@@ -8,6 +8,7 @@
         "build.zig",
         "build.zig.zon",
         "thirdparty",
+        "src",
         "tests/native",
     },
     .dependencies = .{},

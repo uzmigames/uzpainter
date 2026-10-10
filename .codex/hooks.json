@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash 'e:\\UzmiGames\\UzPainter\\.codex\\hooks\\protect-task-scaffolding.sh'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash 'e:\\UzmiGames\\UzPainter\\.codex\\hooks\\no-os-scheduling.sh'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash 'e:\\UzmiGames\\UzPainter\\.codex\\hooks\\jev-gate.sh' prompt",
+            "timeout": 8
+          }
+        ]
+      }
+    ]
+  }
+}

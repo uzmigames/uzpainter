@@ -251,6 +251,10 @@ def _report_sample(path: str, document: Any, data: bytes, ctx: _Context) -> list
     return validation_errors(document, Schema.COMPARISON_REPORT)
 
 
+def _semantics(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    return validation_errors(document, Schema.SEMANTICS)
+
+
 def _register(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     if not isinstance(document, Mapping):
         return validation_errors(document, Schema.EXCEPTIONS)
@@ -291,6 +295,7 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
     ),
     (re.compile(r"^parity/exceptions\.json$"), "exceptions.json", _register),
     (re.compile(r"^parity/manifests/.+$"), "golden-public.json", _public_manifest),
+    (re.compile(r"^parity/semantics/[^/]+$"), "semantics.json", _semantics),
     (re.compile(r"^parity/fixtures/.+$"), "authored input of a manifest", _fixture),
 )
 

@@ -1,5 +1,7 @@
 """Iray capture path and operator form against a fake Painter and a scripted operator
-(task items 2.4, 2.5, 2.6 for Tier 3; 07-preview-and-render-parity.md §2.2)."""
+(task items 2.4, 2.5, 2.6 for Tier 3; 07-preview-and-render-parity.md §2.2; current-frame
+verification against the fixture projected from the recorded camera, task
+`phase0.6_render-reference-procedure` item 3.2)."""
 
 from __future__ import annotations
 
@@ -14,38 +16,62 @@ from typing import Any
 import pytest
 
 from tools.parity.recorder.capture import StaleCaptureError
-from tools.parity.recorder.iray import K_TIMES_SAMPLES, SEPARATE_SESSION, record_iray_reference
+from tools.parity.recorder.iray import (
+    K_TIMES_SAMPLES,
+    SEPARATE_SESSION,
+    record_iray_reference,
+    settings_sheet,
+)
 from tools.parity.recorder.job import Job, job_from_manifest
 from tools.parity.recorder.session import PainterSession, RecorderError
+from tools.parity.render_procedure.projection import Camera, coverage_rows, load_obj
 from tools.parity.schemas import REPO_ROOT, Schema, record_problems, validation_errors
 
 MakeSession = Callable[[Any], PainterSession]
 S = 16
-SIZE = 4
+SIZE = 32
+SPHERE = REPO_ROOT / "parity" / "fixtures" / "render-procedure" / "sphere.obj"
+CAMERA_Z = 60.0
 
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def object_pixels(fill: tuple[int, int, int]) -> list[tuple[int, ...]]:
+def object_pixels(
+    fill: tuple[int, int, int], camera_z: float = CAMERA_Z, shift: int = 0
+) -> list[tuple[int, ...]]:
+    """A render of the sphere seen from (0, 0, camera_z): `fill` where the sphere projects."""
+    camera = Camera((0.0, 0.0, camera_z), (0.0, 0.0, 0.0), 40.0, "Perspective")
+    rows = coverage_rows(load_obj(SPHERE), camera, SIZE, SIZE)
     return [
-        fill if 1 <= x <= 2 and 1 <= y <= 2 else (0, 0, 0) for y in range(SIZE) for x in range(SIZE)
+        fill if 0 <= x - shift < SIZE and rows[y] >> (x - shift) & 1 else (0, 0, 0)
+        for y in range(SIZE)
+        for x in range(SIZE)
     ]
 
 
+def sheet_setting(name: str, value: Any) -> dict[str, Any]:
+    return {"name": name, "value": value, "applied_by": "recorder_api"}
+
+
 @pytest.fixture
-def iray_job(fake: types.ModuleType, tmp_path: Path) -> Job:
+def iray_job(tmp_path: Path) -> Job:
+    return make_iray_job(tmp_path)
+
+
+def make_iray_job(
+    tmp_path: Path,
+    camera_z: float = CAMERA_Z,
+    rotation: list[float] | None = None,
+    capture: list[dict[str, Any]] | None = None,
+) -> Job:
     root = tmp_path / "repo"
-    (root / "fixtures").mkdir(parents=True)
-    mesh = root / "fixtures" / "plane.obj"
-    mesh.write_bytes((REPO_ROOT / "parity" / "fixtures" / "meshes" / "plane.obj").read_bytes())
+    (root / "fixtures").mkdir(parents=True, exist_ok=True)
+    mesh = root / "fixtures" / "sphere.obj"
+    mesh.write_bytes(SPHERE.read_bytes())
     environment = root / "fixtures" / "constant.exr"
     environment.write_bytes(b"authored constant environment")
-    mask = root / "fixtures" / "silhouette.png"
-    fake.write_png(
-        mask, SIZE, SIZE, [(255,) if p != (0, 0, 0) else (0,) for p in object_pixels((1, 1, 1))], 8
-    )
 
     def authored(input_id: str, kind: str, path: Path) -> dict[str, Any]:
         return {
@@ -63,37 +89,41 @@ def iray_job(fake: types.ModuleType, tmp_path: Path) -> Job:
     manifest = {
         "schema": "uzpainter/parity/golden-public/1",
         "record_class": "public_manifest",
-        "golden_id": "tests/tier3/plane-constant",
+        "golden_id": "tests/tier3/sphere-constant",
         "tier": "3",
-        "domain": "tier3/plane-constant",
+        "domain": "tier3/sphere-constant",
         "description": "Synthetic Tier 3 job for the recorder tests.",
         "inputs": [
-            authored("plane", "mesh", mesh),
+            authored("sphere", "mesh", mesh),
             authored("env", "environment", environment),
-            authored("silhouette", "mask", mask),
         ],
         "instruction_sequence": {
             "author": "UzmiGames",
             "interface": "substance_painter_documented_python_api",
             "steps": [
-                {"step": 1, "call": "substance_painter.project.create", "args": {"mesh": "plane"}},
+                {"step": 1, "call": "substance_painter.project.create", "args": {"mesh": "sphere"}},
                 {
                     "step": 2,
                     "call": "substance_painter.display.Camera.position",
-                    "args": {"value": [0.0, 30.0, 0.0]},
+                    "args": {"value": [0.0, 0.0, camera_z]},
                 },
                 {
                     "step": 3,
+                    "call": "substance_painter.display.Camera.rotation",
+                    "args": {"value": rotation or [0.0, 0.0, 0.0]},
+                },
+                {
+                    "step": 4,
                     "call": "substance_painter.display.Camera.aperture",
                     "args": {"value": 0.0},
                 },
                 {
-                    "step": 4,
+                    "step": 5,
                     "call": "substance_painter.display.set_environment_resource",
                     "args": {"environment": "env"},
                 },
                 {
-                    "step": 5,
+                    "step": 6,
                     "call": "substance_painter.display.set_tone_mapping",
                     "args": {"function": "Linear"},
                 },
@@ -107,7 +137,15 @@ def iray_job(fake: types.ModuleType, tmp_path: Path) -> Job:
             operator_setting("Iray Settings/Height", SIZE, "px"),
             operator_setting("Iray Settings/Firefly Filter", False),
             operator_setting("Viewer and MDL Settings/Environment Exposure", 0.0, "EV"),
-            {"name": "capture.encoding", "value": "display_referred", "applied_by": "recorder_api"},
+            *(
+                capture
+                if capture is not None
+                else [
+                    sheet_setting("capture.encoding", "display_referred"),
+                    sheet_setting("capture.procedure", "iray-capture/1"),
+                    sheet_setting("capture.route", "save_render"),
+                ]
+            ),
         ],
         "uncontrolled_settings": ["denoiser"],
         "expectations": [],
@@ -218,13 +256,16 @@ def test_reference_golden_is_assembled_from_three_sessions(
     assert reference["uncontrolled_settings"] == ["denoiser"]
     assert reference["current_frame_verified"] is True
     render_state = data["key"]["render_state"]
-    assert render_state["camera.position"] == [0.0, 30.0, 0.0]
+    assert render_state["camera.position"] == [0.0, 0.0, CAMERA_Z]
     assert render_state["camera.aperture"] == 0.0
     assert render_state["environment_url"] == "resource://project0/env"
     assert render_state["tone_mapping"] == "Linear"
+    assert render_state["scene_bounding_box"]["dimensions"] == [20.0, 20.0, 20.0]
     kinds = {r["kind"] for r in manifest["private_records"]}
     assert kinds == {"private_oracle_record", "iray_reference", "settings_panel_evidence"}
-    assert not (work / "iray-staging" / "tests__tier3__plane-constant").exists()
+    assert not (work / "iray-staging" / "tests__tier3__sphere-constant").exists()
+    route = {s["name"]: s["value"] for s in manifest["applied_settings"]}
+    assert (route["capture.procedure"], route["capture.route"]) == ("iray-capture/1", "save_render")
 
 
 def test_operator_entries_and_panel_images_are_private_evidence(
@@ -299,9 +340,73 @@ def test_stale_render_is_refused(
 def test_wrong_frame_is_refused_by_the_silhouette(
     fake: types.ModuleType, make_session: MakeSession, iray_job: Job, work: Path, inbox: Path
 ) -> None:
-    shifted = [(180, 120, 60) if x >= 2 else (0, 0, 0) for y in range(SIZE) for x in range(SIZE)]
-    with pytest.raises(StaleCaptureError):
+    shifted = object_pixels((180, 120, 60), shift=5)
+    with pytest.raises(StaleCaptureError, match="wrong frame or geometry"):
         record(fake, make_session, iray_job, work, inbox, SEPARATE_SESSION, render=shifted)
+
+
+def test_render_from_another_camera_is_refused(
+    fake: types.ModuleType, make_session: MakeSession, tmp_path: Path, work: Path, inbox: Path
+) -> None:
+    """The render shows the sphere from z = 60, but the recorded camera is at z = 40."""
+    job = make_iray_job(tmp_path, camera_z=40.0)
+    with pytest.raises(StaleCaptureError, match="wrong frame or geometry"):
+        record(fake, make_session, job, work, inbox, SEPARATE_SESSION)
+    assert not (work / "iray-staging").exists()
+
+
+def test_silhouette_follows_the_recorded_camera(
+    fake: types.ModuleType, make_session: MakeSession, tmp_path: Path, work: Path, inbox: Path
+) -> None:
+    job = make_iray_job(tmp_path, camera_z=40.0)
+    render = object_pixels((180, 120, 60), camera_z=40.0)
+    assert record(fake, make_session, job, work, inbox, SEPARATE_SESSION, render=render) is None
+
+
+def test_rotated_camera_needs_the_confirmed_euler_order(
+    fake: types.ModuleType, make_session: MakeSession, tmp_path: Path, work: Path, inbox: Path
+) -> None:
+    job = make_iray_job(tmp_path, rotation=[0.0, 5.0, 0.0])
+    with pytest.raises(RecorderError, match="camera_rotation_order"):
+        record(fake, make_session, job, work, inbox, SEPARATE_SESSION)
+
+
+def test_moved_fixture_is_refused(
+    fake: types.ModuleType, make_session: MakeSession, iray_job: Job, work: Path, inbox: Path
+) -> None:
+    world = fake.FakeWorld()
+    original = world.modules["substance_painter.project"].create
+
+    def create_moved(mesh_file_path: str, *args: Any, **kwargs: Any) -> None:
+        original(mesh_file_path, *args, **kwargs)
+        low, high = world.scene_bounds
+        world.scene_bounds = ([v + 3.0 for v in low], [v + 3.0 for v in high])
+
+    world.modules["substance_painter.project"].create = create_moved
+    with pytest.raises(RecorderError, match="moved or rescaled"):
+        record(
+            fake, make_session, iray_job, work, inbox, SEPARATE_SESSION, session=make_session(world)
+        )
+
+
+@pytest.mark.parametrize(
+    ("capture", "message"),
+    [
+        ([sheet_setting("capture.route", "save_render")], "capture.procedure"),
+        (
+            [
+                sheet_setting("capture.procedure", "iray-capture/1"),
+                sheet_setting("capture.route", "external_observation_1to1"),
+            ],
+            "only the Save Render route",
+        ),
+    ],
+)
+def test_sheet_names_procedure_and_route(
+    tmp_path: Path, capture: list[dict[str, Any]], message: str
+) -> None:
+    with pytest.raises(RecorderError, match=message):
+        settings_sheet(make_iray_job(tmp_path, capture=capture))
 
 
 def test_k_must_exceed_one(

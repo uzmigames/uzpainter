@@ -1,0 +1,980 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "procedural-feasibility",
+  "description": "Procedural feasibility study (phase0.6_procedural-feasibility, P0-FEAS-PROC): clean-room prototypes of the Position and Metal Edge Wear generators and of an independently designed stand-in for the Leather Damaged smart material, fitted black-box to private Painter oracles on the authored sphere and rounded cube at 1024 px. Residuals are |\u0394| in 16-bit code values over the comparison domain (UV-covered texels eroded by one texel), against both recordings.",
+  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "corpus": [
+    "phase0/procedural-feasibility/position/sphere/defaults",
+    "phase0/procedural-feasibility/position/sphere/boundary-a",
+    "phase0/procedural-feasibility/position/sphere/boundary-b",
+    "phase0/procedural-feasibility/position/rounded-cube/defaults",
+    "phase0/procedural-feasibility/position/rounded-cube/boundary-a",
+    "phase0/procedural-feasibility/position/rounded-cube/boundary-b",
+    "phase0/procedural-feasibility/metal-edge-wear/sphere/defaults",
+    "phase0/procedural-feasibility/metal-edge-wear/sphere/seed-1",
+    "phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-a",
+    "phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-b",
+    "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/defaults",
+    "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/seed-1",
+    "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-a",
+    "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-b",
+    "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+    "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults"
+  ],
+  "entries": [
+    {
+      "entry_id": "position-prototype",
+      "subject": "Position (mesh-map generators), feasibility prototype",
+      "status": "exact",
+      "formula": "acc = sum over the directions with non-zero opacity of opacity * g, combined by Linear Dodge (Add) from 0, where g is the Position map channel X (Right to Left), Y (Top to Bottom) or Z (Front to Back) in 16-bit code units, replaced by 65535 - g when that direction's Invert is on; acc = 65535 - acc when the section Invert is on. Default Balance 0.5 and Contrast 0: out = round(acc). Other Balance/Contrast pairs only at calibrated points: out = clamp(1/2 + (acc - T) g) with the fitted T and g.",
+      "public_sources": [
+        {
+          "source_id": "A-HELP-GUIDE",
+          "locator": "Effects > Generators > Position (parameters)"
+        },
+        {
+          "source_id": "A-HELP-BAKING",
+          "locator": "Position mesh map"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "step_curve[0].position_balance",
+          "value": 1.0,
+          "origin": "authored"
+        },
+        {
+          "name": "step_curve[0].position_contrast",
+          "value": 1.0,
+          "origin": "authored"
+        },
+        {
+          "name": "step_curve[0].threshold",
+          "value": 60677.96594949263,
+          "origin": "fitted",
+          "unit": "code units"
+        },
+        {
+          "name": "step_curve[0].gain",
+          "value": 1.0,
+          "origin": "fitted",
+          "unit": "per code unit"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "phase0/procedural-feasibility/position/sphere/defaults",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1015700,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/sphere/defaults",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1015700,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/sphere/boundary-a",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1015700,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/sphere/boundary-a",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1015700,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/sphere/boundary-b",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1015700,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/sphere/boundary-b",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1015700,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/rounded-cube/defaults",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 608972,
+            "affected_texels": 0,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/rounded-cube/defaults",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 608972,
+            "affected_texels": 0,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/rounded-cube/boundary-a",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 608972,
+            "affected_texels": 0,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/rounded-cube/boundary-a",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 608972,
+            "affected_texels": 0,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/rounded-cube/boundary-b",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 608972,
+            "affected_texels": 0,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/position/rounded-cube/boundary-b",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 608972,
+            "affected_texels": 0,
+            "texels": 608972
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "metal-edge-wear-prototype",
+      "subject": "Metal Edge Wear (mesh-map generators), feasibility prototype",
+      "status": "calibrated",
+      "formula": "e = Gaussian blur, sigma = blur_sigma * Edges Smoothness, of 2 max(curvature - 1/2, 0); n = fBm(Grunge Scale cells, seed) in [0, 1]; w = edge_gain * Curvature Weight * e + grunge_gain * Grunge Amount * (n - 1/2) + bias; out = clamp((w - (1 - Wear Level)) * (1 + contrast_gain * Wear Contrast) + 1/2) * (1 - m + m * AO), m = Ambient Occlusion Masking.",
+      "public_sources": [
+        {
+          "source_id": "A-HELP-GUIDE",
+          "locator": "Effects > Generators > Metal Edge Wear (parameters)"
+        },
+        {
+          "source_id": "A-HELP-BAKING",
+          "locator": "Curvature and Ambient Occlusion mesh maps"
+        },
+        {
+          "source_id": "P-NOISE",
+          "locator": "Perlin 2002 Improving Noise; fBm"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "edge_gain",
+          "value": 2.1756352777614483,
+          "origin": "fitted"
+        },
+        {
+          "name": "blur_sigma",
+          "value": 3.7022014611152407,
+          "origin": "fitted"
+        },
+        {
+          "name": "grunge_gain",
+          "value": -0.18648353736828427,
+          "origin": "fitted"
+        },
+        {
+          "name": "bias",
+          "value": -0.016453622389954365,
+          "origin": "fitted"
+        },
+        {
+          "name": "contrast_gain",
+          "value": 10.863624980499184,
+          "origin": "fitted"
+        },
+        {
+          "name": "objective_mean_abs_diff",
+          "value": 3088.4188825435567,
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/defaults",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 51952,
+            "mean": 3393.007135965344,
+            "p99": 32308,
+            "differing": 318046,
+            "total": 1015700,
+            "affected_texels": 318046,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/defaults",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 51952,
+            "mean": 3393.007135965344,
+            "p99": 32308,
+            "differing": 318046,
+            "total": 1015700,
+            "affected_texels": 318046,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/seed-1",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 52596,
+            "mean": 3121.542464310328,
+            "p99": 31516,
+            "differing": 298708,
+            "total": 1015700,
+            "affected_texels": 298708,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/seed-1",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 52596,
+            "mean": 3121.542464310328,
+            "p99": 31516,
+            "differing": 298708,
+            "total": 1015700,
+            "affected_texels": 298708,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-a",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1015700,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-a",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1015700,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-b",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 65535,
+            "mean": 7448.77006990253,
+            "p99": 65535,
+            "differing": 245398,
+            "total": 1015700,
+            "affected_texels": 245398,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-b",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 65535,
+            "mean": 7448.77006990253,
+            "p99": 65535,
+            "differing": 245398,
+            "total": 1015700,
+            "affected_texels": 245398,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/defaults",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 65535,
+            "mean": 538.2761982488522,
+            "p99": 19504,
+            "differing": 29814,
+            "total": 608972,
+            "affected_texels": 29814,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/defaults",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 65535,
+            "mean": 538.2761982488522,
+            "p99": 19504,
+            "differing": 29814,
+            "total": 608972,
+            "affected_texels": 29814,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/seed-1",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 65535,
+            "mean": 541.1059868105594,
+            "p99": 19941,
+            "differing": 28628,
+            "total": 608972,
+            "affected_texels": 28628,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/seed-1",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 65535,
+            "mean": 541.1059868105594,
+            "p99": 19941,
+            "differing": 28628,
+            "total": 608972,
+            "affected_texels": 28628,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-a",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 36622,
+            "mean": 733.8417529870011,
+            "p99": 28996,
+            "differing": 364796,
+            "total": 608972,
+            "affected_texels": 364796,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-a",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 36622,
+            "mean": 733.8417529870011,
+            "p99": 28996,
+            "differing": 364796,
+            "total": 608972,
+            "affected_texels": 364796,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-b",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 65535,
+            "mean": 7562.4583445544295,
+            "p99": 65535,
+            "differing": 148176,
+            "total": 608972,
+            "affected_texels": 148176,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-b",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 65535,
+            "mean": 7562.4583445544295,
+            "p99": 65535,
+            "differing": 148176,
+            "total": 608972,
+            "affected_texels": 148176,
+            "texels": 608972
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "leather-damaged-prototype",
+      "subject": "Leather Damaged (smart materials), feasibility prototype",
+      "status": "calibrated",
+      "formula": "Independently designed recipe, not Painter's preset structure: per exported channel component, value = base + grain * (fBm(16 cells, seed 0, 5 octaves) - 1/2) + edge * 2 max(curvature - 1/2, 0), clamped to [0, 1]; base, grain and edge fitted by least squares.",
+      "public_sources": [
+        {
+          "source_id": "P-NOISE",
+          "locator": "Perlin 2002 Improving Noise; fBm"
+        },
+        {
+          "source_id": "A-HELP-BAKING",
+          "locator": "Curvature mesh map"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "basecolor.base",
+          "value": [
+            0.1169440025844437,
+            0.06682280979983089,
+            0.03692511562243467
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "basecolor.grain",
+          "value": [
+            0.0001563280739907691,
+            -0.0006973463990151141,
+            -0.0013807397992236237
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "basecolor.edge",
+          "value": [
+            0.133046399347256,
+            0.1907093178687197,
+            0.2353204875240089
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "specularroughness.base",
+          "value": [
+            0.5887106275717502
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "specularroughness.grain",
+          "value": [
+            0.00042404034614146324
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "specularroughness.edge",
+          "value": [
+            0.20964310480846737
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "basemetalness.base",
+          "value": [
+            0.0
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "basemetalness.grain",
+          "value": [
+            0.0
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "basemetalness.edge",
+          "value": [
+            0.0
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "height.base",
+          "value": [
+            0.5047334161074403
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "height.grain",
+          "value": [
+            7.04819623224967e-05
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "height.edge",
+          "value": [
+            -0.048790158771785205
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "normal.base",
+          "value": [
+            0.49999237048904,
+            0.49999237048904,
+            0.9999999999999829
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "normal.grain",
+          "value": [
+            6.598790009837216e-17,
+            6.598790009837216e-17,
+            9.81228560957562e-17
+          ],
+          "origin": "fitted"
+        },
+        {
+          "name": "normal.edge",
+          "value": [
+            3.097626911979374e-17,
+            3.097626911979374e-17,
+            3.479366812894719e-17
+          ],
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+          "map": "basecolor",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 10450,
+            "mean": 1482.0211837484821,
+            "p99": 8120,
+            "differing": 3047100,
+            "total": 3047100,
+            "affected_texels": 1015700,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+          "map": "basecolor",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 10450,
+            "mean": 1482.0211837484821,
+            "p99": 8120,
+            "differing": 3047100,
+            "total": 3047100,
+            "affected_texels": 1015700,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+          "map": "basemetalness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1015700,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+          "map": "basemetalness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1015700,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+          "map": "height",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 4446,
+            "mean": 453.7278527124151,
+            "p99": 2741,
+            "differing": 1014988,
+            "total": 1015700,
+            "affected_texels": 1014988,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+          "map": "height",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 4446,
+            "mean": 453.7278527124151,
+            "p99": 2741,
+            "differing": 1014988,
+            "total": 1015700,
+            "affected_texels": 1014988,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+          "map": "normal",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3047100,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+          "map": "normal",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3047100,
+            "affected_texels": 0,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 15472,
+            "mean": 1844.2553815102885,
+            "p99": 11620,
+            "differing": 1015700,
+            "total": 1015700,
+            "affected_texels": 1015700,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 15472,
+            "mean": 1844.2553815102885,
+            "p99": 11620,
+            "differing": 1015700,
+            "total": 1015700,
+            "affected_texels": 1015700,
+            "texels": 1015700
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+          "map": "basecolor",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 10973,
+            "mean": 1907.2183045088007,
+            "p99": 8488,
+            "differing": 1826492,
+            "total": 1826916,
+            "affected_texels": 608972,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+          "map": "basecolor",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 10973,
+            "mean": 1907.2183045088007,
+            "p99": 8488,
+            "differing": 1826492,
+            "total": 1826916,
+            "affected_texels": 608972,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+          "map": "basemetalness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 608972,
+            "affected_texels": 0,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+          "map": "basemetalness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 608972,
+            "affected_texels": 0,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+          "map": "height",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 4918,
+            "mean": 546.4959505527348,
+            "p99": 2846,
+            "differing": 608635,
+            "total": 608972,
+            "affected_texels": 608635,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+          "map": "height",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 4918,
+            "mean": 546.4959505527348,
+            "p99": 2846,
+            "differing": 608635,
+            "total": 608972,
+            "affected_texels": 608635,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+          "map": "normal",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1826916,
+            "affected_texels": 0,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+          "map": "normal",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1826916,
+            "affected_texels": 0,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+          "map": "specularroughness",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 19149,
+            "mean": 2256.269757887062,
+            "p99": 12209,
+            "differing": 608972,
+            "total": 608972,
+            "affected_texels": 608972,
+            "texels": 608972
+          }
+        },
+        {
+          "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+          "map": "specularroughness",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 19149,
+            "mean": 2256.269757887062,
+            "p99": 12209,
+            "differing": 608972,
+            "total": 608972,
+            "affected_texels": 608972,
+            "texels": 608972
+          }
+        }
+      ]
+    }
+  ]
+}

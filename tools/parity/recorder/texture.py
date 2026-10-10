@@ -40,6 +40,16 @@ from tools.parity.recorder.session import (
 
 Now = Callable[[], datetime]
 
+# Export map names (lower case) whose document channel has another `ChannelType` name: the
+# documented `ambientOcclusion` map is the AO channel; the documented virtual maps
+# `Normal_OpenGL`/`Normal_DirectX` derive from the Normal channel and `AO_Mixed` from AO.
+SOURCE_CHANNEL_OF_MAP = {
+    "ambientocclusion": "ao",
+    "normal_opengl": "normal",
+    "normal_directx": "normal",
+    "ao_mixed": "ao",
+}
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -78,6 +88,11 @@ def replay(session: PainterSession, job: Job, staged: dict[str, Path]) -> dict[s
             defaults["colour_management"] = result["colour_management"]
         elif step.call == ps.INSERT_FILL:
             defaults["insert_fill"][str(step.step)] = result["defaults"]
+        elif step.call in (ps.INSERT_GROUP, ps.INSERT_LEVELS, ps.INSERT_FILTER):
+            inserted = {k: v for k, v in result.items() if k != "done_at"}
+            defaults.setdefault("inserted_nodes", {})[str(step.step)] = inserted
+        elif "resource_url" in result:
+            defaults.setdefault("resources", {})[str(step.step)] = result["resource_url"]
     session.wait_ready()
     return defaults
 
@@ -122,15 +137,25 @@ def export_roots(template: dict[str, Any]) -> list[tuple[str, str]]:
     ]
 
 
-def channel_encoding(template: dict[str, Any], texture_set: str, stack: str, out: OutputMap) -> str:
+def channel_encoding(
+    template: dict[str, Any],
+    texture_set: str,
+    stack: str,
+    out: OutputMap,
+    channel_names: dict[str, str] | None = None,
+) -> str:
     """Encoding from the source channel's documented storage (`textureset.ChannelFormat`).
 
     Used only when the exported file does not state its encoding; the record names the basis.
+    `channel_names` maps a lower-case `ChannelType` member to its `.name` as Painter reports it
+    (a legacy alias such as `Roughness` reports the member it aliases).
     """
     channels = template["texture_sets"][texture_set]["stacks"][stack]
-    if out.map_type == "documentMap":
+    if out.map_type in ("documentMap", "virtualMap"):
+        wanted = SOURCE_CHANNEL_OF_MAP.get(out.name.lower(), out.name.lower())
+        wanted = (channel_names or {}).get(wanted, wanted).lower()
         for name, channel in channels.items():
-            if name.lower() == out.name.lower():
+            if name.lower() == wanted:
                 return "srgb" if str(channel["format"]).startswith("sRGB") else "linear"
     raise RecorderError(
         f"{texture_set}/{out.name}: the export states no encoding and no document channel gives one"
@@ -156,6 +181,7 @@ def export_outputs(
     verify_current_outputs(files, export_dir, fence_ns)
     outputs: list[dict[str, Any]] = []
     blobs: list[Path] = []
+    channel_names: dict[str, str] | None = None
     for group in result["textures"]:
         texture_set, stack = group["texture_set"], group["stack"]
         for name in group["files"]:
@@ -167,8 +193,14 @@ def export_outputs(
             measured = measure_storage_format(path)
             if measured.encoding is not None:
                 encoding, basis = measured.encoding, "file"
+            elif out.map_type == "defaultMap":
+                # The documented constant maps (`black`, `white`): 0 and 1 in any encoding.
+                encoding, basis = "linear", "constant_default_map"
             else:
-                encoding = channel_encoding(template, texture_set, stack, out)
+                if channel_names is None:
+                    reported = session.call("channel_names")
+                    channel_names = {k.lower(): v for k, v in reported.items()}
+                encoding = channel_encoding(template, texture_set, stack, out, channel_names)
                 basis = "source_channel_format"
             parts = [output_safe(texture_set), *([output_safe(stack)] if stack else []), out.name]
             outputs.append(
@@ -267,6 +299,8 @@ def record_texture_golden(
         raise RecorderError("Tier 3 goldens are Iray references: use the iray command")
     if not job.exports:
         raise RecorderError("a texture golden needs at least one export_project_textures step")
+    if job.captures:
+        raise RecorderError("baking-defaults captures are recorded by the record-defaults command")
     identity = session.connect()
     directory = ensure_outside_repository(work) / job.golden_id.replace("/", "__")
     directory = directory / run_name(identity.session_id, now())

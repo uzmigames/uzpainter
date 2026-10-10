@@ -1,5 +1,32 @@
 {
-  "status": "pending",
+  "status": "in-progress",
   "createdAt": "2026-10-10T06:01:48.496Z",
-  "updatedAt": "2026-10-10T06:01:48.496Z"
+  "updatedAt": "2026-10-10T17:47:22.750Z",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "How should the Tier 0 corpus cover the three cases Painter's documented API cannot set: the second height→normal method, the height→normal strength sweep, and the group PassThrough blend mode?",
+      "status": "answered",
+      "askedAt": "2026-10-10T08:49:38.092Z",
+      "context": "48 goldens are recorded twice (same session; after save/reopen), admitted to the private store, and verify/guard pass. Three §9 cases are not reachable through the documented API on Painter 12.1.0. (1) The height→normal method is a project setting: neither the Python API nor the documented JavaScript API can set or read it (04 §6 names a method choice in the project settings). (2) The strength is a shader/project setting with no documented setter. (3) The python-doc lists BlendingMode.PassThrough, but on 12.1.0 the runtime enum has no such member (AttributeError), and a new group defaults to Normal. Recorded now: the default method and strength on the plane, sphere and bevelled cube, with amplitude varied through opacity and a doubled height; groups in Normal (default and explicit), with and without masks; 31 of the 32 modes on fills.",
+      "options": [
+        {
+          "label": "Operator-recorded settings",
+          "description": "the owner sets the method, each strength value and a pass-through group in Painter's UI from a settings sheet; the recorder gains an operator step for texture goldens, as it has for Iray. Full coverage, about 30 min of owner time plus recorder work"
+        },
+        {
+          "label": "Follow-up task",
+          "description": "archive this task with the API-reachable goldens and create a child task for the operator-recorded cases. Unblocks phase0.7 fits now; the three cases stay release gaps until the child closes"
+        },
+        {
+          "label": "Scope decision",
+          "description": "accept the default method/strength and Normal groups as the Tier 0 contract; the other method, strength and PassThrough are declared capability gaps"
+        }
+      ],
+      "recommended": "Follow-up task",
+      "blocks": "2.2, 2.5 (PassThrough part), 2.8 (second method and strength sweep), 4.1",
+      "answer": "Owner (2026-10-10): follow-up child task. Archive this task with the 48 recorded goldens; move the three cases (height-to-normal method, height-to-normal strength sweep, group PassThrough blend) into a new child task that decides how to record them (decision 029 now allows UI automation of Painter for settings the documented API cannot reach). That child task must not block G0.",
+      "answeredAt": "2026-10-10T17:47:22.750Z"
+    }
+  ]
 }

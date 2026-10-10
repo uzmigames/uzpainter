@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:uzpainter:parity:schema:semantics:1",
+  "title": "UzPainter public fitted semantics",
+  "description": "A public file of fitted formulas (parity/semantics/*.json; parity/CONTRACT.md §6.4): independently written formulas, each citing approved public sources (docs/approved-sources.md), with their authored or fitted constants and their residuals against private oracles as numbers only. No recorded output fits a slot: every object is closed, values are short scalars or short lists of numbers, and the corpus is named by golden ids only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "record_class", "semantics_id", "description", "painter_build_id", "corpus", "entries"],
+  "properties": {
+    "schema": {"const": "uzpainter/parity/semantics/1"},
+    "record_class": {"const": "public_semantics"},
+    "semantics_id": {"$ref": "#/$defs/slug"},
+    "description": {"$ref": "#/$defs/text"},
+    "painter_build_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "corpus": {
+      "description": "The goldens the fits and residuals use, by id (their manifests hold the private hashes).",
+      "type": "array",
+      "maxItems": 512,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/golden_id"}
+    },
+    "entries": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/entry"}}
+  },
+  "$defs": {
+    "slug": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$", "maxLength": 128},
+    "text": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "golden_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$", "maxLength": 256},
+    "scalar": {"oneOf": [{"type": "string", "maxLength": 128}, {"type": ["number", "boolean", "null"]}]},
+    "value": {
+      "oneOf": [
+        {"$ref": "#/$defs/scalar"},
+        {"type": "array", "maxItems": 16, "items": {"type": "number"}}
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "locator"],
+      "properties": {
+        "source_id": {
+          "description": "An approved public source; black-box observation (A-OBSERVE) is never a public derivation.",
+          "type": "string",
+          "pattern": "^[SPNXA]-[A-Z0-9-]+$",
+          "not": {"const": "A-OBSERVE"}
+        },
+        "locator": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value", "origin"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "value": {"$ref": "#/$defs/value"},
+        "origin": {"enum": ["public_documentation", "authored", "fitted"]},
+        "unit": {"type": "string", "maxLength": 64}
+      }
+    },
+    "difference": {
+      "description": "|Δ| statistics in native code values (CONTRACT §8.1): never a mean without max and counts.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max", "mean", "p99", "differing", "total", "affected_texels", "texels"],
+      "properties": {
+        "max": {"type": "number", "minimum": 0},
+        "mean": {"type": "number", "minimum": 0},
+        "p99": {"type": "number", "minimum": 0},
+        "differing": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 1},
+        "affected_texels": {"type": "integer", "minimum": 0},
+        "texels": {"type": "integer", "minimum": 1}
+      }
+    },
+    "residual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["golden_id", "map", "compared_against", "unit", "difference"],
+      "properties": {
+        "golden_id": {"$ref": "#/$defs/golden_id"},
+        "map": {"type": "string", "minLength": 1, "maxLength": 64},
+        "compared_against": {"type": "string", "minLength": 1, "maxLength": 32},
+        "unit": {"type": "string", "minLength": 1, "maxLength": 64},
+        "difference": {"$ref": "#/$defs/difference"}
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry_id", "subject", "status", "formula", "public_sources", "parameters", "residuals"],
+      "properties": {
+        "entry_id": {"$ref": "#/$defs/slug"},
+        "subject": {"type": "string", "minLength": 1, "maxLength": 256},
+        "status": {
+          "description": "exact: zero residual on every listed comparison; calibrated: fitted, non-zero residual (a candidate exception, never a pass); gap: not reproduced.",
+          "enum": ["exact", "calibrated", "gap"]
+        },
+        "formula": {"$ref": "#/$defs/text"},
+        "public_sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}},
+        "parameters": {"type": "array", "items": {"$ref": "#/$defs/parameter"}},
+        "residuals": {"type": "array", "items": {"$ref": "#/$defs/residual"}},
+        "notes": {"$ref": "#/$defs/text"}
+      }
+    }
+  }
+}

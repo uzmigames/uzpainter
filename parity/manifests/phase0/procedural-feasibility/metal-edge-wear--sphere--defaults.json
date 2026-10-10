@@ -1,0 +1,354 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/defaults",
+  "tier": "2a",
+  "domain": "procedural_asset/metal-edge-wear",
+  "description": "Procedural feasibility (P0-FEAS-PROC): Painter's Metal Edge Wear (mesh-map generators) on the authored sphere with its six authored mesh maps, texture set 1024 px, parameters: defaults. Exported at 16 bits; recorded twice (same session; after save and reopen).",
+  "inputs": [
+    {
+      "input_id": "sphere",
+      "kind": "mesh",
+      "path": "parity/fixtures/feasibility/sphere.obj",
+      "sha256": "5db95d11b75b66878d887485537f44e96702340c723dae6216e93c261e7b6a5b",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "sphere-position",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/sphere-position.png",
+      "sha256": "9e0373941ea86bfbed8345baef37017e24257a25875146638dbe6112f9150bff",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "sphere-world-space-normal",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/sphere-world-space-normal.png",
+      "sha256": "9e0373941ea86bfbed8345baef37017e24257a25875146638dbe6112f9150bff",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "sphere-normal",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/sphere-normal.png",
+      "sha256": "0af39e4f40ef86f25f5969288dcf19055cc4f05adb8aeceffa3f8168a8eb9221",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "sphere-ambient-occlusion",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/sphere-ambient-occlusion.png",
+      "sha256": "ca29df4f8ae64012e03d8af45f3e1540b6d4a98995b3176ac5c9923bc6d9f059",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "sphere-curvature",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/sphere-curvature.png",
+      "sha256": "6aaf165bfb898131e8dbb09e170c065236e427964c1c965a71e9905085ab9473",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "sphere-thickness",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/sphere-thickness.png",
+      "sha256": "37651d8a5d523bf5210bf32e6ba7444b8dbcbf9af115b4d9a6dd589160baf0f5",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "sphere",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 1024
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "sphere-position",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "sphere-world-space-normal",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "sphere-normal",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "sphere-ambient-occlusion",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "sphere-curvature",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "sphere-thickness",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "Position",
+          "resource_step": 2
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "WorldSpaceNormal",
+          "resource_step": 3
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "Normal",
+          "resource_step": 4
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "AO",
+          "resource_step": 5
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "Curvature",
+          "resource_step": 6
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "Thickness",
+          "resource_step": 7
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.textureset.Stack.edit_channel",
+        "args": {
+          "channel": "SpecularRoughness",
+          "format": "L16"
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 15,
+          "channels": [
+            "SpecularRoughness"
+          ]
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 15,
+          "channel": "SpecularRoughness",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 15
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 18,
+          "channels": [
+            "SpecularRoughness"
+          ]
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 18,
+          "channel": "SpecularRoughness",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 18,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 18,
+          "stack": "Mask",
+          "resource_name": "Metal Edge Wear",
+          "resource_usage": "GENERATOR"
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/specularroughness:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 1024,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.0",
+      "build_id": "12.1.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "c2144eac59c3d2fbb77864e6823b6b8525a7bc4c0fa38401ee60cbfe68041504",
+      "size_bytes": 26495
+    },
+    {
+      "record_id": "r1-uzp_sphere-specularroughness",
+      "kind": "exported_map",
+      "sha256": "236d91d0547a25dc8635c5c1fc38b1ebc0b2653861bf1e04ed6765d3ed242b79",
+      "size_bytes": 225718
+    },
+    {
+      "record_id": "r2-uzp_sphere-specularroughness",
+      "kind": "exported_map",
+      "sha256": "b4fefa923c7478ed74972d032a6ea5b0fa581dfac8225ba8f4430ea1c96879de",
+      "size_bytes": 228464
+    }
+  ]
+}

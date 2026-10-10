@@ -35,7 +35,7 @@ Candidates are the commits of `main`, newest first. The newest, `380c142e`, pass
 | Exported bytes = commit blobs | Pass: 97 of 97 blob ids equal the `git ls-tree` entries |
 | (a) No conflict markers in the subset | Pass: none in the 97 files |
 | (b) Include closure equals the subset | Pass, see below |
-| (c) UzPainter build of the subset and hardware `selftest` | Build: pass on 2026-10-10 (`phase0.3_vendor-modifications`: the subset with UZP-MOD-001…006 compiles as the static library `uzrendercore` from UzPainter's `build.zig` under Zig 0.15.2 with `-std=c++23`, `tests/vendoring/test_modifications.py`). Hardware `selftest`: pending, confirmed by `phase0.6_toolchain-hardware-slice` |
+| (c) UzPainter build of the subset and hardware `selftest` | Build: pass on 2026-10-10 (`phase0.3_vendor-modifications`: the subset with UZP-MOD-001…006 compiles as the static library `uzrendercore` from UzPainter's `build.zig` under Zig 0.15.2 with `-std=c++23`, `tests/vendoring/test_modifications.py`). Hardware `selftest`: pass on 2026-10-10 (`phase0.6_toolchain-hardware-slice`: `UzPainter.exe selftest`, built from this subset and linked statically, passes the DX12 hardware slice on the owner's machine — device on the NVIDIA GeForce RTX 4090 with the Agility SDK runtime from `D3D12\`, DXIL and SPIR-V compile, compute dispatch and readback, 16-bit PNG, Embree; `parity/reports/phase0/toolchain-hardware-slice.md`, `tests/toolchain/test_selftest.py`) |
 | (d) Cited behaviours re-verified | Pass: all 31 citations hold at the line numbers below |
 | UzEngine's own build and tests at the commit | Information only, not a gate: not run by this import (UzEngine is read-only for UzPainter and building it writes into its checkout) |
 

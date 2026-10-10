@@ -1,0 +1,137 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/defaults-templates/baking-defaults",
+  "tier": "0",
+  "domain": "tier0/defaults/baking",
+  "description": "Baking defaults of a fresh Painter project (06-baking.md section 2): on the authored plane, created with every project setting left to Painter, each texture set's BakingParameters.common() and baker(usage) for the ten MeshMapUsage bakers, every key read with the documented properties.Property getters (value, name, short name, label, widget type, enum values, the enum value of each enum label, meta properties), plus the curvature method, the enabled bakers and whether the texture set is enabled. Recorded three times: r1 fresh project, r2 after save and reopen, r3 a second fresh project in the same session. Recorder command: record-defaults.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.baking.BakingParameters.common"
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Normal"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "WorldSpaceNormal"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "ID"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "AO"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Curvature"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Position"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Thickness"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Height"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "BentNormals"
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.baking.BakingParameters.baker",
+        "args": {
+          "usage": "Opacity"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.baking.BakingParameters.get_curvature_method"
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.baking.BakingParameters.get_enabled_bakers"
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.baking.BakingParameters.is_textureset_enabled"
+      }
+    ]
+  },
+  "applied_settings": [],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.0",
+      "build_id": "12.1.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "aa823e7adbd5bb5c8759ec2261977997d3779ca2ee50685e0487ce285b9d44ed",
+      "size_bytes": 116441
+    }
+  ]
+}

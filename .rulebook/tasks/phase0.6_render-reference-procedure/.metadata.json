@@ -1,5 +1,26 @@
 {
-  "status": "pending",
+  "status": "in-progress",
   "createdAt": "2026-10-10T06:01:56.927Z",
-  "updatedAt": "2026-10-10T06:01:56.927Z"
+  "updatedAt": "2026-10-10T17:47:42.308Z",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Can you run the Iray probe session and the qualification capture at Painter's panels? It takes about 60 minutes in one sitting; the steps are below.\n\n1. With no other agent using Painter, open a terminal in E:\\UzmiGames\\UzPainter. Take the Painter lock: `python E:\\UzmiGames\\Assets3D\\Docs\\Colaboracao\\scripts\\collab.py --root E:\\UzmiGames\\Assets3D\\Docs\\Colaboracao lock acquire --app Painter --owner Owner/uzpainter-iray-probe --task \"iray procedure probe\"` and keep the token it prints. If the lock is held, wait until it is free.\n2. Start Painter 12.1.0 with `--enable-remote-scripting`, with no project open. Leave the OCIO and PAINTER_ACE_CONFIG variables unset (Legacy colour management).\n3. Run `python -m tools.parity.recorder iray-probe` (about 40 min) and answer every prompt in the terminal:\n   - set each panel value the prompt names and type the value the panel then shows;\n   - when a prompt asks for a panel screenshot, take one with Win+Shift+S, save it as a PNG and paste its path;\n   - when a prompt prints a file path, use Save Render and type that exact path, extension included.\n   It saves 12 small renders (256×256, 64 samples) and finishes with a persistence check (save, close, reopen, new project).\n4. Leave Painter open with no project. Run `python -m tools.parity.recorder iray parity/manifests/tier3/render-procedure/qualification-sphere.json --condition separate_session` (about 10 min: one 1200×1200 render at 256 samples, same kind of prompts).\n5. Close Painter, then release the lock: `... lock release --app Painter --token <token>`.\n6. Reply here with the `probe evidence:` path printed in step 3, plus the last line of step 4 (`reference staged ...`) or the `refused: ...` message.",
+      "status": "answered",
+      "askedAt": "2026-10-10T08:45:54.653Z",
+      "context": "Painter's Python and JavaScript APIs expose none of the Iray panel settings, convergence status, denoiser, seed or Save Render (documentation scan, recorded in parity/reports/phase0/iray-capture-procedure.md). Black-box answers to the open rows of 07 §2.1 therefore need a person at the panels, and agents must not drive Painter's UI. All the code is ready and tested against the fake Painter: the probe (`iray-probe`), its analysis and the qualification job. Everything recorded stays private on your machine, outside the repository; only SHA-256 hashes enter the report.",
+      "options": [
+        {
+          "label": "Done: I ran both and paste the probe path and the qualification result line. The next agent merges the answers (`python -m tools.parity.render_procedure answers --merge <dir>`), checks 3.1/3.3 and archives."
+        },
+        {
+          "label": "Not now: the task stays blocked; phase0.7_render-reference-captures and the G0 render clause wait for it."
+        }
+      ],
+      "recommended": "Done: I ran both and paste the probe path and the qualification result line. The next agent merges the answers (`python -m tools.parity.render_procedure answers --merge <dir>`), checks 3.1/3.3 and archives.",
+      "blocks": "2.1, 2.2, 2.4, 2.5, 2.6, 2.7, 2.9, 3.1, 3.3, 4.1",
+      "answer": "Owner 2026-10-10: agent performs the panel session via UI automation (decision 029)",
+      "answeredAt": "2026-10-10T17:47:42.308Z"
+    }
+  ]
 }

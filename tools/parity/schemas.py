@@ -28,6 +28,7 @@ class Schema(StrEnum):
     GOLDEN_PRIVATE = "golden-private.json"
     EXCEPTIONS = "exceptions.json"
     COMPARISON_REPORT = "comparison-report.json"
+    SEMANTICS = "semantics.json"
 
 
 def load_json(path: Path) -> Any:

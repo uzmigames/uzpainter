@@ -57,7 +57,10 @@ def extract(archive: Path, dest: Path) -> None:
 
 
 def uzengine_copy(uzengine: Path, lib: Library) -> dict[str, tuple[str, bytes]]:
-    """UzEngine's files of `lib` at the selected commit: `path -> (blob id, bytes)`."""
+    """UzEngine's files of `lib` at the selected commit: `path -> (blob id, bytes)`; empty for a
+    library UzEngine's tree has no copy of."""
+    if lib.uzengine_dir is None:
+        return {}
     blobs = git.ls_tree_blobs(uzengine, UZENGINE_COMMIT, (lib.uzengine_dir,))
     contents = git.read_blobs(uzengine, sorted(set(blobs.values())))
     prefix = lib.uzengine_dir + "/"

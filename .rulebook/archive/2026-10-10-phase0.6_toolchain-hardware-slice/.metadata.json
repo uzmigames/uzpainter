@@ -1,0 +1,32 @@
+{
+  "status": "in-progress",
+  "createdAt": "2026-10-10T06:01:55.195Z",
+  "updatedAt": "2026-10-10T17:41:30.770Z",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "How should the Visual C++ runtime that Embree needs reach a clean Windows machine, and who runs the clean-machine start?",
+      "status": "answered",
+      "askedAt": "2026-10-10T08:18:21.190Z",
+      "context": "Measured on 2026-10-10 (tools/toolchain/dll_closure.py): the prebuilt Embree 4.4.1 release (embree4.dll, tbb12.dll) imports MSVCP140.dll and VCRUNTIME140.dll (Visual C++ 2015-2022 runtime). The Embree package does not contain them, and a clean Windows 10/11 has no Visual C++ runtime. UzPainter.exe itself, DXC and the Agility runtime need only Windows system DLLs. Everything else in the slice is green on this machine (RTX 4090: device, DXIL+SPIR-V compile, compute readback, 16-bit PNG, Embree). UzPainter.exe loads embree4.dll at run time, so on a clean machine the process starts and every other stage runs, but the embree stage fails with 'module not found'. Shipping the runtime app-local is allowed by 13-engine-integration.md section 5 (\"further Visual C++ runtime DLLs ... only as measured\"), but docs/licensing-and-clean-room.md section 3 lists those files as \"redistributable - exact files not confirmed\", so their source and licence acceptance are the owner's call (same pattern as RB-AGILITY-TERMS / RB-DXC-DXIL). Separately, the clean-machine run itself needs a clean Windows 10/11 x64 machine or VM without the Windows SDK, Vulkan SDK, Python or Painter. This machine has none (Windows Sandbox is not enabled, Docker is set up for Linux containers), so the agent cannot do that run.",
+      "options": [
+        {
+          "label": "Ship app-local: vendor msvcp140.dll and vcruntime140.dll from Microsoft's Visual C++ 2015-2022 Redistributable 14.44.35112 (VS 2022 VC\\Redist folder, recorded by file hash and Authenticode signer) beside UzPainter.exe, with release blocker RB-VCRT-TERMS until you accept the redistribution terms; you (or a VM you provide) run the clean-machine start",
+          "description": "keeps the one-folder promise"
+        },
+        {
+          "label": "Installer prerequisite: no app-local runtime; the Visual C++ Redistributable is installed before UzPainter (the clean-machine check installs vc_redist.x64.exe first)",
+          "description": "simplest licence story, but breaks the self-contained one-folder distribution"
+        },
+        {
+          "label": "Build Embree from source with Zig (internal tasking, no TBB, no Microsoft runtime)",
+          "description": "no Microsoft redistributable at all, but a large new vendored source tree and build, and the Embree stage then tests UzPainter's own Embree build rather than the upstream binary"
+        }
+      ],
+      "recommended": "Ship app-local: vendor msvcp140.dll and vcruntime140.dll from Microsoft's Visual C++ 2015-2022 Redistributable 14.44.35112 (VS 2022 VC\\Redist folder, recorded by file hash and Authenticode signer) beside UzPainter.exe, with release blocker RB-VCRT-TERMS until you accept the redistribution terms; you (or a VM you provide) run the clean-machine start",
+      "blocks": "3.5 Clean-machine start (and the clean-machine part of 4.1)",
+      "answer": "Owner (2026-10-10): option 1 — ship msvcp140.dll and vcruntime140.dll app-local beside UzPainter.exe from Microsoft's Visual C++ 2015-2022 Redistributable (recorded by file hash and Authenticode signer), with release blocker RB-VCRT-TERMS until the owner accepts the redistribution terms. The clean-machine start test is NOT an agent task: the owner will test it personally in the future; record the static --clean-machine closure check and the reduced-environment start as this task's evidence and close item 3.5/4.1 on that basis, noting the owner-run clean-machine test as pending owner action.",
+      "answeredAt": "2026-10-10T17:41:30.770Z"
+    }
+  ]
+}

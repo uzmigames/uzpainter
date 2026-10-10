@@ -14,13 +14,15 @@ Painter session:
 4. The recorder writes the fence, then the operator saves the render (Save Render) to the path
    the recorder names. Current-frame verification: the file is the only file of a fresh
    directory, written after the fence, at the overridden resolution, and its silhouette matches
-   the fixture's authored silhouette mask (input `silhouette`).
+   the fixture mesh projected from the camera the recorder read back (`render_procedure/
+   projection.py`), after checking that Painter's scene bounding box is the mesh file's.
 5. The recording is staged in the private work directory. When two `separate_session`
    references (different Painter processes) and one `k_times_samples` reference with identical
    keys are staged, the private record and the public manifest are written to the inbox.
 
-The procedure is qualified by `phase0.9_render-reference-capture` before any render golden is
-admitted (14-parity-testing.md §2); until then the recorder only produces candidates.
+The sheet names the procedure version (`capture.procedure`, `PROCEDURE_VERSION`) and the pixel
+route (`capture.route`); the qualified procedure and its answers are
+`parity/reports/phase0/iray-capture-procedure.md` (task `phase0.6_render-reference-procedure`).
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.capture import (
     MEDIA_TYPES,
     check_silhouette,
@@ -43,6 +46,15 @@ from tools.parity.recorder.job import Job, canonical_json, sha256_bytes, sha256_
 from tools.parity.recorder.output import ensure_outside_repository, run_name, slug, write_run
 from tools.parity.recorder.session import PainterSession, RecorderError
 from tools.parity.recorder.texture import Now, close_quietly, replay, stage_inputs, utc_now
+from tools.parity.render_procedure.projection import (
+    DEFAULT_ORDER,
+    ROTATION_ORDERS,
+    Camera,
+    check_scene_bounds,
+    load_obj,
+    silhouette_mask,
+    write_grey_png,
+)
 
 IRAY_PANEL = "Iray Settings"
 MIN_SAMPLE = f"{IRAY_PANEL}/Min Sample"
@@ -51,7 +63,11 @@ MAX_TIME = f"{IRAY_PANEL}/Max Time"
 WIDTH = f"{IRAY_PANEL}/Width"
 HEIGHT = f"{IRAY_PANEL}/Height"
 CAPTURE_ENCODING = "capture.encoding"
-SILHOUETTE_INPUT = "silhouette"
+CAPTURE_PROCEDURE = "capture.procedure"
+CAPTURE_ROUTE = "capture.route"
+ROTATION_ORDER = "capture.camera_rotation_order"
+PROCEDURE_VERSION = "iray-capture/1"
+SAVE_RENDER = "save_render"
 TIME_UNITS = {"s": 1.0, "min": 60.0, "h": 3600.0}
 PANEL_IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 SEPARATE_SESSION = "separate_session"
@@ -91,15 +107,16 @@ class SettingsSheet:
     panel_settings: tuple[PanelSetting, ...]
     capture_encoding: str | None
     sha256: str
+    rotation_order: str | None = None
 
 
 def settings_sheet(job: Job) -> SettingsSheet:
     manifest = job.manifest
     panel: list[PanelSetting] = []
-    capture_encoding: str | None = None
+    capture: dict[str, str] = {}
     for setting in manifest["applied_settings"]:
-        if setting["name"] == CAPTURE_ENCODING:
-            capture_encoding = str(setting["value"])
+        if setting["name"].startswith("capture."):
+            capture[setting["name"]] = str(setting["value"])
         elif setting["applied_by"] == "operator_settings_sheet":
             name, _, label = setting["name"].partition("/")
             if not label:
@@ -116,6 +133,19 @@ def settings_sheet(job: Job) -> SettingsSheet:
     time_setting = by_name[MAX_TIME]
     if time_setting.unit not in TIME_UNITS:
         raise RecorderError(f"Max Time unit must be one of {sorted(TIME_UNITS)}")
+    if capture.get(CAPTURE_PROCEDURE) != PROCEDURE_VERSION:
+        raise RecorderError(
+            f"the sheet must name the capture procedure: {CAPTURE_PROCEDURE} = "
+            f"{PROCEDURE_VERSION!r} (found {capture.get(CAPTURE_PROCEDURE)!r})"
+        )
+    if capture.get(CAPTURE_ROUTE) != SAVE_RENDER:
+        raise RecorderError(
+            f"{CAPTURE_ROUTE} must be {SAVE_RENDER!r}: the recorder implements only the Save "
+            "Render route of the qualified procedure"
+        )
+    order = capture.get(ROTATION_ORDER)
+    if order is not None and order not in ROTATION_ORDERS:
+        raise RecorderError(f"{ROTATION_ORDER} must be one of {ROTATION_ORDERS}")
     sheet = {
         "golden_id": manifest["golden_id"],
         "instruction_sequence": manifest["instruction_sequence"],
@@ -128,8 +158,9 @@ def settings_sheet(job: Job) -> SettingsSheet:
         width=int(by_name[WIDTH].value),
         height=int(by_name[HEIGHT].value),
         panel_settings=tuple(panel),
-        capture_encoding=capture_encoding,
+        capture_encoding=capture.get(CAPTURE_ENCODING),
         sha256=sha256_bytes(canonical_json(sheet)),
+        rotation_order=order,
     )
 
 
@@ -141,7 +172,7 @@ def same_value(entered: str, expected: float | int | str | bool) -> bool:
             return float(entered) == float(expected)
         except ValueError:
             return False
-    return entered == expected
+    return entered.strip().casefold() == str(expected).strip().casefold()
 
 
 def expected_value(setting: PanelSetting, samples: int) -> float | int | str | bool:
@@ -222,6 +253,34 @@ def convergence(operator: Operator, sheet: SettingsSheet, samples: int) -> dict[
         "rendering_time_s": rendering_time,
         "max_time_s": sheet.max_time_s,
     }
+
+
+def mesh_input(job: Job) -> str:
+    for step in job.state_steps:
+        if step.call == ps.CREATE:
+            return str(step.args["mesh"])
+    raise RecorderError("the instruction sequence has no project.create step")
+
+
+def expected_silhouette(
+    mesh_file: Path, render_state: dict[str, Any], sheet: SettingsSheet, directory: Path
+) -> Path:
+    """The fixture projected from the recorded camera, written as a mask (private evidence)."""
+    mesh = load_obj(mesh_file)
+    check_scene_bounds(mesh, render_state["scene_bounding_box"])
+    camera = Camera.from_render_state(render_state)
+    order = sheet.rotation_order
+    if order is None:
+        if any(angle != 0.0 for angle in camera.rotation):
+            raise RecorderError(
+                f"camera rotation {list(camera.rotation)} needs {ROTATION_ORDER} in the sheet "
+                "(the Euler order the probe confirmed)"
+            )
+        order = DEFAULT_ORDER  # irrelevant for a zero rotation
+    mask = directory / "expected-silhouette.png"
+    directory.mkdir(parents=True, exist_ok=True)
+    write_grey_png(mask, silhouette_mask(mesh, camera, sheet.width, sheet.height, order))
+    return mask
 
 
 def capture_render(
@@ -315,9 +374,8 @@ def record_iray_reference(
         raise RecorderError("Iray references are Tier 3 goldens")
     if job.exports:
         raise RecorderError("a Tier 3 job captures with Save Render, not texture exports")
-    if SILHOUETTE_INPUT not in job.inputs:
-        raise RecorderError(f"current-frame verification needs a {SILHOUETTE_INPUT!r} mask input")
     sheet = settings_sheet(job)
+    mesh_id = mesh_input(job)
     if condition == SEPARATE_SESSION:
         samples = sheet.samples
     elif condition == K_TIMES_SAMPLES:
@@ -340,14 +398,16 @@ def record_iray_reference(
     try:
         defaults = replay(session, job, staged_inputs)
         render_state = session.call("render_state")
+        render_state["scene_bounding_box"] = session.call("scene_bounding_box")
+        silhouette = expected_silhouette(
+            staged_inputs[mesh_id], render_state, sheet, directory / "verification"
+        )
         switched = session.call("switch_mode", mode="Visualisation")
         if switched["mode"] != "Visualisation":
             raise RecorderError(f"Painter stayed in {switched['mode']} mode")
         operator_outputs, evidence, images = operator_form(operator, sheet, samples, directory)
         converged = convergence(operator, sheet, samples)
-        reference, render_file = capture_render(
-            operator, sheet, directory, staged_inputs[SILHOUETTE_INPUT]
-        )
+        reference, render_file = capture_render(operator, sheet, directory, silhouette)
     finally:
         close_quietly(session)
     key = {
@@ -362,7 +422,6 @@ def record_iray_reference(
         "resource_hashes": [
             {"resource": input_id, "sha256": sha256_file(path)}
             for input_id, path in sorted(job.inputs.items())
-            if input_id != SILHOUETTE_INPUT
         ],
         "bake_backend": None,
         "render_state": render_state,

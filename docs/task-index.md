@@ -4,7 +4,7 @@ Every rulebook task under `.rulebook/tasks/`, one table per phase, rows ordered 
 
 ## Phase 0
 
-27 tasks, levels 1–10.
+28 tasks, levels 1–10.
 
 | Id | DAG node | Parent | Depends on (same phase) | Goal |
 |---|---|---|---|---|
@@ -26,6 +26,7 @@ Every rulebook task under `.rulebook/tasks/`, one table per phase, rows ordered 
 | `phase0.6_tier0-semantics-goldens` | (P0-TIER0) | `phase0.8_tier0-goldens` | `phase0.3_painter-oracle-recorder`, `phase0.5_private-oracle-store` | The compositor reproduces Painter's layer-stack semantics, but most of what decides its outputs is undocumented: blend formulas and the space they operate in, where values are quantised, stack base values, mask … |
 | `phase0.6_toolchain-hardware-slice` | (P0-TOOLCHAIN) | `phase0.8_toolchain-slice` | `phase0.2_vendor-thirdparty`, `phase0.3_vendor-modifications`, `phase0.5_vendor-render-core` | UzPainter has its own build (decision 021; PRD ARC-08 "own build, Zig-first unless the vendored subset dictates otherwise, with Phase 0 qualification"), and G0 requires the hardware `selftest` to be green on the owner's … |
 | `phase0.7_render-reference-captures` | (P0-FEAS-RENDER) | `phase0.9_render-reference-capture` | `phase0.3_painter-oracle-recorder`, `phase0.5_private-oracle-store`, `phase0.6_render-reference-procedure` | Tier 3 compares UzPainter's path tracer with converged Iray references; Iray is stochastic, so each reference must be recorded twice in separate Painter sessions plus once at k·S samples to measure Iray's own run-to-run … |
+| `phase0.7_tier0-semantics-ui-cases` | (P0-TIER0) | — | `phase0.6_tier0-semantics-goldens` | Three Tier 0 cases cannot be set through Painter 12.1.0's documented API: the second height→normal method, the height→normal strength and the group `PassThrough` mode. Owner answer to q1 of `phase0.6_tier0-semantics-goldens` (2026-10-10): a follow-up task, recorded through Painter's UI under decision 029; not a prerequisite of `phase0.8_tier0-goldens` or `phase0.10_gate-g0` |
 | `phase0.7_tier0-stability-fits` | (P0-TIER0) | `phase0.8_tier0-goldens` | `phase0.3_painter-oracle-recorder`, `phase0.5_private-oracle-store`, `phase0.6_tier0-api-probes`, `phase0.6_tier0-defaults-templates`, `phase0.6_tier0-semantics-goldens` | Exact equality with Painter is the acceptance rule (decision 017, owner Q1), so before any compositor kernel is frozen two things must be known: whether Painter reproduces itself (oracle stability, always reported … |
 | `phase0.7_toolchain-cpython` | (P0-TOOLCHAIN) | `phase0.8_toolchain-slice` | `phase0.5_vendor-render-core`, `phase0.6_toolchain-hardware-slice` | UzPainter embeds CPython 3.13 (Painter 12.1 ships 3.13.9): the worker hosts the `substance_painter` facade and `run` scripts over the pybind11 `uzpainter` module, and the supervisor runs the official Python MCP SDK from … |
 | `phase0.7_toolchain-probes` | (P0-TOOLCHAIN) | `phase0.8_toolchain-slice` | `phase0.5_vendor-render-core`, `phase0.6_toolchain-hardware-slice` | Owner Q9 (decision 022) makes DX12 the primary backend and Vulkan the second backend on Windows 10/11 x64, with DXR Tier 1.1 and Vulkan ray queries required by the path tracer and the optional GPU baker … |

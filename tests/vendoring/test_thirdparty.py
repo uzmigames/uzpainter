@@ -31,6 +31,7 @@ from tools.vendoring.thirdparty import (
     ComparedFile,
     Library,
     VendoredFile,
+    application_include_problems,
     build_manifest,
     classify,
     compare,
@@ -229,6 +230,13 @@ def test_every_include_resolves_inside_the_repository() -> None:
     `thirdparty/<library>/` (the library its origin names); the rest are standard, Windows SDK
     or inactive-branch headers; no include directory leaves `thirdparty/`."""
     assert include_problems(REPO_ROOT / "thirdparty") == []
+
+
+def test_application_includes_resolve_inside_the_repository() -> None:
+    """The third-party code compiled into `UzPainter.exe` only (zlib, spng, the Embree headers;
+    phase0.6_toolchain-hardware-slice) resolves its includes inside its own folders; the rest are
+    standard, Windows or inactive-branch headers."""
+    assert application_include_problems(REPO_ROOT / "thirdparty") == []
 
 
 # ---------------------------------------------------------------------------------------------

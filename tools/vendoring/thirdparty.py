@@ -1,12 +1,15 @@
 """Third-party libraries of the vendored render core (`docs/architecture/13-engine-integration.md`
-§2.2, §2.5; `docs/licensing-and-clean-room.md` §3).
+§2.2, §2.5; `docs/licensing-and-clean-room.md` §3) and of `UzPainter.exe` itself.
 
-Every library is taken from its own upstream release archive, never from a UzEngine tree, at the
-version UzEngine's tree uses at the selected commit. `LIBRARIES` pins each archive (URL and
-SHA-256), the files selected from it, the include directories the build adds, the licence result
-and the causes of every difference from UzEngine's copy. Each `thirdparty/<folder>/` holds the
-selected files at their upstream relative paths plus `MANIFEST.json` and `ORIGIN.md`, both written
-from this table and the import evidence by `tools.vendoring.import_thirdparty`.
+Every library is taken from its own upstream release archive, never from a UzEngine tree. The
+render core's libraries (`Library.core`) are pinned at the version UzEngine's tree uses at the
+selected commit; the libraries UzPainter selects itself (Embree, zlib, spng; first needed by the
+`selftest` hardware slice, `phase0.6_toolchain-hardware-slice`) at the release recorded in their
+`version_source`. `LIBRARIES` pins each archive (URL and SHA-256), the files selected from it, the
+include directories the build adds, the licence result and the causes of every difference from
+UzEngine's copy, where UzEngine has one. Each `thirdparty/<folder>/` holds the selected files at
+their upstream relative paths plus `MANIFEST.json` and `ORIGIN.md`, both written from this table
+and the import evidence by `tools.vendoring.import_thirdparty`.
 """
 
 from __future__ import annotations
@@ -47,6 +50,10 @@ IMPORTER = (
     "Rulebook task `phase0.2_vendor-thirdparty`, run with "
     "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
 )
+IMPORTER_SLICE = (
+    "Rulebook task `phase0.6_toolchain-hardware-slice`, run with "
+    "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
+)
 
 COMPILED = "shipped: compiled into `UzPainter.exe`"
 HEADERS = "build-only: headers, nothing of it is compiled on its own or shipped"
@@ -62,7 +69,9 @@ class Library:
     Paths in `select`, `sources`, `licence_files`, `header_closure`, `include_dirs` and
     `differences` are relative to the archive root (`archive_root` stripped), which is also the
     layout of `thirdparty/<folder>/` and, for the libraries UzEngine has, of UzEngine's
-    `runtime/thirdparty/<uzengine_folder>/`."""
+    `runtime/thirdparty/<uzengine_folder>/`. `uzengine_folder` is None when UzEngine's tree has
+    no copy (`uzengine_note` says why); `core` is False for libraries of `UzPainter.exe` that the
+    render core does not use, which stay out of the render core's build lists."""
 
     name: str
     folder: str
@@ -80,20 +89,24 @@ class Library:
     licence: str
     role: str
     features: str
-    uzengine_folder: str
+    uzengine_folder: str | None
     sources: tuple[str, ...] = ()
     header_closure: tuple[str, ...] = ()
     differences: Mapping[str, str] = field(default_factory=dict)
     uzengine_note: str = ""
     licence_notes: tuple[str, ...] = ()
     release_blocker: str | None = None
+    core: bool = True
+    importer: str = IMPORTER
 
     @property
     def path(self) -> str:
         return f"{THIRDPARTY_DIR}/{self.folder}"
 
     @property
-    def uzengine_dir(self) -> str:
+    def uzengine_dir(self) -> str | None:
+        if self.uzengine_folder is None:
+            return None
         return f"runtime/thirdparty/{self.uzengine_folder}"
 
 
@@ -505,6 +518,169 @@ LIBRARIES: tuple[Library, ...] = (
             "resolve by written confirmation of the terms or by not shipping `dxil.dll`"
         ),
     ),
+    Library(
+        name="Embree",
+        folder="embree",
+        upstream="https://github.com/RenderKit/embree",
+        version="v4.4.1",
+        commit="f590db83ef6559387df7f6d8725c34fb7acf851d",
+        archive_url=(
+            "https://github.com/RenderKit/embree/releases/download/v4.4.1/"
+            "embree-4.4.1.x64.windows.zip"
+        ),
+        archive_name="embree-4.4.1.x64.windows.zip",
+        archive_sha256="5aa1fa3161a720f9c610b06c652b80f421cb2b1fe8221fdf92b74157336fdf8f",
+        archive_root="embree-4.4.1.x64.windows/",
+        version_source=(
+            "UzPainter's selection: the newest Embree 4.x release on the retrieval date (tag "
+            "`v4.4.1`, published 2026-04-02), its prebuilt x64 Windows package "
+            "(`13-engine-integration.md` §5: `embree4.dll` + `tbb12.dll` from an Embree 4.x "
+            "release)"
+        ),
+        select=(
+            "include/embree4/*.h",
+            "bin/embree4.dll",
+            "bin/tbb12.dll",
+            "share/doc/Embree_superbuild/LICENSE.txt",
+            "share/doc/Embree_superbuild/third-party-programs.txt",
+            "share/doc/Embree_superbuild/third-party-programs-TBB.txt",
+        ),
+        licence_files=(
+            "share/doc/Embree_superbuild/LICENSE.txt",
+            "share/doc/Embree_superbuild/third-party-programs.txt",
+            "share/doc/Embree_superbuild/third-party-programs-TBB.txt",
+        ),
+        include_dirs=("include",),
+        licence=(
+            "Apache-2.0 (`share/doc/Embree_superbuild/LICENSE.txt`; every header carries "
+            "`SPDX-License-Identifier: Apache-2.0`); `tbb12.dll` is oneTBB, Apache-2.0, with its "
+            "notices in `third-party-programs-TBB.txt`; `third-party-programs.txt` lists the "
+            "notices of the release's components"
+        ),
+        role=(
+            "shipped: `embree4.dll` and `tbb12.dll` beside `UzPainter.exe` "
+            "(`13-engine-integration.md` §5), loaded at run time by the `embree` stage of "
+            "`selftest`; headers build-only"
+        ),
+        features=(
+            "Prebuilt x64 Windows release with TBB tasking: `embree4.dll`, `tbb12.dll` and the "
+            "C API headers `include/embree4/*.h`. No import library (UzPainter loads "
+            "`embree4.dll` with `LoadLibraryExW` and resolves the C API by name), no "
+            "`tbbmalloc.dll` (neither vendored DLL imports it), no tutorials, ISPC headers, "
+            "CMake files or documentation besides the licence files"
+        ),
+        uzengine_folder=None,
+        uzengine_note=(
+            "UzEngine's tree at the commit has no Embree (`runtime/thirdparty/` holds no Embree "
+            "folder), so there is nothing to compare."
+        ),
+        licence_notes=(
+            "Apache-2.0 §4(d): the release has no `NOTICE` file; binary distributions reproduce "
+            "`LICENSE.txt`, `third-party-programs.txt` and `third-party-programs-TBB.txt`.",
+            "`embree4.dll` and `tbb12.dll` import the Visual C++ runtime (`MSVCP140.dll`, "
+            "`VCRUNTIME140.dll`), which the package does not contain; the measured import "
+            "closure (`tools.toolchain.dll_closure`) records them, and their app-local shipping "
+            "is governed by the Visual C++ runtime row of `docs/licensing-and-clean-room.md` §3.",
+        ),
+        core=False,
+        importer=IMPORTER_SLICE,
+    ),
+    Library(
+        name="zlib",
+        folder="zlib",
+        upstream="https://github.com/madler/zlib",
+        version="v1.3.2",
+        commit="da607da739fa6047df13e66a2af6b8bec7c2a498",
+        archive_url="https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz",
+        archive_name="zlib-1.3.2.tar.gz",
+        archive_sha256="bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+        archive_root="zlib-1.3.2/",
+        version_source=(
+            "UzPainter's selection: the newest zlib release on the retrieval date (tag `v1.3.2`, "
+            "published 2026-02-17); spng needs zlib (`SPNG_USE_MINIZ` stays undefined)"
+        ),
+        select=(
+            "LICENSE",
+            "README",
+            "adler32.c",
+            "compress.c",
+            "crc32.c",
+            "crc32.h",
+            "deflate.c",
+            "deflate.h",
+            "gzguts.h",
+            "inffast.c",
+            "inffast.h",
+            "inffixed.h",
+            "inflate.c",
+            "inflate.h",
+            "inftrees.c",
+            "inftrees.h",
+            "trees.c",
+            "trees.h",
+            "zconf.h",
+            "zlib.h",
+            "zutil.c",
+            "zutil.h",
+        ),
+        licence_files=("LICENSE", "README"),
+        include_dirs=(".",),
+        sources=(
+            "adler32.c",
+            "compress.c",
+            "crc32.c",
+            "deflate.c",
+            "inffast.c",
+            "inflate.c",
+            "inftrees.c",
+            "trees.c",
+            "zutil.c",
+        ),
+        licence="zlib licence (`LICENSE`; the same notice is in `README` and `zlib.h`)",
+        role=COMPILED,
+        features=(
+            "The units spng uses, compiled as C11: `adler32`, `compress`, `crc32`, `deflate`, "
+            "`inffast`, `inflate`, `inftrees`, `trees`, `zutil`; `gzguts.h` only because "
+            "`zutil.c` includes it; no gz* sources, `uncompr`, contrib, examples or tests"
+        ),
+        uzengine_folder=None,
+        uzengine_note=(
+            "UzEngine takes zlib from vcpkg (`runtime/thirdparty/README.md`, vcpkg section); its "
+            "tree at the commit has no zlib folder, so there is nothing to compare."
+        ),
+        core=False,
+        importer=IMPORTER_SLICE,
+    ),
+    Library(
+        name="spng",
+        folder="spng",
+        upstream="https://github.com/randy408/libspng",
+        version="v0.7.4",
+        commit="fb768002d4288590083a476af628e51c3f1d47cd",
+        archive_url="https://github.com/randy408/libspng/archive/refs/tags/v0.7.4.tar.gz",
+        archive_name="libspng-v0.7.4.tar.gz",
+        archive_sha256="47ec02be6c0a6323044600a9221b049f63e1953faf816903e7383d4dc4234487",
+        archive_root="libspng-0.7.4/",
+        version_source=(
+            "`runtime/thirdparty/README.md` (spng 0.7.4), also the newest spng release on the "
+            "retrieval date; selected over libpng from the inventory "
+            "(`docs/licensing-and-clean-room.md` §3) for the 16-bit PNG encoder and decoder of "
+            "`selftest`"
+        ),
+        select=("spng/spng.c", "spng/spng.h", "LICENSE"),
+        licence_files=("LICENSE",),
+        include_dirs=("spng",),
+        sources=("spng/spng.c",),
+        licence="BSD-2-Clause (`LICENSE`)",
+        role=COMPILED,
+        features=(
+            "`spng/spng.c` compiled as C11 with `SPNG_STATIC` and zlib (`SPNG_USE_MINIZ` "
+            "undefined); encoder and decoder, 8 and 16 bits per sample; no examples or tests"
+        ),
+        uzengine_folder="spng",
+        core=False,
+        importer=IMPORTER_SLICE,
+    ),
 )
 
 LIBRARY_BY_NAME = {lib.name: lib for lib in LIBRARIES}
@@ -695,7 +871,7 @@ class LibraryManifest:
     archive_root: str
     files: list[VendoredFile]
     uzengine_commit: str
-    uzengine_dir: str
+    uzengine_dir: str | None
     comparison: list[ComparedFile]
     not_in_uzengine: list[str]
 
@@ -756,7 +932,7 @@ def loads_manifest(text: str) -> LibraryManifest:
             for f in cast(list[dict[str, Any]], raw["files"])
         ],
         uzengine_commit=str(raw["uzengine_commit"]),
-        uzengine_dir=str(raw["uzengine_dir"]),
+        uzengine_dir=_opt_str(raw["uzengine_dir"]),
         comparison=comparison,
         not_in_uzengine=[str(p) for p in cast(list[Any], raw["not_in_uzengine"])],
     )
@@ -828,8 +1004,8 @@ def render_origin(lib: Library, manifest: LibraryManifest) -> str:
         f"| Archive root | `{lib.archive_root or '(none)'}` (stripped; paths below are relative "
         "to it) |",
         f"| Retrieved | {RETRIEVED} |",
-        f"| Importer | {IMPORTER} |",
-        f"| Version source | UzEngine commit `{UZENGINE_COMMIT[:12]}`: {lib.version_source} |",
+        f"| Importer | {lib.importer} |",
+        f"| Version source | {_version_source(lib)} |",
         f"| Licence | {lib.licence} |",
         f"| Licence files | {', '.join(f'`{f}`' for f in lib.licence_files)} (verbatim) |",
         f"| Distribution role | {lib.role} |",
@@ -850,6 +1026,12 @@ def render_origin(lib: Library, manifest: LibraryManifest) -> str:
     return "\n".join(lines)
 
 
+def _version_source(lib: Library) -> str:
+    if lib.uzengine_folder is None:
+        return lib.version_source
+    return f"UzEngine commit `{UZENGINE_COMMIT[:12]}`: {lib.version_source}"
+
+
 def _status(lib: Library) -> str:
     if lib.release_blocker:
         return f"**release blocker** — {lib.release_blocker}"
@@ -857,6 +1039,8 @@ def _status(lib: Library) -> str:
 
 
 def _comparison_section(lib: Library, manifest: LibraryManifest) -> list[str]:
+    if manifest.uzengine_dir is None:
+        return ["## Comparison with UzEngine's copy", "", lib.uzengine_note]
     by_result: dict[Result, list[ComparedFile]] = {r: [] for r in RESULTS}
     for c in manifest.comparison:
         by_result[c.result].append(c)
@@ -908,15 +1092,23 @@ def _comparison_section(lib: Library, manifest: LibraryManifest) -> list[str]:
 # Include resolution of the build
 
 
-def build_include_dirs() -> list[str]:
-    """The third-party include directories in build order, relative to `thirdparty/`."""
-    return [f"{lib.folder}/{d}".removesuffix("/.") for lib in LIBRARIES for d in lib.include_dirs]
+def build_include_dirs(core: bool = True) -> list[str]:
+    """The third-party include directories in build order, relative to `thirdparty/`: those of
+    the render core's libraries, or (`core=False`) those of the libraries only `UzPainter.exe`
+    uses."""
+    return [
+        f"{lib.folder}/{d}".removesuffix("/.")
+        for lib in LIBRARIES
+        if lib.core == core
+        for d in lib.include_dirs
+    ]
 
 
-def compiled_sources() -> list[str]:
+def compiled_sources(core: bool = True) -> list[str]:
     """Third-party translation units the build compiles on their own, relative to
-    `thirdparty/`."""
-    return [f"{lib.folder}/{s}" for lib in LIBRARIES for s in lib.sources]
+    `thirdparty/`: the render core's (`uzrendercore.lib`), or (`core=False`) those compiled into
+    `UzPainter.exe` only."""
+    return [f"{lib.folder}/{s}" for lib in LIBRARIES if lib.core == core for s in lib.sources]
 
 
 def library_of(path: str) -> Library | None:
@@ -1059,5 +1251,69 @@ def include_problems(thirdparty_root: Path) -> list[str]:
     problems += [
         f"THIRD_PARTY_SYSTEM_INCLUDES lists {s}, which no vendored file includes unresolved"
         for s in sorted(set(THIRD_PARTY_SYSTEM_INCLUDES) - seen_system)
+    ]
+    return problems
+
+
+# Includes made by the third-party files compiled into `UzPainter.exe` only (zlib, spng, the
+# Embree headers) that stay unresolved because they name a toolchain or Windows header or sit in
+# a branch the Windows x64 build never takes.
+APPLICATION_SYSTEM_INCLUDES: dict[str, str] = {
+    "alloc.h": "zlib's Borland/Turbo C branch, not built",
+    "arm64_neon.h": _ARM,
+    "arm_neon.h": _ARM,
+    "contrib/crc32vx/crc32_vx_hooks.h": "zlib's s390x branch (`HAVE_S390X_VX`), not built",
+    "ctype.h": _CRT,
+    "errno.h": _CRT,
+    "fcntl.h": _CRT,
+    "immintrin.h": _INTRINSICS,
+    "inttypes.h": _CRT,
+    "io.h": _CRT,
+    "malloc.h": _CRT,
+    "pthread.h": _OTHER,
+    "unixio.h": _OTHER,
+    "stdatomic.h": _CRT,
+    "stdbool.h": _CRT,
+    "sys/stat.h": _CRT,
+    "sys/types.h": _CRT,
+    "miniz.h": "spng with `SPNG_USE_MINIZ`, not enabled (zlib is used)",
+    "tests/framac_stubs.h": "spng's Frama-C analysis branch (`__FRAMAC__`), not built",
+}
+
+# The Embree header `UzPainter.exe` includes; the rest of the API is reached through it.
+APPLICATION_HEADERS = ("embree/include/embree4/rtcore.h",)
+
+
+def application_include_problems(thirdparty_root: Path) -> list[str]:
+    """Include check over the third-party code compiled into `UzPainter.exe` only.
+
+    The closure of `compiled_sources(core=False)` and `APPLICATION_HEADERS` is followed through
+    `build_include_dirs(core=False)`, all inside `thirdparty_root`; every unresolved include must
+    be a standard or Windows header (`subset.external_origin`) or be listed in
+    `APPLICATION_SYSTEM_INCLUDES`, and every listed entry must still occur."""
+    dirs = build_include_dirs(core=False)
+    problems = [
+        f"include directory {d} leaves the repository's thirdparty folder"
+        for d in dirs
+        if d.startswith(("/", "..")) or ":" in d or "/../" in f"/{d}/"
+    ]
+    seeds = [*compiled_sources(core=False), *APPLICATION_HEADERS]
+    result = compute_closure(thirdparty_root, seeds, dirs, pair_sources=False)
+    for path in sorted(result.files):
+        lib = library_of(path)
+        if lib is None or lib.core:
+            problems.append(
+                f"{path}: reached from UzPainter.exe's third-party code, outside its libraries"
+            )
+    seen: set[str] = set()
+    for include in result.unresolved:
+        if include.spelling in APPLICATION_SYSTEM_INCLUDES:
+            seen.add(include.spelling)
+            continue
+        if external_origin(include.spelling) is None:
+            problems.append(f"{include.source}: unresolved include {include.spelling}")
+    problems += [
+        f"APPLICATION_SYSTEM_INCLUDES lists {s}, which no vendored file includes unresolved"
+        for s in sorted(set(APPLICATION_SYSTEM_INCLUDES) - seen)
     ]
     return problems

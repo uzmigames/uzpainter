@@ -2,11 +2,15 @@
 //!
 //! `zig build` builds `uzrendercore`, the vendored UzEngine render core
 //! (`thirdparty/uzengine-render-core/`, local modifications in its `MODIFICATIONS.md`) as a static
-//! library, and the native tests of those modifications. Steps:
+//! library, the native tests of those modifications and `UzPainter.exe`. Steps:
 //!
 //! - `zig build render-core`  the static library only (`zig-out/lib/uzrendercore.lib`)
 //! - `zig build native-tests` the test executable with `dxcompiler.dll`, `dxil.dll` and the
 //!   Agility SDK's `D3D12\D3D12Core.dll` beside it (`zig-out/bin/`)
+//! - `zig build painter`      `UzPainter.exe` (`src/`, the render core and libc++ linked
+//!   statically) with the same run-time files plus Embree's `embree4.dll` and `tbb12.dll` and
+//!   the Visual C++ runtime they import (`zig-out/bin/`, the one-folder layout of
+//!   `13-engine-integration.md` §5)
 //!
 //! Every include and library path is inside this repository. Windows system headers and import
 //! libraries come from the MinGW-w64 files bundled with the pinned Zig release; nothing refers
@@ -130,6 +134,55 @@ const spdlog_sources = [_][]const u8{
     "stdout_sinks.cpp",
 };
 
+/// UzPainter's own C++ sources, relative to `src/`, compiled into `UzPainter.exe`.
+const app_sources = [_][]const u8{
+    "main.cpp",
+    "selftest/harness.cpp",
+    "selftest/hardware_slice.cpp",
+    "selftest/png16.cpp",
+    "selftest/embree_stage.cpp",
+};
+
+/// Third-party code only `UzPainter.exe` uses (`tools/vendoring/thirdparty.py`, libraries with
+/// `core=False`): include directories in the order of `build_include_dirs(core=False)`, and the
+/// C sources of `compiled_sources(core=False)`. Embree contributes headers only: its DLL is loaded
+/// at run time.
+const app_thirdparty_include_dirs = [_][]const u8{
+    "thirdparty/embree/include",
+    "thirdparty/zlib",
+    "thirdparty/spng/spng",
+};
+const zlib_sources = [_][]const u8{
+    "adler32.c",
+    "compress.c",
+    "crc32.c",
+    "deflate.c",
+    "inffast.c",
+    "inflate.c",
+    "inftrees.c",
+    "trees.c",
+    "zutil.c",
+};
+/// spng without DLL import/export decorations, on zlib (`SPNG_USE_MINIZ` undefined).
+const spng_flags = [_][]const u8{ "-std=c11", "-DSPNG_STATIC" };
+
+/// Run-time files installed beside the executables (`zig-out/bin/`) as in the distribution
+/// (`13-engine-integration.md` §5): repository path, then the path below `bin/`.
+const dx_runtime_files = [_][2][]const u8{
+    .{ "thirdparty/dxc/bin/x64/dxcompiler.dll", "dxcompiler.dll" },
+    .{ "thirdparty/dxc/bin/x64/dxil.dll", "dxil.dll" },
+    .{ "thirdparty/agility/build/native/bin/x64/D3D12Core.dll", "D3D12/D3D12Core.dll" },
+};
+/// Embree, and the Visual C++ runtime its prebuilt DLLs import, app-local
+/// (`tools/vendoring/vcruntime.py`).
+const embree_runtime_files = [_][2][]const u8{
+    .{ "thirdparty/embree/bin/embree4.dll", "embree4.dll" },
+    .{ "thirdparty/embree/bin/tbb12.dll", "tbb12.dll" },
+    .{ "thirdparty/vc-runtime/msvcp140.dll", "msvcp140.dll" },
+    .{ "thirdparty/vc-runtime/vcruntime140.dll", "vcruntime140.dll" },
+    .{ "thirdparty/vc-runtime/vcruntime140_1.dll", "vcruntime140_1.dll" },
+};
+
 /// Windows system libraries the core links against (import libraries from Zig's MinGW-w64).
 const system_libraries = [_][]const u8{
     "d3d12",
@@ -227,19 +280,72 @@ pub fn build(b: *std.Build) void {
         .root_module = test_mod,
     });
 
+    // Run-time files beside the executables, laid out as in the distribution (`13-…` §5).
+    var dx_runtime: [dx_runtime_files.len]*std.Build.Step = undefined;
+    for (dx_runtime_files, 0..) |file, i| {
+        dx_runtime[i] = &b.addInstallBinFile(b.path(file[0]), file[1]).step;
+    }
+
     const tests_step = b.step("native-tests", "Build the native tests of the vendored modifications");
     tests_step.dependOn(&b.addInstallArtifact(test_exe, .{}).step);
-    // Run-time files beside the executable, laid out as in the distribution (`13-…` §5).
-    tests_step.dependOn(&b.addInstallBinFile(
-        b.path("thirdparty/dxc/bin/x64/dxcompiler.dll"),
-        "dxcompiler.dll",
-    ).step);
-    tests_step.dependOn(&b.addInstallBinFile(b.path("thirdparty/dxc/bin/x64/dxil.dll"), "dxil.dll").step);
-    tests_step.dependOn(&b.addInstallBinFile(
-        b.path("thirdparty/agility/build/native/bin/x64/D3D12Core.dll"),
-        "D3D12/D3D12Core.dll",
-    ).step);
+    for (dx_runtime) |step| tests_step.dependOn(step);
     b.getInstallStep().dependOn(tests_step);
+
+    // ── UzPainter.exe ────────────────────────────────────────────────────────────────────────
+
+    // The Zig release and build mode are recorded in the `selftest` report.
+    const app_defines = [_][]const u8{
+        b.fmt("-DUZP_ZIG_VERSION=\"{s}\"", .{builtin.zig_version_string}),
+        b.fmt("-DUZP_BUILD_MODE=\"{s}\"", .{@tagName(optimize)}),
+    };
+    const app_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, app_mod);
+    app_mod.addIncludePath(b.path("src"));
+    for (app_thirdparty_include_dirs) |dir| app_mod.addIncludePath(b.path(dir));
+    app_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &app_sources,
+        .flags = &(cxx_flags ++ [_][]const u8{"-DSPNG_STATIC"} ++ app_defines),
+    });
+    app_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    app_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/zlib"),
+        .files = &zlib_sources,
+        .flags = &.{"-std=c11"},
+    });
+    app_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/spng/spng"),
+        .files = &.{"spng.c"},
+        .flags = &spng_flags,
+    });
+    app_mod.linkLibrary(core_lib);
+    for (system_libraries) |name| app_mod.linkSystemLibrary(name, .{});
+    // Module enumeration, file version resources and the registry (OS build) for the report.
+    app_mod.linkSystemLibrary("psapi", .{});
+    app_mod.linkSystemLibrary("version", .{});
+    app_mod.linkSystemLibrary("advapi32", .{});
+
+    const app_exe = b.addExecutable(.{
+        .name = "UzPainter",
+        .root_module = app_mod,
+    });
+
+    const painter_step = b.step("painter", "Build UzPainter.exe with its run-time files");
+    painter_step.dependOn(&b.addInstallArtifact(app_exe, .{}).step);
+    for (dx_runtime) |step| painter_step.dependOn(step);
+    for (embree_runtime_files) |file| {
+        painter_step.dependOn(&b.addInstallBinFile(b.path(file[0]), file[1]).step);
+    }
+    b.getInstallStep().dependOn(painter_step);
 }
 
 fn addCoreIncludePaths(b: *std.Build, mod: *std.Build.Module) void {

@@ -22,7 +22,7 @@ from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
 EXPORT = "substance_painter.export.export_project_textures"
 
 # Step arguments naming an input by input_id; the recorder passes the input's file path.
-INPUT_ARGS = {ps.CREATE: "mesh", ps.SET_ENVIRONMENT: "environment"}
+INPUT_ARGS = {ps.CREATE: "mesh", ps.SET_ENVIRONMENT: "environment", ps.IMPORT_RESOURCE: "input"}
 
 STATE_CALLS = frozenset(
     {
@@ -36,6 +36,34 @@ STATE_CALLS = frozenset(
         ps.SET_ENVIRONMENT,
         ps.SET_TONE_MAPPING,
         *(ps.CAMERA + name for name in ps.CAMERA_PROPERTIES),
+        ps.INSERT_GROUP,
+        ps.INSERT_LEVELS,
+        ps.INSERT_FILTER,
+        ps.SET_EFFECT_SOURCE,
+        ps.SET_EFFECT_CHANNELS,
+        ps.SET_FILTER_CHANNELS,
+        ps.SET_LEVELS_CHANNEL,
+        ps.SET_LEVELS,
+        ps.SET_PROJECTION,
+        ps.ADD_CHANNEL,
+        ps.EDIT_CHANNEL,
+        ps.IMPORT_RESOURCE,
+        ps.SET_MESH_MAP,
+        ps.ADD_MASK,
+        ps.INSERT_GENERATOR,
+        ps.INSERT_SMART_MATERIAL,
+        ps.SET_PARAMETERS,
+    }
+)
+
+# Capture calls of a baking-defaults job (read after the state steps, never changing state).
+BAKING_CAPTURES = frozenset(
+    {
+        ps.BAKING_COMMON,
+        ps.BAKING_BAKER,
+        ps.BAKING_CURVATURE_METHOD,
+        ps.BAKING_ENABLED_BAKERS,
+        ps.BAKING_TEXTURESET_ENABLED,
     }
 )
 
@@ -45,6 +73,18 @@ READBACK_OF = {
     ps.SET_ACTIVE_CHANNELS: (ps.GET_ACTIVE_CHANNELS, ("node_step",)),
     ps.SET_BLENDING_MODE: (ps.GET_BLENDING_MODE, ("node_step", "channel")),
     ps.SET_OPACITY: (ps.GET_OPACITY, ("node_step", "channel")),
+    ps.SET_EFFECT_SOURCE: (ps.GET_EFFECT_SOURCE, ("node_step", "channel")),
+    ps.SET_LEVELS_CHANNEL: (ps.GET_LEVELS, ("node_step",)),
+    ps.SET_LEVELS: (ps.GET_LEVELS, ("node_step",)),
+    ps.SET_PROJECTION: (ps.GET_PROJECTION, ("node_step",)),
+    ps.SET_MESH_MAP: (ps.GET_MESH_MAP, ("usage",)),
+    ps.SET_PARAMETERS: (ps.GET_GENERATOR_SOURCE, ("node_step",)),
+}
+
+# Getter recorded for the node an insertion step creates (`node_step` is the step itself).
+READBACK_OF_INSERTED = {
+    ps.INSERT_GENERATOR: ps.GET_GENERATOR_SOURCE,
+    ps.INSERT_SMART_MATERIAL: ps.GET_SUB_LAYERS,
 }
 
 EXPORT_PRESET = "uzp_recorder"
@@ -153,6 +193,7 @@ class Job:
     inputs: dict[str, Path]
     state_steps: tuple[Step, ...]
     exports: tuple[ExportStep, ...]
+    captures: tuple[Step, ...] = ()
 
     @property
     def golden_id(self) -> str:
@@ -172,6 +213,10 @@ class Job:
     def readback_specs(self) -> list[dict[str, Any]]:
         specs: list[dict[str, Any]] = []
         for step in self.state_steps:
+            if step.call in READBACK_OF_INSERTED:
+                spec = {"call": READBACK_OF_INSERTED[step.call], "args": {"node_step": step.step}}
+                if spec not in specs:
+                    specs.append(spec)
             if step.call in READBACK_OF:
                 getter, keys = READBACK_OF[step.call]
                 spec = {"call": getter, "args": {k: step.args[k] for k in keys}}
@@ -217,11 +262,15 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
         raise RecorderError("instruction steps must be numbered 1..n in order")
     state: list[Step] = []
     exports: list[ExportStep] = []
+    captures: list[Step] = []
     for step in steps:
         if step.call == EXPORT:
             exports.append(export_step(step))
             continue
-        if exports:
+        if step.call in BAKING_CAPTURES:
+            captures.append(step)
+            continue
+        if exports or captures:
             raise RecorderError(f"step {step.step}: state steps must precede the captures")
         if step.call not in STATE_CALLS:
             raise RecorderError(f"step {step.step}: {step.call} is not in the recorder vocabulary")
@@ -231,4 +280,4 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
         state.append(step)
     if not state or state[0].call != ps.CREATE:
         raise RecorderError("the instruction sequence must start with project.create")
-    return Job(manifest, inputs, tuple(state), tuple(exports))
+    return Job(manifest, inputs, tuple(state), tuple(exports), tuple(captures))

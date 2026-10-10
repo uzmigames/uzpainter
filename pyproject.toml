@@ -3,7 +3,7 @@ name = "uzpainter-tools"
 version = "0.0.0"
 description = "UzPainter repository tooling (vendoring, sources and other checks)"
 requires-python = ">=3.13"
-dependencies = ["jsonschema>=4.25"]
+dependencies = ["jsonschema>=4.25", "numpy>=2.4"]
 
 [tool.ruff]
 target-version = "py313"

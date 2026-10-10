@@ -1,0 +1,5 @@
+# rulebook_task create rejects sub-phase ids (phaseN.M_); create with phaseN_ then rename the folder
+**Source**: manual
+**Date**: 2026-10-10
+**Tags**: rulebook, tooling, task-ids
+rulebook_task {action:"create"} validates that the id starts with "phase<N>_" and rejects UzPainter's sub-phase ids "phase<N>.<M>_<name>" (2026-10-10). show, validate, update and archive all work on dotted ids because the id is just the folder name and .metadata.json holds no id. Workaround: create with "phase<N>_<name>" through the MCP (so the tool writes proposal.md and .metadata.json; a hook blocks writing those by hand), then `mv .rulebook/tasks/phase<N>_<name> .rulebook/tasks/phase<N>.<M>_<name>`, fix the "# Proposal:" title line, and add the row to docs/task-index.md. The global `rulebook` CLI is broken on this machine (MODULE_NOT_FOUND); the cached npx copy works.

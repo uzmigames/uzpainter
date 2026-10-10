@@ -16,8 +16,16 @@ A job is the golden's public manifest (`golden-public.json`) with `private_recor
 
 | Call | Arguments |
 |---|---|
-| `substance_painter.project.create` | `mesh` (input id); optional `normal_map_format`, `tangent_space_mode`, `project_workflow`, `default_texture_resolution`, `import_cameras`, `mesh_unit_scale` |
-| `substance_painter.layerstack.insert_fill` | `position: "top"`, or `above_step` / `below_step` (the step that inserted the reference layer) |
+| `substance_painter.project.create` | `mesh` (input id); optional `normal_map_format`, `tangent_space_mode`, `project_workflow`, `default_texture_resolution`, `import_cameras`, `mesh_unit_scale`, `template` (a shipped template's identifier, §8) |
+| `substance_painter.layerstack.insert_fill` | `position: "top"` (optional `texture_set`: that set's stack, else the active stack), or `above_step` / `below_step` (the step that inserted the reference node), or `inside_step` with `stack` (`Substack`, `Content`, `Mask`; `InsertPosition.inside_node`): a fill layer, or a fill effect in a content or mask stack |
+| `substance_painter.layerstack.insert_group`, `.insert_levels_effect` | the insert positions of `insert_fill` |
+| `substance_painter.layerstack.insert_filter_effect` | the insert positions, and `filter_search` (a documented `resource.search` query; the first result is used and its URL recorded) |
+| `substance_painter.layerstack.FillEffectNode.set_source` | as `FillLayerNode.set_source`; `channel: null` in a mask stack |
+| `substance_painter.layerstack.FillEffectNode.active_channels`, `FilterEffectNode.active_channels` | `node_step`, `channels` |
+| `substance_painter.layerstack.LevelsEffectNode.affected_channel` | `node_step`, `channel` |
+| `substance_painter.layerstack.LevelsEffectNode.set_parameters` | `node_step` and any of `input_min`, `input_max`, `gamma`, `output_min`, `output_max` (a number, used for R, G and B on a colour channel, or [r, g, b]), `clamp` |
+| `substance_painter.layerstack.FillLayerNode.set_projection_parameters` | `node_step`, `filtering_mode` (`BilinearHQ`, `BilinearSharp`, `Nearest`), `uv_wrapping_mode`, `scale_mode` (`Factors`), `scale`, `rotation`, `offset` (`UVProjectionParams`) |
+| `substance_painter.textureset.Stack.add_channel`, `.edit_channel` | `channel`, `format` (a `ChannelFormat` member); optional `texture_set`, else every texture set |
 | `substance_painter.layerstack.FillLayerNode.active_channels` | `node_step`, `channels` |
 | `substance_painter.layerstack.FillLayerNode.set_source` | `node_step`, `channel`, and either `color` [r, g, b] with optional `color_space` (`sRGB`, `Working`, `Raw`) or `resource` (a `resource://` URL, `resource.ResourceID.from_url`); the readback records a uniform colour, or every `properties.Property` of a substance source (`value`, `widget_type`, `label`) |
 | `substance_painter.layerstack.Node.set_blending_mode` | `node_step`, `blending_mode`, `channel` |
@@ -26,7 +34,15 @@ A job is the golden's public manifest (`golden-public.json`) with `private_recor
 | `substance_painter.display.Camera.<property>` | `value` (`projection_type`, `position`, `rotation`, `field_of_view`, `focal_length`, `focus_distance`, `aperture`, `orthographic_height`) |
 | `substance_painter.display.set_environment_resource` | `environment` (input id, imported with `resource.import_project_resource`) |
 | `substance_painter.display.set_tone_mapping` | `function` (`Linear`, `ACES`) |
+| `substance_painter.resource.import_project_resource` | `input` (input id), `usage` (`TEXTURE`, `GENERATOR`, `SMART_MATERIAL`); the imported resource is kept for later steps and its URL recorded |
+| `substance_painter.textureset.TextureSet.set_mesh_map_resource` | `usage` (a `MeshMapUsage` member), `resource_step` (the import step); optional `texture_set`, else every texture set; readback `get_mesh_map_resource` |
+| `substance_painter.layerstack.LayerNode.add_mask` | `node_step`, `background` (`Black`, `White`) |
+| `substance_painter.layerstack.insert_generator_effect`, `.insert_smart_material` | the insert positions of `insert_fill`, and either `resource` (a `resource://` URL) or `resource_name` + `resource_usage` (optional `resource_context`): exactly one `resource.search` result with that GUI or identifier name and usage, its URL recorded. Readbacks: the generator's `get_source` (every `Property` described, presets, image inputs and outputs); the smart material's structure (`GroupLayerNode.sub_layers` walk with names, types, sources and effects), private like every readback |
+| `substance_painter.source.SourceSubstance.set_parameters` | `node_step` (a generator effect, or a fill with `channel`), `parameter`, `value` (booleans as 0/1, lists as tuples); readback: the generator's `get_source` |
 | `substance_painter.export.export_project_textures` (capture) | `maps` (`<mapType>/<name>:<RGB|RGBA|L>`, e.g. `documentMap/basecolor:RGB`), `bit_depth`, `padding`; optional `file_format` (png), `dithering`, `dilation`, `size_log2` |
+| `substance_painter.baking.BakingParameters.common` (capture, §8) | none |
+| `substance_painter.baking.BakingParameters.baker` (capture, §8) | `usage` (a `textureset.MeshMapUsage` member name) |
+| `substance_painter.baking.BakingParameters.get_curvature_method`, `.get_enabled_bakers`, `.is_textureset_enabled` (captures, §8) | none |
 
 Enum arguments accept only the documented member names listed in `painter_side.py`.
 
@@ -45,12 +61,14 @@ Enum arguments accept only the documented member names listed in `painter_side.p
 
 ## 4. Iray references (Tier 3)
 
-`python -m tools.parity.recorder iray <manifest.json> --condition separate_session` (twice, restarting Painter in between), then `--condition k_times_samples --k <k>`. This implements `07-preview-and-render-parity.md` §2.2. The procedure must be qualified by `phase0.9_render-reference-capture` before any render golden is admitted.
+`python -m tools.parity.recorder iray <manifest.json> --condition separate_session` (twice, restarting Painter in between), then `--condition k_times_samples --k 4`. This implements `07-preview-and-render-parity.md` §2.2 as procedure `iray-capture/1`. The procedure, its answers to 07 §2.1 and its qualification status are in `parity/reports/phase0/iray-capture-procedure.md`; no render golden is admitted before it is qualified.
 
-- The recorder applies the documented settings (camera, environment, tone mapping), reads every documented render setting back into `key.render_state`, and switches to `ui.UIMode.Visualisation`.
+- The sheet must name the procedure and the pixel route: settings `capture.procedure` = `iray-capture/1` and `capture.route` = `save_render` (`applied_by: recorder_api`). A camera rotation other than zero also needs `capture.camera_rotation_order`, the Euler order the probe confirmed.
+- The recorder applies the documented settings (camera, environment, tone mapping). It reads every documented render setting back into `key.render_state`, together with `project.get_scene_bounding_box()`, and switches to `ui.UIMode.Visualisation`.
 - **Operator form.** The settings sheet is the manifest's `applied_settings` with `applied_by: operator_settings_sheet`, named `<panel>/<setting>`. It must include `Iray Settings/Min Sample` = `Max Sample` (S), `Max Time` (unit `s`, `min` or `h`), `Width` and `Height`. For each setting, the operator types the value the panel shows; any value that differs from the sheet (k·S for Min/Max Sample on the k run) refuses the reference. The operator also gives one PNG or JPEG image of each panel. Entries and images become private outputs (`operator_recorded_settings`, `settings_panel_evidence`).
 - **Convergence.** Accepted only when the operator reports Status `Done`, Iterations equal to the sample count, and a Rendering time below Max Time.
-- **Capture.** The recorder writes the fence, and the operator uses Save Render to save to the path it names. Current-frame verification: the file is the only one in a new directory, written after the fence, at the overridden resolution, and its silhouette matches the fixture's authored mask (input `silhouette`: 0 is background, full value is the object, anything else is a don't-care edge band). Every background pixel must hold one value and no object pixel may hold it. If the file states no encoding, the sheet must give it as setting `capture.encoding`.
+- **Capture.** The recorder writes the fence, and the operator uses Save Render to save to the path it names. Current-frame verification: the file is the only one in a new directory, written after the fence, at the overridden resolution (square), and its silhouette matches the job's mesh projected from the read-back camera (`tools/parity/render_procedure/projection.py`; Perspective only, a 2-pixel don't-care band around the outline). The scene bounding box must equal the mesh file's. Every background pixel must hold one value and no object pixel may hold it. If the file states no encoding, the sheet must give it as setting `capture.encoding`.
+- **Probe.** `python -m tools.parity.recorder iray-probe` runs the operator-assisted probe session of the procedure report §3. Its evidence goes to `UZP_ORACLE_WORK\iray-probe\<run>\probe.json`; `iray-probe-analyse <dir>` re-runs the analysis without Painter.
 - References are staged in the work directory. When two `separate_session` references (from different Painter processes) and one `k_times_samples` reference have identical keys, the record is written. Different keys refuse assembly, because the oracle is unstable.
 
 ## 5. Output: private inbox, public hashes
@@ -84,3 +102,45 @@ The recorder ran `record parity/manifests/tier0/recorder-sample/blend-multiply-p
 - all four exports are byte-identical.
 
 Painter was driven only through the documented remote control, under the shared Painter lock, on throwaway projects. The substance-source `Property` readback is covered by the unit tests only: the sample uses uniform-colour fills.
+
+## 8. Baking defaults and project templates (Tier 0)
+
+Task `phase0.6_tier0-defaults-templates`; code: `tools/parity/recorder/defaults.py`; tests: `tests/parity/recorder/test_defaults_templates.py`; jobs: `parity/manifests/tier0/defaults-templates/`. Both captures are private oracle records (`effective_default_capture`, `template_capture` outputs). The public manifests carry the instruction sequence, the template identifiers, the Painter build id and the record hash. The default table and template JSON UzPainter ships are written separately by UzmiGames, and each entry names its provenance (`06-baking.md` §2, `03-project-model.md` §2).
+
+**Baking defaults:** `python -m tools.parity.recorder record-defaults <manifest.json>`. The job creates one project from the mesh only, so every project setting keeps Painter's default. It must then capture `common()` and `baker(usage)` for all ten `MeshMapUsage` bakers. On every texture set, each key of the returned dict is described with every documented `properties.Property` getter: `value`, `name`, `short_name`, `label`, `widget_type`, `enum_values` and `properties`, plus `enum_value(label)` for each label `enum_values()` returns. A getter that raises is recorded under `raised`. The optional captures `get_curvature_method`, `get_enabled_bakers` and `is_textureset_enabled` record the remaining baking state. The recorder refuses a capture in which a key is not fully described or an enum label has no `enum_value` read. A baker that exposes no keys, and an enumeration with no labels, are recorded as Painter reports them. There are three recordings: `r1` on a fresh project, `r2` after save and reopen, and `r3` on a second fresh project in the same session. All three must report the same keys.
+
+**Templates:** `python -m tools.parity.recorder list-templates` prints the shipped templates, and `record-templates <manifest.json>` records them. A shipped template is a `.spt` file of the documented application shelf (`resource.Shelves.application_shelf().path()`), identified by its shelf-relative POSIX path. The recorder lists file names only and never reads, hashes or copies a template. Painter opens each one through `project.create(template_file_path=...)` (coordinator ruling, 2026-10-10). The job is one `project.create` step per template, with `mesh` and `template` only, so the template's own settings apply. It must name exactly the shipped templates. Each recording starts with the shipped list (`templates/shipped`) and then gives, per template, the texture sets, stacks, channels and `ChannelFormat` (§3 template capture): `r1` as created, `r2` after save and reopen. If the documented API refuses a template, the refusal is recorded twice as `accepted: false` together with the exception.
+
+**First recording (2026-10-10, owner's machine, Painter `12.1.0+js-api.1.1.20`, under the shared Painter lock).** One Painter session recorded both goldens. The baking defaults have three recordings, and `r2` and `r3` are identical to `r1`. The application shelf ships 26 templates. Painter accepted all 26, and the `r2` captures are identical to `r1`. Both runs were admitted with `python -m tools.parity.store record --run`, and `python -m tools.parity.store verify parity/manifests/tier0/defaults-templates` and the whole-store `verify` both exit 0.
+
+## 9. Tier 0 API probes
+
+Task `phase0.6_tier0-api-probes`. Code: `tools/parity/recorder/probes.py` (host) and `painter_probes.py` (inside Painter); tests: `tests/parity/recorder/test_api_probes.py` with the fake `fake_probe_painter.py`. Manifests: `parity/manifests/tier0/api-probes/<probe>.json`, one golden per probe, golden id `tier0/api-probes/<probe>`; a capability-manifest `tier_evidence` cites one as `T0-api-probes/<probe>.json` (`docs/architecture/10-python-api.md` §3). Authored inputs: the plane mesh and the 16×16 PNGs in `parity/fixtures/api-probes/`.
+
+`python -m tools.parity.recorder.probes record <manifest.json>`
+
+`painter_probes.py` is executed into a copy of `painter_side.py`'s namespace: it reuses its helpers and registers its operations in the same `OPERATIONS` table, and its own names never replace `painter_side.py`'s.
+
+**Instruction sequence.** `project.create`, then state steps, then probe steps, then optional `export_project_textures` captures (§3).
+
+- *State steps* (`insert_fill`, `insert_group`, `insert_levels_effect`, `insert_compare_mask_effect`, `insert_color_selection_effect`, `Node.set_name`, `set_visible`, `set_blending_mode`, `set_opacity`, `FillLayerNode.active_channels` with `channels`, `set_source`, `set_projection_mode`, `set_projection_parameters` (UV), `SourceBitmap.set_color_space`, `LayerNode.add_mask`, `enable_mask`, `LevelsEffectNode.affected_channel` with `channel`, `set_parameters`, `resource.import_project_resource`, `textureset.set_resolutions`, `TextureSet.set_mesh_map_resource`) run once. Positions are `position: "top"`, `above_step`, `below_step`, or `inside_step` with `node_stack`. A `channel` of `null` is passed as `None`.
+- *Probe steps* are the readbacks (getters, and `active_channels`/`affected_channel` without a value) and every edit marked `probe: true`. They run again in every recording. An edit is marked as a probe when its outcome, usually a documented error, is the thing being observed.
+- Each outcome is recorded as an `api_readback`: the value the call returned (enums by name, colours in working space, nodes by type and name, parameter dataclasses field by field), or `raised` with the exception class name and message. A step that raises does not stop the recording.
+
+**Recordings.** `r1` (`same_session`) holds the outcomes of the state steps, then the probes and exports. The project is then saved (Full), closed and reopened. Each inserted node is found again by its place in the tree (root index, then `Substack`/`Content`/`Mask` index). `r2` (`after_save_reopen`) repeats the probes and exports. Every probe call resolves its node freshly through `layerstack.get_node_by_uid`. In each recording, `identity/s<step>` records whether the node kept the uid it had in `r1`, and whether that uid resolves to the node. The golden key holds the effective defaults of every inserted node, read before any step edits it.
+
+**Lifecycle probe** (`lifecycle-events`, first step `event.Dispatcher.connect`). The procedure is fixed. The listed project events are connected, then two cycles run, each of create → save_as → close (`same_session`) followed by open → save → close (`after_save_reopen`). That gives four recordings. Each phase records the events dispatched during it, with `is_open()`, `is_in_edition_state()` and `is_busy()` read inside each callback. It also records the distinct readiness states polled until the phase completed, plus three settle polls. The callbacks are disconnected at the end.
+
+| Probe | Observes |
+|---|---|
+| `fill-layer-readback` | Set→get of name, visibility, active channels, uniform and bitmap sources, bitmap colour space, per-channel blending and opacity, group blending, UV projection; BaseColor and Height exports |
+| `mask-stack` | Mask-stack `None` rules for source, blending and opacity; channel arguments on the mask fill and `None` on the content layer; mask properties; a second `add_mask`; a mask levels effect; BaseColor export |
+| `set-source-none-multichannel` | `set_source(None, …)` and `get_source(None)` on a fill layer and a content fill effect; `set_source` on an inactive channel |
+| `active-channel-reset`, `active-channel-reset-superset`, `active-channel-order-control` | `active_channels` assigned again (same set, larger set) after `set_source`, against the channels-first control; source readback and BaseColor/Height exports |
+| `insert-positions` | Every insertion the documented table forbids, repeated in each recording; two undocumented cases applied once; resulting structure |
+| `textureset-project-readback` | Resolution, Normal/AO mesh-map resources, a resource reused for a second usage, `needs_saving`, file name, project name |
+| `lifecycle-events` | Event order and readiness transitions of create/open, save and close |
+
+Admission: `python -m tools.parity.store record parity/manifests/tier0/api-probes/<probe>.json --run <run>`, then `python -m tools.parity.store verify parity/manifests/tier0/api-probes`. `test_api_probes.py` checks that every manifest is admitted and that every probe output appears in at least two recordings of the stored record. Where there is no store, it skips that check and says why.
+
+**First recording (2026-10-10, owner's machine, Painter `12.1.0+js-api.1.1.20`, under the shared Painter lock).** All nine probes were recorded in one Painter session and admitted with `python -m tools.parity.store record --run`. `python -m tools.parity.store verify parity/manifests/tier0/api-probes` and the whole-store `verify` both exit 0. Readbacks are equal across the recordings, except values that depend on the condition: the resource context of the reopened project instance, and the file path, project name and mesh-map resource context after a save. The `mask-stack` BaseColor export differs between `same_session` and `after_save_reopen` (4608 of 196608 values). Two runs reproduced the same pair of hashes. Its stability classification belongs to `phase0.7_tier0-stability-fits`.

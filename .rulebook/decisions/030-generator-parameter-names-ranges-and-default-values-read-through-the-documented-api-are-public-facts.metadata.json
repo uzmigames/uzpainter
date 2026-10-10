@@ -1,0 +1,11 @@
+{
+  "id": 30,
+  "slug": "generator-parameter-names-ranges-and-default-values-read-through-the-documented-api-are-public-facts",
+  "title": "Generator parameter names, ranges and default values read through the documented API are public facts",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase0.6_procedural-feasibility"
+  ],
+  "supersededBy": null
+}

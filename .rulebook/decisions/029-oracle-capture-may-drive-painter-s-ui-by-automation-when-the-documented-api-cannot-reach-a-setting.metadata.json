@@ -1,0 +1,11 @@
+{
+  "id": 29,
+  "slug": "oracle-capture-may-drive-painter-s-ui-by-automation-when-the-documented-api-cannot-reach-a-setting",
+  "title": "Oracle capture may drive Painter's UI by automation when the documented API cannot reach a setting",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase0.6_render-reference-procedure"
+  ],
+  "supersededBy": null
+}

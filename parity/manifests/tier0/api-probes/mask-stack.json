@@ -1,0 +1,458 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/mask-stack",
+  "tier": "0",
+  "domain": "tier0/api-probes/mask-stack",
+  "description": "API probe: mask-stack context rules. A fill effect in a layer mask takes no channel type (None) for its source, blending and opacity; the probes record what a channel argument raises there, what None raises on the content layer, the mask properties, a second add_mask, and a levels effect in the mask, with the BaseColor export.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "mask_left_half",
+      "kind": "image",
+      "path": "parity/fixtures/api-probes/mask-left-half.png",
+      "sha256": "f5d8e7f1c0bc3b577833422141afee43682f1b1fe28696e51de48e3031ccc724",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0",
+        "note": "16x16 8-bit grey: left half 255, right half 0."
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 2,
+          "channels": [
+            "BaseColor"
+          ]
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 2,
+          "channel": "BaseColor",
+          "color": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "color_space": "Working"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 2,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 2,
+          "node_stack": "Mask"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "image": "mask_left_half",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 6,
+          "channel": null,
+          "resource_step": 7
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_mode",
+        "args": {
+          "node_step": 6,
+          "projection_mode": "UV"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 6,
+          "name": "uzp mask fill"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.Node.set_opacity",
+        "args": {
+          "node_step": 6,
+          "opacity": 0.75,
+          "channel": null
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Screen",
+          "channel": null
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.insert_levels_effect",
+        "args": {
+          "inside_step": 2,
+          "node_stack": "Mask"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.LevelsEffectNode.set_parameters",
+        "args": {
+          "node_step": 13,
+          "input_min": 0.1,
+          "input_max": 0.9,
+          "gamma": 1.2,
+          "clamp": true
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 6,
+          "channel": "BaseColor",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Working",
+          "probe": true
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 6,
+          "channel": null
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 6,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Normal",
+          "channel": "BaseColor",
+          "probe": true
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6,
+          "channel": null
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.Node.set_opacity",
+        "args": {
+          "node_step": 6,
+          "opacity": 0.5,
+          "channel": "BaseColor",
+          "probe": true
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.Node.get_opacity",
+        "args": {
+          "node_step": 6,
+          "channel": null
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.layerstack.Node.get_opacity",
+        "args": {
+          "node_step": 6,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.layerstack.FillLayerNode.source_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 6,
+          "channels": [
+            "BaseColor"
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.layerstack.Node.is_in_mask_stack",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.layerstack.Node.has_blending",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.layerstack.Node.get_name",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.layerstack.FillLayerNode.get_projection_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 31,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 2,
+          "channel": null
+        }
+      },
+      {
+        "step": 32,
+        "call": "substance_painter.layerstack.Node.set_opacity",
+        "args": {
+          "node_step": 2,
+          "opacity": 1.0,
+          "channel": null,
+          "probe": true
+        }
+      },
+      {
+        "step": 33,
+        "call": "substance_painter.layerstack.LayerNode.has_mask",
+        "args": {
+          "node_step": 2
+        }
+      },
+      {
+        "step": 34,
+        "call": "substance_painter.layerstack.LayerNode.get_mask_background",
+        "args": {
+          "node_step": 2
+        }
+      },
+      {
+        "step": 35,
+        "call": "substance_painter.layerstack.LayerNode.is_mask_enabled",
+        "args": {
+          "node_step": 2
+        }
+      },
+      {
+        "step": 36,
+        "call": "substance_painter.layerstack.LayerNode.mask_effects",
+        "args": {
+          "node_step": 2
+        }
+      },
+      {
+        "step": 37,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 2,
+          "background": "White",
+          "probe": true
+        }
+      },
+      {
+        "step": 38,
+        "call": "substance_painter.layerstack.LevelsEffectNode.get_parameters",
+        "args": {
+          "node_step": 13
+        }
+      },
+      {
+        "step": 39,
+        "call": "substance_painter.layerstack.LevelsEffectNode.affected_channel",
+        "args": {
+          "node_step": 13
+        }
+      },
+      {
+        "step": 40,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 13,
+          "channel": null
+        }
+      },
+      {
+        "step": 41,
+        "call": "substance_painter.layerstack.Node.is_in_mask_stack",
+        "args": {
+          "node_step": 13
+        }
+      },
+      {
+        "step": 42,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.0",
+      "build_id": "12.1.0+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "e928005cf24adaf9da3c5563f543b04b6b39fbbd5dfae7ad33ded61c19cf6718",
+      "size_bytes": 22803
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "a0b5be91fbbf2798933da502aade79e1db7be6794cae1e96befb69734199b245",
+      "size_bytes": 1101
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "c3e896d1a63a9208370be57ab45fee895f9dddd830a012b524b9fdf009cfd03d",
+      "size_bytes": 1103
+    }
+  ]
+}

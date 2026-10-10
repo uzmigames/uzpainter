@@ -11,7 +11,10 @@
       "kind": "mesh",
       "path": "parity/fixtures/meshes/plane.obj",
       "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
-      "provenance": { "origin": "uzmigames_authored", "licence": "Apache-2.0" }
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
     }
   ],
   "instruction_sequence": {
@@ -21,45 +24,99 @@
       {
         "step": 1,
         "call": "substance_painter.project.create",
-        "args": { "mesh": "plane", "normal_map_format": "OpenGL", "default_texture_resolution": 256 }
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
       },
-      { "step": 2, "call": "substance_painter.layerstack.insert_fill", "args": { "position": "top" } },
+      {
+        "step": 2,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
       {
         "step": 3,
         "call": "substance_painter.layerstack.FillLayerNode.active_channels",
-        "args": { "node_step": 2, "channels": ["BaseColor"] }
+        "args": {
+          "node_step": 2,
+          "channels": [
+            "BaseColor"
+          ]
+        }
       },
       {
         "step": 4,
         "call": "substance_painter.layerstack.FillLayerNode.set_source",
-        "args": { "node_step": 2, "channel": "BaseColor", "color": [0.5, 0.5, 0.5], "color_space": "Working" }
+        "args": {
+          "node_step": 2,
+          "channel": "BaseColor",
+          "color": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "color_space": "Working"
+        }
       },
-      { "step": 5, "call": "substance_painter.layerstack.insert_fill", "args": { "above_step": 2 } },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 2
+        }
+      },
       {
         "step": 6,
         "call": "substance_painter.layerstack.FillLayerNode.active_channels",
-        "args": { "node_step": 5, "channels": ["BaseColor"] }
+        "args": {
+          "node_step": 5,
+          "channels": [
+            "BaseColor"
+          ]
+        }
       },
       {
         "step": 7,
         "call": "substance_painter.layerstack.FillLayerNode.set_source",
-        "args": { "node_step": 5, "channel": "BaseColor", "color": [0.5, 0.25, 1.0], "color_space": "Working" }
+        "args": {
+          "node_step": 5,
+          "channel": "BaseColor",
+          "color": [
+            0.5,
+            0.25,
+            1.0
+          ],
+          "color_space": "Working"
+        }
       },
       {
         "step": 8,
         "call": "substance_painter.layerstack.Node.set_blending_mode",
-        "args": { "node_step": 5, "blending_mode": "Multiply", "channel": "BaseColor" }
+        "args": {
+          "node_step": 5,
+          "blending_mode": "Multiply",
+          "channel": "BaseColor"
+        }
       },
       {
         "step": 9,
         "call": "substance_painter.layerstack.Node.set_opacity",
-        "args": { "node_step": 5, "opacity": 1.0, "channel": "BaseColor" }
+        "args": {
+          "node_step": 5,
+          "opacity": 1.0,
+          "channel": "BaseColor"
+        }
       },
       {
         "step": 10,
         "call": "substance_painter.export.export_project_textures",
         "args": {
-          "maps": ["documentMap/basecolor:RGB"],
+          "maps": [
+            "documentMap/basecolor:RGB"
+          ],
           "file_format": "png",
           "bit_depth": 16,
           "padding": "infinite",
@@ -69,12 +126,37 @@
     ]
   },
   "applied_settings": [
-    { "name": "project.normal_map_format", "value": "OpenGL", "applied_by": "recorder_api" },
-    { "name": "texture_set.resolution", "value": 256, "unit": "px", "applied_by": "recorder_api" },
-    { "name": "export.file_format", "value": "png", "applied_by": "recorder_api" },
-    { "name": "export.bit_depth", "value": 16, "applied_by": "recorder_api" },
-    { "name": "export.padding", "value": "infinite", "applied_by": "recorder_api" },
-    { "name": "export.dithering", "value": false, "applied_by": "recorder_api" }
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
   ],
   "expectations": [],
   "software": {
@@ -85,5 +167,24 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "2943c58675c14bd3262f6b3e27350fd76fc6ceb0d12e2b3eb3146a04b3e98853",
+      "size_bytes": 6664
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "818b5162e33d92a5e5e15c44c0461b25b599de24be286637c81e9128c5898f7c",
+      "size_bytes": 1014
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "818b5162e33d92a5e5e15c44c0461b25b599de24be286637c81e9128c5898f7c",
+      "size_bytes": 1014
+    }
+  ]
 }

@@ -1,0 +1,106 @@
+{
+  "library": "Embree",
+  "upstream": "https://github.com/RenderKit/embree",
+  "version": "v4.4.1",
+  "commit": "f590db83ef6559387df7f6d8725c34fb7acf851d",
+  "archive_url": "https://github.com/RenderKit/embree/releases/download/v4.4.1/embree-4.4.1.x64.windows.zip",
+  "archive_sha256": "5aa1fa3161a720f9c610b06c652b80f421cb2b1fe8221fdf92b74157336fdf8f",
+  "archive_root": "embree-4.4.1.x64.windows/",
+  "files": [
+    {
+      "path": "bin/embree4.dll",
+      "sha256": "b0f979636b18ebf75e8195567b495832297ae4be74ba0fad28a347f158a16c82",
+      "size": 37435952
+    },
+    {
+      "path": "bin/tbb12.dll",
+      "sha256": "b24e99b40add5ce3132793c10f7325b8e9fdfb4db03465f5103cfb43146a5a9f",
+      "size": 348008
+    },
+    {
+      "path": "include/embree4/rtcore.h",
+      "sha256": "cc1fe7c6161aa72efa09ace94914bb77bc99b533396ed1064fb1b94bcc099336",
+      "size": 355
+    },
+    {
+      "path": "include/embree4/rtcore_buffer.h",
+      "sha256": "0b689d75f63b7d8b722672a7fd75930565dffd6c2358ed0fac60eb57ce00af33",
+      "size": 2418
+    },
+    {
+      "path": "include/embree4/rtcore_builder.h",
+      "sha256": "f0166fad8a7eadcc2b4233f70859785a561e28ae07b5784a289ac8fa78a5330f",
+      "size": 3809
+    },
+    {
+      "path": "include/embree4/rtcore_common.h",
+      "sha256": "e2b60abe9ca6f54200ce3af1b038072a3358a47181d21daee70defdc74db1c51",
+      "size": 15787
+    },
+    {
+      "path": "include/embree4/rtcore_config.h",
+      "sha256": "4e77da53f50e47f0b3f26eda724ff16377f8f2aa235e0afbcb322afff648e6c8",
+      "size": 2975
+    },
+    {
+      "path": "include/embree4/rtcore_device.h",
+      "sha256": "0341db28fb151acc8b0781e73afdbd42d25dc1f80936d72566b85b16467d554b",
+      "size": 5132
+    },
+    {
+      "path": "include/embree4/rtcore_geometry.h",
+      "sha256": "5671e1fb08964d91725cd99002b48fe0aa837bd43441443c84c8673552b42e38",
+      "size": 15987
+    },
+    {
+      "path": "include/embree4/rtcore_quaternion.h",
+      "sha256": "bd17e39fb32461c2c624c85ab078306cc90b73f7431bbbddb2bb0ad978ed0c90",
+      "size": 2591
+    },
+    {
+      "path": "include/embree4/rtcore_ray.h",
+      "sha256": "99f92fc25ecd7f4cd26cbfd4a8923f64efa8ce0bc773dd9867d11639a872a9bf",
+      "size": 11706
+    },
+    {
+      "path": "include/embree4/rtcore_scene.h",
+      "sha256": "422f92f197fdec1b1dd1fed6ae8f3fdee230ba598472fb64857af20ad4864c39",
+      "size": 21605
+    },
+    {
+      "path": "share/doc/Embree_superbuild/LICENSE.txt",
+      "sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5",
+      "size": 11560
+    },
+    {
+      "path": "share/doc/Embree_superbuild/third-party-programs-TBB.txt",
+      "sha256": "5af7527aeb727d865f1cfaf4c022c4927c0951e862aba79bb527cd03811b7e02",
+      "size": 47390
+    },
+    {
+      "path": "share/doc/Embree_superbuild/third-party-programs.txt",
+      "sha256": "b795d00dc67b893b963c155bd771bb039ab5bda59352ff1c3198a1d34929beb3",
+      "size": 113087
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": null,
+  "comparison": [],
+  "not_in_uzengine": [
+    "bin/embree4.dll",
+    "bin/tbb12.dll",
+    "include/embree4/rtcore.h",
+    "include/embree4/rtcore_buffer.h",
+    "include/embree4/rtcore_builder.h",
+    "include/embree4/rtcore_common.h",
+    "include/embree4/rtcore_config.h",
+    "include/embree4/rtcore_device.h",
+    "include/embree4/rtcore_geometry.h",
+    "include/embree4/rtcore_quaternion.h",
+    "include/embree4/rtcore_ray.h",
+    "include/embree4/rtcore_scene.h",
+    "share/doc/Embree_superbuild/LICENSE.txt",
+    "share/doc/Embree_superbuild/third-party-programs-TBB.txt",
+    "share/doc/Embree_superbuild/third-party-programs.txt"
+  ]
+}

@@ -16,7 +16,7 @@ A re-serialised readback no longer matches the index, so it is caught by its con
 
 ## 2. Schema of each JSON path under `parity/`
 
-First match wins; any other JSON under `parity/` is blocked until a rule for its area (for example `parity/semantics/`, comparison reports) is added to `PATH_RULES` in `tools/parity/guard/guard.py` together with its schema.
+First match wins; any other JSON under `parity/` is blocked until a rule for its area (for example comparison reports) is added to `PATH_RULES` in `tools/parity/guard/guard.py` together with its schema.
 
 | Path | Must be |
 |---|---|
@@ -27,6 +27,7 @@ First match wins; any other JSON under `parity/` is blocked until a rule for its
 | `parity/schema/samples/reports/*.json` | Valid `comparison-report.json` |
 | `parity/exceptions.json` | The register: valid `exceptions.json` and `register_problems` (decisions recorded under `.rulebook/decisions/`) |
 | `parity/manifests/**` | Valid `golden-public.json` |
+| `parity/semantics/*.json` | Valid `semantics.json` (fitted formulas: public sources, constants, residuals as numbers) |
 | `parity/fixtures/**` | An authored input (fixture description, authored recipe) that a valid manifest under `parity/manifests/` declares by this path and SHA-256 |
 
 ## 3. Running it

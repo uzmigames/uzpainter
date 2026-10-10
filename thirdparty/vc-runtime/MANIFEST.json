@@ -1,0 +1,26 @@
+{
+  "library": "Microsoft Visual C++ runtime (app-local)",
+  "source": "Visual Studio 2022 VC\\Redist\\MSVC\\14.44.35112\\x64\\Microsoft.VC143.CRT",
+  "file_version": "14.44.35211.0",
+  "signer": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+  "files": [
+    {
+      "path": "msvcp140.dll",
+      "sha256": "0f885b509a685d2bbfa652fed26b5fb31d88fbdab0a978c641d1c7b8aa460aa9",
+      "size": 557728,
+      "signer_thumbprint": "81915C173D7FFCBF49EAA8CF7594696B29A035E1"
+    },
+    {
+      "path": "vcruntime140.dll",
+      "sha256": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066",
+      "size": 124544,
+      "signer_thumbprint": "EC5F0D7EE2327688384B4FDF5D7633553A0D055F"
+    },
+    {
+      "path": "vcruntime140_1.dll",
+      "sha256": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f",
+      "size": 49792,
+      "signer_thumbprint": "EC5F0D7EE2327688384B4FDF5D7633553A0D055F"
+    }
+  ]
+}

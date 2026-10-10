@@ -1,0 +1,143 @@
+{
+  "library": "spng",
+  "upstream": "https://github.com/randy408/libspng",
+  "version": "v0.7.4",
+  "commit": "fb768002d4288590083a476af628e51c3f1d47cd",
+  "archive_url": "https://github.com/randy408/libspng/archive/refs/tags/v0.7.4.tar.gz",
+  "archive_sha256": "47ec02be6c0a6323044600a9221b049f63e1953faf816903e7383d4dc4234487",
+  "archive_root": "libspng-0.7.4/",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "0622b0794d0fecde47d743f1bb70a03e6fdf082be8e71f39de672ed995d96ff9",
+      "size": 1341
+    },
+    {
+      "path": "spng/spng.c",
+      "sha256": "59243c1ca05956f124c7debef763b707378b52e4dbfeaf17e6192917dd8c8dc2",
+      "size": 199677
+    },
+    {
+      "path": "spng/spng.h",
+      "sha256": "3f398e878a94c49ba8735ba1b410a904a3667ffdf6924f82d6cf5bee61a87cb6",
+      "size": 13338
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/spng",
+  "comparison": [
+    {
+      "path": ".gitlab-ci.yml",
+      "uzengine_blob": "e1bf635f339627b7e4257ae6831a55767361ac0e",
+      "upstream_sha256": "269362c67a48c60c97ceecde1fe0100dc67c1f24883df36f4955460a50126fdf",
+      "upstream_lf_sha256": "269362c67a48c60c97ceecde1fe0100dc67c1f24883df36f4955460a50126fdf",
+      "result": "identical"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "uzengine_blob": "da1917e310a24a97bdf0e57945cd4d7934b90a91",
+      "upstream_sha256": "57e7774c13ba67aae0fd5bed4eb720c424e1d9435da4879f884237e5e348d42b",
+      "upstream_lf_sha256": "57e7774c13ba67aae0fd5bed4eb720c424e1d9435da4879f884237e5e348d42b",
+      "result": "identical"
+    },
+    {
+      "path": "LICENSE",
+      "uzengine_blob": "05234f0ea34b56979cf08b9d3a73f06334d7c907",
+      "upstream_sha256": "0622b0794d0fecde47d743f1bb70a03e6fdf082be8e71f39de672ed995d96ff9",
+      "upstream_lf_sha256": "0622b0794d0fecde47d743f1bb70a03e6fdf082be8e71f39de672ed995d96ff9",
+      "result": "identical"
+    },
+    {
+      "path": "README.md",
+      "uzengine_blob": "281d091f799188a367cb5c202b047c5dbd63c2a2",
+      "upstream_sha256": "517c820ede8ddafeabefbfa00ca3bf38a6ff2a6290a3d09d55d7853ccb7ed929",
+      "upstream_lf_sha256": "517c820ede8ddafeabefbfa00ca3bf38a6ff2a6290a3d09d55d7853ccb7ed929",
+      "result": "identical"
+    },
+    {
+      "path": "cmake/Config.cmake.in",
+      "uzengine_blob": "d0123db2a4823a5548c62dec6552bf3eb7858dd4",
+      "upstream_sha256": "5595275d0b6fd507d77e59c0ec33842c5a7ec9918c8bad3ea7c8f6cee98d21f5",
+      "upstream_lf_sha256": "5595275d0b6fd507d77e59c0ec33842c5a7ec9918c8bad3ea7c8f6cee98d21f5",
+      "result": "identical"
+    },
+    {
+      "path": "cmake/libspng.pc.in",
+      "uzengine_blob": "71e0e47bdd28b9f89accc97a1712c103bb32307e",
+      "upstream_sha256": "1a1c414c10895b8b814fa121fac7692ecd4d2599a7dc434e649a8875649d66d0",
+      "upstream_lf_sha256": "1a1c414c10895b8b814fa121fac7692ecd4d2599a7dc434e649a8875649d66d0",
+      "result": "identical"
+    },
+    {
+      "path": "meson.build",
+      "uzengine_blob": "af4689444c8485eec08b9d4acf56f7e66a6d5401",
+      "upstream_sha256": "c59fe049a342a5db21008edd022b0a0bd7dc4f943516b50899ec4ee7e82d872f",
+      "upstream_lf_sha256": "c59fe049a342a5db21008edd022b0a0bd7dc4f943516b50899ec4ee7e82d872f",
+      "result": "identical"
+    },
+    {
+      "path": "meson_options.txt",
+      "uzengine_blob": "7bfc0a697a092858b6843a15c4179cded919e611",
+      "upstream_sha256": "6a3f8b0f81ab7551f2a0a225a27e3b4ec02ef0fe7f0f13193d6bfd5e2eef2d0d",
+      "upstream_lf_sha256": "6a3f8b0f81ab7551f2a0a225a27e3b4ec02ef0fe7f0f13193d6bfd5e2eef2d0d",
+      "result": "identical"
+    },
+    {
+      "path": "spng/spng.c",
+      "uzengine_blob": "b22b7110a17bdde5e400d02b41ed039e73cbac64",
+      "upstream_sha256": "59243c1ca05956f124c7debef763b707378b52e4dbfeaf17e6192917dd8c8dc2",
+      "upstream_lf_sha256": "59243c1ca05956f124c7debef763b707378b52e4dbfeaf17e6192917dd8c8dc2",
+      "result": "identical"
+    },
+    {
+      "path": "spng/spng.h",
+      "uzengine_blob": "8f946337bfa2c6a0fc087458a7e9ff5b8a91e14c",
+      "upstream_sha256": "3f398e878a94c49ba8735ba1b410a904a3667ffdf6924f82d6cf5bee61a87cb6",
+      "upstream_lf_sha256": "3f398e878a94c49ba8735ba1b410a904a3667ffdf6924f82d6cf5bee61a87cb6",
+      "result": "identical"
+    },
+    {
+      "path": "subprojects/benchmark_images.wrap",
+      "uzengine_blob": "d2cbb07fe47b9467505ed2943b09891eaa4c4e0f",
+      "upstream_sha256": "bfd8fd8db0eebaf89ddd114af07df6bf67dd8cbc5f6845b18a67e5b1e6854770",
+      "upstream_lf_sha256": "bfd8fd8db0eebaf89ddd114af07df6bf67dd8cbc5f6845b18a67e5b1e6854770",
+      "result": "identical"
+    },
+    {
+      "path": "subprojects/fuzzing_corpora.wrap",
+      "uzengine_blob": "05c7673e85f570bc9a50173d643d6d12f7bbcb93",
+      "upstream_sha256": "dcd4a748cc79e8e600ff43edb9acb86c837b59e07da726952f08d6ccabfcde89",
+      "upstream_lf_sha256": "dcd4a748cc79e8e600ff43edb9acb86c837b59e07da726952f08d6ccabfcde89",
+      "result": "identical"
+    },
+    {
+      "path": "subprojects/libpng.wrap",
+      "uzengine_blob": "b7af9091c3ad6d9df0d988617403b963bef7b5e3",
+      "upstream_sha256": "f77c6f5a505e3f91a40fc4e252fa91daa0b51dd09c2e725c558312bc7e5265bb",
+      "upstream_lf_sha256": "f77c6f5a505e3f91a40fc4e252fa91daa0b51dd09c2e725c558312bc7e5265bb",
+      "result": "identical"
+    },
+    {
+      "path": "subprojects/miniz.wrap",
+      "uzengine_blob": "52ee474db3f519b1c00ffe54f4cc89a567221efa",
+      "upstream_sha256": "7c0748876f203ce48118a7a40ba8411cd8f74c20587d653f8da7471bf64c3fd1",
+      "upstream_lf_sha256": "7c0748876f203ce48118a7a40ba8411cd8f74c20587d653f8da7471bf64c3fd1",
+      "result": "identical"
+    },
+    {
+      "path": "subprojects/spngt.wrap",
+      "uzengine_blob": "05135911df6fdd40204d7b6813ac807065c8cd5d",
+      "upstream_sha256": "1368c84f395581e29096f2e5845846738fcc70d3d8aebce6318f8ac91a23f135",
+      "upstream_lf_sha256": "1368c84f395581e29096f2e5845846738fcc70d3d8aebce6318f8ac91a23f135",
+      "result": "identical"
+    },
+    {
+      "path": "subprojects/zlib.wrap",
+      "uzengine_blob": "1b311bf28d015592a70a80ac2da7308222159e02",
+      "upstream_sha256": "533eeda6375fef242232db6ebf29efaaaaa310424e0c84de40b25f4eeecfaad3",
+      "upstream_lf_sha256": "533eeda6375fef242232db6ebf29efaaaaa310424e0c84de40b25f4eeecfaad3",
+      "result": "identical"
+    }
+  ],
+  "not_in_uzengine": []
+}

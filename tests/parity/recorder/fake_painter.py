@@ -161,6 +161,25 @@ class ToneMappingFunction(enum.Enum):
 class Usage(enum.Enum):
     ENVIRONMENT = 1
     TEXTURE = 2
+    COLOR_LUT = 3
+
+
+class MeshMapUsage(enum.Enum):
+    Normal = 1
+    WorldSpaceNormal = 2
+    ID = 3
+    AO = 4
+    Curvature = 5
+    Position = 6
+    Thickness = 7
+    Height = 8
+    BentNormals = 9
+    Opacity = 10
+
+
+class CurvatureMethod(enum.Enum):
+    FromMesh = 1
+    FromNormalMap = 2
 
 
 CHANNEL_FORMATS = {
@@ -211,6 +230,59 @@ class Property:
         return self.text
 
 
+@dataclass
+class BakingProperty:
+    """A baking parameter with the documented `properties.Property` getters (authored values)."""
+
+    key: str
+    widget: str
+    data: Any
+    enum: dict[str, int] = field(default_factory=dict)
+
+    def value(self) -> Any:
+        return self.data
+
+    def name(self) -> str:
+        return f"fake/{self.key}"
+
+    def short_name(self) -> str:
+        return self.key
+
+    def label(self) -> str:
+        return self.key.replace("_", " ").title()
+
+    def widget_type(self) -> str:
+        return self.widget
+
+    def enum_values(self) -> dict[str, int]:
+        return dict(self.enum)
+
+    def enum_value(self, enum_label: str) -> int:
+        return self.enum[enum_label]
+
+    def properties(self) -> dict[str, Any]:
+        return {"min": 0, "max": 10} if self.widget == "Slider" else {}
+
+
+def fake_baking_parameters() -> dict[str, dict[str, BakingProperty]]:
+    """Authored stand-in parameters: `common` and one group per MeshMapUsage name."""
+    groups = {
+        "common": {
+            "fake_size": BakingProperty("fake_size", "Slider", (8, 8)),
+            "fake_mode": BakingProperty("fake_mode", "Combobox", 1, {"First": 0, "Second": 1}),
+            "fake_tint": BakingProperty(
+                "fake_tint", "Color", Color(0.25, 0.5, 0.75, GenericColorSpace.Working)
+            ),
+        }
+    }
+    for usage in MeshMapUsage:
+        groups[usage.name] = {
+            "fake_strength": BakingProperty("fake_strength", "Slider", float(usage.value)),
+            "fake_filter": BakingProperty("fake_filter", "Combobox", 0, {"Off": 0, "On": 1}),
+        }
+    return groups
+
+
 class SourceSubstance:
     """A procedural source; its properties are fixed fake values."""
 
@@ -236,9 +308,10 @@ class Resolution:
 @dataclass
 class Channel:
     kind: ChannelType
+    channel_format: ChannelFormat | None = None
 
     def format(self) -> ChannelFormat:
-        return CHANNEL_FORMATS[self.kind]
+        return self.channel_format or CHANNEL_FORMATS[self.kind]
 
     def bit_depth(self) -> int:
         return 16 if self.kind == ChannelType.Normal else 8
@@ -277,6 +350,8 @@ class FakeWorld:
         self.next_uid = 100
         self.ui_mode = UIMode.Edition
         self.environment: str | None = None
+        self.color_lut: str | None = None
+        self.scene_bounds: tuple[list[float], list[float]] = ([0.0] * 3, [0.0] * 3)
         self.tone_mapping = ToneMappingFunction.Linear
         self.camera: dict[str, Any] = {
             "projection_type": CameraProjectionType.Perspective,
@@ -289,6 +364,10 @@ class FakeWorld:
             "orthographic_height": 10.0,
         }
         self.export_hook = export_hook
+        self.channels = dict(CHANNEL_FORMATS)
+        self.shelf_path: Path | None = None  # application shelf (templates are its .spt files)
+        self.template_channels: dict[str, dict[ChannelType, ChannelFormat]] = {}
+        self.baking = fake_baking_parameters()
         self.version = "12.1.0"
         self.version_info = (12, 1, 0)
         self.modules = build_modules(self)
@@ -300,6 +379,7 @@ class FakeWorld:
     def snapshot(self) -> dict[str, Any]:
         return {
             "resolution": list(self.resolution),
+            "channels": {c.name: f.name for c, f in self.channels.items()},
             "layers": [
                 {
                     "uid": layer.uid_value,
@@ -315,6 +395,7 @@ class FakeWorld:
 
     def restore(self, data: dict[str, Any]) -> None:
         self.resolution = (data["resolution"][0], data["resolution"][1])
+        self.channels = {ChannelType[c]: ChannelFormat[f] for c, f in data["channels"].items()}
         self.layers = [
             Layer(
                 uid_value=item["uid"] + 1000,  # uids change across reopen
@@ -361,12 +442,31 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         world.edition_polls += 1
         return world.edition_polls > 1  # loading is asynchronous: ready on the second poll
 
-    def create(mesh_file_path: str, settings: Settings) -> None:
+    def create(
+        mesh_file_path: str, template_file_path: str | None = None, settings: Any = None
+    ) -> None:
         if world.project_open:
             raise ProjectError("there is already an opened project")
         if not Path(mesh_file_path).is_file():
             raise ValueError("mesh file does not exist")
+        world.channels = dict(CHANNEL_FORMATS)
+        if template_file_path is not None:
+            template = Path(template_file_path)
+            if not template.is_file():
+                raise ValueError("template file does not exist")
+            if template.stem not in world.template_channels:
+                raise ValueError("template file is invalid")
+            world.channels = dict(world.template_channels[template.stem])
         world.project_open, world.edition_polls, world.file_path = True, 0, None
+        points = [
+            [float(v) for v in line.split()[1:4]]
+            for line in Path(mesh_file_path).read_text(encoding="utf-8").splitlines()
+            if line.startswith("v ")
+        ]
+        world.scene_bounds = (
+            [min(p[i] for p in points) for i in range(3)],
+            [max(p[i] for p in points) for i in range(3)],
+        )
         size = settings.kwargs.get("default_texture_resolution") or 1024
         world.resolution = (size, size)
         world.layers = []
@@ -390,6 +490,19 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         world.require_open()
         return world.file_path
 
+    @dataclass
+    class BoundingBox:
+        dimensions: list[float]
+        center: list[float]
+        radius: float
+
+    def get_scene_bounding_box() -> BoundingBox:
+        world.require_open()
+        low, high = world.scene_bounds
+        size = [h - lo for lo, h in zip(low, high, strict=True)]
+        centre = [(lo + h) / 2.0 for lo, h in zip(low, high, strict=True)]
+        return BoundingBox(size, centre, sum(s * s for s in size) ** 0.5 / 2.0)
+
     project = module(
         "substance_painter.project",
         Settings=Settings,
@@ -401,6 +514,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         is_in_edition_state=is_in_edition_state,
         is_busy=lambda: world.busy,
         file_path=file_path,
+        get_scene_bounding_box=get_scene_bounding_box,
         create=create,
         save_as=save_as,
         close=close,
@@ -441,7 +555,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             return TextureSet(self.texture_set)
 
         def all_channels(self) -> dict[ChannelType, Channel]:
-            return {kind: Channel(kind) for kind in CHANNEL_FORMATS}
+            return {kind: Channel(kind, fmt) for kind, fmt in world.channels.items()}
 
     def set_resolutions(sets: list[TextureSet], resolution: Resolution) -> None:
         world.resolution = (resolution.width, resolution.height)
@@ -450,6 +564,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         "substance_painter.textureset",
         ChannelType=ChannelType,
         ChannelFormat=ChannelFormat,
+        MeshMapUsage=MeshMapUsage,
         Resolution=Resolution,
         TextureSet=TextureSet,
         Stack=Stack,
@@ -512,6 +627,12 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
 
         def get_stack(self) -> Stack:
             return Stack(world.texture_set, "")
+
+        def get_parent(self) -> None:
+            return None  # every fake fill layer is a root layer
+
+        def is_in_mask_stack(self) -> bool:
+            return False
 
         def uid(self) -> int:
             return self.layer.uid_value
@@ -632,14 +753,30 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             None if world.environment is None else ResourceID(world.environment)
         ),
         set_environment_resource=set_environment_resource,
-        get_color_lut_resource=lambda: None,
+        get_color_lut_resource=lambda: (
+            None if world.color_lut is None else ResourceID.from_url(world.color_lut)
+        ),
+        set_color_lut_resource=lambda rid: setattr(world, "color_lut", rid.url()),
         get_tone_mapping=lambda: world.tone_mapping,
         set_tone_mapping=lambda f: setattr(world, "tone_mapping", f),
     )
+
+    class Shelf:
+        def path(self) -> str:
+            if world.shelf_path is None:
+                raise ValueError("the shelf doesn't exist anymore")
+            return str(world.shelf_path)
+
+    class Shelves:
+        @staticmethod
+        def application_shelf() -> Shelf:
+            return Shelf()
+
     resource = module(
         "substance_painter.resource",
         Usage=Usage,
         ResourceID=ResourceID,
+        Shelves=Shelves,
         import_project_resource=lambda path, usage: Resource(ResourceID(Path(path).stem)),
     )
     ui = module(
@@ -647,6 +784,36 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         UIMode=UIMode,
         get_current_mode=lambda: world.ui_mode,
         switch_to_mode=lambda mode: setattr(world, "ui_mode", mode),
+    )
+
+    class BakingParameters:
+        def __init__(self, texture_set: TextureSet) -> None:
+            self.set_name = texture_set.name()
+
+        @staticmethod
+        def from_texture_set(texture_set: TextureSet) -> BakingParameters:
+            world.require_open()
+            return BakingParameters(texture_set)
+
+        def common(self) -> dict[str, BakingProperty]:
+            return dict(world.baking["common"])
+
+        def baker(self, baked_map: MeshMapUsage) -> dict[str, BakingProperty]:
+            return dict(world.baking[baked_map.name])
+
+        def get_curvature_method(self) -> CurvatureMethod:
+            return CurvatureMethod.FromMesh
+
+        def get_enabled_bakers(self) -> list[MeshMapUsage]:
+            return [MeshMapUsage.Normal, MeshMapUsage.AO]
+
+        def is_textureset_enabled(self) -> bool:
+            return True
+
+    baking = module(
+        "substance_painter.baking",
+        BakingParameters=BakingParameters,
+        CurvatureMethod=CurvatureMethod,
     )
 
     def evaluate(code: str) -> str:
@@ -661,6 +828,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             version_info=lambda: world.version_info,
             engine_computations_status=lambda: True,
         ),
+        "substance_painter.baking": baking,
         "substance_painter.colormanagement": module(
             "substance_painter.colormanagement", Color=Color, GenericColorSpace=GenericColorSpace
         ),
