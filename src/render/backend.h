@@ -135,6 +135,9 @@ public:
     virtual void DestroyBuffer(uz::RHIBufferHandle buffer) = 0;
     virtual Result<uz::RHITextureHandle> CreateTexture(const uz::RHITextureDesc& desc) = 0;
     virtual void DestroyTexture(uz::RHITextureHandle texture) = 0;
+    /// The creation description of a live texture; empty for an invalid or destroyed handle.
+    [[nodiscard]] virtual std::optional<uz::RHITextureDesc> TextureDesc(
+        uz::RHITextureHandle texture) const = 0;
     /// A compute kernel from bytecode of `NativeKernelTarget()`.
     virtual Result<ComputeKernel> CreateComputeKernel(std::span<const uint8_t> bytecode,
                                                       const std::string& name) = 0;

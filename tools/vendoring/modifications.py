@@ -392,6 +392,43 @@ UPSTREAM_CITATIONS: tuple[Citation, ...] = (
         r'if \(desc\.disableOptimizations\) \{\s*args\.push_back\(L"-Od"\);',
         "the last code-generation flag BuildArguments passes; `-Gis` is never passed",
     ),
+    # UZP-MOD-009
+    _cite(
+        "engine/rhi/rhi_types.h",
+        166,
+        205,
+        r"enum class RHIFormat : uint8_t \{(?:(?!R16Unorm|RG16Unorm|RGBA16Unorm)[\s\S])*"
+        r"D32FloatS8Uint,[^\n]*\n\};",
+        "RHIFormat has no 16-bit unorm color format",
+    ),
+    _cite(
+        "engine/rhi/rhi_types.h",
+        262,
+        263,
+        r"case RHIFormat::D32FloatS8Uint: return 8;\s*default:\s*return 0;",
+        "BytesPerTexel ends at D32FloatS8Uint",
+    ),
+    _cite(
+        "engine/rhi/dx12/dx12_texture_creation.cpp",
+        59,
+        60,
+        r"return DXGI_FORMAT_BC7_UNORM_SRGB;\s*default:\s*return DXGI_FORMAT_UNKNOWN;",
+        "the texture-creation format map ends at BC7Srgb",
+    ),
+    _cite(
+        "engine/rhi/dx12/dx12_command_list.cpp",
+        882,
+        883,
+        r"return DXGI_FORMAT_BC7_UNORM_SRGB;\s*default:\s*return DXGI_FORMAT_UNKNOWN;",
+        "the copy-footprint format map ends at BC7Srgb",
+    ),
+    _cite(
+        "engine/rhi/vulkan/vulkan_format_helpers.h",
+        53,
+        54,
+        r"return VK_FORMAT_BC7_SRGB_BLOCK;\s*default:\s*return VK_FORMAT_UNDEFINED;",
+        "the Vulkan format map ends at BC7Srgb",
+    ),
     # Kept on purpose
     _cite(
         "engine/rhi/dx12/dx12_command_list.cpp",

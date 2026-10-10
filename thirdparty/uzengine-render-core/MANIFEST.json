@@ -328,9 +328,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "7b0de9478f9fb3b62d2662820ad08862fb1eefee",
       "upstream_sha256": "6998d7d16136a0609338d869e2c88b94f0914b9267fd196e96b04281a8aebca2",
-      "vendored_sha256": "6998d7d16136a0609338d869e2c88b94f0914b9267fd196e96b04281a8aebca2",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "d75b198e2a5016c3ff808ce7101ebfd4ca168b5bfe9a6c9c14a4a2e99b2604d4",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-009"
+      ]
     },
     {
       "upstream_path": "runtime/engine/rhi/dx12/dx12_command_list.h",
@@ -547,9 +549,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "b2049904400880dc5f61f9f31e4bd4b9d11593bf",
       "upstream_sha256": "9bb7163a4f5816b1dfdbad2d4ad6a88c04259ef9409e200e9e5d6bad6bc45803",
-      "vendored_sha256": "9bb7163a4f5816b1dfdbad2d4ad6a88c04259ef9409e200e9e5d6bad6bc45803",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "7ccb517b458336b6afacfd711c5cc36e2bb82adbfedde8b35e38c4fae6a0069c",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-009"
+      ]
     },
     {
       "upstream_path": "runtime/engine/rhi/rhi.h",
@@ -685,9 +689,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "116ef0cbbaff3f29bd50914971e00fea53961085",
       "upstream_sha256": "df6437fca7af9259c832736e823b1e3dc786e500cbe292f40c4cd9759538ff21",
-      "vendored_sha256": "df6437fca7af9259c832736e823b1e3dc786e500cbe292f40c4cd9759538ff21",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "d592d21ddf49881a3ae4e10b3033aa4b6d8df8f8cf817c3291101bc3a6e290ae",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-009"
+      ]
     },
     {
       "upstream_path": "runtime/engine/rhi/vulkan/vulkan_command_list.cpp",
@@ -759,9 +765,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "7cc7db806600b286375530473508559908b26333",
       "upstream_sha256": "99401fe222b73f48b402f4c5cc182eb09d9e1deb77f40bfa4b2b94babdc5cc7f",
-      "vendored_sha256": "99401fe222b73f48b402f4c5cc182eb09d9e1deb77f40bfa4b2b94babdc5cc7f",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "1e27a34afc94c44c47ca05b1d34a735128edafffc1d41bd93152e63451743378",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-009"
+      ]
     },
     {
       "upstream_path": "runtime/engine/rhi/vulkan/vulkan_gpu_profiler.cpp",

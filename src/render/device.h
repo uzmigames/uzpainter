@@ -55,6 +55,7 @@ public:
     void DestroyBuffer(uz::RHIBufferHandle buffer) override;
     Result<uz::RHITextureHandle> CreateTexture(const uz::RHITextureDesc& desc) override;
     void DestroyTexture(uz::RHITextureHandle texture) override;
+    std::optional<uz::RHITextureDesc> TextureDesc(uz::RHITextureHandle texture) const override;
     Result<ComputeKernel> CreateComputeKernel(std::span<const uint8_t> bytecode,
                                               const std::string& name) override;
     void DestroyComputeKernel(const ComputeKernel& kernel) override;

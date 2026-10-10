@@ -11,7 +11,10 @@
 //!   statically) with the same run-time files plus Embree's `embree4.dll` and `tbb12.dll` and
 //!   the Visual C++ runtime they import, and the embedded CPython: the embeddable package
 //!   (`python313.dll`, `python313.zip`, ...), `python313._pth` and the pinned wheels unpacked into
-//!   `Lib/site-packages/` (`zig-out/bin/`, the one-folder layout of `13-engine-integration.md` §5)
+//!   `Lib/site-packages/` (`zig-out/bin/`, the one-folder layout of `13-engine-integration.md` §5),
+//!   and `capabilities.json`
+//! - `zig build capabilities` the capability manifest `zig-out/bin/capabilities.json`, generated
+//!   by `tools/capabilities/generate_capabilities.py` (Python on PATH, or `-Dpython=<exe>`)
 //! - `zig build probe-tests`  `uzp-probe-tests.exe`, the native tests of the `selftest` probe
 //!   decisions (`tests/native/selftest_probes_test.cpp`)
 //! - `zig build render-tests` `uzp-render-tests.exe`, the native tests of the render layer
@@ -20,6 +23,8 @@
 //!   prototype of the normal-convention fixture (`src/prototype/`, mikktspace, spng, zlib)
 //! - `zig build uzp-core-tests` `uzp-core-tests.exe`, the native tests of the document model and
 //!   the canonical manifest (`src/uzp_core/`, `tests/uzp_core/uzp_core_test.cpp`)
+//! - `zig build uzp-core-transaction-tests` `uzp-core-transaction-tests.exe`, the native tests of
+//!   transactions, operation records and name addressing (`tests/uzp_core/transaction_test.cpp`)
 //!
 //! Every include and library path is inside this repository. Windows system headers and import
 //! libraries come from the MinGW-w64 files bundled with the pinned Zig release; nothing refers
@@ -167,6 +172,7 @@ const render_sources = [_][]const u8{
     "render/device.cpp",
     "render/engine_thread.cpp",
     "render/kernel_cache.cpp",
+    "render/texture_readback.cpp",
     "render/xxhash64.cpp",
 };
 /// Warnings are errors in UzPainter's render layer and its tests (never in vendored code).
@@ -218,6 +224,11 @@ const uzp_core_sources = [_][]const u8{
     "uzp_core/types/receipt.cpp",
     "uzp_core/types/resource_url.cpp",
     "uzp_core/types/validation.cpp",
+    "uzp_core/document/document.cpp",
+    "uzp_core/document/nodes.cpp",
+    "uzp_core/naming/naming.cpp",
+    "uzp_core/operation/operation.cpp",
+    "uzp_core/transaction/transaction.cpp",
 };
 /// Warnings are errors in UzPainter's document model and its tests (never in vendored code).
 const uzp_core_flags = cxx_flags ++ [_][]const u8{ "-Wall", "-Wextra", "-Werror" };
@@ -429,6 +440,29 @@ pub fn build(b: *std.Build) void {
     }).step);
     painter_step.dependOn(&b.addInstallBinFile(b.path(cpython_pth_file), "python313._pth").step);
     painter_step.dependOn(&InstallWheels.create(b, b.path(wheels_dir), "Lib/site-packages").step);
+
+    // ── Capability manifest (docs/architecture/10-python-api.md §3) ───────────────────────────
+
+    // The generator reads the Tier 0 manifests and the architecture headings it cites, which a
+    // directory argument does not hash, so it runs on every build (it takes well under a second).
+    const python = b.option([]const u8, "python", "Python 3.13 that runs the capability manifest generator (default: python on PATH)") orelse "python";
+    const capabilities_run = b.addSystemCommand(&.{ python, "-I" });
+    capabilities_run.setName("generate capabilities.json");
+    capabilities_run.addFileArg(b.path("tools/capabilities/generate_capabilities.py"));
+    capabilities_run.addArg("--inventory");
+    capabilities_run.addFileArg(b.path("tools/capabilities/painter-api-inventory.json"));
+    capabilities_run.addArg("--additions");
+    capabilities_run.addFileArg(b.path("tools/capabilities/uzpainter-additions.json"));
+    capabilities_run.addArg("--tier0");
+    capabilities_run.addDirectoryArg(b.path("parity/manifests/tier0"));
+    capabilities_run.addArg("--repo-root");
+    capabilities_run.addDirectoryArg(b.path("."));
+    capabilities_run.addArg("--output");
+    const capabilities_json = capabilities_run.addOutputFileArg("capabilities.json");
+    capabilities_run.has_side_effects = true;
+    const capabilities_step = b.step("capabilities", "Generate the capability manifest bin/capabilities.json");
+    capabilities_step.dependOn(&b.addInstallBinFile(capabilities_json, "capabilities.json").step);
+    painter_step.dependOn(capabilities_step);
     b.getInstallStep().dependOn(painter_step);
 
     // ── Native tests of the probe decisions (src/selftest/probe_report.h) ─────────────────────
@@ -564,6 +598,33 @@ pub fn build(b: *std.Build) void {
     const uzp_core_tests_step = b.step("uzp-core-tests", "Build the native tests of the document model");
     uzp_core_tests_step.dependOn(&b.addInstallArtifact(uzp_core_tests_exe, .{}).step);
     b.getInstallStep().dependOn(uzp_core_tests_step);
+
+    // ── Native tests of transactions and name addressing (phase1.2_docmodel-transactions) ─────
+
+    const uzp_core_txn_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    uzp_core_txn_tests_mod.addIncludePath(b.path("src"));
+    uzp_core_txn_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &uzp_core_sources,
+        .flags = &uzp_core_flags,
+    });
+    uzp_core_txn_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/uzp_core"),
+        .files = &.{"transaction_test.cpp"},
+        .flags = &uzp_core_flags,
+    });
+    const uzp_core_txn_tests_exe = b.addExecutable(.{
+        .name = "uzp-core-transaction-tests",
+        .root_module = uzp_core_txn_tests_mod,
+    });
+    const uzp_core_txn_tests_step = b.step("uzp-core-transaction-tests", "Build the native tests of transactions and name addressing");
+    uzp_core_txn_tests_step.dependOn(&b.addInstallArtifact(uzp_core_txn_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(uzp_core_txn_tests_step);
 }
 
 /// Installs every wheel of a folder into `<prefix>/bin/<subdir>` the way an installer lays out a

@@ -56,6 +56,9 @@ constexpr NamedFormat kFormats[] = {
     {uz::RHIFormat::D32Float, "D32Float"},
     {uz::RHIFormat::D24UnormS8Uint, "D24UnormS8Uint"},
     {uz::RHIFormat::D32FloatS8Uint, "D32FloatS8Uint"},
+    {uz::RHIFormat::R16Unorm, "R16Unorm"},
+    {uz::RHIFormat::RG16Unorm, "RG16Unorm"},
+    {uz::RHIFormat::RGBA16Unorm, "RGBA16Unorm"},
 };
 
 std::string Utf8(const wchar_t* wide) {
@@ -207,6 +210,13 @@ AdmissionBudget DeriveAdmissionBudget(const VramReport& vram,
             (descriptors.shaderResources - policy.reservedDescriptors) / policy.descriptorsPerTile;
     }
     return budget;
+}
+
+std::string_view FormatName(uz::RHIFormat format) {
+    for (const NamedFormat& named : kFormats) {
+        if (named.format == format) return named.name;
+    }
+    return "Unknown";
 }
 
 const FormatCapability* CapabilityReport::Find(uz::RHIFormat format) const {

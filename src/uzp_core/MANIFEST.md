@@ -21,6 +21,7 @@ file: `uzpainter inspect` prints it, every revision stores it, and its SHA-256 i
 | `manifest/sha256.h` | SHA-256 (FIPS 180-4) |
 | `manifest/manifest.h` | Project ⇄ manifest, `SaveManifest`, `LoadManifest`, `ManifestDigest` |
 | `schema/manifest.schema.json` | JSON Schema (draft 2020-12) of the manifest |
+| `document/`, `transaction/`, `operation/`, `naming/` | Revisions, transactions, operation records, name addressing (`TRANSACTIONS.md`) |
 
 ## 2. Canonical form and digest
 
@@ -81,10 +82,9 @@ applied by the operations that create nodes, not by this model.
 
 ## 6. Known limits
 
-`ChannelType` lists the 25 members whose documentation pages are recorded in
-`tools/parity/recorder/documented_symbols.json` (approved source A-PYDOC). The documented enum has
-further members (other OpenPBR names and legacy aliases); each is added to `types/enums.h` and the
-schema together with its documentation page when it is recorded there. A manifest naming another
+`ChannelType` lists all 85 documented members (OpenPBR, user `User0`-`User31`, legacy and
+legacy-alias names), each recorded with its documentation page in
+`tools/parity/recorder/documented_symbols.json` (approved source A-PYDOC). A manifest naming another
 channel type is refused with `ManifestError`, never misread.
 
 ## 7. Tests

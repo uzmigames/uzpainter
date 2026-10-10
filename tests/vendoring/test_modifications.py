@@ -1,6 +1,7 @@
 """Tests of phase0.3_vendor-modifications: UzPainter's own static-library build of the vendored
-render core (`build.zig`) and the local modifications UZP-MOD-001…006 and UZP-MOD-008
-(`thirdparty/uzengine-render-core/MODIFICATIONS.md`).
+render core (`build.zig`) and the local modifications UZP-MOD-001…006, UZP-MOD-008 and
+UZP-MOD-009 (`thirdparty/uzengine-render-core/MODIFICATIONS.md`; UZP-MOD-009 is covered by
+`tests/render/test_core_readback.py`).
 
 The native cases run `uzp-vendor-tests.exe` (`tests/native/vendor_modifications_test.cpp`),
 built once per module from a fresh cache so the build log lists every compile and link
@@ -417,7 +418,7 @@ def test_notices_log_and_manifest_agree() -> None:
     that exists, and its manifest entry carries the logged ids and its current hash."""
     log = load_log(REPO_ROOT)
     # UZP-MOD-007 (Vulkan acceleration structures) is planned for phase3.3 and not applied yet.
-    assert [m.id for m in log] == [f"UZP-MOD-00{n}" for n in (1, 2, 3, 4, 5, 6, 8)]
+    assert [m.id for m in log] == [f"UZP-MOD-00{n}" for n in (1, 2, 3, 4, 5, 6, 8, 9)]
     manifest = load(VENDORED / "MANIFEST.json")
     assert problems(REPO_ROOT, manifest, log) == []
     modified = {e.vendored_path for e in manifest.files if e.status == "modified"}

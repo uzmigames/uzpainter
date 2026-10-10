@@ -1,5 +1,5 @@
 {
-  "description": "substance_painter symbols the recorder uses, each with the python-doc object that documents it (Painter 12.1.0 Python API documentation, approved source A-PYDOC). `documented_as` equals the symbol, or names the class whose page documents the member (constructor parameter, enum member, or the `.name` attribute every enum documents). Checked by tests/parity/recorder/test_provenance.py.",
+  "description": "substance_painter symbols the recorder and the document model (`src/uzp_core/types/enums.h`) use, each with the python-doc object that documents it (Painter 12.1.0 Python API documentation, approved source A-PYDOC). `documented_as` equals the symbol, or names the class whose page documents the member (constructor parameter, enum member, or the `.name` attribute every enum documents). Checked by tests/parity/recorder/test_provenance.py.",
   "source_id": "A-PYDOC",
   "edition": "Adobe Substance 3D Painter 12.1.0 python-doc (Python API 0.3.5)",
   "symbols": {
@@ -675,6 +675,14 @@
       "documented_as": "substance_painter.layerstack.ProjectionMode",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
+    "substance_painter.layerstack.ProjectionMode.UVSetToUVSet": {
+      "documented_as": "substance_painter.layerstack.ProjectionMode",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.layerstack.ProjectionMode.Warp": {
+      "documented_as": "substance_painter.layerstack.ProjectionMode",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
     "substance_painter.layerstack.ScaleMode": {
       "documented_as": "substance_painter.layerstack.ScaleMode",
       "page": "substance_painter/layerstack/layereffect/fill.html"
@@ -1163,6 +1171,14 @@
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
+    "substance_painter.textureset.ChannelType.AbsorptionColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Anisotropyangle": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
     "substance_painter.textureset.ChannelType.Anisotropylevel": {
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
@@ -1171,11 +1187,55 @@
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
+    "substance_painter.textureset.ChannelType.BaseDiffuseRoughness": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
     "substance_painter.textureset.ChannelType.BaseMetalness": {
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
     "substance_painter.textureset.ChannelType.BaseWeight": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.BlendingMask": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.CoatColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.CoatNormal": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.CoatOpacity": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.CoatRoughness": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.CoatRoughnessAnisotropy": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.CoatSpecularLevel": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.CoatTangent": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.CoatWeight": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Diffuse": {
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
@@ -1191,7 +1251,27 @@
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
+    "substance_painter.textureset.ChannelType.FuzzColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.FuzzRoughness": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.FuzzWeight": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Glossiness": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
     "substance_painter.textureset.ChannelType.Height": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Ior": {
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
@@ -1207,6 +1287,10 @@
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
+    "substance_painter.textureset.ChannelType.Reflection": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
     "substance_painter.textureset.ChannelType.Roughness": {
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
@@ -1215,7 +1299,31 @@
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
+    "substance_painter.textureset.ChannelType.ScatteringColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.SheenColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.SheenOpacity": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.SheenRoughness": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Specular": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
     "substance_painter.textureset.ChannelType.SpecularColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.SpecularEdgeColor": {
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
@@ -1223,7 +1331,51 @@
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
+    "substance_painter.textureset.ChannelType.SpecularRoughnessAnisotropy": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
     "substance_painter.textureset.ChannelType.SpecularWeight": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Specularlevel": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.SubsurfaceColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.SubsurfaceRadiusScale": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.SubsurfaceWeight": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Tangent": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.ThinFilmWeight": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Translucency": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.TransmissionColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.TransmissionWeight": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Transmissive": {
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
@@ -1235,11 +1387,99 @@
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
+    "substance_painter.textureset.ChannelType.User10": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User11": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User12": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User13": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User14": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User15": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User16": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User17": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User18": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User19": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
     "substance_painter.textureset.ChannelType.User2": {
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
+    "substance_painter.textureset.ChannelType.User20": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User21": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User22": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User23": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User24": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User25": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User26": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User27": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User28": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User29": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
     "substance_painter.textureset.ChannelType.User3": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User30": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User31": {
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },
@@ -1256,6 +1496,14 @@
       "page": "substance_painter/textureset/index.html"
     },
     "substance_painter.textureset.ChannelType.User7": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User8": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User9": {
       "documented_as": "substance_painter.textureset.ChannelType",
       "page": "substance_painter/textureset/index.html"
     },

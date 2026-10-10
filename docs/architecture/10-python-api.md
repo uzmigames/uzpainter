@@ -21,7 +21,7 @@ Scripts run inside the worker's interpreter: `UzPainter.exe run script.py` (sing
 
 ## 3. Capability manifest
 
-Generated at build time from the Painter inventory plus UzPainter additions; shipped as `capabilities.json`, printed by `uzpainter capabilities`, exposed as the MCP resource `uzpainter://capabilities`. One entry per qualified symbol and per operation context:
+Generated at build time from the Painter inventory plus UzPainter additions; shipped as `capabilities.json`, printed by `uzpainter capabilities`, exposed as the MCP resource `uzpainter://capabilities`. Inputs, generator and schema live in `tools/capabilities/` (`zig build capabilities`; its `README.md`). One entry per qualified symbol and per operation context:
 
 ```json
 {"symbol": "substance_painter.layerstack.Node.set_blending_mode", "context": "content-stack|mask-stack",

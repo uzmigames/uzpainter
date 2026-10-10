@@ -13,6 +13,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Texture readback, capability manifest and document transactions (tasks `phase1.2_core-readback`, `phase1.2_docmodel-capability-manifest`, `phase1.2_docmodel-transactions`): ordered GPU readback with 16-bit unorm formats (UZP-MOD-009); capability inventory of 784 documented Painter symbols with statuses (`tools/capabilities/`, `zig build capabilities`), ChannelType completed to 85 members; copy-on-write revisions, transactions, operation records with idempotency and name scopes in `src/uzp_core/`.
 - Normal convention (task `phase0.9_normal-convention-fixture`): OpenGL +v green confirmed; clean-room MikkTSpace prototype matches Painter's PerFragment and PerVertex bakes within 1 code at 16 bits (`parity/semantics/tangent-frame.json`); mikktspace vendored; decision 031 (unset tangent mode = PerVertex, Painter's default).
 - Phase 1 start: render device layer (task `phase1.1_core-device-kernels`: engine thread, DX12 device with deadlines, DXIL/SPIR-V kernel cache with IEEE-strict compilation UZP-MOD-008, admission budget) and document model types with canonical manifest JSON (task `phase1.1_docmodel-types-manifest`, digests identical in C++ and Python).
 - P0-TIER0 accepted (task `phase0.8_tier0-goldens`): 59 Tier 0 goldens recorded at least twice, 53 stable, fits reproduced, store verify and guard green; gate test `tests/parity/test_tier0_gate.py`; OpenEXR binding listed as a dev-only dependency.

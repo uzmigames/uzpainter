@@ -103,6 +103,19 @@ below against the selected commit, and runs the covering tests.
 | Author | UzmiGames (rulebook task `phase1.1_core-device-kernels`) |
 | Covering test | `tests/vendoring/test_modifications.py::test_ieee_strict_arithmetic` |
 
+## UZP-MOD-009 — 16-bit unorm color formats
+
+| Field | Value |
+|---|---|
+| Id | UZP-MOD-009 |
+| Files | `engine/rhi/rhi_types.h`, `engine/rhi/dx12/dx12_texture_creation.cpp`, `engine/rhi/dx12/dx12_command_list.cpp`, `engine/rhi/vulkan/vulkan_format_helpers.h` |
+| Reason | capability |
+| Description | New `RHIFormat` values `R16Unorm`, `RG16Unorm` and `RGBA16Unorm`, appended after `D32FloatS8Uint` so the values of the existing formats are unchanged. `BytesPerTexel` gives 2, 4 and 8 bytes; textures are created as, and copy footprints use, `DXGI_FORMAT_R16_UNORM`, `DXGI_FORMAT_R16G16_UNORM` and `DXGI_FORMAT_R16G16B16A16_UNORM` on DX12 and `VK_FORMAT_R16_UNORM`, `VK_FORMAT_R16G16_UNORM` and `VK_FORMAT_R16G16B16A16_UNORM` on Vulkan. UzPainter holds `L16`/`RGB16` channels and 16-bit mesh maps natively on the GPU and reads them back without conversion (`src/render/texture_readback.*`); FP16 is never a substitute for 16-bit unorm storage (`docs/architecture/04-layer-stack-and-compositing.md` §7). |
+| Upstream behaviour | `engine/rhi/rhi_types.h:166-205` declares no 16-bit unorm color format (`D16Unorm` is depth only); `engine/rhi/rhi_types.h:262-263` sizes no such format; `engine/rhi/dx12/dx12_texture_creation.cpp:59-60` and `engine/rhi/dx12/dx12_command_list.cpp:882-883` map every format after `BC7Srgb` to `DXGI_FORMAT_UNKNOWN`; `engine/rhi/vulkan/vulkan_format_helpers.h:53-54` maps it to `VK_FORMAT_UNDEFINED` |
+| Date | 2026-10-10 |
+| Author | UzmiGames (rulebook task `phase1.2_core-readback`) |
+| Covering test | `tests/render/test_core_readback.py::test_exact_native_formats` |
+
 ## Behaviours kept on purpose
 
 - `DX12CommandList::FatalErrorLoop` still aborts the process after repeated RHI errors

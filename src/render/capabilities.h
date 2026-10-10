@@ -91,6 +91,9 @@ struct CapabilityReport {
     [[nodiscard]] std::string ToJson() const;
 };
 
+/// The `uz::RHIFormat` enumerator's name, e.g. "RGBA16Unorm"; "Unknown" for `Unknown`.
+[[nodiscard]] std::string_view FormatName(uz::RHIFormat format);
+
 /// Queries the device's capabilities and derives the admission budget with `policy`.
 [[nodiscard]] Result<CapabilityReport> QueryCapabilities(IDevice& device,
                                                          const AdmissionPolicy& policy);

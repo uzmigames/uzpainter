@@ -1,6 +1,7 @@
 // Native tests of the render layer's device, engine thread, kernel cache and capability query
-// (src/render/, rulebook task phase1.1_core-device-kernels). Built by `zig build render-tests`
-// and driven by tests/render/test_core_device_kernels.py.
+// (src/render/, rulebook task phase1.1_core-device-kernels) and of its texture readback
+// (phase1.2_core-readback). Built by `zig build render-tests` and driven by
+// tests/render/test_core_device_kernels.py and tests/render/test_core_readback.py.
 //
 // Usage: uzp-render-tests <case> <work-dir>
 //   xxhash          XXH64 against reference digests
@@ -11,6 +12,11 @@
 //   device-removed  `ID3D12Device5::RemoveDevice`, then `device_removed {backend: dx12, ...}`
 //   unavailable     Vulkan and a missing DX12 adapter: `gpu_backend_unavailable`, no work run
 //   capabilities    the DX12 capability report and the derived admission budget
+//   readback-layout  readback row pitch and texel layouts; the RHI's 16-bit unorm formats
+//   readback-pitch   widths 1, 3, 1023 and 4097 texels read back with unshifted rows
+//   readback-exact   every readable format (and a lower mip) read back bit-identical
+//   readback-drain   64 readbacks in flight drained in submission order, no staging left
+//   readback-failure device removal and a stalled queue under pending readbacks
 //
 // Output: `PASS <check>` / `FAIL <check>: <detail>` lines, `INFO` lines and, for
 // `capabilities`, one `REPORT <json>` line. Exit code 0 when every check passed, 1 when one
@@ -23,14 +29,19 @@
 #include "render/device.h"
 #include "render/engine_thread.h"
 #include "render/kernel_cache.h"
+#include "render/texture_readback.h"
 #include "render/xxhash64.h"
 
+#include "D3D12MemAlloc.h"
 #include "dx12_device.h"
 #include "dx12_guids.h"
+#include "dx12_resource_creation.h"
+#include "dx12_resources.h"
 #include "log.h"
 
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <bit>
 #include <chrono>
@@ -39,6 +50,8 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -699,7 +712,7 @@ int RunCapabilities(const fs::path& dir) {
     Check(report->backend == Backend::Dx12 && !report->adapter.empty(),
           "the report names the DX12 adapter", report->adapter);
     Check(!report->softwareAdapter, "the adapter is a hardware adapter");
-    Check(report->formats.size() == 28, "every RHI format is reported",
+    Check(report->formats.size() == 31, "every RHI format is reported",
           std::to_string(report->formats.size()));
     const FormatCapability* rgba16 = report->Find(uz::RHIFormat::RGBA16Float);
     Check(rgba16 && rgba16->texture2D && rgba16->shaderResource && rgba16->unorderedAccess,
@@ -756,16 +769,728 @@ int RunAdmission() {
     return Finish();
 }
 
+// ── readback helpers ─────────────────────────────────────────────────────────
+
+/// Every format `ReadbackLayout` accepts.
+constexpr uz::RHIFormat kReadableFormats[] = {
+    uz::RHIFormat::R8Unorm,     uz::RHIFormat::RG8Unorm,    uz::RHIFormat::RGBA8Unorm,
+    uz::RHIFormat::RGBA8Srgb,   uz::RHIFormat::BGRA8Unorm,  uz::RHIFormat::BGRA8Srgb,
+    uz::RHIFormat::R16Unorm,    uz::RHIFormat::RG16Unorm,   uz::RHIFormat::RGBA16Unorm,
+    uz::RHIFormat::R16Float,    uz::RHIFormat::RG16Float,   uz::RHIFormat::RGBA16Float,
+    uz::RHIFormat::R32Float,    uz::RHIFormat::RG32Float,   uz::RHIFormat::RGB32Float,
+    uz::RHIFormat::RGBA32Float, uz::RHIFormat::R32Uint,     uz::RHIFormat::RG32Uint,
+    uz::RHIFormat::RGBA32Uint,
+};
+
+std::string Name(uz::RHIFormat format) { return std::string(FormatName(format)); }
+
+/// Deterministic bytes (xorshift64*): every bit pattern of a channel, NaNs and denormals of the
+/// float formats included, occurs.
+std::vector<std::byte> PatternBytes(size_t count, uint64_t seed) {
+    std::vector<std::byte> bytes(count);
+    uint64_t state = seed * 0x9E3779B97F4A7C15ull + 1;
+    for (std::byte& b : bytes) {
+        state ^= state >> 12;
+        state ^= state << 25;
+        state ^= state >> 27;
+        b = static_cast<std::byte>((state * 0x2545F4914F6CDD1Dull) >> 56);
+    }
+    return bytes;
+}
+
+/// The first `channels` channels of every texel of tightly packed `texels`.
+std::vector<std::byte> FirstChannels(const std::vector<std::byte>& texels, TexelLayout layout,
+                                     uint32_t channels) {
+    const size_t in = layout.BytesPerTexel();
+    const size_t out = size_t{channels} * layout.bytesPerChannel;
+    std::vector<std::byte> result;
+    result.reserve(texels.size() / in * out);
+    for (size_t offset = 0; offset < texels.size(); offset += in) {
+        result.insert(result.end(), texels.begin() + static_cast<ptrdiff_t>(offset),
+                      texels.begin() + static_cast<ptrdiff_t>(offset + out));
+    }
+    return result;
+}
+
+/// Empty when `image` holds exactly `expected` with `width` x `height` texels; else the first
+/// difference.
+std::string Compare(const Result<ReadbackImage>& image, const std::vector<std::byte>& expected,
+                    uint32_t width, uint32_t height) {
+    if (!image) return image.error().Describe();
+    if (image->width != width || image->height != height) {
+        return "size " + std::to_string(image->width) + "x" + std::to_string(image->height);
+    }
+    if (image->texels.size() != expected.size()) {
+        return std::to_string(image->texels.size()) + " bytes, expected " +
+               std::to_string(expected.size());
+    }
+    const size_t row = image->RowBytes();
+    for (size_t i = 0; i < expected.size(); ++i) {
+        if (image->texels[i] == expected[i]) continue;
+        return "first difference in row " + std::to_string(i / row) + " at byte " +
+               std::to_string(i % row);
+    }
+    return {};
+}
+
+uz::DX12Device& NativeOf(IDevice& device) { return static_cast<Dx12Device&>(device).Native(); }
+
+/// Live D3D12MA allocations of the device (textures and buffers).
+uint64_t LiveAllocations(IDevice& device) {
+    D3D12MA::TotalStatistics stats{};
+    NativeOf(device).GetAllocator()->CalculateStatistics(&stats);
+    return stats.Total.Stats.AllocationCount;
+}
+
+/// The copyable footprint D3D12 itself reports for one mip level.
+struct Footprint {
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout{};
+    UINT rows = 0;
+    UINT64 rowBytes = 0;
+    UINT64 totalBytes = 0;
+};
+
+std::optional<Footprint> CopyFootprint(IDevice& device, uz::RHITextureHandle texture,
+                                       uint32_t mip) {
+    uz::DX12Texture* entry = NativeOf(device).GetTexturePool().Get(texture.index, texture.generation);
+    if (!entry || !entry->resource) return std::nullopt;
+    D3D12_RESOURCE_DESC desc{};
+    entry->resource->GetDesc(&desc);
+    Footprint footprint;
+    static_cast<Dx12Device&>(device).D3D12()->GetCopyableFootprints(
+        &desc, mip, 1, 0, &footprint.layout, &footprint.rows, &footprint.rowBytes,
+        &footprint.totalBytes);
+    return footprint;
+}
+
+Result<uz::RHITextureHandle> MakeTexture(IDevice& device, uz::RHIFormat format, uint32_t width,
+                                         uint32_t height, uint16_t mips = 1,
+                                         uz::RHITextureUsage usage = uz::RHITextureUsage::CopySrc |
+                                                                     uz::RHITextureUsage::CopyDst) {
+    uz::RHITextureDesc desc;
+    desc.width = width;
+    desc.height = height;
+    desc.mipLevels = mips;
+    desc.format = format;
+    desc.usage = usage;
+    desc.debugName = "readback_test";
+    return device.CreateTexture(desc);
+}
+
+/// Writes tightly packed `texels` to mip `mip` through an upload buffer laid out at the footprint
+/// D3D12 reports (independent of `TextureReadback`'s own pitch). The texture ends in `Common`.
+Result<void> Upload(EngineContext& context, uz::RHITextureHandle texture, uint32_t mip,
+                    const std::vector<std::byte>& texels) {
+    IDevice& device = context.Device();
+    const std::optional<Footprint> footprint = CopyFootprint(device, texture, mip);
+    if (!footprint || footprint->rowBytes * footprint->rows != texels.size()) {
+        return Fail(ErrorCode::RequestFailed, Backend::Dx12, "upload data does not fit the mip");
+    }
+    uz::RHIBufferDesc desc;
+    desc.sizeBytes = footprint->totalBytes;
+    desc.usage = uz::RHIBufferUsage::CopySrc;
+    desc.memory = uz::RHIMemoryType::Upload;
+    desc.debugName = "readback_test_upload";
+    Result<uz::RHIBufferHandle> buffer = device.CreateBuffer(desc);
+    if (!buffer) return Unexpected(buffer.error());
+    auto* mapped = static_cast<std::byte*>(device.Rhi().MapBuffer(*buffer));
+    if (!mapped) {
+        device.DestroyBuffer(*buffer);
+        return Fail(ErrorCode::RequestFailed, Backend::Dx12, "upload buffer not mapped");
+    }
+    for (UINT y = 0; y < footprint->rows; ++y) {
+        std::memcpy(mapped + footprint->layout.Offset + uint64_t{footprint->layout.Footprint.RowPitch} * y,
+                    texels.data() + footprint->rowBytes * y, footprint->rowBytes);
+    }
+    device.Rhi().UnmapBuffer(*buffer);
+    const uz::RHIBufferHandle source = *buffer;
+    const uint32_t pitch = footprint->layout.Footprint.RowPitch;
+    Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+        const uz::RHIBarrierDesc toCopy{texture, uz::RHIBufferHandle::Invalid(),
+                                        uz::RHIResourceState::Common,
+                                        uz::RHIResourceState::CopyDst};
+        cmd.ResourceBarrier(&toCopy, 1);
+        cmd.CopyBufferToTexture(source, 0, pitch, texture, mip, 0);
+        const uz::RHIBarrierDesc back{texture, uz::RHIBufferHandle::Invalid(),
+                                      uz::RHIResourceState::CopyDst,
+                                      uz::RHIResourceState::Common};
+        cmd.ResourceBarrier(&back, 1);
+    });
+    device.DestroyBuffer(source);
+    return done;
+}
+
+/// A texture filled with pattern bytes; destroyed by its owner.
+struct Filled {
+    uz::RHITextureHandle texture = uz::RHITextureHandle::Invalid();
+    uz::RHIFormat format = uz::RHIFormat::Unknown;
+    TexelLayout layout;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    std::vector<std::byte> texels;
+};
+
+Result<Filled> MakeFilled(EngineContext& context, uz::RHIFormat format, uint32_t width,
+                          uint32_t height, uint64_t seed) {
+    Filled filled;
+    filled.format = format;
+    filled.layout = ReadbackLayout(format).value_or(TexelLayout{});
+    filled.width = width;
+    filled.height = height;
+    filled.texels = PatternBytes(size_t{width} * height * filled.layout.BytesPerTexel(), seed);
+    Result<uz::RHITextureHandle> texture = MakeTexture(context.Device(), format, width, height);
+    if (!texture) return Unexpected(texture.error());
+    filled.texture = *texture;
+    Result<void> uploaded = Upload(context, filled.texture, 0, filled.texels);
+    if (!uploaded) {
+        context.Device().DestroyTexture(filled.texture);
+        return Unexpected(uploaded.error());
+    }
+    return filled;
+}
+
+/// The formats of `kReadableFormats` the adapter supports as 2D textures.
+std::vector<uz::RHIFormat> TextureFormats(const Engine& engine) {
+    const Result<CapabilityReport> report = engine.Capabilities();
+    std::vector<uz::RHIFormat> formats;
+    for (const uz::RHIFormat format : kReadableFormats) {
+        const FormatCapability* capability = report ? report->Find(format) : nullptr;
+        if (capability && capability->texture2D) {
+            formats.push_back(format);
+        } else {
+            Info(Name(format) + " is not a 2D texture format on this adapter; not tested");
+        }
+    }
+    return formats;
+}
+
+// ── readback-layout ──────────────────────────────────────────────────────────
+
+int RunReadbackLayout() {
+    Check(ReadbackRowPitch(1) == 256 && ReadbackRowPitch(256) == 256 &&
+              ReadbackRowPitch(257) == 512 && ReadbackRowPitch(1023 * 8) == 8192 &&
+              ReadbackRowPitch(4097 * 2) == 8448,
+          "row pitch is the row size rounded up to 256 bytes");
+    bool sized = true;
+    for (const uz::RHIFormat format : kReadableFormats) {
+        const std::optional<TexelLayout> layout = ReadbackLayout(format);
+        if (!layout || layout->BytesPerTexel() != uz::BytesPerTexel(format) ||
+            layout->channels < 1 || layout->channels > 4) {
+            sized = false;
+            Check(false, "layout of " + Name(format));
+        }
+    }
+    Check(sized, "every readable format's layout matches the RHI's bytes per texel");
+    Check(ReadbackLayout(uz::RHIFormat::R16Unorm) == TexelLayout{1, 2} &&
+              ReadbackLayout(uz::RHIFormat::RG16Unorm) == TexelLayout{2, 2} &&
+              ReadbackLayout(uz::RHIFormat::RGBA16Unorm) == TexelLayout{4, 2},
+          "16-bit unorm formats read back as 2-byte channels");
+    Check(uz::BytesPerTexel(uz::RHIFormat::R16Unorm) == 2 &&
+              uz::BytesPerTexel(uz::RHIFormat::RG16Unorm) == 4 &&
+              uz::BytesPerTexel(uz::RHIFormat::RGBA16Unorm) == 8,
+          "UZP-MOD-009: the RHI sizes the 16-bit unorm formats");
+    Check(uz::ToDxgiFormat(uz::RHIFormat::R16Unorm) == DXGI_FORMAT_R16_UNORM &&
+              uz::ToDxgiFormat(uz::RHIFormat::RG16Unorm) == DXGI_FORMAT_R16G16_UNORM &&
+              uz::ToDxgiFormat(uz::RHIFormat::RGBA16Unorm) == DXGI_FORMAT_R16G16B16A16_UNORM,
+          "UZP-MOD-009: the 16-bit unorm formats map to their DXGI formats");
+    const uz::RHIFormat unreadable[] = {uz::RHIFormat::Unknown, uz::RHIFormat::BC1Unorm,
+                                        uz::RHIFormat::BC7Srgb, uz::RHIFormat::D16Unorm,
+                                        uz::RHIFormat::D32Float, uz::RHIFormat::D24UnormS8Uint};
+    bool rejected = true;
+    for (const uz::RHIFormat format : unreadable) rejected = rejected && !ReadbackLayout(format);
+    Check(rejected, "block-compressed, depth and unknown formats are not read back");
+    return Finish();
+}
+
+// ── readback-pitch ───────────────────────────────────────────────────────────
+
+int RunReadbackPitch(const fs::path& dir) {
+    Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    struct Case {
+        uz::RHIFormat format;
+        uint32_t channels;  // 0: all
+        const char* label;
+    };
+    std::vector<Case> cases = {
+        {uz::RHIFormat::R8Unorm, 0, "L8 (R8Unorm)"},
+        {uz::RHIFormat::RGBA8Unorm, 3, "RGB8 (RGBA8Unorm, 3 channels)"},
+        {uz::RHIFormat::R16Unorm, 0, "L16 (R16Unorm)"},
+        {uz::RHIFormat::RGBA16Unorm, 3, "RGB16 (RGBA16Unorm, 3 channels)"},
+        {uz::RHIFormat::RGBA16Float, 3, "RGB16F (RGBA16Float, 3 channels)"},
+        {uz::RHIFormat::R32Float, 0, "L32F (R32Float)"},
+        {uz::RHIFormat::RGBA32Float, 0, "RGBA32Float"},
+    };
+    const std::vector<uz::RHIFormat> supported = TextureFormats(engine);
+    if (std::find(supported.begin(), supported.end(), uz::RHIFormat::RGB32Float) != supported.end()) {
+        cases.push_back({uz::RHIFormat::RGB32Float, 0, "RGB32F (RGB32Float)"});
+    }
+    constexpr uint32_t kWidths[] = {1, 3, 1023, 4097};
+    constexpr uint32_t kRows = 5;
+
+    auto snapshot = std::make_shared<const TestSnapshot>();
+    auto future = engine.Submit(snapshot, [&](EngineContext& context, const TestSnapshot&)
+                                              -> Result<void> {
+        IDevice& device = context.Device();
+        bool allRows = true;
+        bool allPitches = true;
+        uint64_t seed = 1;
+        for (const Case& c : cases) {
+            for (const uint32_t width : kWidths) {
+                const std::string what =
+                    std::string(c.label) + ", width " + std::to_string(width);
+                Result<Filled> filled = MakeFilled(context, c.format, width, kRows, seed++);
+                if (!filled) {
+                    allRows = false;
+                    Check(false, what + ": texture uploaded", filled.error().Describe());
+                    continue;
+                }
+                // The pitch the readback uses is the one D3D12 reports for the copy footprint.
+                const uint64_t rowBytes = uint64_t{width} * filled->layout.BytesPerTexel();
+                const std::optional<Footprint> footprint = CopyFootprint(device, filled->texture, 0);
+                const bool pitchOk = footprint && footprint->layout.Footprint.RowPitch ==
+                                                      ReadbackRowPitch(rowBytes);
+                allPitches = allPitches && pitchOk;
+                if (!pitchOk) Check(false, what + ": readback pitch equals the D3D12 footprint");
+                Info(what + ": row " + std::to_string(rowBytes) + " bytes, pitch " +
+                     std::to_string(ReadbackRowPitch(rowBytes)));
+
+                TextureReadback readback(context);
+                ReadbackDesc desc;
+                desc.texture = filled->texture;
+                desc.channels = c.channels;
+                Result<ReadbackId> id = readback.Request(desc);
+                Result<ReadbackImage> image =
+                    id ? readback.Complete(*id) : Result<ReadbackImage>(Unexpected(id.error()));
+                const uint32_t channels = c.channels == 0 ? filled->layout.channels : c.channels;
+                const std::string diff =
+                    Compare(image, FirstChannels(filled->texels, filled->layout, channels), width,
+                            kRows);
+                Check(diff.empty(), what + ": every row reads back unshifted", diff);
+                allRows = allRows && diff.empty();
+                device.DestroyTexture(filled->texture);
+            }
+        }
+        Check(allPitches, "the readback pitch equals D3D12's copy footprint for every width");
+        Check(allRows,
+              "widths 1, 3, 1023 and 4097 read back with correct rows for every tested format");
+        return {};
+    });
+    Result<void> result = Get(future);
+    Check(result.has_value(), "the pitch request ran", Describe(result));
+    return Finish();
+}
+
+// ── readback-exact ───────────────────────────────────────────────────────────
+
+int RunReadbackExact(const fs::path& dir) {
+    Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    const std::vector<uz::RHIFormat> formats = TextureFormats(engine);
+    constexpr uint32_t kW = 1023;
+    constexpr uint32_t kH = 7;
+
+    auto snapshot = std::make_shared<const TestSnapshot>();
+    auto future = engine.Submit(snapshot, [&](EngineContext& context, const TestSnapshot&)
+                                              -> Result<void> {
+        IDevice& device = context.Device();
+        bool all = true;
+        uint64_t seed = 100;
+        for (const uz::RHIFormat format : formats) {
+            Result<Filled> filled = MakeFilled(context, format, kW, kH, seed++);
+            if (!filled) {
+                all = false;
+                Check(false, Name(format) + " reads back bit-identical", filled.error().Describe());
+                continue;
+            }
+            TextureReadback readback(context);
+            ReadbackDesc desc;
+            desc.texture = filled->texture;
+            Result<ReadbackId> id = readback.Request(desc);
+            Result<ReadbackImage> image =
+                id ? readback.Complete(*id) : Result<ReadbackImage>(Unexpected(id.error()));
+            std::string diff = Compare(image, filled->texels, kW, kH);
+            if (diff.empty() && (image->format != format ||
+                                 image->channels != filled->layout.channels ||
+                                 image->bytesPerChannel != filled->layout.bytesPerChannel)) {
+                diff = "image format fields differ";
+            }
+            Check(diff.empty(), Name(format) + " reads back bit-identical", diff);
+            all = all && diff.empty();
+
+            // The spec's scenario: an RGB16 channel (RGBA16Unorm storage) 1023 texels wide.
+            if (format == uz::RHIFormat::RGBA16Unorm) {
+                desc.channels = 3;
+                Result<ReadbackId> rgb = readback.Request(desc);
+                Result<ReadbackImage> rgbImage = rgb ? readback.Complete(*rgb)
+                                                     : Result<ReadbackImage>(Unexpected(rgb.error()));
+                const std::string rgbDiff = Compare(
+                    rgbImage, FirstChannels(filled->texels, filled->layout, 3), kW, kH);
+                Check(rgbDiff.empty() && rgbImage->channels == 3 && rgbImage->bytesPerChannel == 2,
+                      "an RGB16 texture 1023 texels wide reads back every texel unchanged",
+                      rgbDiff);
+                all = all && rgbDiff.empty();
+            }
+            device.DestroyTexture(filled->texture);
+        }
+        Check(all, "every supported format reads back bit-identical");
+
+        // A lower mip level of a mipmapped texture: its own size, its own texels.
+        Result<uz::RHITextureHandle> mipped =
+            MakeTexture(device, uz::RHIFormat::RGBA16Unorm, 64, 40, 3);
+        if (!mipped) return Unexpected(mipped.error());
+        const std::vector<std::byte> mip2 = PatternBytes(size_t{16} * 10 * 8, 7);
+        Result<void> uploaded = Upload(context, *mipped, 2, mip2);
+        if (uploaded) {
+            TextureReadback readback(context);
+            ReadbackDesc desc;
+            desc.texture = *mipped;
+            desc.mipLevel = 2;
+            Result<ReadbackId> id = readback.Request(desc);
+            Result<ReadbackImage> image =
+                id ? readback.Complete(*id) : Result<ReadbackImage>(Unexpected(id.error()));
+            const std::string diff = Compare(image, mip2, 16, 10);
+            Check(diff.empty(), "mip level 2 (16x10) reads back bit-identical", diff);
+        } else {
+            Check(false, "mip level 2 uploaded", uploaded.error().Describe());
+        }
+        device.DestroyTexture(*mipped);
+        return {};
+    });
+    Result<void> result = Get(future);
+    Check(result.has_value(), "the exactness request ran", Describe(result));
+    return Finish();
+}
+
+// ── readback-drain ───────────────────────────────────────────────────────────
+
+int RunReadbackDrain(const fs::path& dir) {
+    Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    constexpr size_t kRequests = 64;
+    auto snapshot = std::make_shared<const TestSnapshot>();
+    uint64_t atStart = 0;
+    uint64_t atEnd = 0;
+
+    auto future = engine.Submit(snapshot, [&](EngineContext& context, const TestSnapshot&)
+                                              -> Result<void> {
+        IDevice& device = context.Device();
+        atStart = LiveAllocations(device);
+        const uz::RHIFormat formats[] = {uz::RHIFormat::R16Unorm, uz::RHIFormat::RGBA16Unorm,
+                                         uz::RHIFormat::R8Unorm, uz::RHIFormat::RGBA8Unorm,
+                                         uz::RHIFormat::R16Float, uz::RHIFormat::RGBA16Float,
+                                         uz::RHIFormat::R32Float, uz::RHIFormat::RGBA32Float};
+        const uint32_t widths[] = {1, 3, 255, 1023, 64, 513, 4097, 17};
+        std::vector<Filled> textures;
+        for (size_t i = 0; i < std::size(formats); ++i) {
+            Result<Filled> filled = MakeFilled(context, formats[i], widths[i], 9, 1000 + i);
+            if (!filled) return Unexpected(filled.error());
+            textures.push_back(std::move(*filled));
+        }
+        const uint64_t baseline = LiveAllocations(device);
+
+        // A burst of requests, all in flight before any is completed.
+        std::vector<ReadbackId> ids;
+        std::vector<size_t> sources;
+        {
+            TextureReadback readback(context);
+            for (size_t i = 0; i < kRequests; ++i) {
+                const size_t source = (i * 5) % textures.size();
+                ReadbackDesc desc;
+                desc.texture = textures[source].texture;
+                Result<ReadbackId> id = readback.Request(desc);
+                if (!id) return Unexpected(id.error());
+                ids.push_back(*id);
+                sources.push_back(source);
+            }
+            Check(readback.Outstanding() == kRequests && readback.StagingBuffers() == kRequests,
+                  "64 readback requests are outstanding, each with its own staging buffer",
+                  std::to_string(readback.StagingBuffers()) + " staging buffers");
+            Check(LiveAllocations(device) == baseline + kRequests,
+                  "the device holds one staging allocation per outstanding request",
+                  std::to_string(LiveAllocations(device) - baseline) + " allocations");
+            Check(std::is_sorted(ids.begin(), ids.end()) &&
+                      std::adjacent_find(ids.begin(), ids.end()) == ids.end(),
+                  "request ids increase in submission order");
+
+            std::vector<ReadbackOutcome> outcomes = readback.Drain();
+            bool order = outcomes.size() == kRequests;
+            bool exact = order;
+            std::string first;
+            for (size_t i = 0; order && i < outcomes.size(); ++i) {
+                order = outcomes[i].id == ids[i];
+                const Filled& source = textures[sources[i]];
+                const std::string diff =
+                    Compare(outcomes[i].image, source.texels, source.width, source.height);
+                if (!diff.empty() && first.empty()) first = "request " + std::to_string(i) + ": " + diff;
+                exact = exact && diff.empty();
+            }
+            Check(order, "the drain reports every request in submission order",
+                  std::to_string(outcomes.size()) + " outcomes");
+            Check(exact, "every drained request returns its texture's texels", first);
+            Check(readback.Outstanding() == 0 && readback.StagingBuffers() == 0,
+                  "after the drain no request is outstanding and no staging buffer is held");
+            Check(LiveAllocations(device) == baseline,
+                  "after the drain no staging buffer remains allocated on the device",
+                  std::to_string(LiveAllocations(device)) + " allocations, baseline " +
+                      std::to_string(baseline));
+        }
+
+        // Out-of-order completion and the destructor's drain.
+        {
+            TextureReadback readback(context);
+            Result<ReadbackId> a = readback.Request({textures[0].texture});
+            Result<ReadbackId> b = readback.Request({textures[1].texture});
+            Result<ReadbackId> c = readback.Request({textures[2].texture});
+            if (!a || !b || !c) return Fail(ErrorCode::RequestFailed, Backend::Dx12, "request");
+            const bool cFirst =
+                Compare(readback.Complete(*c), textures[2].texels, textures[2].width, 9).empty();
+            const bool aSecond =
+                Compare(readback.Complete(*a), textures[0].texels, textures[0].width, 9).empty();
+            Check(cFirst && aSecond && readback.Outstanding() == 1,
+                  "a later request can be completed before earlier ones");
+            Result<ReadbackImage> again = readback.Complete(*a);
+            Check(!again && again.error().code == ErrorCode::RequestFailed,
+                  "completing a request twice fails with request_failed", Describe(again));
+            for (size_t i = 0; i < 16; ++i) {
+                static_cast<void>(readback.Request({textures[i % textures.size()].texture}));
+            }
+            Check(readback.StagingBuffers() == 17, "17 requests outstanding before destruction",
+                  std::to_string(readback.StagingBuffers()));
+        }
+        Check(LiveAllocations(device) == baseline,
+              "destroying a TextureReadback drains it and releases its staging buffers",
+              std::to_string(LiveAllocations(device)) + " allocations, baseline " +
+                  std::to_string(baseline));
+
+        // Invalid requests fail before anything is allocated.
+        {
+            TextureReadback readback(context);
+            Result<uz::RHITextureHandle> bc = MakeTexture(device, uz::RHIFormat::BC1Unorm, 64, 64);
+            Result<uz::RHITextureHandle> noCopy =
+                MakeTexture(device, uz::RHIFormat::R16Unorm, 8, 8, 1, uz::RHITextureUsage::ShaderResource);
+            Result<uz::RHITextureHandle> gone = MakeTexture(device, uz::RHIFormat::R16Unorm, 8, 8);
+            if (!bc || !noCopy || !gone) return Fail(ErrorCode::RequestFailed, Backend::Dx12, "textures");
+            device.DestroyTexture(*gone);
+            const uint64_t before = LiveAllocations(device);
+            ReadbackDesc fiveChannels{textures[1].texture};
+            fiveChannels.channels = 5;
+            ReadbackDesc badMip{textures[0].texture};
+            badMip.mipLevel = 1;
+            ReadbackDesc badSlice{textures[0].texture};
+            badSlice.arraySlice = 1;
+            const struct {
+                ReadbackDesc desc;
+                const char* what;
+            } invalid[] = {
+                {ReadbackDesc{*bc}, "a block-compressed texture"},
+                {ReadbackDesc{*noCopy}, "a texture without CopySrc usage"},
+                {ReadbackDesc{*gone}, "a destroyed texture"},
+                {ReadbackDesc{uz::RHITextureHandle::Invalid()}, "an invalid handle"},
+                {fiveChannels, "five channels of RGBA16Unorm"},
+                {badMip, "a mip level the texture lacks"},
+                {badSlice, "an array slice the texture lacks"},
+            };
+            bool allRejected = true;
+            for (const auto& entry : invalid) {
+                Result<ReadbackId> id = readback.Request(entry.desc);
+                const bool rejected = !id && id.error().code == ErrorCode::RequestFailed;
+                Check(rejected, std::string("a readback of ") + entry.what + " is rejected",
+                      Describe(id));
+                if (!id) Info(id.error().Describe());
+                allRejected = allRejected && rejected;
+            }
+            Check(allRejected && readback.StagingBuffers() == 0 && LiveAllocations(device) == before,
+                  "rejected requests allocate nothing");
+            device.DestroyTexture(*bc);
+            device.DestroyTexture(*noCopy);
+        }
+        for (const Filled& filled : textures) device.DestroyTexture(filled.texture);
+        return {};
+    });
+    Result<void> result = Get(future);
+    Check(result.has_value(), "the drain request ran", Describe(result));
+
+    // Readback requests from four threads at once: the engine thread serves them in turn.
+    std::vector<std::future<Result<void>>> futures;
+    std::vector<std::thread> threads;
+    std::mutex futuresMutex;
+    for (int t = 0; t < 4; ++t) {
+        threads.emplace_back([&, t] {
+            auto f = engine.Submit(snapshot, [t](EngineContext& context, const TestSnapshot&)
+                                                 -> Result<void> {
+                std::vector<Filled> textures;
+                for (int i = 0; i < 4; ++i) {
+                    Result<Filled> filled = MakeFilled(context, uz::RHIFormat::RGBA16Unorm,
+                                                       static_cast<uint32_t>(97 + 64 * i), 6,
+                                                       static_cast<uint64_t>(5000 + t * 10 + i));
+                    if (!filled) return Unexpected(filled.error());
+                    textures.push_back(std::move(*filled));
+                }
+                TextureReadback readback(context);
+                for (int i = 0; i < 16; ++i) {
+                    Result<ReadbackId> id = readback.Request({textures[static_cast<size_t>(i % 4)].texture});
+                    if (!id) return Unexpected(id.error());
+                }
+                std::vector<ReadbackOutcome> outcomes = readback.Drain();
+                for (size_t i = 0; i < outcomes.size(); ++i) {
+                    const Filled& source = textures[i % 4];
+                    const std::string diff =
+                        Compare(outcomes[i].image, source.texels, source.width, source.height);
+                    if (!diff.empty()) {
+                        return Fail(ErrorCode::RequestFailed, Backend::Dx12, "outcome " + std::to_string(i) + ": " + diff);
+                    }
+                }
+                for (const Filled& filled : textures) context.Device().DestroyTexture(filled.texture);
+                return {};
+            });
+            std::lock_guard<std::mutex> lock(futuresMutex);
+            futures.push_back(std::move(f));
+        });
+    }
+    for (std::thread& thread : threads) thread.join();
+    bool allThreads = futures.size() == 4;
+    std::string firstError;
+    for (auto& f : futures) {
+        Result<void> r = Get(f);
+        if (!r && firstError.empty()) firstError = r.error().Describe();
+        allThreads = allThreads && r.has_value();
+    }
+    Check(allThreads, "readback bursts submitted from four threads all drain exactly", firstError);
+    auto count = engine.Submit(snapshot, [&](EngineContext& context, const TestSnapshot&)
+                                             -> Result<void> {
+        atEnd = LiveAllocations(context.Device());
+        return {};
+    });
+    Result<void> counted = Get(count);
+    Check(counted && atEnd == atStart,
+          "after every request the device holds no more allocations than before the first",
+          std::to_string(atEnd) + " allocations, " + std::to_string(atStart) + " at the start");
+    return Finish();
+}
+
+// ── readback-failure ─────────────────────────────────────────────────────────
+
+int RunReadbackFailure(const fs::path& dir) {
+    auto snapshot = std::make_shared<const TestSnapshot>();
+    {
+        Engine engine(TestOptions(dir));
+        if (NoAdapter(engine)) return kExitSkip;
+        auto future = engine.Submit(snapshot, [&](EngineContext& context, const TestSnapshot&)
+                                                  -> Result<void> {
+            IDevice& device = context.Device();
+            Result<Filled> filled = MakeFilled(context, uz::RHIFormat::R16Unorm, 1023, 5, 77);
+            if (!filled) return Unexpected(filled.error());
+            TextureReadback readback(context);
+            Result<ReadbackId> first = readback.Request({filled->texture});
+            Result<ReadbackImage> before =
+                first ? readback.Complete(*first) : Result<ReadbackImage>(Unexpected(first.error()));
+            Check(Compare(before, filled->texels, 1023, 5).empty(),
+                  "a readback succeeds before the removal", Describe(before));
+
+            // New contents, then two readbacks in flight and the device removed under them.
+            const std::vector<std::byte> newer = PatternBytes(filled->texels.size(), 78);
+            Result<void> uploaded = Upload(context, filled->texture, 0, newer);
+            if (!uploaded) return Unexpected(uploaded.error());
+            Result<ReadbackId> pending = readback.Request({filled->texture});
+            Result<ReadbackId> pending2 = readback.Request({filled->texture});
+            Check(pending && pending2 && readback.Outstanding() == 2,
+                  "two readbacks are pending when the device is removed");
+            ComPtr<ID3D12Device5> device5;
+            if (FAILED(static_cast<Dx12Device&>(device).D3D12()->QueryInterface(IID_PPV_ARGS(&device5)))) {
+                return Fail(ErrorCode::RequestFailed, Backend::Dx12, "no ID3D12Device5");
+            }
+            device5->RemoveDevice();
+
+            Result<ReadbackImage> after =
+                pending ? readback.Complete(*pending) : Result<ReadbackImage>(Unexpected(pending.error()));
+            Info(Describe(after));
+            Check(!after && after.error().code == ErrorCode::DeviceRemoved &&
+                      after.error().Describe().starts_with(
+                          "device_removed {backend: dx12, reason: DXGI_ERROR_DEVICE_REMOVED"),
+                  "the pending readback fails with device_removed {backend: dx12, reason}",
+                  Describe(after));
+            Check(!after.has_value(), "no texels are returned, neither previous nor new");
+            std::vector<ReadbackOutcome> drained = readback.Drain();
+            Check(drained.size() == 1 && drained[0].id == *pending2 && !drained[0].image &&
+                      drained[0].image.error().code == ErrorCode::DeviceRemoved,
+                  "the drain fails the other pending readback with device_removed");
+            Result<ReadbackId> later = readback.Request({filled->texture});
+            Check(!later && later.error().code == ErrorCode::DeviceRemoved,
+                  "a readback requested after the removal fails with device_removed",
+                  Describe(later));
+            Check(readback.Outstanding() == 0 && readback.StagingBuffers() == 0,
+                  "the failed readbacks hold no staging buffer");
+            device.DestroyTexture(filled->texture);
+            return {};
+        });
+        Result<void> result = Get(future);
+        Check(result.has_value(), "the removal request ran", Describe(result));
+        bool ran = false;
+        auto next = engine.Submit(snapshot, [&](EngineContext&, const TestSnapshot&) -> Result<void> {
+            ran = true;
+            return {};
+        });
+        Result<void> after = Get(next);
+        Check(!after && after.error().code == ErrorCode::DeviceRemoved && !ran,
+              "later requests fail with device_removed without running", Describe(after));
+        engine.Stop();
+    }
+
+    // A readback whose copy is stuck behind a stalled queue: the wait's timeout, no texels, and
+    // the staging buffer is kept until the copy has completed.
+    EngineOptions options = TestOptions(dir);
+    options.requestDeadline = Ms{300};
+    Engine engine(options);
+    if (NoAdapter(engine)) return kExitSkip;
+    auto future = engine.Submit(snapshot, [&](EngineContext& context, const TestSnapshot&)
+                                              -> Result<void> {
+        auto& device = static_cast<Dx12Device&>(context.Device());
+        Result<Filled> filled = MakeFilled(context, uz::RHIFormat::RGBA16Unorm, 300, 4, 91);
+        if (!filled) return Unexpected(filled.error());
+        ComPtr<ID3D12Fence> blocker;
+        if (FAILED(device.D3D12()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&blocker)))) {
+            return Fail(ErrorCode::ResourceCreationFailed, Backend::Dx12, "blocker fence");
+        }
+        device.Native().GetDirectQueue()->Wait(blocker.Get(), 1);
+        TextureReadback readback(context);
+        Result<ReadbackId> id = readback.Request({filled->texture});
+        Result<ReadbackImage> image =
+            id ? readback.Complete(*id) : Result<ReadbackImage>(Unexpected(id.error()));
+        Check(!image && image.error().code == ErrorCode::Timeout,
+              "a readback behind a stalled queue fails with timeout and no texels", Describe(image));
+        Check(readback.Outstanding() == 0 && readback.StagingBuffers() == 1,
+              "its staging buffer is held while the GPU may still write it");
+        const bool released = SUCCEEDED(blocker->Signal(1));
+        const auto until = Clock::now() + std::chrono::seconds(10);
+        while (device.Queue().Completed() < device.Queue().LastSubmitted() && Clock::now() < until) {
+            std::this_thread::sleep_for(Ms{5});
+        }
+        static_cast<void>(readback.Drain());
+        Check(released && readback.StagingBuffers() == 0,
+              "once the copy has completed the drain releases the held staging buffer");
+        device.DestroyTexture(filled->texture);
+        return {};
+    });
+    Result<void> result = Get(future);
+    Check(result.has_value(), "the timeout request ran", Describe(result));
+    engine.Stop();
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     const std::string_view mode = argc > 1 ? argv[1] : "";
     if (mode == "xxhash") return RunXxhash();
     if (mode == "admission") return RunAdmission();
+    if (mode == "readback-layout") return RunReadbackLayout();
     if (argc < 3) {
         std::fprintf(stderr,
-                     "usage: uzp-render-tests xxhash | admission | kernel-cache | dispatch | deadline | "
-                     "device-removed | unavailable | capabilities <work-dir>\n");
+                     "usage: uzp-render-tests xxhash | admission | readback-layout | kernel-cache | "
+                     "dispatch | deadline | device-removed | unavailable | capabilities | "
+                     "readback-pitch | readback-exact | readback-drain | readback-failure "
+                     "<work-dir>\n");
         return 2;
     }
     const fs::path dir = argv[2];
@@ -780,6 +1505,10 @@ int main(int argc, char** argv) {
     else if (mode == "device-removed") code = RunDeviceRemoved(dir);
     else if (mode == "unavailable") code = RunUnavailable(dir);
     else if (mode == "capabilities") code = RunCapabilities(dir);
+    else if (mode == "readback-pitch") code = RunReadbackPitch(dir);
+    else if (mode == "readback-exact") code = RunReadbackExact(dir);
+    else if (mode == "readback-drain") code = RunReadbackDrain(dir);
+    else if (mode == "readback-failure") code = RunReadbackFailure(dir);
     else std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());
     uz::LogShutdown();
     return code;

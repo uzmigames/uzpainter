@@ -4,6 +4,7 @@
 
 #include "dx12_device.h"
 #include "dx12_guids.h"
+#include "dx12_resources.h"
 #include "rhi_backend.h"
 
 #include <windows.h>
@@ -153,6 +154,14 @@ Result<uz::RHITextureHandle> Dx12Device::CreateTexture(const uz::RHITextureDesc&
 
 void Dx12Device::DestroyTexture(uz::RHITextureHandle texture) {
     if (texture.IsValid()) m_rhi->DestroyTexture(texture);
+}
+
+std::optional<uz::RHITextureDesc> Dx12Device::TextureDesc(uz::RHITextureHandle texture) const {
+    // A destroyed texture keeps its pool slot (and generation) until the slot is reused, with its
+    // resource released; `IRHIDevice::GetTextureDesc` would still return its old description.
+    const uz::DX12Texture* entry = m_native->GetTexturePool().Get(texture.index, texture.generation);
+    if (!entry || !entry->resource) return std::nullopt;
+    return entry->desc;
 }
 
 Result<ComputeKernel> Dx12Device::CreateComputeKernel(std::span<const uint8_t> bytecode,

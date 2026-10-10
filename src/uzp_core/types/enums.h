@@ -5,7 +5,7 @@
 // Members that mirror a documented Painter enum keep the documented member names (Painter 12.1.0
 // Python API documentation, approved source A-PYDOC, `docs/approved-sources.md`): `ChannelType`
 // and `MeshMapUsage` list the members recorded with their documentation page in
-// `tools/parity/recorder/documented_symbols.json`; `ChannelFormat`, `BlendingMode`, `NodeType`,
+// `tools/parity/recorder/documented_symbols.json` (for `ChannelType`, every documented member); `ChannelFormat`, `BlendingMode`, `NodeType`,
 // `NormalMapFormat`, `TangentSpace`, `ProjectWorkflow`, `MaskBackground`, `ProjectionMode`,
 // `FilteringMode`, `UVWrapMode` and `ScaleMode` list the members `docs/architecture/03-…`,
 // `04-…` and the documentation name. Enumerations without a Painter counterpart (`LayerKind`,
@@ -51,16 +51,37 @@ UZP_ENUM_TABLE(TangentSpace, "PerVertex", "PerFragment");
 enum class ProjectWorkflow { Default, UVTile, TextureSetPerUVTile };
 UZP_ENUM_TABLE(ProjectWorkflow, "Default", "UVTile", "TextureSetPerUVTile");
 
+/// All 85 documented members (OpenPBR, user, legacy and legacy-alias names), in byte order.
 enum class ChannelType {
-    AO, Anisotropylevel, BaseColor, BaseMetalness, BaseWeight, Displacement, EmissionColor,
-    Emissive, Height, Metallic, Normal, Opacity, Roughness, Scattering, SpecularColor,
-    SpecularRoughness, SpecularWeight, User0, User1, User2, User3, User4, User5, User6, User7,
+    AO, AbsorptionColor, Anisotropyangle, Anisotropylevel, BaseColor, BaseDiffuseRoughness,
+    BaseMetalness, BaseWeight, BlendingMask, CoatColor, CoatNormal, CoatOpacity, CoatRoughness,
+    CoatRoughnessAnisotropy, CoatSpecularLevel, CoatTangent, CoatWeight, Diffuse, Displacement,
+    EmissionColor, Emissive, FuzzColor, FuzzRoughness, FuzzWeight, Glossiness, Height, Ior,
+    Metallic, Normal, Opacity, Reflection, Roughness, Scattering, ScatteringColor, SheenColor,
+    SheenOpacity, SheenRoughness, Specular, SpecularColor, SpecularEdgeColor, SpecularRoughness,
+    SpecularRoughnessAnisotropy, SpecularWeight, Specularlevel, SubsurfaceColor,
+    SubsurfaceRadiusScale, SubsurfaceWeight, Tangent, ThinFilmWeight, Translucency,
+    TransmissionColor, TransmissionWeight, Transmissive, User0, User1, User10, User11, User12,
+    User13, User14, User15, User16, User17, User18, User19, User2, User20, User21, User22,
+    User23, User24, User25, User26, User27, User28, User29, User3, User30, User31, User4, User5,
+    User6, User7, User8, User9,
 };
-UZP_ENUM_TABLE(ChannelType, "AO", "Anisotropylevel", "BaseColor", "BaseMetalness", "BaseWeight",
-               "Displacement", "EmissionColor", "Emissive", "Height", "Metallic", "Normal",
-               "Opacity", "Roughness", "Scattering", "SpecularColor", "SpecularRoughness",
-               "SpecularWeight", "User0", "User1", "User2", "User3", "User4", "User5", "User6",
-               "User7");
+UZP_ENUM_TABLE(ChannelType, "AO", "AbsorptionColor", "Anisotropyangle", "Anisotropylevel",
+               "BaseColor", "BaseDiffuseRoughness", "BaseMetalness", "BaseWeight", "BlendingMask",
+               "CoatColor", "CoatNormal", "CoatOpacity", "CoatRoughness", "CoatRoughnessAnisotropy",
+               "CoatSpecularLevel", "CoatTangent", "CoatWeight", "Diffuse", "Displacement",
+               "EmissionColor", "Emissive", "FuzzColor", "FuzzRoughness", "FuzzWeight",
+               "Glossiness", "Height", "Ior", "Metallic", "Normal", "Opacity", "Reflection",
+               "Roughness", "Scattering", "ScatteringColor", "SheenColor", "SheenOpacity",
+               "SheenRoughness", "Specular", "SpecularColor", "SpecularEdgeColor",
+               "SpecularRoughness", "SpecularRoughnessAnisotropy", "SpecularWeight",
+               "Specularlevel", "SubsurfaceColor", "SubsurfaceRadiusScale", "SubsurfaceWeight",
+               "Tangent", "ThinFilmWeight", "Translucency", "TransmissionColor",
+               "TransmissionWeight", "Transmissive", "User0", "User1", "User10", "User11", "User12",
+               "User13", "User14", "User15", "User16", "User17", "User18", "User19", "User2",
+               "User20", "User21", "User22", "User23", "User24", "User25", "User26", "User27",
+               "User28", "User29", "User3", "User30", "User31", "User4", "User5", "User6", "User7",
+               "User8", "User9");
 
 /// The nine Painter channel formats (`03-project-model.md` §2).
 enum class ChannelFormat { sRGB8, L8, RGB8, L16, RGB16, L16F, RGB16F, L32F, RGB32F };
