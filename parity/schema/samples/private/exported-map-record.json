@@ -1,0 +1,80 @@
+{
+  "schema": "uzpainter/parity/golden-private/1",
+  "record_class": "private_oracle_record",
+  "golden_id": "samples/tier0/blend-multiply-plane",
+  "tier": "0",
+  "note": "Synthetic sample for the schema tests: invented values and hashes, nothing recorded from Painter.",
+  "key": {
+    "inputs": [
+      { "input_id": "plane", "sha256": "c2d449b6b97cc54dab7d00a61f1c3abb0e93c47f8e21b9d0770f06d40d9df43a" },
+      { "input_id": "fixture", "sha256": "2a46a247710e9d290d0362854d67fb5c778493cc31c442239020f945f6058517" }
+    ],
+    "instruction_sequence_sha256": "ba8d4bc1aa2041f38fb3dedca5442101f7043a4c4c354f44d9ce8ce931420672",
+    "effective_defaults": { "synthetic.default": 1 },
+    "painter_build": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.0",
+      "build_id": "synthetic-sample-build"
+    },
+    "project_settings": { "synthetic.normal_format": "synthetic" },
+    "resource_hashes": [],
+    "bake_backend": null,
+    "render_state": null
+  },
+  "recordings": [
+    {
+      "recording_id": "r1",
+      "condition": "same_session",
+      "session_id": "synthetic-session-1",
+      "recorded_at": "2026-10-10T12:00:00Z",
+      "outputs": [
+        {
+          "output_id": "SampleSet/BaseColor",
+          "kind": "exported_map",
+          "texture_set": "SampleSet",
+          "map": "BaseColor",
+          "blob": {
+            "sha256": "8774472f4ebead1b564bcb6c70ba64df1bb04298b6de3ae2648cdd3f0eb16951",
+            "size_bytes": 131417,
+            "media_type": "image/png"
+          },
+          "storage_format": {
+            "container": "png",
+            "sample_type": "uint",
+            "bits_per_channel": 16,
+            "channels": 3,
+            "encoding": "srgb"
+          },
+          "export_settings": { "synthetic.padding": "synthetic" }
+        }
+      ]
+    },
+    {
+      "recording_id": "r2",
+      "condition": "after_save_reopen",
+      "session_id": "synthetic-session-1",
+      "recorded_at": "2026-10-10T12:05:00Z",
+      "outputs": [
+        {
+          "output_id": "SampleSet/BaseColor",
+          "kind": "exported_map",
+          "texture_set": "SampleSet",
+          "map": "BaseColor",
+          "blob": {
+            "sha256": "4cc7703745a6cf98de7e7abb6bf34e4f874404e2387dc5cf7691f863cfe1aecd",
+            "size_bytes": 131417,
+            "media_type": "image/png"
+          },
+          "storage_format": {
+            "container": "png",
+            "sample_type": "uint",
+            "bits_per_channel": 16,
+            "channels": 3,
+            "encoding": "srgb"
+          },
+          "export_settings": { "synthetic.padding": "synthetic" }
+        }
+      ]
+    }
+  ]
+}

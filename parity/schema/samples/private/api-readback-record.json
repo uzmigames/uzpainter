@@ -1,0 +1,63 @@
+{
+  "schema": "uzpainter/parity/golden-private/1",
+  "record_class": "private_oracle_record",
+  "golden_id": "samples/tier0/api-probe-set-get",
+  "tier": "0",
+  "note": "Synthetic sample for the schema tests: invented values and hashes, nothing recorded from Painter.",
+  "key": {
+    "inputs": [
+      { "input_id": "plane", "sha256": "c2d449b6b97cc54dab7d00a61f1c3abb0e93c47f8e21b9d0770f06d40d9df43a" }
+    ],
+    "instruction_sequence_sha256": "ba8d4bc1aa2041f38fb3dedca5442101f7043a4c4c354f44d9ce8ce931420672",
+    "effective_defaults": {},
+    "painter_build": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.0",
+      "build_id": "synthetic-sample-build"
+    },
+    "project_settings": {},
+    "resource_hashes": [],
+    "bake_backend": null,
+    "render_state": null
+  },
+  "recordings": [
+    {
+      "recording_id": "r1",
+      "condition": "same_session",
+      "session_id": "synthetic-session-1",
+      "recorded_at": "2026-10-10T12:00:00Z",
+      "outputs": [
+        {
+          "output_id": "probe/opacity-readback",
+          "kind": "api_readback",
+          "call": "substance_painter.layerstack.Node.get_opacity",
+          "args": { "channel": "synthetic" },
+          "value": { "synthetic_readback": [0.5, "synthetic", true] }
+        },
+        {
+          "output_id": "probe/mask-none",
+          "kind": "api_readback",
+          "call": "substance_painter.layerstack.Node.add_mask",
+          "args": { "mask": null },
+          "value": null,
+          "raised": { "type": "SyntheticError", "message": "synthetic sample message" }
+        }
+      ]
+    },
+    {
+      "recording_id": "r2",
+      "condition": "after_save_reopen",
+      "session_id": "synthetic-session-2",
+      "recorded_at": "2026-10-10T12:10:00Z",
+      "outputs": [
+        {
+          "output_id": "probe/opacity-readback",
+          "kind": "api_readback",
+          "call": "substance_painter.layerstack.Node.get_opacity",
+          "args": { "channel": "synthetic" },
+          "value": { "synthetic_readback": [0.5, "synthetic", true] }
+        }
+      ]
+    }
+  ]
+}

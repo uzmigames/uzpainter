@@ -1,0 +1,82 @@
+{
+  "schema": "uzpainter/parity/comparison-report/1",
+  "record_class": "comparison_report",
+  "golden_id": "samples/tier0/blend-multiply-plane",
+  "tier": "0",
+  "domain": "tier0/blend/multiply/BaseColor",
+  "manifest_sha256": "6c2a717e46339b0d3e8411883aa336212f2789dc677551ae41a38b9eb80460c5",
+  "run": {
+    "hardware": "synthetic GPU",
+    "driver": "synthetic driver 1.0",
+    "backend": "dx12",
+    "uzpainter_build_hash": "0123abc",
+    "painter_build_id": "synthetic-sample-build",
+    "resource_hashes": ["c2d449b6b97cc54dab7d00a61f1c3abb0e93c47f8e21b9d0770f06d40d9df43a"]
+  },
+  "flip_tool": {
+    "version": "synthetic",
+    "sha256": "3078e3529d004e2ae4ce489bf9a51c9e5d83e5247544d47c3a904ed54040afaa"
+  },
+  "oracle_stability": {
+    "status": "stable",
+    "maps": [
+      {
+        "output_id": "SampleSet/BaseColor",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "srgb"
+        },
+        "abs_diff": { "max": 0, "mean": 0, "p99": 0 },
+        "differing": { "count": 0, "percent": 0, "total": 65536 },
+        "regions": []
+      }
+    ]
+  },
+  "uzpainter_repeatability": {
+    "status": "repeatable",
+    "maps": [
+      {
+        "output_id": "SampleSet/BaseColor",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "srgb"
+        },
+        "abs_diff": { "max": 0, "mean": 0, "p99": 0 },
+        "differing": { "count": 0, "percent": 0, "total": 65536 },
+        "regions": []
+      }
+    ]
+  },
+  "equality_to_painter": {
+    "outcome": "pass",
+    "exceptions_relied_on": [],
+    "maps": [
+      {
+        "output_id": "SampleSet/BaseColor",
+        "storage_format": {
+          "container": "png",
+          "sample_type": "uint",
+          "bits_per_channel": 16,
+          "channels": 3,
+          "encoding": "srgb"
+        },
+        "abs_diff": { "max": 0, "mean": 0, "p99": 0 },
+        "differing": { "count": 0, "percent": 0, "total": 65536 },
+        "regions": [
+          {
+            "region": "whole-plane",
+            "abs_diff": { "max": 0, "mean": 0, "p99": 0 },
+            "differing": { "count": 0, "percent": 0, "total": 65536 }
+          }
+        ],
+        "flip_mean": 0
+      }
+    ]
+  }
+}

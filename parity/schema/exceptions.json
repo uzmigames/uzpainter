@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:uzpainter:parity:schema:exceptions:1",
+  "title": "UzPainter parity exception register",
+  "description": "Schema of parity/exceptions.json (parity/CONTRACT.md §5). Exact equality is the rule; an entry is the only way a non-zero difference passes. Each entry is owner-approved, versioned, backed by evidence and by a defect-detection test, and recorded as a decision under .rulebook/decisions/. Public: numbers and hashes of the private evidence only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "entries"],
+  "properties": {
+    "schema": { "const": "uzpainter/parity/exceptions/1" },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "metric": {
+      "description": "A diagnostic of the comparison tool (CONTRACT.md §8.2). _downN is the same statistic after N x N box downsampling.",
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^(max_abs_diff|mean_abs_diff|p99_abs_diff|differing_count|differing_percent)(_down(2|4|8))?$"
+        },
+        {
+          "enum": [
+            "normal_angular_max_deg",
+            "normal_angular_mean_deg",
+            "normal_non_finite_count",
+            "normal_unnormalised_count",
+            "id_label_differing_count",
+            "alpha_differing_count",
+            "edge_coverage_differing_count",
+            "abs_mean_signed_diff_in_se",
+            "compression_max_abs_diff"
+          ]
+        }
+      ]
+    },
+    "bound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "scope", "max"],
+      "properties": {
+        "metric": { "$ref": "#/$defs/metric" },
+        "scope": {
+          "description": "whole: the statistic over the compared data; each_region: the statistic of every material region.",
+          "enum": ["whole", "each_region"]
+        },
+        "max": {
+          "description": "Inclusive upper bound: the metric passes when its value is <= max.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exception_id",
+        "version",
+        "tier",
+        "domain",
+        "bounds",
+        "evidence",
+        "defect_detection_test",
+        "decision_id",
+        "approved_by",
+        "approved_on"
+      ],
+      "properties": {
+        "exception_id": { "type": "string", "pattern": "^EXC-[0-9]{3,}$" },
+        "version": { "type": "integer", "minimum": 1 },
+        "tier": { "enum": ["0", "1", "2a", "2b", "3"] },
+        "domain": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "selector"],
+          "properties": {
+            "kind": {
+              "enum": [
+                "channel",
+                "asset_map",
+                "procedural_asset",
+                "bake_map",
+                "render_fixture_class",
+                "backend_pair"
+              ]
+            },
+            "selector": {
+              "description": "The comparison domain covered, exactly as named by the public manifests (golden-public.json `domain`).",
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._:-]*(/[A-Za-z0-9][A-Za-z0-9._:-]*)*$"
+            }
+          }
+        },
+        "bounds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/bound" }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["basis", "summary", "private_evidence", "uncontrolled_settings"],
+          "properties": {
+            "basis": { "enum": ["oracle_instability", "irreducible_difference", "noise_floor"] },
+            "summary": { "type": "string", "minLength": 1 },
+            "private_evidence": {
+              "description": "SHA-256 of the private evidence records (stability reports, references, difference maps).",
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sha256", "description"],
+                "properties": {
+                  "sha256": { "$ref": "#/$defs/sha256" },
+                  "description": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "noise_floor": {
+              "description": "Measured noise floor per metric (Tier 3): Iray's own error at S and UzPainter's error at S.",
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": { "$ref": "#/$defs/metric" },
+              "additionalProperties": { "type": "number", "minimum": 0 }
+            },
+            "uncontrolled_settings": {
+              "description": "Every setting recorded `uncontrolled` in the references this entry relies on (empty when none).",
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "defect_detection_test": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["test_id", "injected_defects", "outcome"],
+          "properties": {
+            "test_id": { "type": "string", "minLength": 1 },
+            "injected_defects": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "outcome": {
+              "description": "The bounds were applied to every injected defect and each one failed.",
+              "const": "every_injected_defect_fails"
+            },
+            "report_sha256": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "decision_id": {
+          "description": "The owner decision under .rulebook/decisions/ (three-digit number).",
+          "type": "string",
+          "pattern": "^[0-9]{3}$"
+        },
+        "approved_by": { "const": "owner" },
+        "approved_on": { "type": "string", "format": "date" },
+        "notes": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "description": "Tier 3: noise-floor evidence, render or backend domains only (never a structural difference), and the four render defect injections.",
+          "if": { "properties": { "tier": { "const": "3" } } },
+          "then": {
+            "properties": {
+              "domain": { "properties": { "kind": { "enum": ["render_fixture_class", "backend_pair"] } } },
+              "bounds": {
+                "items": {
+                  "properties": {
+                    "metric": {
+                      "not": {
+                        "enum": [
+                          "id_label_differing_count",
+                          "alpha_differing_count",
+                          "edge_coverage_differing_count"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "defect_detection_test": {
+                "properties": {
+                  "injected_defects": {
+                    "allOf": [
+                      { "contains": { "const": "missing_channel" } },
+                      { "contains": { "const": "wrong_lobe" } },
+                      { "contains": { "const": "roughness_offset" } },
+                      { "contains": { "const": "wrong_environment_rotation" } }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "domain": {
+                "properties": {
+                  "kind": {
+                    "enum": ["channel", "asset_map", "procedural_asset", "bake_map", "backend_pair"]
+                  }
+                }
+              },
+              "evidence": {
+                "properties": { "basis": { "enum": ["oracle_instability", "irreducible_difference"] } }
+              },
+              "bounds": {
+                "items": {
+                  "properties": {
+                    "metric": {
+                      "description": "Downsampled statistics are render diagnostics (Tier 3 only).",
+                      "not": { "type": "string", "pattern": "_down(2|4|8)$" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "A render fixture class is covered only on the measured noise floor.",
+          "if": {
+            "properties": { "domain": { "properties": { "kind": { "const": "render_fixture_class" } } } }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": ["noise_floor"],
+                "properties": { "basis": { "const": "noise_floor" } }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

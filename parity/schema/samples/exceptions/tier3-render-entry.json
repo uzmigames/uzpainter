@@ -1,0 +1,31 @@
+{
+  "exception_id": "EXC-002",
+  "version": 1,
+  "tier": "3",
+  "domain": { "kind": "render_fixture_class", "selector": "tier3/analytic/sphere-constant-material" },
+  "bounds": [
+    { "metric": "abs_mean_signed_diff_in_se", "scope": "each_region", "max": 3 },
+    { "metric": "p99_abs_diff", "scope": "each_region", "max": 0.02 }
+  ],
+  "evidence": {
+    "basis": "noise_floor",
+    "summary": "Synthetic sample: bounds derived from the measured noise floor (Iray at S against k*S, UzPainter at S across seeds).",
+    "private_evidence": [
+      {
+        "sha256": "7637778b9b3a37c37a6b5602e1dbc59adac59f953090f99b03281c48a28f8edc",
+        "description": "noise-floor report"
+      }
+    ],
+    "noise_floor": { "p99_abs_diff": 0.02 },
+    "uncontrolled_settings": ["Denoiser", "Random seed"]
+  },
+  "defect_detection_test": {
+    "test_id": "tests/parity/defects/test_tier3_sphere.py::test_bounds_catch_render_defects",
+    "injected_defects": ["missing_channel", "wrong_lobe", "roughness_offset", "wrong_environment_rotation"],
+    "outcome": "every_injected_defect_fails"
+  },
+  "decision_id": "999",
+  "approved_by": "owner",
+  "approved_on": "2026-10-10",
+  "notes": "Synthetic sample entry for the schema tests; decision 999 does not exist and the entry is not in the register."
+}

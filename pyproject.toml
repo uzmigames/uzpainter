@@ -3,7 +3,7 @@ name = "uzpainter-tools"
 version = "0.0.0"
 description = "UzPainter repository tooling (vendoring, sources and other checks)"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = ["jsonschema>=4.25"]
 
 [tool.ruff]
 target-version = "py313"
@@ -19,6 +19,11 @@ strict = true
 files = ["tools", "tests"]
 explicit_package_bases = true
 exclude = ["^thirdparty/"]
+
+[[tool.mypy.overrides]]
+# jsonschema ships no type information (no py.typed) and its stubs are not installed.
+module = ["jsonschema", "jsonschema.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

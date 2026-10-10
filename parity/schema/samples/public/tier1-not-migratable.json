@@ -1,0 +1,29 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "samples/tier1/not-migratable-fixture",
+  "tier": "1",
+  "domain": "tier1/sample-asset/SampleSet/BaseColor",
+  "description": "Synthetic sample of a Tier 1 fixture that cannot be rebuilt through documented APIs: no instruction step, no private record, and no owner scope decision, so its gate stays blocked.",
+  "inputs": [],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": []
+  },
+  "applied_settings": [],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.0",
+      "build_id": "synthetic-sample-build"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [],
+  "not_migratable": {
+    "reason": "Synthetic sample: a required layer has no documented API to rebuild it.",
+    "owner_scope_decision": null
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "samples/tier0/blend-multiply-plane",
+  "tier": "0",
+  "domain": "tier0/blend/multiply/BaseColor",
+  "description": "Synthetic sample manifest: two uniform-colour fills on the authored plane, the upper one in Multiply mode at full opacity, BaseColor exported at 16 bits. All hashes are synthetic.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "c2d449b6b97cc54dab7d00a61f1c3abb0e93c47f8e21b9d0770f06d40d9df43a",
+      "provenance": { "origin": "uzmigames_authored", "licence": "Apache-2.0" }
+    },
+    {
+      "input_id": "fixture",
+      "kind": "fixture_description",
+      "path": "parity/fixtures/tier0/blend-multiply-plane.json",
+      "sha256": "2a46a247710e9d290d0362854d67fb5c778493cc31c442239020f945f6058517",
+      "provenance": { "origin": "uzmigames_authored", "licence": "Apache-2.0" }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      { "step": 1, "call": "substance_painter.project.create", "args": { "mesh": "plane" } },
+      { "step": 2, "call": "substance_painter.layerstack.insert_fill", "args": { "color": [0.5, 0.5, 0.5] } },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": { "color": [0.5, 0.25, 1.0], "blend_mode": "Multiply", "opacity": 1.0 }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.export.export_project_textures",
+        "args": { "maps": ["BaseColor"], "bit_depth": 16, "padding": "infinite" }
+      }
+    ]
+  },
+  "applied_settings": [
+    { "name": "export.bit_depth", "value": 16, "applied_by": "recorder_api" },
+    { "name": "texture_set.resolution", "value": 256, "unit": "px", "applied_by": "recorder_api" }
+  ],
+  "expectations": [
+    {
+      "expectation_id": "multiply-candidate",
+      "quantity": "BaseColor of the multiplied texel, linear candidate (calibrated in Tier 0, not assumed)",
+      "value": [0.25, 0.125, 0.5],
+      "derivation": "public_documentation",
+      "source_id": "S-W3C-BLEND",
+      "locator": "Compositing and Blending Level 1, blend mode multiply"
+    }
+  ],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.0",
+      "build_id": "synthetic-sample-build"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "f5045f3d8465fd9f53513c12e3575fae793e72d8868359f52b0a8fda6b168464",
+      "size_bytes": 2140
+    },
+    {
+      "record_id": "basecolor-same-session",
+      "kind": "exported_map",
+      "sha256": "8774472f4ebead1b564bcb6c70ba64df1bb04298b6de3ae2648cdd3f0eb16951",
+      "size_bytes": 131417
+    },
+    {
+      "record_id": "basecolor-after-reopen",
+      "kind": "exported_map",
+      "sha256": "4cc7703745a6cf98de7e7abb6bf34e4f874404e2387dc5cf7691f863cfe1aecd",
+      "size_bytes": 131417
+    }
+  ]
+}

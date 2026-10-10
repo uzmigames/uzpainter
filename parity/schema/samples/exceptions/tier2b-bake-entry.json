@@ -1,0 +1,31 @@
+{
+  "exception_id": "EXC-001",
+  "version": 1,
+  "tier": "2b",
+  "domain": { "kind": "bake_map", "selector": "tier2b/wand/ambient_occlusion" },
+  "bounds": [
+    { "metric": "max_abs_diff", "scope": "whole", "max": 3 },
+    { "metric": "differing_percent", "scope": "whole", "max": 0.5 }
+  ],
+  "evidence": {
+    "basis": "oracle_instability",
+    "summary": "Synthetic sample: the two Painter recordings of this map differ by up to 3 code values in 0.4% of texels, so the oracle itself is not stable at this precision.",
+    "private_evidence": [
+      {
+        "sha256": "e1bb11e34bc20c7819ae477ccf7f27ff3f1d4bebf1fda0bcb2ce58bf0ec7a44b",
+        "description": "oracle-stability report of the two recordings"
+      }
+    ],
+    "uncontrolled_settings": []
+  },
+  "defect_detection_test": {
+    "test_id": "tests/parity/defects/test_bake_ao.py::test_bound_catches_injected_defects",
+    "injected_defects": ["sparse_seam", "one_wrong_texel_region", "alpha_defect"],
+    "outcome": "every_injected_defect_fails",
+    "report_sha256": "ce5e2f6a35689846d6594df798e6c651a5ba43915dac372feec0d34f4fe3a504"
+  },
+  "decision_id": "999",
+  "approved_by": "owner",
+  "approved_on": "2026-10-10",
+  "notes": "Synthetic sample entry for the schema tests; decision 999 does not exist and the entry is not in the register."
+}

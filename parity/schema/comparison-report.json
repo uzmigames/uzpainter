@@ -1,0 +1,378 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:uzpainter:parity:schema:comparison-report:1",
+  "title": "UzPainter parity comparison report",
+  "description": "Machine form of the comparison-tool specification (parity/CONTRACT.md §8). A public report carries numbers and hashes only; difference maps and region crops stay in the private store. Three results are reported separately. A mean or percentile is never reported without the maximum and the differing count next to it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "record_class",
+    "golden_id",
+    "tier",
+    "domain",
+    "manifest_sha256",
+    "run",
+    "oracle_stability",
+    "uzpainter_repeatability",
+    "equality_to_painter"
+  ],
+  "properties": {
+    "schema": { "const": "uzpainter/parity/comparison-report/1" },
+    "record_class": { "const": "comparison_report" },
+    "golden_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$" },
+    "tier": { "enum": ["0", "1", "2a", "2b", "3"] },
+    "domain": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._:-]*(/[A-Za-z0-9][A-Za-z0-9._:-]*)*$" },
+    "manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "run": {
+      "description": "Every result carries hardware, driver, backend, build hash, resource hashes (14-parity-testing.md §8).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hardware", "driver", "backend", "uzpainter_build_hash", "painter_build_id", "resource_hashes"],
+      "properties": {
+        "hardware": { "type": "string", "minLength": 1 },
+        "driver": { "type": "string", "minLength": 1 },
+        "backend": { "enum": ["dx12", "vulkan", "cpu", "warp"] },
+        "uzpainter_build_hash": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
+        "painter_build_id": { "type": "string", "minLength": 1 },
+        "resource_hashes": { "type": "array", "items": { "$ref": "#/$defs/sha256" } }
+      }
+    },
+    "flip_tool": {
+      "description": "NVlabs/flip pinned by version and hash; diagnostic only, never a gate.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "sha256"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "oracle_stability": {
+      "description": "Does Painter reproduce itself? Painter recording vs Painter recording.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "maps"],
+      "properties": {
+        "status": { "enum": ["stable", "unstable", "not_measured", "oracle_unavailable"] },
+        "maps": { "type": "array", "items": { "$ref": "#/$defs/map_diagnostics" } }
+      }
+    },
+    "uzpainter_repeatability": {
+      "description": "Same build, same inputs: same bytes? UzPainter run vs UzPainter run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "maps"],
+      "properties": {
+        "status": { "enum": ["repeatable", "not_repeatable", "not_measured"] },
+        "maps": { "type": "array", "items": { "$ref": "#/$defs/map_diagnostics" } }
+      }
+    },
+    "equality_to_painter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "exceptions_relied_on", "maps"],
+      "properties": {
+        "outcome": { "enum": ["pass", "fail", "blocked", "oracle_unavailable"] },
+        "exceptions_relied_on": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["exception_id", "version"],
+            "properties": {
+              "exception_id": { "type": "string", "pattern": "^EXC-[0-9]{3,}$" },
+              "version": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "maps": { "type": "array", "items": { "$ref": "#/$defs/map_diagnostics" } }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "A pass without an exception entry requires exact equality of every compared map.",
+      "if": {
+        "properties": {
+          "equality_to_painter": {
+            "properties": {
+              "outcome": { "const": "pass" },
+              "exceptions_relied_on": { "maxItems": 0 }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "equality_to_painter": {
+            "properties": {
+              "maps": {
+                "minItems": 1,
+                "items": {
+                  "properties": {
+                    "abs_diff": { "properties": { "max": { "const": 0 } } },
+                    "differing": { "properties": { "count": { "const": 0 } } },
+                    "regions": {
+                      "items": {
+                        "properties": {
+                          "abs_diff": { "properties": { "max": { "const": 0 } } },
+                          "differing": { "properties": { "count": { "const": 0 } } }
+                        }
+                      }
+                    },
+                    "exact_checks": { "items": { "properties": { "equal": { "const": true } } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "A Tier 3 pass exists only through a register entry.",
+      "if": {
+        "properties": {
+          "tier": { "const": "3" },
+          "equality_to_painter": { "properties": { "outcome": { "const": "pass" } } }
+        }
+      },
+      "then": {
+        "properties": {
+          "equality_to_painter": { "properties": { "exceptions_relied_on": { "minItems": 1 } } }
+        }
+      }
+    },
+    {
+      "description": "A missing oracle blob is reported as oracle_unavailable, with nothing compared.",
+      "if": {
+        "properties": { "oracle_stability": { "properties": { "status": { "const": "oracle_unavailable" } } } }
+      },
+      "then": {
+        "properties": {
+          "equality_to_painter": {
+            "properties": { "outcome": { "const": "oracle_unavailable" }, "maps": { "maxItems": 0 } }
+          }
+        }
+      }
+    },
+    {
+      "description": "oracle_unavailable compares nothing.",
+      "if": {
+        "properties": { "equality_to_painter": { "properties": { "outcome": { "const": "oracle_unavailable" } } } }
+      },
+      "then": {
+        "properties": { "equality_to_painter": { "properties": { "maps": { "maxItems": 0 } } } }
+      }
+    },
+    {
+      "description": "A FLIP value in oracle_stability requires the pinned FLIP tool identity.",
+      "if": {
+        "required": ["oracle_stability"],
+        "properties": {
+          "oracle_stability": {
+            "required": ["maps"],
+            "properties": { "maps": { "contains": { "required": ["flip_mean"] } } }
+          }
+        }
+      },
+      "then": { "required": ["flip_tool"] }
+    },
+    {
+      "description": "A FLIP value in uzpainter_repeatability requires the pinned FLIP tool identity.",
+      "if": {
+        "required": ["uzpainter_repeatability"],
+        "properties": {
+          "uzpainter_repeatability": {
+            "required": ["maps"],
+            "properties": { "maps": { "contains": { "required": ["flip_mean"] } } }
+          }
+        }
+      },
+      "then": { "required": ["flip_tool"] }
+    },
+    {
+      "description": "A FLIP value in equality_to_painter requires the pinned FLIP tool identity.",
+      "if": {
+        "required": ["equality_to_painter"],
+        "properties": {
+          "equality_to_painter": {
+            "required": ["maps"],
+            "properties": { "maps": { "contains": { "required": ["flip_mean"] } } }
+          }
+        }
+      },
+      "then": { "required": ["flip_tool"] }
+    },
+    {
+      "description": "An unstable oracle never passes without a register entry (decision 017).",
+      "if": {
+        "properties": {
+          "oracle_stability": { "properties": { "status": { "const": "unstable" } } },
+          "equality_to_painter": { "properties": { "outcome": { "const": "pass" } } }
+        }
+      },
+      "then": {
+        "properties": {
+          "equality_to_painter": { "properties": { "exceptions_relied_on": { "minItems": 1 } } }
+        }
+      }
+    },
+    {
+      "description": "Tier 3 evidence comes from the GPU backends only (never WARP or CPU).",
+      "if": { "properties": { "tier": { "const": "3" } } },
+      "then": { "properties": { "run": { "properties": { "backend": { "enum": ["dx12", "vulkan"] } } } } }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "abs_diff": {
+      "description": "Absolute difference statistics in native decoded units. max, mean and p99 always travel together.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max", "mean", "p99"],
+      "properties": {
+        "max": { "type": "number", "minimum": 0 },
+        "mean": { "type": "number", "minimum": 0 },
+        "p99": { "type": "number", "minimum": 0 }
+      }
+    },
+    "differing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "percent", "total"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "percent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "stat_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["abs_diff", "differing"],
+      "properties": {
+        "abs_diff": { "$ref": "#/$defs/abs_diff" },
+        "differing": { "$ref": "#/$defs/differing" }
+      }
+    },
+    "map_diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_id", "storage_format", "abs_diff", "differing", "regions"],
+      "properties": {
+        "output_id": { "type": "string", "minLength": 1 },
+        "storage_format": {
+          "description": "Measured storage format that classifies the channel (never the map name).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["container", "sample_type", "bits_per_channel", "channels", "encoding"],
+          "properties": {
+            "container": { "enum": ["png", "exr", "tga", "tiff", "dds", "jpeg"] },
+            "encoding": { "enum": ["linear", "srgb", "display_referred"] },
+            "sample_type": { "enum": ["uint", "half", "float"] },
+            "bits_per_channel": { "enum": [8, 16, 32] },
+            "channels": { "type": "integer", "minimum": 1, "maximum": 4 }
+          }
+        },
+        "abs_diff": { "$ref": "#/$defs/abs_diff" },
+        "differing": { "$ref": "#/$defs/differing" },
+        "regions": {
+          "description": "Per-region breakdown by the asset's material masks (empty when the golden defines no regions).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["region", "abs_diff", "differing"],
+            "properties": {
+              "region": { "type": "string", "minLength": 1 },
+              "abs_diff": { "$ref": "#/$defs/abs_diff" },
+              "differing": { "$ref": "#/$defs/differing" },
+              "render": { "$ref": "#/$defs/render" }
+            }
+          }
+        },
+        "normal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["angular_max_deg", "angular_mean_deg", "non_finite_count", "unnormalised_count"],
+          "properties": {
+            "angular_max_deg": { "type": "number", "minimum": 0 },
+            "angular_mean_deg": { "type": "number", "minimum": 0 },
+            "non_finite_count": { "type": "integer", "minimum": 0 },
+            "unnormalised_count": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "exact_checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check", "equal", "differing_count", "edge_coverage_differing_count"],
+            "properties": {
+              "check": { "enum": ["id_labels", "alpha"] },
+              "equal": { "type": "boolean" },
+              "differing_count": { "type": "integer", "minimum": 0 },
+              "edge_coverage_differing_count": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "render": { "$ref": "#/$defs/render" },
+        "lossy_derivative": {
+          "description": "Decoded compression error of a lossy derivative (BC, mips) against the canonical map; a separate contract from authoring equality.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["derivative", "abs_diff", "differing"],
+          "properties": {
+            "derivative": { "type": "string", "minLength": 1 },
+            "abs_diff": { "$ref": "#/$defs/abs_diff" },
+            "differing": { "$ref": "#/$defs/differing" }
+          }
+        },
+        "flip_mean": {
+          "description": "Mean FLIP error; diagnostic only.",
+          "type": "number",
+          "minimum": 0
+        },
+        "private_difference_map_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "render": {
+      "description": "Tier 3 statistics (07-preview-and-render-parity.md §4), next to the noise floor and UzPainter's own re-render.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mean_signed_diff", "standard_error", "downsampled", "noise_floor", "uzpainter_rerender"],
+      "properties": {
+        "mean_signed_diff": { "type": "number" },
+        "standard_error": { "type": "number", "minimum": 0 },
+        "downsampled": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["factor", "abs_diff", "differing"],
+            "properties": {
+              "factor": { "enum": [2, 4, 8] },
+              "abs_diff": { "$ref": "#/$defs/abs_diff" },
+              "differing": { "$ref": "#/$defs/differing" }
+            }
+          }
+        },
+        "noise_floor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["iray_at_s", "uzpainter_at_s", "iray_run_to_run"],
+          "properties": {
+            "iray_at_s": { "$ref": "#/$defs/stat_block" },
+            "uzpainter_at_s": { "$ref": "#/$defs/stat_block" },
+            "iray_run_to_run": { "$ref": "#/$defs/stat_block" }
+          }
+        },
+        "uzpainter_rerender": { "$ref": "#/$defs/stat_block" }
+      }
+    }
+  }
+}

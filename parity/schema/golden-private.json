@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:uzpainter:parity:schema:golden-private:1",
+  "title": "UzPainter private oracle record",
+  "description": "A recorded Painter golden (parity/CONTRACT.md §2, §6): {inputs, instruction sequence, effective defaults, Painter build, project settings, resource hashes, bake backend, render state} -> {outputs}, recorded at least twice. Every recorded Painter output (exported maps, API readbacks including JSON, effective-default and template captures, Iray references with their settings sheet and operator-recorded settings, settings-panel evidence) is described here. Records live only in the private oracle store (UZP_PARITY_STORE); never in the repository, never shipped.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "record_class", "golden_id", "tier", "key", "recordings"],
+  "properties": {
+    "schema": { "const": "uzpainter/parity/golden-private/1" },
+    "record_class": { "const": "private_oracle_record" },
+    "golden_id": { "$ref": "#/$defs/golden_id" },
+    "tier": { "enum": ["0", "1", "2a", "2b", "3"] },
+    "note": {
+      "description": "Free text, e.g. marking a synthetic sample. The record does not hash its public manifest: the manifest names the record by SHA-256 (golden_id links them), so the two hashes never depend on each other.",
+      "type": "string"
+    },
+    "key": { "$ref": "#/$defs/golden_key" },
+    "recordings": {
+      "description": "Two-recording rule: at least two recordings of the same key.",
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/recording" }
+    }
+  },
+  "allOf": [
+    {
+      "description": "Tiers 0-2b: one repeat in the same session and one after save/reopen.",
+      "if": { "properties": { "tier": { "enum": ["0", "1", "2a", "2b"] } } },
+      "then": {
+        "properties": {
+          "recordings": {
+            "allOf": [
+              { "contains": { "properties": { "condition": { "const": "same_session" } } } },
+              { "contains": { "properties": { "condition": { "const": "after_save_reopen" } } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "description": "Tier 3: two recordings in separate Painter sessions plus one at k*S samples; every output set holds a converged Iray reference.",
+      "if": { "properties": { "tier": { "const": "3" } } },
+      "then": {
+        "properties": {
+          "key": { "required": ["render_state"], "properties": { "render_state": { "type": "object" } } },
+          "recordings": {
+            "allOf": [
+              {
+                "contains": { "properties": { "condition": { "const": "separate_session" } } },
+                "minContains": 2
+              },
+              { "contains": { "properties": { "condition": { "const": "k_times_samples" } } } }
+            ],
+            "items": {
+              "properties": {
+                "outputs": {
+                  "contains": { "properties": { "kind": { "const": "iray_reference" } } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "golden_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$"
+    },
+    "golden_key": {
+      "description": "Left-hand side of the golden shape: everything that determines the outputs.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputs",
+        "instruction_sequence_sha256",
+        "effective_defaults",
+        "painter_build",
+        "project_settings",
+        "resource_hashes",
+        "bake_backend",
+        "render_state"
+      ],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["input_id", "sha256"],
+            "properties": {
+              "input_id": { "type": "string", "minLength": 1 },
+              "sha256": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        },
+        "instruction_sequence_sha256": { "$ref": "#/$defs/sha256" },
+        "effective_defaults": {
+          "description": "Effective defaults read back from Painter at recording time (private).",
+          "type": "object"
+        },
+        "painter_build": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["product", "version", "build_id"],
+          "properties": {
+            "product": { "const": "Adobe Substance 3D Painter" },
+            "version": { "const": "12.1.0" },
+            "build_id": { "type": "string", "minLength": 1 }
+          }
+        },
+        "project_settings": { "type": "object" },
+        "resource_hashes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["resource", "sha256"],
+            "properties": {
+              "resource": { "type": "string", "minLength": 1 },
+              "sha256": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        },
+        "bake_backend": {
+          "description": "Painter's bake backend for Tier 2b goldens (CPU recorded); null when nothing is baked.",
+          "oneOf": [{ "enum": ["cpu", "gpu"] }, { "type": "null" }]
+        },
+        "render_state": {
+          "description": "Readback of every documented render setting (07-preview-and-render-parity.md §2.1) for Tier 3; null otherwise.",
+          "oneOf": [{ "type": "object" }, { "type": "null" }]
+        }
+      }
+    },
+    "recording": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recording_id", "condition", "session_id", "recorded_at", "outputs"],
+      "properties": {
+        "recording_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "condition": {
+          "description": "same_session: recorded in the session that built the state; after_save_reopen: recorded after saving and reopening the project; separate_session: Tier 3 reference recorded after a Painter restart; k_times_samples: Tier 3 reference at k*S samples.",
+          "enum": [
+            "same_session",
+            "after_save_reopen",
+            "separate_session",
+            "k_times_samples"
+          ]
+        },
+        "session_id": { "type": "string", "minLength": 1 },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/output" }
+        }
+      }
+    },
+    "blob": {
+      "description": "Content-addressed blob in the private store.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "size_bytes", "media_type"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "media_type": { "type": "string", "minLength": 1 }
+      }
+    },
+    "storage_format": {
+      "description": "Measured storage format of the decoded data (never inferred from a map name).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["container", "sample_type", "bits_per_channel", "channels", "encoding"],
+      "properties": {
+        "container": { "enum": ["png", "exr", "tga", "tiff", "dds", "jpeg"] },
+        "sample_type": { "enum": ["uint", "half", "float"] },
+        "bits_per_channel": { "enum": [8, 16, 32] },
+        "channels": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "encoding": { "enum": ["linear", "srgb", "display_referred"] }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": ["output_id", "kind"],
+      "properties": {
+        "output_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$" },
+        "kind": {
+          "enum": [
+            "exported_map",
+            "api_readback",
+            "effective_default_capture",
+            "template_capture",
+            "iray_reference",
+            "operator_recorded_settings",
+            "settings_panel_evidence"
+          ]
+        }
+      },
+      "oneOf": [
+        { "$ref": "#/$defs/exported_map" },
+        { "$ref": "#/$defs/api_readback" },
+        { "$ref": "#/$defs/capture" },
+        { "$ref": "#/$defs/iray_reference" },
+        { "$ref": "#/$defs/operator_recorded_settings" },
+        { "$ref": "#/$defs/settings_panel_evidence" }
+      ]
+    },
+    "exported_map": {
+      "description": "A map exported by the documented substance_painter.export.export_project_textures.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_id", "kind", "texture_set", "map", "blob", "storage_format", "export_settings"],
+      "properties": {
+        "output_id": true,
+        "kind": { "const": "exported_map" },
+        "texture_set": { "type": "string", "minLength": 1 },
+        "map": { "type": "string", "minLength": 1 },
+        "blob": { "$ref": "#/$defs/blob" },
+        "storage_format": { "$ref": "#/$defs/storage_format" },
+        "export_settings": { "type": "object" }
+      }
+    },
+    "api_readback": {
+      "description": "A value read back through Painter's documented Python API, JSON included.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_id", "kind", "call", "value"],
+      "properties": {
+        "output_id": true,
+        "kind": { "const": "api_readback" },
+        "call": { "type": "string", "pattern": "^substance_painter(\\.[A-Za-z_][A-Za-z0-9_]*)+$" },
+        "args": { "type": "object" },
+        "value": true,
+        "raised": {
+          "description": "Exception type and message when the call raised (documented error behaviour).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "message"],
+          "properties": { "type": { "type": "string" }, "message": { "type": "string" } }
+        }
+      }
+    },
+    "capture": {
+      "description": "An effective-default or template capture (current defaults, property metadata, template channel sets and formats).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_id", "kind", "subject", "values"],
+      "properties": {
+        "output_id": true,
+        "kind": { "enum": ["effective_default_capture", "template_capture"] },
+        "subject": { "type": "string", "minLength": 1 },
+        "values": { "type": "object" }
+      }
+    },
+    "iray_reference": {
+      "description": "A converged Iray render saved after the qualified capture procedure (07-preview-and-render-parity.md §2.2).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output_id",
+        "kind",
+        "blob",
+        "storage_format",
+        "samples",
+        "resolution",
+        "convergence",
+        "capture_route",
+        "settings_sheet_sha256",
+        "operator_settings_output_id",
+        "current_frame_verified"
+      ],
+      "properties": {
+        "output_id": true,
+        "kind": { "const": "iray_reference" },
+        "blob": { "$ref": "#/$defs/blob" },
+        "storage_format": { "$ref": "#/$defs/storage_format" },
+        "samples": { "type": "integer", "minimum": 1 },
+        "resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "convergence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "iterations", "rendering_time_s", "max_time_s"],
+          "properties": {
+            "status": { "const": "Done" },
+            "iterations": { "type": "integer", "minimum": 1 },
+            "rendering_time_s": { "type": "number", "minimum": 0 },
+            "max_time_s": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "capture_route": { "enum": ["save_render", "external_observation_1to1"] },
+        "settings_sheet_sha256": { "$ref": "#/$defs/sha256" },
+        "operator_settings_output_id": { "type": "string", "minLength": 1 },
+        "current_frame_verified": { "const": true },
+        "uncontrolled_settings": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "operator_recorded_settings": {
+      "description": "Values the operator entered in settings panels the Python API does not expose.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_id", "kind", "entries"],
+      "properties": {
+        "output_id": true,
+        "kind": { "const": "operator_recorded_settings" },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["panel", "setting", "value"],
+            "properties": {
+              "panel": { "type": "string", "minLength": 1 },
+              "setting": { "type": "string", "minLength": 1 },
+              "value": { "type": ["number", "string", "boolean"] },
+              "unit": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "settings_panel_evidence": {
+      "description": "An image of a settings panel kept as private evidence.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_id", "kind", "panel", "blob"],
+      "properties": {
+        "output_id": true,
+        "kind": { "const": "settings_panel_evidence" },
+        "panel": { "type": "string", "minLength": 1 },
+        "blob": { "$ref": "#/$defs/blob" }
+      }
+    }
+  }
+}

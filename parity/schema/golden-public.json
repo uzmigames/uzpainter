@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:uzpainter:parity:schema:golden-public:1",
+  "title": "UzPainter public golden manifest",
+  "description": "A public parity manifest (parity/manifests/**/*.json; parity/CONTRACT.md §6). It holds only independently authored inputs, UzmiGames instruction sequences, the settings a test applies, public-documentation-derived expectations, software identities and the SHA-256 of every private oracle record. It never holds a recorded Painter output: every object is closed (additionalProperties false) and no field can carry a recorded value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "record_class",
+    "golden_id",
+    "tier",
+    "domain",
+    "description",
+    "inputs",
+    "instruction_sequence",
+    "applied_settings",
+    "expectations",
+    "software",
+    "private_records"
+  ],
+  "properties": {
+    "schema": { "const": "uzpainter/parity/golden-public/1" },
+    "record_class": { "const": "public_manifest" },
+    "golden_id": { "$ref": "#/$defs/golden_id" },
+    "tier": { "$ref": "#/$defs/tier" },
+    "domain": {
+      "description": "Comparison domain the golden belongs to (the key exception entries match on).",
+      "$ref": "#/$defs/domain"
+    },
+    "description": { "$ref": "#/$defs/text" },
+    "inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/authored_input" }
+    },
+    "instruction_sequence": { "$ref": "#/$defs/instruction_sequence" },
+    "applied_settings": {
+      "description": "Settings the test applies (recorder by API, or the operator from the settings sheet). Values are authored by UzmiGames, never read back from Painter.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/applied_setting" }
+    },
+    "uncontrolled_settings": {
+      "description": "Names of settings the Phase 0 probe found cannot be fixed or read (07-preview-and-render-parity.md §2.1). Names only, never values.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    },
+    "expectations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/expectation" }
+    },
+    "software": { "$ref": "#/$defs/software" },
+    "private_records": {
+      "description": "SHA-256 of every private oracle record of this golden (empty until `uzpainter parity record` writes them).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/private_record_ref" }
+    },
+    "not_migratable": { "$ref": "#/$defs/not_migratable" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "golden_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$"
+    },
+    "tier": { "enum": ["0", "1", "2a", "2b", "3"] },
+    "domain": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:-]*(/[A-Za-z0-9][A-Za-z0-9._:-]*)*$"
+    },
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "scalar": {
+      "description": "A short authored value. Strings are bounded so that no slot can carry a recorded blob or a serialized readback.",
+      "oneOf": [
+        { "type": "string", "maxLength": 256 },
+        { "type": ["number", "boolean", "null"] }
+      ]
+    },
+    "scalar_or_list": {
+      "oneOf": [
+        { "$ref": "#/$defs/scalar" },
+        { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/scalar" } }
+      ]
+    },
+    "repo_path": {
+      "type": "string",
+      "pattern": "^(?![/\\\\])(?!.*\\.\\.)(?![A-Za-z]:)[^\\\\]+$"
+    },
+    "public_source_id": {
+      "description": "An approved public source of docs/approved-sources.md (specifications, papers, platform documentation, public Adobe documentation). Black-box observation (A-OBSERVE) is private and never a public derivation.",
+      "type": "string",
+      "pattern": "^[SPNXA]-[A-Z0-9-]+$",
+      "not": { "const": "A-OBSERVE" }
+    },
+    "authored_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_id", "kind", "sha256", "provenance"],
+      "properties": {
+        "input_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "kind": {
+          "enum": [
+            "mesh",
+            "mask",
+            "image",
+            "environment",
+            "resource",
+            "fixture_description",
+            "recipe_json"
+          ],
+          "description": "recipe_json is a UzmiGames-authored recipe only; a recipe dumped or extracted from a Painter project is a private record, never a public input."
+        },
+        "path": { "$ref": "#/$defs/repo_path" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["origin", "licence"],
+          "properties": {
+            "origin": { "enum": ["uzmigames_authored", "cc0_public"] },
+            "licence": { "enum": ["Apache-2.0", "CC0-1.0"] },
+            "source_id": { "$ref": "#/$defs/public_source_id" },
+            "note": { "$ref": "#/$defs/text" }
+          }
+        }
+      }
+    },
+    "instruction_sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["author", "interface", "steps"],
+      "properties": {
+        "author": { "const": "UzmiGames" },
+        "interface": {
+          "description": "Painter's documented Python API (A-PYDOC); the community MCP bridge is never an interface.",
+          "const": "substance_painter_documented_python_api"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["step", "call"],
+            "properties": {
+              "step": { "type": "integer", "minimum": 1 },
+              "call": {
+                "description": "A documented symbol, e.g. substance_painter.export.export_project_textures.",
+                "type": "string",
+                "pattern": "^substance_painter(\\.[A-Za-z_][A-Za-z0-9_]*)+$"
+              },
+              "args": {
+                "description": "Authored arguments: short scalars or short lists of scalars (inputs are referenced by input_id). No nested objects.",
+                "type": "object",
+                "maxProperties": 16,
+                "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+                "additionalProperties": { "$ref": "#/$defs/scalar_or_list" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "applied_setting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value", "applied_by"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "value": { "$ref": "#/$defs/scalar" },
+        "unit": { "type": "string", "maxLength": 32 },
+        "applied_by": { "enum": ["recorder_api", "operator_settings_sheet", "environment_variable"] }
+      }
+    },
+    "expectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expectation_id", "quantity", "value", "derivation", "source_id", "locator"],
+      "properties": {
+        "expectation_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "quantity": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "value": { "$ref": "#/$defs/scalar_or_list" },
+        "derivation": { "const": "public_documentation" },
+        "source_id": { "$ref": "#/$defs/public_source_id" },
+        "locator": {
+          "description": "Where in the public source the expectation is stated (section, page, symbol).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "software": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["painter", "uzpainter_build_hash"],
+      "properties": {
+        "painter": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["product", "version", "build_id"],
+          "properties": {
+            "product": { "const": "Adobe Substance 3D Painter" },
+            "version": { "const": "12.1.0" },
+            "build_id": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        },
+        "uzpainter_build_hash": {
+          "description": "Build hash of the UzPainter build compared against this golden; null for a golden recorded before any comparison.",
+          "oneOf": [{ "type": "string", "pattern": "^[0-9a-f]{7,64}$" }, { "type": "null" }]
+        }
+      }
+    },
+    "private_record_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_id", "kind", "sha256", "size_bytes"],
+      "properties": {
+        "record_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "kind": {
+          "enum": [
+            "private_oracle_record",
+            "exported_map",
+            "api_readback",
+            "effective_default_capture",
+            "template_capture",
+            "iray_reference",
+            "operator_recorded_settings",
+            "settings_panel_evidence"
+          ]
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "not_migratable": {
+      "description": "A fixture that cannot be rebuilt through documented APIs (CONTRACT.md §6). Its gate stays blocked unless owner_scope_decision names a recorded owner decision.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "owner_scope_decision"],
+      "properties": {
+        "reason": { "$ref": "#/$defs/text" },
+        "owner_scope_decision": {
+          "oneOf": [{ "type": "string", "pattern": "^[0-9]{3}$" }, { "type": "null" }]
+        }
+      }
+    }
+  }
+}

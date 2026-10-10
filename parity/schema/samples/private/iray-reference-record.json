@@ -1,0 +1,143 @@
+{
+  "schema": "uzpainter/parity/golden-private/1",
+  "record_class": "private_oracle_record",
+  "golden_id": "samples/tier3/sphere-rough-dielectric",
+  "tier": "3",
+  "note": "Synthetic sample for the schema tests: invented values and hashes, nothing recorded from Painter.",
+  "key": {
+    "inputs": [
+      { "input_id": "sphere", "sha256": "ae5d6965de53af2feaa3ee3ee1181c327b7e4553f0328b30a287813c3300ce04" },
+      { "input_id": "env-constant-grey", "sha256": "c991b0185d6b5f6f58d34d1101c6bde03002a231873c367b1264818a3ab06525" }
+    ],
+    "instruction_sequence_sha256": "ba8d4bc1aa2041f38fb3dedca5442101f7043a4c4c354f44d9ce8ce931420672",
+    "effective_defaults": {},
+    "painter_build": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.0",
+      "build_id": "synthetic-sample-build"
+    },
+    "project_settings": { "synthetic.colour_management": "synthetic" },
+    "resource_hashes": [
+      { "resource": "env-constant-grey", "sha256": "c991b0185d6b5f6f58d34d1101c6bde03002a231873c367b1264818a3ab06525" }
+    ],
+    "bake_backend": null,
+    "render_state": { "synthetic.camera": [0, 0, 5], "synthetic.tone_mapping": "synthetic" }
+  },
+  "recordings": [
+    {
+      "recording_id": "s1",
+      "condition": "separate_session",
+      "session_id": "synthetic-session-1",
+      "recorded_at": "2026-10-10T13:00:00Z",
+      "outputs": [
+        {
+          "output_id": "reference",
+          "kind": "iray_reference",
+          "blob": {
+            "sha256": "eea7df2c3417de8171f239816db91aa986624da504a2dc63f85dd2b7796e1839",
+            "size_bytes": 17280000,
+            "media_type": "image/x-exr"
+          },
+          "storage_format": {
+            "container": "exr",
+            "sample_type": "float",
+            "bits_per_channel": 32,
+            "channels": 3,
+            "encoding": "linear"
+          },
+          "samples": 256,
+          "resolution": { "width": 1200, "height": 1200 },
+          "convergence": { "status": "Done", "iterations": 256, "rendering_time_s": 41.5, "max_time_s": 3600 },
+          "capture_route": "save_render",
+          "settings_sheet_sha256": "fdfdbbd42d82952ac469446973c81ce79e5fd2930d828c79104829f2c0ad4767",
+          "operator_settings_output_id": "operator-settings",
+          "current_frame_verified": true,
+          "uncontrolled_settings": ["Denoiser", "Random seed"]
+        },
+        {
+          "output_id": "operator-settings",
+          "kind": "operator_recorded_settings",
+          "entries": [
+            { "panel": "Iray Settings", "setting": "Min Sample", "value": 256 },
+            { "panel": "Iray Settings", "setting": "Max Sample", "value": 256 },
+            { "panel": "Iray Settings", "setting": "Max Time", "value": 3600, "unit": "s" }
+          ]
+        },
+        {
+          "output_id": "panel-iray-settings",
+          "kind": "settings_panel_evidence",
+          "panel": "Iray Settings",
+          "blob": {
+            "sha256": "95ebd8d5d4ef9f89b9096b6465f75482709f1cc09646f18b0471f7c9b8cd8c82",
+            "size_bytes": 48211,
+            "media_type": "image/png"
+          }
+        }
+      ]
+    },
+    {
+      "recording_id": "s2",
+      "condition": "separate_session",
+      "session_id": "synthetic-session-2",
+      "recorded_at": "2026-10-10T14:00:00Z",
+      "outputs": [
+        {
+          "output_id": "reference",
+          "kind": "iray_reference",
+          "blob": {
+            "sha256": "ea5206d5e879723c661e8f6b12d8a4a90a9cb48e65c19ed57165686eea2eeb51",
+            "size_bytes": 17280000,
+            "media_type": "image/x-exr"
+          },
+          "storage_format": {
+            "container": "exr",
+            "sample_type": "float",
+            "bits_per_channel": 32,
+            "channels": 3,
+            "encoding": "linear"
+          },
+          "samples": 256,
+          "resolution": { "width": 1200, "height": 1200 },
+          "convergence": { "status": "Done", "iterations": 256, "rendering_time_s": 40.9, "max_time_s": 3600 },
+          "capture_route": "save_render",
+          "settings_sheet_sha256": "fdfdbbd42d82952ac469446973c81ce79e5fd2930d828c79104829f2c0ad4767",
+          "operator_settings_output_id": "operator-settings",
+          "current_frame_verified": true,
+          "uncontrolled_settings": ["Denoiser", "Random seed"]
+        }
+      ]
+    },
+    {
+      "recording_id": "k",
+      "condition": "k_times_samples",
+      "session_id": "synthetic-session-3",
+      "recorded_at": "2026-10-10T15:00:00Z",
+      "outputs": [
+        {
+          "output_id": "reference",
+          "kind": "iray_reference",
+          "blob": {
+            "sha256": "410dd4c47060fdcef3fbfd30c8d54cd330688a0c66645d44fe3c4a5659e0188d",
+            "size_bytes": 17280000,
+            "media_type": "image/x-exr"
+          },
+          "storage_format": {
+            "container": "exr",
+            "sample_type": "float",
+            "bits_per_channel": 32,
+            "channels": 3,
+            "encoding": "linear"
+          },
+          "samples": 4096,
+          "resolution": { "width": 1200, "height": 1200 },
+          "convergence": { "status": "Done", "iterations": 4096, "rendering_time_s": 655.0, "max_time_s": 36000 },
+          "capture_route": "save_render",
+          "settings_sheet_sha256": "fdfdbbd42d82952ac469446973c81ce79e5fd2930d828c79104829f2c0ad4767",
+          "operator_settings_output_id": "operator-settings",
+          "current_frame_verified": true,
+          "uncontrolled_settings": ["Denoiser", "Random seed"]
+        }
+      ]
+    }
+  ]
+}

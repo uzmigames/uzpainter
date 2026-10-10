@@ -1,0 +1,106 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "samples/tier3/sphere-rough-dielectric",
+  "tier": "3",
+  "domain": "tier3/analytic/sphere-constant-material",
+  "description": "Synthetic sample manifest of an analytic render fixture: authored sphere with a constant-parameter material under an authored constant-colour environment, Iray reference per the capture procedure. The settings sheet holds proposed (unratified) analytic-profile values; the uncontrolled-settings list is illustrative, not a Phase 0 probe result. All hashes are synthetic.",
+  "inputs": [
+    {
+      "input_id": "sphere",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/sphere.obj",
+      "sha256": "ae5d6965de53af2feaa3ee3ee1181c327b7e4553f0328b30a287813c3300ce04",
+      "provenance": { "origin": "uzmigames_authored", "licence": "Apache-2.0" }
+    },
+    {
+      "input_id": "env-constant-grey",
+      "kind": "environment",
+      "path": "parity/fixtures/environments/constant-grey.exr",
+      "sha256": "c991b0185d6b5f6f58d34d1101c6bde03002a231873c367b1264818a3ab06525",
+      "provenance": { "origin": "uzmigames_authored", "licence": "Apache-2.0" }
+    },
+    {
+      "input_id": "fixture",
+      "kind": "fixture_description",
+      "path": "parity/fixtures/tier3/sphere-rough-dielectric.json",
+      "sha256": "029c9da6b04d39f3129c001ae784c17b432fd547d46906fd8d2a444af2c4e8d9",
+      "provenance": { "origin": "uzmigames_authored", "licence": "Apache-2.0" }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      { "step": 1, "call": "substance_painter.project.create", "args": { "mesh": "sphere" } },
+      {
+        "step": 2,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": { "path": "env-constant-grey", "usage": "ENVIRONMENT" }
+      },
+      { "step": 3, "call": "substance_painter.display.set_environment_resource", "args": { "resource": "env-constant-grey" } },
+      { "step": 4, "call": "substance_painter.display.set_tone_mapping", "args": { "function": "Linear" } },
+      { "step": 5, "call": "substance_painter.ui.switch_to_mode", "args": { "mode": "Visualisation" } }
+    ]
+  },
+  "applied_settings": [
+    { "name": "camera.aperture", "value": 0, "applied_by": "recorder_api" },
+    { "name": "Min Sample", "value": 256, "applied_by": "operator_settings_sheet" },
+    { "name": "Max Sample", "value": 256, "applied_by": "operator_settings_sheet" },
+    { "name": "Max Time", "value": 3600, "unit": "s", "applied_by": "operator_settings_sheet" },
+    { "name": "Caustic Sampler", "value": false, "applied_by": "operator_settings_sheet" },
+    { "name": "Firefly Filter", "value": false, "applied_by": "operator_settings_sheet" },
+    { "name": "Override viewport resolution", "value": "1200x1200", "applied_by": "operator_settings_sheet" }
+  ],
+  "uncontrolled_settings": ["Denoiser", "Random seed"],
+  "expectations": [
+    {
+      "expectation_id": "tone-mapping-members",
+      "quantity": "Members of the documented tone-mapping function enumeration",
+      "value": ["Linear", "ACES"],
+      "derivation": "public_documentation",
+      "source_id": "A-PYDOC",
+      "locator": "substance_painter.display, tone mapping"
+    }
+  ],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.0",
+      "build_id": "synthetic-sample-build"
+    },
+    "uzpainter_build_hash": "0123abc"
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "794d0ce277a58382462542acd34dfea59608407c216bacef0d2893227f4967ea",
+      "size_bytes": 3912
+    },
+    {
+      "record_id": "reference-session-1",
+      "kind": "iray_reference",
+      "sha256": "eea7df2c3417de8171f239816db91aa986624da504a2dc63f85dd2b7796e1839",
+      "size_bytes": 17280000
+    },
+    {
+      "record_id": "reference-session-2",
+      "kind": "iray_reference",
+      "sha256": "ea5206d5e879723c661e8f6b12d8a4a90a9cb48e65c19ed57165686eea2eeb51",
+      "size_bytes": 17280000
+    },
+    {
+      "record_id": "reference-k-samples",
+      "kind": "iray_reference",
+      "sha256": "410dd4c47060fdcef3fbfd30c8d54cd330688a0c66645d44fe3c4a5659e0188d",
+      "size_bytes": 17280000
+    },
+    {
+      "record_id": "operator-settings",
+      "kind": "operator_recorded_settings",
+      "sha256": "b443b5022d4115f3a7886ba7083e27aa4f5d9b1ed4a93e9d89f2a26254e679e8",
+      "size_bytes": 812
+    }
+  ]
+}
