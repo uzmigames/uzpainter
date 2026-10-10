@@ -17,6 +17,8 @@
 //   readback-exact   every readable format (and a lower mip) read back bit-identical
 //   readback-drain   64 readbacks in flight drained in submission order, no staging left
 //   readback-failure device removal and a stalled queue under pending readbacks
+//   readback-kernel  a kernel compiled through the cache, dispatched, then 64 readbacks drained
+//                    (phase1.4_render-core-layer)
 //   uv-raster-*      the UV-space raster pass (phase1.3_core-uv-raster, uv_raster_test.cpp)
 //   image-*          the image passes (phase1.3_core-image-passes, image_passes_test.cpp)
 //
@@ -1482,6 +1484,164 @@ int RunReadbackFailure(const fs::path& dir) {
     return Finish();
 }
 
+// ── readback-kernel (phase1.4_render-core-layer) ─────────────────────────────
+
+/// End to end through the render layer: the ramp kernel compiled through the engine's kernel
+/// cache, dispatched into eight R32Float textures in one submission, and 64 readbacks of them in
+/// flight at once, drained in submission order with every texel equal to the IEEE-strict CPU
+/// value; no staging buffer survives the drain, and the dispatched kernel is in the cache folder.
+int RunReadbackKernel(const fs::path& dir) {
+    Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    constexpr size_t kRequests = 64;
+    struct Target {
+        uint32_t width = 0, height = 0;
+        TestSnapshot snapshot;
+        uz::RHITextureHandle texture = uz::RHITextureHandle::Invalid();
+    };
+    auto snapshot = std::make_shared<const TestSnapshot>();
+    auto future = engine.Submit(snapshot, [&](EngineContext& context, const TestSnapshot&)
+                                              -> Result<void> {
+        IDevice& device = context.Device();
+        Result<ComputeKernel> kernel = context.Kernel(RampSource());
+        Check(kernel.has_value(), "the ramp kernel compiles through the kernel cache",
+              Describe(kernel));
+        if (!kernel) return Unexpected(kernel.error());
+
+        const uint32_t widths[] = {1, 3, 100, 255, 1023, 4097, 64, 17};
+        std::vector<Target> targets;
+        const auto destroy = [&] {
+            for (const Target& t : targets) device.DestroyTexture(t.texture);
+        };
+        for (size_t i = 0; i < std::size(widths); ++i) {
+            Target t;
+            t.width = widths[i];
+            t.height = 5 + static_cast<uint32_t>(i);
+            t.snapshot = TestSnapshot{20 + i, 0.1f * static_cast<float>(i + 1),
+                                      0.37f / static_cast<float>(i + 1)};
+            uz::RHITextureDesc desc;
+            desc.width = t.width;
+            desc.height = t.height;
+            desc.format = uz::RHIFormat::R32Float;
+            desc.usage = uz::RHITextureUsage::UnorderedAccess | uz::RHITextureUsage::CopySrc;
+            desc.debugName = "readback_kernel_target";
+            Result<uz::RHITextureHandle> texture = device.CreateTexture(desc);
+            if (!texture) {
+                destroy();
+                return Unexpected(texture.error());
+            }
+            t.texture = *texture;
+            targets.push_back(t);
+        }
+        const uint64_t baseline = LiveAllocations(device);
+
+        // One submission dispatches the kernel into every target; nothing waits for it before
+        // the readbacks are requested (they follow it on the same queue).
+        const uz::RHIPipelineHandle pipeline = kernel->pipeline;
+        Result<uint64_t> dispatched = context.Submit([&](uz::IRHICommandList& cmd) {
+            for (const Target& t : targets) {
+                uz::RHIBarrierDesc toUav{t.texture, uz::RHIBufferHandle::Invalid(),
+                                         uz::RHIResourceState::Common,
+                                         uz::RHIResourceState::UnorderedAccess};
+                cmd.ResourceBarrier(&toUav, 1);
+                uint32_t constants[5] = {
+                    t.width, t.height, std::bit_cast<uint32_t>(t.snapshot.s),
+                    std::bit_cast<uint32_t>(t.snapshot.t),
+                    std::bit_cast<uint32_t>(static_cast<float>(t.snapshot.revision))};
+                cmd.SetPipeline(pipeline);
+                cmd.SetRootConstants(kRootConstantsParam, constants, 5);
+                cmd.SetDescriptorTable(kUavTableParam, device.Rhi().GetTextureUAVIndex(t.texture));
+                cmd.Dispatch((t.width + 7) / 8, (t.height + 7) / 8, 1);
+            }
+        });
+        Check(dispatched.has_value(), "the cached kernel is dispatched into eight textures",
+              Describe(dispatched));
+        if (!dispatched) {
+            destroy();
+            return Unexpected(dispatched.error());
+        }
+
+        {
+            TextureReadback readback(context);
+            std::vector<ReadbackId> ids;
+            std::vector<size_t> sources;
+            for (size_t i = 0; i < kRequests; ++i) {
+                const size_t source = (i * 3) % targets.size();
+                ReadbackDesc desc;
+                desc.texture = targets[source].texture;
+                desc.state = uz::RHIResourceState::UnorderedAccess;
+                Result<ReadbackId> id = readback.Request(desc);
+                if (!id) {
+                    Check(false, "every readback request is accepted", Describe(id));
+                    break;
+                }
+                ids.push_back(*id);
+                sources.push_back(source);
+            }
+            Check(readback.Outstanding() == kRequests && readback.StagingBuffers() == kRequests,
+                  "64 readbacks of the dispatched textures are in flight at once",
+                  std::to_string(readback.Outstanding()) + " outstanding");
+            std::vector<ReadbackOutcome> outcomes = readback.Drain();
+            bool order = outcomes.size() == ids.size();
+            size_t mismatches = 0;
+            std::string first;
+            for (size_t i = 0; order && i < outcomes.size(); ++i) {
+                order = outcomes[i].id == ids[i];
+                const Target& t = targets[sources[i]];
+                const Result<ReadbackImage>& image = outcomes[i].image;
+                if (!image || image->format != uz::RHIFormat::R32Float || image->width != t.width ||
+                    image->height != t.height || image->texels.size() != size_t{t.width} * t.height * 4) {
+                    if (mismatches++ == 0) {
+                        first = "request " + std::to_string(i) + ": " +
+                                (image ? std::string("wrong image shape") : image.error().Describe());
+                    }
+                    continue;
+                }
+                for (uint32_t y = 0; y < t.height; ++y) {
+                    for (uint32_t x = 0; x < t.width; ++x) {
+                        uint32_t got = 0;
+                        std::memcpy(&got, image->texels.data() + (size_t{y} * t.width + x) * 4, 4);
+                        const uint32_t want = std::bit_cast<uint32_t>(ExpectedRamp(x, y, t.snapshot));
+                        if (got != want && mismatches++ == 0) {
+                            char buf[160];
+                            std::snprintf(buf, sizeof(buf),
+                                          "request %zu at (%u, %u): got %08X, expected %08X", i, x,
+                                          y, got, want);
+                            first = buf;
+                        }
+                    }
+                }
+            }
+            Check(order, "the drain reports every request in submission order",
+                  std::to_string(outcomes.size()) + " outcomes");
+            Check(mismatches == 0,
+                  "every drained texel equals the IEEE-strict CPU value bit for bit",
+                  std::to_string(mismatches) + " mismatches; " + first);
+            Check(readback.Outstanding() == 0 && readback.StagingBuffers() == 0 &&
+                      LiveAllocations(device) == baseline,
+                  "after the drain no request is outstanding and no staging buffer remains",
+                  std::to_string(LiveAllocations(device)) + " allocations, baseline " +
+                      std::to_string(baseline));
+        }
+        destroy();
+        return {};
+    });
+    Result<void> result = Get(future);
+    Check(result.has_value(), "the end-to-end request ran", Describe(result));
+    engine.Stop();
+
+    // The dispatched kernel came from the cache folder the engine was given.
+    Result<std::unique_ptr<DxcKernelCompiler>> dxc = DxcKernelCompiler::Load(DefaultDxcompilerPath());
+    Check(dxc.has_value(), "DXC loads", Describe(dxc));
+    if (dxc) {
+        KernelCache cache(**dxc, dir / "kernel-cache");
+        Result<CompiledKernel> dxil = cache.Get(RampSource(), KernelTarget::Dxil);
+        Check(dxil && dxil->cacheHit, "the dispatched DXIL kernel is in the kernel cache folder",
+              Describe(dxil));
+    }
+    return Finish();
+}
+
 }  // namespace
 
 /// The `uv-raster-*` cases (tests/render/uv_raster_test.cpp); -1 for any other mode.
@@ -1497,7 +1657,8 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: uzp-render-tests xxhash | admission | readback-layout | kernel-cache | "
                      "dispatch | deadline | device-removed | unavailable | capabilities | "
-                     "readback-pitch | readback-exact | readback-drain | readback-failure | uv-raster-* | "
+                     "readback-pitch | readback-exact | readback-drain | readback-failure | "
+                     "readback-kernel | uv-raster-* | "
                      "image-* "
                      "<work-dir>\n");
         return 2;
@@ -1518,6 +1679,7 @@ int main(int argc, char** argv) {
     else if (mode == "readback-exact") code = RunReadbackExact(dir);
     else if (mode == "readback-drain") code = RunReadbackDrain(dir);
     else if (mode == "readback-failure") code = RunReadbackFailure(dir);
+    else if (mode == "readback-kernel") code = RunReadbackKernel(dir);
     else if (const int uv = RunUvRasterCase(mode, dir); uv >= 0) code = uv;
     else if (const int image = RunImagePassCase(mode, dir); image >= 0) code = image;
     else std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());

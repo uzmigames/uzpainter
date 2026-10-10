@@ -45,7 +45,7 @@ from tools.vendoring.subset import METADATA_FILES, VENDORED_DIR, denylisted
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_NAME = "MANIFEST.json"
-BUILD_STEPS = ("render-core", "native-tests", "painter")
+BUILD_STEPS = ("render-core", "native-tests", "painter", "render-tests")
 
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SHA1_RE = re.compile(r"[0-9a-f]{40}")
@@ -441,8 +441,8 @@ def windows_sdk_roots() -> list[Path]:
 
 
 def run_build(repo_root: Path, zig: str) -> tuple[int, str, Path]:
-    """`zig build render-core native-tests painter --verbose-cc --verbose-link` from a fresh
-    local cache inside the repository (so every compile and link is printed); returns the exit
+    """`zig build render-core native-tests painter render-tests --verbose-cc --verbose-link` from a
+    fresh local cache inside the repository (so every compile and link is printed); returns the exit
     code, the log and the build's working directory."""
     work = repo_root / ".zig-cache" / f"vendor-check-{uuid.uuid4().hex[:12]}"
     try:

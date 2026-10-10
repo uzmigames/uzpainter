@@ -13,6 +13,8 @@
 //   uv-raster-ids       two materials, two islands: ids per texel; a texture-set filter
 //   uv-raster-repeat    the bevelled cube rasterised twice: byte-identical; prints `HASH` lines
 //                       that the Python test compares across processes
+//   uv-raster-tier0     the plane, sphere and bevelled cube OBJs of the Tier 0 corpus (copied into
+//                       <work-dir>/tier0-meshes/ by tests/render/test_render_core_layer.py)
 //
 // The reference is computed on the CPU in double precision. Texels within `kEps` texels of a
 // triangle boundary are ambiguous at single precision and are checked only for consistency.
@@ -30,10 +32,12 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -865,6 +869,105 @@ int RunRepeat(const fs::path& dir) {
     return Finish();
 }
 
+// ── Tier 0 corpus meshes (phase1.4_render-core-layer) ────────────────────────
+
+/// One OBJ of the Tier 0 corpus (`v`, `vt`, `vn`, `usemtl`, `f v/vt/vn` with positive indices),
+/// fan-triangulated with one corner per face corner. The material id is the `usemtl` index in
+/// order of appearance; island ids and tangents are not in the file (island 0, tangent +X).
+std::optional<Mesh> LoadObj(const fs::path& path, std::string& error) {
+    std::ifstream file(path);
+    if (!file) {
+        error = "cannot open " + path.string();
+        return std::nullopt;
+    }
+    std::vector<Vec3> positions, normals;
+    std::vector<Vec2> uvs;
+    std::vector<std::string> materials;
+    uint32_t material = 0;
+    Mesh mesh;
+    std::string line;
+    size_t lineNumber = 0;
+    while (std::getline(file, line)) {
+        ++lineNumber;
+        std::istringstream in(line);
+        std::string tag;
+        in >> tag;
+        if (tag == "v" || tag == "vn") {
+            Vec3 v{};
+            in >> v.x >> v.y >> v.z;
+            (tag == "v" ? positions : normals).push_back(v);
+        } else if (tag == "vt") {
+            Vec2 uv{};
+            in >> uv.x >> uv.y;
+            uvs.push_back(uv);
+        } else if (tag == "usemtl") {
+            std::string name;
+            in >> name;
+            const auto it = std::find(materials.begin(), materials.end(), name);
+            material = static_cast<uint32_t>(it - materials.begin());
+            if (it == materials.end()) materials.push_back(name);
+        } else if (tag == "f") {
+            std::vector<uint32_t> ids;
+            std::string token;
+            while (in >> token) {
+                unsigned v = 0, t = 0, n = 0;
+                if (std::sscanf(token.c_str(), "%u/%u/%u", &v, &t, &n) != 3 || v == 0 ||
+                    t == 0 || n == 0 || v > positions.size() || t > uvs.size() ||
+                    n > normals.size()) {
+                    error = path.filename().string() + ":" + std::to_string(lineNumber) +
+                            ": unsupported face corner " + token;
+                    return std::nullopt;
+                }
+                ids.push_back(mesh.Add(MakeCorner(positions[v - 1], normals[n - 1], uvs[t - 1],
+                                                  {1, 0, 0}, 1.0f, material, 0)));
+            }
+            for (size_t k = 1; k + 1 < ids.size(); ++k) mesh.Triangle(ids[0], ids[k], ids[k + 1]);
+        }
+    }
+    if (mesh.TriangleCount() == 0) {
+        error = path.filename().string() + " has no faces";
+        return std::nullopt;
+    }
+    return mesh;
+}
+
+/// The plane, sphere and bevelled cube of the Tier 0 corpus (`parity/TIER0-SEMANTICS.md` §2),
+/// read from `<work-dir>/tier0-meshes/` where the driving test copies them: the conservative mask
+/// and texel-centre coverage equal the reference at a square and a non-square size; the plane,
+/// mapped to the whole 0-1 square, covers every texel centre.
+int RunTier0Meshes(const fs::path& dir) {
+    const std::unique_ptr<Engine> engine = MakeEngine(dir);
+    if (!engine) return kExitSkip;
+    for (const char* name : {"plane", "sphere", "bevelled-cube"}) {
+        std::string error;
+        const std::optional<Mesh> mesh = LoadObj(dir / "tier0-meshes" / (std::string(name) + ".obj"),
+                                                 error);
+        Check(mesh.has_value(), std::string(name) + ".obj loads", error);
+        if (!mesh) continue;
+        Info(std::string(name) + ".obj: " + std::to_string(mesh->TriangleCount()) + " triangles");
+        const Layout layout = Interleaved(*mesh);
+        for (const auto [w, h] : {std::pair<uint32_t, uint32_t>{512, 512}, {300, 200}}) {
+            Result<Raster> raster = Run(*engine, layout.corners, Request(w, h));
+            const std::string label =
+                std::string(name) + " " + std::to_string(w) + "x" + std::to_string(h);
+            Check(raster.has_value(), label + ": rasterises", Describe(raster));
+            if (!raster) continue;
+            CheckCoverage(label, *mesh, *raster);
+            if (std::string_view(name) == "plane") {
+                size_t uncovered = 0;
+                for (uint32_t y = 0; y < h; ++y) {
+                    for (uint32_t x = 0; x < w; ++x) {
+                        uncovered += raster->Uint(raster->Triangle(), x, y) == kUvRasterNoId;
+                    }
+                }
+                Check(uncovered == 0, label + ": every texel centre is covered",
+                      std::to_string(uncovered) + " uncovered");
+            }
+        }
+    }
+    return Finish();
+}
+
 }  // namespace
 
 /// Runs a `uv-raster-*` case; -1 when `mode` is not one.
@@ -875,5 +978,6 @@ int RunUvRasterCase(std::string_view mode, const std::filesystem::path& dir) {
     if (mode == "uv-raster-coverage") return RunCoverage(dir);
     if (mode == "uv-raster-ids") return RunIds(dir);
     if (mode == "uv-raster-repeat") return RunRepeat(dir);
+    if (mode == "uv-raster-tier0") return RunTier0Meshes(dir);
     return -1;
 }
