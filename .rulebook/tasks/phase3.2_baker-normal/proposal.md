@@ -9,7 +9,7 @@ OWN-05 and BAK-03 (`docs/prd.md`) require a detailed tangent-space normal bake f
 - Tier 2b manifests for the `Normal` usage under `parity/manifests/` (fixture descriptions and hashes of the private Painter CPU goldens).
 
 ## Dependencies
-- Prerequisites: `phase3.1_baker-request-model`; `phase0.9_normal-convention-fixture` (already accepted upstream of `phase2.10_pilot-tunic-recovery`, re-used here).
+- Prerequisites: `phase3.1_baker-request-model`; `phase0.9_normal-convention-fixture` (already accepted upstream of `phase2.10_pilot-tunic-recovery`, reused here).
 - Parent: `phase3.5_embree-bakers`. Unblocks `phase3.3_baker-evidence-publication` (first usage published with receipts) and `phase3.4_baker-curvature` (`FromNormalMap`).
 
 ## Acceptance
