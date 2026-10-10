@@ -66,6 +66,10 @@ The local run report is the gate evidence for every check that needs the store o
 2. From the repository root, on a clean checkout of the commit under test: `python -m tools.parity.store verify` (whole-store integrity), then `python -m tools.parity.store verify parity/manifests` when that folder exists. Both must exit 0.
 3. Write the run report: the commands, machine name, GPU and driver version, build hash (the commit), Painter build, and each command's exit status and output. It holds statuses and hashes only, never a recorded output, and is recorded as the evidence of the task that needs it.
 
+The first run (P0-STORE acceptance, 2026-10-10) initialised the store at the default location, made the record → delete → fetch → verify round trip with authored stand-ins under the Painter build id `local-run-authored` (golden `local-run/store-gate`), and ran the committed pre-commit hook against that store in a throwaway repository; its report is the Evidence section of `.rulebook/archive/*-phase0.5_private-oracle-store/tasks.md`.
+
 ## 6. Tests
 
 `tests/parity/test_store.py` (every test uses a temporary store): round trip record → delete the local copy → fetch → hash (single file and recorder run), missing/unreadable/mismatched blob → `oracle_unavailable` (CLI, API and verdict), write-once refusal and idempotent re-record, per-build corpora, store and fetch paths inside the repository refused, the hosted lane without a store (subprocess without `UZP_PARITY_STORE`), and the workflow's lane rules.
+
+`tests/parity/test_store_integration.py` is the P0-STORE gate on one commit: with one temporary store it makes the round trip of an authored sample, checks that a machine without the store gets `oracle_unavailable` for the same manifest, records stand-ins for a recorded PNG and a JSON readback with `record`, and in a throwaway repository the committed pre-commit hook accepts the authored fixture image and expectation JSON and rejects both stand-ins by their store hash.
