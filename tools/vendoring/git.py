@@ -1,7 +1,8 @@
 """Read-only git operations on the UzEngine repository.
 
-Every command reads commit objects only (`rev-list`, `ls-tree`, `archive`, `log`); none changes the
-repository's state. `core.autocrlf` is forced off so exported bytes equal the stored blobs.
+Every command reads commit objects only (`rev-list`, `ls-tree`, `archive`, `log`, `cat-file`);
+none changes the repository's state. `core.autocrlf` is forced off so exported bytes equal the
+stored blobs.
 """
 
 from __future__ import annotations
@@ -66,6 +67,30 @@ def ls_tree_blobs(repo: Path, commit: str, paths: Sequence[str] = ()) -> dict[st
         _mode, kind, object_id = meta.split(" ")
         if kind == "blob":
             blobs[path] = object_id
+    return blobs
+
+
+def read_blobs(repo: Path, object_ids: Sequence[str]) -> dict[str, bytes]:
+    """Raw contents of the given blob ids (`git cat-file --batch`), without any conversion."""
+    if not object_ids:
+        return {}
+    completed = subprocess.run(
+        ["git", "-C", str(repo), "cat-file", "--batch"],
+        input="".join(f"{oid}\n" for oid in object_ids).encode("ascii"),
+        check=True,
+        capture_output=True,
+    )
+    out = completed.stdout
+    blobs: dict[str, bytes] = {}
+    pos = 0
+    for oid in object_ids:
+        end = out.index(b"\n", pos)
+        header = out[pos:end].decode("ascii").split(" ")
+        if len(header) != 3 or header[1] != "blob":
+            raise ValueError(f"{oid}: not a blob ({' '.join(header)})")
+        size = int(header[2])
+        blobs[oid] = out[end + 1 : end + 1 + size]
+        pos = end + 1 + size + 1
     return blobs
 
 

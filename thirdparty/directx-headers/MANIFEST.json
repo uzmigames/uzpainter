@@ -1,0 +1,623 @@
+{
+  "library": "DirectX-Headers",
+  "upstream": "https://github.com/microsoft/DirectX-Headers",
+  "version": "v1.619.1",
+  "commit": "9e393d6d8a3b30dcc6f2806ef604ec16a27b0d7e",
+  "archive_url": "https://github.com/microsoft/DirectX-Headers/archive/refs/tags/v1.619.1.tar.gz",
+  "archive_sha256": "6193774904c940eebb9b0c51b816b93dd776cfeb25a951f0f4a58f22387e5008",
+  "archive_root": "DirectX-Headers-1.619.1/",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "903df5512f7d02609fed0c780a9b704f5a3eeb6e4d84ebe42a29845c81899a3c",
+      "size": 1093
+    },
+    {
+      "path": "include/directx/D3D12MarkerApiEnums.idl",
+      "sha256": "126b174abf6874eeb96ce892cda788b5c8d70c92650309745f65d3f023b0d7f2",
+      "size": 7499
+    },
+    {
+      "path": "include/directx/D3D12TokenizedProgramFormat.hpp",
+      "sha256": "5862ef7c8b819f0d02ba73563a9df4dc0e89f11fe59d8f598def39122273c626",
+      "size": 130378
+    },
+    {
+      "path": "include/directx/DirectML.h",
+      "sha256": "3daeed73aa64905c07b6f5394c7b45eabf0ac17bbca54b1584c871e03e4f54ad",
+      "size": 79871
+    },
+    {
+      "path": "include/directx/d3d12.h",
+      "sha256": "ed149a58d027ee55d3581a34992fb6247a5973bbdcb00cc44e66a6898a3838a4",
+      "size": 1691904
+    },
+    {
+      "path": "include/directx/d3d12.idl",
+      "sha256": "5213026f9722677a8d6d75c36cf47e0bfbdfed9bd411a644a51cb7e535017b02",
+      "size": 302087
+    },
+    {
+      "path": "include/directx/d3d12compatibility.h",
+      "sha256": "49c90e78c6729d086770cecc0b037b118cd63fa87c1fa7237771eadb59c28d2c",
+      "size": 25465
+    },
+    {
+      "path": "include/directx/d3d12compatibility.idl",
+      "sha256": "df7f5e52521a83ca85caa1c1ee24adc042ca7982e805d2c98633f817ecc7a2de",
+      "size": 4926
+    },
+    {
+      "path": "include/directx/d3d12compiler.h",
+      "sha256": "0c0a18ad212e122579828b5ffdcd39abd68c4e71debd946ff0562f3630ac83f1",
+      "size": 34475
+    },
+    {
+      "path": "include/directx/d3d12compiler.idl",
+      "sha256": "ebbee2d4aeb159f30340805178c6532ac45c4a057b281f4e6a2f089ea1c89450",
+      "size": 11382
+    },
+    {
+      "path": "include/directx/d3d12sdklayers.h",
+      "sha256": "0f778771fc1cd156acb419c934acebf252bd3b038904d797b22505dddc8f84f0",
+      "size": 182783
+    },
+    {
+      "path": "include/directx/d3d12sdklayers.idl",
+      "sha256": "530fa44577cda17044c8c7732ecd7336c3caa39a066bbe02751fc6b2e90fb823",
+      "size": 97821
+    },
+    {
+      "path": "include/directx/d3d12shader.h",
+      "sha256": "bdcdd726b6bc803ae50f442fe725ed02b7a8b068572cfd17078358b6232f217c",
+      "size": 28043
+    },
+    {
+      "path": "include/directx/d3d12video.h",
+      "sha256": "9ccd140cedfb962696e05604f42207697d4e1802d1aa639ce16511f62616bbfd",
+      "size": 459032
+    },
+    {
+      "path": "include/directx/d3d12video.idl",
+      "sha256": "88cb80c14b92de77f3c5dffafe266e8529e6741d58bfbec8d8c253e1a6cbfc71",
+      "size": 188848
+    },
+    {
+      "path": "include/directx/d3dcommon.h",
+      "sha256": "8c236985415516302faf0cb725fa78312cb1ac05ba866e29eeab23d695a0f5cb",
+      "size": 51955
+    },
+    {
+      "path": "include/directx/d3dcommon.idl",
+      "sha256": "2513f619ece3bda0af925b8120ba1adfd6ac1d27a9cb62e4635ef3fafbd09fd2",
+      "size": 47674
+    },
+    {
+      "path": "include/directx/d3dshadercacheregistration.h",
+      "sha256": "a4d3ec8419366f2df66d63682505f2d732e58d0534f391b04dcbf459aac32f0f",
+      "size": 33812
+    },
+    {
+      "path": "include/directx/d3dshadercacheregistration.idl",
+      "sha256": "aaff8e7804d536d546633823a803e77d2e0bfc508b0c6ee935faf563978aa6a9",
+      "size": 7441
+    },
+    {
+      "path": "include/directx/d3dx12.h",
+      "sha256": "874a67be3eeee5dd4d589b997f53c8e63bd95023270f53cb8bb696736a612e44",
+      "size": 913
+    },
+    {
+      "path": "include/directx/d3dx12_barriers.h",
+      "sha256": "55aef3331bfd628c99fc0f7856d3a6001449c9373f6c9c7799757c2e06be0966",
+      "size": 6443
+    },
+    {
+      "path": "include/directx/d3dx12_check_feature_support.h",
+      "sha256": "56e3f58969eb2b3a66b83f5ec7c9d54294e27973966e3e4893703ed830ccc996",
+      "size": 46273
+    },
+    {
+      "path": "include/directx/d3dx12_core.h",
+      "sha256": "e00c6d265a7553bd6bd9426dd9b8846c8255fa5bc21d279c7c87ac5d9e7c7799",
+      "size": 77309
+    },
+    {
+      "path": "include/directx/d3dx12_default.h",
+      "sha256": "a41a985b72913cfc53946f1a99f7dd1964e75e44109db95d18978080b01c65c8",
+      "size": 313
+    },
+    {
+      "path": "include/directx/d3dx12_pipeline_state_stream.h",
+      "sha256": "7443a40ca7826b1c1bd09466dfddf4fb3decc3748b10fa8710b8a67b7572446e",
+      "size": 96018
+    },
+    {
+      "path": "include/directx/d3dx12_property_format_table.h",
+      "sha256": "1fa486e39acdbf64a2ba56f1aa6502ba1e5b3ad2e6febd305a96786ea6305c19",
+      "size": 11437
+    },
+    {
+      "path": "include/directx/d3dx12_render_pass.h",
+      "sha256": "b3b7cce48c17b2e6e420ac6d9b707146a2f680e5f2653077271ecbb60b0f84a3",
+      "size": 4204
+    },
+    {
+      "path": "include/directx/d3dx12_resource_helpers.h",
+      "sha256": "ec08177b93c3618ebfd3b64b272df3e71fd102a232bdb503f0cd1573fc4d44b8",
+      "size": 25743
+    },
+    {
+      "path": "include/directx/d3dx12_root_signature.h",
+      "sha256": "b6446912da91384cb368c6f3c15ed6e21c33987af0483352d459066bd64abc86",
+      "size": 52198
+    },
+    {
+      "path": "include/directx/d3dx12_state_object.h",
+      "sha256": "b57816e56747aeeaf698f490c4e4996b10cad9f539eb77315e597f9915c1aedf",
+      "size": 93614
+    },
+    {
+      "path": "include/directx/dxcore.h",
+      "sha256": "63810a79e8cf27becb12be85af84e9a09acef613b23bc866f63cc7c3f54e72dc",
+      "size": 1133
+    },
+    {
+      "path": "include/directx/dxcore_interface.h",
+      "sha256": "4d6cc2c2f1540df29c1dc73f2a9a09e7d7b7fe375a1a1ee804b1775bdb232352",
+      "size": 14941
+    },
+    {
+      "path": "include/directx/dxgicommon.h",
+      "sha256": "10b795959eef2771c5f4d20c49b20d56353cf9439e49667c391f32b9e74b09f6",
+      "size": 2262
+    },
+    {
+      "path": "include/directx/dxgicommon.idl",
+      "sha256": "e74cf909cfcaad9129915c575153bf2b5fe24c14293210d2c0fc062534396d7a",
+      "size": 2199
+    },
+    {
+      "path": "include/directx/dxgiformat.h",
+      "sha256": "0ac14d7da595c528e0f14c64685d83596c392d36a0ab49ce2ecab05299e6c0d0",
+      "size": 8022
+    },
+    {
+      "path": "include/directx/dxgiformat.idl",
+      "sha256": "dec3bd183947ebf7bdef8547aff8f1b3aa6e6f6be770d3be15b14d39b626618f",
+      "size": 7909
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/directx_headers",
+  "comparison": [
+    {
+      "path": "Android.bp",
+      "uzengine_blob": "afba86403c25e324c4317508842327932256320c",
+      "upstream_sha256": "5d1b253573aca10ccf28d8ba7aa9abfc626ec8ab4781148e1b34957dc1ed13bf",
+      "upstream_lf_sha256": "5d1b253573aca10ccf28d8ba7aa9abfc626ec8ab4781148e1b34957dc1ed13bf",
+      "result": "identical"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "uzengine_blob": "202f9176a3631f53340f07e233984b7444e5645b",
+      "upstream_sha256": "6bcdd91552b43d7a2671905d97a6758320a74491e2dd8b846dfa89805afc66cf",
+      "upstream_lf_sha256": "c4d715a9328c0d01fbd5b51b3f0851cf00950f72786569d366aecd736ff252ba",
+      "result": "line-endings"
+    },
+    {
+      "path": "CMakePresets.json",
+      "uzengine_blob": "e728c2051e99a53892f58ce6697608bcab20527e",
+      "upstream_sha256": "3f7cb8992b67b499a01e8a773af957434c7ca341e5ba9756678517605afc71d9",
+      "upstream_lf_sha256": "9316f2ce7f1d589c84015b4509c231de3b977b9de231ca25f4b7ca437609bca4",
+      "result": "line-endings"
+    },
+    {
+      "path": "LICENSE",
+      "uzengine_blob": "63447fd8bbbf720abce8bb9794177779c8fb5bb1",
+      "upstream_sha256": "903df5512f7d02609fed0c780a9b704f5a3eeb6e4d84ebe42a29845c81899a3c",
+      "upstream_lf_sha256": "fd532481d828e13a0b13ccb598e02338a3617740675a862ee6bdc1541b68e93d",
+      "result": "line-endings"
+    },
+    {
+      "path": "README.md",
+      "uzengine_blob": "09f6299a13b7412e72af52f4c14cf859dd24f7b8",
+      "upstream_sha256": "1d2bc9d96e0cc3d482c02b45a606dca5b23804ec1aac214c3a74eb1e81f67eab",
+      "upstream_lf_sha256": "c3bf87fed05d6e105a330592e859ae2a4fc5cd3e8eb3a011e72928139679885d",
+      "result": "line-endings"
+    },
+    {
+      "path": "cmake/DirectX-Headers.pc.in",
+      "uzengine_blob": "f33d3ffd433e4922c93da82393aa9cf02f4e1c86",
+      "upstream_sha256": "c5f607f79fbb509229c81d2ac42d28ef0c6fb2a2784fad909e6a1fac989e53a0",
+      "upstream_lf_sha256": "c5f607f79fbb509229c81d2ac42d28ef0c6fb2a2784fad909e6a1fac989e53a0",
+      "result": "identical"
+    },
+    {
+      "path": "cmake/JoinPaths.cmake",
+      "uzengine_blob": "c68d91b84dbc7238d8202cd55c6022e8c94fac3d",
+      "upstream_sha256": "794b0d8fa62a3b798c7df12d50114580d1a47a234bfb6b4d83092eb646a6ecc4",
+      "upstream_lf_sha256": "794b0d8fa62a3b798c7df12d50114580d1a47a234bfb6b4d83092eb646a6ecc4",
+      "result": "identical"
+    },
+    {
+      "path": "cmake/directx-headers-config.cmake.in",
+      "uzengine_blob": "50c40bc2d66ecb8ca1ae01b9dc714aa3f80578ae",
+      "upstream_sha256": "5b32c518045397d8d77863966e00c102738dbd4f287ce4360429958822a85679",
+      "upstream_lf_sha256": "2ff108a2f35a2919f94c1181643ce7bf2df07a523593c6dbb37b58d86990893a",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/composition/dcomp-preview.h",
+      "uzengine_blob": "303567a209eef10efa7c7d7b5815c07767ca1b2d",
+      "upstream_sha256": "006436a376dc30a6336d88e8477a6795249e5d62c708493ad07d20df9935adda",
+      "upstream_lf_sha256": "006436a376dc30a6336d88e8477a6795249e5d62c708493ad07d20df9935adda",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/D3D12MarkerApiEnums.idl",
+      "uzengine_blob": "1384b73835ff66e6e4c099f9b22b2aaa33c21bb4",
+      "upstream_sha256": "126b174abf6874eeb96ce892cda788b5c8d70c92650309745f65d3f023b0d7f2",
+      "upstream_lf_sha256": "126b174abf6874eeb96ce892cda788b5c8d70c92650309745f65d3f023b0d7f2",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/D3D12TokenizedProgramFormat.hpp",
+      "uzengine_blob": "b95145430ffca8aed30fe57fc9d27ae70908ee05",
+      "upstream_sha256": "5862ef7c8b819f0d02ba73563a9df4dc0e89f11fe59d8f598def39122273c626",
+      "upstream_lf_sha256": "5862ef7c8b819f0d02ba73563a9df4dc0e89f11fe59d8f598def39122273c626",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/DirectML.h",
+      "uzengine_blob": "3bd1921bcba7ebebba93266ceb1ad3d62d85568a",
+      "upstream_sha256": "3daeed73aa64905c07b6f5394c7b45eabf0ac17bbca54b1584c871e03e4f54ad",
+      "upstream_lf_sha256": "7105c86903c5fcf0f2e15feb78d2d64de0a76c18436f5140cb741bd89ab6b2dc",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3d12.h",
+      "uzengine_blob": "6fb931a3b5d74c82fb891bbca0f875035a215d8d",
+      "upstream_sha256": "ed149a58d027ee55d3581a34992fb6247a5973bbdcb00cc44e66a6898a3838a4",
+      "upstream_lf_sha256": "cfe972e781ec625a94860b21c28924126a9eed9dcc296d7185edb768b8f3e31a",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3d12.idl",
+      "uzengine_blob": "1b6670f5e81f0227b43c86c8135ae42850f995d5",
+      "upstream_sha256": "5213026f9722677a8d6d75c36cf47e0bfbdfed9bd411a644a51cb7e535017b02",
+      "upstream_lf_sha256": "b1c8d308c449ce28defe2c6ed3fa92a9eccc674f40264d5199fc8d09cc536fdd",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3d12compatibility.h",
+      "uzengine_blob": "ec9ff5f971fcd6bd4769c484f46c63a1316c8d67",
+      "upstream_sha256": "49c90e78c6729d086770cecc0b037b118cd63fa87c1fa7237771eadb59c28d2c",
+      "upstream_lf_sha256": "73c4a0d01c62f72abe1797341f8240ff667d57e00019c15387c1b6ffd1de1e86",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3d12compatibility.idl",
+      "uzengine_blob": "8606214b1011e55e32d04838a159db0a86c41b1d",
+      "upstream_sha256": "df7f5e52521a83ca85caa1c1ee24adc042ca7982e805d2c98633f817ecc7a2de",
+      "upstream_lf_sha256": "ba26c87b40c8cf129f3cf9f29a42e172ab02dcdb8c0c5548ac53bf54753f7578",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3d12compiler.h",
+      "uzengine_blob": "1d8fe3be6d1a6000fc855e9b600b7b29ee3de3d6",
+      "upstream_sha256": "0c0a18ad212e122579828b5ffdcd39abd68c4e71debd946ff0562f3630ac83f1",
+      "upstream_lf_sha256": "0c0a18ad212e122579828b5ffdcd39abd68c4e71debd946ff0562f3630ac83f1",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3d12compiler.idl",
+      "uzengine_blob": "0bdc5ae726bff76e277867859e93201d2bd55a2c",
+      "upstream_sha256": "ebbee2d4aeb159f30340805178c6532ac45c4a057b281f4e6a2f089ea1c89450",
+      "upstream_lf_sha256": "ebbee2d4aeb159f30340805178c6532ac45c4a057b281f4e6a2f089ea1c89450",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3d12sdklayers.h",
+      "uzengine_blob": "0eb9747727dbc31241e6a23584bfae982977cb1e",
+      "upstream_sha256": "0f778771fc1cd156acb419c934acebf252bd3b038904d797b22505dddc8f84f0",
+      "upstream_lf_sha256": "8e580fd8bb2f6eabf807775c9959f9a0c8c0a22fea879760f5eaa322fb2f714e",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3d12sdklayers.idl",
+      "uzengine_blob": "47bc044dddbd419ae60cb71ac98ef1677f72572e",
+      "upstream_sha256": "530fa44577cda17044c8c7732ecd7336c3caa39a066bbe02751fc6b2e90fb823",
+      "upstream_lf_sha256": "1143cfd76b14d6498d9fcfc41086a92fe15c7bec338a9027c8875f55843be930",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3d12shader.h",
+      "uzengine_blob": "b51138ce8567f1641c193da5db0b2f7264b28440",
+      "upstream_sha256": "bdcdd726b6bc803ae50f442fe725ed02b7a8b068572cfd17078358b6232f217c",
+      "upstream_lf_sha256": "b6b9b326c08d746a9d30d65e9aa3b002a48030fe4947f899348b32edb8700acf",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3d12video.h",
+      "uzengine_blob": "79f92331f577c9fccf679ef0c12145927b86a752",
+      "upstream_sha256": "9ccd140cedfb962696e05604f42207697d4e1802d1aa639ce16511f62616bbfd",
+      "upstream_lf_sha256": "1e9a8e325f5a50227c9a723eb154654fb0ae1314e087ca3eb86d22e8fc5045c0",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3d12video.idl",
+      "uzengine_blob": "4ae8563b2644c4d3c523006811552847d8018a88",
+      "upstream_sha256": "88cb80c14b92de77f3c5dffafe266e8529e6741d58bfbec8d8c253e1a6cbfc71",
+      "upstream_lf_sha256": "a3beb36cb404c455bfd2e317f5265f78d4c4fba9fd140d77f55872c9fe04a973",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3dcommon.h",
+      "uzengine_blob": "2e2418dc166c912c3dcba722c32897085a9b5ccf",
+      "upstream_sha256": "8c236985415516302faf0cb725fa78312cb1ac05ba866e29eeab23d695a0f5cb",
+      "upstream_lf_sha256": "edcdf06d1d7fbc5200565110df3dbaf5f6c4feaeb77b4625ae54c0ca6d2ffded",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3dcommon.idl",
+      "uzengine_blob": "bfa375d30024c3295bd2446398aa8a3a810fdbfd",
+      "upstream_sha256": "2513f619ece3bda0af925b8120ba1adfd6ac1d27a9cb62e4635ef3fafbd09fd2",
+      "upstream_lf_sha256": "94f7af982291035da4c2384ee13c3ab3a6819c8fdc04d3bc57d673b8b44f747f",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3dshadercacheregistration.h",
+      "uzengine_blob": "671866a18c2c030a190b62338a6e33dd568fe3db",
+      "upstream_sha256": "a4d3ec8419366f2df66d63682505f2d732e58d0534f391b04dcbf459aac32f0f",
+      "upstream_lf_sha256": "a4d3ec8419366f2df66d63682505f2d732e58d0534f391b04dcbf459aac32f0f",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dshadercacheregistration.idl",
+      "uzengine_blob": "bc5441e6786582e2c4fa3aac6b9e849943547e11",
+      "upstream_sha256": "aaff8e7804d536d546633823a803e77d2e0bfc508b0c6ee935faf563978aa6a9",
+      "upstream_lf_sha256": "aaff8e7804d536d546633823a803e77d2e0bfc508b0c6ee935faf563978aa6a9",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dx12.h",
+      "uzengine_blob": "f449e206109d55f73b6f2190b88e77a64d57e66c",
+      "upstream_sha256": "874a67be3eeee5dd4d589b997f53c8e63bd95023270f53cb8bb696736a612e44",
+      "upstream_lf_sha256": "79d87861ecfb591a7f1eab8ab11709d1c09014534138b96ad0add360bd69bcc8",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/d3dx12_barriers.h",
+      "uzengine_blob": "2c2b135a62c35091e0a606302744db30044404bb",
+      "upstream_sha256": "55aef3331bfd628c99fc0f7856d3a6001449c9373f6c9c7799757c2e06be0966",
+      "upstream_lf_sha256": "55aef3331bfd628c99fc0f7856d3a6001449c9373f6c9c7799757c2e06be0966",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dx12_check_feature_support.h",
+      "uzengine_blob": "4df6f8ead309d86a0c6690098a7fb9ee0fe1f7b3",
+      "upstream_sha256": "56e3f58969eb2b3a66b83f5ec7c9d54294e27973966e3e4893703ed830ccc996",
+      "upstream_lf_sha256": "56e3f58969eb2b3a66b83f5ec7c9d54294e27973966e3e4893703ed830ccc996",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dx12_core.h",
+      "uzengine_blob": "139fbceb4acfe5324864adbbe34d6fc2c0b22a5e",
+      "upstream_sha256": "e00c6d265a7553bd6bd9426dd9b8846c8255fa5bc21d279c7c87ac5d9e7c7799",
+      "upstream_lf_sha256": "e00c6d265a7553bd6bd9426dd9b8846c8255fa5bc21d279c7c87ac5d9e7c7799",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dx12_default.h",
+      "uzengine_blob": "2b74d70f77e4f52f111dea6821c42f68eabc7f66",
+      "upstream_sha256": "a41a985b72913cfc53946f1a99f7dd1964e75e44109db95d18978080b01c65c8",
+      "upstream_lf_sha256": "a41a985b72913cfc53946f1a99f7dd1964e75e44109db95d18978080b01c65c8",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dx12_pipeline_state_stream.h",
+      "uzengine_blob": "cc584c2c508c7d0ededf9d4eb925ede123dfbff9",
+      "upstream_sha256": "7443a40ca7826b1c1bd09466dfddf4fb3decc3748b10fa8710b8a67b7572446e",
+      "upstream_lf_sha256": "7443a40ca7826b1c1bd09466dfddf4fb3decc3748b10fa8710b8a67b7572446e",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dx12_property_format_table.h",
+      "uzengine_blob": "66c7600f55d0e75d991e5eaf54274e8b37b7b5e0",
+      "upstream_sha256": "1fa486e39acdbf64a2ba56f1aa6502ba1e5b3ad2e6febd305a96786ea6305c19",
+      "upstream_lf_sha256": "1fa486e39acdbf64a2ba56f1aa6502ba1e5b3ad2e6febd305a96786ea6305c19",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dx12_render_pass.h",
+      "uzengine_blob": "c88fbdf1bc9075658b44353da19d2e610d98341b",
+      "upstream_sha256": "b3b7cce48c17b2e6e420ac6d9b707146a2f680e5f2653077271ecbb60b0f84a3",
+      "upstream_lf_sha256": "b3b7cce48c17b2e6e420ac6d9b707146a2f680e5f2653077271ecbb60b0f84a3",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dx12_resource_helpers.h",
+      "uzengine_blob": "a6a27aaa2a4ffdf587e767cddac78c3a15cc4bd8",
+      "upstream_sha256": "ec08177b93c3618ebfd3b64b272df3e71fd102a232bdb503f0cd1573fc4d44b8",
+      "upstream_lf_sha256": "ec08177b93c3618ebfd3b64b272df3e71fd102a232bdb503f0cd1573fc4d44b8",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dx12_root_signature.h",
+      "uzengine_blob": "e194d30a3f475d287f556f842f6b1ec6e4fde260",
+      "upstream_sha256": "b6446912da91384cb368c6f3c15ed6e21c33987af0483352d459066bd64abc86",
+      "upstream_lf_sha256": "b6446912da91384cb368c6f3c15ed6e21c33987af0483352d459066bd64abc86",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/d3dx12_state_object.h",
+      "uzengine_blob": "21715da300fa7d53d8568a99cc4b6878a52b89a2",
+      "upstream_sha256": "b57816e56747aeeaf698f490c4e4996b10cad9f539eb77315e597f9915c1aedf",
+      "upstream_lf_sha256": "b57816e56747aeeaf698f490c4e4996b10cad9f539eb77315e597f9915c1aedf",
+      "result": "identical"
+    },
+    {
+      "path": "include/directx/dxcore.h",
+      "uzengine_blob": "4244eaa60f98c742f741ba3502e25bac44a69fc0",
+      "upstream_sha256": "63810a79e8cf27becb12be85af84e9a09acef613b23bc866f63cc7c3f54e72dc",
+      "upstream_lf_sha256": "0fd290896c2b68124246cef50a37df8712fa327f9804706bf4474b0b6e0f45b3",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/dxcore_interface.h",
+      "uzengine_blob": "318208ea3ad4cf73901f52a2172137045045e4bb",
+      "upstream_sha256": "4d6cc2c2f1540df29c1dc73f2a9a09e7d7b7fe375a1a1ee804b1775bdb232352",
+      "upstream_lf_sha256": "1aa8d9f709044b41cf66fdba0649d13a812122c26634d6d0165b5a3a0301414c",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/dxgicommon.h",
+      "uzengine_blob": "f83aa01e61ed712bccf300e5fdd9895262ceb97d",
+      "upstream_sha256": "10b795959eef2771c5f4d20c49b20d56353cf9439e49667c391f32b9e74b09f6",
+      "upstream_lf_sha256": "8d07bb3266a7c750605b372ff8572538da4e3b27d7b9f29529ea61547446afdf",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/dxgicommon.idl",
+      "uzengine_blob": "4e1348617c8a62de405ecf8984ab3576b2940370",
+      "upstream_sha256": "e74cf909cfcaad9129915c575153bf2b5fe24c14293210d2c0fc062534396d7a",
+      "upstream_lf_sha256": "9f8b3abaff1930a8d192ecb28d437eaddd54b0254b4ba76db30ced0581c14cd7",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/dxgiformat.h",
+      "uzengine_blob": "83e6c077564fe69dce0aa41089fd192a6d199e18",
+      "upstream_sha256": "0ac14d7da595c528e0f14c64685d83596c392d36a0ab49ce2ecab05299e6c0d0",
+      "upstream_lf_sha256": "48df2f31927ce6167597c6fb41046ca4d9d771de9e11dac80f44a900d66162dd",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/directx/dxgiformat.idl",
+      "uzengine_blob": "34cc883ef3fd510273d41cea93eef320ef95ff53",
+      "upstream_sha256": "dec3bd183947ebf7bdef8547aff8f1b3aa6e6f6be770d3be15b14d39b626618f",
+      "upstream_lf_sha256": "970a0ac4970c72d984913117728250c69d8318b25de20b2083a8ee515f9805dc",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/dxguids/dxguids.h",
+      "uzengine_blob": "acb18186d376055102d58a83257ff8993e2e1195",
+      "upstream_sha256": "190d14a4ac8115162926797367f161b419eadc03da96e0fa0bb6c7bf448c1a5d",
+      "upstream_lf_sha256": "190d14a4ac8115162926797367f161b419eadc03da96e0fa0bb6c7bf448c1a5d",
+      "result": "identical"
+    },
+    {
+      "path": "include/wsl/stubs/basetsd.h",
+      "uzengine_blob": "4c75ef27b36e8278695068c034bdccdaed9e35d1",
+      "upstream_sha256": "a13f32227ff7371438e13381a3ac46cd748db5df5a40902cd5aae9d365816e6a",
+      "upstream_lf_sha256": "78ea2c2149bee8e4c444c7ded5a42465fac2fa91ba97ae056b0573503e9cc07c",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/wsl/stubs/oaidl.h",
+      "uzengine_blob": "76f5b5f95119301867800b48700aa2c994404529",
+      "upstream_sha256": "6169e7f95762b9304753c3f6da81c3a78bd86dc46788357ea4988902bc8394a0",
+      "upstream_lf_sha256": "6169e7f95762b9304753c3f6da81c3a78bd86dc46788357ea4988902bc8394a0",
+      "result": "identical"
+    },
+    {
+      "path": "include/wsl/stubs/ocidl.h",
+      "uzengine_blob": "76f5b5f95119301867800b48700aa2c994404529",
+      "upstream_sha256": "6169e7f95762b9304753c3f6da81c3a78bd86dc46788357ea4988902bc8394a0",
+      "upstream_lf_sha256": "6169e7f95762b9304753c3f6da81c3a78bd86dc46788357ea4988902bc8394a0",
+      "result": "identical"
+    },
+    {
+      "path": "include/wsl/stubs/rpc.h",
+      "uzengine_blob": "76f5b5f95119301867800b48700aa2c994404529",
+      "upstream_sha256": "6169e7f95762b9304753c3f6da81c3a78bd86dc46788357ea4988902bc8394a0",
+      "upstream_lf_sha256": "6169e7f95762b9304753c3f6da81c3a78bd86dc46788357ea4988902bc8394a0",
+      "result": "identical"
+    },
+    {
+      "path": "include/wsl/stubs/rpcndr.h",
+      "uzengine_blob": "68aa3909d30faa2f92185568b59f412652f9464a",
+      "upstream_sha256": "83e90cd4f1746c22e970c443131cbc9154863aff6be8aad05d380ea320d44422",
+      "upstream_lf_sha256": "83e90cd4f1746c22e970c443131cbc9154863aff6be8aad05d380ea320d44422",
+      "result": "identical"
+    },
+    {
+      "path": "include/wsl/stubs/unknwn.h",
+      "uzengine_blob": "e08ad1e602cb7f1c82fd2f5dbd4180a12282bd77",
+      "upstream_sha256": "f29eaad0480e4a7da9c64cc2caed0abcefc6b30c677f7a8309f5bb13030833e4",
+      "upstream_lf_sha256": "5d69416b110e4d094cac7918466b4e9bc820ecdfee329679ad6d6dcc77b657c2",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/wsl/stubs/unknwnbase.h",
+      "uzengine_blob": "7a54651145533c0051c83a98e0990d0ea3394865",
+      "upstream_sha256": "6f0cd0479cea416de9f960ffa81a9927302f4c7f7103614a131fc124401b1ab2",
+      "upstream_lf_sha256": "3f26660432a49445b8703b3c4bd52bd01fd745618d36b883bf71c72524c1a879",
+      "result": "line-endings"
+    },
+    {
+      "path": "include/wsl/stubs/winapifamily.h",
+      "uzengine_blob": "064c4c2d0143ad311edb8dc2d5c644f8cfd5a021",
+      "upstream_sha256": "c42b24ba228cfe80aa1e75772ba364dffb16f0aad7b61e9d9c6a9064c2359646",
+      "upstream_lf_sha256": "c42b24ba228cfe80aa1e75772ba364dffb16f0aad7b61e9d9c6a9064c2359646",
+      "result": "identical"
+    },
+    {
+      "path": "include/wsl/stubs/wrl/client.h",
+      "uzengine_blob": "64293a70b2f7aca9c60b99a34b0a644e7417efa1",
+      "upstream_sha256": "6b31920f8bb071f1a1222c1b60f7fc751fc599fcea34cb1506cb162ce5443fc8",
+      "upstream_lf_sha256": "6b31920f8bb071f1a1222c1b60f7fc751fc599fcea34cb1506cb162ce5443fc8",
+      "result": "identical"
+    },
+    {
+      "path": "include/wsl/stubs/wrl/implements.h",
+      "uzengine_blob": "5a3979e1a4c6f62fcfd0e37c5b59ca68eda1c9bf",
+      "upstream_sha256": "2c144204cb6088b8ee13614650a232670dc442e9ffd69684a54b1ab68d19bd44",
+      "upstream_lf_sha256": "2c144204cb6088b8ee13614650a232670dc442e9ffd69684a54b1ab68d19bd44",
+      "result": "identical"
+    },
+    {
+      "path": "include/wsl/winadapter.h",
+      "uzengine_blob": "ccb2b3c12f3b9be6e9a7ebaaede69f9ff9761f58",
+      "upstream_sha256": "32dc819b324189ddb8bf95c2cd301f5370622cd269bd9cad3d0b77d10cc798dc",
+      "upstream_lf_sha256": "32dc819b324189ddb8bf95c2cd301f5370622cd269bd9cad3d0b77d10cc798dc",
+      "result": "identical"
+    },
+    {
+      "path": "include/wsl/wrladapter.h",
+      "uzengine_blob": "fcfd894ff9c4a319657fc189de9913335c1674bb",
+      "upstream_sha256": "bed45f4c0552a15572cc05d28acacffe6d7e660c31c95d7feb42b9a3635b9f00",
+      "upstream_lf_sha256": "bed45f4c0552a15572cc05d28acacffe6d7e660c31c95d7feb42b9a3635b9f00",
+      "result": "identical"
+    },
+    {
+      "path": "meson.build",
+      "uzengine_blob": "c03897f00a9d2031d305fa3d99f7480c1a3850fc",
+      "upstream_sha256": "383fab75f0fa6772b99fae95ebb234529ef47c2281bc541c07a77f0a2a470637",
+      "upstream_lf_sha256": "9bda6475042aa120100cc861fe411a8653f62b569b88c78e5ca2b6cdc38801c6",
+      "result": "line-endings"
+    },
+    {
+      "path": "meson_options.txt",
+      "uzengine_blob": "af5cd470461f6d975aaf8d27de25fb381d3b3538",
+      "upstream_sha256": "ab63da6f2fe4ef6c55d22ce964163d5dd1f589e15645f03fb4a7e894272be3df",
+      "upstream_lf_sha256": "1946c64d11c5dcae1b4aebdc27c1dbeb349b845da3c2279b979b40a121aeb0c3",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/d3dx12_property_format_table.cpp",
+      "uzengine_blob": "bd01abc5b489bc5d896caf511a8bd35b1c6ab5ff",
+      "upstream_sha256": "3ff05722c52f6b35af13827068ee77106da55416832545e6a4a7735ce90744d1",
+      "upstream_lf_sha256": "3ff05722c52f6b35af13827068ee77106da55416832545e6a4a7735ce90744d1",
+      "result": "identical"
+    },
+    {
+      "path": "src/dxguids.cpp",
+      "uzengine_blob": "cff98f4fa0d9b7fe0ba60e91220ca1c53ecb210e",
+      "upstream_sha256": "868b89e5e1995db67fd90510f457191cd90e63e1febc8524a4421635ad827c4e",
+      "upstream_lf_sha256": "868b89e5e1995db67fd90510f457191cd90e63e1febc8524a4421635ad827c4e",
+      "result": "identical"
+    }
+  ],
+  "not_in_uzengine": []
+}

@@ -13,6 +13,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Third-party libraries for the render core (task `phase0.2_vendor-thirdparty`): D3D12MA, DirectX-Headers, DirectXMath, DXC, Agility SDK, volk, Vulkan Memory Allocator, Vulkan-Headers, SPIRV-Reflect, spdlog and Tracy headers vendored from their own upstream releases under `thirdparty/<library>/` with licence files, `MANIFEST.json` and `ORIGIN.md`; comparison with UzEngine's copies recorded; release blockers RB-DXC-DXIL and RB-AGILITY-TERMS recorded in `docs/licensing-and-clean-room.md`.
 - Approved-source index (task `phase0.1_approved-source-index`): `docs/approved-sources.md` lists the public specifications, public Adobe documentation, UzmiGames files and the 21 cleared `docs/analysis/` files (pinned by blob hash), plus the quarantine list (25 files and every uncleared revision); architecture citations aligned; citation and revision checks in `tools/sources/` with tests in `tests/sources/`.
 - Vendored UzEngine render core (task `phase0.1_vendor-core-copy`): 97 files copied byte-equal from UzEngine commit `380c142e` into `thirdparty/uzengine-render-core/` with `LICENSE`, `ORIGIN.md` and `MANIFEST.json`; root `NOTICE`; `.gitattributes` keeps the vendored folder free of line-ending conversion; Python tooling base (`pyproject.toml`: ruff, mypy strict, pytest) with vendoring checks in `tools/vendoring/` and tests in `tests/vendoring/`.
 - Apache-2.0 licence for the project: `LICENSE`.

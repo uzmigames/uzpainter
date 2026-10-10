@@ -1,0 +1,1449 @@
+{
+  "library": "spdlog",
+  "upstream": "https://github.com/gabime/spdlog",
+  "version": "v1.17.0",
+  "commit": "79524ddd08a4ec981b7fea76afd08ee05f83755d",
+  "archive_url": "https://github.com/gabime/spdlog/archive/refs/tags/v1.17.0.tar.gz",
+  "archive_sha256": "d8862955c6d74e5846b3f580b1605d2428b11d97a410d86e2fb13e857cd3a744",
+  "archive_root": "spdlog-1.17.0/",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "d678c20826e1392578508e1c78649a1e3c31bda05ef4388d967dbd654461b140",
+      "size": 1323
+    },
+    {
+      "path": "include/spdlog/async.h",
+      "sha256": "3ddaaba57d2f757d6cb09568fe1823949e45426d73f6baeb4ca8d8a2fe78121b",
+      "size": 4012
+    },
+    {
+      "path": "include/spdlog/async_logger-inl.h",
+      "sha256": "c298acfd85cd1ad21c0ff0a3cc930746174d4945f0844dcd6ca8b842ee9a22ce",
+      "size": 2817
+    },
+    {
+      "path": "include/spdlog/async_logger.h",
+      "sha256": "5e3219c74c29dee0b04a8c72ae6568e6d44999071f4416453a01514eccd21b64",
+      "size": 2556
+    },
+    {
+      "path": "include/spdlog/cfg/argv.h",
+      "sha256": "6f9aa40647fda08e2ad776598a7b5de1d1596ec9a73512c90c69504f6e347a2d",
+      "size": 1219
+    },
+    {
+      "path": "include/spdlog/cfg/env.h",
+      "sha256": "d2afd153fe8a1b2826feb60ec62ea42811d1ca085471fda238d002fedf5bb1bc",
+      "size": 1007
+    },
+    {
+      "path": "include/spdlog/cfg/helpers-inl.h",
+      "sha256": "1d43f8134b35efd52f6e3387be03602d3c85ca6df2dceab0313b660c37d1df90",
+      "size": 3164
+    },
+    {
+      "path": "include/spdlog/cfg/helpers.h",
+      "sha256": "5134c03ca4795ed4e998a2249793b1917989bd2199ff66c689ef48fd9a827bfe",
+      "size": 714
+    },
+    {
+      "path": "include/spdlog/common-inl.h",
+      "sha256": "e170ca1af147a885142c8afdf29722ae52a40416dfd6b666758b39b5b5588d62",
+      "size": 2046
+    },
+    {
+      "path": "include/spdlog/common.h",
+      "sha256": "ddf4fa8ee4687f364086c3f3bca3b9113df3622916c67776594d231418102143",
+      "size": 12569
+    },
+    {
+      "path": "include/spdlog/details/backtracer-inl.h",
+      "sha256": "9b2795b78571295776003345d7e2b9f264fa71fabb7a15cda7b049464a2d24c3",
+      "size": 2000
+    },
+    {
+      "path": "include/spdlog/details/backtracer.h",
+      "sha256": "d4d613badbe01d67bfaefaba0a7a934f0e5f5eb3f18096e5cba54ab2fd4da883",
+      "size": 1161
+    },
+    {
+      "path": "include/spdlog/details/circular_q.h",
+      "sha256": "0bc4025c81425023f4d58711d6aa6231a55ee606bb1fc88f4fb3e655e807e265",
+      "size": 3377
+    },
+    {
+      "path": "include/spdlog/details/console_globals.h",
+      "sha256": "3dced73dc2bc5eacc678eec34af6458f910740c8949fd1bc8449808d1345467a",
+      "size": 603
+    },
+    {
+      "path": "include/spdlog/details/file_helper-inl.h",
+      "sha256": "cb74c68b416fd94ef738b12e93af4bb571b69f2bcc3b6987cc7ee0a1fbee0547",
+      "size": 4669
+    },
+    {
+      "path": "include/spdlog/details/file_helper.h",
+      "sha256": "e23822a24c9f913328ceed3a7176e832114ec65abccf802bac280852b288415b",
+      "size": 1754
+    },
+    {
+      "path": "include/spdlog/details/fmt_helper.h",
+      "sha256": "7a2e655f077c1f9ceb7d7a69214594c3721702b691b7a301bad96f0affd45d06",
+      "size": 4443
+    },
+    {
+      "path": "include/spdlog/details/log_msg-inl.h",
+      "sha256": "7ec7033b384263180c041a4ab627cc8081d7550af6a4533f49334af5fce2d4f7",
+      "size": 1392
+    },
+    {
+      "path": "include/spdlog/details/log_msg.h",
+      "sha256": "7e9a3b7b89646cc1ad36d21de8e7d584f81dfa642760c12f40385dc0db65e3b0",
+      "size": 1200
+    },
+    {
+      "path": "include/spdlog/details/log_msg_buffer-inl.h",
+      "sha256": "e41147aa63dfb99b1b2285a88740d9e7c238099ae3518b2e88798e7e5991932a",
+      "size": 1664
+    },
+    {
+      "path": "include/spdlog/details/log_msg_buffer.h",
+      "sha256": "5a79fdfa5429d23286c58926a53de3ee83b577db21a4cccbd104ceda8ded7c50",
+      "size": 931
+    },
+    {
+      "path": "include/spdlog/details/mpmc_blocking_q.h",
+      "sha256": "66ed3083a98e5cc142aa8d9dc18ce8de5ff32f82382386546f6ff302a01fc6c6",
+      "size": 5280
+    },
+    {
+      "path": "include/spdlog/details/null_mutex.h",
+      "sha256": "1377fde4b54417dca1b3d162d0f18c35f9418e1db91a333949952f1c877127b1",
+      "size": 930
+    },
+    {
+      "path": "include/spdlog/details/os-inl.h",
+      "sha256": "f32d377e7b58e53b1d601a7e0fef5e2c1d137592c25df3bb4adbf89e015018ef",
+      "size": 16986
+    },
+    {
+      "path": "include/spdlog/details/os.h",
+      "sha256": "dc6af3c0fae5b49d8a703f6ef5432f3f25cd061290e81dd0d80441ba5719cf07",
+      "size": 4050
+    },
+    {
+      "path": "include/spdlog/details/periodic_worker-inl.h",
+      "sha256": "72c338426a4cd5f1a387d222a867b575f01f8d1968326f5f30a82ff5071bd681",
+      "size": 616
+    },
+    {
+      "path": "include/spdlog/details/periodic_worker.h",
+      "sha256": "2773bf8766655b9ba5b53c9a84b2abcd4a4f02ec5b55363740668534eaa217cc",
+      "size": 1809
+    },
+    {
+      "path": "include/spdlog/details/registry-inl.h",
+      "sha256": "52163509eb3f64e0b014646611a250a0ee01674fe85f4efdfd4afda0e003cb12",
+      "size": 8849
+    },
+    {
+      "path": "include/spdlog/details/registry.h",
+      "sha256": "a5ce3c5a8bc019e7d8508268b222136c01f1e81360df67f104f21bf4b49e4f4b",
+      "size": 4460
+    },
+    {
+      "path": "include/spdlog/details/synchronous_factory.h",
+      "sha256": "3fcfcc28aa4edc2998e9e00d218362600605b89e0c58ebf2c7267950412e1cdc",
+      "size": 751
+    },
+    {
+      "path": "include/spdlog/details/tcp_client-windows.h",
+      "sha256": "3553c39bc4a1a28e43ee05ab79f11762ba829847358e1f564bf4f8a96c683d73",
+      "size": 7065
+    },
+    {
+      "path": "include/spdlog/details/tcp_client.h",
+      "sha256": "6977deb87db2535da5afb0013644386bcf32e49b64655c31344f5835f1324029",
+      "size": 6393
+    },
+    {
+      "path": "include/spdlog/details/thread_pool-inl.h",
+      "sha256": "b7042c70da4d1c0398ddc74fc12bb5eec746647c18857ace1c6f425b5cf9435e",
+      "size": 4270
+    },
+    {
+      "path": "include/spdlog/details/thread_pool.h",
+      "sha256": "432bccde480274c911460d7ba30cda62afefd6fcc2cc57529b5f44d68324a62e",
+      "size": 3515
+    },
+    {
+      "path": "include/spdlog/details/udp_client-windows.h",
+      "sha256": "475721551d61f3749fe008762cf0359f67d6bd90383208749e30360bfa190d1d",
+      "size": 3122
+    },
+    {
+      "path": "include/spdlog/details/udp_client.h",
+      "sha256": "53e10fa54ef911f254fa485ff9e6f8047c9c7659f5b345f87a4a590831832903",
+      "size": 2233
+    },
+    {
+      "path": "include/spdlog/details/windows_include.h",
+      "sha256": "ee78df4fa66a4e41ed97b47305953f9af2140718c5fab14d921ad8b195e9931b",
+      "size": 180
+    },
+    {
+      "path": "include/spdlog/fmt/bin_to_hex.h",
+      "sha256": "5609bbf846807ba9a18330fdc0141d91a067c0e44b760b97693c2a88893a5635",
+      "size": 7362
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/args.h",
+      "sha256": "6e0bf8ffbd904e6ef525cdce8e6e00312ce5d14f616cea5d88132606ca0384c4",
+      "size": 7199
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/base.h",
+      "sha256": "892fcc48f31a80382f0e304e427d68d2fd62a2d78aef142020199120db5269fb",
+      "size": 105054
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/chrono.h",
+      "sha256": "f8e2a69bd97bc5b90c9af7fb87e010775b695d487a77e8d8cbe624e57bd2f9bf",
+      "size": 77454
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/color.h",
+      "sha256": "f88bf0c4833caed3a7f01b6d633c7b259741a26119e84c651ac1e31cfc980b72",
+      "size": 24145
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/compile.h",
+      "sha256": "636c13842acce0b42b378e65fe67a69e5635e8225c9701975e5b326a97be5cb8",
+      "size": 20493
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/core.h",
+      "sha256": "b2b6692145b11c7c2774db106078c97575a47d18e80c7783c68566475325ebb4",
+      "size": 187
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/fmt.license.rst",
+      "sha256": "07580f2a3b35709ce703d523f447b242f6dfec7582a8c0df102c7fa2849375f8",
+      "size": 1431
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/format-inl.h",
+      "sha256": "e7baf108b84e89b29915bb35733540f8f4262cd8f4b41c15754eed4d2f185f61",
+      "size": 81008
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/format.h",
+      "sha256": "b4c65350362bf40e76a8e6b450587d912c7081b6eafeafaf3d7bcf53153e17fc",
+      "size": 162666
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/os.h",
+      "sha256": "45d4e84be4e84a128442f04eda06e1305c8e02c61166854a3b8b348194d35da5",
+      "size": 12860
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/ostream.h",
+      "sha256": "742416a6a88286609887fa512c4423820764aafbb723a42a825f3193cb52b4f0",
+      "size": 5027
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/printf.h",
+      "sha256": "afddb422a86125e04a7260bb0f0ae3423ea8d591181ed5d4ef60b7a5d068993a",
+      "size": 19991
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/ranges.h",
+      "sha256": "ccaf61c9b5937e0fa97737fb047121c5fca9db34de516b8edfc1d913583e3c8e",
+      "size": 28126
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/std.h",
+      "sha256": "3f06cdf32774b9e6915e9762411f5f4de8b8ba5660adccbdea514be7f0b23826",
+      "size": 23532
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/xchar.h",
+      "sha256": "f0903d522c64faaee2c374a0b2063ac3e43d0b5006dfd3411f0e5dccd8ff6062",
+      "size": 13098
+    },
+    {
+      "path": "include/spdlog/fmt/chrono.h",
+      "sha256": "f57be9fd2c4c39dc7ff73f736c481eaa418723ccc7adeb16b3905a0f4a7b534e",
+      "size": 467
+    },
+    {
+      "path": "include/spdlog/fmt/compile.h",
+      "sha256": "6ecd7b2ae593e3b7b00d577ad035c0598c29c2df3947c21102ec110b2a33b5e9",
+      "size": 475
+    },
+    {
+      "path": "include/spdlog/fmt/fmt.h",
+      "sha256": "6fc4048665172d38d835203d757aa30d4136c622d26d26e881f72f96b86aa556",
+      "size": 712
+    },
+    {
+      "path": "include/spdlog/fmt/ostr.h",
+      "sha256": "d0437444e2da75ee732e392ce96e8f72d1db5bf9a6a79f0a1d36dbdd93ce1f1e",
+      "size": 470
+    },
+    {
+      "path": "include/spdlog/fmt/ranges.h",
+      "sha256": "7ef5f93f56f8f39ecda80b070bf1b3a93530832b6f69415c99acb72bd33a80ac",
+      "size": 467
+    },
+    {
+      "path": "include/spdlog/fmt/std.h",
+      "sha256": "4a72a66fa67040b429dd791b10e75b21d5c18017ababcab808ef09900c727484",
+      "size": 557
+    },
+    {
+      "path": "include/spdlog/fmt/xchar.h",
+      "sha256": "0f5db8046e2c81bca4d2dd0245702366d5d4c51131a25cb0b79e5001a5002177",
+      "size": 464
+    },
+    {
+      "path": "include/spdlog/formatter.h",
+      "sha256": "213631628274dc6c26fcc9a3bed36a3a9a83edea5e6b9f027baea58ca9c5eff3",
+      "size": 463
+    },
+    {
+      "path": "include/spdlog/fwd.h",
+      "sha256": "246d2754fb77dcdcb7ed4be2328944659fd154599ee09df865db5cdb33cbe349",
+      "size": 305
+    },
+    {
+      "path": "include/spdlog/logger-inl.h",
+      "sha256": "1507122f5c8bc7428fd5a606c29bc0fff42b6f55c602311d1891e45d23afb7a7",
+      "size": 6742
+    },
+    {
+      "path": "include/spdlog/logger.h",
+      "sha256": "e6b8ba92b7c6b83b816871f9a663cab4c1c21da3c5b252904f3dae412dfad85d",
+      "size": 13353
+    },
+    {
+      "path": "include/spdlog/mdc.h",
+      "sha256": "c3516a85d687f806080d81d0b63cb0353665b26d78f6cdc2c51e526ae9c492d8",
+      "size": 1493
+    },
+    {
+      "path": "include/spdlog/pattern_formatter-inl.h",
+      "sha256": "7e05fab1303d952801143118e33525a50d77304b3b3fec117ccc8637c85135fb",
+      "size": 47192
+    },
+    {
+      "path": "include/spdlog/pattern_formatter.h",
+      "sha256": "87fffd034b0a2139a6373ba04d9f88ae57cfac3865138e0859f19a9e5858da43",
+      "size": 3754
+    },
+    {
+      "path": "include/spdlog/sinks/android_sink.h",
+      "sha256": "96f8c917be604bfc0cd4a84e6e9bebd790c9828170f921a50f0f013a653cda8d",
+      "size": 4717
+    },
+    {
+      "path": "include/spdlog/sinks/ansicolor_sink-inl.h",
+      "sha256": "62a5e7c2522606660d4faa683d206d748c94cdcd6c72540ce6ac46b28a153958",
+      "size": 5095
+    },
+    {
+      "path": "include/spdlog/sinks/ansicolor_sink.h",
+      "sha256": "c6078602b09b78f781e4a18b966e2a3ea2dbea5c9a84a77adbe1e27557e85de7",
+      "size": 4031
+    },
+    {
+      "path": "include/spdlog/sinks/base_sink-inl.h",
+      "sha256": "7fe3e5bb453018d03e2b850384b18f8c00a1b64be363bb22c4b9b92082d9bcc7",
+      "size": 1804
+    },
+    {
+      "path": "include/spdlog/sinks/base_sink.h",
+      "sha256": "86186e0d15535b94270c94ab5eeb798d47dfe7330f4e622bf7c66dc46c820f37",
+      "size": 1600
+    },
+    {
+      "path": "include/spdlog/sinks/basic_file_sink-inl.h",
+      "sha256": "613295eaac45babf5cd5e7bec262763a5214071eaeab58c5598ac60620285c6c",
+      "size": 1387
+    },
+    {
+      "path": "include/spdlog/sinks/basic_file_sink.h",
+      "sha256": "e4693c382833fc13d6adbdc68d602d479c72225a463892bc4fd6fde6475edd4c",
+      "size": 2312
+    },
+    {
+      "path": "include/spdlog/sinks/callback_sink.h",
+      "sha256": "568eed97d5c29f942d811afe8614ceae6c110b74ffa4535123a5bd9db31f263f",
+      "size": 1705
+    },
+    {
+      "path": "include/spdlog/sinks/daily_file_sink.h",
+      "sha256": "ee32cbdd80b9fe51abe04ae290d199c46cec2ecbf35e7a2e796daf712b8520d2",
+      "size": 9610
+    },
+    {
+      "path": "include/spdlog/sinks/dist_sink.h",
+      "sha256": "fa6b8b53368b3cc9490046f1a207c3852835f0a00f6f677005c9e52799e86247",
+      "size": 2373
+    },
+    {
+      "path": "include/spdlog/sinks/dup_filter_sink.h",
+      "sha256": "aded06d32de86861be0b07a7c1561cd1a9f1df80cdbc0eb15c4f9735c26cc309",
+      "size": 3225
+    },
+    {
+      "path": "include/spdlog/sinks/hourly_file_sink.h",
+      "sha256": "aa31439c3c3072e9b77acc2800005b586f6b6cdc2d790e0783050b8627a79411",
+      "size": 7279
+    },
+    {
+      "path": "include/spdlog/sinks/kafka_sink.h",
+      "sha256": "9bb10a5ea347f2400baadf0d794d5045169fae77388132bc0cf3dcf30ec00c08",
+      "size": 4445
+    },
+    {
+      "path": "include/spdlog/sinks/mongo_sink.h",
+      "sha256": "df9a5c34bef34a9a55f4bec51f98c3f0527fdc61bc8ee247a9b4f4149e8ff0f0",
+      "size": 4003
+    },
+    {
+      "path": "include/spdlog/sinks/msvc_sink.h",
+      "sha256": "2c9107975cc29f89880846dce6939f2e8670a0b4aacf36a83cf08c8190475402",
+      "size": 1988
+    },
+    {
+      "path": "include/spdlog/sinks/null_sink.h",
+      "sha256": "75d92f19d80ba59e15c8607e4c98a86a14e238e5ca9b5afd6150dcf9e86d10d6",
+      "size": 1240
+    },
+    {
+      "path": "include/spdlog/sinks/ostream_sink.h",
+      "sha256": "8a444e2537b82d6fe4a87c1162d4eb53f94ceb01acbc8d646828f2b24f869085",
+      "size": 1222
+    },
+    {
+      "path": "include/spdlog/sinks/qt_sinks.h",
+      "sha256": "e3bb4b606187dcfc06ef2abafb0bf285662ed1edc079f5525cd4039e081e5212",
+      "size": 12697
+    },
+    {
+      "path": "include/spdlog/sinks/ringbuffer_sink.h",
+      "sha256": "69dd445a2519bdc25261f2af884b479a09a54458468f9f351a8333ae6ab370a5",
+      "size": 2196
+    },
+    {
+      "path": "include/spdlog/sinks/rotating_file_sink-inl.h",
+      "sha256": "8dc1c0985be041ac2ec0f155b534b748cd44b3eb33e8836dc849f9314c21d13e",
+      "size": 6087
+    },
+    {
+      "path": "include/spdlog/sinks/rotating_file_sink.h",
+      "sha256": "27fa443b8bd9158f4472e116a05fea37e82b6452b6eb70a4ea78ae0089039142",
+      "size": 3348
+    },
+    {
+      "path": "include/spdlog/sinks/sink-inl.h",
+      "sha256": "f8fabf0de532bef4788ad59f278afbd3c4187b598f5c856370cdfa3dd564f28a",
+      "size": 721
+    },
+    {
+      "path": "include/spdlog/sinks/sink.h",
+      "sha256": "75e5c2b43c253cfe7c553077125e3b158e9d71caf2765ad97bb08443ee83b56a",
+      "size": 889
+    },
+    {
+      "path": "include/spdlog/sinks/stdout_color_sinks-inl.h",
+      "sha256": "4267753c6a0f8f8380999fa1445438cde62a62874a6be4555d8bd23245f9e1f7",
+      "size": 1431
+    },
+    {
+      "path": "include/spdlog/sinks/stdout_color_sinks.h",
+      "sha256": "03700ff3259fc97d2adb52ef5c470cf847bb1d417bf5d74e851c7c1b6212fe0e",
+      "size": 1780
+    },
+    {
+      "path": "include/spdlog/sinks/stdout_sinks-inl.h",
+      "sha256": "cd9298408922fcf38b45eec7853cd0e96efac4ca65a8fc0326dcc17189853dfe",
+      "size": 4344
+    },
+    {
+      "path": "include/spdlog/sinks/stdout_sinks.h",
+      "sha256": "a7eb6c3e4aedbed13c57ae517cbee30ef62582b3e02e35530123cae58ce1f526",
+      "size": 2421
+    },
+    {
+      "path": "include/spdlog/sinks/syslog_sink.h",
+      "sha256": "92dddbd22c8e62597eaef1d886093df50dbab19763a4d758b394227c68d55596",
+      "size": 4248
+    },
+    {
+      "path": "include/spdlog/sinks/systemd_sink.h",
+      "sha256": "e312d6a5a52dc5acd6321833f18fb6c29a438a1f24ee5dfe3dd29a550f35887f",
+      "size": 4868
+    },
+    {
+      "path": "include/spdlog/sinks/tcp_sink.h",
+      "sha256": "92092dec86bdc1cfced58bd61a28c6c22cb5cb905050aa416437f9c9eb4a71a1",
+      "size": 2700
+    },
+    {
+      "path": "include/spdlog/sinks/udp_sink.h",
+      "sha256": "6eb0b04604fa84e63b1bab51539a281a0bf17c912b9b5a5f794efdb0ddab190b",
+      "size": 1850
+    },
+    {
+      "path": "include/spdlog/sinks/win_eventlog_sink.h",
+      "sha256": "4783a96f7b89b19d48c14eea3f82f3ffd659e8faf34a4446659cd0c2d822e39c",
+      "size": 8888
+    },
+    {
+      "path": "include/spdlog/sinks/wincolor_sink-inl.h",
+      "sha256": "ed4e3f9ed012bf495044e414e1f921311bba888bc905a515da41ddde35c8c557",
+      "size": 7092
+    },
+    {
+      "path": "include/spdlog/sinks/wincolor_sink.h",
+      "sha256": "75a20f219b48c8ff63d2e7a11db9ed748fbc9cef5198e9cf739b889062665aaf",
+      "size": 2688
+    },
+    {
+      "path": "include/spdlog/spdlog-inl.h",
+      "sha256": "eca55774acb8f0cbe05f18cfa95405fd5ff1ed041cd7372556b2eee39776a5ef",
+      "size": 3264
+    },
+    {
+      "path": "include/spdlog/spdlog.h",
+      "sha256": "54283b3e3bf96c3df22c40caea526ffe0bbf203b5f76a98aa130b91a50487195",
+      "size": 11866
+    },
+    {
+      "path": "include/spdlog/stopwatch.h",
+      "sha256": "60f3aaed933185261ae603cc589cd39ebf93ef78321548871d469fb566903c44",
+      "size": 1865
+    },
+    {
+      "path": "include/spdlog/tweakme.h",
+      "sha256": "8e641df000560090a11adb04eff3f1a18e814f6eb8f2a9a9a1f22c0dcc572f82",
+      "size": 6610
+    },
+    {
+      "path": "include/spdlog/version.h",
+      "sha256": "a0c15d9295eba580732dada20940a443c53ddb47d8565c730d7af1ee5f3bd712",
+      "size": 417
+    },
+    {
+      "path": "src/async.cpp",
+      "sha256": "1a985a2d65548d858a8171f7eb298d38129e4e554909f77005b4f45fae790121",
+      "size": 394
+    },
+    {
+      "path": "src/bundled_fmtlib_format.cpp",
+      "sha256": "26c11b7389cb98f18f054cf39a3c8b64ab180c439c8677772048aeec4d628fe4",
+      "size": 1417
+    },
+    {
+      "path": "src/cfg.cpp",
+      "sha256": "1734c9cf9421c3daf4d682d5998cb2d3d4f51fb7d2a9be77a2340d0388f7e92e",
+      "size": 275
+    },
+    {
+      "path": "src/color_sinks.cpp",
+      "sha256": "eb5c7d22aaba48eff1e70452c6f55255a4922e05f84abba048790c3ef70c7f2b",
+      "size": 3137
+    },
+    {
+      "path": "src/file_sinks.cpp",
+      "sha256": "02bfd1ee0bbdb51e476933c8da2db30810dbda9ace8a31485dd3aa854805629e",
+      "size": 797
+    },
+    {
+      "path": "src/spdlog.cpp",
+      "sha256": "e357d79d7816fe72f8d5203ee5624d0d73cf8f90076fa08302ce92035ae72ca5",
+      "size": 1134
+    },
+    {
+      "path": "src/stdout_sinks.cpp",
+      "sha256": "f28d35429c75493a2cc67857fea53e4ad345666b04cc58082e023e684b91de39",
+      "size": 2014
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/spdlog",
+  "comparison": [
+    {
+      "path": ".git-blame-ignore-revs",
+      "uzengine_blob": "47b8fed10ea47383cd88694551fdfaaaf3e017b8",
+      "upstream_sha256": "816559f74ffa80d977600fa4f5170c4cb1ff98248ab0eb4c99a08037efc591d9",
+      "upstream_lf_sha256": "816559f74ffa80d977600fa4f5170c4cb1ff98248ab0eb4c99a08037efc591d9",
+      "result": "identical"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "uzengine_blob": "c7708eb92b41837662b4ea0e8f840d927bd11957",
+      "upstream_sha256": "e921ebfad63b31b55a381f47f493a67d242483f7e1c4e53973a0eb747d56ef0f",
+      "upstream_lf_sha256": "e921ebfad63b31b55a381f47f493a67d242483f7e1c4e53973a0eb747d56ef0f",
+      "result": "identical"
+    },
+    {
+      "path": "INSTALL",
+      "uzengine_blob": "f240cbe0383572b1c6978fafae85f37951e6dc08",
+      "upstream_sha256": "c6b59b46780d190f65d6547d3673260bb0bc230352e811f9e3106fcd91909a7a",
+      "upstream_lf_sha256": "b90008e8d53b3027fa3e7be02203eec5e0acea39e60511297d3b630f0637078e",
+      "result": "line-endings"
+    },
+    {
+      "path": "LICENSE",
+      "uzengine_blob": "4b1b23357f9685fb6b6291aa33489fc9fe1c122c",
+      "upstream_sha256": "d678c20826e1392578508e1c78649a1e3c31bda05ef4388d967dbd654461b140",
+      "upstream_lf_sha256": "d678c20826e1392578508e1c78649a1e3c31bda05ef4388d967dbd654461b140",
+      "result": "identical"
+    },
+    {
+      "path": "README.md",
+      "uzengine_blob": "262f867e5cdb59cbd7d147f6f7e876cd87868176",
+      "upstream_sha256": "d6ea8fd52d4e3194edf0b1cead3f55e9cd75130a192d52e9cd9aae87c1aa5254",
+      "upstream_lf_sha256": "cca571021dc1066335df45e4066f6a7bbae3df99f331b6bbd1886c03883cdbc4",
+      "result": "line-endings"
+    },
+    {
+      "path": "cmake/ide.cmake",
+      "uzengine_blob": "a0656a5e8d791d6af74740a2f67030cec4af0c33",
+      "upstream_sha256": "2f7b9b2a4637a699020402908b6cc0de76f159a07f8f8304d7f44ec6be08d2cf",
+      "upstream_lf_sha256": "2f7b9b2a4637a699020402908b6cc0de76f159a07f8f8304d7f44ec6be08d2cf",
+      "result": "identical"
+    },
+    {
+      "path": "cmake/pch.h.in",
+      "uzengine_blob": "0592ee9def1eda8c790a1cca8cd58ed1546d5931",
+      "upstream_sha256": "b8f6631912edfa081afe62a62a8b014eb85665561087ba8b4d0ba510f82be52b",
+      "upstream_lf_sha256": "b8f6631912edfa081afe62a62a8b014eb85665561087ba8b4d0ba510f82be52b",
+      "result": "identical"
+    },
+    {
+      "path": "cmake/spdlog.pc.in",
+      "uzengine_blob": "ffab5d6f85215f9535ea91061573f0a8c612898b",
+      "upstream_sha256": "479c0d19341a6903ae042944b2e6a062c92ca9685fcdad362d1dec82ac6dc568",
+      "upstream_lf_sha256": "479c0d19341a6903ae042944b2e6a062c92ca9685fcdad362d1dec82ac6dc568",
+      "result": "identical"
+    },
+    {
+      "path": "cmake/spdlogCPack.cmake",
+      "uzengine_blob": "58bf40130af64a35fb1c578fc3ab4bbf96f6c7bc",
+      "upstream_sha256": "e2482deb8541c34211f7e37d18faad0366b58ea319e9d1f8f2ab8fd1854ebcf6",
+      "upstream_lf_sha256": "e2482deb8541c34211f7e37d18faad0366b58ea319e9d1f8f2ab8fd1854ebcf6",
+      "result": "identical"
+    },
+    {
+      "path": "cmake/spdlogConfig.cmake.in",
+      "uzengine_blob": "d8a3ac1643479c0ca7af2587c2cc675b061b649a",
+      "upstream_sha256": "e29707bb0c6e208c7998cc4cc23eeafcad9362fb322b8b9c985ad9f1b0bc2c9b",
+      "upstream_lf_sha256": "b5e2a31820d8054fe7610412728eba49cfbf4f440bccdc9f53f77af1365ef68a",
+      "result": "line-endings"
+    },
+    {
+      "path": "cmake/utils.cmake",
+      "uzengine_blob": "8926657c9a5e16353cb43ecf5ab0c98d4eb3bd6f",
+      "upstream_sha256": "7de5cc47f4a9339f8ffc08b39f4a7a02105a4b7122aed1fa81de8d943de729a5",
+      "upstream_lf_sha256": "7de5cc47f4a9339f8ffc08b39f4a7a02105a4b7122aed1fa81de8d943de729a5",
+      "result": "identical"
+    },
+    {
+      "path": "cmake/version.rc.in",
+      "uzengine_blob": "a86c1385393e9f5c3140751c1075e3fda029629b",
+      "upstream_sha256": "19f63b85700122bcae8e32c1bd44e8c0bef9a5696443d1f26f504cbe6dc7067d",
+      "upstream_lf_sha256": "19f63b85700122bcae8e32c1bd44e8c0bef9a5696443d1f26f504cbe6dc7067d",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/async.h",
+      "uzengine_blob": "92fcd9a7da104e38d82987a6cc90d03019199e41",
+      "upstream_sha256": "3ddaaba57d2f757d6cb09568fe1823949e45426d73f6baeb4ca8d8a2fe78121b",
+      "upstream_lf_sha256": "3ddaaba57d2f757d6cb09568fe1823949e45426d73f6baeb4ca8d8a2fe78121b",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/async_logger-inl.h",
+      "uzengine_blob": "cde73f90b45053f5df32b2f224729517eb899570",
+      "upstream_sha256": "c298acfd85cd1ad21c0ff0a3cc930746174d4945f0844dcd6ca8b842ee9a22ce",
+      "upstream_lf_sha256": "c298acfd85cd1ad21c0ff0a3cc930746174d4945f0844dcd6ca8b842ee9a22ce",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/async_logger.h",
+      "uzengine_blob": "be361538437b8e2da61b09aacdfd0ba1411e1582",
+      "upstream_sha256": "5e3219c74c29dee0b04a8c72ae6568e6d44999071f4416453a01514eccd21b64",
+      "upstream_lf_sha256": "5e3219c74c29dee0b04a8c72ae6568e6d44999071f4416453a01514eccd21b64",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/cfg/argv.h",
+      "uzengine_blob": "7de2f83e7d2a5fa9dec8a90e8e0d4ec79c9620ed",
+      "upstream_sha256": "6f9aa40647fda08e2ad776598a7b5de1d1596ec9a73512c90c69504f6e347a2d",
+      "upstream_lf_sha256": "6f9aa40647fda08e2ad776598a7b5de1d1596ec9a73512c90c69504f6e347a2d",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/cfg/env.h",
+      "uzengine_blob": "47bf61c721e14a8141672661cf79ca460133837c",
+      "upstream_sha256": "d2afd153fe8a1b2826feb60ec62ea42811d1ca085471fda238d002fedf5bb1bc",
+      "upstream_lf_sha256": "d2afd153fe8a1b2826feb60ec62ea42811d1ca085471fda238d002fedf5bb1bc",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/cfg/helpers-inl.h",
+      "uzengine_blob": "6ed869558bd68193811ef91bfa83694627b262e4",
+      "upstream_sha256": "1d43f8134b35efd52f6e3387be03602d3c85ca6df2dceab0313b660c37d1df90",
+      "upstream_lf_sha256": "1d43f8134b35efd52f6e3387be03602d3c85ca6df2dceab0313b660c37d1df90",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/cfg/helpers.h",
+      "uzengine_blob": "d09a1e97840ccd10b03c91104f174a3f41b048c3",
+      "upstream_sha256": "5134c03ca4795ed4e998a2249793b1917989bd2199ff66c689ef48fd9a827bfe",
+      "upstream_lf_sha256": "5134c03ca4795ed4e998a2249793b1917989bd2199ff66c689ef48fd9a827bfe",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/common-inl.h",
+      "uzengine_blob": "f35901c5a194243b69446b8913492bba47658edb",
+      "upstream_sha256": "e170ca1af147a885142c8afdf29722ae52a40416dfd6b666758b39b5b5588d62",
+      "upstream_lf_sha256": "e170ca1af147a885142c8afdf29722ae52a40416dfd6b666758b39b5b5588d62",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/common.h",
+      "uzengine_blob": "20dbca453ebe704896fb1504193df6376b3a9b88",
+      "upstream_sha256": "ddf4fa8ee4687f364086c3f3bca3b9113df3622916c67776594d231418102143",
+      "upstream_lf_sha256": "ddf4fa8ee4687f364086c3f3bca3b9113df3622916c67776594d231418102143",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/backtracer-inl.h",
+      "uzengine_blob": "baa06b6afcb031d341a437e40e6b91e1385eed50",
+      "upstream_sha256": "9b2795b78571295776003345d7e2b9f264fa71fabb7a15cda7b049464a2d24c3",
+      "upstream_lf_sha256": "9b2795b78571295776003345d7e2b9f264fa71fabb7a15cda7b049464a2d24c3",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/backtracer.h",
+      "uzengine_blob": "f9eb4b43cd09e2e7a5c059e1441d8fb6a07f0e17",
+      "upstream_sha256": "d4d613badbe01d67bfaefaba0a7a934f0e5f5eb3f18096e5cba54ab2fd4da883",
+      "upstream_lf_sha256": "d4d613badbe01d67bfaefaba0a7a934f0e5f5eb3f18096e5cba54ab2fd4da883",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/circular_q.h",
+      "uzengine_blob": "29e9d255f4f4c5ffba08f3ccb234688698035be7",
+      "upstream_sha256": "0bc4025c81425023f4d58711d6aa6231a55ee606bb1fc88f4fb3e655e807e265",
+      "upstream_lf_sha256": "0bc4025c81425023f4d58711d6aa6231a55ee606bb1fc88f4fb3e655e807e265",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/console_globals.h",
+      "uzengine_blob": "9c552106a4e3c3cdfab1cddb857969c126f5a024",
+      "upstream_sha256": "3dced73dc2bc5eacc678eec34af6458f910740c8949fd1bc8449808d1345467a",
+      "upstream_lf_sha256": "3dced73dc2bc5eacc678eec34af6458f910740c8949fd1bc8449808d1345467a",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/file_helper-inl.h",
+      "uzengine_blob": "c7260ec3b042012df0ec75e9845833357b2fa825",
+      "upstream_sha256": "cb74c68b416fd94ef738b12e93af4bb571b69f2bcc3b6987cc7ee0a1fbee0547",
+      "upstream_lf_sha256": "cb74c68b416fd94ef738b12e93af4bb571b69f2bcc3b6987cc7ee0a1fbee0547",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/file_helper.h",
+      "uzengine_blob": "aba0be476fde3c891e6b94ca77efccbf2c012143",
+      "upstream_sha256": "e23822a24c9f913328ceed3a7176e832114ec65abccf802bac280852b288415b",
+      "upstream_lf_sha256": "e23822a24c9f913328ceed3a7176e832114ec65abccf802bac280852b288415b",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/fmt_helper.h",
+      "uzengine_blob": "b629b894d79fd62ff7fccced55ceafcdb66b9da2",
+      "upstream_sha256": "7a2e655f077c1f9ceb7d7a69214594c3721702b691b7a301bad96f0affd45d06",
+      "upstream_lf_sha256": "7a2e655f077c1f9ceb7d7a69214594c3721702b691b7a301bad96f0affd45d06",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/log_msg-inl.h",
+      "uzengine_blob": "3a23dcf1797a1b8e2d7723bc7ba3212394f4f2fc",
+      "upstream_sha256": "7ec7033b384263180c041a4ab627cc8081d7550af6a4533f49334af5fce2d4f7",
+      "upstream_lf_sha256": "7ec7033b384263180c041a4ab627cc8081d7550af6a4533f49334af5fce2d4f7",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/log_msg.h",
+      "uzengine_blob": "64b4bf6f46d3d0f1562e3f42ce7f4ef5c5b35f75",
+      "upstream_sha256": "7e9a3b7b89646cc1ad36d21de8e7d584f81dfa642760c12f40385dc0db65e3b0",
+      "upstream_lf_sha256": "7e9a3b7b89646cc1ad36d21de8e7d584f81dfa642760c12f40385dc0db65e3b0",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/log_msg_buffer-inl.h",
+      "uzengine_blob": "45c33835c10abb51e869fa2c9de1ce508a901075",
+      "upstream_sha256": "e41147aa63dfb99b1b2285a88740d9e7c238099ae3518b2e88798e7e5991932a",
+      "upstream_lf_sha256": "e41147aa63dfb99b1b2285a88740d9e7c238099ae3518b2e88798e7e5991932a",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/log_msg_buffer.h",
+      "uzengine_blob": "c926cfaa817641a7d30eccbb6faee11e066a2644",
+      "upstream_sha256": "5a79fdfa5429d23286c58926a53de3ee83b577db21a4cccbd104ceda8ded7c50",
+      "upstream_lf_sha256": "5a79fdfa5429d23286c58926a53de3ee83b577db21a4cccbd104ceda8ded7c50",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/mpmc_blocking_q.h",
+      "uzengine_blob": "f153f6c2a78a3b35b177b4fe3cd4524fad387e1f",
+      "upstream_sha256": "66ed3083a98e5cc142aa8d9dc18ce8de5ff32f82382386546f6ff302a01fc6c6",
+      "upstream_lf_sha256": "66ed3083a98e5cc142aa8d9dc18ce8de5ff32f82382386546f6ff302a01fc6c6",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/null_mutex.h",
+      "uzengine_blob": "e3b32204158df4b4a6c5d40953cb22cd497f6212",
+      "upstream_sha256": "1377fde4b54417dca1b3d162d0f18c35f9418e1db91a333949952f1c877127b1",
+      "upstream_lf_sha256": "1377fde4b54417dca1b3d162d0f18c35f9418e1db91a333949952f1c877127b1",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/os-inl.h",
+      "uzengine_blob": "92dfe129ee158e66c64fcef32c7670ca65247e13",
+      "upstream_sha256": "f32d377e7b58e53b1d601a7e0fef5e2c1d137592c25df3bb4adbf89e015018ef",
+      "upstream_lf_sha256": "f32d377e7b58e53b1d601a7e0fef5e2c1d137592c25df3bb4adbf89e015018ef",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/os.h",
+      "uzengine_blob": "8bb8d14ac3f4d4e3a764f11cd577e35445ba2715",
+      "upstream_sha256": "dc6af3c0fae5b49d8a703f6ef5432f3f25cd061290e81dd0d80441ba5719cf07",
+      "upstream_lf_sha256": "dc6af3c0fae5b49d8a703f6ef5432f3f25cd061290e81dd0d80441ba5719cf07",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/periodic_worker-inl.h",
+      "uzengine_blob": "c12e9e123869a53837b9f8fc007c9bcce4710b27",
+      "upstream_sha256": "72c338426a4cd5f1a387d222a867b575f01f8d1968326f5f30a82ff5071bd681",
+      "upstream_lf_sha256": "72c338426a4cd5f1a387d222a867b575f01f8d1968326f5f30a82ff5071bd681",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/periodic_worker.h",
+      "uzengine_blob": "2f59bb33aae342eb4087529c208eaaf444679467",
+      "upstream_sha256": "2773bf8766655b9ba5b53c9a84b2abcd4a4f02ec5b55363740668534eaa217cc",
+      "upstream_lf_sha256": "2773bf8766655b9ba5b53c9a84b2abcd4a4f02ec5b55363740668534eaa217cc",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/registry-inl.h",
+      "uzengine_blob": "576eebe08fbd170792806b36bc085b9792774ac0",
+      "upstream_sha256": "52163509eb3f64e0b014646611a250a0ee01674fe85f4efdfd4afda0e003cb12",
+      "upstream_lf_sha256": "52163509eb3f64e0b014646611a250a0ee01674fe85f4efdfd4afda0e003cb12",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/registry.h",
+      "uzengine_blob": "576803eebdc197d54e4cb0bb995d68f1f61fdaec",
+      "upstream_sha256": "a5ce3c5a8bc019e7d8508268b222136c01f1e81360df67f104f21bf4b49e4f4b",
+      "upstream_lf_sha256": "a5ce3c5a8bc019e7d8508268b222136c01f1e81360df67f104f21bf4b49e4f4b",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/synchronous_factory.h",
+      "uzengine_blob": "4bd5a51c86831e1808407c8cd5a34db36e95038c",
+      "upstream_sha256": "3fcfcc28aa4edc2998e9e00d218362600605b89e0c58ebf2c7267950412e1cdc",
+      "upstream_lf_sha256": "3fcfcc28aa4edc2998e9e00d218362600605b89e0c58ebf2c7267950412e1cdc",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/tcp_client-windows.h",
+      "uzengine_blob": "956f9f9b62c95f890ef891129ee52baa152b2c09",
+      "upstream_sha256": "3553c39bc4a1a28e43ee05ab79f11762ba829847358e1f564bf4f8a96c683d73",
+      "upstream_lf_sha256": "3553c39bc4a1a28e43ee05ab79f11762ba829847358e1f564bf4f8a96c683d73",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/tcp_client.h",
+      "uzengine_blob": "a6f9b80dbf3f35f5b463e98ab328cd5fd64a8ed7",
+      "upstream_sha256": "6977deb87db2535da5afb0013644386bcf32e49b64655c31344f5835f1324029",
+      "upstream_lf_sha256": "6977deb87db2535da5afb0013644386bcf32e49b64655c31344f5835f1324029",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/thread_pool-inl.h",
+      "uzengine_blob": "3fefc6762a466205a3baaf52204f45615bb2ed65",
+      "upstream_sha256": "b7042c70da4d1c0398ddc74fc12bb5eec746647c18857ace1c6f425b5cf9435e",
+      "upstream_lf_sha256": "b7042c70da4d1c0398ddc74fc12bb5eec746647c18857ace1c6f425b5cf9435e",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/thread_pool.h",
+      "uzengine_blob": "b9303cf8d7927bb22812c1c04a48f360e4e8148f",
+      "upstream_sha256": "432bccde480274c911460d7ba30cda62afefd6fcc2cc57529b5f44d68324a62e",
+      "upstream_lf_sha256": "432bccde480274c911460d7ba30cda62afefd6fcc2cc57529b5f44d68324a62e",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/udp_client-windows.h",
+      "uzengine_blob": "fd60f280e7081e377b1b9e714fcf78f80b3ad8af",
+      "upstream_sha256": "475721551d61f3749fe008762cf0359f67d6bd90383208749e30360bfa190d1d",
+      "upstream_lf_sha256": "475721551d61f3749fe008762cf0359f67d6bd90383208749e30360bfa190d1d",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/udp_client.h",
+      "uzengine_blob": "8d9c71faba370e84c59e2a040a0fb38daffed942",
+      "upstream_sha256": "53e10fa54ef911f254fa485ff9e6f8047c9c7659f5b345f87a4a590831832903",
+      "upstream_lf_sha256": "53e10fa54ef911f254fa485ff9e6f8047c9c7659f5b345f87a4a590831832903",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/details/windows_include.h",
+      "uzengine_blob": "10e04fc4d8963bef269c2e4381e29764a311ed04",
+      "upstream_sha256": "ee78df4fa66a4e41ed97b47305953f9af2140718c5fab14d921ad8b195e9931b",
+      "upstream_lf_sha256": "ee78df4fa66a4e41ed97b47305953f9af2140718c5fab14d921ad8b195e9931b",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bin_to_hex.h",
+      "uzengine_blob": "57ef3020f1e08742e230d0c2b44a2d43c11268ec",
+      "upstream_sha256": "5609bbf846807ba9a18330fdc0141d91a067c0e44b760b97693c2a88893a5635",
+      "upstream_lf_sha256": "5609bbf846807ba9a18330fdc0141d91a067c0e44b760b97693c2a88893a5635",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/args.h",
+      "uzengine_blob": "5e5f40f9ebf75c68ea11fbed9b48851c3f734566",
+      "upstream_sha256": "6e0bf8ffbd904e6ef525cdce8e6e00312ce5d14f616cea5d88132606ca0384c4",
+      "upstream_lf_sha256": "6e0bf8ffbd904e6ef525cdce8e6e00312ce5d14f616cea5d88132606ca0384c4",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/base.h",
+      "uzengine_blob": "620456b417405bf71b022e9164bb0765e67d8d90",
+      "upstream_sha256": "892fcc48f31a80382f0e304e427d68d2fd62a2d78aef142020199120db5269fb",
+      "upstream_lf_sha256": "892fcc48f31a80382f0e304e427d68d2fd62a2d78aef142020199120db5269fb",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/chrono.h",
+      "uzengine_blob": "9fbeeed6798e73f4f3f076894385dfcb232c9287",
+      "upstream_sha256": "f8e2a69bd97bc5b90c9af7fb87e010775b695d487a77e8d8cbe624e57bd2f9bf",
+      "upstream_lf_sha256": "f8e2a69bd97bc5b90c9af7fb87e010775b695d487a77e8d8cbe624e57bd2f9bf",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/color.h",
+      "uzengine_blob": "2cbc53ca3048f5cbd232cb3077c99f1ff1321726",
+      "upstream_sha256": "f88bf0c4833caed3a7f01b6d633c7b259741a26119e84c651ac1e31cfc980b72",
+      "upstream_lf_sha256": "f88bf0c4833caed3a7f01b6d633c7b259741a26119e84c651ac1e31cfc980b72",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/compile.h",
+      "uzengine_blob": "64eb7a20dc8134841b4e36d1056b446fac0e5362",
+      "upstream_sha256": "636c13842acce0b42b378e65fe67a69e5635e8225c9701975e5b326a97be5cb8",
+      "upstream_lf_sha256": "636c13842acce0b42b378e65fe67a69e5635e8225c9701975e5b326a97be5cb8",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/core.h",
+      "uzengine_blob": "8ca735f0c00498a19b7bcc44493b1417faf4fb8c",
+      "upstream_sha256": "b2b6692145b11c7c2774db106078c97575a47d18e80c7783c68566475325ebb4",
+      "upstream_lf_sha256": "b2b6692145b11c7c2774db106078c97575a47d18e80c7783c68566475325ebb4",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/fmt.license.rst",
+      "uzengine_blob": "1cd1ef92696b65b2ecb0e560e622f0a0e869dcf3",
+      "upstream_sha256": "07580f2a3b35709ce703d523f447b242f6dfec7582a8c0df102c7fa2849375f8",
+      "upstream_lf_sha256": "07580f2a3b35709ce703d523f447b242f6dfec7582a8c0df102c7fa2849375f8",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/format-inl.h",
+      "uzengine_blob": "945cb912a6014813864ef8c92bc20e28339f77ab",
+      "upstream_sha256": "e7baf108b84e89b29915bb35733540f8f4262cd8f4b41c15754eed4d2f185f61",
+      "upstream_lf_sha256": "e7baf108b84e89b29915bb35733540f8f4262cd8f4b41c15754eed4d2f185f61",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/format.h",
+      "uzengine_blob": "4a6530072f875b752fe7c3a9b3b0285260d17c63",
+      "upstream_sha256": "b4c65350362bf40e76a8e6b450587d912c7081b6eafeafaf3d7bcf53153e17fc",
+      "upstream_lf_sha256": "b4c65350362bf40e76a8e6b450587d912c7081b6eafeafaf3d7bcf53153e17fc",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/os.h",
+      "uzengine_blob": "94d730de281ec9a5af1a02bafe5fdea67f6734b7",
+      "upstream_sha256": "45d4e84be4e84a128442f04eda06e1305c8e02c61166854a3b8b348194d35da5",
+      "upstream_lf_sha256": "45d4e84be4e84a128442f04eda06e1305c8e02c61166854a3b8b348194d35da5",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/ostream.h",
+      "uzengine_blob": "bf2371b7998488601cd1b7b297e06d8a14a8933b",
+      "upstream_sha256": "742416a6a88286609887fa512c4423820764aafbb723a42a825f3193cb52b4f0",
+      "upstream_lf_sha256": "742416a6a88286609887fa512c4423820764aafbb723a42a825f3193cb52b4f0",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/printf.h",
+      "uzengine_blob": "cc066d8c07c7a49c194400eceea928c850e558bc",
+      "upstream_sha256": "afddb422a86125e04a7260bb0f0ae3423ea8d591181ed5d4ef60b7a5d068993a",
+      "upstream_lf_sha256": "afddb422a86125e04a7260bb0f0ae3423ea8d591181ed5d4ef60b7a5d068993a",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/ranges.h",
+      "uzengine_blob": "36b38e29636567153b6d368f60fecf3383a90a8e",
+      "upstream_sha256": "ccaf61c9b5937e0fa97737fb047121c5fca9db34de516b8edfc1d913583e3c8e",
+      "upstream_lf_sha256": "ccaf61c9b5937e0fa97737fb047121c5fca9db34de516b8edfc1d913583e3c8e",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/std.h",
+      "uzengine_blob": "184c6d26d605f47518ef1f420b1ae7a698807445",
+      "upstream_sha256": "3f06cdf32774b9e6915e9762411f5f4de8b8ba5660adccbdea514be7f0b23826",
+      "upstream_lf_sha256": "3f06cdf32774b9e6915e9762411f5f4de8b8ba5660adccbdea514be7f0b23826",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/bundled/xchar.h",
+      "uzengine_blob": "9334b87fdc13cb8600c4392eefd08e9ef050c024",
+      "upstream_sha256": "f0903d522c64faaee2c374a0b2063ac3e43d0b5006dfd3411f0e5dccd8ff6062",
+      "upstream_lf_sha256": "f0903d522c64faaee2c374a0b2063ac3e43d0b5006dfd3411f0e5dccd8ff6062",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/chrono.h",
+      "uzengine_blob": "4da092b862009dbc389a93c2f3bb579e57e10b7b",
+      "upstream_sha256": "f57be9fd2c4c39dc7ff73f736c481eaa418723ccc7adeb16b3905a0f4a7b534e",
+      "upstream_lf_sha256": "f57be9fd2c4c39dc7ff73f736c481eaa418723ccc7adeb16b3905a0f4a7b534e",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/compile.h",
+      "uzengine_blob": "795e6a3d023cf60c401a8705b2064027fa11fc26",
+      "upstream_sha256": "6ecd7b2ae593e3b7b00d577ad035c0598c29c2df3947c21102ec110b2a33b5e9",
+      "upstream_lf_sha256": "6ecd7b2ae593e3b7b00d577ad035c0598c29c2df3947c21102ec110b2a33b5e9",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/fmt.h",
+      "uzengine_blob": "6b1936d397ec2fe6c1f075e1e359237a603cde0e",
+      "upstream_sha256": "6fc4048665172d38d835203d757aa30d4136c622d26d26e881f72f96b86aa556",
+      "upstream_lf_sha256": "6fc4048665172d38d835203d757aa30d4136c622d26d26e881f72f96b86aa556",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/ostr.h",
+      "uzengine_blob": "a9e50e1f531f77893dc989057d5ab3c123870513",
+      "upstream_sha256": "d0437444e2da75ee732e392ce96e8f72d1db5bf9a6a79f0a1d36dbdd93ce1f1e",
+      "upstream_lf_sha256": "d0437444e2da75ee732e392ce96e8f72d1db5bf9a6a79f0a1d36dbdd93ce1f1e",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/ranges.h",
+      "uzengine_blob": "117a9e46e7a69ceb543e5f48d1581754c6db34b0",
+      "upstream_sha256": "7ef5f93f56f8f39ecda80b070bf1b3a93530832b6f69415c99acb72bd33a80ac",
+      "upstream_lf_sha256": "7ef5f93f56f8f39ecda80b070bf1b3a93530832b6f69415c99acb72bd33a80ac",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/std.h",
+      "uzengine_blob": "4a3b828c0413b44431f8a21eaf822479133740c8",
+      "upstream_sha256": "4a72a66fa67040b429dd791b10e75b21d5c18017ababcab808ef09900c727484",
+      "upstream_lf_sha256": "4a72a66fa67040b429dd791b10e75b21d5c18017ababcab808ef09900c727484",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fmt/xchar.h",
+      "uzengine_blob": "8ce1798830d9ee6fbae94226e97a0b8ba6ab42ed",
+      "upstream_sha256": "0f5db8046e2c81bca4d2dd0245702366d5d4c51131a25cb0b79e5001a5002177",
+      "upstream_lf_sha256": "0f5db8046e2c81bca4d2dd0245702366d5d4c51131a25cb0b79e5001a5002177",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/formatter.h",
+      "uzengine_blob": "4d482f827e671c7acec2b4aaa9fa2dd0bc8f2dbb",
+      "upstream_sha256": "213631628274dc6c26fcc9a3bed36a3a9a83edea5e6b9f027baea58ca9c5eff3",
+      "upstream_lf_sha256": "213631628274dc6c26fcc9a3bed36a3a9a83edea5e6b9f027baea58ca9c5eff3",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/fwd.h",
+      "uzengine_blob": "647b16bf0fa41f9f5806f38b94eaa136d4d6befc",
+      "upstream_sha256": "246d2754fb77dcdcb7ed4be2328944659fd154599ee09df865db5cdb33cbe349",
+      "upstream_lf_sha256": "246d2754fb77dcdcb7ed4be2328944659fd154599ee09df865db5cdb33cbe349",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/logger-inl.h",
+      "uzengine_blob": "768cee3711e71ccc28d277357291735f51421b71",
+      "upstream_sha256": "1507122f5c8bc7428fd5a606c29bc0fff42b6f55c602311d1891e45d23afb7a7",
+      "upstream_lf_sha256": "1507122f5c8bc7428fd5a606c29bc0fff42b6f55c602311d1891e45d23afb7a7",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/logger.h",
+      "uzengine_blob": "9db3c6b3976db0114c614bf196597291eb7182de",
+      "upstream_sha256": "e6b8ba92b7c6b83b816871f9a663cab4c1c21da3c5b252904f3dae412dfad85d",
+      "upstream_lf_sha256": "e6b8ba92b7c6b83b816871f9a663cab4c1c21da3c5b252904f3dae412dfad85d",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/mdc.h",
+      "uzengine_blob": "2f2665a7819cc236be6f22a674f575d9c638b497",
+      "upstream_sha256": "c3516a85d687f806080d81d0b63cb0353665b26d78f6cdc2c51e526ae9c492d8",
+      "upstream_lf_sha256": "c3516a85d687f806080d81d0b63cb0353665b26d78f6cdc2c51e526ae9c492d8",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/pattern_formatter-inl.h",
+      "uzengine_blob": "5204f58f01af2e708953fc20e74ab12df22665e2",
+      "upstream_sha256": "7e05fab1303d952801143118e33525a50d77304b3b3fec117ccc8637c85135fb",
+      "upstream_lf_sha256": "7e05fab1303d952801143118e33525a50d77304b3b3fec117ccc8637c85135fb",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/pattern_formatter.h",
+      "uzengine_blob": "0658161c9b2b24fa24f8b65fa4065448dea28806",
+      "upstream_sha256": "87fffd034b0a2139a6373ba04d9f88ae57cfac3865138e0859f19a9e5858da43",
+      "upstream_lf_sha256": "87fffd034b0a2139a6373ba04d9f88ae57cfac3865138e0859f19a9e5858da43",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/android_sink.h",
+      "uzengine_blob": "c9e1d27b820f4853cdccbd4c87cc68d3cd3bbdaa",
+      "upstream_sha256": "96f8c917be604bfc0cd4a84e6e9bebd790c9828170f921a50f0f013a653cda8d",
+      "upstream_lf_sha256": "96f8c917be604bfc0cd4a84e6e9bebd790c9828170f921a50f0f013a653cda8d",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/ansicolor_sink-inl.h",
+      "uzengine_blob": "1d2c5447ca7c8353ce4335a53fe770e34928bad3",
+      "upstream_sha256": "62a5e7c2522606660d4faa683d206d748c94cdcd6c72540ce6ac46b28a153958",
+      "upstream_lf_sha256": "62a5e7c2522606660d4faa683d206d748c94cdcd6c72540ce6ac46b28a153958",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/ansicolor_sink.h",
+      "uzengine_blob": "542888fbd20df26ac57a6732edf6be270783ac01",
+      "upstream_sha256": "c6078602b09b78f781e4a18b966e2a3ea2dbea5c9a84a77adbe1e27557e85de7",
+      "upstream_lf_sha256": "c6078602b09b78f781e4a18b966e2a3ea2dbea5c9a84a77adbe1e27557e85de7",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/base_sink-inl.h",
+      "uzengine_blob": "4c3625e53bb2a8905379fbd6a67330a84190c3c3",
+      "upstream_sha256": "7fe3e5bb453018d03e2b850384b18f8c00a1b64be363bb22c4b9b92082d9bcc7",
+      "upstream_lf_sha256": "7fe3e5bb453018d03e2b850384b18f8c00a1b64be363bb22c4b9b92082d9bcc7",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/base_sink.h",
+      "uzengine_blob": "c4fb4fcef65bb3e8230ffc6d6be991ab7dbe71d1",
+      "upstream_sha256": "86186e0d15535b94270c94ab5eeb798d47dfe7330f4e622bf7c66dc46c820f37",
+      "upstream_lf_sha256": "86186e0d15535b94270c94ab5eeb798d47dfe7330f4e622bf7c66dc46c820f37",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/basic_file_sink-inl.h",
+      "uzengine_blob": "8aec33c75f421c68b10ab2b9ffcec07a09bcf21d",
+      "upstream_sha256": "613295eaac45babf5cd5e7bec262763a5214071eaeab58c5598ac60620285c6c",
+      "upstream_lf_sha256": "613295eaac45babf5cd5e7bec262763a5214071eaeab58c5598ac60620285c6c",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/basic_file_sink.h",
+      "uzengine_blob": "23ac6c1ac4b5d6f08489fa979f439beab557a32b",
+      "upstream_sha256": "e4693c382833fc13d6adbdc68d602d479c72225a463892bc4fd6fde6475edd4c",
+      "upstream_lf_sha256": "e4693c382833fc13d6adbdc68d602d479c72225a463892bc4fd6fde6475edd4c",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/callback_sink.h",
+      "uzengine_blob": "8f0c8d4118929b080326862090a50f42646ee3f6",
+      "upstream_sha256": "568eed97d5c29f942d811afe8614ceae6c110b74ffa4535123a5bd9db31f263f",
+      "upstream_lf_sha256": "568eed97d5c29f942d811afe8614ceae6c110b74ffa4535123a5bd9db31f263f",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/daily_file_sink.h",
+      "uzengine_blob": "615c9f7be3dd74281c3e46112a508aacb814657a",
+      "upstream_sha256": "ee32cbdd80b9fe51abe04ae290d199c46cec2ecbf35e7a2e796daf712b8520d2",
+      "upstream_lf_sha256": "ee32cbdd80b9fe51abe04ae290d199c46cec2ecbf35e7a2e796daf712b8520d2",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/dist_sink.h",
+      "uzengine_blob": "69c4971c95344bfef79befecfa26e89f6b9df571",
+      "upstream_sha256": "fa6b8b53368b3cc9490046f1a207c3852835f0a00f6f677005c9e52799e86247",
+      "upstream_lf_sha256": "fa6b8b53368b3cc9490046f1a207c3852835f0a00f6f677005c9e52799e86247",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/dup_filter_sink.h",
+      "uzengine_blob": "0588d77217238f3b26915a53a87af7664139d4ce",
+      "upstream_sha256": "aded06d32de86861be0b07a7c1561cd1a9f1df80cdbc0eb15c4f9735c26cc309",
+      "upstream_lf_sha256": "aded06d32de86861be0b07a7c1561cd1a9f1df80cdbc0eb15c4f9735c26cc309",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/hourly_file_sink.h",
+      "uzengine_blob": "3e618725baedb498c5b4979275b7bfc03544a1ab",
+      "upstream_sha256": "aa31439c3c3072e9b77acc2800005b586f6b6cdc2d790e0783050b8627a79411",
+      "upstream_lf_sha256": "aa31439c3c3072e9b77acc2800005b586f6b6cdc2d790e0783050b8627a79411",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/kafka_sink.h",
+      "uzengine_blob": "91e987865a229d717db41b220e1ffcd86a06b307",
+      "upstream_sha256": "9bb10a5ea347f2400baadf0d794d5045169fae77388132bc0cf3dcf30ec00c08",
+      "upstream_lf_sha256": "9bb10a5ea347f2400baadf0d794d5045169fae77388132bc0cf3dcf30ec00c08",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/mongo_sink.h",
+      "uzengine_blob": "c5b38ab958453fd1ae2d33f5997f7d5656b02e4b",
+      "upstream_sha256": "df9a5c34bef34a9a55f4bec51f98c3f0527fdc61bc8ee247a9b4f4149e8ff0f0",
+      "upstream_lf_sha256": "df9a5c34bef34a9a55f4bec51f98c3f0527fdc61bc8ee247a9b4f4149e8ff0f0",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/msvc_sink.h",
+      "uzengine_blob": "1fe9892c40fdfba3e3c08d899cdc67b2f50aa53b",
+      "upstream_sha256": "2c9107975cc29f89880846dce6939f2e8670a0b4aacf36a83cf08c8190475402",
+      "upstream_lf_sha256": "2c9107975cc29f89880846dce6939f2e8670a0b4aacf36a83cf08c8190475402",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/null_sink.h",
+      "uzengine_blob": "74530b5b1a32a5b7e681b68d54e1603b9a8fc1ae",
+      "upstream_sha256": "75d92f19d80ba59e15c8607e4c98a86a14e238e5ca9b5afd6150dcf9e86d10d6",
+      "upstream_lf_sha256": "75d92f19d80ba59e15c8607e4c98a86a14e238e5ca9b5afd6150dcf9e86d10d6",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/ostream_sink.h",
+      "uzengine_blob": "6af9dd091e1cc3df8c530f2a9546c775d04c6eeb",
+      "upstream_sha256": "8a444e2537b82d6fe4a87c1162d4eb53f94ceb01acbc8d646828f2b24f869085",
+      "upstream_lf_sha256": "8a444e2537b82d6fe4a87c1162d4eb53f94ceb01acbc8d646828f2b24f869085",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/qt_sinks.h",
+      "uzengine_blob": "ce74f8883367d3d794365525516a83f6bf7355cd",
+      "upstream_sha256": "e3bb4b606187dcfc06ef2abafb0bf285662ed1edc079f5525cd4039e081e5212",
+      "upstream_lf_sha256": "e3bb4b606187dcfc06ef2abafb0bf285662ed1edc079f5525cd4039e081e5212",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/ringbuffer_sink.h",
+      "uzengine_blob": "bcdf0ffca2d8121ccc95f893a1cbf1e92dc71b5e",
+      "upstream_sha256": "69dd445a2519bdc25261f2af884b479a09a54458468f9f351a8333ae6ab370a5",
+      "upstream_lf_sha256": "69dd445a2519bdc25261f2af884b479a09a54458468f9f351a8333ae6ab370a5",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/rotating_file_sink-inl.h",
+      "uzengine_blob": "370fa7c29d2854853e47bba8e7ab082647be46f5",
+      "upstream_sha256": "8dc1c0985be041ac2ec0f155b534b748cd44b3eb33e8836dc849f9314c21d13e",
+      "upstream_lf_sha256": "8dc1c0985be041ac2ec0f155b534b748cd44b3eb33e8836dc849f9314c21d13e",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/rotating_file_sink.h",
+      "uzengine_blob": "522dab63a3b91a96dc6423ef0dc07d6faa7e7dc2",
+      "upstream_sha256": "27fa443b8bd9158f4472e116a05fea37e82b6452b6eb70a4ea78ae0089039142",
+      "upstream_lf_sha256": "27fa443b8bd9158f4472e116a05fea37e82b6452b6eb70a4ea78ae0089039142",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/sink-inl.h",
+      "uzengine_blob": "7ffb33e94b5a78f4519b812a63bb5c0141e24647",
+      "upstream_sha256": "f8fabf0de532bef4788ad59f278afbd3c4187b598f5c856370cdfa3dd564f28a",
+      "upstream_lf_sha256": "f8fabf0de532bef4788ad59f278afbd3c4187b598f5c856370cdfa3dd564f28a",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/sink.h",
+      "uzengine_blob": "9c39522f4c14a49f3b566bb5b203f02dc90f1f63",
+      "upstream_sha256": "75e5c2b43c253cfe7c553077125e3b158e9d71caf2765ad97bb08443ee83b56a",
+      "upstream_lf_sha256": "75e5c2b43c253cfe7c553077125e3b158e9d71caf2765ad97bb08443ee83b56a",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/stdout_color_sinks-inl.h",
+      "uzengine_blob": "74c811309a1109cff08fa2101202d149141a4616",
+      "upstream_sha256": "4267753c6a0f8f8380999fa1445438cde62a62874a6be4555d8bd23245f9e1f7",
+      "upstream_lf_sha256": "4267753c6a0f8f8380999fa1445438cde62a62874a6be4555d8bd23245f9e1f7",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/stdout_color_sinks.h",
+      "uzengine_blob": "9ce26724a4fa3d2dca439d1967aba7e3ff7da1e1",
+      "upstream_sha256": "03700ff3259fc97d2adb52ef5c470cf847bb1d417bf5d74e851c7c1b6212fe0e",
+      "upstream_lf_sha256": "03700ff3259fc97d2adb52ef5c470cf847bb1d417bf5d74e851c7c1b6212fe0e",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/stdout_sinks-inl.h",
+      "uzengine_blob": "74ec1414d16963adbc5ee0fa5665622aad8bb96a",
+      "upstream_sha256": "cd9298408922fcf38b45eec7853cd0e96efac4ca65a8fc0326dcc17189853dfe",
+      "upstream_lf_sha256": "cd9298408922fcf38b45eec7853cd0e96efac4ca65a8fc0326dcc17189853dfe",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/stdout_sinks.h",
+      "uzengine_blob": "0b36c16f9ce6e56408b61620ce47771dfa16a23b",
+      "upstream_sha256": "a7eb6c3e4aedbed13c57ae517cbee30ef62582b3e02e35530123cae58ce1f526",
+      "upstream_lf_sha256": "a7eb6c3e4aedbed13c57ae517cbee30ef62582b3e02e35530123cae58ce1f526",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/syslog_sink.h",
+      "uzengine_blob": "913d41be61cf0124751f4de7dd38a75c4996b731",
+      "upstream_sha256": "92dddbd22c8e62597eaef1d886093df50dbab19763a4d758b394227c68d55596",
+      "upstream_lf_sha256": "92dddbd22c8e62597eaef1d886093df50dbab19763a4d758b394227c68d55596",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/systemd_sink.h",
+      "uzengine_blob": "1ad32ce775216bd9f2130d370fa9f26234207922",
+      "upstream_sha256": "e312d6a5a52dc5acd6321833f18fb6c29a438a1f24ee5dfe3dd29a550f35887f",
+      "upstream_lf_sha256": "e312d6a5a52dc5acd6321833f18fb6c29a438a1f24ee5dfe3dd29a550f35887f",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/tcp_sink.h",
+      "uzengine_blob": "cffd4339aac246799c832a476e8b286566e5deb0",
+      "upstream_sha256": "92092dec86bdc1cfced58bd61a28c6c22cb5cb905050aa416437f9c9eb4a71a1",
+      "upstream_lf_sha256": "92092dec86bdc1cfced58bd61a28c6c22cb5cb905050aa416437f9c9eb4a71a1",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/udp_sink.h",
+      "uzengine_blob": "6f2877190048ac30a124fd2b90dc244f66009da9",
+      "upstream_sha256": "6eb0b04604fa84e63b1bab51539a281a0bf17c912b9b5a5f794efdb0ddab190b",
+      "upstream_lf_sha256": "6eb0b04604fa84e63b1bab51539a281a0bf17c912b9b5a5f794efdb0ddab190b",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/win_eventlog_sink.h",
+      "uzengine_blob": "2c9b582d30ae061908ba975fba7e2ce0d0ec8afc",
+      "upstream_sha256": "4783a96f7b89b19d48c14eea3f82f3ffd659e8faf34a4446659cd0c2d822e39c",
+      "upstream_lf_sha256": "4783a96f7b89b19d48c14eea3f82f3ffd659e8faf34a4446659cd0c2d822e39c",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/wincolor_sink-inl.h",
+      "uzengine_blob": "910115c5d3d6d364024d3598c2dc4068f2d2c8e8",
+      "upstream_sha256": "ed4e3f9ed012bf495044e414e1f921311bba888bc905a515da41ddde35c8c557",
+      "upstream_lf_sha256": "ed4e3f9ed012bf495044e414e1f921311bba888bc905a515da41ddde35c8c557",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/sinks/wincolor_sink.h",
+      "uzengine_blob": "743241c8bc90fd2b1af23ea7729ec85db494d32d",
+      "upstream_sha256": "75a20f219b48c8ff63d2e7a11db9ed748fbc9cef5198e9cf739b889062665aaf",
+      "upstream_lf_sha256": "75a20f219b48c8ff63d2e7a11db9ed748fbc9cef5198e9cf739b889062665aaf",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/spdlog-inl.h",
+      "uzengine_blob": "56f191689cfff5c2abf22f93b173dc70dd9e29d3",
+      "upstream_sha256": "eca55774acb8f0cbe05f18cfa95405fd5ff1ed041cd7372556b2eee39776a5ef",
+      "upstream_lf_sha256": "eca55774acb8f0cbe05f18cfa95405fd5ff1ed041cd7372556b2eee39776a5ef",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/spdlog.h",
+      "uzengine_blob": "681045e190c628597e12295a5957b502c7bab0cd",
+      "upstream_sha256": "54283b3e3bf96c3df22c40caea526ffe0bbf203b5f76a98aa130b91a50487195",
+      "upstream_lf_sha256": "54283b3e3bf96c3df22c40caea526ffe0bbf203b5f76a98aa130b91a50487195",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/stopwatch.h",
+      "uzengine_blob": "54ab3d3b846651a904f2fe41be77b6828742744e",
+      "upstream_sha256": "60f3aaed933185261ae603cc589cd39ebf93ef78321548871d469fb566903c44",
+      "upstream_lf_sha256": "60f3aaed933185261ae603cc589cd39ebf93ef78321548871d469fb566903c44",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/tweakme.h",
+      "uzengine_blob": "d60929878a519a5e0d15498ce13568a57fb552d4",
+      "upstream_sha256": "8e641df000560090a11adb04eff3f1a18e814f6eb8f2a9a9a1f22c0dcc572f82",
+      "upstream_lf_sha256": "8e641df000560090a11adb04eff3f1a18e814f6eb8f2a9a9a1f22c0dcc572f82",
+      "result": "identical"
+    },
+    {
+      "path": "include/spdlog/version.h",
+      "uzengine_blob": "f8e0806cce3903c87b695656b7c3b7af801cf2f1",
+      "upstream_sha256": "a0c15d9295eba580732dada20940a443c53ddb47d8565c730d7af1ee5f3bd712",
+      "upstream_lf_sha256": "a0c15d9295eba580732dada20940a443c53ddb47d8565c730d7af1ee5f3bd712",
+      "result": "identical"
+    },
+    {
+      "path": "src/async.cpp",
+      "uzengine_blob": "77a072992d506ad9ce9d032a52463c32364a5a5d",
+      "upstream_sha256": "1a985a2d65548d858a8171f7eb298d38129e4e554909f77005b4f45fae790121",
+      "upstream_lf_sha256": "1a985a2d65548d858a8171f7eb298d38129e4e554909f77005b4f45fae790121",
+      "result": "identical"
+    },
+    {
+      "path": "src/bundled_fmtlib_format.cpp",
+      "uzengine_blob": "8ec479cb1879126ac36bfbea9bbd28c171ceff82",
+      "upstream_sha256": "26c11b7389cb98f18f054cf39a3c8b64ab180c439c8677772048aeec4d628fe4",
+      "upstream_lf_sha256": "26c11b7389cb98f18f054cf39a3c8b64ab180c439c8677772048aeec4d628fe4",
+      "result": "identical"
+    },
+    {
+      "path": "src/cfg.cpp",
+      "uzengine_blob": "98a96ca2f6e5befdaa1a472bf8760f4c4a383d15",
+      "upstream_sha256": "1734c9cf9421c3daf4d682d5998cb2d3d4f51fb7d2a9be77a2340d0388f7e92e",
+      "upstream_lf_sha256": "1734c9cf9421c3daf4d682d5998cb2d3d4f51fb7d2a9be77a2340d0388f7e92e",
+      "result": "identical"
+    },
+    {
+      "path": "src/color_sinks.cpp",
+      "uzengine_blob": "6ee94327d0feae6a363678408347cc9a31a179a3",
+      "upstream_sha256": "eb5c7d22aaba48eff1e70452c6f55255a4922e05f84abba048790c3ef70c7f2b",
+      "upstream_lf_sha256": "eb5c7d22aaba48eff1e70452c6f55255a4922e05f84abba048790c3ef70c7f2b",
+      "result": "identical"
+    },
+    {
+      "path": "src/file_sinks.cpp",
+      "uzengine_blob": "809883f05ed266eaa53b1214746707f9cc2bfcb8",
+      "upstream_sha256": "02bfd1ee0bbdb51e476933c8da2db30810dbda9ace8a31485dd3aa854805629e",
+      "upstream_lf_sha256": "02bfd1ee0bbdb51e476933c8da2db30810dbda9ace8a31485dd3aa854805629e",
+      "result": "identical"
+    },
+    {
+      "path": "src/spdlog.cpp",
+      "uzengine_blob": "c6c85149b913273c57b7be22324be5a64d60753e",
+      "upstream_sha256": "e357d79d7816fe72f8d5203ee5624d0d73cf8f90076fa08302ce92035ae72ca5",
+      "upstream_lf_sha256": "e357d79d7816fe72f8d5203ee5624d0d73cf8f90076fa08302ce92035ae72ca5",
+      "result": "identical"
+    },
+    {
+      "path": "src/stdout_sinks.cpp",
+      "uzengine_blob": "d9d8ba4f75e6302602d98d463ca8506bdff0d64b",
+      "upstream_sha256": "f28d35429c75493a2cc67857fea53e4ad345666b04cc58082e023e684b91de39",
+      "upstream_lf_sha256": "f28d35429c75493a2cc67857fea53e4ad345666b04cc58082e023e684b91de39",
+      "result": "identical"
+    }
+  ],
+  "not_in_uzengine": []
+}

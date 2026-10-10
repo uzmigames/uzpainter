@@ -96,11 +96,13 @@ def compute_closure(
     include_dirs: Sequence[str],
     cuts: Collection[tuple[str, str]] = (),
     header_only: Collection[str] = (),
+    pair_sources: bool = True,
 ) -> ClosureResult:
     """Compute the include closure of `seeds` under `root`.
 
     `cuts` holds `(source, spelling)` pairs that are not followed (includes a recorded local
-    modification removes). `header_only` lists headers whose `.cpp` is deliberately not added.
+    modification removes). `header_only` lists headers whose `.cpp` is deliberately not added;
+    `pair_sources=False` adds no `.cpp` at all (headers-only selections).
     Seeds missing under `root` raise `FileNotFoundError`.
     """
     index = index_tree(root)
@@ -131,7 +133,7 @@ def compute_closure(
                 unresolved.add(include)
             else:
                 found.append(target)
-        if current.lower() not in header_only_set:
+        if pair_sources and current.lower() not in header_only_set:
             source = paired_source(index, current)
             if source is not None:
                 found.append(source)

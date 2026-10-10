@@ -1,0 +1,201 @@
+{
+  "library": "VMA",
+  "upstream": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator",
+  "version": "v3.2.1",
+  "commit": "c788c52156f3ef7bc7ab769cb03c110a53ac8fcb",
+  "archive_url": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/archive/refs/tags/v3.2.1.tar.gz",
+  "archive_sha256": "5e7749504cb802427ffb7bec38a0b6a15db46ae253f00560acb3e624d9fe695c",
+  "archive_root": "VulkanMemoryAllocator-3.2.1/",
+  "files": [
+    {
+      "path": "LICENSE.txt",
+      "sha256": "8d70e4cf2a9941f6454da71cd60e38484dd3e34810c824760d550e982af6d97a",
+      "size": 1099
+    },
+    {
+      "path": "include/vk_mem_alloc.h",
+      "sha256": "1869d860b9713dda74f9d226d85b3a16c1c360b5430e56b5a54131c4d9fdf168",
+      "size": 729652
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/vma",
+  "comparison": [
+    {
+      "path": "CHANGELOG.md",
+      "uzengine_blob": "7eacf38b8b8c0974e76e805fc3e1d02a7ee595e0",
+      "upstream_sha256": "ac1ba05731e7b627c60d5443225ad15d2f4c6f255c6cf855c3a28bc5878444e2",
+      "upstream_lf_sha256": "ac1ba05731e7b627c60d5443225ad15d2f4c6f255c6cf855c3a28bc5878444e2",
+      "result": "identical"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "uzengine_blob": "5f31eea7539eed0907847310ba12e95814e14592",
+      "upstream_sha256": "eaa87d27e2d944334a25eaf4223341fa61b39d42a97cc68076d013125a22ac17",
+      "upstream_lf_sha256": "eaa87d27e2d944334a25eaf4223341fa61b39d42a97cc68076d013125a22ac17",
+      "result": "identical"
+    },
+    {
+      "path": "LICENSE.txt",
+      "uzengine_blob": "a080d9bf71fcf40b4714c6fab0130f6a9d973d7f",
+      "upstream_sha256": "8d70e4cf2a9941f6454da71cd60e38484dd3e34810c824760d550e982af6d97a",
+      "upstream_lf_sha256": "8d70e4cf2a9941f6454da71cd60e38484dd3e34810c824760d550e982af6d97a",
+      "result": "identical"
+    },
+    {
+      "path": "README.md",
+      "uzengine_blob": "d6fc640463781d5964632292655c4a1f2cef9b93",
+      "upstream_sha256": "7f2e65c6620f947750173473c1ac220d39febe6f7b4667d76b2140812242a030",
+      "upstream_lf_sha256": "7f2e65c6620f947750173473c1ac220d39febe6f7b4667d76b2140812242a030",
+      "result": "identical"
+    },
+    {
+      "path": "bin/Shader.frag.spv",
+      "uzengine_blob": "d47ff398be98f5c03edb601c9527ca3263b7e979",
+      "upstream_sha256": "53357cbb49d0281cfc095de17f131293396cc44282e6a0c34e5c49ced322cbf5",
+      "upstream_lf_sha256": "53357cbb49d0281cfc095de17f131293396cc44282e6a0c34e5c49ced322cbf5",
+      "result": "identical"
+    },
+    {
+      "path": "bin/Shader.vert.spv",
+      "uzengine_blob": "5629e0401c7faa678da8eaedbacaab3ea1e01567",
+      "upstream_sha256": "36c263ef0ef71ecdf0be0d735d12dc451657c891d219d48e5e0295fb3c27e405",
+      "upstream_lf_sha256": "36c263ef0ef71ecdf0be0d735d12dc451657c891d219d48e5e0295fb3c27e405",
+      "result": "identical"
+    },
+    {
+      "path": "include/vk_mem_alloc.h",
+      "uzengine_blob": "6f71d5b4604d8e58aba4f340552ab092be190606",
+      "upstream_sha256": "1869d860b9713dda74f9d226d85b3a16c1c360b5430e56b5a54131c4d9fdf168",
+      "upstream_lf_sha256": "1869d860b9713dda74f9d226d85b3a16c1c360b5430e56b5a54131c4d9fdf168",
+      "result": "identical"
+    },
+    {
+      "path": "media/Thumbnail.png",
+      "uzengine_blob": "22027bd7bfe7993a9495cff53e46d794c43de539",
+      "upstream_sha256": "366128291fa0d4d22cb5bebedf2db76436bda9821e447074df6b7a94ee342b7e",
+      "upstream_lf_sha256": "769ac1b85d8b11186ee90a5cf9e663362ee341115c23c1056fcfcc110f015544",
+      "result": "identical"
+    },
+    {
+      "path": "src/.editorconfig",
+      "uzengine_blob": "3b730e6f1b6e062314dbc2f67ac9fd2e895bb788",
+      "upstream_sha256": "a937246bbf7c6a19431de5b7027cd99385c36a3aec55d3ec1edae54aa220b0f3",
+      "upstream_lf_sha256": "a937246bbf7c6a19431de5b7027cd99385c36a3aec55d3ec1edae54aa220b0f3",
+      "result": "identical"
+    },
+    {
+      "path": "src/CMakeLists.txt",
+      "uzengine_blob": "c062d67d8b38ec0f2a95be8d5754b33ab5b08303",
+      "upstream_sha256": "3657ece50448369bc48bf1187a502dcbcb8c3173c0f6dc635918cd85f68cfe97",
+      "upstream_lf_sha256": "3657ece50448369bc48bf1187a502dcbcb8c3173c0f6dc635918cd85f68cfe97",
+      "result": "identical"
+    },
+    {
+      "path": "src/Common.cpp",
+      "uzengine_blob": "997146e7c2e0a99c93ee974aeb47b190cdf8c1f9",
+      "upstream_sha256": "4c5a8840881b87c72730934623b3b72507879b1c2f52403a46d5e9042309f9e1",
+      "upstream_lf_sha256": "4c5a8840881b87c72730934623b3b72507879b1c2f52403a46d5e9042309f9e1",
+      "result": "identical"
+    },
+    {
+      "path": "src/Common.h",
+      "uzengine_blob": "4e9457ae449e4a0ae98aa16359a5f297b26de5df",
+      "upstream_sha256": "60d0d0ff5fc3d8c4c2384ce1d1a9a9b15281eea16278a11282f7b928254b5450",
+      "upstream_lf_sha256": "60d0d0ff5fc3d8c4c2384ce1d1a9a9b15281eea16278a11282f7b928254b5450",
+      "result": "identical"
+    },
+    {
+      "path": "src/Shaders/CMakeLists.txt",
+      "uzengine_blob": "1fee5820d705075108111fc4c3ff564243cd0e99",
+      "upstream_sha256": "e7eb07dd7370dd6a98ee1670ebd0571389f00f1f3210e22dbdacc3ec3f7508a6",
+      "upstream_lf_sha256": "e7eb07dd7370dd6a98ee1670ebd0571389f00f1f3210e22dbdacc3ec3f7508a6",
+      "result": "identical"
+    },
+    {
+      "path": "src/Shaders/CompileShaders.bat",
+      "uzengine_blob": "425649932a5141320ec2e07c39759ac576f785d6",
+      "upstream_sha256": "c675f9a6c63c08c957889b324c891b246384af7e15b9df8425a2355d879d4e4b",
+      "upstream_lf_sha256": "8e9736d134fcb91f47d12f9bcb37c425b3f520ec7991c8f59c94519df5a8586f",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/Shaders/Shader.frag",
+      "uzengine_blob": "3138b488688597fcabcdaf49d2683a9579fe79e3",
+      "upstream_sha256": "5e2fc92df5be7a8458d3c3bf2ff1644065ceede07a40bfd4a0288eec7292e1f3",
+      "upstream_lf_sha256": "5e2fc92df5be7a8458d3c3bf2ff1644065ceede07a40bfd4a0288eec7292e1f3",
+      "result": "identical"
+    },
+    {
+      "path": "src/Shaders/Shader.vert",
+      "uzengine_blob": "6c06f2eb038a233bc978863f2b33f55046e3dd26",
+      "upstream_sha256": "e9e2b7cb3b38ba2416795fc1cbf88701139f119d22d085310d0d8a6723d0747b",
+      "upstream_lf_sha256": "e9e2b7cb3b38ba2416795fc1cbf88701139f119d22d085310d0d8a6723d0747b",
+      "result": "identical"
+    },
+    {
+      "path": "src/Shaders/SparseBindingTest.comp",
+      "uzengine_blob": "6014bd3260845d9be5a4333abc5a0bd843d95957",
+      "upstream_sha256": "0bcb2014de4c9d5e8850c1851fd42aa8d657e5d5dd35563bf6ebadd016d72aa5",
+      "upstream_lf_sha256": "0bcb2014de4c9d5e8850c1851fd42aa8d657e5d5dd35563bf6ebadd016d72aa5",
+      "result": "identical"
+    },
+    {
+      "path": "src/SparseBindingTest.cpp",
+      "uzengine_blob": "52c1af27e48451027480702340029ee97abaccdd",
+      "upstream_sha256": "a9eec9ec1f20d8a8e72cb1055495cab0e203813dbf01d277e9e65b2fdca7f5e6",
+      "upstream_lf_sha256": "a9eec9ec1f20d8a8e72cb1055495cab0e203813dbf01d277e9e65b2fdca7f5e6",
+      "result": "identical"
+    },
+    {
+      "path": "src/SparseBindingTest.h",
+      "uzengine_blob": "62c87f19be2d6a7125f9d39ad13c583c0e85347f",
+      "upstream_sha256": "2fd9921371ed8d0243ddaf76af0c1add17c9178d8c5950b62aa8985142ee56bd",
+      "upstream_lf_sha256": "2fd9921371ed8d0243ddaf76af0c1add17c9178d8c5950b62aa8985142ee56bd",
+      "result": "identical"
+    },
+    {
+      "path": "src/Tests.cpp",
+      "uzengine_blob": "b1544760d56da3ca214803277e9ee704fd575070",
+      "upstream_sha256": "3e023b6418538b1624227104a8e1e4c5d27f3b5f3d83399049e8fcb910ba3323",
+      "upstream_lf_sha256": "3e023b6418538b1624227104a8e1e4c5d27f3b5f3d83399049e8fcb910ba3323",
+      "result": "identical"
+    },
+    {
+      "path": "src/Tests.h",
+      "uzengine_blob": "7a7dd4b86e229f016611c7418115be8743ef21bd",
+      "upstream_sha256": "6ba80f3ed04a0af58b2959df0a1e87fe50c906d595daaf633a7c42833719b036",
+      "upstream_lf_sha256": "6ba80f3ed04a0af58b2959df0a1e87fe50c906d595daaf633a7c42833719b036",
+      "result": "identical"
+    },
+    {
+      "path": "src/VmaUsage.cpp",
+      "uzengine_blob": "cbdb7818179a5b180d8e9aaecdaebebd60228201",
+      "upstream_sha256": "653916daf23926c4978962474e9fe369caf4813e8b42404e16f05c5ff36ba026",
+      "upstream_lf_sha256": "653916daf23926c4978962474e9fe369caf4813e8b42404e16f05c5ff36ba026",
+      "result": "identical"
+    },
+    {
+      "path": "src/VmaUsage.h",
+      "uzengine_blob": "527c8979e9bd12d96043d93bae0c6b32b2fb5734",
+      "upstream_sha256": "e56ea58fe95c5e1607ba20fc7c83e14aa8a76fd357d86df25d4cd734e858d4ba",
+      "upstream_lf_sha256": "e56ea58fe95c5e1607ba20fc7c83e14aa8a76fd357d86df25d4cd734e858d4ba",
+      "result": "identical"
+    },
+    {
+      "path": "src/VulkanSample.cpp",
+      "uzengine_blob": "bffcffe52536dcfaac9bbd3bc1e77a1fb04af70d",
+      "upstream_sha256": "d204076fb798c8fcdcf640ef1d3b739d482d193a2dddc52f317a8e83efbb1621",
+      "upstream_lf_sha256": "d204076fb798c8fcdcf640ef1d3b739d482d193a2dddc52f317a8e83efbb1621",
+      "result": "identical"
+    },
+    {
+      "path": "src/vk_mem_alloc.natvis",
+      "uzengine_blob": "92215d86b3b145d32de472a67c8195fb75504c37",
+      "upstream_sha256": "32f15b4171a275abb80b10f851265bcb54a07fc13b181add30d089c449f10731",
+      "upstream_lf_sha256": "32f15b4171a275abb80b10f851265bcb54a07fc13b181add30d089c449f10731",
+      "result": "identical"
+    }
+  ],
+  "not_in_uzengine": []
+}

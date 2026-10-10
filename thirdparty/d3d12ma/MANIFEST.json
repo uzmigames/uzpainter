@@ -1,0 +1,190 @@
+{
+  "library": "D3D12MA",
+  "upstream": "https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator",
+  "version": "v3.1.0",
+  "commit": "0fa62ed3a0a69b73230a8ec1faa752d4061c8dc8",
+  "archive_url": "https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator/archive/refs/tags/v3.1.0.tar.gz",
+  "archive_sha256": "629aa00919f2f0f8cdfcdc485db5077f456e939e418cee148e17458efa055f63",
+  "archive_root": "D3D12MemoryAllocator-3.1.0/",
+  "files": [
+    {
+      "path": "LICENSE.txt",
+      "sha256": "5478a2f36b736e13dd3250b9c71a4ab521bc327fb9d112a92c647bf3e69ddb68",
+      "size": 1099
+    },
+    {
+      "path": "NOTICES.txt",
+      "sha256": "7b7fc5046e474378f4fe0bde65508e0d2b3146b58568ebc7cc192aea85ff91b8",
+      "size": 2839
+    },
+    {
+      "path": "include/D3D12MemAlloc.h",
+      "sha256": "991b32779e527dc50c56da20b435bd84d4ed27fdd023f23846c8dd140808a817",
+      "size": 171914
+    },
+    {
+      "path": "src/D3D12MemAlloc.cpp",
+      "sha256": "5713bab55c2b242355facf20f1011ac37a91d3fae55dad9d34f3bf1cef7d1c04",
+      "size": 349023
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/d3d12ma",
+  "comparison": [
+    {
+      "path": "CHANGELOG.md",
+      "uzengine_blob": "997417aab97a69c52b7f01894b02c8e52a8c0490",
+      "upstream_sha256": "65773592124d1e15974eaf2264a6bc5be814fa88ebf4fb68ddf49439e116b643",
+      "upstream_lf_sha256": "f4b1f0a7f41998ad0506ebb540cd23ad3d6ae740683dd8ea8856277761038ab8",
+      "result": "line-endings"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "uzengine_blob": "6d61b219a638e438b6e807c74ee481fc38fed6c1",
+      "upstream_sha256": "db6f8a3cf605b1c6677bdf09b04e9d7c05690b9fc8dd61829bc8ffc9db3b2912",
+      "upstream_lf_sha256": "db6f8a3cf605b1c6677bdf09b04e9d7c05690b9fc8dd61829bc8ffc9db3b2912",
+      "result": "identical"
+    },
+    {
+      "path": "LICENSE.txt",
+      "uzengine_blob": "3d5a69a6f5695507ecc9c412c783ca60572bf878",
+      "upstream_sha256": "5478a2f36b736e13dd3250b9c71a4ab521bc327fb9d112a92c647bf3e69ddb68",
+      "upstream_lf_sha256": "5478a2f36b736e13dd3250b9c71a4ab521bc327fb9d112a92c647bf3e69ddb68",
+      "result": "identical"
+    },
+    {
+      "path": "NOTICES.txt",
+      "uzengine_blob": "98bccc5de5575a3cbdb8d491345fe761a2a917f5",
+      "upstream_sha256": "7b7fc5046e474378f4fe0bde65508e0d2b3146b58568ebc7cc192aea85ff91b8",
+      "upstream_lf_sha256": "7af18e6093af41d516228ffd65e782859bf2918931d8c3670c7ba8b74afa8288",
+      "result": "line-endings"
+    },
+    {
+      "path": "README.md",
+      "uzengine_blob": "87964cc58aca59acf9982bd51c076ad3bd1f9f29",
+      "upstream_sha256": "7711db96c4b060537ffcadb43a930a2443e0529d7562921497b3303cfb5e5782",
+      "upstream_lf_sha256": "7711db96c4b060537ffcadb43a930a2443e0529d7562921497b3303cfb5e5782",
+      "result": "identical"
+    },
+    {
+      "path": "include/D3D12MemAlloc.h",
+      "uzengine_blob": "32fe908c2483ef83fb06e6747f13f3fe537e4be3",
+      "upstream_sha256": "991b32779e527dc50c56da20b435bd84d4ed27fdd023f23846c8dd140808a817",
+      "upstream_lf_sha256": "0a76d033e79b56716a07e8084785b6be865370c94b175060eb09a449f55b4d76",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/.editorconfig",
+      "uzengine_blob": "1b9f7aaac143e7417a92ffd754d6993d232c3ee3",
+      "upstream_sha256": "3f80c747ac4dc7c9107bf928e26ed63c59c6942bf88c9c202187392c4cf160b3",
+      "upstream_lf_sha256": "143f6ebbb71ac6b32804171ccdd57af5f20a226fa557c95def4af53b9f9bcf7b",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/CMakeLists.txt",
+      "uzengine_blob": "e5c9d8d0f3865734435f1f99dc785231faf89247",
+      "upstream_sha256": "d85899243de52fa559b7e3199b911cf7706d046e4775fc286a55d52653f50908",
+      "upstream_lf_sha256": "2ad09d1c80c66abecb3d4dcfbf0f20e9e87ebf6698e97cc4f46e64faad5e222d",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/Common.cpp",
+      "uzengine_blob": "cb10c30174635886c4d6c1ca90cf89f4ceadcf08",
+      "upstream_sha256": "9a8b2225c712e00fdd19a70a8f83250376a457a0337faba85a5e34821db1395f",
+      "upstream_lf_sha256": "e36694bb5b1ba64370460bb6fc51c3e713d1cc144fd178e18f80260c1a3acf1c",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/Common.h",
+      "uzengine_blob": "11e7ad2e118e9f0d9fd7ac2ca584d7f56825d411",
+      "upstream_sha256": "b181564673f9d95e5b606f4ea331610db29e5615121994deee8c4dc43c7f4e62",
+      "upstream_lf_sha256": "50aeff818d545ac94acd91f0263703c1377d9e485b8ff747ae4deafb565cb30d",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/D3D12MemAlloc.cpp",
+      "uzengine_blob": "6c90ae4990af87db3e32506274f32ab0b1ef8d3c",
+      "upstream_sha256": "5713bab55c2b242355facf20f1011ac37a91d3fae55dad9d34f3bf1cef7d1c04",
+      "upstream_lf_sha256": "f34ee22c576216f438da46038c9e0f49e415e037049938e48b336f00017a8b2c",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/D3D12MemAlloc.natvis",
+      "uzengine_blob": "957edc929dd451547a1aa7ce3144f7811c5c0b4f",
+      "upstream_sha256": "25e04d152bdfbb140e732ff231b2abb645c21de8735fcd8e5852e2e87ceeb04f",
+      "upstream_lf_sha256": "2c4f5821abc4a825c322f49e17178d7028c5d29959ad478fc37ef6a98189bf8c",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/D3D12Sample.cpp",
+      "uzengine_blob": "60834aa2fed378cebd6683058362eea9b2bb7c1d",
+      "upstream_sha256": "1be10a7b416869b5f94df83ddef642de6ac52e3687052f9acefeeef9cd0ba967",
+      "upstream_lf_sha256": "31165e8bc5bd59b9e9e6a4a93c77a699102c664bdd17a6b7ef932a31269415e2",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/Doxyfile",
+      "uzengine_blob": "c2609e8748bfcacbf0e86edc24dec9b4c668e659",
+      "upstream_sha256": "3e38b82907756d77ac9ce6bc20c8bca994174c6f76855c64c57ff7ceb8683e61",
+      "upstream_lf_sha256": "3e38b82907756d77ac9ce6bc20c8bca994174c6f76855c64c57ff7ceb8683e61",
+      "result": "identical"
+    },
+    {
+      "path": "src/Shaders/FxBatchCompilerScript.fxbc",
+      "uzengine_blob": "49c0a14e292235175ae54428843ebea8618200ee",
+      "upstream_sha256": "e157f42e4e101c6c1783d24c3e7fbb664d5944d5c63ccdf6f8964a56bc69a97c",
+      "upstream_lf_sha256": "64d761fb9c0a11dd4f259446c0f381dd49498baa8551ea750c58449b3269a2d6",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/Shaders/PS.hlsl",
+      "uzengine_blob": "3a2b8e35f1537d34296149d6c85d562b6a369376",
+      "upstream_sha256": "36bbeb461e5dddcdc8cacbee131071a94e24bd562dd0bd63d43458f29bad1341",
+      "upstream_lf_sha256": "afec0a9d12f87280e0aa10d579d62e5376f4c4a42f5160f7cf749740fa0ce1a9",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/Shaders/PS_Compiled.h",
+      "uzengine_blob": "33a540d4018aa9a789fef2ae220333989988af95",
+      "upstream_sha256": "2c5bb7be95e787e8e1d4465e59638db158e2acfae7f256e55c4399fbe84ca0ff",
+      "upstream_lf_sha256": "63c577636f6fbde131feb31f3b3dca39b1c25be4d6a9c51ba6419e52341084a9",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/Shaders/VS.hlsl",
+      "uzengine_blob": "289f32e3d226362bd8c9c856294f36ec543ee009",
+      "upstream_sha256": "fc4a1f38bd3281526c10c4e4ae7f687e19149f0e41eaa5b7d9505784557f8e29",
+      "upstream_lf_sha256": "b366f457bea21ddc6b963b963a898f083b7a889fe8bc958b5774a6696f682626",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/Shaders/VS_Compiled.h",
+      "uzengine_blob": "97c99c5f0f0e54638cba5c7bb992a143ac965f44",
+      "upstream_sha256": "45dc02d920d5b18243d7658df5e5bb29da90f396601108afb8b5a0b74364ed8d",
+      "upstream_lf_sha256": "8c854d4d1a8376a77a1c191504590f803646a272985dfc2963ef7eaa4b851da3",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/Tests.cpp",
+      "uzengine_blob": "d1fbb430671403514ad4eccd3c7a54f399d723a7",
+      "upstream_sha256": "3fa448cc6a2a1b491f6799bcf07b4b2b554b44d3a6d0285aa2c689a1e5655e34",
+      "upstream_lf_sha256": "771290855f09d621f8079b76c4db617480caffcebc18f9097112c0c5e8a1df21",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/Tests.h",
+      "uzengine_blob": "bfea03a8df27b43b8795bc7ed0af210b356b69f3",
+      "upstream_sha256": "3ed58a11824a3456c5371f9dd7296bf0543f5025d66b98eab7e1fda3d5570c49",
+      "upstream_lf_sha256": "71f7df2eada90dc408965bf846cd38ac8cbd595bcb749dd8c924958cc5f6becc",
+      "result": "line-endings"
+    },
+    {
+      "path": "src/cmake/config.cmake.in",
+      "uzengine_blob": "3e47daa5ebdea8c0e24dbcdb6292f9983f1c56ed",
+      "upstream_sha256": "cea5381f1159497cd8396bbe2cfa73492a8986da5f86b87438e300b16f7d0365",
+      "upstream_lf_sha256": "cea5381f1159497cd8396bbe2cfa73492a8986da5f86b87438e300b16f7d0365",
+      "result": "identical"
+    }
+  ],
+  "not_in_uzengine": []
+}

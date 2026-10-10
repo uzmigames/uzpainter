@@ -1,0 +1,699 @@
+{
+  "library": "Tracy",
+  "upstream": "https://github.com/wolfpld/tracy",
+  "version": "v0.13.1",
+  "commit": "05cceee0df3b8d7c6fa87e9638af311dbabc63cb",
+  "archive_url": "https://github.com/wolfpld/tracy/archive/refs/tags/v0.13.1.tar.gz",
+  "archive_sha256": "d4efc50ebcb0bfcfdbba148995aeb75044c0d80f5d91223aebfaa8fa9e563d2b",
+  "archive_root": "tracy-0.13.1/",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "16f7df4828bd89c880c17dd2f45e834b754b6d5e8c9a9ee886af1be4b89475ca",
+      "size": 1618
+    },
+    {
+      "path": "public/client/TracyCallstack.h",
+      "sha256": "946034086733907080ce26cf1f7d0f12cd32a377768ee5e7379a44a4817a4163",
+      "size": 926
+    },
+    {
+      "path": "public/client/TracyCallstack.hpp",
+      "sha256": "92fd23ac71ab2a399934f5408420abc2d9f3938f8f8aef8ec527d247e0d16127",
+      "size": 3702
+    },
+    {
+      "path": "public/client/TracyFastVector.hpp",
+      "sha256": "aec011fc54b1df82b6e7ffd78e974a85869cdae91cfaf73178114b4a54044c86",
+      "size": 2673
+    },
+    {
+      "path": "public/client/TracyKCore.hpp",
+      "sha256": "b874b8e5b06db4b01ccc1bdce34d05ec6d0d7812f82ae6afb75bb29b6b12b08b",
+      "size": 437
+    },
+    {
+      "path": "public/client/TracyLock.hpp",
+      "sha256": "95fe77a7b938631ecb21a8ee1e012858bfb9f9175df6ac027dcd3786926e2a0e",
+      "size": 17132
+    },
+    {
+      "path": "public/client/TracyProfiler.hpp",
+      "sha256": "19ac2e4e145c32d6d2509a405c4e4d450117c90dafdaae4128cc0381e4c2e00a",
+      "size": 36581
+    },
+    {
+      "path": "public/client/TracyScoped.hpp",
+      "sha256": "46e64c08a5bb7f68f94ff9ce3281ccb8170fb8c74a3d9daaba37d86ca06be8fd",
+      "size": 7154
+    },
+    {
+      "path": "public/client/TracySysPower.hpp",
+      "sha256": "bb1edd89aa226572e6af54aaeadd22062f2636fd4c966ac63f642b1342f58903",
+      "size": 592
+    },
+    {
+      "path": "public/client/TracySysTime.hpp",
+      "sha256": "a5a9a18671ab22c19bd88db1512be516d72e60509af4d836bec2b97b1c85b62e",
+      "size": 435
+    },
+    {
+      "path": "public/client/tracy_SPSCQueue.h",
+      "sha256": "8cb74f10b233693d83da294dc48aa8ba8bb2a860a1d4dafb19dfbe3a76620a70",
+      "size": 4954
+    },
+    {
+      "path": "public/client/tracy_concurrentqueue.h",
+      "sha256": "f94ead8ee471b85320a4b549e1916919c7018f651ec00244642f4d7ca8eab74e",
+      "size": 54120
+    },
+    {
+      "path": "public/client/tracy_rpmalloc.hpp",
+      "sha256": "5db11b9a63d08da1a9381a08c4f0c61f140c2cea44d84cee26d4c04fdc0c667b",
+      "size": 17850
+    },
+    {
+      "path": "public/common/TracyAlign.hpp",
+      "sha256": "316d6ec57c62834d2b83adde547f001160832705aa86abc46336709b1bdd615c",
+      "size": 394
+    },
+    {
+      "path": "public/common/TracyAlloc.hpp",
+      "sha256": "60706b629718792fff32372da4efa710a76d6bd7ca503eb20572f26c8158c5c0",
+      "size": 1186
+    },
+    {
+      "path": "public/common/TracyApi.h",
+      "sha256": "6198a31de880ab2037dead016f98392b25c2aa14c1151985a9576cb970b1d306",
+      "size": 352
+    },
+    {
+      "path": "public/common/TracyColor.hpp",
+      "sha256": "a9dc70ed1921fcca3258909d1a941f91bb18f6651c225d40e36ded48324a6640",
+      "size": 17206
+    },
+    {
+      "path": "public/common/TracyForceInline.hpp",
+      "sha256": "b4035600f7f1042c76e79d418fd49d3217d339a6b9435ba57528eaad6bda230e",
+      "size": 465
+    },
+    {
+      "path": "public/common/TracyMutex.hpp",
+      "sha256": "e63b7a9cde4000c07cf4c965733e063762181ec3c11124cb93713eb55a54ab0b",
+      "size": 255
+    },
+    {
+      "path": "public/common/TracyProtocol.hpp",
+      "sha256": "5eacb350f9a35db93919966bc0b44380e58df494adf4413e76e145402cbcdd5e",
+      "size": 3855
+    },
+    {
+      "path": "public/common/TracyQueue.hpp",
+      "sha256": "0350401265b3467a184de885ee9a07d8a1de83af0f3a963b7f2c46d928a80384",
+      "size": 23476
+    },
+    {
+      "path": "public/common/TracySystem.hpp",
+      "sha256": "ba00e7784c9bf49581cf4e2166073c24e22012d2f7728bcb1ae93628a005279d",
+      "size": 754
+    },
+    {
+      "path": "public/common/TracyWinFamily.hpp",
+      "sha256": "a5bf76bc68be60b23982e963d5f93f0cfb6260695003a074082fcd4da5a84d58",
+      "size": 392
+    },
+    {
+      "path": "public/tracy/Tracy.hpp",
+      "sha256": "2d28896112f80f97967d190dc4105ff7b2f2fec3ea63accda2e1c805fd7cb35c",
+      "size": 15041
+    },
+    {
+      "path": "public/tracy/TracyD3D12.hpp",
+      "sha256": "7172bf48b6599bd3dc0cccfe1424e93a823d3119be89ed5c35eb04406c759265",
+      "size": 21566
+    },
+    {
+      "path": "public/tracy/TracyVulkan.hpp",
+      "sha256": "56bf418bef05bf7655282b475829ed35b140d25c36a4bfc5dc9c509c18376080",
+      "size": 31673
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/tracy",
+  "comparison": [
+    {
+      "path": "LICENSE",
+      "uzengine_blob": "62016082197c26492274b66f2e04c6ed5a62779c",
+      "upstream_sha256": "16f7df4828bd89c880c17dd2f45e834b754b6d5e8c9a9ee886af1be4b89475ca",
+      "upstream_lf_sha256": "16f7df4828bd89c880c17dd2f45e834b754b6d5e8c9a9ee886af1be4b89475ca",
+      "result": "identical"
+    },
+    {
+      "path": "patches/0001-fix-getdesc-abi-directx-headers.patch",
+      "uzengine_blob": "14ddae9308feaab06fdb12a9b2b3fd91a7ab1728",
+      "upstream_sha256": null,
+      "upstream_lf_sha256": null,
+      "result": "uzengine-only"
+    },
+    {
+      "path": "public/TracyClient.cpp",
+      "uzengine_blob": "8e6697596878adc7555c9f2ed7bf55eecbe6111c",
+      "upstream_sha256": "64c93f21bfc0e3d56910bcb42a6a89333320e220c1ff4a4b909c2834bca0cd62",
+      "upstream_lf_sha256": "64c93f21bfc0e3d56910bcb42a6a89333320e220c1ff4a4b909c2834bca0cd62",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyAlloc.cpp",
+      "uzengine_blob": "c675b6d3f88e122caa406d3b3970527b605e08e3",
+      "upstream_sha256": "fba9bd76d112085ec9795c26e91dc0d8b9896a457fd2d37b32c01e943a26f985",
+      "upstream_lf_sha256": "fba9bd76d112085ec9795c26e91dc0d8b9896a457fd2d37b32c01e943a26f985",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyArmCpuTable.hpp",
+      "uzengine_blob": "2b47c3a60d0653a177bd3fb7e29c5ec78aa60d0d",
+      "upstream_sha256": "4fc235a82da94a5136477a806e6391e230c7ae3c0fe62053f5c211d9e321f5a8",
+      "upstream_lf_sha256": "4fc235a82da94a5136477a806e6391e230c7ae3c0fe62053f5c211d9e321f5a8",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyCallstack.cpp",
+      "uzengine_blob": "7ab6b1c4c6f08abfc6814be194edc2a3c2a5146c",
+      "upstream_sha256": "5a03e8e3eace9f69b29faf7a46874cc04f78d057fa6964b561dee8b69f537315",
+      "upstream_lf_sha256": "5a03e8e3eace9f69b29faf7a46874cc04f78d057fa6964b561dee8b69f537315",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyCallstack.h",
+      "uzengine_blob": "2df15420c809305aa8ceee9af39859b7c49f2e3e",
+      "upstream_sha256": "946034086733907080ce26cf1f7d0f12cd32a377768ee5e7379a44a4817a4163",
+      "upstream_lf_sha256": "946034086733907080ce26cf1f7d0f12cd32a377768ee5e7379a44a4817a4163",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyCallstack.hpp",
+      "uzengine_blob": "7d8ed6e66c36d13d2af0c9a4d8ab73a1c03b8539",
+      "upstream_sha256": "92fd23ac71ab2a399934f5408420abc2d9f3938f8f8aef8ec527d247e0d16127",
+      "upstream_lf_sha256": "92fd23ac71ab2a399934f5408420abc2d9f3938f8f8aef8ec527d247e0d16127",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyCpuid.hpp",
+      "uzengine_blob": "9820be00bb3c467070e3fcf2159d6a8689d1afd4",
+      "upstream_sha256": "91f4b9da8b860b4b9f91e69668d3d29e384fd72f311b5458856562aec01440cb",
+      "upstream_lf_sha256": "91f4b9da8b860b4b9f91e69668d3d29e384fd72f311b5458856562aec01440cb",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyDebug.hpp",
+      "uzengine_blob": "8723356f49ba3c49a67a8af4621f1f51a71068b0",
+      "upstream_sha256": "038afed2e613d22f859f0937bfb7a07c6be5567cc33051c9dbed6ea613257e27",
+      "upstream_lf_sha256": "038afed2e613d22f859f0937bfb7a07c6be5567cc33051c9dbed6ea613257e27",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyDxt1.cpp",
+      "uzengine_blob": "930d098207d5995a8fcba66a6612e19be579e9de",
+      "upstream_sha256": "0bb2cb8a068492f93de5083ac00e7cb3ddce4afbf101a5c42f861c23b3013518",
+      "upstream_lf_sha256": "0bb2cb8a068492f93de5083ac00e7cb3ddce4afbf101a5c42f861c23b3013518",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyDxt1.hpp",
+      "uzengine_blob": "c23135427890151261b980b5a5a239aea6aca83b",
+      "upstream_sha256": "3c21b2ec285b969b0f7aaff8a576a57ff5a32afd41c195a1943407654005912d",
+      "upstream_lf_sha256": "3c21b2ec285b969b0f7aaff8a576a57ff5a32afd41c195a1943407654005912d",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyFastVector.hpp",
+      "uzengine_blob": "38accc926b09c93cae8b041861e18bc9c5857d88",
+      "upstream_sha256": "aec011fc54b1df82b6e7ffd78e974a85869cdae91cfaf73178114b4a54044c86",
+      "upstream_lf_sha256": "aec011fc54b1df82b6e7ffd78e974a85869cdae91cfaf73178114b4a54044c86",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyKCore.cpp",
+      "uzengine_blob": "09d51d117afc152bb7f31001f297951c353c5baf",
+      "upstream_sha256": "d6caa0e973e79f70d838b620858a3714621c641d9ba59c92c4e3aa1cff08a6da",
+      "upstream_lf_sha256": "d6caa0e973e79f70d838b620858a3714621c641d9ba59c92c4e3aa1cff08a6da",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyKCore.hpp",
+      "uzengine_blob": "437e172c236eecd3c1e5ce03bbae3e2259d4f41b",
+      "upstream_sha256": "b874b8e5b06db4b01ccc1bdce34d05ec6d0d7812f82ae6afb75bb29b6b12b08b",
+      "upstream_lf_sha256": "b874b8e5b06db4b01ccc1bdce34d05ec6d0d7812f82ae6afb75bb29b6b12b08b",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyLock.hpp",
+      "uzengine_blob": "e00b344a85465beaa6bebdd46e68fe4a03d5f29f",
+      "upstream_sha256": "95fe77a7b938631ecb21a8ee1e012858bfb9f9175df6ac027dcd3786926e2a0e",
+      "upstream_lf_sha256": "95fe77a7b938631ecb21a8ee1e012858bfb9f9175df6ac027dcd3786926e2a0e",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyOverride.cpp",
+      "uzengine_blob": "591508a7ff4e0f2887ac8c938b64495a45e86382",
+      "upstream_sha256": "32fc9564d3ce6503b98d05517fff87aa3c0414ef092f3ef09e0aa93ae6732aa1",
+      "upstream_lf_sha256": "32fc9564d3ce6503b98d05517fff87aa3c0414ef092f3ef09e0aa93ae6732aa1",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyProfiler.cpp",
+      "uzengine_blob": "0691f78ecbd9badab712e6fb31ca60784fd1f957",
+      "upstream_sha256": "57ff510aba6eafbc070f302576371e18d2e94fa2cc72e05149e2e98e409cc0e6",
+      "upstream_lf_sha256": "57ff510aba6eafbc070f302576371e18d2e94fa2cc72e05149e2e98e409cc0e6",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyProfiler.hpp",
+      "uzengine_blob": "aacfa16b055445ccb8c2cb1386e8596aeb019d98",
+      "upstream_sha256": "19ac2e4e145c32d6d2509a405c4e4d450117c90dafdaae4128cc0381e4c2e00a",
+      "upstream_lf_sha256": "19ac2e4e145c32d6d2509a405c4e4d450117c90dafdaae4128cc0381e4c2e00a",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyRingBuffer.hpp",
+      "uzengine_blob": "e9100e2d8b7b2c4bbfe78858713a689407070ff5",
+      "upstream_sha256": "0ce9c5397676edd0c45e88ab2c10f32c6239b75dca38b5cc099c90e3ef6a954c",
+      "upstream_lf_sha256": "0ce9c5397676edd0c45e88ab2c10f32c6239b75dca38b5cc099c90e3ef6a954c",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyRocprof.cpp",
+      "uzengine_blob": "370e42ec39d811a0f1557ba2e6e8014474fbf766",
+      "upstream_sha256": "76f5589522770dd4bceecd37802aa9d63adf6e42f2b2a9e4a10e505ea540f5ae",
+      "upstream_lf_sha256": "76f5589522770dd4bceecd37802aa9d63adf6e42f2b2a9e4a10e505ea540f5ae",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyScoped.hpp",
+      "uzengine_blob": "c2f7eda0bb08de764d22334eeccf93ae26a939de",
+      "upstream_sha256": "46e64c08a5bb7f68f94ff9ce3281ccb8170fb8c74a3d9daaba37d86ca06be8fd",
+      "upstream_lf_sha256": "46e64c08a5bb7f68f94ff9ce3281ccb8170fb8c74a3d9daaba37d86ca06be8fd",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyStringHelpers.hpp",
+      "uzengine_blob": "977be6a3e9cd2ff08272a5aeae6b6999a53c65cb",
+      "upstream_sha256": "b655b26bf0df158e763f516aefc82faae81bdaa9213585a406bfa2be77515e01",
+      "upstream_lf_sha256": "b655b26bf0df158e763f516aefc82faae81bdaa9213585a406bfa2be77515e01",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracySysPower.cpp",
+      "uzengine_blob": "6ad1d64783694013e1cfcffc263da101afaf0641",
+      "upstream_sha256": "af32b647274c2e66eec70979dec46ce17add0456d1f6b9ca537713a44853fc50",
+      "upstream_lf_sha256": "af32b647274c2e66eec70979dec46ce17add0456d1f6b9ca537713a44853fc50",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracySysPower.hpp",
+      "uzengine_blob": "210123bce40682fce88d824b1e063622708e6a05",
+      "upstream_sha256": "bb1edd89aa226572e6af54aaeadd22062f2636fd4c966ac63f642b1342f58903",
+      "upstream_lf_sha256": "bb1edd89aa226572e6af54aaeadd22062f2636fd4c966ac63f642b1342f58903",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracySysTime.cpp",
+      "uzengine_blob": "cf7dd9b141ca674a678b899c0397e1482a162416",
+      "upstream_sha256": "3bae0c87cb33a22d52c1a973fd61cd2c469763b0f27bdaca228bc24a90d71800",
+      "upstream_lf_sha256": "3bae0c87cb33a22d52c1a973fd61cd2c469763b0f27bdaca228bc24a90d71800",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracySysTime.hpp",
+      "uzengine_blob": "cb5ebe7361a573a7b7f8c52412572f0967a8ae61",
+      "upstream_sha256": "a5a9a18671ab22c19bd88db1512be516d72e60509af4d836bec2b97b1c85b62e",
+      "upstream_lf_sha256": "a5a9a18671ab22c19bd88db1512be516d72e60509af4d836bec2b97b1c85b62e",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracySysTrace.cpp",
+      "uzengine_blob": "1dd947742c4886bebd251db73969092004f09e45",
+      "upstream_sha256": "274d553bf9c7ab32a4ac5ee515b26e0917617e0a7683ea21f432250b06f022d6",
+      "upstream_lf_sha256": "274d553bf9c7ab32a4ac5ee515b26e0917617e0a7683ea21f432250b06f022d6",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracySysTrace.hpp",
+      "uzengine_blob": "2a28e8b8a81c8aee4108b6226a020286bc5865e0",
+      "upstream_sha256": "6e7fa65b00d71c57f5517222d58380e0d545c1472a6a199dfd98d3ea7f98739b",
+      "upstream_lf_sha256": "6e7fa65b00d71c57f5517222d58380e0d545c1472a6a199dfd98d3ea7f98739b",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/TracyThread.hpp",
+      "uzengine_blob": "5638756acabbdbe0c08fa35c069c229580dec77d",
+      "upstream_sha256": "5c02df54ebda30ffc6d31e5b415a6c7a5b680781665bc3403d3a2a887270399b",
+      "upstream_lf_sha256": "5c02df54ebda30ffc6d31e5b415a6c7a5b680781665bc3403d3a2a887270399b",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/tracy_SPSCQueue.h",
+      "uzengine_blob": "7f1752b56869ddbe7f24ae1790a03854b042f412",
+      "upstream_sha256": "8cb74f10b233693d83da294dc48aa8ba8bb2a860a1d4dafb19dfbe3a76620a70",
+      "upstream_lf_sha256": "8cb74f10b233693d83da294dc48aa8ba8bb2a860a1d4dafb19dfbe3a76620a70",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/tracy_concurrentqueue.h",
+      "uzengine_blob": "4178d39eadf679e0a55b1c49601ea79e86277d82",
+      "upstream_sha256": "f94ead8ee471b85320a4b549e1916919c7018f651ec00244642f4d7ca8eab74e",
+      "upstream_lf_sha256": "f94ead8ee471b85320a4b549e1916919c7018f651ec00244642f4d7ca8eab74e",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/tracy_rpmalloc.cpp",
+      "uzengine_blob": "c43b8cab9b7b6a5c9b9f556747a9ddd82d81c70c",
+      "upstream_sha256": "c45cb03220512636b18fd21b5f117bf10cf572856b7dddb6155be0c266d7c5b8",
+      "upstream_lf_sha256": "c45cb03220512636b18fd21b5f117bf10cf572856b7dddb6155be0c266d7c5b8",
+      "result": "identical"
+    },
+    {
+      "path": "public/client/tracy_rpmalloc.hpp",
+      "uzengine_blob": "51216a21b705378d36c85075cdb7be176eadbeb3",
+      "upstream_sha256": "5db11b9a63d08da1a9381a08c4f0c61f140c2cea44d84cee26d4c04fdc0c667b",
+      "upstream_lf_sha256": "5db11b9a63d08da1a9381a08c4f0c61f140c2cea44d84cee26d4c04fdc0c667b",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyAlign.hpp",
+      "uzengine_blob": "c3531ba0dd1e91074246a15f069d5885f236c260",
+      "upstream_sha256": "316d6ec57c62834d2b83adde547f001160832705aa86abc46336709b1bdd615c",
+      "upstream_lf_sha256": "316d6ec57c62834d2b83adde547f001160832705aa86abc46336709b1bdd615c",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyAlloc.hpp",
+      "uzengine_blob": "ddb0e5df65bf1070d91cfee25462e2e02f5fc71a",
+      "upstream_sha256": "60706b629718792fff32372da4efa710a76d6bd7ca503eb20572f26c8158c5c0",
+      "upstream_lf_sha256": "60706b629718792fff32372da4efa710a76d6bd7ca503eb20572f26c8158c5c0",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyApi.h",
+      "uzengine_blob": "f396ce0c68d6d745d1d51ae55fb711c7c91876db",
+      "upstream_sha256": "6198a31de880ab2037dead016f98392b25c2aa14c1151985a9576cb970b1d306",
+      "upstream_lf_sha256": "6198a31de880ab2037dead016f98392b25c2aa14c1151985a9576cb970b1d306",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyColor.hpp",
+      "uzengine_blob": "4825c0fba20b9988db1f91c7d7abc6703c18a42f",
+      "upstream_sha256": "a9dc70ed1921fcca3258909d1a941f91bb18f6651c225d40e36ded48324a6640",
+      "upstream_lf_sha256": "a9dc70ed1921fcca3258909d1a941f91bb18f6651c225d40e36ded48324a6640",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyForceInline.hpp",
+      "uzengine_blob": "b6a5833e586becccc60a4a92af3b7f18c6061f47",
+      "upstream_sha256": "b4035600f7f1042c76e79d418fd49d3217d339a6b9435ba57528eaad6bda230e",
+      "upstream_lf_sha256": "b4035600f7f1042c76e79d418fd49d3217d339a6b9435ba57528eaad6bda230e",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyMutex.hpp",
+      "uzengine_blob": "57fb01a0c323316f80051a2d1bd6e4b0ffd9a7b1",
+      "upstream_sha256": "e63b7a9cde4000c07cf4c965733e063762181ec3c11124cb93713eb55a54ab0b",
+      "upstream_lf_sha256": "e63b7a9cde4000c07cf4c965733e063762181ec3c11124cb93713eb55a54ab0b",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyProtocol.hpp",
+      "uzengine_blob": "8174d932dff55c42c943f16e6ca4d1b7cdcd0711",
+      "upstream_sha256": "5eacb350f9a35db93919966bc0b44380e58df494adf4413e76e145402cbcdd5e",
+      "upstream_lf_sha256": "5eacb350f9a35db93919966bc0b44380e58df494adf4413e76e145402cbcdd5e",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyQueue.hpp",
+      "uzengine_blob": "765c83c7d55246550608fd68e68e00a85c7fa104",
+      "upstream_sha256": "0350401265b3467a184de885ee9a07d8a1de83af0f3a963b7f2c46d928a80384",
+      "upstream_lf_sha256": "0350401265b3467a184de885ee9a07d8a1de83af0f3a963b7f2c46d928a80384",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracySocket.cpp",
+      "uzengine_blob": "bdba3619654e8483dd22542a968a73c7baf49b08",
+      "upstream_sha256": "a3786f703006d39e6870e36d898b36d0b152f5af148ebfdad22377a7b2457b34",
+      "upstream_lf_sha256": "a3786f703006d39e6870e36d898b36d0b152f5af148ebfdad22377a7b2457b34",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracySocket.hpp",
+      "uzengine_blob": "f7713aac663797f5a837012b98705b1ebcf61885",
+      "upstream_sha256": "b52b40eb848f799b2a3a7156b8a377630c40cbe0d6251690db16fe6d49794999",
+      "upstream_lf_sha256": "b52b40eb848f799b2a3a7156b8a377630c40cbe0d6251690db16fe6d49794999",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyStackFrames.cpp",
+      "uzengine_blob": "7b0abace3775fb552a184088497afe49b492c236",
+      "upstream_sha256": "30f20093ed436e65664f325c099f1f675737371b60d7e7f12b07cdf710a41f23",
+      "upstream_lf_sha256": "30f20093ed436e65664f325c099f1f675737371b60d7e7f12b07cdf710a41f23",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyStackFrames.hpp",
+      "uzengine_blob": "9d4262c00a1789ae4c0a0a07ab96fdfdd8e50e80",
+      "upstream_sha256": "fbd2359bd907581b97c66a286dcda3eafec884498af260d108b38d2dcb06fc58",
+      "upstream_lf_sha256": "fbd2359bd907581b97c66a286dcda3eafec884498af260d108b38d2dcb06fc58",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracySystem.cpp",
+      "uzengine_blob": "7696ca32fc30b245d08077ab00ce019f74c2c7a1",
+      "upstream_sha256": "23c19371bb09436687a4a9080e684b4e73303f545d53c57271c8e18a7c533f87",
+      "upstream_lf_sha256": "23c19371bb09436687a4a9080e684b4e73303f545d53c57271c8e18a7c533f87",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracySystem.hpp",
+      "uzengine_blob": "2f565e9a26bd2d85d6680f001eb453c9ebc00a86",
+      "upstream_sha256": "ba00e7784c9bf49581cf4e2166073c24e22012d2f7728bcb1ae93628a005279d",
+      "upstream_lf_sha256": "ba00e7784c9bf49581cf4e2166073c24e22012d2f7728bcb1ae93628a005279d",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyVersion.hpp",
+      "uzengine_blob": "6dde8cf81447b4a85b252d5b49749f7f3510670f",
+      "upstream_sha256": "28316a5f3689f02be7e8c0f6707a33c9a4c8f834f9292d878716c888709c5683",
+      "upstream_lf_sha256": "28316a5f3689f02be7e8c0f6707a33c9a4c8f834f9292d878716c888709c5683",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyWinFamily.hpp",
+      "uzengine_blob": "b601455cfc2b8214c3fc463c5a0c49dd73d5ed3e",
+      "upstream_sha256": "a5bf76bc68be60b23982e963d5f93f0cfb6260695003a074082fcd4da5a84d58",
+      "upstream_lf_sha256": "a5bf76bc68be60b23982e963d5f93f0cfb6260695003a074082fcd4da5a84d58",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/TracyYield.hpp",
+      "uzengine_blob": "035836cdb9f19be4e97ab01050134707bcebb362",
+      "upstream_sha256": "7d4ea857b76a6c2a2d010579075a0fde28969c8e1201f5573239cd0288a311cc",
+      "upstream_lf_sha256": "7d4ea857b76a6c2a2d010579075a0fde28969c8e1201f5573239cd0288a311cc",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/tracy_lz4.cpp",
+      "uzengine_blob": "15d0990f8261161f60b7b519f0c1d6f74f1f6252",
+      "upstream_sha256": "0e010e8ee986bea9cec7c394e0e2c2f22274e4677a9a680e1d3cb7c03710bc08",
+      "upstream_lf_sha256": "0e010e8ee986bea9cec7c394e0e2c2f22274e4677a9a680e1d3cb7c03710bc08",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/tracy_lz4.hpp",
+      "uzengine_blob": "672c2feb2472d3e2a76e001ce717ecb7511d7cdd",
+      "upstream_sha256": "4b3b0577518f334dee2c851f74f3fb4e940ba04e5d16deb18d00c2adacd8e7f7",
+      "upstream_lf_sha256": "4b3b0577518f334dee2c851f74f3fb4e940ba04e5d16deb18d00c2adacd8e7f7",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/tracy_lz4hc.cpp",
+      "uzengine_blob": "eec7239e05b83f161032ff221f2119e4855a8133",
+      "upstream_sha256": "71218c5612140f6d655f79458c43bac1e172f0f89d594f89679bff6628ba66b6",
+      "upstream_lf_sha256": "71218c5612140f6d655f79458c43bac1e172f0f89d594f89679bff6628ba66b6",
+      "result": "identical"
+    },
+    {
+      "path": "public/common/tracy_lz4hc.hpp",
+      "uzengine_blob": "460cbae7f0432bde8b95d524fdb36152d97e9e11",
+      "upstream_sha256": "6284759c4a4c92750a61158af8c891b74cb7200a0931dd11faaf3e4d40004620",
+      "upstream_lf_sha256": "6284759c4a4c92750a61158af8c891b74cb7200a0931dd11faaf3e4d40004620",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/LICENSE",
+      "uzengine_blob": "097d2774e5dfb4632ab232c61cd002208a1b7d52",
+      "upstream_sha256": "ef8a9b3247488f8901ca60de9b17b745d7bd67e5ec1e622f80d62364572200d8",
+      "upstream_lf_sha256": "ef8a9b3247488f8901ca60de9b17b745d7bd67e5ec1e622f80d62364572200d8",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/alloc.cpp",
+      "uzengine_blob": "a365a4860ac827574c75fdcc2146230ab4a39bac",
+      "upstream_sha256": "7f6026e65e7bc7d1406a99d1ec798491dbd04d28862fe3ab61216f6eb313fc32",
+      "upstream_lf_sha256": "7f6026e65e7bc7d1406a99d1ec798491dbd04d28862fe3ab61216f6eb313fc32",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/backtrace.hpp",
+      "uzengine_blob": "e4be297a9ed88be8cf276e4c56b9c5a0bb13b1ee",
+      "upstream_sha256": "79231477cf0483608aa3f640a2d4f7d8aa8f239b4916e8bd60e4db3d00dec72b",
+      "upstream_lf_sha256": "79231477cf0483608aa3f640a2d4f7d8aa8f239b4916e8bd60e4db3d00dec72b",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/config.h",
+      "uzengine_blob": "87e38a95b5881b4e627dd320160d2aa60636b6c7",
+      "upstream_sha256": "2734b54de6d7695205c7be60cbb67d404e15ad86f04091f049cea85c6d52aa8e",
+      "upstream_lf_sha256": "2734b54de6d7695205c7be60cbb67d404e15ad86f04091f049cea85c6d52aa8e",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/dwarf.cpp",
+      "uzengine_blob": "52fa8a8d22a93c2cb8266f80cee92857f98c6e11",
+      "upstream_sha256": "f84db56b3eafb39fd5a0190053bf1eac36741ec4a0d8b377349530d989ca65ab",
+      "upstream_lf_sha256": "f84db56b3eafb39fd5a0190053bf1eac36741ec4a0d8b377349530d989ca65ab",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/elf.cpp",
+      "uzengine_blob": "352b50dcafd672bb0b49a3b8dcde961940cf3a68",
+      "upstream_sha256": "bdc5d7b2d3bf6db9e1c4237cd1b5732789e89d32ae2dccb0af6dbb55bdf13d9a",
+      "upstream_lf_sha256": "bdc5d7b2d3bf6db9e1c4237cd1b5732789e89d32ae2dccb0af6dbb55bdf13d9a",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/fileline.cpp",
+      "uzengine_blob": "5a37ff0c7d9d67e8b48e4af6793b37c599e8f8f7",
+      "upstream_sha256": "89e33a7b14d8d92346ccc9bac83362916bdf4425854ea07ef3315208a64dae19",
+      "upstream_lf_sha256": "89e33a7b14d8d92346ccc9bac83362916bdf4425854ea07ef3315208a64dae19",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/filenames.hpp",
+      "uzengine_blob": "aa7bd7adff56c23e1df2abbb22acdeea583774f5",
+      "upstream_sha256": "8d2c2d284c3f071a8b418c2ce71e42e48b48caa0c4485b7319a4afe82b236c36",
+      "upstream_lf_sha256": "8d2c2d284c3f071a8b418c2ce71e42e48b48caa0c4485b7319a4afe82b236c36",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/internal.hpp",
+      "uzengine_blob": "213959759bca5c489e9eeebfeee336e085b7ea34",
+      "upstream_sha256": "145767be4ff0b646510862a891fc1140747eb401271717ed1b2ce7633adbb137",
+      "upstream_lf_sha256": "145767be4ff0b646510862a891fc1140747eb401271717ed1b2ce7633adbb137",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/macho.cpp",
+      "uzengine_blob": "bb2e4682742b357b523c4c29bbdee63cb59fdca9",
+      "upstream_sha256": "95ff83546e2a72fe8c65f92474adf80667d25c6f2cac040cf16456b6a67db3b0",
+      "upstream_lf_sha256": "95ff83546e2a72fe8c65f92474adf80667d25c6f2cac040cf16456b6a67db3b0",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/mmapio.cpp",
+      "uzengine_blob": "0e8f599bb82abec8bcfe1adfbac11b3ab974d635",
+      "upstream_sha256": "451eb6f0dcefb25b3ece0cd1fc18f993ec5b206fa54ed80bcefe102032517669",
+      "upstream_lf_sha256": "451eb6f0dcefb25b3ece0cd1fc18f993ec5b206fa54ed80bcefe102032517669",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/posix.cpp",
+      "uzengine_blob": "8233a8ea324b982f87cfe0ba00eff8f293024cbd",
+      "upstream_sha256": "27038d75f4c8fbcc943ea8663cc8a2fac940e9995b0df5d679f8adea7d77a927",
+      "upstream_lf_sha256": "27038d75f4c8fbcc943ea8663cc8a2fac940e9995b0df5d679f8adea7d77a927",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/sort.cpp",
+      "uzengine_blob": "6daee0a64fd2300c01494e3429cb77a462c8ebbd",
+      "upstream_sha256": "1bf7600c9186e86b1dec6f256231a3d6b348c3627e8bc6007c4ebf828f90c9b5",
+      "upstream_lf_sha256": "1bf7600c9186e86b1dec6f256231a3d6b348c3627e8bc6007c4ebf828f90c9b5",
+      "result": "identical"
+    },
+    {
+      "path": "public/libbacktrace/state.cpp",
+      "uzengine_blob": "ea3c137c5d57189dc81dbd3f0e9d233a08885cdc",
+      "upstream_sha256": "33969d1444b919e0533dae8890c20c1d143cbb432aad3b683ac81de308cc493d",
+      "upstream_lf_sha256": "33969d1444b919e0533dae8890c20c1d143cbb432aad3b683ac81de308cc493d",
+      "result": "identical"
+    },
+    {
+      "path": "public/tracy/Tracy.hpp",
+      "uzengine_blob": "848139699ffb3a502956273adfc29bd461a581d9",
+      "upstream_sha256": "2d28896112f80f97967d190dc4105ff7b2f2fec3ea63accda2e1c805fd7cb35c",
+      "upstream_lf_sha256": "2d28896112f80f97967d190dc4105ff7b2f2fec3ea63accda2e1c805fd7cb35c",
+      "result": "identical"
+    },
+    {
+      "path": "public/tracy/TracyC.h",
+      "uzengine_blob": "e77c01f76cfe570ccebe0a619f14148b78a736c4",
+      "upstream_sha256": "9330679fc1603f76998bdd0cce9f7850477a08a949719f81ffd8b0f5ff98706f",
+      "upstream_lf_sha256": "9330679fc1603f76998bdd0cce9f7850477a08a949719f81ffd8b0f5ff98706f",
+      "result": "identical"
+    },
+    {
+      "path": "public/tracy/TracyCUDA.hpp",
+      "uzengine_blob": "40ff55dc2bcde57fd8609c18a61a195c1aa6e519",
+      "upstream_sha256": "967659a473eb58ef2103ed752487cb2c264dfd5d411c20e4b2735e2ba241114e",
+      "upstream_lf_sha256": "967659a473eb58ef2103ed752487cb2c264dfd5d411c20e4b2735e2ba241114e",
+      "result": "identical"
+    },
+    {
+      "path": "public/tracy/TracyD3D11.hpp",
+      "uzengine_blob": "acab383169fb8902b639f883fe7ac399e7580af4",
+      "upstream_sha256": "8a8ca2746ef45771ad29b34712281562fd80822eb5c1811f60dc26e83449609f",
+      "upstream_lf_sha256": "8a8ca2746ef45771ad29b34712281562fd80822eb5c1811f60dc26e83449609f",
+      "result": "identical"
+    },
+    {
+      "path": "public/tracy/TracyD3D12.hpp",
+      "uzengine_blob": "016301ed82fead63440118fe8247b180219ed138",
+      "upstream_sha256": "7172bf48b6599bd3dc0cccfe1424e93a823d3119be89ed5c35eb04406c759265",
+      "upstream_lf_sha256": "7172bf48b6599bd3dc0cccfe1424e93a823d3119be89ed5c35eb04406c759265",
+      "result": "different"
+    },
+    {
+      "path": "public/tracy/TracyLua.hpp",
+      "uzengine_blob": "f0c5c406eab2a34c7c7cfac5b225af2873438194",
+      "upstream_sha256": "fc04041bda48169178eb0019c336d2a8cbc187d85c030c6e9cac32495ae00cac",
+      "upstream_lf_sha256": "fc04041bda48169178eb0019c336d2a8cbc187d85c030c6e9cac32495ae00cac",
+      "result": "identical"
+    },
+    {
+      "path": "public/tracy/TracyMetal.hmm",
+      "uzengine_blob": "a4b4cb52162193ca240afad26e3f51f3b763be5b",
+      "upstream_sha256": "fc00512a5c7971fd7b8917e58c964bf3985ca2eb7594da7c88745a9c31e6392a",
+      "upstream_lf_sha256": "fc00512a5c7971fd7b8917e58c964bf3985ca2eb7594da7c88745a9c31e6392a",
+      "result": "identical"
+    },
+    {
+      "path": "public/tracy/TracyOpenCL.hpp",
+      "uzengine_blob": "ede5c4613bd7df45431f2d463a46f92aa9a3d248",
+      "upstream_sha256": "834d67772e5f431f98834a691378c8843fb1f8bd960f71ca4b62b226a4dfc6e1",
+      "upstream_lf_sha256": "834d67772e5f431f98834a691378c8843fb1f8bd960f71ca4b62b226a4dfc6e1",
+      "result": "identical"
+    },
+    {
+      "path": "public/tracy/TracyOpenGL.hpp",
+      "uzengine_blob": "30abd4fd05133ebb864977cb642bfac692e021b9",
+      "upstream_sha256": "9af3baf8021a3852385feb3319731ce8545c5484fb6050c315c4bbfe8ab67c89",
+      "upstream_lf_sha256": "9af3baf8021a3852385feb3319731ce8545c5484fb6050c315c4bbfe8ab67c89",
+      "result": "identical"
+    },
+    {
+      "path": "public/tracy/TracyVulkan.hpp",
+      "uzengine_blob": "429f299db503cd5dba9f7f988be1449e2d170d11",
+      "upstream_sha256": "56bf418bef05bf7655282b475829ed35b140d25c36a4bfc5dc9c509c18376080",
+      "upstream_lf_sha256": "56bf418bef05bf7655282b475829ed35b140d25c36a4bfc5dc9c509c18376080",
+      "result": "identical"
+    }
+  ],
+  "not_in_uzengine": []
+}

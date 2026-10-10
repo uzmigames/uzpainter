@@ -1,3 +1,15 @@
 # Vendored code stays byte-equal to upstream: no end-of-line conversion on checkout or commit,
 # so MANIFEST.json hashes hold on every machine (docs/architecture/13-engine-integration.md §3.3).
 /thirdparty/uzengine-render-core/** -text
+# Third-party packages stay byte-equal to their upstream archives (MANIFEST.json hashes).
+/thirdparty/spdlog/** -text
+/thirdparty/tracy/** -text
+/thirdparty/directxmath/** -text
+/thirdparty/spirv-reflect/** -text
+/thirdparty/vulkan-headers/** -text
+/thirdparty/volk/** -text
+/thirdparty/vma/** -text
+/thirdparty/d3d12ma/** -text
+/thirdparty/directx-headers/** -text
+/thirdparty/agility/** -text
+/thirdparty/dxc/** -text

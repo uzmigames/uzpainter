@@ -1,0 +1,120 @@
+{
+  "library": "SPIRV-Reflect",
+  "upstream": "https://github.com/KhronosGroup/SPIRV-Reflect",
+  "version": "vulkan-sdk-1.4.309.0",
+  "commit": "c637858562fbce1b6f5dc7ca48d4e8a5bd117b70",
+  "archive_url": "https://github.com/KhronosGroup/SPIRV-Reflect/archive/refs/tags/vulkan-sdk-1.4.309.0.tar.gz",
+  "archive_sha256": "ee57238d4a2c0abf7f0641fb5143bde211e8e31a94194458bab2b6b0a97cb282",
+  "archive_root": "SPIRV-Reflect-vulkan-sdk-1.4.309.0/",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "size": 11357
+    },
+    {
+      "path": "include/spirv/unified1/spirv.h",
+      "sha256": "206606a4597149ae437a08d55432240214cc1fae863cf504b8ff0720c4f0e7f8",
+      "size": 152524
+    },
+    {
+      "path": "spirv_reflect.c",
+      "sha256": "821221991c28eadfa40487b48c64d911ecc008a8225956e025268a2d62c922d8",
+      "size": 219598
+    },
+    {
+      "path": "spirv_reflect.h",
+      "sha256": "0818da09eb65142b53bc52e28041d02ce873f29ea43af5c44f6b205e115f5419",
+      "size": 95914
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/spirv-reflect",
+  "comparison": [
+    {
+      "path": ".git-blame-ignore-revs",
+      "uzengine_blob": "ae4e1bc1c7fc60c9b18bf913ffb467a545900902",
+      "upstream_sha256": "ab1cc088b2ad18e91ad38d6369ab57ee775d67fd9fe6169ecb79d4af34ec49d7",
+      "upstream_lf_sha256": "ab1cc088b2ad18e91ad38d6369ab57ee775d67fd9fe6169ecb79d4af34ec49d7",
+      "result": "identical"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "uzengine_blob": "906c208e9590bb855fc730b7619a7d2062b657db",
+      "upstream_sha256": "9ce4c77d85314905a6e7cc06100b8794cfa1abf1dcbb8f035f78de36ffaaf01f",
+      "upstream_lf_sha256": "9ce4c77d85314905a6e7cc06100b8794cfa1abf1dcbb8f035f78de36ffaaf01f",
+      "result": "identical"
+    },
+    {
+      "path": "CODE_OF_CONDUCT.adoc",
+      "uzengine_blob": "fc586013a16f8b041eb7101962d67624923f1383",
+      "upstream_sha256": "af81de4203e9511f5c471b063139131b7c983c89001afef37ec6dd7361bf0f54",
+      "upstream_lf_sha256": "af81de4203e9511f5c471b063139131b7c983c89001afef37ec6dd7361bf0f54",
+      "result": "identical"
+    },
+    {
+      "path": "LICENSE",
+      "uzengine_blob": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+      "upstream_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "upstream_lf_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "result": "identical"
+    },
+    {
+      "path": "README.md",
+      "uzengine_blob": "4f7e82b1456d1681e8f9a45162b2b092b4759519",
+      "upstream_sha256": "2d9c2392bd1ec29af8502900f4a5ae404b3340a7dc3e7f6f2230eae1d6d93db1",
+      "upstream_lf_sha256": "2d9c2392bd1ec29af8502900f4a5ae404b3340a7dc3e7f6f2230eae1d6d93db1",
+      "result": "identical"
+    },
+    {
+      "path": "common/output_stream.cpp",
+      "uzengine_blob": "c8d59faf5a83eff159dfab002ede08714257e3dc",
+      "upstream_sha256": "3d53d5dc37d135c73732fd615362044c1e2ee12dd92a40faf1a4bfe5eb406fad",
+      "upstream_lf_sha256": "3d53d5dc37d135c73732fd615362044c1e2ee12dd92a40faf1a4bfe5eb406fad",
+      "result": "identical"
+    },
+    {
+      "path": "common/output_stream.h",
+      "uzengine_blob": "42c837d087d60b98566935867d009ac62ff54022",
+      "upstream_sha256": "5d33295ce5d6130917769c0ac9557fa4263050a176035887126a87dd8f8eeffb",
+      "upstream_lf_sha256": "5d33295ce5d6130917769c0ac9557fa4263050a176035887126a87dd8f8eeffb",
+      "result": "identical"
+    },
+    {
+      "path": "include/spirv/unified1/spirv.h",
+      "uzengine_blob": "65becfd7691c5f43e667ed159ae44a9cf736a221",
+      "upstream_sha256": "206606a4597149ae437a08d55432240214cc1fae863cf504b8ff0720c4f0e7f8",
+      "upstream_lf_sha256": "206606a4597149ae437a08d55432240214cc1fae863cf504b8ff0720c4f0e7f8",
+      "result": "identical"
+    },
+    {
+      "path": "main.cpp",
+      "uzengine_blob": "029be1dd491c043f8e56a618e9c41d1ab2e700cf",
+      "upstream_sha256": "d0126811b61b90b2b9700da4241b2603ce48fe6f2d5f45fa83e63ad95dfac628",
+      "upstream_lf_sha256": "d0126811b61b90b2b9700da4241b2603ce48fe6f2d5f45fa83e63ad95dfac628",
+      "result": "identical"
+    },
+    {
+      "path": "spirv_reflect.c",
+      "uzengine_blob": "50986b52d6ae1b66b7886ffbc597d51029dff27b",
+      "upstream_sha256": "821221991c28eadfa40487b48c64d911ecc008a8225956e025268a2d62c922d8",
+      "upstream_lf_sha256": "821221991c28eadfa40487b48c64d911ecc008a8225956e025268a2d62c922d8",
+      "result": "identical"
+    },
+    {
+      "path": "spirv_reflect.cpp",
+      "uzengine_blob": "9f991d6e369e2821f1d1a8f368ca850c1619836f",
+      "upstream_sha256": "498198cef8a9a84b8cf38bf9bed6f24d835483210b2e5856263d4db5bf28410d",
+      "upstream_lf_sha256": "498198cef8a9a84b8cf38bf9bed6f24d835483210b2e5856263d4db5bf28410d",
+      "result": "identical"
+    },
+    {
+      "path": "spirv_reflect.h",
+      "uzengine_blob": "eea30bd711f7152a5ca4e7a2556042b43f899d2a",
+      "upstream_sha256": "0818da09eb65142b53bc52e28041d02ce873f29ea43af5c44f6b205e115f5419",
+      "upstream_lf_sha256": "0818da09eb65142b53bc52e28041d02ce873f29ea43af5c44f6b205e115f5419",
+      "result": "identical"
+    }
+  ],
+  "not_in_uzengine": []
+}

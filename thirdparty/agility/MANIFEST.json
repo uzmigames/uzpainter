@@ -1,0 +1,232 @@
+{
+  "library": "Agility SDK",
+  "upstream": "https://www.nuget.org/packages/Microsoft.Direct3D.D3D12",
+  "version": "1.619.2",
+  "commit": null,
+  "archive_url": "https://www.nuget.org/api/v2/package/Microsoft.Direct3D.D3D12/1.619.2",
+  "archive_sha256": "eb92d90bb23b2ec23410c41d791e41dbdbec942ab946924d1fdcb31eac6f0735",
+  "archive_root": "",
+  "files": [
+    {
+      "path": "LICENSE-CODE.txt",
+      "sha256": "903df5512f7d02609fed0c780a9b704f5a3eeb6e4d84ebe42a29845c81899a3c",
+      "size": 1093
+    },
+    {
+      "path": "LICENSE.txt",
+      "sha256": "5239850894610071566f7ecee0b751fde43c862032d92b99d7d0f596b3433ebd",
+      "size": 13147
+    },
+    {
+      "path": "README.md",
+      "sha256": "e0708344efa705a4356d7e5239727d8b8c845bcec892021b53bb932313620c11",
+      "size": 16598
+    },
+    {
+      "path": "build/native/bin/x64/D3D12Core.dll",
+      "sha256": "90770bc8028ebb9f78051f903343b0aabc12fe7a2b886e007278b5312ba6f101",
+      "size": 5019680
+    },
+    {
+      "path": "build/native/bin/x64/d3d12SDKLayers.dll",
+      "sha256": "86101082d8a95e36f71c33c77713d9719eac20153ff22276e2e460d9064c59c7",
+      "size": 4962336
+    },
+    {
+      "path": "build/native/include/D3D12TokenizedProgramFormat.hpp",
+      "sha256": "6e92a19e6ef7e5ef1723713c86d35101025653c9725cde5eeb6436797094e917",
+      "size": 133012
+    },
+    {
+      "path": "build/native/include/d3d12.h",
+      "sha256": "ed149a58d027ee55d3581a34992fb6247a5973bbdcb00cc44e66a6898a3838a4",
+      "size": 1691904
+    },
+    {
+      "path": "build/native/include/d3d12.idl",
+      "sha256": "5213026f9722677a8d6d75c36cf47e0bfbdfed9bd411a644a51cb7e535017b02",
+      "size": 302087
+    },
+    {
+      "path": "build/native/include/d3d12compatibility.h",
+      "sha256": "49c90e78c6729d086770cecc0b037b118cd63fa87c1fa7237771eadb59c28d2c",
+      "size": 25465
+    },
+    {
+      "path": "build/native/include/d3d12compatibility.idl",
+      "sha256": "df7f5e52521a83ca85caa1c1ee24adc042ca7982e805d2c98633f817ecc7a2de",
+      "size": 4926
+    },
+    {
+      "path": "build/native/include/d3d12compiler.h",
+      "sha256": "b262ef82c3f8de1f7f9309ca875554e72daaba6aa29e28a5d937fa453e97458a",
+      "size": 35452
+    },
+    {
+      "path": "build/native/include/d3d12compiler.idl",
+      "sha256": "82fba0810504e3268cacc9ed5a88d17b9d0895e31b37a363a83d89fcc47fa01c",
+      "size": 11672
+    },
+    {
+      "path": "build/native/include/d3d12markerapienums.idl",
+      "sha256": "3a56a193a577050b3457c6d493c3c85e3660c219bd9a6892436674f8053ba415",
+      "size": 7618
+    },
+    {
+      "path": "build/native/include/d3d12sdklayers.h",
+      "sha256": "30bb616907af14ec59725bec260e5e48eb8195e4319a30e5e45a594b3e449c3c",
+      "size": 182842
+    },
+    {
+      "path": "build/native/include/d3d12sdklayers.idl",
+      "sha256": "b9d0e7de9d138c88152a9e67e15a7ec95439d58e2cf44d753c53e725d0edee65",
+      "size": 97876
+    },
+    {
+      "path": "build/native/include/d3d12shader.h",
+      "sha256": "bdcdd726b6bc803ae50f442fe725ed02b7a8b068572cfd17078358b6232f217c",
+      "size": 28043
+    },
+    {
+      "path": "build/native/include/d3d12video.h",
+      "sha256": "9ccd140cedfb962696e05604f42207697d4e1802d1aa639ce16511f62616bbfd",
+      "size": 459032
+    },
+    {
+      "path": "build/native/include/d3d12video.idl",
+      "sha256": "88cb80c14b92de77f3c5dffafe266e8529e6741d58bfbec8d8c253e1a6cbfc71",
+      "size": 188848
+    },
+    {
+      "path": "build/native/include/d3dcommon.h",
+      "sha256": "8c236985415516302faf0cb725fa78312cb1ac05ba866e29eeab23d695a0f5cb",
+      "size": 51955
+    },
+    {
+      "path": "build/native/include/d3dcommon.idl",
+      "sha256": "2513f619ece3bda0af925b8120ba1adfd6ac1d27a9cb62e4635ef3fafbd09fd2",
+      "size": 47674
+    },
+    {
+      "path": "build/native/include/d3dshadercacheregistration.h",
+      "sha256": "822351db7e51ccccd46ce6407cd708d84cf6232799b921c191b5379225751663",
+      "size": 34810
+    },
+    {
+      "path": "build/native/include/d3dshadercacheregistration.idl",
+      "sha256": "3d6560ee407b561094b77cdf3e21860c212fe9dce46b6f6e718fddc334be67b3",
+      "size": 7635
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12.h",
+      "sha256": "874a67be3eeee5dd4d589b997f53c8e63bd95023270f53cb8bb696736a612e44",
+      "size": 913
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12_barriers.h",
+      "sha256": "f34f8e4dc71ba50d684e58e33d622f31b4f56c66bff0d82531a65b17ec710849",
+      "size": 6635
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12_check_feature_support.h",
+      "sha256": "acd83a6b7a89da9acaed06b6d4ec46af7f05c77e87b9b4d1e82c336e5da7a604",
+      "size": 47466
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12_core.h",
+      "sha256": "7d187da4ad8413d441b6ec9505a55dacf617a22a4fd6aedd2770885982cff87d",
+      "size": 79380
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12_default.h",
+      "sha256": "7086bdb3b36e9ee8f3f4eda7ac0f50b4d8fcbb3a4d641ea5d0e7a4253d85e8fa",
+      "size": 325
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12_pipeline_state_stream.h",
+      "sha256": "34368aa1a5370233be9cc272c82b0fc9b6bb4ad45f0d24b82074a6861883cee1",
+      "size": 97735
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12_property_format_table.h",
+      "sha256": "a63eb8632c7e3b8ee97ffc4a1f7d39b07b2eb022f5f50dc75c6803418842fbb4",
+      "size": 11564
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12_render_pass.h",
+      "sha256": "092ffb4cd1df4f755afb2d7b99e7cca51908fb5471bb2666f7355171d4df47d1",
+      "size": 4309
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12_resource_helpers.h",
+      "sha256": "16a04f62a9b3e809e07a21bff9dc706067c7668f4dfeb4c3c631bef97bda439c",
+      "size": 26354
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12_root_signature.h",
+      "sha256": "6575ca966d6a6ab82f9acc3f07d3fcf327d1d586d860cf5a3859f57d4875955d",
+      "size": 53425
+    },
+    {
+      "path": "build/native/include/d3dx12/d3dx12_state_object.h",
+      "sha256": "bcf793ae8151104a99a9bd517f3df3ef2512717d15a73e3f073b7a4e773294d1",
+      "size": 96187
+    },
+    {
+      "path": "build/native/include/dxgiformat.h",
+      "sha256": "0ac14d7da595c528e0f14c64685d83596c392d36a0ab49ce2ecab05299e6c0d0",
+      "size": 8022
+    },
+    {
+      "path": "build/native/include/dxgiformat.idl",
+      "sha256": "dec3bd183947ebf7bdef8547aff8f1b3aa6e6f6be770d3be15b14d39b626618f",
+      "size": 7909
+    },
+    {
+      "path": "distributable files.txt",
+      "sha256": "18be111795af241547e17596a010cb7606aa8670d9a26096425ba46a0f76ef9e",
+      "size": 93
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/agility",
+  "comparison": [],
+  "not_in_uzengine": [
+    "LICENSE-CODE.txt",
+    "LICENSE.txt",
+    "README.md",
+    "build/native/bin/x64/D3D12Core.dll",
+    "build/native/bin/x64/d3d12SDKLayers.dll",
+    "build/native/include/D3D12TokenizedProgramFormat.hpp",
+    "build/native/include/d3d12.h",
+    "build/native/include/d3d12.idl",
+    "build/native/include/d3d12compatibility.h",
+    "build/native/include/d3d12compatibility.idl",
+    "build/native/include/d3d12compiler.h",
+    "build/native/include/d3d12compiler.idl",
+    "build/native/include/d3d12markerapienums.idl",
+    "build/native/include/d3d12sdklayers.h",
+    "build/native/include/d3d12sdklayers.idl",
+    "build/native/include/d3d12shader.h",
+    "build/native/include/d3d12video.h",
+    "build/native/include/d3d12video.idl",
+    "build/native/include/d3dcommon.h",
+    "build/native/include/d3dcommon.idl",
+    "build/native/include/d3dshadercacheregistration.h",
+    "build/native/include/d3dshadercacheregistration.idl",
+    "build/native/include/d3dx12/d3dx12.h",
+    "build/native/include/d3dx12/d3dx12_barriers.h",
+    "build/native/include/d3dx12/d3dx12_check_feature_support.h",
+    "build/native/include/d3dx12/d3dx12_core.h",
+    "build/native/include/d3dx12/d3dx12_default.h",
+    "build/native/include/d3dx12/d3dx12_pipeline_state_stream.h",
+    "build/native/include/d3dx12/d3dx12_property_format_table.h",
+    "build/native/include/d3dx12/d3dx12_render_pass.h",
+    "build/native/include/d3dx12/d3dx12_resource_helpers.h",
+    "build/native/include/d3dx12/d3dx12_root_signature.h",
+    "build/native/include/d3dx12/d3dx12_state_object.h",
+    "build/native/include/dxgiformat.h",
+    "build/native/include/dxgiformat.idl",
+    "distributable files.txt"
+  ]
+}

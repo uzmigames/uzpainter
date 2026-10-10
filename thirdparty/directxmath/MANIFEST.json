@@ -1,0 +1,288 @@
+{
+  "library": "DirectXMath",
+  "upstream": "https://github.com/microsoft/DirectXMath",
+  "version": "apr2025",
+  "commit": "56206b1916646b29b37e1eac56e96e2008d6c71f",
+  "archive_url": "https://github.com/microsoft/DirectXMath/archive/refs/tags/apr2025.tar.gz",
+  "archive_sha256": "8ac7f060d7fcc971d77c5a9f3ff98548ecf119c144a7c2dd9d21f4b66ba94cd4",
+  "archive_root": "DirectXMath-apr2025/",
+  "files": [
+    {
+      "path": "Inc/DirectXCollision.h",
+      "sha256": "979c6a2396768c8f5d36ae62c63b0c07d22945633677ef660256b15b5d04d46c",
+      "size": 18114
+    },
+    {
+      "path": "Inc/DirectXCollision.inl",
+      "sha256": "100c840b77875f87b9a900558899167712c8bd0e47771a752d02343572acad2c",
+      "size": 200097
+    },
+    {
+      "path": "Inc/DirectXColors.h",
+      "sha256": "d333f0a20ef585ae8d8aa594411f3c2b8710c3d7ec278adb5bc6ec37189cd9fe",
+      "size": 28687
+    },
+    {
+      "path": "Inc/DirectXMath.h",
+      "sha256": "67cf7cd9e1dd53af2147b7107d1074af16eac3291364a2380dcd9a6041fbc849",
+      "size": 128770
+    },
+    {
+      "path": "Inc/DirectXMathConvert.inl",
+      "sha256": "aec241bb47ba9a6458bc048c0913c3e9f5223d5defd462b2b637a2035001f1ad",
+      "size": 81932
+    },
+    {
+      "path": "Inc/DirectXMathMatrix.inl",
+      "sha256": "ec8f1ce63fa906c5121c023296e281d18935bc197a399e9039b1f850da04fbeb",
+      "size": 122191
+    },
+    {
+      "path": "Inc/DirectXMathMisc.inl",
+      "sha256": "469ca3b1c8b2ad78e58ff3a9cf095125965c11c594f3e102ee8d72bf39dae91d",
+      "size": 82204
+    },
+    {
+      "path": "Inc/DirectXMathVector.inl",
+      "sha256": "70fe825b3aa5019b0df0adb713e17b70b23e1c452b7dac6c4665805781d3339e",
+      "size": 549530
+    },
+    {
+      "path": "Inc/DirectXPackedVector.h",
+      "sha256": "0dc0f00d9f9484ba24fe65f5cf9e1da65a7386096f6dc9c184769dbcfc4a95e3",
+      "size": 51043
+    },
+    {
+      "path": "Inc/DirectXPackedVector.inl",
+      "sha256": "5d05b4145048ab82540e96ddc6fbd127e53c749aae5c9d4cc4607cc9c8453b7a",
+      "size": 167443
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+      "size": 1141
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/directxmath",
+  "comparison": [
+    {
+      "path": ".azuredevops/pipelines/DirectXMath-GitHub-CMake-Dev17.yml",
+      "uzengine_blob": "5c21d1c17cac3a26b5a63821cd5819a65a5809d6",
+      "upstream_sha256": "7fd398c9ec73a68adfa35129aadcb51f34c08f42fd9fd5d7b28831e52d085a6e",
+      "upstream_lf_sha256": "7fd398c9ec73a68adfa35129aadcb51f34c08f42fd9fd5d7b28831e52d085a6e",
+      "result": "identical"
+    },
+    {
+      "path": ".azuredevops/pipelines/DirectXMath-GitHub-CMake.yml",
+      "uzengine_blob": "c6513764f38950cfbd2a6717f630e1627c996eee",
+      "upstream_sha256": "17f8715cb028430a68dd4679e73c1c0130b13a2a693c444fd7cdd9cb84c6a703",
+      "upstream_lf_sha256": "17f8715cb028430a68dd4679e73c1c0130b13a2a693c444fd7cdd9cb84c6a703",
+      "result": "identical"
+    },
+    {
+      "path": ".azuredevops/pipelines/DirectXMath-GitHub-Dev17.yml",
+      "uzengine_blob": "c81a97c8c22a7d97f0febb5c7e2ec97a85233c25",
+      "upstream_sha256": "f4cb6dfd260ab3fd25426f19cfb97a3a057b0301c71e0ea0f32ba3baa802e12d",
+      "upstream_lf_sha256": "f4cb6dfd260ab3fd25426f19cfb97a3a057b0301c71e0ea0f32ba3baa802e12d",
+      "result": "identical"
+    },
+    {
+      "path": ".azuredevops/pipelines/DirectXMath-GitHub-MinGW.yml",
+      "uzengine_blob": "a3553d8fa172588ab49ef2de897eddf31b146e02",
+      "upstream_sha256": "ffdf4697bf2b825f17711c4b98ac4ff6b2b5c441098f280f33e78100e2b4608d",
+      "upstream_lf_sha256": "ffdf4697bf2b825f17711c4b98ac4ff6b2b5c441098f280f33e78100e2b4608d",
+      "result": "identical"
+    },
+    {
+      "path": ".azuredevops/pipelines/DirectXMath-GitHub-WSL-11.yml",
+      "uzengine_blob": "eba12ed53094e2a8ce026301f33b904eb0b75908",
+      "upstream_sha256": "2afc6869204a63cc1e29a5aa6ae69e566046a223f28f65dff326230db42f0cb3",
+      "upstream_lf_sha256": "2afc6869204a63cc1e29a5aa6ae69e566046a223f28f65dff326230db42f0cb3",
+      "result": "identical"
+    },
+    {
+      "path": ".azuredevops/pipelines/DirectXMath-GitHub-WSL-13.yml",
+      "uzengine_blob": "00847482167e776a1181eaab011f15ae750729ad",
+      "upstream_sha256": "70e9016225d951ea2c0e6cd46e9d5048dfdd54878b748e3979c6308dd18c9480",
+      "upstream_lf_sha256": "70e9016225d951ea2c0e6cd46e9d5048dfdd54878b748e3979c6308dd18c9480",
+      "result": "identical"
+    },
+    {
+      "path": ".azuredevops/pipelines/DirectXMath-GitHub.yml",
+      "uzengine_blob": "bab7fd1952d98e80cca447699fe285e07c1d4490",
+      "upstream_sha256": "39247543be6f4811f634994fe6fe48237a9688a8e40e5f06bb7cf1fe25ba00b1",
+      "upstream_lf_sha256": "39247543be6f4811f634994fe6fe48237a9688a8e40e5f06bb7cf1fe25ba00b1",
+      "result": "identical"
+    },
+    {
+      "path": ".azuredevops/pipelines/DirectXMath-SDL.yml",
+      "uzengine_blob": "e37e878f2080f6f8902d44af0400177e218eaa28",
+      "upstream_sha256": "70750ee45d7f46a72b6fbf2e36e634c6f73b79d708dddefb1d40f640e9141ef3",
+      "upstream_lf_sha256": "70750ee45d7f46a72b6fbf2e36e634c6f73b79d708dddefb1d40f640e9141ef3",
+      "result": "identical"
+    },
+    {
+      "path": ".azuredevops/policies/approvercountpolicy.yml",
+      "uzengine_blob": "6cf0f0f027c1c7471054b0f9fe05306ed0b78873",
+      "upstream_sha256": "0013e1b7d129b43eb5e79f40b2aafd48ae909df976abe21e53dea9953d139cc6",
+      "upstream_lf_sha256": "0013e1b7d129b43eb5e79f40b2aafd48ae909df976abe21e53dea9953d139cc6",
+      "result": "identical"
+    },
+    {
+      "path": ".nuget/directxmath.nuspec",
+      "uzengine_blob": "6913985b6e77dece4e00776e8735f8cd02d5e460",
+      "upstream_sha256": "fd797ce8159cefe9a5d62af1834a361aa2c58bdf095f1dc2e0e45e7171eb8962",
+      "upstream_lf_sha256": "fd797ce8159cefe9a5d62af1834a361aa2c58bdf095f1dc2e0e45e7171eb8962",
+      "result": "identical"
+    },
+    {
+      "path": ".nuget/directxmath.targets",
+      "uzengine_blob": "0a31f579bdb3a469a71d60c8031c296a66b2ace4",
+      "upstream_sha256": "0768b2080810f8a3c09344939389413f4a4e1faab096e4e04f43898de7652d5b",
+      "upstream_lf_sha256": "0768b2080810f8a3c09344939389413f4a4e1faab096e4e04f43898de7652d5b",
+      "result": "identical"
+    },
+    {
+      "path": ".nuget/icon.jpg",
+      "uzengine_blob": "08fe1faeb7f6e45d796cf1e67bf1cbb1347c514a",
+      "upstream_sha256": "b0a12877be69e18384c7e2940bb285cd0e813d88b1424ade27ddcd2355910d29",
+      "upstream_lf_sha256": "b0a12877be69e18384c7e2940bb285cd0e813d88b1424ade27ddcd2355910d29",
+      "result": "identical"
+    },
+    {
+      "path": ".nuget/signconfig.xml",
+      "uzengine_blob": "f32a6a46493ddfd4a1624ea73d2073563e140579",
+      "upstream_sha256": "ca3b8716e323fe7a52fe8c78506c73df11a6d976deeade6da07205252cf5bba7",
+      "upstream_lf_sha256": "ca3b8716e323fe7a52fe8c78506c73df11a6d976deeade6da07205252cf5bba7",
+      "result": "identical"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "uzengine_blob": "75a965dc1bbd1a46d173f161e7556cd2c5bfeb51",
+      "upstream_sha256": "34317e63465f2b6673a91c54cfe71c55d459c2a5687c59d3dc27a346e10f63d7",
+      "upstream_lf_sha256": "34317e63465f2b6673a91c54cfe71c55d459c2a5687c59d3dc27a346e10f63d7",
+      "result": "identical"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "uzengine_blob": "48b8d38cb934407b11c753e9a158d53b5aaca926",
+      "upstream_sha256": "4dc38525623b54b6c9956218aef99dde9f0e32e788dce4749aafc470365b39e7",
+      "upstream_lf_sha256": "4dc38525623b54b6c9956218aef99dde9f0e32e788dce4749aafc470365b39e7",
+      "result": "identical"
+    },
+    {
+      "path": "CMakePresets.json",
+      "uzengine_blob": "ab5817b9c2252dfe68c925c7fa84b6361e2b0296",
+      "upstream_sha256": "d0159039111ccdaf93beb0efaec87d1f417799b9663e6c330ee6ca89f521c28d",
+      "upstream_lf_sha256": "d0159039111ccdaf93beb0efaec87d1f417799b9663e6c330ee6ca89f521c28d",
+      "result": "identical"
+    },
+    {
+      "path": "Inc/DirectXCollision.h",
+      "uzengine_blob": "a0ee195348b6fdc25c34d9559457272afdf53305",
+      "upstream_sha256": "979c6a2396768c8f5d36ae62c63b0c07d22945633677ef660256b15b5d04d46c",
+      "upstream_lf_sha256": "838a392c804e117d0e919df2d0ccafa3ecb4e16b62562f34b4c46bd659b6eedf",
+      "result": "line-endings"
+    },
+    {
+      "path": "Inc/DirectXCollision.inl",
+      "uzengine_blob": "92986f200c624713a61fbb2aa47f62af5abcc39a",
+      "upstream_sha256": "100c840b77875f87b9a900558899167712c8bd0e47771a752d02343572acad2c",
+      "upstream_lf_sha256": "b25be6d99810e978625de983af98322b8684cd718b9904e0a0d567baefaea94e",
+      "result": "line-endings"
+    },
+    {
+      "path": "Inc/DirectXColors.h",
+      "uzengine_blob": "83fa21093b61f2c0ba076f97123a57930a92c33d",
+      "upstream_sha256": "d333f0a20ef585ae8d8aa594411f3c2b8710c3d7ec278adb5bc6ec37189cd9fe",
+      "upstream_lf_sha256": "926d5a4d8e8c6d7f550fa267960d95d44892dca6117c993fff61283d730e8c4a",
+      "result": "line-endings"
+    },
+    {
+      "path": "Inc/DirectXMath.h",
+      "uzengine_blob": "256db662c3e1f22a415674964c95daa717e4b40d",
+      "upstream_sha256": "67cf7cd9e1dd53af2147b7107d1074af16eac3291364a2380dcd9a6041fbc849",
+      "upstream_lf_sha256": "71b7cf095503a42db1d017ffd1c0ffe7a3fb866fc2ae584bad417fc5308d9a2a",
+      "result": "line-endings"
+    },
+    {
+      "path": "Inc/DirectXMathConvert.inl",
+      "uzengine_blob": "3ca86d5ff85ec83f481056ba27bdf81b556ec1eb",
+      "upstream_sha256": "aec241bb47ba9a6458bc048c0913c3e9f5223d5defd462b2b637a2035001f1ad",
+      "upstream_lf_sha256": "eb77f0b0cd66fc7473d2615a4931dc6521614e4b7eafa66d3442e7aacffe3351",
+      "result": "line-endings"
+    },
+    {
+      "path": "Inc/DirectXMathMatrix.inl",
+      "uzengine_blob": "f063a61767521bd7de45de49daf0a348911ec33c",
+      "upstream_sha256": "ec8f1ce63fa906c5121c023296e281d18935bc197a399e9039b1f850da04fbeb",
+      "upstream_lf_sha256": "73116706cccc344995d055d0307f9895ffc133e17f9484b067a05cd16c824db1",
+      "result": "line-endings"
+    },
+    {
+      "path": "Inc/DirectXMathMisc.inl",
+      "uzengine_blob": "ccd904f334f2dce27e6ddd28e76a6ad851438eb3",
+      "upstream_sha256": "469ca3b1c8b2ad78e58ff3a9cf095125965c11c594f3e102ee8d72bf39dae91d",
+      "upstream_lf_sha256": "5f24a34c28d50e0bc1746bfff7e661cf7bb5ef7d379ecf369b10b77982fb7ad1",
+      "result": "line-endings"
+    },
+    {
+      "path": "Inc/DirectXMathVector.inl",
+      "uzengine_blob": "be15215fac4eb4cb4f286b6d9132ba34972f1a91",
+      "upstream_sha256": "70fe825b3aa5019b0df0adb713e17b70b23e1c452b7dac6c4665805781d3339e",
+      "upstream_lf_sha256": "9c7edab7b1e2a17a6380a6e1b0ed5856e697301d979da8619314701b328c01a1",
+      "result": "line-endings"
+    },
+    {
+      "path": "Inc/DirectXPackedVector.h",
+      "uzengine_blob": "1f7d1cd94c15db7eaabb0d8728a60615cdecf763",
+      "upstream_sha256": "0dc0f00d9f9484ba24fe65f5cf9e1da65a7386096f6dc9c184769dbcfc4a95e3",
+      "upstream_lf_sha256": "a4a7dac7ea6021d4b3af3aeecb8268a250170e4d5d95340fea0c31b0d7a18c19",
+      "result": "line-endings"
+    },
+    {
+      "path": "Inc/DirectXPackedVector.inl",
+      "uzengine_blob": "2be690d5101f090f463fc08441372c560cafcab7",
+      "upstream_sha256": "5d05b4145048ab82540e96ddc6fbd127e53c749aae5c9d4cc4607cc9c8453b7a",
+      "upstream_lf_sha256": "aab9f95a3cad70b949300cb1dc02b1eb2d3607fd3a6fe6545d24eac4c9569f6c",
+      "result": "line-endings"
+    },
+    {
+      "path": "Inc/sal.h",
+      "uzengine_blob": "9d461e8050f57e350a79cddf773e9f15599c8bb1",
+      "upstream_sha256": null,
+      "upstream_lf_sha256": null,
+      "result": "uzengine-only"
+    },
+    {
+      "path": "LICENSE",
+      "uzengine_blob": "9e841e7a26e4eb057b24511e7b92d42b257a80e5",
+      "upstream_sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+      "upstream_lf_sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+      "result": "identical"
+    },
+    {
+      "path": "README.md",
+      "uzengine_blob": "0d912dba47cc2741173f76e4491a1685b98d4e30",
+      "upstream_sha256": "9a4a0b5fb0d3e4c499b24863a0755324e653e3ac3e1627fa446866a368c367b3",
+      "upstream_lf_sha256": "9a4a0b5fb0d3e4c499b24863a0755324e653e3ac3e1627fa446866a368c367b3",
+      "result": "identical"
+    },
+    {
+      "path": "Stereo3D/Stereo3DMatrixHelper.cpp",
+      "uzengine_blob": "6e49b6cade14af062738ff8ae19b3294a03ad4a1",
+      "upstream_sha256": "ed9ff9b99cf23de64555213298b349ac66fef2099eb853becdb2a2433eb812d5",
+      "upstream_lf_sha256": "4b96baa84099df9613fabfd484483dec89e56a157099bb770d78fb76f217c827",
+      "result": "line-endings"
+    },
+    {
+      "path": "Stereo3D/Stereo3DMatrixHelper.h",
+      "uzengine_blob": "412d0350a63a7066e777b7954cb6b78b92d1b904",
+      "upstream_sha256": "8161644a4c067a25995e8cdf92e237ef0ba9e3f25045bc1568253f4625779b60",
+      "upstream_lf_sha256": "4386c9c52cc098eae79b5702ee29b7c9863b9df95cb6b349e603917a994942a1",
+      "result": "line-endings"
+    }
+  ],
+  "not_in_uzengine": []
+}

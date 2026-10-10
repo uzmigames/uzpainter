@@ -1,0 +1,73 @@
+{
+  "library": "volk",
+  "upstream": "https://github.com/zeux/volk",
+  "version": "vulkan-sdk-1.4.304.1",
+  "commit": "0b17a763ba5643e32da1b2152f8140461b3b7345",
+  "archive_url": "https://github.com/zeux/volk/archive/refs/tags/vulkan-sdk-1.4.304.1.tar.gz",
+  "archive_sha256": "01f9facf95167f76d48c752c17ac602ffbc33d2e7157774e2c32a7de614b3687",
+  "archive_root": "volk-vulkan-sdk-1.4.304.1/",
+  "files": [
+    {
+      "path": "LICENSE.md",
+      "sha256": "e85b35831f01da6aa8c029f0a06a0468be143534babe9014e37ee03bf078bf36",
+      "size": 1066
+    },
+    {
+      "path": "volk.c",
+      "sha256": "40a6ed31067b244b97c444e866876746574d3c3ad1c9bb9fac1588e2b4160628",
+      "size": 267743
+    },
+    {
+      "path": "volk.h",
+      "sha256": "45dc84d3055048e181516a7caa0029cc54d1db6d5dbc5e8ff1017ac0720bf0c1",
+      "size": 134827
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/volk",
+  "comparison": [
+    {
+      "path": "CMakeLists.txt",
+      "uzengine_blob": "69beea25081f35fcf40202d2a93c004a206b1a60",
+      "upstream_sha256": "ce44d87723c7ce5e55b8df97854d549b1317a4ac24e954fd1bc1425d724c76e2",
+      "upstream_lf_sha256": "ce44d87723c7ce5e55b8df97854d549b1317a4ac24e954fd1bc1425d724c76e2",
+      "result": "identical"
+    },
+    {
+      "path": "LICENSE.md",
+      "uzengine_blob": "5a717f267809d0e37f75ff213e1d385cf38c7934",
+      "upstream_sha256": "e85b35831f01da6aa8c029f0a06a0468be143534babe9014e37ee03bf078bf36",
+      "upstream_lf_sha256": "e85b35831f01da6aa8c029f0a06a0468be143534babe9014e37ee03bf078bf36",
+      "result": "identical"
+    },
+    {
+      "path": "README.md",
+      "uzengine_blob": "8d5ff0b0585d581427a3aeaf2dcbdab57af61768",
+      "upstream_sha256": "53a6269bf1d7bb813e4ba393c51b831ce12f227f985b63842a1d4ba53a1b6082",
+      "upstream_lf_sha256": "53a6269bf1d7bb813e4ba393c51b831ce12f227f985b63842a1d4ba53a1b6082",
+      "result": "identical"
+    },
+    {
+      "path": "generate.py",
+      "uzengine_blob": "bb21877a74a74e26fe2cd01315700beb14276cf1",
+      "upstream_sha256": "ffb00585a7e6674d123db5613777144feaa9c572cd526e02b185f18a0c2df585",
+      "upstream_lf_sha256": "ffb00585a7e6674d123db5613777144feaa9c572cd526e02b185f18a0c2df585",
+      "result": "identical"
+    },
+    {
+      "path": "volk.c",
+      "uzengine_blob": "ba984c0c18448514ed7b21934917922c7c6cd577",
+      "upstream_sha256": "40a6ed31067b244b97c444e866876746574d3c3ad1c9bb9fac1588e2b4160628",
+      "upstream_lf_sha256": "40a6ed31067b244b97c444e866876746574d3c3ad1c9bb9fac1588e2b4160628",
+      "result": "identical"
+    },
+    {
+      "path": "volk.h",
+      "uzengine_blob": "20a5bb4b634814210b7f10482c0f22dd1929197c",
+      "upstream_sha256": "45dc84d3055048e181516a7caa0029cc54d1db6d5dbc5e8ff1017ac0720bf0c1",
+      "upstream_lf_sha256": "45dc84d3055048e181516a7caa0029cc54d1db6d5dbc5e8ff1017ac0720bf0c1",
+      "result": "identical"
+    }
+  ],
+  "not_in_uzengine": []
+}
