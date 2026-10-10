@@ -1,0 +1,123 @@
+# 01 — Assets3D pipeline overview (as of 2026-10-09)
+
+Analysis of the Tales of Shadowland 3D asset pipeline at `E:\UzmiGames\Assets3D`, written as input for UzPainter (a 100% AI-operated replacement for Adobe Substance 3D Painter). This file describes the end-to-end flow; later files zoom in on Painter usage (02), bake (03), painting (04), export (05), review rendering (06), lessons (07) and derived requirements (08).
+
+## Conventions
+
+- Paths are relative to `E:\UzmiGames\Assets3D\` unless they start with a drive letter. `SM/` abbreviates `Creatures/Undead/Skeletal Mage/Models3D/`. `report.json → key` means a key inside that JSON file.
+- Labels: **F** = Fact (stated in, or computed this session from, the cited source), **H** = Hypothesis (inferred, not confirmed by a source), **R** = Recommendation (ours, for UzPainter). "Not confirmed" marks gaps.
+- Only one character has gone through the pipeline so far: the Skeletal Mage (body + 17 equipment pieces) — **F**, `Docs/Pipeline/README.md` (first paragraph). All evidence below comes from that character.
+
+## 1. Summary
+
+**F** — The agreed order is: low faithful to the high's construction → shape checked against the original → professional UV validated → bake → low + normal vs high comparison approved → masks → painting → maps checked → render and feedback → lesson recorded (`Docs/Pipeline/README.md`, section "Fluxo reutilizável: da low à pintura validada"). Since 2026-10-08 every stage ends with a written gate check and only a pass advances (`AGENTS.override.md` → "Stage quality gates").
+
+**F** — Painting is done exclusively in Substance 3D Painter 12.1, driven through MCP/Python, never by mouse or keyboard (`AGENTS.override.md` → "Working agreements"; `.claude/skills/pintura-pbr/SKILL.md`, "A pintura é SEMPRE no Substance Painter"; `Docs/Pipeline/README.md`, "Operação por MCP e ferramentas locais"). Everything else — generation, assembly, low/retopo, UV, the authoritative normal bake, mask computation, review rendering, GLB/FBX export — happens in Meshy, Blender 5.2.2 (background workers or MCP) and plain Python/NumPy.
+
+## 2. Actors and responsibilities
+
+| Actor | Role in the pipeline | Type | Source |
+|---|---|---|---|
+| User (art director) | Gives requests, judges against the reference, gives the only artistic approval; watches a visible Painter/Blender window; forbids mouse/keyboard/focus control of their windows. | F | `AGENTS.override.md` → "Working agreements", "Stage quality gates"; `Docs/Pipeline/README.md` ("O usuário proibiu controle de mouse, teclado e foco") |
+| Claude (Claude Code) | Construction, fit, authored painting, coordination of every character; opens scoped Astra sessions. | F | `AGENTS.override.md` → "Coordination" |
+| Astra (OpenAI Codex CLI/app) | UV, bake, technical QA, infrastructure, image generation (`image_gen` swatches and clean reference edits). | F | `AGENTS.override.md` → "Coordination"; `Docs/Colaboracao/Capacidades.md` |
+| Producer vs confirmer | The producer self-inspects; another session confirms the gate; the manifest records both separately. | F | `AGENTS.override.md` → "Coordination"; `Docs/Pipeline/Manifesto/README.md` |
+| Collaboration channel | `Docs/Colaboracao/scripts/collab.py` (publish, inbox, exclusive `lock` for Blender and Painter). | F | `Docs/Colaboracao/Colaboracao.md` → "Substance Painter" |
+
+## 3. Tools and versions
+
+| Tool | Version / location | Used for | Source |
+|---|---|---|---|
+| Meshy image-to-3D | Meshy 7.1, geometry "Ultra 4K" (single image) or 2K (multi-image, 1–4 views); no remesh, decimation, texture generation, resize or auto-rig | High-poly source generation | F — `Docs/Pipeline/README.md` → "Geração", "Operação e retomada" |
+| Blender | 5.2.2 LTS, `E:/SteamLibrary/steamapps/common/Blender/blender.exe`; only numpy inside (no scipy) | Assembly, low/retopo, UV, normal/AO/mask bakes, review renders, GLB/FBX export | F — `Docs/Pipeline/MCP/Ambiente.md` |
+| Blender MCP | `mcp-for-blender` 2.1.3 (PyPI), port 9876, client `Docs/Pipeline/MCP/blender_mcp_client.py`; background workers (`blender -b --factory-startup`) preferred | Scene operations | F — `Docs/Pipeline/README.md` → "Blender e trabalho conjunto"; `Docs/Pipeline/MCP/Ambiente.md` |
+| Substance 3D Painter | 12.1.0, launched with `--enable-remote-scripting`, endpoint `localhost` (IPv6 `::1:60041`) | Mesh-map bakes (some pieces), layer stack, smart materials/masks, export, Iray preview | F — `Docs/Pipeline/README.md` → "Operação por MCP e ferramentas locais" |
+| Painter MCP | Community `SubstancePainterMCP` (github.com/elliezu) as submodule `Tools/SubstancePainterMCP`, plus local patch `Docs/Pipeline/MCP/substance-painter-mcp-local.patch`; 79 tools in `Tools/SubstancePainterMCP/tool-schema.json` (count computed this session) | Bridge between agents and Painter | F — `Docs/README.md` → "Ferramentas (submodules)" |
+| Python 3 | numpy, scipy, Pillow | 3D per-texel mask computation, boards, metrics | F — `Docs/Pipeline/MCP/Ambiente.md` |
+| Review panel | `Docs/Pipeline/Painel/painel.py` (stdlib server) + three.js 0.170 viewer | Browser review of GLBs vs references, pivots, equipped composition | F — `Docs/Pipeline/Painel/README.md` |
+| Catalog | `Docs/Pipeline/catalogo.py` / `catalogo.json` (225 tools, 68 lessons, 3 recipes, 8 swatches; counted this session) | Find existing tools/recipes/lessons; generates `Gates/` and archetype indexes | F — `Docs/Pipeline/README.md`; `Docs/Pipeline/catalogo.json` |
+| Manifest | `Docs/Pipeline/Manifesto/manifesto.py` + `manifesto-schema-v1.json` | Per-version manifest and character index | F — `Docs/Pipeline/Manifesto/README.md` |
+
+## 4. Stages end to end
+
+| # | Stage | Main tools | Driven by | Key outputs | Gate to advance | Sources |
+|---|---|---|---|---|---|---|
+| 0 | Reference preparation | Reference sheets in `Creatures/.../Model/` and `Equipment/`; Astra `image_gen` edits ("clean photo of the piece as worn") | Claude + Astra | Per-piece reference PNGs | — | F — `SM/23-Cinto/manifestos/v5.json` (`referencia` entries); `Docs/Pipeline/Licoes/geracao-meshy-foto-limpa-vestida.md` |
+| 1 | Generation | `Docs/Pipeline/Geracao/meshy_session.py`, `report_meshy.py`, `inspect_glb.py` | Agent, with user-authorised credits | GLB + OBJ highs (e.g. hat high 667,248 tris; grimoire v2 606,526 tris) kept read-only in `SM/Meshy-High-v*` | Visual selection | F — `Docs/Pipeline/README.md` → "Geração"; `SM/10-Chapeu/report.json → source_data` |
+| 2 | Assembly / fit | `Docs/Pipeline/Montagem/*.py` (`place_by_reference_views.py`, `equip_pivot.py`, coverage cuts) | Claude | Assembly `.blend`, `Assembly/equip-placements.json` | Geometry gate | F — `.claude/skills/remontagem-personagem/SKILL.md`; `AGENTS.override.md` → "Never deform a model to fit another", "Equipment pivot" |
+| 3 | Geometry gate | `Docs/Pipeline/Render/render_ref_view_crops.py`, `board_ref_vs_render.py` under `ref_match` | Producer + confirmer | Clay renders at every reference framing | `gates.visual.geometria-encaixe = pass` in the manifest before the Painter project is created | F — `AGENTS.override.md` → "Stage quality gates" §1; `Docs/Pipeline/Licoes/gate-nao-pintar-geometria-reprovada.md` |
+| 4 | Low / retopo | Voxel remesh + decimate + shrinkwrap (`retopo_voxel_low.py`), decimation, per-piece parametric construction scripts (`Docs/Pipeline/Retopologia/chapeu-v6/`, `cajado-v10/`, `cintura_v5/`, `varinha11-v1/`) | Claude | Low `.blend` (e.g. hat v6 3,498 tris for a 3,500 budget; tunic 11,000) | Silhouette kept within budget | F — `Docs/Pipeline/README.md` → "Como escolher a low"; `SM/10-Chapeu/report.json → v6.low` |
+| 5 | UV | `Docs/Pipeline/UV/*.py`: unwrap/panels/xatlas → `uv_fold_repair_pack.py` → `normalize_uv_islands.py` (10.24 px/cm) → pack → `validate_uv_mesh.py`; texture-set split/join | Astra / Claude | Validated low, `uv/val-<res>.json`, checker renders | Numerical gate + checker review | F — `.claude/skills/uv-profissional/SKILL.md`; `Docs/Pipeline/Retopologia/cajado-v10/uvchain.sh` |
+| 6 | Bake | Blender: `Docs/Pipeline/Pintura/bake_normal_pair.py` (normal), `garment_blender_io.py extract` (AO + raster inputs); Painter bakers on some pieces | Astra / Claude | 16-bit OpenGL normal + `_raw/_coverage/_stages` evidence; AO | Lit low+bake render with no misses, waviness or seam artifacts | F — `Docs/Pipeline/Retopologia/*/bake.sh`; `AGENTS.override.md` → "Stage quality gates" §3 |
+| 7 | Low + normal vs high fidelity | `Docs/Pipeline/Render/render_fidelity_pairs.py` / `render_fidelity_sets.py` | Producer + confirmer | `Review/*Fidelidade*`, `report.json → low_high_fidelity` | `pass`; `fail`/`pending` blocks painting | F — `Docs/Pipeline/README.md` (table "Etapa / Evidência para seguir") |
+| 8 | Material masks | `garment_material_masks.py fields/masks` and piece scripts (`hat_masks.py`, `staff_masks.py`, `waist_masks.py`, `iron_material_masks.py`, `leather_distress_masks.py`, `bone_material_masks.py`, `book_material_masks.py`, …) | Claude | `M_*.png` (16-bit, padded) and `T_*.png` (sRGB projected swatches) | Private mask check only | F — `.claude/skills/pintura-pbr/SKILL.md` → "Máscaras de material em 3D"; `Docs/Pipeline/Pintura/` docstrings |
+| 9 | Colour swatches | Astra/Codex `image_gen`; `Docs/Biblioteca/Amostras/<id>/` with `proveniencia.json` | Astra | Flat seamless BaseColor PNGs | Swatch visual check | F — `Docs/Biblioteca/README.md`; `Docs/Biblioteca/Amostras/ferro-martelado-v2/proveniencia.json` |
+| 10 | Painting | Painter via `painter_create.py`, `Docs/Pipeline/Pintura/painter_layer_stack.py sync/smart`, `painter_export.py` | Claude (authored painting) | `.spp`, exported maps | Paint gate (vs-ref board under `ref_match`, tonal targets, reference details present) | F — `Docs/Pipeline/Retopologia/cintura_v5/round.sh`; `AGENTS.override.md` → "Stage quality gates" §4 |
+| 11 | Review render | Blender Cycles `paintrender.py` per piece (`ref_match` at reference framing), boards; Painter Iray live capture; review panel | Producer + confirmer + user | `Review/` PNGs, boards, tone stats | Same paint gate | F — `Docs/Pipeline/Retopologia/cajado-v10/paintrender.py`; `Docs/Pipeline/Render/Render-Comparison.md` |
+| 12 | Delivery | `deliver.py` per piece (game low + material, GLB with tangents, FBX), `report_v*.py`, `manifesto.py build/index` | Producer | `<piece>-vN.blend`, `Export/*.glb/.fbx`, `Textures/`, `report.json`, `manifestos/vN.json`, `pecas-index.json` | Coherent round across `.spp/.blend/maps/GLB/FBX/Review` | F — `Docs/Pipeline/Retopologia/cajado-v10/deliver.py`; `Docs/Pipeline/Licoes/exportacao-rodada-coerente.md` |
+| 13 | Character integration | `SM/Assembly/Skeletal-Mage-Assembly-v*.blend`, `equip-placements.json`, review panel | Claude | Assembly scenes, equipped composition | User review | F — `Docs/Pipeline/README.md` → "Montagem v7"; `Docs/Pipeline/Painel/README.md` |
+
+```mermaid
+flowchart LR
+  REF[References] --> GEN[Meshy high]
+  GEN --> FIT[Blender assembly/fit]
+  FIT --> G1{Geometry gate}
+  G1 --> LOW[Low / retopo] --> UV[UV + density] --> BAKE[Blender normal + AO bake]
+  BAKE --> G2{Low+normal vs high}
+  G2 --> MASK[3D per-texel masks + swatches]
+  MASK --> PAINT[Substance Painter via MCP]
+  PAINT --> EXP[Painter export 16-bit PNG]
+  EXP --> REV[Blender Cycles ref_match review]
+  REV --> G3{Paint gate}
+  G3 --> DEL[Blender GLB/FBX + report + manifest]
+```
+
+## 5. Where Painter sits, and what it does not do
+
+| Statement | Type | Source |
+|---|---|---|
+| Painter receives an already-validated low (OBJ), an externally baked tangent normal and (since 2026-10-09) an externally baked AO, then hosts the editable layer stack and exports the maps. | F | `Docs/Pipeline/Retopologia/cajado-v10/painter_create.py`; `.claude/skills/pintura-pbr/SKILL.md` ("importar a low e o normal assado; importar as máscaras 3D como recursos; montar a pilha com `painter_layer_stack.py sync`") |
+| Material masks are computed outside Painter (NumPy, per texel, in 3D) and imported as bitmap resources; Painter layers are mostly uniform-colour fills masked by those bitmaps. | F | `AGENTS.override.md` → "Paint standard" steps 2–4 |
+| Blender composites of masks are allowed only as private mask checks, never as a paint round or a delivered map. | F | `AGENTS.override.md` → "Working agreements" ("Painting is always in Substance Painter") |
+| Final review renders and gate boards are made in Blender Cycles, not in Painter's viewport; Painter's viewport light hid albedo variation that Cycles showed. | F | `.claude/skills/pintura-pbr/SKILL.md` → "Peça orgânica: 00-Corpo" ("julgar só no viewport do Painter engana") |
+| GLB/FBX are exported by Blender from copies of the low, with Painter maps wired into a Principled BSDF. | F | `Docs/Pipeline/Retopologia/cajado-v10/deliver.py`; `.claude/skills/pintura-pbr/SKILL.md` step 9 |
+
+## 6. Handoff formats
+
+| Artifact | Format | Producer → consumer | Notes | Source |
+|---|---|---|---|---|
+| High source | Meshy GLB/OBJ; working high inside `.blend`; per-part highs in bake scenes | Meshy → Blender | Originals never overwritten; working highs are copies | F — `Docs/Pipeline/README.md` → "Conferência e próximos estágios" |
+| Low for Painter | OBJ (triangulated low exported from Blender; `usemtl <name>` sets the texture-set name) | Blender → Painter | e.g. `_tmp/claude/cajado-v10/paint/09-Cajado-v10_low.obj` | F — `Docs/Pipeline/Retopologia/cajado-v10/painter_create_args.json`; `SM/22-Bracal-Direito/report.json → painting.mesh` |
+| High for Painter bakers | OBJ exported triangulated with normals | Blender → Painter | Painter writes an `.assbin` cache next to it | F — `SM/00-Corpo/report.json → painting_v6.rebake_mesh_maps.high`; `SM/22-Bracal-Direito/report.json → painting.mesh_maps.note` |
+| Geometry normal | 16-bit RGB PNG, OpenGL tangent space | Blender → Painter (mesh-map resource) | `<piece>_Normal_OpenGL_v<N>.png` | F — `Docs/Pipeline/Pintura/bake_normal_pair.py` docstring; `painter_create.py` |
+| AO | 16-bit PNG written from `ao.npy` | Blender/Python → Painter (mesh-map resource) and delivery | | F — `Docs/Pipeline/Retopologia/cintura_v5/sashchain.sh`; `Docs/Pipeline/Licoes/pintura-ao-falhas-de-raio-definicao.md` |
+| Masks / colour textures | `M_*.png` 16-bit grayscale padded; `T_*.png` sRGB 8-bit already in final UV | Python → Painter (project resources) | | F — `Docs/Pipeline/Pintura/garment_material_masks.py`, `iron_material_masks.py` docstrings |
+| Layer stack recipe | Stack JSON (`title`, `groups`, `layers`) + session state JSON | Agent → `painter_layer_stack.py` → Painter | | F — `Docs/Pipeline/Pintura/painter_layer_stack.py` docstring |
+| Exported maps | PNG 16-bit (BaseColor sRGB; others Raw), normal OpenGL combined | Painter → Blender | | F — `Docs/Pipeline/Retopologia/cajado-v10/painter_export.py`; `SM/10-Chapeu/report.json → painter_recipe.export` |
+| Game asset | `.blend` (game low + hidden high), GLB (tangents), FBX | Blender → review panel / assembly / future engine | | F — `Docs/Pipeline/Retopologia/cajado-v10/deliver.py` |
+| State and evidence | `report.json` per piece, `manifestos/vN.json`, `pecas-index.json`, `Review/*.png` | All → all | Manifests are generated, never hand-written | F — `Docs/Pipeline/Manifesto/README.md` |
+
+## 7. State stores and folder rules
+
+| Store | Rule | Type | Source |
+|---|---|---|---|
+| `SM/<NN-Piece>/` | Holds `vN.blend`, `vN.spp`, `Textures/`, `Export/`, `Review/`, `Source/`, `report.json`, `manifestos/` | F | Directory listing this session; `Docs/README.md` ("Saber o estado de uma peça") |
+| `_tmp/<agent>/<job>/` | Work in progress; scripts promoted to `Docs/Pipeline/<Stage>/` on delivery | F | `Docs/Pipeline/MCP/Ambiente.md` → "Trabalho em andamento" |
+| Git | Text only; `.blend`, `.spp`, `.glb`, `.fbx`, `.obj`, textures and Review images are git-ignored; `Creatures/` ≈ 37 GB and `_tmp/` ≈ 42 GB on 2026-10-09 | F | `Docs/Pipeline/MCP/Ambiente.md` |
+| Versions | Keep the current version plus the previous checkpoint; approved assets are never deformed or repainted in place | F | `README.md` (root); `AGENTS.override.md` → "Protect approved work" |
+
+## 8. Timeline of the Painter-related process
+
+| Date | Event | Type | Source |
+|---|---|---|---|
+| 2026-10-04/05 | Hat v4/v5 pilot: Painter bakes all mesh maps, manual + MCP stack, "Blender (Principled BSDF)" 4K/16-bit export; local MCP patch (bake without UDIM, mask resource assignment, OCIO colours) | F | `SM/10-Chapeu/report.json → painter_recipe`; `git log` commit `92e3cc3` (2026-10-05) |
+| 2026-10-05 | Tunic v9/v10 approved: 3D per-texel masks + uniform fills (`painter_layer_stack.py sync`); declared the paint standard for every piece on 2026-10-08 | F | `SM/18-Tunica/report.json → artistic_approval`; `AGENTS.override.md` → "Paint standard" |
+| 2026-10-07 | "Painting is ALWAYS in Substance" directive; body split into three texture sets; layer-isolation tool; bake tool keeps RAW and repairs padding only | F | `.claude/skills/pintura-pbr/SKILL.md`; `git log` `37efb2b`, `994c238` |
+| 2026-10-08 | Stage gates binding; per-part bake, cage fill, hidden mask; bracer leather family; `ref_match` preset v3 | F | `AGENTS.override.md`; `git log` `2b729eb`, `192bea6`; `Docs/Pipeline/Render/Render-Comparison-Standard.json → presets.ref_match.calibration.date` |
+| 2026-10-09 | Construction-driven pieces (hat v6, staff v9/v10, wand v1, belt/sash v5) with Blender normal + AO as Painter mesh maps and a custom inline export preset; lighting-independent definition directive; equipment pivot convention | F | `Docs/Pipeline/Retopologia/*/README.md`; `AGENTS.override.md` → "Definition independent of the lighting", "Equipment pivot" |
+
+## 9. Open points
+
+- **Not confirmed:** whether any engine (UzEngine, Unreal) currently consumes the deliverables. Assets3D only states that "conversion to Unreal and compression/packing are a later stage" (`.claude/skills/pintura-pbr/SKILL.md` step 8). See 05.
+- **Not confirmed:** how binaries (`.spp`, textures) move between machines; Git LFS vs a shared folder is undecided (`Docs/Pipeline/MCP/Ambiente.md`).
+- **R:** Replacing Painter changes a binding project rule ("Painting is always in Substance Painter", `AGENTS.override.md`). The user must amend that rule before UzPainter output can count as a paint round (see 08, governance requirement).

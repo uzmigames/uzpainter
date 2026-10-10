@@ -1,0 +1,45 @@
+{
+  "version": "7.4.0",
+  "installedAt": "2026-10-10T02:27:47.559Z",
+  "updatedAt": "2026-10-10T02:27:47.738Z",
+  "projectId": "4d68ca6f-bd19-48fb-ae83-bf1b1932351e",
+  "mode": "full",
+  "features": {
+    "logging": true,
+    "gitHooks": false,
+    "templates": false,
+    "context": false,
+    "health": false,
+    "parallel": false,
+    "smartContinue": false
+  },
+  "coverageThreshold": 95,
+  "language": "en",
+  "outputLanguage": "en",
+  "cliTools": [],
+  "maxParallelTasks": 1,
+  "timeouts": {
+    "taskExecution": 300000,
+    "cliResponse": 60000,
+    "testRun": 120000
+  },
+  "agentsMode": "lean",
+  "monorepo": {
+    "detected": false,
+    "tool": null,
+    "packages": []
+  },
+  "languages": [
+    "cpp"
+  ],
+  "modules": [],
+  "modular": true,
+  "rulebookDir": ".rulebook",
+  "gitPushMode": "manual",
+  "integrations": {
+    "typesafe": {
+      "enabled": true,
+      "askedAt": "2026-10-10T02:27:47.737Z"
+    }
+  }
+}
