@@ -18,7 +18,7 @@
 
 ## 3. Tests
 - [ ] 3.1 Set → get → save → reopen → get through a freshly resolved handle for every Phase 1 setter
-- [ ] 3.2 Tier 0 API-probe readbacks owned by the native API (set→get, LAY-01 values unchanged across active-channel toggles) compared exactly with `phase0.6_tier0-api-probes` goldens on the self-hosted GPU runner
+- [ ] 3.2 Tier 0 API-probe readbacks owned by the native API (set→get, LAY-01 values unchanged across active-channel toggles) compared exactly with `phase0.6_tier0-api-probes` goldens in a local run on the owner's machine (decision 028; the local run report is the evidence)
 - [ ] 3.3 `AttributeError` on an unknown attribute assignment; `ValueError` on a deleted node's handle; `NotYetSupported` raised before mutation by each later-phase call
 - [ ] 3.4 Transaction tests: failed call leaves no mutation; script raising after two calls keeps both and its error receipt names the last committed revision; a raising `Transaction` block commits nothing; results list created/modified/hidden ids
 - [ ] 3.5 LAY-06: ambiguous name fails before mutation with candidate ids; repeating a named operation creates no duplicate; ids survive save/reopen
@@ -27,7 +27,7 @@
 - [ ] 3.8 GIL test: a second Python thread runs while the command thread waits on an export job
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green (hosted CPU lane where no GPU is needed, self-hosted GPU runner for evaluation, export and private-golden comparisons); results attached to `phase1.24_python-api-facade`
+- [ ] 4.1 Every §3 test green (hosted CPU lane where no GPU is needed, with GPU and oracle tests skipped there with an explicit reason; a local run on the owner's machine for evaluation, export and private-golden comparisons, decision 028); results attached to `phase1.24_python-api-facade`
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

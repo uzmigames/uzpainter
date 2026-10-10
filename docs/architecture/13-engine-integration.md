@@ -1,6 +1,6 @@
 # 13 — Render core, build and packaging
 
-Implements D12 as decided by the owner on 2026-10-10: decision 021 (Q8, supersedes decision 014: **zero dependency on UzEngine** — UzPainter vendors only the rendering code it needs; the two are separate systems) and decision 022 (Q9: Windows 10/11 x64; DX12 primary plus Vulkan as the second backend; one-folder distribution; the owner's machine is the self-hosted GPU runner). Requirements: OWN-02, OWN-08, NFR-01, NFR-03, NFR-06, NFR-07, ARC-07, ARC-08, LIC-01…03 (`docs/prd.md`).
+Implements D12 as decided by the owner on 2026-10-10: decision 021 (Q8, supersedes decision 014: **zero dependency on UzEngine** — UzPainter vendors only the rendering code it needs; the two are separate systems) and decision 022 (Q9: Windows 10/11 x64; DX12 primary plus Vulkan as the second backend; one-folder distribution) and decision 028 (hosted CI is CPU-only; GPU and oracle checks run locally on the owner's machine; supersedes the CI-runner part of 022). Requirements: OWN-02, OWN-08, NFR-01, NFR-03, NFR-06, NFR-07, ARC-07, ARC-08, LIC-01…03 (`docs/prd.md`).
 
 UzEngine facts below were read from the files of the checkout `E:\UzmiGames\UzEngine` on 2026-10-10 (read-only; paths relative to its `runtime\` folder). Line numbers are those of that checkout; P0-VENDOR re-verifies every cited behaviour against the selected commit and records the line numbers in `ORIGIN.md`.
 
@@ -151,7 +151,7 @@ A later UzEngine fix is taken only by repeating §3.1–§3.3 for the affected f
 | `d3dcompiler_47.dll` (FXC), Slang, `lua51.dll`, FFmpeg, DLSS, FidelityFX, the LunarG Vulkan SDK and its validation layers | — | Not used | Never |
 
   The install folder stays read-only; the shader cache, logs and the supervisor's ledger live under the user's local app-data folder. The DLL closure is computed from the import tables of every shipped binary and compared with an allowlist; DLL count and footprint are measured, not promised. Verified on a clean, offline Windows machine without Python, Painter, Blender, the Vulkan SDK or the Windows SDK.
-- **CI (Q9b):** the owner's machine (GPU, licensed Painter, private oracle store) is the self-hosted GPU runner and runs both backends; hosted runners run the CPU-only lanes (`14-parity-testing.md` §7).
+- **CI (decision 028, superseding Q9b's runner part):** hosted CI runs only the CPU-only lanes, and GPU tests skip there with an explicit reason; every GPU check on both backends runs locally on the owner's machine (GPU, licensed Painter, private oracle store), and its local run report is the evidence (`14-parity-testing.md` §7).
 
 ## 6. Capacity and budgets
 

@@ -35,7 +35,7 @@ Historical analyses and discussion files are not implementation inputs until an 
 | `architecture/11-mcp-server.md` | MCP topology, tools and typed operation families, jobs, lease, path roots, opt-in `run_python` |
 | `architecture/12-mesh-import.md` | Mesh formats, texturing mesh, tangents, certification, reload |
 | `architecture/13-engine-integration.md` | Render core vendored from UzEngine with zero engine dependency, own build, DX12 and Vulkan backends, Windows platform, packaging |
-| `architecture/14-parity-testing.md` | Four-tier golden corpus, exact-equality gate, owner exception register, private oracle store, CI lanes |
+| `architecture/14-parity-testing.md` | Four-tier golden corpus, exact-equality gate, owner exception register, private oracle store, hosted CI and local runs |
 | `roadmap.md` | Phases with acceptance gates, pilot order, durations as labelled Hypotheses |
 | `dag.md` | Work-package dependency graph with stable parent ids (rulebook task ids), gate nodes, provisional dependency chain, parallelism |
 | `task-index.md` | Every rulebook task by phase and sub-phase level: id, DAG node, parent, same-phase prerequisites, one-line goal |
@@ -57,4 +57,4 @@ Historical analyses and discussion files are not implementation inputs until an 
 
 ## Status
 
-Documentation only; no source code exists yet. Every owner question is answered (2026-10-10, `open-questions.md`). Rulebook decisions under `.rulebook/decisions/`: 001 output parity, 002 Apache-2.0 and clean room, 003–016 the D1–D14 outcomes, 017–027 the owner's answers of 2026-10-10. Decisions 004, 008 and 014 are superseded by 019 (D2), 018 (D6) and 021 (D12); every other decision is accepted.
+Documentation only; no source code exists yet. Every owner question is answered (2026-10-10, `open-questions.md`). Rulebook decisions under `.rulebook/decisions/`: 001 output parity, 002 Apache-2.0 and clean room, 003–016 the D1–D14 outcomes, 017–027 the owner's answers of 2026-10-10, 028 hosted CPU-only CI with GPU and Painter-oracle checks run locally on the owner's machine. Decisions 004, 008 and 014 are superseded by 019 (D2), 018 (D6) and 021 (D12), and the CI-runner part of 022 by 028; every other decision is accepted.

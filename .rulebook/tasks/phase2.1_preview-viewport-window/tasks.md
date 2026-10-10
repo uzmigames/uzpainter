@@ -10,7 +10,7 @@
 - [ ] 2.6 Viewport regression goldens on UzmiGames-authored sphere, plane and bevelled-cube fixtures, keyed by build, adapter and driver
 
 ## 3. Tests
-- [ ] 3.1 Viewport regression goldens exact for a fixed build, adapter and driver on the self-hosted GPU runner
+- [ ] 3.1 Viewport regression goldens exact for a fixed build, adapter and driver, run locally on the owner's machine (decision 028); the local run report is the evidence
 - [ ] 3.2 Preview-thread stall hook: evaluation and export complete with unchanged results and no wait on the preview thread
 - [ ] 3.3 Window opened, minimised, resized and closed during evaluation: no effect on evaluation results or revision order
 - [ ] 3.4 Unsupported display configuration (including ACE mode) fails before rendering

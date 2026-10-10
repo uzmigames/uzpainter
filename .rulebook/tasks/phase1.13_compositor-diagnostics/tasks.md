@@ -16,7 +16,7 @@
 - [ ] 3.5 Diagnostics outputs are byte-identical across two runs
 
 ## 4. Acceptance
-- [ ] 4.1 Diagnostics tests green on the self-hosted GPU runner (DX12)
+- [ ] 4.1 Diagnostics tests green in a local DX12 run on the owner's machine (decision 028; the local run report is the evidence)
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

@@ -9,7 +9,7 @@
 - [ ] 2.2 Settling report writer for `parity/reports/phase2/preview-settling.json`
 
 ## 3. Tests
-- [ ] 3.1 Captures on the self-hosted GPU runner without any window or desktop focus, in `painter_viewport`, `base_color`, `channel:<name>` and `mask:<uid>` modes
+- [ ] 3.1 Captures in a local run on the owner's machine (decision 028) without any window or desktop focus, in `painter_viewport`, `base_color`, `channel:<name>` and `mask:<uid>` modes
 - [ ] 3.2 Preview window open, minimised and stalled while the wand v1 export runs: export bytes and timing unaffected by the preview, no evaluation wait on the preview thread
 - [ ] 3.3 `painter_iray` reported as an explicit unavailable capability in `uzpainter://capabilities` and by `capture`
 

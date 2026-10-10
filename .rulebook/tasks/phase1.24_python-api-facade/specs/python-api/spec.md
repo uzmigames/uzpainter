@@ -11,9 +11,9 @@ Then every script completes with its JSON result and no script file was modified
 ### Requirement: API Probe Goldens Exact
 Every Tier 0 API probe (set→get readback, mask `None` rules, insertion rules, active-channel reset, event order) MUST match its private Painter golden exactly.
 
-#### Scenario: Probe suite on the GPU runner
-Given the `phase0.6_tier0-api-probes` goldens in the private store on the self-hosted GPU runner
-When the full probe suite runs against the build
+#### Scenario: Probe suite in a local run
+Given the `phase0.6_tier0-api-probes` goldens in the private store on the owner's machine (decision 028)
+When the full probe suite runs locally against the build
 Then every probe result equals its golden and the comparison report lists zero differences
 
 ### Requirement: Parent Closes Only With All Children

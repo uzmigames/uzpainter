@@ -1,9 +1,9 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: `phase2.10_pilot-tunic-recovery` (parent input), `phase3.2_uze-uzmat-preset`; self-hosted GPU runner from `phase0.5_private-oracle-store` available
+- [ ] 1.1 Prerequisites accepted: `phase2.10_pilot-tunic-recovery` (parent input), `phase3.2_uze-uzmat-preset`; private oracle store from `phase0.5_private-oracle-store` available on the owner's machine for local runs (decision 028)
 
 ## 2. Implementation
 - [ ] 2.1 Fixture manifest `parity/manifests/consumers/uzengine/wand-v1.json`: executable identity and hash, test scene, qualified mesh route, pinned generation, expected bindings
-- [ ] 2.2 Runner on the self-hosted GPU runner lane invoking UzEngine's own executable as an external process through the generation-pinning delivery adapter
+- [ ] 2.2 Runner, run locally on the owner's machine (decision 028), invoking UzEngine's own executable as an external process through the generation-pinning delivery adapter
 - [ ] 2.3 Load-and-render check reading the engine's load report and verifying each slot binding of the UzEngine preset table
 - [ ] 2.4 Normal convention check against the convention settled by `phase0.9_normal-convention-fixture`
 - [ ] 2.5 Lossy-derivative comparison of decoded `.uztexture` levels against canonical maps (`14-parity-testing.md` §4)

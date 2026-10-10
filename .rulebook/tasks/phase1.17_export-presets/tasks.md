@@ -7,7 +7,7 @@
 - [ ] 2.3 Implement the internal compatibility alias table for `defaultExportPreset` names
 
 ## 3. Tests
-- [ ] 3.1 Output-parity test per preset on a UzmiGames fixture project against the private records (self-hosted runner): every file equal on decoded pixels and naming
+- [ ] 3.1 Output-parity test per preset on a UzmiGames fixture project against the private records (local run on the owner's machine, decision 028; the local run report is the evidence): every file equal on decoded pixels and naming
 - [ ] 3.2 Provenance test: every preset has a complete `.provenance.json` validated against its schema
 - [ ] 3.3 Alias test: `defaultExportPreset: "Blender (Principled BSDF)"` resolves to the shipped preset
 - [ ] 3.4 Guard test: no shipped preset file matches a private-store hash (repository guard of P0-STORE)

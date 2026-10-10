@@ -19,7 +19,7 @@
 - [ ] 3.6 Decode round trip: a PNG16 and an EXR read back equal the encoded values at native depth
 
 ## 4. Acceptance
-- [ ] 4.1 Tier 0 sets of this child exact on the self-hosted GPU runner; determinism tests green on the hosted CPU lane and the runner
+- [ ] 4.1 Tier 0 sets of this child exact in a local run on the owner's machine (decision 028; the local run report is the evidence); determinism tests green on the hosted CPU lane and in that local run
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

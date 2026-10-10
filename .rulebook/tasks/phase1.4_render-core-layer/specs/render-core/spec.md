@@ -5,7 +5,7 @@ The render-core layer SHALL pass its unit tests on synthetic meshes and its read
 
 #### Scenario: Phase 1 acceptance run
 Given all four children of `phase1.4_render-core-layer` are accepted
-When the render-layer suite runs on the DX12 hardware adapter of the self-hosted GPU runner
+When the render-layer suite runs on the DX12 hardware adapter in a local run on the owner's machine (decision 028)
 Then the synthetic-mesh unit tests and the readback drain tests pass and the run records hardware, driver, backend and build hash
 
 ### Requirement: Backend-neutral render-layer interfaces

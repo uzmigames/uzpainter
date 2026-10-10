@@ -9,7 +9,7 @@ UzPainter's bakers mirror Painter's dynamic `Property` model and must start from
   - **Templates:** for each project template shipped with Painter 12.1.0 and selectable through the documented project-creation API, a project created on a UzmiGames synthetic mesh, and per texture-set stack the channel set and each channel's `ChannelFormat` read back through the documented `textureset` API, with the project settings applied.
 - Each capture recorded at least twice (same session; after save/reopen; the defaults capture also on a second fresh project), shaped by `parity/schema/golden-private.json`, admitted into the private store by `uzpainter parity record`.
 - Public manifest `parity/manifests/phase0/tier0-defaults-templates.json`: the instruction sequences, the template identifiers used, software identities (Painter build id) and the SHA-256 of each private capture — no captured value.
-- Not in this task: the UzmiGames-authored `assets/defaults/baking.json` and template JSON (authored later from documented semantics, each entry with its provenance, and checked against these captures on the self-hosted runner).
+- Not in this task: the UzmiGames-authored `assets/defaults/baking.json` and template JSON (authored later from documented semantics, each entry with its provenance, and checked against these captures in a local run on the owner's machine, decision 028).
 
 ## Dependencies
 - Prerequisites: `phase0.3_painter-oracle-recorder` (P0-RECORDER), `phase0.5_private-oracle-store` (P0-STORE).

@@ -20,7 +20,7 @@ This task is the parent integration and acceptance task. The DAG task decomposit
 - Downstream: `phase4.5_uv-tiles` (P4-TILES), `phase4.6_gate-g4` (G4); `phase5.2_parity-report-mcp-conformance` consumes the conformance fixtures.
 
 ## Acceptance
-DAG gate of P4-NODES: Tier 0 extended; manifest updated. In substance: every child task is accepted; the Tier 0 corpus contains exact goldens for instances, anchors and anchor references, compare mask, colour selection, warp and UV-set projections, vector and font sources, and paint layers and paint effects receiving bitmaps and projections, all passing on the self-hosted GPU runner (any difference only through an owner-approved exception, decision 017); the capability manifest shows each of these kinds `supported` with its evidence or as an explicit gap, and no kind is silently a no-op (ARC-03).
+DAG gate of P4-NODES: Tier 0 extended; manifest updated. In substance: every child task is accepted; the Tier 0 corpus contains exact goldens for instances, anchors and anchor references, compare mask, colour selection, warp and UV-set projections, vector and font sources, and paint layers and paint effects receiving bitmaps and projections, all passing in a local run on the owner's machine (decision 028; the local run report is the evidence) (any difference only through an owner-approved exception, decision 017); the capability manifest shows each of these kinds `supported` with its evidence or as an explicit gap, and no kind is silently a no-op (ARC-03).
 
 ## Impact
 - Affected specs: `compositor` (remaining node, effect and source kinds)

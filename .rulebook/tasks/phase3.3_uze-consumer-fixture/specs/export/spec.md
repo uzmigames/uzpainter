@@ -13,7 +13,7 @@ The fixture MUST load the published `.uzmat` and `.uztexture` files of a pinned 
 
 #### Scenario: Wand v1 row 9 passes
 Given wand v1 exported with the UzEngine preset into a published generation
-When the fixture runs on the self-hosted GPU runner
+When the fixture runs locally on the owner's machine (decision 028)
 Then the scene renders and the albedo, normal, ORM, emissive and height bindings match the preset table
 
 #### Scenario: Mis-bound material is caught
@@ -41,6 +41,6 @@ Then it lists SpecularWeight as a consumer gap and names the qualified mesh rout
 The fixture MUST fail explicitly when the UzEngine executable or its scene is unavailable.
 
 #### Scenario: Executable missing
-Given the runner has no UzEngine executable at the recorded identity
+Given the machine running the fixture has no UzEngine executable at the recorded identity
 When the fixture runs
 Then it fails with an unavailable status and the row is not counted as passed

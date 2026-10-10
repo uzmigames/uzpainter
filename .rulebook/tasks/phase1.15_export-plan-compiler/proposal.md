@@ -16,7 +16,7 @@ The Assets3D scripts call `export_project_textures(json_config)` with Painter's 
 - Parent: `phase1.18_export-engine`. Siblings building on this child: `phase1.16_export-processing-encoders`, `phase1.17_export-presets`, `phase1.17_export-publication-receipts`.
 
 ## Acceptance
-Plan tests pass (EXP-03 naming and collisions, wildcard and filter semantics, resolution order, invalid configurations, unknown identifiers, refused formats) and the Tier 0 virtual-map goldens for the virtual maps marked `supported` are exact. Goldens are private and compared on the self-hosted GPU runner; only fitted operators, their public sources and residuals are published under `parity/semantics/` (`docs/architecture/14-parity-testing.md` §6).
+Plan tests pass (EXP-03 naming and collisions, wildcard and filter semantics, resolution order, invalid configurations, unknown identifiers, refused formats) and the Tier 0 virtual-map goldens for the virtual maps marked `supported` are exact. Goldens are private and compared locally on the owner's machine (decision 028; the local run report is the evidence; hosted CI skips these tests with an explicit reason); only fitted operators, their public sources and residuals are published under `parity/semantics/` (`docs/architecture/14-parity-testing.md` §6).
 
 ## Impact
 - Affected specs: `export`

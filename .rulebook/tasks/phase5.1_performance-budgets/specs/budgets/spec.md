@@ -4,7 +4,7 @@
 The measurement harness SHALL record wall time, peak VRAM and peak RAM per fixture, operation and backend on the certified corpus, and MUST measure only fixtures whose Tier 1 outputs are equal; every record MUST carry hardware, driver, backend, build hash and resource hashes.
 
 #### Scenario: Corpus measured on both backends
-Given G4 accepted and the self-hosted GPU runner with DX12 and Vulkan available
+Given G4 accepted and the owner's machine with DX12 and Vulkan available for a local run (decision 028)
 When the harness runs the corpus
 Then the budget report holds one timing and memory record per fixture, operation and backend, each tagged with its build hash and backend
 

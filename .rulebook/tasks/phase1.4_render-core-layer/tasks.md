@@ -9,7 +9,7 @@
 - [ ] 2.5 Wire the four children behind the backend-neutral interface in `src/render/backend.h` and register them in the `build.zig` render-layer target
 
 ## 3. Tests
-- [ ] 3.1 Run the render-layer unit suite on the synthetic meshes (plane, sphere, bevelled cube of the Tier 0 corpus, `docs/architecture/14-parity-testing.md` §3) on the DX12 hardware adapter of the self-hosted GPU runner
+- [ ] 3.1 Run the render-layer unit suite on the synthetic meshes (plane, sphere, bevelled cube of the Tier 0 corpus, `docs/architecture/14-parity-testing.md` §3) on the DX12 hardware adapter in a local run on the owner's machine (decision 028; the local run report is the evidence)
 - [ ] 3.2 Run the `TextureReadback` drain tests on DX12 together with a compute kernel compiled through the kernel cache (end to end: compile, dispatch, read back)
 - [ ] 3.3 Run the vendoring check and confirm no include or library path of the render layer points into a UzEngine checkout (`docs/architecture/13-engine-integration.md` §3.3)
 

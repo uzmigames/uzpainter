@@ -17,7 +17,7 @@
 - Parent: `phase4.2_remaining-nodes`. Independent of the other children.
 
 ## Acceptance
-Part of the P4-NODES gate (Tier 0 extended; manifest updated). This child is accepted when the Tier 0 goldens for instances (same and different blending, masked instance, edited source), anchors and reference sources (channel mapping, referenced channel, alpha matte, levels; references in masks and generator inputs) and the cycle and insertion probes are exact on the self-hosted GPU runner or covered by an owner-approved exception, and the kinds appear in the capability manifest with their evidence.
+Part of the P4-NODES gate (Tier 0 extended; manifest updated). This child is accepted when the Tier 0 goldens for instances (same and different blending, masked instance, edited source), anchors and reference sources (channel mapping, referenced channel, alpha matte, levels; references in masks and generator inputs) and the cycle and insertion probes are exact in a local run on the owner's machine (decision 028; the local run report is the evidence) or covered by an owner-approved exception, and the kinds appear in the capability manifest with their evidence.
 
 ## Impact
 - Affected specs: `compositor` (instances and anchors)

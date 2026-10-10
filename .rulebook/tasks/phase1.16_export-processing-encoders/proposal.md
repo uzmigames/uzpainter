@@ -17,7 +17,7 @@ Exported maps are compared on decoded pixels at native depth and must be byte-id
 - Parent: `phase1.18_export-engine`.
 
 ## Acceptance
-Tier 0 export goldens owned by this child are exact on decoded pixels at native depth (padding, dithering, resize, bit depth), and exports are byte-deterministic. Goldens are private and compared on the self-hosted GPU runner; only fitted operators, their public sources and residuals are published under `parity/semantics/` (`docs/architecture/14-parity-testing.md` §6).
+Tier 0 export goldens owned by this child are exact on decoded pixels at native depth (padding, dithering, resize, bit depth), and exports are byte-deterministic. Goldens are private and compared locally on the owner's machine (decision 028; the local run report is the evidence; hosted CI skips these tests with an explicit reason); only fitted operators, their public sources and residuals are published under `parity/semantics/` (`docs/architecture/14-parity-testing.md` §6).
 
 ## Impact
 - Affected specs: `export`

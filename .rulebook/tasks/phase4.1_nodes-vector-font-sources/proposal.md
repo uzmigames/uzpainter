@@ -15,7 +15,7 @@
 - Parent: `phase4.2_remaining-nodes`. Independent of the other children.
 
 ## Acceptance
-Part of the P4-NODES gate (Tier 0 extended; manifest updated). This child is accepted when the Tier 0 goldens for vector and font sources (a UzmiGames-authored vector file and an openly licensed font on the plane and sphere fixtures, in a content stack and in a mask stack, across the documented parameters) are exact on the self-hosted GPU runner or covered by an owner-approved exception; source parameters read back exactly after save/reopen; and the dependency inventory lists every new library with its licence.
+Part of the P4-NODES gate (Tier 0 extended; manifest updated). This child is accepted when the Tier 0 goldens for vector and font sources (a UzmiGames-authored vector file and an openly licensed font on the plane and sphere fixtures, in a content stack and in a mask stack, across the documented parameters) are exact in a local run on the owner's machine (decision 028; the local run report is the evidence) or covered by an owner-approved exception; source parameters read back exactly after save/reopen; and the dependency inventory lists every new library with its licence.
 
 ## Impact
 - Affected specs: `compositor` (vector and font sources)

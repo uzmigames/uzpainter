@@ -18,7 +18,7 @@
 - Parent: `phase4.2_remaining-nodes`. `phase4.1_nodes-paint-layers` can project bitmaps with these modes once this child is accepted.
 
 ## Acceptance
-Part of the P4-NODES gate (Tier 0 extended; manifest updated). This child is accepted when the Tier 0 goldens for `Warp` and `UVSetToUVSet` (UzmiGames-authored meshes with two UV sets; warp parameter sweeps; symmetry combinations where documented) are exact on the self-hosted GPU runner or covered by an owner-approved exception, Phase 1–3 projection goldens are unchanged, and the capability manifest shows both modes `supported` with evidence or as explicit gaps.
+Part of the P4-NODES gate (Tier 0 extended; manifest updated). This child is accepted when the Tier 0 goldens for `Warp` and `UVSetToUVSet` (UzmiGames-authored meshes with two UV sets; warp parameter sweeps; symmetry combinations where documented) are exact in a local run on the owner's machine (decision 028; the local run report is the evidence) or covered by an owner-approved exception, Phase 1–3 projection goldens are unchanged, and the capability manifest shows both modes `supported` with evidence or as explicit gaps.
 
 ## Impact
 - Affected specs: `compositor` (warp and UV-set projections)

@@ -14,7 +14,7 @@ Height is authored in declared units and converted to a normal; the exported nor
 - Parent: `phase1.14_compositor-core`. Consumer: `phase1.15_export-plan-compiler` (virtual normal maps).
 
 ## Acceptance
-Tier 0 goldens owned by this child are exact: height→normal methods and strength scaling, normal blends, height goldens (MAT-05). Only the fitted formula, its public source and its residual are published under `parity/semantics/`; the goldens stay in the private oracle store and are compared on the self-hosted GPU runner (`docs/architecture/14-parity-testing.md` §6).
+Tier 0 goldens owned by this child are exact: height→normal methods and strength scaling, normal blends, height goldens (MAT-05). Only the fitted formula, its public source and its residual are published under `parity/semantics/`; the goldens stay in the private oracle store and are compared locally on the owner's machine (decision 028; `docs/architecture/14-parity-testing.md` §6); the local run report is the evidence and hosted CI skips these tests with an explicit reason.
 
 ## Impact
 - Affected specs: `compositor`

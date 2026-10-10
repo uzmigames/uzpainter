@@ -2,7 +2,7 @@
 - [ ] 1.1 Prerequisites accepted: phase4.6_gate-g4, phase3.7_path-tracer, phase5.1_performance-budgets; frozen release build hash and dependency lock recorded
 
 ## 2. Implementation
-- [ ] 2.1 Comparison job on the self-hosted GPU runner that runs every tier on DX12 and on Vulkan against the frozen build and fetches oracle blobs through `uzpainter parity fetch`/`verify`
+- [ ] 2.1 Local comparison command, run on the owner's machine (decision 028; the local run report is the evidence), that runs every tier on DX12 and on Vulkan against the frozen build and fetches oracle blobs through `uzpainter parity fetch`/`verify`
 - [ ] 2.2 Tier 0 run over the 14 §3 corpus, including the Phase 4 node kinds and the UDIM fixture
 - [ ] 2.3 Tier 1 run for wand v1, belt v5, tunic v10, bracer r9, hat v8, body v6b and every other Tier 1 fixture of 14 §3: every exported map per set, save/reopen, dump-and-rebuild
 - [ ] 2.4 Tier 2a per certified procedural asset and Tier 2b for the ten bakers (evidence first, then maps)

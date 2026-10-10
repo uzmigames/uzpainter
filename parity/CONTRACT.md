@@ -1,6 +1,6 @@
 # UzPainter parity contract
 
-Work package P0-CONTRACT (`docs/dag.md`), task `phase0.2_parity-contract`. Binding for every parity comparison, recorder, store, comparison tool and report. Implements D13 as refined by the owner's answers of 2026-10-10: exact equality with an exception register (Q1, decision 017), Painter's Iray as the render reference (Q2, decision 018), migration through the documented API (Q6, decision 020), the owner's machine as GPU runner and private store (Q9b, decision 022). Acceptance premise: decision 001; clean room: decision 002. Architecture: `docs/architecture/14-parity-testing.md` and `docs/architecture/07-preview-and-render-parity.md` §2 and §4. Where this contract and those documents differ, the documents' owner decisions win and this file is corrected.
+Work package P0-CONTRACT (`docs/dag.md`), task `phase0.2_parity-contract`. Binding for every parity comparison, recorder, store, comparison tool and report. Implements D13 as refined by the owner's answers of 2026-10-10: exact equality with an exception register (Q1, decision 017), Painter's Iray as the render reference (Q2, decision 018), migration through the documented API (Q6, decision 020), the owner's machine as holder of the private store (Q9b, decision 022), where GPU and oracle checks run locally with no GPU CI (decision 028). Acceptance premise: decision 001; clean room: decision 002. Architecture: `docs/architecture/14-parity-testing.md` and `docs/architecture/07-preview-and-render-parity.md` §2 and §4. Where this contract and those documents differ, the documents' owner decisions win and this file is corrected.
 
 ## 1. Acceptance sentence
 
@@ -92,7 +92,7 @@ Tier 1 fixtures are rebuilt through Painter's documented API and proven by outpu
 - **Public repository** (independently authored or public data only): manifests `parity/manifests/**/*.json` (schema `golden-public.json`), fitted formulas `parity/semantics/*.json`, the register, comparison reports (numbers only).
 - **Private store only** (`UZP_PARITY_STORE`, content-addressed by SHA-256, on the owner's machine, never uploaded, never shipped): every recorded Painter output (schema `golden-private.json`): exported maps, Iray references, API readbacks (JSON included), effective-default and template captures, operator-recorded render settings and settings-panel evidence, asset recipes extracted or dumped from Painter projects; and anything derived pixel for pixel from one (difference maps, crops). Public templates and default tables are independently authored from documented semantics with provenance.
 - A missing or hash-mismatched blob yields `oracle_unavailable` (§3).
-- Store layout, the `uzpainter parity init|record|fetch|verify` prototype, the recorder hand-off and the CI lanes: `parity/STORE.md`.
+- Store layout, the `uzpainter parity init|record|fetch|verify` prototype, the recorder hand-off, hosted CI and the local oracle run: `parity/STORE.md`.
 
 ## 7. Schemas
 

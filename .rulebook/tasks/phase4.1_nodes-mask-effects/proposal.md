@@ -15,7 +15,7 @@ LAY-04 (`docs/prd.md`) requires layer masks with ordered typed effects; Phase 1 
 - Parent: `phase4.2_remaining-nodes`. Independent of the other children.
 
 ## Acceptance
-Part of the P4-NODES gate (Tier 0 extended; manifest updated). This child is accepted when the Tier 0 goldens for compare mask and colour selection (parameter sweeps on the plane, sphere and bevelled cube; ordering with the Phase 1 mask effects; mode and opacity in the mask stack; insertion-rule probes) are exact on the self-hosted GPU runner or covered by an owner-approved exception, and both kinds appear in the capability manifest with their evidence.
+Part of the P4-NODES gate (Tier 0 extended; manifest updated). This child is accepted when the Tier 0 goldens for compare mask and colour selection (parameter sweeps on the plane, sphere and bevelled cube; ordering with the Phase 1 mask effects; mode and opacity in the mask stack; insertion-rule probes) are exact in a local run on the owner's machine (decision 028; the local run report is the evidence) or covered by an owner-approved exception, and both kinds appear in the capability manifest with their evidence.
 
 ## Impact
 - Affected specs: `compositor` (compare mask and colour selection)

@@ -14,7 +14,7 @@ Child of `phase2.3_realtime-preview` (P2-PREVIEW in `docs/dag.md`), implementing
 - Sibling: `phase2.2_preview-capture` builds on this pass.
 
 ## Acceptance
-- Viewport regression goldens reproduce exactly on the self-hosted GPU runner for a fixed build, adapter and driver.
+- Viewport regression goldens reproduce exactly in a local run on the owner's machine (decision 028; the local run report is the evidence) for a fixed build, adapter and driver.
 - With the preview window open, minimised, resized or its thread stalled by a test hook, evaluation and export complete without waiting on the preview thread.
 - An unsupported display configuration fails with an explicit error before rendering.
 

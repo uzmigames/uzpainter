@@ -11,7 +11,7 @@ When the probe reads `baker(MeshMapUsage.AO).keys()` and each property's `label(
 Then every value MUST equal the Tier 0 API-probe golden exactly
 
 ### Requirement: Authored Defaults With Provenance
-`assets/defaults/baking.json` MUST be authored by UzmiGames with a provenance entry per key (public page or hash of the private observation), and every value MUST equal the private Painter 12.1.0 defaults capture on the self-hosted runner.
+`assets/defaults/baking.json` MUST be authored by UzmiGames with a provenance entry per key (public page or hash of the private observation), and every value MUST equal the private Painter 12.1.0 defaults capture in a local run on the owner's machine (decision 028).
 
 #### Scenario: Default drift
 Given an entry of `assets/defaults/baking.json` whose value differs from the private capture it cites

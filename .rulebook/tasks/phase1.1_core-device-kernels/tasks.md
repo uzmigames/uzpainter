@@ -18,7 +18,7 @@
 - [ ] 3.6 Capability report on the DX12 hardware adapter lists formats, usages, ray-query support and the VRAM budget; the admission budget is derived from it
 
 ## 4. Acceptance
-- [ ] 4.1 All tests of this child green on the DX12 hardware adapter of the self-hosted GPU runner; results recorded for the parent's acceptance
+- [ ] 4.1 All tests of this child green on the DX12 hardware adapter in a local run on the owner's machine (decision 028); the local run report recorded as evidence for the parent's acceptance
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

@@ -5,7 +5,7 @@ The final parity report SHALL compare Tiers 0, 1, 2a, 2b and 3 on DX12 and on Vu
 
 #### Scenario: Report built for release
 Given the frozen release build with hash H and its dependency lock
-When the comparison job runs on the self-hosted GPU runner
+When the comparison runs locally on the owner's machine (decision 028)
 Then `parity/reports/phase5/tiers.json` lists every tier on both backends and records build hash H and the same lock as the packaging verification
 
 ### Requirement: Exact Equality For Tiers 0 To 2

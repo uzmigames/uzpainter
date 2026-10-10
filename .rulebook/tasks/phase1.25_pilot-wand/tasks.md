@@ -9,7 +9,7 @@
 - [ ] 2.5 Write the comparison step: decode both sides at native depth, classify channels by measured storage format, compute the `docs/architecture/14-parity-testing.md` §4 diagnostics and write `parity/reports/phase1/tier1-wand-v1.json`
 
 ## 3. Tests
-- [ ] 3.1 Tier 1 equality: every exported Wand v1 map per set equal to its private golden on the self-hosted GPU runner (DX12)
+- [ ] 3.1 Tier 1 equality: every exported Wand v1 map per set equal to its private golden in a local DX12 run on the owner's machine (decision 028; the local run report is the evidence)
 - [ ] 3.2 Repeatability: run the rebuild and export twice in separate processes; every file byte-identical
 - [ ] 3.3 Save/reopen: save the rebuilt project, reopen it and export again; maps equal to the first export
 - [ ] 3.4 Oracle availability: a missing golden blob fails the comparison as `oracle_unavailable`, never as a pass

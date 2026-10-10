@@ -17,7 +17,7 @@
 - [ ] 3.5 1:1 bitmap fill copies the source texels exactly; two nodes binding different hashes under the same alias evaluate to their own bytes (LAY-13)
 
 ## 4. Acceptance
-- [ ] 4.1 Tier 0 sets of this child exact on the self-hosted GPU runner (DX12); unit tests green
+- [ ] 4.1 Tier 0 sets of this child exact in a local DX12 run on the owner's machine (decision 028; the local run report is the evidence); unit tests green
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

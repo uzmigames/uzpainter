@@ -17,7 +17,7 @@ The approved paint standard relies on layer masks (background, bitmap fill effec
 - Parent: `phase1.14_compositor-core`.
 
 ## Acceptance
-Tier 0 goldens owned by this child are exact: mask goldens (background, fill effect, levels, subtract), levels clamp behaviour, content-effect order, group `Normal`/`PassThrough` semantics with masks, mask precision, base value under complementary masks (LAY-10). Only the fitted formula, its public source and its residual are published under `parity/semantics/`; the goldens stay in the private oracle store and are compared on the self-hosted GPU runner (`docs/architecture/14-parity-testing.md` §6).
+Tier 0 goldens owned by this child are exact: mask goldens (background, fill effect, levels, subtract), levels clamp behaviour, content-effect order, group `Normal`/`PassThrough` semantics with masks, mask precision, base value under complementary masks (LAY-10). Only the fitted formula, its public source and its residual are published under `parity/semantics/`; the goldens stay in the private oracle store and are compared locally on the owner's machine (decision 028; `docs/architecture/14-parity-testing.md` §6); the local run report is the evidence and hosted CI skips these tests with an explicit reason.
 
 ## Impact
 - Affected specs: `compositor`

@@ -3,7 +3,7 @@
 
 ## 2. Implementation
 - [ ] 2.1 Measurement harness: per-operation wall time, peak VRAM, peak RAM, tiles admitted/evicted and bytes written, each record tagged with hardware, driver, backend, build hash and resource hashes
-- [ ] 2.2 Corpus runs on DX12 and Vulkan on the self-hosted GPU runner for wand v1, belt v5, tunic v10, bracer r9, hat v8 and body v6b, only on fixtures whose Tier 1 outputs are equal
+- [ ] 2.2 Corpus runs on DX12 and Vulkan locally on the owner's machine (decision 028; local run report as evidence) for wand v1, belt v5, tunic v10, bracer r9, hat v8 and body v6b, only on fixtures whose Tier 1 outputs are equal
 - [ ] 2.3 NFR-03 workloads measured separately: body v6b three 4096² sets; bracer 21 and hat v8 layer stacks; hat v6 masks (more than twenty 4K 16-bit); hat v8 seven delivered maps per set
 - [ ] 2.4 VRAM budget query per backend (DXGI memory budget on DX12; `VK_EXT_memory_budget`, else heap sizes, on Vulkan) and the derived tile admission budget tuned from the measurements
 - [ ] 2.5 Texture-set creation above the budget refused with an explicit error at creation time (2048, 4096 and 8192 per-set resolutions)

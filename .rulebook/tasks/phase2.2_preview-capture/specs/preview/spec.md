@@ -3,8 +3,8 @@
 ### Requirement: Captures Are Window-Independent
 Every capture SHALL render to an offscreen target without a window, swapchain or desktop focus.
 
-#### Scenario: Headless runner
-Given the self-hosted GPU runner with no interactive desktop session
+#### Scenario: Headless local run
+Given a local run on the owner's machine (decision 028) with no interactive desktop session
 When a `painter_viewport` capture of an open project is requested
 Then the PNG and its receipt are written without creating any window
 

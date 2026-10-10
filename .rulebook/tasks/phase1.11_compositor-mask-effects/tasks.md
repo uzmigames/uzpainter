@@ -18,7 +18,7 @@
 - [ ] 3.6 Tier 0 base-value goldens under complementary masks exact (no default bleed, LAY-10)
 
 ## 4. Acceptance
-- [ ] 4.1 Tier 0 sets of this child exact on the self-hosted GPU runner (DX12); unit tests green
+- [ ] 4.1 Tier 0 sets of this child exact in a local DX12 run on the owner's machine (decision 028; the local run report is the evidence); unit tests green
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

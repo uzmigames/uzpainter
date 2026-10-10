@@ -8,7 +8,7 @@
 - [ ] 2.4 `phase1.17_export-publication-receipts` accepted
 
 ## 3. Tests
-- [ ] 3.1 Run the union of the children's Tier 0 export goldens (padding, dithering, resize, bit depth, virtual maps) on the self-hosted GPU runner and publish the comparison numbers
+- [ ] 3.1 Run the union of the children's Tier 0 export goldens (padding, dithering, resize, bit depth, virtual maps) in a local run on the owner's machine (decision 028) and publish the comparison numbers in the local run report used as evidence
 - [ ] 3.2 Determinism lane: export the same project with the same config twice in separate processes and compare every file byte for byte and every receipt hash
 - [ ] 3.3 Publication interruption suite end to end (each file, the receipt, the pointer, each fixed-name copy)
 

@@ -28,6 +28,6 @@ Then `parity/reports/phase4/` lists both sides' byte counts and the ratio to the
 Timing and peak memory for evaluation, export, save, reopen and compaction of body v6b SHALL be measured and published for P5-PERF.
 
 #### Scenario: Budgets recorded
-Given a complete body v6b run on the self-hosted GPU runner
+Given a complete body v6b run locally on the owner's machine (decision 028)
 When the run finishes
 Then the report lists each operation's time and peak RAM and VRAM with the build hash

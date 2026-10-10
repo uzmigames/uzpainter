@@ -14,7 +14,7 @@
 - [ ] 3.3 Requirement-to-typed-operation matrix: the stack-family rows for these kinds move to `available`, each naming its Python-disabled conformance fixture
 
 ## 4. Tests
-- [ ] 4.1 Full extended Tier 0 corpus (Phase 1–3 goldens plus the new kinds) passes on the self-hosted GPU runner
+- [ ] 4.1 Full extended Tier 0 corpus (Phase 1–3 goldens plus the new kinds) passes in a local run on the owner's machine (decision 028); the local run report is the evidence
 - [ ] 4.2 A mixed recipe combining an instance, an anchor reference, a compare mask, a warp projection, a font source and a paint layer with a projected bitmap exports equal to its Painter golden and survives save/reopen
 - [ ] 4.3 Python-disabled MCP conformance fixtures for the new kinds pass
 

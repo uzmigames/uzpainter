@@ -14,7 +14,7 @@
 - [ ] 2.10 `python/substance_painter_plugins/` with `start_plugin`, `close_plugin`, `path`, `load_startup_modules` for non-UI modules
 
 ## 3. Tests
-- [ ] 3.1 Facade quirk probes compared exactly with `phase0.6_tier0-api-probes` goldens on the self-hosted GPU runner: active-channel reset, mask `None` rules, insertion rules, `EditionContextException`
+- [ ] 3.1 Facade quirk probes compared exactly with `phase0.6_tier0-api-probes` goldens in a local run on the owner's machine (decision 028; the local run report is the evidence): active-channel reset, mask `None` rules, insertion rules, `EditionContextException`
 - [ ] 3.2 Provenance test: every public facade symbol maps to a documentation anchor in the admitted inventory (`tools/capabilities/painter-api-inventory.json`); no underscore-private Painter symbol is exposed
 - [ ] 3.3 Each desktop-only symbol raises `UnsupportedInUzPainter` naming symbol, reason and alternative
 - [ ] 3.4 Each inert-state symbol reads back what was set and leaves exports byte-identical
@@ -24,7 +24,7 @@
 - [ ] 3.8 `substance_painter_plugins.load_startup_modules` loads a non-UI startup module and `close_plugin` unloads it
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green (hosted CPU lane where no GPU or private golden is needed, self-hosted GPU runner otherwise); results attached to `phase1.24_python-api-facade`
+- [ ] 4.1 Every §3 test green (hosted CPU lane where no GPU or private golden is needed, with the other tests skipped there with an explicit reason; a local run on the owner's machine otherwise, decision 028); results attached to `phase1.24_python-api-facade`
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

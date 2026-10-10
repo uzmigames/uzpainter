@@ -182,7 +182,7 @@ Consolidated requirement list. Sources: the owner's requirements (`vision.md`), 
 
 | ID | Requirement | Priority | Source | Acceptance criterion | Doc |
 |---|---|---|---|---|---|
-| NFR-01 | Fully headless on Windows 10/11 x64 for CI/batch (no window, no focus); opening the live viewer is optional | MUST | 08 §4; owner 2026-10-10 (Q9, Q9b) | Hosted CPU lane and the self-hosted GPU runner on the owner's machine, both without a window | 02, 13, 14 |
+| NFR-01 | Fully headless on Windows 10/11 x64 for CI/batch (no window, no focus); opening the live viewer is optional | MUST | 08 §4; owner 2026-10-10 (Q9, Q9b) | Hosted CPU lane and the local GPU run on the owner's machine (decision 028), both without a window | 02, 13, 14 |
 | NFR-02 | Determinism: identical inputs + recipe + seed + resources + build ⇒ identical exports | MUST | 08 §4 | Repeatability lane | 14 |
 | NFR-03 | Scale, supported for each recorded workload separately: three 4096² texture sets in one project; 30–45-layer stacks; more than twenty 4K 16-bit masks; up to seven delivered maps per set. A combined worst case is a proposed stress fixture, not an observed baseline | MUST | 08 §4 | Body v6b (sets), bracer 21 and hat v8 (layers), hat v6 (masks), hat v8 (maps), each measured separately | 04, 13 |
 | NFR-04 | Compact project file; candidate budget 10 % of the matched `.spp`, ratified after the census | MUST | 08 §4; owner 2026-10-10 (Q11) | Census report | 09 |
@@ -216,13 +216,13 @@ Human editing UI; brush strokes and any stroke engine (Painter's Python API does
 
 ## 17. Constraints
 
-Windows 10/11 x64 only for now (owner Q9); DX12 primary (SM6.6 for compositor and viewport, DXR for the path tracer) and Vulkan as the second backend on Windows (Vulkan ray tracing for the path tracer); a GPU is required for compositing, preview and path tracing; CPU baking runs on the Windows/CPU/ISA configurations qualified for the pinned Embree build, unsupported configurations receive an explicit capability error, and cross-machine repeatability is measured separately; render core vendored from a clean UzEngine commit with zero dependency on UzEngine (Q8); own build, Zig-first unless the vendored subset dictates otherwise; Apache-2.0 and clean room (LIC, CLR); private oracle store on the owner's machine, which is also the self-hosted GPU CI runner with the licensed Painter (Q9b); one-folder distribution; no network dependency at run time.
+Windows 10/11 x64 only for now (owner Q9); DX12 primary (SM6.6 for compositor and viewport, DXR for the path tracer) and Vulkan as the second backend on Windows (Vulkan ray tracing for the path tracer); a GPU is required for compositing, preview and path tracing; CPU baking runs on the Windows/CPU/ISA configurations qualified for the pinned Embree build, unsupported configurations receive an explicit capability error, and cross-machine repeatability is measured separately; render core vendored from a clean UzEngine commit with zero dependency on UzEngine (Q8); own build, Zig-first unless the vendored subset dictates otherwise; Apache-2.0 and clean room (LIC, CLR); private oracle store on the owner's machine with the licensed Painter, where GPU and oracle checks run locally (Q9b, decision 028; hosted CI is CPU-only); one-folder distribution; no network dependency at run time.
 
 ## 18. Release criteria for v1
 
 Release is gated by evidence, not by date: roadmap durations are labelled Hypotheses and revised at each gate (owner Q14). Packaging verification and the final parity report refer to the same immutable build hash and dependency lock.
 
-1. Tiers 0–2 equal on the self-hosted GPU runner for the certified corpus (wand, belt, tunic v10, bracer r9, hat v8, body v6b), and Tier 3 compared with converged Iray references; every divergence, including every Tier 3 residual, covered by a recorded owner exception; the exception register published.
+1. Tiers 0–2 equal in a local run on the owner's machine (decision 028) for the certified corpus (wand, belt, tunic v10, bracer r9, hat v8, body v6b), and Tier 3 compared with converged Iray references; every divergence, including every Tier 3 residual, covered by a recorded owner exception; the exception register published.
 2. Capability manifest published; every in-scope, output-affecting Painter capability is `supported` or covered by an explicit owner scope decision (reporting a gap is not accepting it); brush strokes are out of scope; nothing is called a full replacement while a required gap is open (Q5).
 3. The three pipeline scripts run unchanged under `UzPainter.exe run`; the belt round completes through MCP with Python disabled; the requirement-to-typed-operation matrix and a Python-disabled conformance fixture cover every required operation family (Q12).
 4. Worker-fault recovery, lost-acknowledgement retry (including a failure after the durable commit and before the acknowledgement) and project-store fault injection pass.
@@ -242,7 +242,7 @@ Release is gated by evidence, not by date: roadmap durations are labelled Hypoth
 | Owner Q6 (rebuild through the documented API; no `.spp` reader) | G-03, §16 |
 | Owner Q7 (Wand v1 → Belt v5 → Tunic v10) | OWN-03 |
 | Owner Q8 (zero dependency on UzEngine; vendored render core; own build) | OWN-02, LIC-02, ARC-06, ARC-07, ARC-08, §16, §17 |
-| Owner Q9, Q9b (Windows 10/11 x64; DX12 + Vulkan; CI and oracle store on the owner's machine) | OWN-08, CLR-05, NFR-01, ARC-09, §17 |
+| Owner Q9, Q9b (Windows 10/11 x64; DX12 + Vulkan; oracle store and local GPU/oracle runs on the owner's machine, hosted CI CPU-only — decision 028) | OWN-08, CLR-05, NFR-01, ARC-09, §17 |
 | Owner Q10 (UE 5.6, UzEngine `.uzmat`/`.uztexture`, SpecularWeight consumer gap) | OWN-06, EXP-08, §18 item 5 |
 | Owner Q11 (portable file, 10 % candidate budget, retention) | OWN-07, SAV-01, SAV-02, NFR-04, §18 item 6 |
 | Owner Q12 (`run_python` only with `--allow-python`; typed MCP covers every required operation) | INT-02, ARC-14, §18 item 3 |

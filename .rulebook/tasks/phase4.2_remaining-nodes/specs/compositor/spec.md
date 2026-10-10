@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Remaining Nodes Integration Acceptance
-The remaining-nodes work package MUST close only when its five child tasks are accepted and the extended Tier 0 corpus passes on the self-hosted GPU runner.
+The remaining-nodes work package MUST close only when its five child tasks are accepted and the extended Tier 0 corpus passes in a local run on the owner's machine (decision 028).
 
 #### Scenario: A failed child keeps the parent open
 Given `phase4.1_nodes-vector-font-sources` is not accepted

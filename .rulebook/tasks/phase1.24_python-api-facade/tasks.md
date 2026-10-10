@@ -9,7 +9,7 @@
 - [ ] 2.5 `phase1.23_pyapi-pipeline-adapter` accepted
 
 ## 3. Tests
-- [ ] 3.1 Run the full Tier 0 API-probe comparison against `phase0.6_tier0-api-probes` goldens on one build on the self-hosted GPU runner: set→get readback, mask `None` rules, insertion rules, active-channel reset, event order; every probe exact
+- [ ] 3.1 Run the full Tier 0 API-probe comparison against `phase0.6_tier0-api-probes` goldens on one build in a local run on the owner's machine (decision 028; the local run report is the evidence): set→get readback, mask `None` rules, insertion rules, active-channel reset, event order; every probe exact
 - [ ] 3.2 Run the wand v1 adapter fixture end to end on the same build: `painter_create.py`, `painter_layer_stack.py sync`, `painter_export.py` with pinned SHA-256, results returned as JSON
 - [ ] 3.3 Regenerate `capabilities.json` from the same build and run the manifest-versus-behaviour conformance test
 

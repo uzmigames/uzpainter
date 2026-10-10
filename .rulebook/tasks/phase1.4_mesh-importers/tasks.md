@@ -13,7 +13,7 @@
 ## 3. Tests
 - [ ] 3.1 Corner preservation: a triangulated OBJ imports with corner hashes equal to the source (no re-triangulation, welding, normal recomputation or UV repacking)
 - [ ] 3.2 Negative OBJ indices fixture imports equal to its positive-index twin
-- [ ] 3.3 N-gon fixture: fan triangulation flagged; Tier 0 quad-triangulation comparison against Painter's result on the same quad mesh (self-hosted runner, private oracle)
+- [ ] 3.3 N-gon fixture: fan triangulation flagged; Tier 0 quad-triangulation comparison against Painter's result on the same quad mesh (local run on the owner's machine, private oracle, decision 028)
 - [ ] 3.4 Duplicate material names: import error by default; explicit merge with `allow_duplicate_material_names`
 - [ ] 3.5 Instances/transforms fixture (FBX and glTF): all instances present with their transforms
 - [ ] 3.6 Units fixture: centimetre and metre sources give the recorded effective scale
@@ -22,7 +22,7 @@
 - [ ] 3.9 UVs outside 0–1 fail with the tile list; `dae` import and `AutoUnwrapSettings` raise their documented errors
 
 ## 4. Acceptance
-- [ ] 4.1 All tests of this child green (hosted CPU lane; the Tier 0 triangulation comparison on the self-hosted runner)
+- [ ] 4.1 All tests of this child green (hosted CPU lane; the Tier 0 triangulation comparison in a local run on the owner's machine, decision 028, whose report is the evidence)
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

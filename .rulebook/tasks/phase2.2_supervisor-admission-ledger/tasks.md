@@ -20,7 +20,7 @@
 - [ ] 3.6 Unreadable operation records produce `outcome_unknown` and no execution
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green on the hosted CPU lane and on the self-hosted GPU runner; results attached to `phase2.4_supervisor-worker`
+- [ ] 4.1 Every §3 test green on the hosted CPU lane (GPU tests skip there with an explicit reason) and in a local run on the owner's machine (decision 028; the local run report is the evidence); results attached to `phase2.4_supervisor-worker`
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

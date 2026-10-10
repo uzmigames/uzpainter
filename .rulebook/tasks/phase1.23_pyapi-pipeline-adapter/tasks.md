@@ -9,7 +9,7 @@
 - [ ] 2.5 Fixture runner pinning the SHA-256 of `painter_create.py`, `painter_layer_stack.py` and `painter_export.py` and refusing to run a changed script
 
 ## 3. Tests
-- [ ] 3.1 Wand v1 fixture: `painter_create.py`, `painter_layer_stack.py sync` and `painter_export.py` run through the adapter on the self-hosted GPU runner with pinned hashes and return their JSON results
+- [ ] 3.1 Wand v1 fixture: `painter_create.py`, `painter_layer_stack.py sync` and `painter_export.py` run through the adapter in a local run on the owner's machine (decision 028) with pinned hashes and return their JSON results
 - [ ] 3.2 An adapter-run script that raises returns a structured failure with traceback and a non-zero exit code
 - [ ] 3.3 Shim isolation: `_substance_painter` is importable inside adapter-run scripts only; a plain `run` script and the facade expose no such symbol
 - [ ] 3.4 Shim in Phase 1: `painter_layer_stack.py capture` fails with an explicit capability error naming `painter_viewport`, and `smart` fails with an explicit capability error naming the missing smart-preset capability; the revision is unchanged in both cases
@@ -17,7 +17,7 @@
 - [ ] 3.6 LAY-07 through `sync`: only the addressed group is rebuilt, other root groups hidden (not deleted) unless `--keep-visible` matches, unrelated roots and resources survive
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green on the self-hosted GPU runner; the run log with script hashes attached to `phase1.24_python-api-facade`
+- [ ] 4.1 Every §3 test green in a local run on the owner's machine (decision 028); the local run report with script hashes, as evidence, attached to `phase1.24_python-api-facade`
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

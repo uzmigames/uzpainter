@@ -23,7 +23,7 @@
 - [ ] 3.6 Worker without `--allow-python` rejects `run_python` with `python_disabled`; a worker with an unavailable backend returns `gpu_backend_unavailable` before mutating while project open/save/inspect still succeed
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green on the self-hosted GPU runner (DX12 and Vulkan device-fault variants) and on the hosted CPU lane where no GPU is needed; results attached to `phase2.4_supervisor-worker`
+- [ ] 4.1 Every §3 test green in a local run on the owner's machine (DX12 and Vulkan device-fault variants; decision 028, the local run report is the evidence) and on the hosted CPU lane where no GPU is needed (GPU tests skip there with an explicit reason); results attached to `phase2.4_supervisor-worker`
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

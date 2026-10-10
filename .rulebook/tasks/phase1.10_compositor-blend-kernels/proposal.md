@@ -14,7 +14,7 @@ All 32 documented `BlendingMode` members must behave exactly as in Painter, per 
 - Parent: `phase1.14_compositor-core`. Consumers: `phase1.11_compositor-mask-effects`, `phase1.12_compositor-height-normal`.
 
 ## Acceptance
-Tier 0 blend goldens exact for every mode: two uniform fills at a sweep of values and opacities, exported at 16 bit through the documented export API, equal at native decoded values. Only the fitted formula, its public source and its residual are published under `parity/semantics/`; the goldens stay in the private oracle store and are compared on the self-hosted GPU runner (`docs/architecture/14-parity-testing.md` §6).
+Tier 0 blend goldens exact for every mode: two uniform fills at a sweep of values and opacities, exported at 16 bit through the documented export API, equal at native decoded values. Only the fitted formula, its public source and its residual are published under `parity/semantics/`; the goldens stay in the private oracle store and are compared locally on the owner's machine (decision 028; `docs/architecture/14-parity-testing.md` §6); the local run report is the evidence and hosted CI skips these tests with an explicit reason.
 
 ## Impact
 - Affected specs: `compositor`

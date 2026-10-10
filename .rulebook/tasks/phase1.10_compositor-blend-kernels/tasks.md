@@ -13,7 +13,7 @@
 - [ ] 3.3 Provenance check: every mode in `blend-modes.json` names a public source and a residual
 
 ## 4. Acceptance
-- [ ] 4.1 Tier 0 blend goldens exact for all 32 modes on the self-hosted GPU runner (DX12), or each remaining mode listed as `release-gap` with an owner decision pending
+- [ ] 4.1 Tier 0 blend goldens exact for all 32 modes in a local DX12 run on the owner's machine (decision 028; the local run report is the evidence), or each remaining mode listed as `release-gap` with an owner decision pending
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

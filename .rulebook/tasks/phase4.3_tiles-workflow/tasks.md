@@ -13,7 +13,7 @@
 - [ ] 2.9 Capability-manifest entries for the tile workflows with their Tier 0 evidence ids
 
 ## 3. Tests
-- [ ] 3.1 Tier 0 goldens on the UDIM mesh: per-tile uniform and bitmap fills exact on the self-hosted GPU runner
+- [ ] 3.1 Tier 0 goldens on the UDIM mesh: per-tile uniform and bitmap fills exact in a local run on the owner's machine (decision 028)
 - [ ] 3.2 Tier 0 golden: `UVTile` geometry mask including one tile and excluding the others
 - [ ] 3.3 Tier 0 golden: `Fill` projection per-tile matching and a UV projection crossing a tile boundary
 - [ ] 3.4 Tier 0 golden: a triangle spanning two tiles evaluates as in Painter and is flagged in the certificate

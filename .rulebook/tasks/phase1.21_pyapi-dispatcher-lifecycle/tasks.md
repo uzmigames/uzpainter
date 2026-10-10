@@ -13,7 +13,7 @@
 - [ ] 2.9 `async_utils` documented helpers bound to the dispatcher
 
 ## 3. Tests
-- [ ] 3.1 Event-order probes for create, open, save and close compared exactly with `phase0.6_tier0-api-probes` goldens on the self-hosted GPU runner
+- [ ] 3.1 Event-order probes for create, open, save and close compared exactly with `phase0.6_tier0-api-probes` goldens in a local run on the owner's machine (decision 028; the local run report is the evidence)
 - [ ] 3.2 `is_in_edition_state()` false until `ProjectEditionEntered` and `is_busy()` true while loading
 - [ ] 3.3 A script connects a handler, starts an open and returns; the handler still receives `ProjectEditionEntered` on the dispatcher thread
 - [ ] 3.4 Lock test: a handler that calls back into the API does not deadlock and observes the committed state
@@ -22,7 +22,7 @@
 - [ ] 3.7 `disconnect` stops delivery; a `connect` (weak) handler whose owner is collected is not called; `connect_strong` keeps it alive
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green (hosted CPU lane where no GPU or private golden is needed, self-hosted GPU runner otherwise); results attached to `phase1.24_python-api-facade`
+- [ ] 4.1 Every §3 test green (hosted CPU lane where no GPU or private golden is needed, with the other tests skipped there with an explicit reason; a local run on the owner's machine otherwise, decision 028); results attached to `phase1.24_python-api-facade`
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

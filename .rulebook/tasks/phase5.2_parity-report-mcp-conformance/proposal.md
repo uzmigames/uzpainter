@@ -22,6 +22,6 @@ Child of `phase5.4_parity-report` (P5-REPORT in `docs/dag.md`), implementing D10
 
 ## Impact
 - Affected specs: `mcp` (typed-operation conformance, Python policy)
-- Affected code: matrix generator, conformance fixtures per operation family, CI job on the self-hosted GPU runner, `parity/reports/phase5/`
+- Affected code: matrix generator, conformance fixtures per operation family, local run command for the owner's machine (decision 028), `parity/reports/phase5/`
 - Breaking change: NO
 - User benefit: an AI agent can perform every required operation through typed MCP tools with Python disabled, proven on the release build

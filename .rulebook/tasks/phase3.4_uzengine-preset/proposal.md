@@ -8,7 +8,7 @@ This task is the parent integration and acceptance task. The work is split into 
 ## What Changes
 - `phase3.1_uze-uztexture-writer`: UzPainter's own `.uztexture` writer (layout from the vendored `uztexture_format.h` only), the deterministic BC encoder adapter (etcpak; BC4/BC5/BC7 including sRGB variants) and the mip policy (sRGB-aware colour filtering, renormalised normals, alpha-coverage-preserving masked albedo).
 - `phase3.2_uze-uzmat-preset`: UzPainter's own `.uzmat` writer (`TextureSample → PBROutput` pins 0..6 plus the inline scene-material block), the shipped preset `assets/export-presets/uzengine.json` with `assets/export-presets/uzengine.provenance.json`, canonical 16-bit/float maps beside every cooked derivative, receipt fields for engine format, binding and consumer gaps.
-- `phase3.3_uze-consumer-fixture`: the external UzEngine consumer fixture (UzEngine's own executable loads the `.uzmat`/`.uztexture` files in a test scene on the self-hosted GPU runner), its manifest under `parity/manifests/consumers/uzengine/`, the lossy-derivative comparison and the gap report.
+- `phase3.3_uze-consumer-fixture`: the external UzEngine consumer fixture (UzEngine's own executable loads the `.uzmat`/`.uztexture` files in a test scene in a local run on the owner's machine, decision 028), its manifest under `parity/manifests/consumers/uzengine/`, the lossy-derivative comparison and the gap report.
 - Parent integration: the preset run end to end on the available pilots (wand v1 is the consumer-matrix fixture; belt v5 and tunic v10 additionally), the consolidated gap list in `parity/reports/phase3/`, and capability-manifest entries for the preset and its outputs.
 
 ## Dependencies

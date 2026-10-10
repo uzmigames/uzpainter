@@ -24,6 +24,6 @@ P5-REPORT in `docs/dag.md` (integration and acceptance task), implementing D13 a
 
 ## Impact
 - Affected specs: `parity-report` (release evidence integration, build identity)
-- Affected code: report integration and build-identity check, CI job on the self-hosted GPU runner, `parity/reports/phase5/`
+- Affected code: report integration and build-identity check, local run command for the owner's machine (decision 028), `parity/reports/phase5/`
 - Breaking change: NO
 - User benefit: one release evidence record the owner can sign at G5, tied to the exact build that ships

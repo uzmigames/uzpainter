@@ -11,7 +11,7 @@ EXP-08 (`docs/prd.md`) lists a Painter-equivalent glTF metallic-roughness preset
 
 ## Dependencies
 - DAG input (through the parent): `phase2.10_pilot-tunic-recovery`.
-- Delivered upstream and used here: `phase1.18_export-engine` (plan compiler, virtual maps, receipts, generational publication), `phase0.5_private-oracle-store` (private observations, self-hosted runner).
+- Delivered upstream and used here: `phase1.18_export-engine` (plan compiler, virtual maps, receipts, generational publication), `phase0.5_private-oracle-store` (private observations; GPU and oracle checks run locally on the owner's machine, decision 028).
 - Parent: `phase3.3_unreal-gltf-presets`. Independent of `phase3.2_unreal-ue56-packed-preset`.
 
 ## Acceptance

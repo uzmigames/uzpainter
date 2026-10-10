@@ -17,7 +17,7 @@
 - [ ] 3.6 Normal-convention fixture re-run: the production tangent frames reproduce the P0-NORMAL verdict on the hemisphere fixture
 
 ## 4. Acceptance
-- [ ] 4.1 All tests of this child green (hosted CPU lane; the normal-convention comparison on the self-hosted runner)
+- [ ] 4.1 All tests of this child green (hosted CPU lane; the normal-convention comparison in a local run on the owner's machine, decision 028, whose report is the evidence)
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

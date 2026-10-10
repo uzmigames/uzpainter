@@ -12,7 +12,7 @@
 - [ ] 3.3 Regenerate the capability manifest: the UV-tile workflow and its symbols move from `release-gap` to `supported` with tier evidence, or stay explicit gaps
 
 ## 4. Tests
-- [ ] 4.1 Tier 0 tile semantics on the UDIM fixture are exact on the self-hosted GPU runner
+- [ ] 4.1 Tier 0 tile semantics on the UDIM fixture are exact in a local run on the owner's machine (decision 028)
 - [ ] 4.2 Tier 1: every exported map of every tile equals the private Painter goldens and is byte-stable across two runs
 - [ ] 4.3 Save/reopen of the UDIM project reproduces identical exports
 

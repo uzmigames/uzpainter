@@ -8,12 +8,12 @@ OWN-06 and EXP-08 (`docs/prd.md`) require Unreal's ORM standard for Unreal Engin
 - **Provenance record** `assets/export-presets/unreal-engine-packed.provenance.json`: public sources (Adobe's public output-template help pages, `export.html`, Unreal Engine documentation), the SHA-256 of the private observed-output fixtures (Painter's files for that preset on a UzmiGames fixture project and the documented `list_output_maps()` result), packing decisions with their source, parity status.
 - **Encodings**: PNG/TGA 8-bit default (TGA through stb); optional DDS variant with UzPainter's own DDS header writer, BC7 for BaseColor, ORM and Emissive, BC5 for Normal, through the BC encoder adapter.
 - **Consumer-gap reporting**: SpecularWeight listed in the receipt; the consumer-side mapping `Specular = 0.5 × SpecularWeight` is never executed by the export.
-- **UE 5.6 import fixture**: manifest `parity/manifests/consumers/unreal/wand-v1.json`; UE 5.6 imports the published generation through the generation-pinning delivery adapter or the publication lock on the self-hosted GPU runner; checks BaseColor sRGB, ORM linear, Normal as a DirectX normal map, Emissive sRGB for both the PNG/TGA and DDS variants; records whether UE re-encodes the DDS files on cook.
+- **UE 5.6 import fixture**: manifest `parity/manifests/consumers/unreal/wand-v1.json`; UE 5.6 imports the published generation through the generation-pinning delivery adapter or the publication lock in a local run on the owner's machine (decision 028; the local run report is the evidence); checks BaseColor sRGB, ORM linear, Normal as a DirectX normal map, Emissive sRGB for both the PNG/TGA and DDS variants; records whether UE re-encodes the DDS files on cook.
 
 ## Dependencies
 - DAG input (through the parent): `phase2.10_pilot-tunic-recovery`.
 - Child-level prerequisite for the DDS items: `phase3.1_uze-uztexture-writer` (BC encoder adapter).
-- Delivered upstream and used here: `phase1.18_export-engine` (plan compiler, virtual maps `AO_Mixed` and `Normal_DirectX`, receipts, generational publication), `phase0.5_private-oracle-store` (private observed outputs, self-hosted runner).
+- Delivered upstream and used here: `phase1.18_export-engine` (plan compiler, virtual maps `AO_Mixed` and `Normal_DirectX`, receipts, generational publication), `phase0.5_private-oracle-store` (private observed outputs; GPU and oracle checks run locally on the owner's machine, decision 028).
 - Parent: `phase3.3_unreal-gltf-presets`. The hat v8 run of row 8 is attached to `phase4.2_coverage-hat-v8`.
 
 ## Acceptance

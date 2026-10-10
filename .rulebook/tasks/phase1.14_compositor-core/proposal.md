@@ -23,7 +23,7 @@ Out of the Phase 1 subset, raising `NotYetSupported` and listed as release gaps 
 - Downstream: `phase1.18_export-engine` (P1-EXPORT).
 
 ## Acceptance
-DAG gate of P1-COMPOSITOR: Tier 0 semantics exact for the implemented subset — every Tier 0 golden set owned by the seven children equals the private Painter goldens at the channel's storage precision on the self-hosted GPU runner (DX12), with no preset tolerance; a remaining difference passes only through an owner-approved entry in `parity/exceptions.json`. The parent closes only when all seven children are accepted.
+DAG gate of P1-COMPOSITOR: Tier 0 semantics exact for the implemented subset — every Tier 0 golden set owned by the seven children equals the private Painter goldens at the channel's storage precision in a local DX12 run on the owner's machine (decision 028; the local run report is the evidence), with no preset tolerance; a remaining difference passes only through an owner-approved entry in `parity/exceptions.json`. The parent closes only when all seven children are accepted.
 
 ## Impact
 - Affected specs: `compositor`

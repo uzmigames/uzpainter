@@ -5,7 +5,7 @@ A document serialised to its canonical JSON manifest and loaded back SHALL be eq
 
 #### Scenario: Round trip on two machines
 Given the fixture documents of `tests/uzp_core/`
-When each is serialised, reloaded and serialised again on the hosted CPU lane and on the self-hosted runner
+When each is serialised, reloaded and serialised again on the hosted CPU lane and in a local run on the owner's machine (decision 028)
 Then the documents are equal and all four digests of each document are identical
 
 ### Requirement: GPU-free document core

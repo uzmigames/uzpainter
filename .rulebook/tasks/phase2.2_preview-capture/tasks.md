@@ -12,7 +12,7 @@
 - [ ] 2.8 Worker capture command handler on the IPC vocabulary for the MCP `capture` tool
 
 ## 3. Tests
-- [ ] 3.1 Headless capture on the self-hosted GPU runner with no window, no desktop focus and no swapchain
+- [ ] 3.1 Headless capture in a local run on the owner's machine (decision 028) with no window, no desktop focus and no swapchain
 - [ ] 3.2 Freshness: mutate, capture, and check the receipt revision and the changed pixels
 - [ ] 3.3 Receipt schema test covering every field
 - [ ] 3.4 Diagnostic captures (`base_color`, `channel:roughness`, `mask:<uid>`) equal the corresponding channel exports in decoded values

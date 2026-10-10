@@ -14,7 +14,7 @@
 
 ## 3. Tests
 - [ ] 3.1 Supervisor started without `--allow-python` on the frozen build: `run_python` absent from the tool list, and a `run_python` request on the pipe rejected with `python_disabled`
-- [ ] 3.2 Every conformance fixture of §2 passes over stdio with Python disabled on the self-hosted GPU runner (DX12 and Vulkan for GPU families)
+- [ ] 3.2 Every conformance fixture of §2 passes over stdio with Python disabled in a local run on the owner's machine (DX12 and Vulkan for GPU families; decision 028, the local run report is the evidence)
 - [ ] 3.3 Matrix completeness check: every required operation has a typed tool and a fixture; the capability resource lists no required operation that needs Python
 - [ ] 3.4 Negative check: a matrix row deliberately stripped of its tool in a test build is reported as a release gap and fails the suite
 

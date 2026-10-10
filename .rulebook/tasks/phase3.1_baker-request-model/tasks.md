@@ -10,7 +10,7 @@
 - [ ] 2.6 Implement per-texel hit classification (straight hit, cage hit, centre miss, hidden) and `SubSampling` coverage accumulation
 - [ ] 2.7 Implement `DilationWidth` with optional `ApplyDiffusion` on the baked map only, keeping RAW; record distances in project units
 - [ ] 2.8 Implement the `BakingParameters`/`Property` model (`common()`, `baker(usage)`, `set`, `Property.*`) from the Phase 0 discovery capture; enum integers from `enum_values()` labels
-- [ ] 2.9 Author `assets/defaults/baking.json` with per-entry provenance and a self-hosted check against the private defaults capture
+- [ ] 2.9 Author `assets/defaults/baking.json` with per-entry provenance and a local check on the owner's machine (decision 028) against the private defaults capture
 - [ ] 2.10 Implement linked groups (`set_linked_group`, `set_linked_group_common_parameters`, `unlink_all*`, `get_link_group*`, `get_linked_texture_sets*`) as one transaction across linked sets; persist `bake_settings {common, detail, per_baker}`
 - [ ] 2.11 Register the MCP Baking parameter tools `bake_inspect`, `bake_configure`, `bake_set_mesh_inputs`, `bake_capture_preset`, `bake_apply_preset`
 

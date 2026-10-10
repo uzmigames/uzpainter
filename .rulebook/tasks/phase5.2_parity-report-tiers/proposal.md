@@ -1,10 +1,10 @@
 # Proposal: phase5.2_parity-report-tiers
 
 ## Why
-Child of `phase5.4_parity-report` (P5-REPORT in `docs/dag.md`), implementing D13 as specified in `docs/architecture/14-parity-testing.md` §1, §3–§5 and §8, with the Tier 3 comparison of `docs/architecture/07-preview-and-render-parity.md` §3.5 and §4 (decisions 017 and 018). Release criterion 1 of `docs/prd.md` §18 requires Tiers 0–2 equal on the self-hosted GPU runner for the certified corpus, Tier 3 compared with converged Iray references, every divergence (every Tier 3 residual included) covered by a recorded owner exception, and the exception register published. Requirements: G-04, ARC-06, ARC-09, ARC-10, VIS-06, EXP-05, NFR-02, CLR-05. This child delivers the full Tier 0–3 report on DX12 and Vulkan and the published exception register.
+Child of `phase5.4_parity-report` (P5-REPORT in `docs/dag.md`), implementing D13 as specified in `docs/architecture/14-parity-testing.md` §1, §3–§5 and §8, with the Tier 3 comparison of `docs/architecture/07-preview-and-render-parity.md` §3.5 and §4 (decisions 017 and 018). Release criterion 1 of `docs/prd.md` §18 requires Tiers 0–2 equal in a local run on the owner's machine (decision 028) for the certified corpus, Tier 3 compared with converged Iray references, every divergence (every Tier 3 residual included) covered by a recorded owner exception, and the exception register published. Requirements: G-04, ARC-06, ARC-09, ARC-10, VIS-06, EXP-05, NFR-02, CLR-05. This child delivers the full Tier 0–3 report on DX12 and Vulkan and the published exception register.
 
 ## What Changes
-- Full comparison run on the frozen release build (the build hash and dependency lock shared with `phase5.2_packaging`) on the self-hosted GPU runner, on DX12 and on Vulkan:
+- Full comparison run on the frozen release build (the build hash and dependency lock shared with `phase5.2_packaging`), run locally on the owner's machine (decision 028; the local run report is the evidence), on DX12 and on Vulkan:
   - Tier 0 semantics over the corpus of 14 §3, including the node kinds and UV-tile fixtures added in Phase 4;
   - Tier 1 recipes for the certified corpus (wand v1, belt v5, tunic v10, bracer r9, hat v8, body v6b) and every other Tier 1 fixture of 14 §3: every exported map per set, save/reopen and dump-and-rebuild;
   - Tier 2a per certified procedural asset and Tier 2b for the ten bakers (hit/coverage evidence first, then maps);
@@ -28,6 +28,6 @@ Child of `phase5.4_parity-report` (P5-REPORT in `docs/dag.md`), implementing D13
 
 ## Impact
 - Affected specs: `parity` (tier report, exception register)
-- Affected code: comparison tool and report generator, CI job on the self-hosted GPU runner, `parity/exceptions.json`, `parity/reports/phase5/`
+- Affected code: comparison tool and report generator, local run command for the owner's machine (decision 028), `parity/exceptions.json`, `parity/reports/phase5/`
 - Breaking change: NO
 - User benefit: one evidence record that shows, per asset, map, backend and render fixture, whether UzPainter equals Painter and which owner exceptions that relies on

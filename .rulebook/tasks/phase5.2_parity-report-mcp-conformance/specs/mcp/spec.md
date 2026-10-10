@@ -25,7 +25,7 @@ When the fixture calls `sync_stack` with a group-only rebuild through MCP with P
 Then only the named group is rebuilt, the result reports the changed ids and the committed revision, and the fixture passes
 
 #### Scenario: Capture family in the parity mode
-Given the frozen build on the self-hosted GPU runner
+Given the frozen build run locally on the owner's machine (decision 028)
 When the fixture calls `capture` with mode `painter_iray`
 Then the call returns a receipt with the revision and a downscaled image block, and no Python executes
 

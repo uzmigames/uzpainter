@@ -1,6 +1,6 @@
 # UzPainter private oracle store
 
-Work package P0-STORE (`docs/dag.md`), task `phase0.3_oracle-store-cli`. Implements `parity/CONTRACT.md` §3 (`oracle_unavailable`) and §6.4, and `docs/architecture/14-parity-testing.md` §6–§7, under decisions 002 (clean room) and 022 (the owner's machine as the self-hosted GPU runner). Code: `tools/parity/store/`; tests: `tests/parity/test_store.py`; CI: `.github/workflows/parity.yml`.
+Work package P0-STORE (`docs/dag.md`), task `phase0.3_oracle-store-cli`. Implements `parity/CONTRACT.md` §3 (`oracle_unavailable`) and §6.4, and `docs/architecture/14-parity-testing.md` §6–§7, under decisions 002 (clean room), 022 (platform) and 028 (hosted CPU-only CI; oracle checks run locally on the owner's machine). Code: `tools/parity/store/`; tests: `tests/parity/test_store.py`; hosted CI: `.github/workflows/parity.yml`.
 
 ## 1. Rules
 
@@ -11,7 +11,7 @@ Work package P0-STORE (`docs/dag.md`), task `phase0.3_oracle-store-cli`. Impleme
 
 ## 2. Location and layout
 
-Root: `UZP_PARITY_STORE` when set, else `%LOCALAPPDATA%\UzPainter\parity-store`. A folder without `store.json` is not a store: a machine without one (every hosted runner) has no oracle.
+Root: `UZP_PARITY_STORE` when set, else `%LOCALAPPDATA%\UzPainter\parity-store`. A folder without `store.json` is not a store: a machine without one (every hosted CI machine) has no oracle.
 
 | Path under the root | Content |
 |---|---|
@@ -49,26 +49,22 @@ The Painter recorder (`phase0.3_painter-oracle-recorder`) writes each recording 
 
 `record --run` requires `READY`, matches every `private_records` entry to a file of the run by SHA-256 and size, checks that each blob file is named by its hash and that the manifest names every blob the record names, then stores everything. Fetched blobs take their extension from the record's `media_type`. The run is never deleted by the store.
 
-## 5. CI lanes and the self-hosted GPU runner
+## 5. Hosted CI and the local oracle run
 
-`.github/workflows/parity.yml` (`14-parity-testing.md` §7):
+Decision 028: there is no GPU CI on GitHub and no self-hosted runner. `.github/workflows/parity.yml` (`14-parity-testing.md` §7) runs only hosted, CPU-only work:
 
-| Job | Runs on | Does |
+| Where | Runs on | Does |
 |---|---|---|
-| `hosted` | `windows-latest`, no GPU, no store, no `UZP_PARITY_STORE` | Type-check, lint, full test suite; then checks that `verify` of the sample manifests reports `oracle_unavailable` |
-| `oracle` | `[self-hosted, windows, x64, uzpainter-gpu]`: the owner's machine only | Whole-store integrity, then `verify parity/manifests`. Later comparison jobs against recorded Painter values join this job's runner labels and nothing else |
+| Hosted CI (`hosted` job) | `windows-latest`, no GPU, no store, no `UZP_PARITY_STORE` | Type-check, lint, full test suite (GPU and oracle tests skip with an explicit reason); then checks that `verify` of the sample manifests reports `oracle_unavailable` |
+| Local oracle run | The owner's machine only, started by hand (§5.1) | Whole-store integrity, then `verify parity/manifests`. Later comparisons against recorded Painter values run the same way, locally, and nowhere else |
 
-The `oracle` job runs only when the repository variable `UZP_GPU_RUNNER` is `registered`, and never for pull requests (a pull request must not execute code on the machine that holds the private store and the Painter licence).
+The local run report is the gate evidence for every check that needs the store or Painter; a hosted run never stands in for it.
 
-### 5.1 Registering the owner's machine (owner's credentials required)
+### 5.1 Local oracle run procedure (owner's machine)
 
-1. Prerequisites on the machine: the GPU with DXR Tier 1.1 and Vulkan ray query, licensed Adobe Substance 3D Painter 12.1.0, Python 3.13 with `jsonschema` on `PATH`, and the store: `python -m tools.parity.store --store <root> init` with `<root>` outside the repository.
-2. On GitHub: repository *Settings → Actions → Runners → New self-hosted runner*, Windows x64. Download the runner into a folder outside the repository (e.g. `C:\actions-runner`).
-3. Configure it with the token GitHub shows: `.\config.cmd --url https://github.com/<owner>/UzPainter --token <token> --name <machine> --labels uzpainter-gpu --unattended` (GitHub adds `self-hosted`, `Windows`, `X64`; labels match case-insensitively).
-4. Give the runner the store: add `UZP_PARITY_STORE=<root>` to the runner folder's `.env` file (or leave it unset when the store is at the default `%LOCALAPPDATA%\UzPainter\parity-store` of the account the runner runs as).
-5. Run it in the owner's logged-in session with `.\run.cmd`, so jobs reach the GPU and the Painter licence of that account.
-6. Enable the lane: repository *Settings → Secrets and variables → Actions → Variables*, add `UZP_GPU_RUNNER` = `registered`.
-7. Check: run the `Parity` workflow (*workflow_dispatch*); the `oracle` job runs on the machine and `verify` reports the store `ok`.
+1. Prerequisites on the machine: the GPU with DXR Tier 1.1 and Vulkan ray query, licensed Adobe Substance 3D Painter 12.1.0, Python 3.13 with `jsonschema` on `PATH`, and the store: `python -m tools.parity.store --store <root> init` with `<root>` outside the repository (once). Set `UZP_PARITY_STORE=<root>`, or leave it unset when the store is at the default `%LOCALAPPDATA%\UzPainter\parity-store`.
+2. From the repository root, on a clean checkout of the commit under test: `python -m tools.parity.store verify` (whole-store integrity), then `python -m tools.parity.store verify parity/manifests` when that folder exists. Both must exit 0.
+3. Write the run report: the commands, machine name, GPU and driver version, build hash (the commit), Painter build, and each command's exit status and output. It holds statuses and hashes only, never a recorded output, and is recorded as the evidence of the task that needs it.
 
 ## 6. Tests
 

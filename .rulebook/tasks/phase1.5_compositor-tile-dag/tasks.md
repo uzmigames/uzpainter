@@ -11,14 +11,14 @@
 
 ## 3. Tests
 - [ ] 3.1 Tier 0 base-value goldens: an empty project per template exports values equal to the private captures (LAY-10)
-- [ ] 3.2 Tier 0 template goldens: channel sets and storage formats per template equal the private captures; template JSON checked against them on the self-hosted runner
+- [ ] 3.2 Tier 0 template goldens: channel sets and storage formats per template equal the private captures; template JSON checked against them in a local run on the owner's machine (decision 028)
 - [ ] 3.3 Tier 0 order goldens: asymmetric blends on stacked uniform fills confirm bottom-up evaluation
 - [ ] 3.4 Tier 0 group goldens without masks: `Normal` and `PassThrough` groups equal the goldens; `Disable` skips the node per channel
 - [ ] 3.5 Cache/invalidation unit test: editing one layer re-evaluates only tiles whose subtree hash changed
 - [ ] 3.6 Admission unit test: under a small artificial budget three 4096² sets evaluate in sequence with LRU eviction; a set above the budget is refused at creation
 
 ## 4. Acceptance
-- [ ] 4.1 Tier 0 sets of this child exact on the self-hosted GPU runner (DX12); unit tests green
+- [ ] 4.1 Tier 0 sets of this child exact in a local DX12 run on the owner's machine (decision 028; the local run report is the evidence); unit tests green
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

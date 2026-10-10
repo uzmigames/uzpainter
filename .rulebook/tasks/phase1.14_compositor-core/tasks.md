@@ -12,7 +12,7 @@
 - [ ] 2.8 Register every Phase 1 node kind, source, projection and blend mode as `supported` with its Tier 0 evidence id, and every excluded one as `release-gap`, in the capability inventory of `phase1.2_docmodel-capability-manifest`
 
 ## 3. Tests
-- [ ] 3.1 Run the union of the children's Tier 0 golden sets in one pass on the self-hosted GPU runner (DX12) and publish the comparison numbers (max |Δ|, mean |Δ|, p99, differing-texel count and percentage) next to oracle stability and UzPainter repeatability
+- [ ] 3.1 Run the union of the children's Tier 0 golden sets in one pass in a local DX12 run on the owner's machine (decision 028) and publish, in the local run report used as evidence, the comparison numbers (max |Δ|, mean |Δ|, p99, differing-texel count and percentage) next to oracle stability and UzPainter repeatability
 - [ ] 3.2 Repeatability lane: the same Tier 0 inputs evaluated twice in separate processes give byte-identical channel rasters
 - [ ] 3.3 Requesting an excluded feature (for example a triplanar projection or a compare mask) raises `NotYetSupported` before any mutation
 
