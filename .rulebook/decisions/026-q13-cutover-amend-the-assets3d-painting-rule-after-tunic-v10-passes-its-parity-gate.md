@@ -12,6 +12,8 @@ The Assets3D pipeline rule says painting is always done in Substance Painter. Ow
 
 The Assets3D rule "painting is always in Substance" is amended after Tunic v10 passes its parity gate (G2, docs/roadmap.md). The full Assets3D cutover (P5-CUTOVER) still follows the release gate G5 and the owner's signature.
 
+Node renamed: `P5-CUTOVER` is now `P3-CUTOVER` in `docs/dag.md`, Rulebook task `phase3.1_assets3d-cutover` (formerly `phase5_assets3d-cutover`). The scoped cutover follows G2 and joins G3; Painter remains the oracle and the tool for out-of-scope work until G5.
+
 ## Alternatives Considered
 
 - Keep the rule until a later integration action after the tunic milestone (round-3 default) - replaced by the owner's answer

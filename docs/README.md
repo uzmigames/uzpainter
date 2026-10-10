@@ -37,6 +37,7 @@ Historical analyses and discussion files are not implementation inputs until an 
 | `architecture/14-parity-testing.md` | Four-tier golden corpus, exact-equality gate, owner exception register, private oracle store, CI lanes |
 | `roadmap.md` | Phases with acceptance gates, pilot order, durations as labelled Hypotheses |
 | `dag.md` | Work-package dependency graph with stable parent ids (rulebook task ids), gate nodes, provisional dependency chain, parallelism |
+| `task-index.md` | Every rulebook task by phase and sub-phase level: id, DAG node, parent, same-phase prerequisites, one-line goal |
 | `open-questions.md` | Owner questions Q1–Q14 and the repository-history criterion, with the owner's answers of 2026-10-10 and the decisions recording them |
 | `analysis/README.md` | Index of the analyses, the Astra reviews, the review responses, the clean-room redaction record and the architecture discussion (files 01–06) |
 | `analysis/clean-room-redactions.md` | Record of the clean-room sanitisation pass over `docs/analysis/`: every redaction by file and category, and the borderline passages kept with the reason |
@@ -47,7 +48,7 @@ Historical analyses and discussion files are not implementation inputs until an 
 
 ## How to use these docs when building a subsystem
 
-1. Find the subsystem's work package in `dag.md`; its inputs tell you which other packages must be accepted first and which decision (`Dn`) it implements. Before creating implementation tasks, split a large parent into child tasks with their own artifact, acceptance fixture and prerequisite edges (ids `phase<N>_<kebab-name>`); the parent closes only when all mandatory children pass.
+1. Find the subsystem's work package in `dag.md`; its inputs tell you which other packages must be accepted first and which decision (`Dn`) it implements. Before creating implementation tasks, split a large parent into child tasks with their own artifact, acceptance fixture and prerequisite edges (ids are `phase<N>.<M>_<kebab-name>`, where `<M>` is the dependency level inside phase `<N>` (1 + the highest level of its same-phase prerequisites); tasks with the same `<N>.<M>` can run in parallel; children come before their parent; the phase gate is the last level; `task-index.md` lists every task); the parent closes only when all mandatory children pass.
 2. Read the architecture doc for that decision and the requirements it lists from `prd.md`.
 3. Read `14-parity-testing.md` for the tier that gates the work, and `open-questions.md` and `.rulebook/decisions/` for the owner answers you depend on; if your work would change a recorded decision, stop and raise it (`rulebook_task {action:"ask"}`) instead of choosing silently.
 4. Evidence conventions: a statement without a label is settled by the cited source or by a recorded decision under `.rulebook/decisions/`; historical analyses and discussion files are context, not implementation inputs, until cleared (see above). **Fact** marks a verified observation whose path is given; **Hypothesis** marks an unverified inference or estimate; **Recommendation** marks a design choice. Durations are always Hypotheses.
