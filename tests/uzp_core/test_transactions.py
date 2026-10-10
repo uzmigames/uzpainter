@@ -11,16 +11,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from tools.parity.recorder.job import canonical_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SCHEMA_PATH = REPO_ROOT / "src" / "uzp_core" / "schema" / "manifest.schema.json"
+# SHA-256 of the canonical manifest of the document `integrated-manifest` builds through
+# transactions (phase1.3_document-model 3.2). Pinned: the hosted CPU lane and a local run on the
+# owner's machine (decision 028) both assert this value, so equal results on the two machines
+# are a passing test on each.
+INTEGRATED_DIGEST = "c2f28a5f8c7296319b31e5d9286acb85257aac5022d091aed9fdc7fcb803e0c2"
 
 NATIVE_CASES = (
     "snapshot_immutability",  # 3.1
@@ -33,6 +41,7 @@ NATIVE_CASES = (
     "document_idempotency",  # 3.5
     "request_hash_key_order",  # 3.6
     "name_addressing",  # 3.7
+    "integrated_round_trip",  # phase1.3_document-model 3.1
 )
 
 
@@ -96,3 +105,37 @@ def test_request_hash_matches_python(
         proc = run(transaction_tests, "request-hash", "layer_insert", str(path))
         assert proc.returncode == 0, proc.stderr.decode()
         assert proc.stdout.decode() == expected
+
+
+# ── phase1.3_document-model: integrated round trip and digest stability ──────────────────────
+
+
+def test_integrated_manifest_digest_stable(transaction_tests: Path) -> None:
+    """3.1/3.2: two processes print the same bytes; their digest is the pinned one in Python too,
+    and Python's reload and canonical re-serialisation give the same bytes back."""
+    outputs = []
+    for _ in range(2):
+        proc = run(transaction_tests, "integrated-manifest")
+        assert proc.returncode == 0, proc.stderr.decode()
+        outputs.append(proc.stdout)
+    assert outputs[0] == outputs[1]
+    manifest = json.loads(outputs[0])
+    assert canonical_json(manifest) == outputs[0]
+    assert hashlib.sha256(outputs[0]).hexdigest() == INTEGRATED_DIGEST
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    assert [error.message for error in Draft202012Validator(schema).iter_errors(manifest)] == []
+
+
+def test_uzp_core_includes_no_render_or_gpu_header() -> None:
+    """2.4: `uzp_core` includes only its own headers and C++ standard headers, so it cannot
+    depend on the render layer, the render core or a GPU API."""
+    include = re.compile(r'^\s*#\s*include\s+([<"])([^>"]+)[>"]', re.MULTILINE)
+    sources = sorted((REPO_ROOT / "src" / "uzp_core").rglob("*.[ch]*"))
+    assert sources
+    foreign = [
+        f"{path.relative_to(REPO_ROOT)}: {name}"
+        for path in sources
+        for kind, name in include.findall(path.read_text(encoding="utf-8"))
+        if not (name.startswith("uzp_core/") if kind == '"' else re.fullmatch(r"[a-z_]+", name))
+    ]
+    assert foreign == []

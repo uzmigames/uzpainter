@@ -7,12 +7,16 @@
 //                                                       when all pass
 //   uzp-core-transaction-tests request-hash <tool> <file> print the request hash of the tool and
 //                                                       the JSON object in <file>
+//   uzp-core-transaction-tests integrated-manifest     print the canonical manifest of the
+//                                                       document built through transactions
+//                                                       (phase1.3_document-model)
 // Errors print "<ErrorClass>: <message>" on stderr and exit 3.
 
 #include <atomic>
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -694,6 +698,117 @@ void NameAddressing() {
     CHECK(added == saved.project->next_id);
 }
 
+// ── phase1.3 3.1 Integrated round trip: a document built through transactions ───────────────
+
+/// Builds a document through committed transactions only (one call per transaction, a composite
+/// attach, a native multi-call `Transaction`, named inserts and their repeat) and marks a
+/// checkpoint. Everything is fixed, so the manifest is the same bytes in every process.
+std::unique_ptr<Document> BuildThroughTransactions() {
+    auto doc = std::make_unique<Document>(State());
+    const auto commit = [&](const std::string& key, const std::string& tool, const std::function<void(Edit&)>& call) {
+        const RequestOutcome outcome = Execute(*doc, Req(key, doc->revision(), tool), call);
+        if (!outcome.result || outcome.result->status == ResultStatus::failed) {
+            throw Failure{key + " did not commit: " + (outcome.result ? outcome.result->error : "not admitted")};
+        }
+        return *outcome.result;
+    };
+    const std::string bitmap = Sha256Hex("integrated bitmap bytes");
+
+    commit("import", "resource_import", [&](Edit& e) {
+        e.project().resources[bitmap] = {Meta(e.AllocateId(), "M_cloth.png")};
+    });
+    Id base = kNoId;
+    commit("base", "layer_insert", [&](Edit& e) {
+        base = e.Insert(kTop, NodeType::FillLayer, "Base");
+        Layer& layer = *FindLayer(e.project(), base);
+        layer.fill->sources[ChannelType::BaseColor] = Source{UniformColorSource{{0.8, 0.2, 0.1}, "sRGB", {}}};
+        layer.fill->sources[ChannelType::Roughness] = Source{BitmapSource{{bitmap, "M_cloth", {}}, "Raw", {}}};
+        layer.fill->active_channels = {ChannelType::BaseColor, ChannelType::Roughness};
+        layer.blending[ChannelType::BaseColor] = Blending{BlendingMode::Multiply, 0.75, {}};
+    });
+    Id group = kNoId;
+    commit("smart", "insert_smart_material", [&](Edit& e) {
+        Layer detached = MakeLayer(e.AllocateId(), LayerKind::group, "Smart leather");
+        detached.children = {MakeLayer(e.AllocateId(), LayerKind::fill, "Leather")};
+        group = detached.uid;
+        e.Attach(InsertPosition::Below(base), std::move(detached));
+    });
+    commit("effects", "effect_insert", [&](Edit& e) {
+        e.Insert(InsertPosition::Inside(base, NodeStack::Content), NodeType::LevelsEffect, "Levels");
+        e.Insert(InsertPosition::Inside(base, NodeStack::Content), NodeType::AnchorPointEffect, "Base anchor");
+    });
+    commit("mask", "mask_add", [&](Edit& e) {
+        Mask mask;
+        mask.background = MaskBackground::Black;
+        FindLayer(e.project(), base)->mask = mask;
+        e.Insert(InsertPosition::Inside(base, NodeStack::Mask), NodeType::FillEffect, "Mask fill");
+        e.Insert(InsertPosition::Inside(base, NodeStack::Mask), NodeType::CompareMaskEffect, "Compare");
+    });
+    {
+        Transaction t(*doc, Req("multi", doc->revision(), "transaction"));
+        Id paint = kNoId;
+        t.Apply([&](Edit& e) { paint = e.Insert(kTop, NodeType::PaintLayer, "Paint"); });
+        t.Apply([&](Edit& e) { e.Insert(kTop, NodeType::InstanceLayer, "Leather instance", group); });
+        t.Apply([&](Edit& e) { FindLayer(e.project(), paint)->visible = false; });
+        const RequestOutcome outcome = t.Commit();
+        if (!outcome.result || outcome.result->status != ResultStatus::committed) throw Failure{"multi did not commit"};
+    }
+    const auto named = [](Edit& e) { e.returned()["node"] = InsertNamed(e, kRoot, NodeType::FillLayer, "M_piping").node; };
+    commit("piping", "layer_insert_named", named);
+    CHECK(commit("piping-again", "layer_insert_named", named).status == ResultStatus::no_op);
+    commit("piping-second", "layer_insert", [&](Edit& e) { e.Insert(kTop, NodeType::FillLayer, "M_piping"); });
+    commit("metadata", "metadata_set", [&](Edit& e) {
+        e.project().metadata["pipeline"] = json::Object{{"stage", "painting"}, {"version", 3}};
+    });
+    doc->MarkCheckpoint();
+    return doc;
+}
+
+void IntegratedRoundTrip() {
+    const std::unique_ptr<Document> doc = BuildThroughTransactions();
+    const Snapshot snapshot = doc->snapshot();
+    CHECK(snapshot.revision == 9);  // nine commits; the repeated named insert was a no-op
+    CHECK(doc->operations().size() == 9);
+    CHECK(!doc->NeedsSaving());
+
+    // Serialise, reload: equal documents, equal bytes, equal digests.
+    const std::string text = SaveManifest(*snapshot.project);
+    const Project reloaded = LoadManifest(text);
+    CHECK(reloaded == *snapshot.project);
+    CHECK(SaveManifest(reloaded) == text);
+    const std::string digest = ManifestDigest(*snapshot.project);
+    CHECK(digest == Sha256Hex(text));
+    CHECK(ManifestDigest(reloaded) == digest);
+
+    // The same transactions in a second document give the same bytes.
+    CHECK(Manifest(*BuildThroughTransactions()) == text);
+
+    // Reopened from the reloaded manifest with the document's state: same revision, checkpoints
+    // and records; a retry of a committed key returns its stored outcome; new ids continue.
+    const Checkpoints checkpoints = doc->checkpoints();
+    DocumentState state = State(reloaded, snapshot.revision);
+    state.named_checkpoint = checkpoints.named;
+    state.previous_checkpoint = checkpoints.previous;
+    state.operations = doc->operations();
+    state.operation_horizon = doc->operation_horizon();
+    Document reopened(std::move(state));
+    CHECK(reopened.revision() == snapshot.revision);
+    CHECK(reopened.checkpoints() == checkpoints);
+    CHECK(reopened.operations() == doc->operations());
+    CHECK(Manifest(reopened) == text);
+    const OperationRecord base_record = *reopened.FindOperation("base");
+    const RequestOutcome retry = Execute(reopened, Req("base", snapshot.revision - 3, "layer_insert"), [](Edit&) {
+        throw Failure{"a stored outcome must not execute"};
+    });
+    CHECK(retry.decision.admission == Admission::stored_outcome);
+    CHECK(retry.decision.record == base_record);
+    CHECK(reopened.revision() == snapshot.revision);
+    Id added = kNoId;
+    Execute(reopened, Req("after", snapshot.revision), [&](Edit& e) { added = e.Insert(kTop, NodeType::FillLayer, "After"); });
+    CHECK(added == reloaded.next_id);
+    CHECK(reopened.NeedsSaving());
+}
+
 // ── Driver ─────────────────────────────────────────────────────────────────────────────────
 
 int Run(const std::string& only) {
@@ -708,6 +823,7 @@ int Run(const std::string& only) {
         {"document_idempotency", DocumentIdempotency},
         {"request_hash_key_order", RequestHashKeyOrder},
         {"name_addressing", NameAddressing},
+        {"integrated_round_trip", IntegratedRoundTrip},
     };
     int failed = 0;
     int ran = 0;
@@ -746,7 +862,12 @@ int Command(int argc, char** argv) {
         std::printf("%s", RequestHash(argv[2], std::get<json::Object>(arguments.data)).c_str());
         return 0;
     }
-    std::fprintf(stderr, "usage: uzp-core-transaction-tests run [case] | request-hash <tool> <file>\n");
+    if (command == "integrated-manifest" && argc == 2) {
+        std::printf("%s", Manifest(*BuildThroughTransactions()).c_str());
+        return 0;
+    }
+    std::fprintf(stderr,
+                 "usage: uzp-core-transaction-tests run [case] | request-hash <tool> <file> | integrated-manifest\n");
     return 2;
 }
 

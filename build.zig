@@ -21,6 +21,8 @@
 //!   (`src/render/`, `tests/render/render_core_test.cpp`) with the DX run-time files beside it
 //! - `zig build normal-prototype` `uzp-normal-prototype.exe`, the Phase 0 tangent-frame
 //!   prototype of the normal-convention fixture (`src/prototype/`, mikktspace, spng, zlib)
+//! - `zig build uzp-core`     the document model as a static library (`zig-out/lib/uzp_core.lib`,
+//!   `src/uzp_core/`): no render layer, no render core, no GPU
 //! - `zig build uzp-core-tests` `uzp-core-tests.exe`, the native tests of the document model and
 //!   the canonical manifest (`src/uzp_core/`, `tests/uzp_core/uzp_core_test.cpp`)
 //! - `zig build uzp-core-transaction-tests` `uzp-core-transaction-tests.exe`, the native tests of
@@ -170,9 +172,14 @@ const render_sources = [_][]const u8{
     "render/backend.cpp",
     "render/capabilities.cpp",
     "render/device.cpp",
+    "render/dilation.cpp",
     "render/engine_thread.cpp",
+    "render/image_pass.cpp",
     "render/kernel_cache.cpp",
+    "render/mips.cpp",
+    "render/resample.cpp",
     "render/texture_readback.cpp",
+    "render/uv_raster.cpp",
     "render/xxhash64.cpp",
 };
 /// Warnings are errors in UzPainter's render layer and its tests (never in vendored code).
@@ -508,7 +515,12 @@ pub fn build(b: *std.Build) void {
     render_tests_mod.addIncludePath(b.path("src"));
     render_tests_mod.addCSourceFiles(.{
         .root = b.path("tests/render"),
-        .files = &.{"render_core_test.cpp"},
+        .files = &.{
+            "render_core_test.cpp",
+            "uv_raster_test.cpp",
+            "image_passes_test.cpp",
+            "reference/image_reference.cpp",
+        },
         .flags = &(cxx_flags ++ own_warning_flags),
     });
     render_tests_mod.addCSourceFiles(.{
@@ -572,6 +584,32 @@ pub fn build(b: *std.Build) void {
     prototype_step.dependOn(&b.addInstallArtifact(prototype_exe, .{}).step);
     b.getInstallStep().dependOn(prototype_step);
 
+    // ── The document model as a static library (phase1.3_document-model) ─────────────────────
+    // Only `src/` and the C++ runtime: no render layer, render core, system library or GPU, so
+    // it builds and its tests run on the hosted CPU lane.
+
+    const uzp_core_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    uzp_core_mod.addIncludePath(b.path("src"));
+    uzp_core_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &uzp_core_sources,
+        .flags = &uzp_core_flags,
+    });
+    const uzp_core_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "uzp_core",
+        .root_module = uzp_core_mod,
+    });
+    const install_uzp_core = b.addInstallArtifact(uzp_core_lib, .{});
+    b.getInstallStep().dependOn(&install_uzp_core.step);
+    const uzp_core_step = b.step("uzp-core", "Build the document model as a static library");
+    uzp_core_step.dependOn(&install_uzp_core.step);
+
     // ── Native tests of the document model (phase1.1_docmodel-types-manifest) ─────────────────
 
     const uzp_core_tests_mod = b.createModule(.{
@@ -581,11 +619,7 @@ pub fn build(b: *std.Build) void {
         .link_libcpp = true,
     });
     uzp_core_tests_mod.addIncludePath(b.path("src"));
-    uzp_core_tests_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &uzp_core_sources,
-        .flags = &uzp_core_flags,
-    });
+    uzp_core_tests_mod.linkLibrary(uzp_core_lib);
     uzp_core_tests_mod.addCSourceFiles(.{
         .root = b.path("tests/uzp_core"),
         .files = &.{"uzp_core_test.cpp"},
@@ -608,11 +642,7 @@ pub fn build(b: *std.Build) void {
         .link_libcpp = true,
     });
     uzp_core_txn_tests_mod.addIncludePath(b.path("src"));
-    uzp_core_txn_tests_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &uzp_core_sources,
-        .flags = &uzp_core_flags,
-    });
+    uzp_core_txn_tests_mod.linkLibrary(uzp_core_lib);
     uzp_core_txn_tests_mod.addCSourceFiles(.{
         .root = b.path("tests/uzp_core"),
         .files = &.{"transaction_test.cpp"},

@@ -134,4 +134,12 @@ gets `stale_revision`); change sets and no-ops; the commit sink and checkpoints;
 one assertion per branch, and the same branches through a document (stored outcome at revision 9
 for a key committed at 5, `idempotency_conflict`, `outcome_unknown` without and with an expired
 precondition, `stale_revision`, execute); request-hash key order; LAY-06 ambiguity, repeat and
-save/reopen. No GPU is used.
+save/reopen; and the integrated round trip of `phase1.3_document-model`: a document built only
+through transactions (resource import, fill layer with sources, composite attach, content and
+mask effects, a native multi-call `Transaction`, named inserts and their no-op repeat,
+metadata) is serialised, reloaded and compared (equal project, bytes and digest), built a
+second time to the same bytes, and reopened with its revision, checkpoints and operation
+records (a retry returns the stored outcome, new ids continue from `next_id`).
+`uzp-core-transaction-tests integrated-manifest` prints that manifest; the pytest runs it in two
+processes and asserts the pinned digest, which the hosted CPU lane and the owner's machine
+both check (decision 028). No GPU is used.

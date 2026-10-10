@@ -31,6 +31,15 @@ GPU_CASES = frozenset(
         "readback-exact",
         "readback-drain",
         "readback-failure",
+        "uv-raster-plane",
+        "uv-raster-thin",
+        "uv-raster-coverage",
+        "uv-raster-ids",
+        "uv-raster-repeat",
+        "image-dilation",
+        "image-resample",
+        "image-mips",
+        "image-repeat",
     }
 )
 

@@ -17,6 +17,8 @@
 //   readback-exact   every readable format (and a lower mip) read back bit-identical
 //   readback-drain   64 readbacks in flight drained in submission order, no staging left
 //   readback-failure device removal and a stalled queue under pending readbacks
+//   uv-raster-*      the UV-space raster pass (phase1.3_core-uv-raster, uv_raster_test.cpp)
+//   image-*          the image passes (phase1.3_core-image-passes, image_passes_test.cpp)
 //
 // Output: `PASS <check>` / `FAIL <check>: <detail>` lines, `INFO` lines and, for
 // `capabilities`, one `REPORT <json>` line. Exit code 0 when every check passed, 1 when one
@@ -31,6 +33,8 @@
 #include "render/kernel_cache.h"
 #include "render/texture_readback.h"
 #include "render/xxhash64.h"
+
+#include "image_passes_test.h"
 
 #include "D3D12MemAlloc.h"
 #include "dx12_device.h"
@@ -1480,16 +1484,21 @@ int RunReadbackFailure(const fs::path& dir) {
 
 }  // namespace
 
+/// The `uv-raster-*` cases (tests/render/uv_raster_test.cpp); -1 for any other mode.
+int RunUvRasterCase(std::string_view mode, const fs::path& dir);
+
 int main(int argc, char** argv) {
     const std::string_view mode = argc > 1 ? argv[1] : "";
     if (mode == "xxhash") return RunXxhash();
     if (mode == "admission") return RunAdmission();
     if (mode == "readback-layout") return RunReadbackLayout();
+    if (mode == "image-reference") return RunImagePassCase(mode, {});
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: uzp-render-tests xxhash | admission | readback-layout | kernel-cache | "
                      "dispatch | deadline | device-removed | unavailable | capabilities | "
-                     "readback-pitch | readback-exact | readback-drain | readback-failure "
+                     "readback-pitch | readback-exact | readback-drain | readback-failure | uv-raster-* | "
+                     "image-* "
                      "<work-dir>\n");
         return 2;
     }
@@ -1509,6 +1518,8 @@ int main(int argc, char** argv) {
     else if (mode == "readback-exact") code = RunReadbackExact(dir);
     else if (mode == "readback-drain") code = RunReadbackDrain(dir);
     else if (mode == "readback-failure") code = RunReadbackFailure(dir);
+    else if (const int uv = RunUvRasterCase(mode, dir); uv >= 0) code = uv;
+    else if (const int image = RunImagePassCase(mode, dir); image >= 0) code = image;
     else std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());
     uz::LogShutdown();
     return code;

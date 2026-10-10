@@ -87,7 +87,14 @@ legacy-alias names), each recorded with its documentation page in
 `tools/parity/recorder/documented_symbols.json` (approved source A-PYDOC). A manifest naming another
 channel type is refused with `ManifestError`, never misread.
 
-## 7. Tests
+## 7. Library and tests
+
+`zig build uzp-core` builds the document model as the static library `uzp_core.lib` from
+`src/uzp_core/` alone: it includes only its own headers and C++ standard headers and links no
+render layer, render core, system library or GPU API (checked by
+`tests/uzp_core/test_transactions.py`), so it builds and its tests run on the hosted CPU lane.
+Both native test executables link it. The capability manifest generator is the separate
+`zig build capabilities` step (`tools/capabilities/`).
 
 `zig build uzp-core-tests` builds `uzp-core-tests.exe` (`tests/uzp_core/uzp_core_test.cpp`; own
 code compiled with `-Wall -Wextra -Werror`). `python -m pytest tests/uzp_core` builds it, runs its
