@@ -160,8 +160,8 @@ hardware slice and the four probes pass on the owner's machine
 | Private oracle store, repository guard, Painter oracle recorder | Done |
 | `UzPainter.exe selftest`: DX12 hardware slice; Vulkan, ray-query and WARP probes | Done |
 | Tier 0 oracles recorded (defaults, templates, API probes, layer semantics); procedural feasibility | Done |
-| Embedded CPython 3.13 and MCP SDK (`phase0.7_toolchain-cpython`) | In progress |
-| Tier 0 oracle stability and first formula fits (`phase0.7_tier0-stability-fits`) | In progress |
+| Embedded CPython 3.13 and MCP SDK (`phase0.7_toolchain-cpython`) | Done |
+| Tier 0 oracle stability and first formula fits (`phase0.7_tier0-stability-fits`, [report](parity/reports/phase0/tier0-stability.md)) | Done |
 | Iray reference capture procedure (`phase0.6_render-reference-procedure`) | In progress |
 | Gate G0 — contract frozen | Planned |
 | Phases 1–5: foundation, pilot parity, bake/render/presets, coverage, release | Planned |
