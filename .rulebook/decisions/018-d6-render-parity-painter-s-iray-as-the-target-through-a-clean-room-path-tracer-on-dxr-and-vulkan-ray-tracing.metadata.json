@@ -1,0 +1,11 @@
+{
+  "id": 18,
+  "slug": "d6-render-parity-painter-s-iray-as-the-target-through-a-clean-room-path-tracer-on-dxr-and-vulkan-ray-tracing",
+  "title": "D6 Render parity: Painter's Iray as the target through a clean-room path tracer on DXR and Vulkan ray tracing",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

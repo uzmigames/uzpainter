@@ -16,7 +16,7 @@
 10. **Fact (AP6; RP findings 1, 5; installed shaders cited in D6):** current Iray/Cycles comparison evidence does not establish identical viewport or Iray output.
 11. **Recommendation:** require an owner-selected render reference and a reproducible Painter oracle before claiming replacement; keep zero unexplained divergence as the default gate.
 12. **Recommendation:** use approved tunic v10 as the painting pilot, then locked leather/bronze, current hat v8 and the multi-set body; none alone proves complete Painter parity.
-13. **Fact (RE; engine files cited in D12):** the inspected engine tree has merge conflicts and a concrete glTF vertex-stride defect; establish a resolved, tested pin before integration.
+13. **Fact (RE; engine files cited in D12):** the inspected engine tree has merge conflicts and a concrete glTF vertex-stride defect. **Recommendation:** establish a resolved, tested pin before integration.
 
 ## 1. System context
 
@@ -253,7 +253,7 @@ flowchart TD
 
 **Recommendation:** implement an offscreen viewport whose shader selection, material channel interpretation, normal/Height conversion, sampling, IBL integration and display transform follow the actual pinned Painter viewport. Port permitted shader behavior to HLSL and reproduce its supporting libraries, sparse-texture semantics, BRDF/LUT/IBL data and final composition. Shader text alone is insufficient.
 
-**Fact (direct read of `Adobe/starter_assets/shaders/pbr-metal-rough.glsl` and `open-pbr.glsl`):** both GLSL entry shaders exist. The former imports PBR/normal-related libraries and identifies an Iray MDL material; the latter imports OpenPBR libraries, exposes SpecularWeight and multiple lobes, and contains raytracer-only parameters that do not affect its rasterizer. Their inspected SHA-256 values are respectively `A434A2B28184C3D1CDB0E9EC602DFEFA961D75C07B1E9AFB7964F29FBE2AEF47` and `327CE488F5A13ACE09479081F454EDD4FA536AB8DE4D03504293378CC9F5655E`.
+**Fact (direct read of `Adobe/starter_assets/shaders/pbr-metal-rough.glsl` and `open-pbr.glsl`):** both GLSL entry shaders exist. [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: Adobe/starter_assets/shaders/pbr-metal-rough.glsl; Adobe/starter_assets/shaders/open-pbr.glsl.] Their inspected SHA-256 values are respectively `A434A2B28184C3D1CDB0E9EC602DFEFA961D75C07B1E9AFB7964F29FBE2AEF47` and `327CE488F5A13ACE09479081F454EDD4FA536AB8DE4D03504293378CC9F5655E`.
 
 **Fact (direct file inventory under `Adobe/shader-doc/`):** supporting `lib-pbr.html`, `lib-pbr-specular.html` and `lib-normal.html` documentation exists; the inspected library-name search did not establish loose files for every imported `.glsl` library. Redistribution/derivative permissions are not confirmed by these reads. **Recommendation:** resolve permitted implementation/distribution before shipping translated Adobe source; source access is evidence, not automatic permission.
 
@@ -265,7 +265,7 @@ flowchart TD
 
 #### Rationale
 
-**Fact (AP6; RP R05–R07; `A/Docs/Pipeline/Render/Render-Comparison-Standard.json`):** the pipeline compares Iray/Cycles approximately; the Painter `ref_match` equivalent is not live-verified. **Fact (UE2; RE F02/F08):** existing hidden rendering uses a window/swapchain, a null-swapchain scene call renders nothing, and diagnostic readback is not arbitrary-precision export. **Recommendation:** implement explicit offscreen scene targets and native readback, including linear and display-referred captures.
+**Fact (AP6; RP R05–R07; `A/Docs/Pipeline/Render/Render-Comparison-Standard.json`):** the pipeline compares Iray/Cycles approximately; the Painter `ref_match` equivalent is not live-verified. **Fact (UE2; RE source ledger C05/C08 and F08):** existing hidden rendering uses a window/swapchain, a null-swapchain scene call renders nothing, and diagnostic readback is not arbitrary-precision export. **Recommendation:** implement explicit offscreen scene targets and native readback, including linear and display-referred captures.
 
 #### Risks
 
@@ -301,7 +301,7 @@ flowchart TD
 
 #### Rationale
 
-**Fact (SP4; AP5; RP findings 5, 13–14; UE4; RE F09/F10/F17):** export schema/presets and PNG16 pipeline usage are documented; engine ORM/RG normal conventions exist, while opacity sampling, Height/Thickness classification, color interpretation and precision have route-specific hazards. `PngCodec::EncodeMemory` accepts 16 bits, but `EncodeFile` hardcodes 8. **Recommendation:** use precision-preserving readback plus the verified memory encoder/file publication path, with bounded queue ownership and fence/pitch handling.
+**Fact (SP4; AP5; RP findings 5, 13–14; UE4; RE F05/F07/F09/F10/F12/F17):** export schema/presets and PNG16 pipeline usage are documented; engine ORM/RG normal conventions exist, while opacity sampling, Height/Thickness classification, color interpretation and precision have route-specific hazards. `PngCodec::EncodeMemory` accepts 16 bits, but `EncodeFile` hardcodes 8. **Recommendation:** use precision-preserving readback plus the verified memory encoder/file publication path, with bounded queue ownership and fence/pitch handling.
 
 #### Risks
 
@@ -330,6 +330,8 @@ flowchart TD
 **Fact (SP5; AP2; `A/Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/report.json`; RP NFR-04):** observed body `.spp` sizes include 879,248,615, 1,087,438,533 and 1,190,431,812 bytes. The analyses do not establish how much is irreducible source/raster payload or recoverable cache/history. HDF5 signatures alone do not explain the sizes.
 
 **Recommendation:** set the compact-save budget from a measured lossless dependency/authoritative-plane census plus document/index and explicitly retained checkpoint overhead; disposable caches must not dominate the portable save. Compare against a semantically equivalent compacted `.spp`, report the size ratio and require a substantial measured reduction on the body corpus. A defensible numeric “much smaller” threshold and feasibility are **not confirmed**; ratify them after the census, before format acceptance. Do not promise an invented megabyte target or obtain a ratio by removing editability.
+
+**Recommendation:** report project-file size and external dependency-closure size separately for both formats. Compare matched embedding/history policies; adding a portable high-poly/HDRI dependency to only one side or excluding necessary linked inputs from only one denominator makes the ratio misleading. Preserve the measured old `.spp` comparison as historical evidence alongside the matched compact-save benchmark.
 
 #### Rationale
 
@@ -429,7 +431,7 @@ flowchart TD
 
 #### Rationale
 
-**Fact (UE5; RE F03/F05; AP3; AP7; RP findings 7–9, 13):** import/cook routes differ in tangents, first-mesh handling, SDF/LOD work and attributes. **Fact (direct read of `U/runtime/engine/asset/importers/mesh_importer.cpp` and `U/runtime/engine/renderer/mesh/mesh_io.cpp`):** the glTF importer writes `VertexPosNormUV` data, while the runtime conversion can copy its smaller stream unchanged and then read/publish `sizeof(Vertex)` stride. RE identifies the concrete 32-byte/48-byte mismatch. **Recommendation:** fix and certify the conversion or bypass it; never use this path as a golden basis.
+**Fact (UE5; RE F03/F10/F11; AP3; AP7; RP findings 7–9, 13):** import/cook routes differ in tangents, first-mesh handling, SDF/LOD work and attributes. **Fact (direct read of `U/runtime/engine/asset/importers/mesh_importer.cpp` and `U/runtime/engine/renderer/mesh/mesh_io.cpp`):** the glTF importer writes `VertexPosNormUV` data, while the runtime conversion can copy its smaller stream unchanged and then read/publish `sizeof(Vertex)` stride. RE identifies the concrete 32-byte/48-byte mismatch. **Recommendation:** fix and certify the conversion or bypass it; never use this path as a golden basis.
 
 #### Risks
 
@@ -455,7 +457,7 @@ flowchart TD
 
 **Fact (RE; direct read/status of `U/runtime/engine/renderer/frame/frame_constants.cpp`, `U/runtime/shaders/runtime/lighting/deferred_lighting_ps.hlsl`):** both files contain merge markers and are reported unmerged in the inspected working tree. **Fact (direct targeted status of `U/runtime/engine/renderer/passes/debug/inspector_pass_validate.cpp`):** that file is currently modified; RE's earlier unmerged observation is snapshot evidence rather than its present status. **Fact (RE):** inspected HEAD `19ffb9b94333f56d624eb1485192cf5c6d174bd0` does not identify all dirty source contents.
 
-**Recommendation:** choose CMake/MSVC with one consistent native compiler/runtime family for the standalone embedding target, using the existing CMake runtime/editor separation as a starting point. Retain the engine's primary Zig build upstream without treating its static libraries as interchangeable C++ ABI products. Use C ABI at any unavoidable mixed-toolchain DLL boundary. Standardize the target's actual language level and required codec translation units explicitly; do not repeat an unsupported C++23 claim.
+**Recommendation:** choose CMake/MSVC and C++20 with one consistent native compiler/runtime family for the standalone embedding target, using the existing CMake runtime/editor separation as a starting point. Retain the engine's primary Zig build upstream without treating its static libraries as interchangeable C++ ABI products. Use C ABI at any unavoidable mixed-toolchain DLL boundary. Standardize required codec translation units explicitly; do not repeat an unsupported C++23 claim.
 
 **Recommendation:** distribute one folder with `UzPainter.exe`, its private CPython runtime/standard library/packages/native extensions, shaders/LUTs/color configuration, selected DXC/D3D12 runtime dependencies and audited native dependency closure. No installed Python, Painter, Blender or editor is needed at runtime. Keep D3D12 loader paths consistent with the packaged layout and verify on a clean offline Windows machine. A single executable entry point is not a promise of zero DLLs or zero GPU/OS requirements.
 

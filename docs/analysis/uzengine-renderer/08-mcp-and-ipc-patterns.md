@@ -2,6 +2,8 @@
 
 Scope: how the existing TypeScript MCP server works, how the engine is actually driven from other processes/languages today, the JSON conventions in use, and what a native UzPainter MCP server can reuse. Paths relative to `E:\UzmiGames\UzEngine\`.
 
+**Baseline** (added after the Astra review, see `10-review-response.md`): line numbers refer to UzEngine `HEAD 19ffb9b` (2026-07-27); `mcp/src/server.ts` and `runtime/engine/app/runtime.h` are identical in the mid-merge working tree, `uzengine.cpp` is not. Source reading only.
+
 ## 1. The existing MCP server does not talk to the engine
 
 **Fact** — `mcp/src/server.ts` (208 lines), `mcp/package.json`:
@@ -17,14 +19,14 @@ Scope: how the existing TypeScript MCP server works, how the engine is actually 
 
 ### 2.1 C API (`runtime/engine/app/runtime.h`, implemented in `runtime.cpp`)
 
-**Fact** — `extern "C"`, `UZ_API` export macro, all functions synchronous, main-thread (or viewport-thread) only:
+**Fact** — `extern "C"`, `UZ_API` export macro. Calls return synchronously, but return is not completion of all GPU/asset work: `uz_load_scene` returns after scene parsing while the renderer queues texture loads asynchronously (`scene_texture_assets.cpp` lines 182-215). Init/viewport calls belong on the main thread and `uz_render_frame` on the thread that created the viewport (`runtime.h` lines 6-11):
 
 | Group | Functions | Data shapes |
 |---|---|---|
 | Lifecycle | `uz_runtime_version`, `uz_runtime_backend`, `uz_set_engine_dir(path)`, `uz_runtime_init`, `uz_runtime_shutdown` | C strings (static buffers) |
 | Viewport | `uz_create_viewport(parent_hwnd, w, h)`, `uz_destroy_viewport`, `uz_resize_viewport`, `uz_set_viewport_position` | ints; single viewport only |
 | Frame | `uz_render_frame() → uz_frame_stats{fps, frame_ms, draw_calls, vertices, triangles, frame_index, device_removed}` | POD struct |
-| Scene | `uz_load_scene(path)`, `uz_save_scene(path)`, `uz_get_scene_tree() → JSON {"entities":[{id,name,children}]}`, `uz_create_entity(name) → id`, `uz_destroy_entity`, `uz_get_component_json(id, "transform") → JSON`, `uz_set_component_property(id, type, prop, value_json)`, `uz_get_entity_components(id) → JSON array`, `uz_select_entity`, `uz_get_selected_entity` | **JSON strings in, JSON strings out**; returned `const char*` valid until the next call (single static buffer) |
+| Scene | `uz_load_scene(path)`, `uz_save_scene(path)`, `uz_get_scene_tree() → JSON {"entities":[{id,name,children}]}`, `uz_create_entity(name) → id`, `uz_destroy_entity`, `uz_get_component_json(id, "transform") → JSON`, `uz_set_component_property(id, type, prop, value_json)`, `uz_get_entity_components(id) → JSON array`, `uz_select_entity`, `uz_get_selected_entity` | **JSON strings in, JSON strings out**; returned `const char*` valid until the next call **to the same function** (per-function static buffer, `runtime.h` lines 13-16) |
 | Play mode | `uz_play`, `uz_stop`, `uz_is_playing` | — |
 | Input | `uz_on_mouse_move/button`, `uz_on_key(_ex)`, `uz_on_scroll` | — |
 | Logging | `uz_set_log_callback(fn(level, category, message))` | callback |
@@ -63,7 +65,7 @@ This is the simplest pattern for a batch-mode UzPainter driven by an MCP server 
 
 **Fact**:
 
-- All asset/scene/project files are JSON ("JSON everywhere", `.rulebook/decisions/010-json-everywhere-for-scene-asset-config-serialization.md`), parsed with nlohmann/json; schemas under `runtime/schemas/*.schema.json` (`uzscene`, `uzmaterial`, `uzmesh`, `uzimport`, `uzproject`, `uzprefab`, `uzvfx`, …) are descriptive, not enforced (the `uzmaterial` schema does not match the loaded `.uzmat` shape — see `04-…` §1).
+- Scene, project, material-graph, sidecar and other metadata files are JSON ("JSON everywhere", `.rulebook/decisions/010-json-everywhere-for-scene-asset-config-serialization.md`), parsed with nlohmann/json; cooked payloads are binary (`.uztexture` writer, `uztexture_format.cpp` lines 13-55; `.uzmesh` serializer, `mesh_importer.cpp` lines 729-744); schemas under `runtime/schemas/*.schema.json` (`uzscene`, `uzmaterial`, `uzmesh`, `uzimport`, `uzproject`, `uzprefab`, `uzvfx`, …) are descriptive, not enforced (the `uzmaterial` schema does not match the loaded `.uzmat` shape — see `04-…` §1).
 - `.uzscene`: `{ "entities":[ { "name", "components": { "<type>": {…} }, "children":[…] } ] }` with a generic component map (`uzscene.schema.json` lines 28-60).
 - Component property set uses `(entity_id, component_type, property_name, value_json)`; vectors are JSON arrays (`"[1.0, 2.0, 3.0]"`).
 - Import sidecars `.uzimport`: `{importer, version, source_hash (xxHash64 hex), options, outputs, dependencies}`.
@@ -77,17 +79,17 @@ This is the simplest pattern for a batch-mode UzPainter driven by an MCP server 
 | Worker process with id-correlated commands | `extension/src/runtime-client.ts` | Promise per request id; push events for streams |
 | Engine-internal pools | `renderer/upload/async_texture_decoder.h`, `async_mesh_loader.h`, `engine/job/job_system.h` (`Enqueue`, `ParallelFor`) | fire-and-forget with per-frame integration budgets |
 | Content-hash caches | shader cache, asset cache, material PSO cache | idempotent re-runs |
-| No job/handle API in the C API | `runtime.h` | every call completes synchronously (screenshot even `WaitIdle`s) |
+| No job/handle API in the C API | `runtime.h` | every call returns synchronously (screenshot even `WaitIdle`s); asset loading started by a call can continue after it returns |
 
 ## 5. What a native (C++) UzPainter MCP server can reuse — and what it must add
 
 | Reusable | Must add |
 |---|---|
 | nlohmann/json (already linked) for JSON-RPC 2.0 framing over stdio | An MCP/JSON-RPC implementation in C++ — none exists in UzEngine (the only MCP code is TypeScript and engine-agnostic) |
-| `uz_*` C-API design rules (opaque ids, JSON payloads, ownership comments) and the worker-command vocabulary as a starting tool list (`load_mesh`, `capture_screenshot`, `set_property`, …) | Long-running jobs (bake, export) need job ids + progress events; nothing in the engine models that |
+| `uz_*` C-API design rules (opaque ids, JSON payloads, ownership comments) and the worker-command vocabulary as a starting tool list (`load_mesh`, `capture_screenshot`, `set_property`, …) | Long-running jobs (bake, export) need job ids + progress events and a defined completion point; no such model was found in the C API, N-API addon or CLI examined here |
 | Screenshot → PNG bytes for vision feedback; FLIP/`ImageDiff` for quantitative feedback | Image results as MCP `image` content; multi-target readback (see `02-…`) |
 | Log callback (`uz_set_log_callback`) → MCP logging notifications | Structured error codes (engine uses `0/1` + logs) |
-| Crash isolation idea (worker process, SEH, minidumps in `platform/windows/crash_handler.h`) | Process supervision inside the MCP server |
+| Crash isolation idea (a worker process isolates a driver crash; SEH and minidumps in `platform/windows/crash_handler.h` only report in-process) | Process supervision inside the MCP server |
 | Auto-doc generator → `search_docs`-style tool for UzPainter's own API docs | — |
 
-**Recommendation** — Keep two transports from day one: (1) in-process native MCP server (stdio JSON-RPC) owning the engine on a dedicated GPU thread with a request queue; (2) the prefixed-JSON CLI batch mode for CI, reusing `uzengine.cpp`'s conventions (`--frames`, `--hidden`, `--screenshot`, `FLIP_JSON`). Python bindings (if any) sit on the same C API as the MCP server, never on a second code path.
+**Recommendation** — Keep two transports from day one: (1) in-process native MCP server (stdio JSON-RPC) owning the engine on a dedicated GPU thread with a request queue; (2) the prefixed-JSON CLI batch mode for CI, reusing `uzengine.cpp`'s conventions (`--frames`, `--hidden`, `--screenshot`, `FLIP_JSON`). The Python API (a stated product requirement, `README.md`) sits on the same C API and job model as the MCP server, never on a second code path; in-process bindings and a worker process are different isolation choices (`07-…` §4).

@@ -1,0 +1,11 @@
+{
+  "id": 12,
+  "slug": "d10-mcp-server-official-python-sdk-in-the-supervisor-with-task-shaped-tools-typed-operation-families-and-durable-jobs",
+  "title": "D10 MCP server: official Python SDK in the supervisor with task-shaped tools, typed operation families and durable jobs",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

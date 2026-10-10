@@ -6,8 +6,9 @@ Module-by-module inventory of every public symbol of the Python API shipped with
 
 - `PAINTER` = `C:\Program Files\Adobe\Adobe Substance 3D Painter`. Paths below are relative to `PAINTER` unless they start with a drive letter.
 - Labels: **Fact** = stated in, or computed this session from, the cited source; **Hypothesis** = inferred, not confirmed; **Recommendation** = ours. "Not confirmed" marks gaps.
-- Method used to build the tables (**Fact**): every `.py` file of the shipped package `resources\python\modules\substance_painter\` (and `resources\python\modules\substance_painter_plugins.py`) was parsed with Python's `ast` module (no import, no execution). Every public (non-underscore) module-level function, class, dataclass field, method, property and native enum was extracted; signatures are the source annotations verbatim. Enum members of native enums come from the docstring placed under each `_utility.expose_private_obj(...)` assignment. The result was cross-checked against every symbol anchor in the shipped HTML docs (`resources\python-doc\**\*.html`): all documented symbols are present in the source. Differences: the HTML lists inherited members under the concrete classes (mixin members under `FillLayerNode`/`FillEffectNode`, `uid()` under nodes and sources, enum members of `ReloadMeshStatus`, fields of `ResourceID`); the source additionally contains symbols without their own HTML entry — the mixin classes (`FillParamsEditorMixin`, `ActiveChannelsMixin`, `SourceEditorMixin`), the iterator classes of `OutputMapping`/`ChannelMapping`, type aliases (`ColorColorSpace`, `ResourceColorSpace`, `GeometryMaskParams`, `AutoUnwrapUVTilesSettings`, `PropertyValue`, `ReloadResourcesFilter`, `Source`), the deprecated `usd_settings` properties and the `logging` severity constants (described in prose in the HTML).
+- Method used to build the tables (**Fact**): every `.py` file of the shipped package `resources\python\modules\substance_painter\` (and `resources\python\modules\substance_painter_plugins.py`) was parsed with Python's `ast` module (no import, no execution). Every public (non-underscore) module-level function, class, dataclass field, method, property and native enum was extracted; signatures are the source annotations verbatim. Enum members of native enums come from the shipped docstrings and match the HTML member lists; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\substance_painter\_utility.py.] The result was cross-checked against every symbol anchor in the shipped HTML docs (`resources\python-doc\**\*.html`): all documented symbols are present in the source. Differences: the HTML lists inherited members under the concrete classes (mixin members under `FillLayerNode`/`FillEffectNode`, `uid()` under nodes and sources, enum members of `ReloadMeshStatus`, fields of `ResourceID`); the source additionally contains symbols without their own HTML entry — the mixin classes (`FillParamsEditorMixin`, `ActiveChannelsMixin`, `SourceEditorMixin`), the iterator classes of `OutputMapping`/`ChannelMapping`, type aliases (`ColorColorSpace`, `ResourceColorSpace`, `GeometryMaskParams`, `AutoUnwrapUVTilesSettings`, `PropertyValue`, `ReloadResourcesFilter`, `Source`), the deprecated `usd_settings` properties and the `logging` severity constants (described in prose in the HTML).
 - "Purpose" is the first sentence of the docstring (lightly cleaned). Deprecations are taken from the docstrings and from the API changelog in `resources\python-doc\index.html`.
+- Corrections after the technical review (`docs\analysis\reviews\substance-parity-astra-review.md`; responses in `08-review-response.md`) (**Fact**, source lines cited in the rows): the extraction read only fields declared directly on each class, so three public fields inherited from private frozen dataclass bases (`UVTile.u`, `UVTile.v`, `TextureSet.material_id`) and the two inherited constructors were missing — now added to the `textureset` table; a private class attribute of `CylindricalProjectionParams` was listed as a dataclass field — now marked as private class metadata; five non-underscore helper classes carry `:meta private:` in their docstrings (`layerstack.FillParamsEditorMixin`, `source.ActiveChannelsMixin`, `source.SourceEditorMixin`, `source.OutputMappingIterator`, `source.ChannelMappingIterator`) — now marked as implementation helpers, not supported public API (their members stay public through the concrete classes that inherit them). No documented top-level function, class or enum is missing.
 
 ## 1. Versions
 
@@ -16,7 +17,7 @@ Module-by-module inventory of every public symbol of the Python API shipped with
 | Painter application | 12.1.0 (file and product version of the executable) | Fact | `PAINTER\Adobe Substance 3D Painter.exe` version resource (read with PowerShell `VersionInfo`) |
 | Python API version string | `0.3.5` (`__version_info__ = (0, 3, 5)`) | Fact | `resources\python\modules\substance_painter\_version.py`; HTML title "Substance 3D Painter Python API 0.3.5 Documentation" in `resources\python-doc\index.html` |
 | API changelog top entry | `0.3.7 (Substance 3D painter 12.1.0)`; `0.3.6 (12.0.2)`; `0.3.5 (11.1.0)` | Fact | `resources\python-doc\index.html` → Changelog |
-| Version-string mismatch | The runtime reports 0.3.5 while the 0.3.6/0.3.7 symbols (e.g. `project.AutoUnwrapUVTilesSettings`, `layerstack.GeometryMaskMeshParams`, `layerstack.export_as_smart_material`) are present in the shipped source. Feature detection must use `hasattr`, not the version string. | Fact (presence) | `substance_painter\_version.py`; `substance_painter\project.py` line 211+; `substance_painter\layerstack.py` lines 204, 2326; also observed by the MCP author: `E:\UzmiGames\Assets3D\Tools\SubstancePainterMCP\README.md` → "Compatibility" ("Runtime reported 0.3.5 in the validated build") |
+| Version-string mismatch | `_version.py` declares 0.3.5 (static source; that a running 12.1 build reports 0.3.5 is the MCP author's second-hand observation on 12.1.1, not observed here) while the 0.3.6/0.3.7 symbols (e.g. `project.AutoUnwrapUVTilesSettings`, `layerstack.GeometryMaskMeshParams`, `layerstack.export_as_smart_material`) are present in the shipped source. Feature detection must use `hasattr`, not the version string. | Fact (presence) | `substance_painter\_version.py`; `substance_painter\project.py` line 211+; `substance_painter\layerstack.py` lines 204, 2326; also observed by the MCP author: `E:\UzmiGames\Assets3D\Tools\SubstancePainterMCP\README.md` → "Compatibility" ("Runtime reported 0.3.5 in the validated build") |
 | Embedded Python | CPython 3.13.9 (`python313.dll`; SDK `python.exe` version 3.13.9; `NEWS.txt` top entry "Python 3.13.9 final") | Fact | `PAINTER\python313.dll`; `resources\pythonsdk\python.exe` version resource; `resources\pythonsdk\NEWS.txt` |
 | Qt binding | PySide6 / shiboken6 built for CPython 3.13 (`pyside6.cp313-win_amd64.dll`); `ui` functions are typed with `PySide6.QtWidgets` | Fact | `PAINTER\pyside6.cp313-win_amd64.dll`; `resources\python\modules\substance_painter\ui.py` |
 | Stale bytecode | `substance_painter\__pycache__\*.cpython-310.pyc` files exist next to the 3.13 sources | Fact (observation only) | `resources\python\modules\substance_painter\__pycache__\` |
@@ -45,11 +46,11 @@ Module-by-module inventory of every public symbol of the Python API shipped with
 | properties | 0 | 1 | 0 | 8 | 1 |
 | resource | 11 | 13 | 4 | 33 | 1 |
 | source | 0 | 15 | 7 | 52 | 2 |
-| textureset | 4 | 5 | 3 | 44 | 0 |
+| textureset | 4 | 5 | 3 | 46 | 0 |
 | ui | 14 | 0 | 2 | 0 | 0 |
 | substance_painter_plugins | 9 | 0 | 0 | 0 | 2 |
 
-Counts are rows of the AST extraction (property getter and setter counted separately) — **Fact**, computed this session.
+Counts are rows of the AST extraction (property getter and setter counted separately) — **Fact**, computed this session; `textureset` includes the two inherited constructors added after review (inherited fields are not counted in these columns).
 
 ## 3. Cross-cutting facts
 
@@ -62,13 +63,13 @@ Counts are rows of the AST extraction (property getter and setter counted separa
 | 5 | Long operations are asynchronous and event-driven: `project.create/open` (finish with `event.ProjectEditionEntered`), `baking.bake_async` (finish with `event.BakingProcessEnded`), `project.reload_mesh` (callback), `resource.reload_modified_resources_async` (`event.ReloadResourcesEnded`), shelf crawling (`event.ShelfCrawlingEnded`). | Fact | `project.html` → Events; `baking.html`; `resource.html` → Resource crawling / Resource reloading |
 | 6 | Remote scripting: the MCP bridge talks to Painter started with `--enable-remote-scripting`, which listens on `localhost:60041` and accepts `POST /run.json` with `{"python": <base64>}` or `{"js": <base64>}`. Not described in the shipped Python HTML docs. | Fact (bridge code); not confirmed in Adobe docs | `E:\UzmiGames\Assets3D\Tools\SubstancePainterMCP\README.md` → "Start Painter with remote scripting"; `...\src\substance_painter_mcp\client.py` (`route = "/run.json"`) |
 | 7 | Plugins: a plugin is a standard Python module on `substance_painter_plugins.path` (initialised from `SUBSTANCE_PAINTER_PLUGINS_PATH`, the install dir and the user resources dir); each plugin dir has `plugins/`, `startup/`, `modules/`; plugin modules expose `start_plugin()`/`close_plugin()`. | Fact | `resources\python-doc\plugins\substance_painter_plugins.html` (`path`) |
-| 8 | Private APIs used by Adobe's own tests but not public: e.g. `_substance_painter.export.export_stack_node_texture(node_uid, channel, path, json)`, `_substance_painter.export.export_project_textures_with_deps`, `_substance_painter.project.create_default_project`, `_substance_painter.project.project_loading_options`, `_substance_painter.feature.set_enabled`, `_substance_painter.display.save_viewport(path, width, height, bool)` (viewport capture), `_substance_painter.display.reset_display_settings()`. | Fact (usage in shipped tests); stability not confirmed | `resources\python\modules\engine_tests\test_export_layerstack_nodes.py`; `engine_tests\test_usd_openpbr_roundtrip.py` (lines 135–173); `automated_tests\test_export_texture_deps.py`; `automated_tests\test_export_fileformats_bitdepth.py`; `engine_tests\common\baking_scenario.py` |
-| 9 | `layerstack.get_node_by_uid` is annotated as returning `List[...]` but its body returns a single node (`_node_id_to_concrete_node(node_id)`). | Fact | `resources\python\modules\substance_painter\layerstack.py` (function `get_node_by_uid`) |
+| 8 | Adobe's shipped test suites call private `_substance_painter.*` functions that are not part of the public API. [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\engine_tests\; resources\python\modules\automated_tests\.] Independently of those tests, the Assets3D pipeline uses the private viewport capture `_substance_painter.display.save_viewport`. | Fact; stability not confirmed | test directories (paths only); `E:\UzmiGames\Assets3D\Docs\Pipeline\Licoes\operacao-projeto-captura-reais.md` |
+| 9 | `layerstack.get_node_by_uid` is annotated as returning `List[...]` (public signature) but returns a single node. [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\substance_painter\layerstack.py.] | Fact | `resources\python-doc\substance_painter\layerstack\navigation.html` (signature) |
 | 10 | The shipped Adobe test suites (`resources\python\modules\automated_tests\`, `engine_tests\`) are the richest usage examples for baking, export, layer stack and project creation and are reused as sources in files 02–05. | Fact | directory listing |
 
 ## 4. Symbol tables
 
-Each section lists every public symbol of one module. Kind values: `function`, `class`, `dataclass`, `enum` (Python `enum.Enum`), `enum (native)` (C++ enum exposed through `expose_private_obj`), `exception (native)`, `method`, `staticmethod`, `classmethod`, `constructor`, `property`, `property setter`, `type alias`, `attribute`, `note` (added rows that document inherited/dunder behaviour).
+Each section lists every public symbol of one module. Kind values: `function`, `class`, `dataclass`, `enum` (Python `enum.Enum`), `enum (native)` (C++ enum exposed by the native module; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\substance_painter\_utility.py.]), `exception (native)`, `method`, `staticmethod`, `classmethod`, `constructor`, `property`, `property setter`, `type alias`, `attribute`, `note` (added rows that document inherited/dunder behaviour).
 
 ## `substance_painter.application`
 
@@ -217,8 +218,8 @@ Event classes and the global dispatcher used to observe project, export, baking,
 | `TextureStateEvent.set_cache_key_invalidation_throttling_period` | staticmethod | `set_cache_key_invalidation_throttling_period(period: datetime.timedelta) -> None` | Set the minimum duration between two texture update events (for a given texture). |
 | `CameraPropertiesChanged` | dataclass | bases (Event) — fields: camera_id: int | Event triggered when the camera properties change. |
 | `ReloadResourcesStarted` | dataclass | bases (Event) — fields: filter: ReloadResourcesFilter | Event triggered when a resource reload operation has started. |
-| `ReloadedResourceResult` | dataclass | fields: old_resource_id: ResourceID; new_resource_id: ResourceID | Per resource result of a succesfull resource reload operation. |
-| `ReloadedResourceError` | dataclass | fields: resource_id: ResourceID; error_msg: str | Per resource result of an unsuccesfull resource reload operation. |
+| `ReloadedResourceResult` | dataclass | fields: old_resource_id: ResourceID; new_resource_id: ResourceID | Per resource result of a successful resource reload operation. |
+| `ReloadedResourceError` | dataclass | fields: resource_id: ResourceID; error_msg: str | Per resource result of an unsuccessful resource reload operation. |
 | `ReloadResourcesEnded` | dataclass | bases (Event) — fields: filter: ReloadResourcesFilter; reloaded_resources: List[ReloadedResourceResult]; resource_errors: List[ReloadedResourceError] | Event triggered when a resource reload operation has completed. |
 | `Dispatcher` | class | — | The Event Dispatcher. |
 | `Dispatcher.__init__` | constructor | `__init__()` |  |
@@ -296,7 +297,7 @@ Layer stack navigation, insertion, deletion, selection, masks, blending, geometr
 | `SymmetryMode` | enum (native) | Members: `Mirror`, `Radial` | Symmetry (Mirror or Radial) is only applied when a 3D projection mode is set on a Fill Layer. |
 | `ScopedModification` | class | — | ScopedModification can be used to group many layerstack modification calls in a single undoable command. |
 | `ScopedModification.__init__` | constructor | `__init__(name)` |  |
-| `FillParamsEditorMixin` | class | — | A mixin allowing manipulation of this fill parameters. |
+| `FillParamsEditorMixin` | class | — | A mixin allowing manipulation of this fill parameters. Docstring marks it `:meta private:` (`layerstack.py:518–523`): implementation helper, not supported public API; its members are public through `FillLayerNode`/`FillEffectNode`. |
 | `FillParamsEditorMixin.get_projection_mode` | method | `get_projection_mode() -> ProjectionMode` | Get the current projection mode. |
 | `FillParamsEditorMixin.set_projection_mode` | method | `set_projection_mode(projection_mode: ProjectionMode)` | Switch to a new projection mode. |
 | `FillParamsEditorMixin.get_projection_parameters` | method | `get_projection_parameters() -> ProjectionParams \| None` | Get the current projection parameters. |
@@ -390,7 +391,7 @@ Layer stack navigation, insertion, deletion, selection, masks, blending, geometr
 | `PlanarProjectionParams` | dataclass | fields: filtering_mode: FilteringMode = None; uv_wrapping_mode: UVWrapMode = None; shape_crop_mode: ShapeCropMode = None; depth_culling: ProjectionCullingParams = dataclasses.field(default_factory=ProjectionCullingParams); backface_culling: ProjectionCullingParams = dataclasses.field(default_factory=ProjectionCullingParams); backface_culling_angle: float = None; uv_transformation: UVTransformationParams = dataclasses.field(default_factory=UVTransformationParams); projection_3d: Projection3DParams = dataclasses.field(default_factory=Projection3DParams) | Parameters that control the fill behaviour when the projection mode is ProjectionMode.Planar <ProjectionMode>. |
 | `WarpProjectionParams` | dataclass | fields: filtering_mode: FilteringMode = None; uv_wrapping_mode: UVWrapMode = None; shape_crop_mode: ShapeCropMode = None; projection_depth: float = None; depth_culling: ProjectionCullingParams = dataclasses.field(default_factory=ProjectionCullingParams); uv_transformation: UVTransformationParams = dataclasses.field(default_factory=UVTransformationParams); projection_3d: Projection3DParams = dataclasses.field(default_factory=Projection3DParams) | Parameters that control the fill behaviour when the projection mode is ProjectionMode.Warp <ProjectionMode>. |
 | `SphericalProjectionParams` | dataclass | fields: filtering_mode: FilteringMode = None; uv_wrapping_mode: UVWrapMode = None; shape_crop_mode: ShapeCropMode = None; uv_transformation: UVTransformationParams = dataclasses.field(default_factory=UVTransformationParams); projection_3d: Projection3DParams = dataclasses.field(default_factory=Projection3DParams) | Parameters that control the fill behaviour when the projection mode is ProjectionMode.Spherical <ProjectionMode>. |
-| `CylindricalProjectionParams` | dataclass | fields: filtering_mode: FilteringMode = None; uv_wrapping_mode: UVWrapMode = None; shape_crop_mode: ShapeCropMode = None; angle: float = None; backface_culling: ProjectionCullingParams = dataclasses.field(default_factory=ProjectionCullingParams); uv_transformation: UVTransformationParams = dataclasses.field(default_factory=UVTransformationParams); projection_3d: Projection3DParams = dataclasses.field(default_factory=Projection3DParams); _flatten_overrides_: ClassVar[Dict[str, str]] = {'backface_culling_enabled': 'cylinder_hide_caps'} | Parameters that control the fill behaviour when the projection mode is ProjectionMode.Cylindrical <ProjectionMode>. |
+| `CylindricalProjectionParams` | dataclass | fields: filtering_mode: FilteringMode = None; uv_wrapping_mode: UVWrapMode = None; shape_crop_mode: ShapeCropMode = None; angle: float = None; backface_culling: ProjectionCullingParams = dataclasses.field(default_factory=ProjectionCullingParams); uv_transformation: UVTransformationParams = dataclasses.field(default_factory=UVTransformationParams); projection_3d: Projection3DParams = dataclasses.field(default_factory=Projection3DParams) | Parameters that control the fill behaviour when the projection mode is ProjectionMode.Cylindrical <ProjectionMode>. Also declares private class metadata, which is not a dataclass field and not a constructor parameter ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\substance_painter\layerstack.py.]). |
 | `UVSetToUVSetProjectionParams` | dataclass | fields: source_uv_set: int = None; filtering_mode: FilteringMode = None; uv_wrapping_mode: UVWrapMode = None; uv_transformation: UVTransformationParams = dataclasses.field(default_factory=UVTransformationParams) | Parameters that control the fill behaviour when the projection mode is ProjectionMode.UVSetToUVSet <ProjectionMode>. |
 | `ProjectionParams` | type alias | = Union[UVProjectionParams, TriplanarProjectionParams, PlanarProjectionParams, WarpProjectionParams, SphericalProjectionParams, CylindricalProjectionParams, UVSetToUVSetProjectionParams] | Each Projection Mode has its own projection parameters. |
 | `MirrorSymmetryParams` | dataclass | fields: axis: SymmetryAxis = None; flip_u: bool = None; flip_v: bool = None; axis_position: List[float] = None | Parameters that control the mirror symmetry behaviour. |
@@ -438,13 +439,7 @@ Messages to the Painter log/console. Source: `resources\python\modules\substance
 
 | Symbol | Kind | Signature / fields / members | Purpose |
 |---|---|---|---|
-| `INFO` | attribute | = _LogSeverity.INFO |  |
-| `WARNING` | attribute | = _LogSeverity.WARNING |  |
-| `ERROR` | attribute | = _LogSeverity.ERROR |  |
-| `DBG_INFO` | attribute | = _LogSeverity.DBG_INFO |  |
-| `DBG_WARNING` | attribute | = _LogSeverity.DBG_WARNING |  |
-| `DBG_ERROR` | attribute | = _LogSeverity.DBG_ERROR |  |
-| `log` | function | `log(severity, channel: str, message: str)` | Logs a message with level `severity` on the Substance 3D Painter logger. |
+| `INFO`, `WARNING`, `ERROR`, `DBG_INFO`, `DBG_WARNING`, `DBG_ERROR` | attribute | severity constants (documented in prose in `logging.html`); [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\substance_painter\logging.py.] |  || `log` | function | `log(severity, channel: str, message: str)` | Logs a message with level `severity` on the Substance 3D Painter logger. |
 | `info` | function | `info(message: str)` | Logs a message with level `INFO` on the Substance 3D Painter logger. |
 | `warning` | function | `warning(message: str)` | Logs a message with level `WARNING` on the Substance 3D Painter logger. |
 | `error` | function | `error(message: str)` | Logs a message with level `ERROR` on the Substance 3D Painter logger. |
@@ -481,9 +476,9 @@ Project create/open/save/close, settings dataclasses, mesh reload, busy state, m
 | `is_in_edition_state` | function | `is_in_edition_state() -> bool` | Check if the current project is ready to work with. |
 | `is_busy` | function | `is_busy() -> bool` | Check if Substance 3D Painter is currently busy. |
 | `execute_when_not_busy` | function | `execute_when_not_busy(callback: Callable[[], None]) -> None` | Execute the given callback when Substance 3D Painter is not busy. |
-| `save_as` | function | `save_as(project_file_path: str, mode: ProjectSaveMode = _DEFAULT_SAVE_MODE) -> None` | Save the current project by writing it to the file path `project_file_path`. |
-| `save` | function | `save(mode: ProjectSaveMode = _DEFAULT_SAVE_MODE) -> None` | Save the current project by overwriting the previous save. |
-| `save_as_copy` | function | `save_as_copy(backup_file_path: str, mode: ProjectSaveMode = _DEFAULT_SAVE_MODE) -> None` | Save a copy of the current project by writing it to the file path `backup_file_path`. |
+| `save_as` | function | `save_as(project_file_path: str, mode: ProjectSaveMode = ProjectSaveMode.Incremental) -> None` | Save the current project by writing it to the file path `project_file_path`. |
+| `save` | function | `save(mode: ProjectSaveMode = ProjectSaveMode.Incremental) -> None` | Save the current project by overwriting the previous save. |
+| `save_as_copy` | function | `save_as_copy(backup_file_path: str, mode: ProjectSaveMode = ProjectSaveMode.Incremental) -> None` | Save a copy of the current project by writing it to the file path `backup_file_path`. |
 | `save_as_template` | function | `save_as_template(template_file_path: str, texture_set_name: str) -> ProjectSaveMode` | Save a template based of the current Texture Set or the one specified. |
 | `create` | function | `create(mesh_file_path: str, mesh_map_file_paths: List[str] = None, template_file_path: str = None, settings: Settings = Settings())` | Create a new project. |
 | `last_imported_mesh_path` | function | `last_imported_mesh_path() -> str` | Return the path to the last imported mesh. |
@@ -498,7 +493,7 @@ Project create/open/save/close, settings dataclasses, mesh reload, busy state, m
 | `Metadata.list` | method | `list() -> list` | Return the list of project metadata keys. |
 | `Metadata.get` | method | `get(key: str)` | Retrieve the project metadata under the given key. |
 | `Metadata.set` | method | `set(key: str, value)` | Store project metadata under the given key. |
-| `ProjectSaveMode` default | note | `_DEFAULT_SAVE_MODE = ProjectSaveMode.Incremental` | Default mode of `save`, `save_as`, `save_as_copy`. |
+| `ProjectSaveMode` default | note | `ProjectSaveMode.Incremental` (HTML signatures; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\substance_painter\project.py.]) | Default mode of `save`, `save_as`, `save_as_copy`. |
 
 ## `substance_painter.properties`
 
@@ -542,7 +537,7 @@ Resources (URL-identified assets), shelves, search, import, project-resource lis
 | `Resource.gui_name` | method | `gui_name() -> str` | Get the GUI name of this resource. |
 | `Resource.type` | method | `type() -> Type` | Get the type of this resource. |
 | `Resource.tags` | method | `tags() -> typing.List[str]` | Get the tags of this resource. |
-| `Resource.internal_properties` | method | `internal_properties() -> dict` | Get a dictionnary of the resource internal properties. |
+| `Resource.internal_properties` | method | `internal_properties() -> dict` | Get a dictionary of the resource internal properties. |
 | `Resource.children` | method | `children() -> typing.List['Resource']` | Get child resources. |
 | `Resource.parent` | method | `parent() -> typing.Optional['Resource']` | Get parent resource. |
 | `Resource.reset_preview` | method | `reset_preview() -> None` | Remove any custom preview for this resource and resets to the default one. |
@@ -550,7 +545,7 @@ Resources (URL-identified assets), shelves, search, import, project-resource lis
 | `show_resources_in_ui` | function | `show_resources_in_ui(resources: typing.List[Resource]) -> None` | Highlight a list of resources in the application shelf UI (Assets window). |
 | `import_project_resource` | function | `import_project_resource(file_path: str, resource_usage: Usage, name: str = None, group: str = None) -> Resource` | Import a resource into the current opened project. |
 | `import_session_resource` | function | `import_session_resource(file_path: str, resource_usage: Usage, name: str = None, group: str = None) -> Resource` | Import a resource into the current session. |
-| `StandardQuery` | class | fields: ALL_RESOURCES = ''; PROJECT_RESOURCES = 's:project!'; SESSION_RESOURCES = 's:session!'; SHELVES_RESOURCES = 's:-session,project!' | Standard resource queries. |
+| `StandardQuery` | class | fields: ALL_RESOURCES; PROJECT_RESOURCES; SESSION_RESOURCES; SHELVES_RESOURCES ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\substance_painter\resource.py.]) | Standard resource queries. |
 | `search` | function | `search(query: str) -> typing.List[Resource]` | List Substance 3D Painter resources that match the given query. |
 | `list_layer_stack_resources` | function | `list_layer_stack_resources() -> typing.List[ResourceID]` | List the resources referenced by the layer stacks and mesh maps of the current project. **Deprecated since 0.3.4 (use list_project_resources).** |
 | `update_layer_stack_resource` | function | `update_layer_stack_resource(old_resource_id: ResourceID, new_resource: Resource) -> typing.List[ResourceID]` | Replace resources from the layer stacks and mesh maps in the current project. **Deprecated since 0.3.4 (use replace_project_resources).** |
@@ -601,10 +596,10 @@ Sources that feed fill layers/effects and procedural inputs: uniform color, bitm
 | `CropAreaMode` | enum (native) | Members: `DocumentBounds`, `Manual` | Enumeration. |
 | `AlphaMatte` | enum (native) | Members: `KeepAlpha`, `ExtractAlpha`, `DefaultBackgroundColor` | Enumeration. |
 | `ResolutionOverride` | dataclass | fields: mode: ResolutionMode; value: Tuple[int, int]; log2_offset: int | Resolution override parameters. |
-| `ActiveChannelsMixin` | class | — | Mixin providing active channels property. |
+| `ActiveChannelsMixin` | class | — | Mixin providing active channels property. Docstring marks it `:meta private:` (`source.py:300–305`): implementation helper; `active_channels` is public through `FillLayerNode`, `FillEffectNode`, `GeneratorEffectNode`, `FilterEffectNode` only (not `PaintLayerNode`). |
 | `ActiveChannelsMixin.active_channels` | property | `active_channels() -> Set[ChannelType]` | The set of active channels of the source. |
 | `ActiveChannelsMixin.active_channels` | property setter | `active_channels(channels: Set[ChannelType]) -> None` | Setter of the property above. |
-| `SourceEditorMixin` | class | bases (ActiveChannelsMixin) | Mixin providing all necessary functions to edit sources. |
+| `SourceEditorMixin` | class | bases (ActiveChannelsMixin) | Mixin providing all necessary functions to edit sources. Docstring marks it `:meta private:` (`source.py:324–329`): implementation helper; members public through `FillLayerNode`/`FillEffectNode`. |
 | `SourceEditorMixin.source_mode` | property | `source_mode() -> SourceMode` | The current context in which the source is edited: |
 | `SourceEditorMixin.get_source` | method | `get_source(channeltype: ChannelType \| None = None) -> Source` | Get the source for the given channel type. |
 | `SourceEditorMixin.set_source` | method | `set_source(channeltype: ChannelType \| None, source: ResourceID \| Color \| layerstack.AnchorPointEffectNode) -> Source` | Set the source for the given channel type. |
@@ -622,17 +617,17 @@ Sources that feed fill layers/effects and procedural inputs: uniform color, bitm
 | `SourceBitmap.set_color_space` | method | `set_color_space(color_space: ResourceColorSpace)` | Override the default color space of the bitmap. |
 | `SourceBitmap.reset_color_space` | method | `reset_color_space()` | Remove any override color space and go back to the default one. |
 | `SourceBitmap.list_available_color_spaces` | method | `list_available_color_spaces() -> List[ResourceColorSpace]` | Get the list of available color spaces for the bitmap. |
-| `SourceFontParams` | dataclass | bases (_ResolutionOverrideDeprecated) — fields: text: str \| None; auto_size: bool; size: float \| None; horizontal_alignment: HorizontalAlignment; vertical_alignment: VerticalAlignment; color: Color; background_color: Color; background_opacity: float \| None; line_spacing: float; character_spacing: float; offset: Tuple[float, float]; resolution: ResolutionOverride | The source font parameters. |
+| `SourceFontParams` | dataclass | bases: private ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\substance_painter\source.py.]) — fields: text: str \| None; auto_size: bool; size: float \| None; horizontal_alignment: HorizontalAlignment; vertical_alignment: VerticalAlignment; color: Color; background_color: Color; background_opacity: float \| None; line_spacing: float; character_spacing: float; offset: Tuple[float, float]; resolution: ResolutionOverride | The source font parameters. |
 | `SourceFont` | class | bases (ReadOnlyUid) | A class that represents a text source. |
 | `SourceFont.resource_id` | property | `resource_id() -> ResourceID` | The current font resource of the source. |
 | `SourceFont.get_parameters` | method | `get_parameters() -> SourceFontParams` | Get the source parameters. |
 | `SourceFont.set_parameters` | method | `set_parameters(params: SourceFontParams) -> None` | Set the source parameters. |
-| `SourceVectorialParams` | dataclass | bases (_ResolutionOverrideDeprecated) — fields: artboard_id: str \| None; scope: str \| None; resolution: ResolutionOverride; crop_area_mode: CropAreaMode; crop_area_value: Tuple[float, float, float, float]; fit_to_square: bool = True | The source vectorial parameters. |
+| `SourceVectorialParams` | dataclass | bases: private (same redaction as `SourceFontParams`) — fields: artboard_id: str \| None; scope: str \| None; resolution: ResolutionOverride; crop_area_mode: CropAreaMode; crop_area_value: Tuple[float, float, float, float]; fit_to_square: bool = True | The source vectorial parameters. |
 | `SourceVectorial` | class | bases (ReadOnlyUid) | A class that represents a vectorial source. |
 | `SourceVectorial.resource_id` | property | `resource_id() -> ResourceID` | The current vectorial resource of the source. |
 | `SourceVectorial.get_parameters` | method | `get_parameters() -> SourceVectorialParams` | Get the source parameters. |
 | `SourceVectorial.set_parameters` | method | `set_parameters(params: SourceVectorialParams) -> None` | Set the source parameters. |
-| `OutputMappingIterator` | class | — | This class implements the iterator interface for class OutputMapping. |
+| `OutputMappingIterator` | class | — | This class implements the iterator interface for class OutputMapping. Docstring marks it `:meta private:` (`source.py:709–714`): implementation helper. |
 | `OutputMappingIterator.__init__` | constructor | `__init__(uid)` |  |
 | `OutputMapping` | class | bases (ReadOnlyUid) | This class gives access to the output mapping of a source procedural in a dict-like fashion. |
 | `SourceSubstance` | class | bases (ReadOnlyUid) | A class that represents a procedural source. |
@@ -655,7 +650,7 @@ Sources that feed fill layers/effects and procedural inputs: uniform color, bitm
 | `SourceSubstance.apply_preset` | method | `apply_preset(name: str)` | Apply a preset given its name. |
 | `SourceSubstance.resolution` | property | `resolution() -> ResolutionOverride` | The resolution parameters for this substance. |
 | `SourceSubstance.resolution` | property setter | `resolution(value)` | Setter of the property above. |
-| `ChannelMappingIterator` | class | — | This class implements the iterator interface for class ChannelMapping. |
+| `ChannelMappingIterator` | class | — | This class implements the iterator interface for class ChannelMapping. Docstring marks it `:meta private:` (`source.py:983–988`): implementation helper. |
 | `ChannelMappingIterator.__init__` | constructor | `__init__(uid)` |  |
 | `ChannelMapping` | class | bases (ReadOnlyUid) | This class gives access to the active channels of a source reference in a dict-like fashion. |
 | `SourceReference` | class | bases (ReadOnlyUid) | A class that represents an reference to an anchor point. |
@@ -669,7 +664,7 @@ Sources that feed fill layers/effects and procedural inputs: uniform color, bitm
 | `SourceReference.set_levels` | method | `set_levels(params: LevelsParams) -> None` | Set the parameters used by the levels of this source. |
 | `Source` | type alias | = Union[SourceUniformColor, SourceBitmap, SourceVectorial, SourceSubstance, SourceReference, SourceFont] |  |
 | `OutputMapping` / `ChannelMapping` (dunder API) | dict-like | `__getitem__(ChannelType)`, `__setitem__(ChannelType, str or ChannelType)`, `__len__`, `__contains__`, `__iter__` | Read/write output mapping (substance outputs to channels) and channel mapping (anchor channels to channels). |
-| `SourceFontParams.resolution_mode` / `resolution_value`, `SourceVectorialParams.resolution_mode` / `resolution_value` | deprecated attributes | via `_ResolutionOverrideDeprecated` | **Deprecated since 0.3.4** (use `resolution: ResolutionOverride`). |
+| `SourceFontParams.resolution_mode` / `resolution_value`, `SourceVectorialParams.resolution_mode` / `resolution_value` | deprecated attributes | via a private base (same redaction as `SourceFontParams`) | **Deprecated since 0.3.4** (use `resolution: ResolutionOverride`). |
 
 ## `substance_painter.textureset`
 
@@ -689,7 +684,10 @@ Texture Sets, stacks, channels (types/formats), UV tiles, resolutions, mesh-map 
 | `Channel.bit_depth` | method | `bit_depth() -> int` | Get the number of bits per component. |
 | `Channel.type` | method | `type() -> ChannelType` | Get the channel type. |
 | `Channel.edit` | method | `edit(channel_format: ChannelFormat, label: typing.Optional[str] = None) -> None` | Change the channel format and label. |
-| `UVTile` | class | bases (_FrozenUVTile) | A UV Tile coordinates. |
+| `UVTile` | class | bases: private ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\substance_painter\textureset.py.]) | A UV Tile coordinates. |
+| `UVTile.u` | attribute | `u: int` | "The U coordinate of the UV Tile" (class docstring); public field (HTML class signature below). [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\substance_painter\textureset.py.] |
+| `UVTile.v` | attribute | `v: int` | "The V coordinate of the UV Tile" (class docstring); public field (HTML class signature below). |
+| `UVTile.__init__` | constructor | `__init__(u: int, v: int, _material_id: int)` | HTML signature `UVTile(u: int, v: int, _material_id: int)` (`textureset\uvtile.html`). `_material_id` is private, not an additional public field. |
 | `UVTile.name` | property | `name() -> str` | The name of the UV Tile. |
 | `UVTile.name` | property setter | `name(name: str) -> None` | Setter of the property above. |
 | `UVTile.description` | property | `description() -> str` | The description of the UV Tile. |
@@ -708,7 +706,9 @@ Texture Sets, stacks, channels (types/formats), UV tiles, resolutions, mesh-map 
 | `Stack.edit_channel` | method | `edit_channel(channel_type: ChannelType, channel_format: ChannelFormat, label: typing.Optional[str] = None) -> None` | Change the texture format and label of a channel. |
 | `Stack.has_channel` | method | `has_channel(channel_type: ChannelType) -> bool` | Check if a channel exists in a stack. |
 | `Stack.get_channel` | method | `get_channel(channel_type: ChannelType) -> Channel` | Get an existing channel from its type. |
-| `TextureSet` | class | bases (_FrozenTextureSet) | A `Substance 3D Painter` Texture Set. |
+| `TextureSet` | class | bases: private (same redaction as `UVTile`) | A `Substance 3D Painter` Texture Set. |
+| `TextureSet.material_id` | attribute | `material_id: int` | Integer id of the Texture Set; public field (HTML class signature below). [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: resources\python\modules\substance_painter\textureset.py.] |
+| `TextureSet.__init__` | constructor | `__init__(material_id: int)` | HTML signature `TextureSet(material_id: int)` (`textureset\textureset.html`). |
 | `TextureSet.from_name` | staticmethod | `from_name(texture_set_name: str)` | Get the Texture Set from its name. |
 | `TextureSet.original_name` | property | `original_name() -> str` | The original name of the Texture Set, as it was when it was imported. |
 | `TextureSet.name` | property | `name() -> str` | The name of the Texture Set. |
@@ -746,7 +746,7 @@ Qt (PySide6) UI integration: main window, docks, menus, toolbars, layouts, UI mo
 | `get_main_window` | function | `get_main_window() -> PySide6.QtWidgets.QMainWindow` | Get access to Substance 3D Painter main window. |
 | `get_layout` | function | `get_layout(mode: UIMode) -> bytes` | Get Substance 3D Painter layout state for the given UI mode. |
 | `get_layout_mode` | function | `get_layout_mode(layout: bytes) -> UIMode` | Get the Substance 3D Painter UI layout mode of a given state. |
-| `set_layout` | function | `set_layout(layout: bytes) -> UIMode` | Restore a Substance 3D Painter layout state optained with get_layout. |
+| `set_layout` | function | `set_layout(layout: bytes) -> UIMode` | Restore a Substance 3D Painter layout state obtained with get_layout. |
 | `reset_layout` | function | `reset_layout(mode: UIMode)` | Reset Substance 3D Painter layout to default for a selected UI mode. |
 | `add_dock_widget` | function | `add_dock_widget(widget: PySide6.QtWidgets.QWidget, ui_modes: int = UIMode.Edition) -> PySide6.QtWidgets.QDockWidget` | Add a widget as a QDockWidget to the main window. |
 | `add_plugins_toolbar_widget` | function | `add_plugins_toolbar_widget(widget: PySide6.QtWidgets.QWidget)` | Add a widget to the plugins toolbar. |

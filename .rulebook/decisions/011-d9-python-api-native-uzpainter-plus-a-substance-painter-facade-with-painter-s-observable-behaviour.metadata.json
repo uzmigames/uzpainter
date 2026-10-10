@@ -1,0 +1,11 @@
+{
+  "id": 11,
+  "slug": "d9-python-api-native-uzpainter-plus-a-substance-painter-facade-with-painter-s-observable-behaviour",
+  "title": "D9 Python API: native uzpainter plus a substance_painter facade with Painter's observable behaviour",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

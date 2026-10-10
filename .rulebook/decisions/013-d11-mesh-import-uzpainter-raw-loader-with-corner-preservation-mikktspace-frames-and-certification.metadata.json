@@ -1,0 +1,11 @@
+{
+  "id": 13,
+  "slug": "d11-mesh-import-uzpainter-raw-loader-with-corner-preservation-mikktspace-frames-and-certification",
+  "title": "D11 Mesh import: UzPainter raw loader with corner preservation, MikkTSpace frames and certification",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

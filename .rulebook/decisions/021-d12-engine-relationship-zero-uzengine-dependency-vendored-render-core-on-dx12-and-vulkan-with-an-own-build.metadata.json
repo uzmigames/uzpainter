@@ -1,0 +1,11 @@
+{
+  "id": 21,
+  "slug": "d12-engine-relationship-zero-uzengine-dependency-vendored-render-core-on-dx12-and-vulkan-with-an-own-build",
+  "title": "D12 Engine relationship: zero UzEngine dependency; vendored render core on DX12 and Vulkan with an own build",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

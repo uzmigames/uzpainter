@@ -1,0 +1,11 @@
+{
+  "id": 25,
+  "slug": "q12-python-trust-trusted-opt-in-run-python-behind-allow-python-typed-mcp-tools-cover-every-required-operation",
+  "title": "Q12 Python trust: trusted opt-in run_python behind --allow-python; typed MCP tools cover every required operation",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

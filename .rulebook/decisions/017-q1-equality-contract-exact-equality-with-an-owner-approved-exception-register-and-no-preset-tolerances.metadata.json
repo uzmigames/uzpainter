@@ -1,0 +1,11 @@
+{
+  "id": 17,
+  "slug": "q1-equality-contract-exact-equality-with-an-owner-approved-exception-register-and-no-preset-tolerances",
+  "title": "Q1 Equality contract: exact equality with an owner-approved exception register and no preset tolerances",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

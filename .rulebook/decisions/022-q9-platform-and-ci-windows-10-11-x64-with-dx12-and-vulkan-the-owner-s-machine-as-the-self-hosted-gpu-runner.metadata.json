@@ -1,0 +1,11 @@
+{
+  "id": 22,
+  "slug": "q9-platform-and-ci-windows-10-11-x64-with-dx12-and-vulkan-the-owner-s-machine-as-the-self-hosted-gpu-runner",
+  "title": "Q9 Platform and CI: Windows 10/11 x64 with DX12 and Vulkan; the owner's machine as the self-hosted GPU runner",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

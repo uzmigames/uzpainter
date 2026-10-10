@@ -1,0 +1,58 @@
+# 11 — MCP server
+
+Implements D10 (`05-resolution.md`) as answered by the owner on 2026-10-10 (Q12: `run_python` is a trusted opt-in behind `--allow-python`, and every required operation is reachable through typed MCP tools). Requirements: INT-01…07, LAY-06, LAY-07, QG-03, ARC-01, ARC-02, ARC-14 (`docs/prd.md`). Protocol facts: `docs/analysis/technology-options/04-mcp-server-options.md` and `05-review-response.md` (revision 2026-07-28; the official Python SDK v2 has no Tasks support; the client launches a stdio server and owns its pipes).
+
+## 1. Topology
+
+The supervisor (`02-runtime-topology.md`) hosts the official Python MCP SDK (pinned release, vendored) in its embedded interpreter. Transports: **stdio** (default; stdout carries protocol frames only, logs go to stderr and to the ledger) and **Streamable HTTP** on `127.0.0.1:<port>` when started with `--mcp-http` for a resident instance (Origin validation, bearer token generated at start or given by `--token`; never bound to a non-loopback address without `--allow-remote`). Both transports call the same tool registry; tool handlers forward to the worker over the private pipe and run in an executor so the event loop keeps serving progress and cancellation.
+
+## 2. Tools
+
+Compact, task-shaped tools for the operations the pipeline performs, plus typed operation families so every required operation is reachable without Python (owner Q12). A **requirement-to-typed-operation matrix**, generated with the capability manifest and published as part of `uzpainter://capabilities`, maps every required operation (PRD INT-02, ARC-14 and the requirements each family serves) to its tool and its conformance fixture; a required operation without a typed tool is a release gap, never a reason to depend on `run_python`. Brush strokes are out of scope (owner Q5), so there is no stroke tool. Every mutating tool accepts `idempotency_key` and `expected_revision`; every result carries `revision`, `committed_revision`, `job_id` where applicable, `changed/created/hidden/imported/skipped` lists and `warnings`.
+
+| Group | Tools |
+|---|---|
+| Status | `status` (versions, profile, open project, revision, busy jobs, lease holder), `capabilities` |
+| Project | `project_create {mesh, settings, mesh_maps, template}`, `project_open`, `project_save {mode}`, `project_save_as`, `project_close {discard?}`, `project_inspect {path?}`, `project_recipe`, `project_revert {revision|checkpoint}` |
+| Texture sets | `set_list`, `set_resolution`, `set_rename`, `set_channels {add|remove|edit}`, `set_mesh_maps {usage → resource|path}` |
+| Resources | `resource_import {path, usage, name, group}`, `resource_list`, `resource_search {query}`, `resource_replace {old → new}`, `assets_search {query}` (UzPainter asset library with parity status) |
+| Stack (typed family) | `layer_list {set, stack}`, `layer_insert {kind, position, params}`, `layer_set {uid, name?, visible?, blending?, geometry_mask?}`, `layer_delete`, `layer_instantiate`, `effect_insert {uid, stack: content|mask, kind, position, params}`, `effect_set`, `mask_set {uid, background?, enabled?, blending?}`, `source_set {uid, channel|None, source}`, `fill_set {uid, projection?, symmetry?, active_channels?, source_mode?}`, `procedural_set {uid, params|preset|image_inputs|output_mapping|resolution}`, `anchor_list`, `smart_material_insert`, `smart_mask_insert`, `smart_export {uid, kind, path}` |
+| Recipes | `sync_stack {stack_json, masks_dir, state?, resource_prefix, resource_group, keep_visible, texture_set}` (the `painter_layer_stack.py sync` semantics), `apply_smart {config_json, texture_set}`, `batch {calls[], stop_on_error}` |
+| Baking | `bake_inspect`, `bake_configure {set, enabled, bakers, uv_tiles, curvature_method, common, per_baker}`, `bake_set_mesh_inputs`, `bake_start {sets[], wait?}`, `bake_capture_preset`, `bake_apply_preset` |
+| Export | `export {config|preset, output_dir, texture_sets?, size_log2?, file_format?, bit_depth?, dry_run?}` → plan or receipt, `export_presets_list` |
+| Render | `capture {mode, camera?, size, samples?, seed?, preset?, path}` → receipt + downscaled image block (modes of `07-preview-and-render-parity.md` §5: the parity mode `painter_iray`, the preview `painter_viewport`, and the diagnostic views), `display_get/display_set`, `shader_get/shader_set`, `camera_get/camera_set` |
+| Diagnostics | `snapshot_layer_tree`, `diff_snapshots`, `isolate_layer {uid, channels, path}`, `material_views {mask, path}`, `region_stats {mask, map}` |
+| Mesh | `mesh_reload {path, settings, wait?}`, `mesh_certificate` |
+| Jobs and lease | `job_status {job_id}`, `job_result`, `job_cancel`, `job_list`, `lease_acquire {owner}`, `lease_release`, `lease_status` |
+| Escape hatch | `run_python {code|path, args}` (registered only with `--allow-python`, owner Q12; result = `result` variable + stdout + stderr) |
+
+Resources: `uzpainter://capabilities`, `uzpainter://project/manifest`, `uzpainter://project/recipe`, `uzpainter://project/layers`, `uzpainter://project/resources`, `uzpainter://assets/parity`, `uzpainter://jobs/<id>`, `uzpainter://ledger` (recent receipts). Prompts: stack JSON template, smart JSON template, baking preset template, export config template.
+
+Schemas carry numeric bounds, enums and object references; the server validates inputs before admission (not only by description). Results are `structuredContent` plus a short text summary. Images are returned as content blocks only for `capture`; everything else references files under the allowlisted roots.
+
+## 3. Long jobs
+
+`bake_start`, `export`, `capture`, `mesh_reload`, `project_create/open` return `{job_id, status}` immediately, or block with `wait=true` while emitting progress notifications. Clients poll `job_status`/`job_result` or wait. Terminal states are durable in the supervisor ledger (`succeeded | failed | cancelled | interrupted`). `job_cancel` acknowledges intent; the final receipt says whether work stopped before or after commit. The MCP Tasks extension is added behind the same job ledger when a pinned SDK release and the owner's clients support it; `job_*` tools remain.
+
+## 4. Single writer, revisions, retries
+
+- One mutation **lease per open project**: `lease_acquire {owner}` is implicit for a stdio client (the only client) and explicit in HTTP mode; a mutating call without the lease returns `lease_held {holder, since, active_job}`. Reads use committed snapshots and need no lease.
+- `expected_revision` mismatch → `stale_revision {expected, current}`.
+- **Idempotency is bound to the persisted revision.** Each mutating transaction writes the operation record `{project_uuid, idempotency_key, request_hash, outcome, committed_revision}` into the project store in the same SQLite transaction as its revision (`09-project-file-format.md`); `request_hash` is the SHA-256 of the canonical JSON of the tool name and its arguments. A key is scoped to its project UUID (`project_create` and `project_save_as` write the record into the new file's first transaction). A record is retained as long as its revision is retained (owner Q11: current and previous checkpoints plus the last 50 mutation revisions); a retry is valid within that window.
+- Replaying a key with the same `request_hash` returns the recorded outcome, never a second mutation; reusing a key with different arguments returns `idempotency_conflict {key, committed_revision}`.
+- After a worker restart the supervisor reconciles its ledger from the operation records of the open project before it admits any mutation. A key found in the records returns its recorded outcome; a key found in neither the records nor the ledger was never committed and runs once; if the records cannot be read, the call fails with `outcome_unknown {committed_revision}` and is never run as a new mutation. The supervisor ledger is a control-plane record, not a second editable document.
+- A call while a conflicting job runs returns `busy {job_id}` rather than queueing silently (INT-05); `wait_idle {timeout}` exists for scripts, and a timeout is a failure, not a continuation.
+
+## 5. Path roots
+
+`--roots project=<dir>;mesh=<dir>;bake_mesh=<dir>;resource=<dir>;export=<dir>` (the Assets3D client sets all five to `E:\UzmiGames\Assets3D` today — `A3D\Docs\Pipeline\MCP\painter_mcp_client.py`). Paths are canonicalised (absolute, resolved reparse points, `file:///` and relative forms normalised) and checked against the root of the operation; results never reference paths outside the roots. Roots are policy for structured tools; they do not sandbox `run_python` (Q12).
+
+## 6. `run_python`
+
+Registered only when the supervisor starts with `--allow-python` (owner Q12); executes in the worker interpreter with the full `uzpainter` and `substance_painter` APIs; returns `result`, stdout and stderr separately; honours the lease and revision rules like any tool. Each API call inside the script is its own transaction (`10-python-api.md` §5): a script that raises after earlier calls keeps those calls committed, and its error receipt reports the last committed revision and the partial changes; atomic multi-call work uses the native `Transaction`. It is trusted execution for the local operator, documented as such. Typed tools cover every required operation, so a deployment runs without it: the belt round completing through MCP with Python disabled is the Phase 2 integration smoke test (G2), and release additionally requires the requirement-to-typed-operation matrix and a Python-disabled conformance fixture for every required operation family (§7).
+
+## 7. Settling evidence (Phase 2, node P2-MCP)
+
+Complete the belt round through MCP only, with `--allow-python` off (integration smoke test); then exercise two writers, a lost acknowledgement with retry, a worker killed immediately after the durable project commit and before the supervisor's acknowledgement (retry the same request, then a changed request with the same key), reconnect in HTTP mode, cancellation during bake, a path outside the roots, and a stale revision. The capability resource must show any operation that still needs Python as a gap.
+
+Release (G5) adds the Python-disabled conformance fixture for every required operation family in the requirement-to-typed-operation matrix: project lifecycle, texture sets, resources, the stack family including the later node, effect and source kinds and paint layers receiving bitmaps and projections, recipes (`sync_stack` name addressing and group-only rebuild, LAY-06/07), native bake, mesh reload, every export target, capture in each mode, diagnostics, and jobs/lease.

@@ -1,0 +1,160 @@
+# 13 — Render core, build and packaging
+
+Implements D12 as decided by the owner on 2026-10-10: decision 021 (Q8, supersedes decision 014: **zero dependency on UzEngine** — UzPainter vendors only the rendering code it needs; the two are separate systems) and decision 022 (Q9: Windows 10/11 x64; DX12 primary plus Vulkan as the second backend; one-folder distribution; the owner's machine is the self-hosted GPU runner). Requirements: OWN-02, OWN-08, NFR-01, NFR-03, NFR-06, NFR-07, ARC-07, ARC-08, LIC-01…03 (`docs/prd.md`).
+
+UzEngine facts below were read from the files of the checkout `E:\UzmiGames\UzEngine` on 2026-10-10 (read-only; paths relative to its `runtime\` folder). Line numbers are those of that checkout; P0-VENDOR re-verifies every cited behaviour against the selected commit and records the line numbers in `ORIGIN.md`.
+
+## 1. Relationship to UzEngine
+
+- UzPainter **copies (vendors)** from UzEngine the minimal rendering code it needs and nothing else. There is no link against `runtime.lib`, no DLL, no submodule, no pin that must be kept current, no patch queue and no obligation to upstream changes. After the copy the two code bases evolve independently.
+- The copy is taken from a **clean commit** of UzEngine (§3.1). The commit hash is recorded for attribution and provenance only; it is not a dependency pin.
+- The copy is treated as third-party Apache-2.0 code although both projects belong to UzmiGames, because UzEngine is released separately and may contain contributions under its licence. Licence handling, attribution, manifest and modification log: §3.3.
+- Known defects are fixed in the copy or the affected path is not taken (§2.4, §3.4). In particular the glTF 32/48-byte stride defect is avoided: none of the files involved is vendored.
+- **Future direction (not now):** UzEngine may later consume UzPainter as a submodule. Nothing is built for that today. The constraint kept now is isolation: UzPainter's own code never includes a path into a UzEngine checkout, and the vendored copy lives under one folder (§3.2), so a future consumer can supply its own originals or keep the copy behind a boundary. How symbol collisions would be avoided (namespace or DLL boundary) is decided when the owner requests that integration.
+
+## 2. The vendored subset
+
+### 2.1 Files
+
+| Group | Files (UzEngine `runtime/`, selected commit) | Used for | Copy status |
+|---|---|---|---|
+| RHI interface | `engine/rhi/`: `rhi.h`, `rhi_backend.h`, `rhi_device.h`, `rhi_command_list.h`, `rhi_types.h`, `rhi_fence.h`, `rhi_swapchain.h`, `rhi_resource_pool.h`, `rhi_gpu_profiler_types.h`, `rhi_frame_limiter.h`, `rhi_config.h`, `rhi_config.cpp`, `rhi_factory.cpp` | Device, queues, fences, resources, PSOs, compute, acceleration structures, copies and readback behind one interface; backend factory | `rhi_factory.cpp` and `rhi_config.cpp` modified (§3.4) |
+| DX12 backend | `engine/rhi/dx12/*` (24 files: device, command list, fence, buffer/texture/PSO creation, descriptor allocator, D3D12MA glue, GPU breadcrumbs, GPU profiler, GUIDs, swapchain, Agility activation) | Primary backend: compute, rasterisation, DXR acceleration structures (BLAS/TLAS create and build), readback, SM 6.6 bindless root signature | Modified (§3.4) |
+| Vulkan backend | `engine/rhi/vulkan/*` (13 files: device, command list, fence, resources, format helpers, GPU profiler, swapchain) | Second backend: compute, rasterisation, readback; volk loader and VMA allocator | Modified (§3.4) |
+| Shader compilation | `engine/shader/`: `shader_compiler.{h,cpp}`, `shader_reflection.{h,cpp}`, `shader_cache.{h,cpp}` | DXC loaded at run time (`LoadLibrary`, `shader_compiler.cpp`), HLSL → **DXIL** or **SPIR-V** (`-spirv`), SPIR-V reflection through SPIRV-Reflect, on-disk bytecode cache | `shader_compiler.cpp` modified (§3.4) |
+| Texture format | `engine/asset/formats/uztexture_format.h` | `.uztexture` format definition only (constants and layout); UzPainter writes `.uztexture` with its own code (`08-export.md`), and the header's `WriteUzTexture`/`ReadUzTexture` declarations are not implemented in UzPainter's build | Verbatim |
+| Math | `engine/math/*` (21 files; closure: DirectXMath headers only) | Vectors, matrices, quaternions, transforms for cameras, mesh transforms and the path tracer | Verbatim |
+| Core utilities | `engine/logging/log.{h,cpp}`, `engine/assertions/engine_assert.{h,cpp}`, `engine/profiling/profiler.{h,cpp}`, `engine/paths/paths.{h,cpp}` | Logging, assertions, profiling macros (no-ops in release), executable-relative paths | Verbatim |
+| Windows platform | `platform/platform_types.h`; `platform/windows/`: `crash_handler.{h,cpp}`, `stack_walker.{h,cpp}`, `file_system.{h,cpp}`, `platform_window.{h,cpp}`, `input.{h,cpp}` | Minidumps and crash reports; file helpers for the shader cache; the `--preview` window and its orbit input | Verbatim |
+
+That is **97 files, about 28,100 lines**. The DX12 files also contain DXR ray-tracing-pipeline and `DispatchRays` code; it is copied with them (files stay verbatim where possible) but UzPainter does not use it: the path tracer and the GPU baker run compute shaders with inline ray queries only (`07-preview-and-render-parity.md` §3).
+
+### 2.2 What the subset drags in
+
+The closure was computed by following `#include` directives from the files above through UzEngine's include directories (`runtime/build.zig`, `engine_include_dirs` and the Windows tables) to a fixed point, adding the `.cpp` of every reached header.
+
+- **Engine code outside the table:** only `engine/config/config.{h,cpp}` and `engine/core/cvar.{h,cpp}`, reached through `rhi_config.cpp`, whose `ResolveRHIConfig(const Config&)` (`rhi_config.cpp:139`) resolves the backend from the command line, `.uzproject` and CVars. The copy removes that function (§3.4), so these four files are not vendored. `rhi_factory.cpp:13-24` includes the DX11 and Metal backends; the copy removes those branches. The RHI and shader files need no math; `engine/math` is vendored for UzPainter's own code.
+- **Third-party headers and sources:** D3D12MA (`include/`, `src/`), DirectX-Headers (`include/directx`), DXC headers (`dxcapi.h`), volk, VMA, Vulkan-Headers, SPIRV-Reflect (`spirv_reflect.c`), spdlog with its bundled fmt (compiled library), DirectXMath (math only) and Tracy's public headers. `dx12_device.h:31`, `dx12_swapchain.cpp:15` and the Vulkan device/command-list files include Tracy's GPU headers unconditionally; with `TRACY_ENABLE` and `UZ_PROFILING_ENABLED` undefined (`profiler.h:49`) they compile to stubs, so only the headers enter the build and no Tracy client is linked.
+- **System:** Windows SDK headers (`windows.h`, `dxgi1_6.h`, `dxgidebug.h`, `DbgHelp.h`, `ShlObj.h`, `xinput.h`, `shellscalingapi.h`, `timeapi.h`) and the matching system DLLs, which are never shipped (§5).
+
+### 2.3 DX12-only today, and what UzPainter writes for Vulkan
+
+| Capability | DX12 in the copy | Vulkan in the copy | UzPainter work |
+|---|---|---|---|
+| Compute, rasterisation, copies, readback (`Readback` memory, `CopyTextureToBuffer` with 256-byte row pitch, `MapBuffer`) | Yes (`dx12_command_list.cpp:887`, `dx12_device.cpp:1036`) | Yes (`vulkan_command_list.cpp:1141`, `vulkan_resources.cpp:157`) | `TextureReadback` on top of both (§4.1) |
+| Acceleration structures (BLAS/TLAS create and build) | Yes (`dx12_device.cpp:1558`, `:1691`; `dx12_command_list.cpp:1093`, `:1131`) | **None**: the RHI's default implementations return invalid handles and `SupportsRayTracing()` returns false (`rhi_device.h:292-361`) | **Write** `VK_KHR_acceleration_structure` with `VK_KHR_deferred_host_operations` behind the existing RHI calls, plus acceleration-structure descriptors |
+| Inline ray queries in compute | Usable, but the device only checks DXR Tier ≥ 1.0 (`dx12_device.cpp:336`) | None | Copy checks DXR Tier 1.1 + SM 6.6 (§3.4); **write** `VK_KHR_ray_query` support, SPIR-V compiled with `SPV_KHR_ray_query`. A missing feature raises `PathTracerUnavailable`, no fallback (`07-preview-and-render-parity.md` §3) |
+| Ray-tracing pipelines, shader tables, `DispatchRays` | Present (`dx12_device.cpp:1819`, `dx12_command_list.cpp:1176`), unused | None | Not needed (inline ray queries only); `VK_KHR_ray_tracing_pipeline` is not required |
+| Bindless descriptors | SM 6.6 bindless root signature (`dx12_pso_creation.cpp:172`) | Fixed layout of 16 slots per register class (`vulkan_device.cpp:748-756`); descriptor indexing is queried but unused (`:532-562`) | Phase 1 kernels stay within the fixed-slot subset on both backends; **write** descriptor-indexing bindless on Vulkan for the path tracer's material textures |
+| Shader reflection | DXIL reflection not wired (`shader_reflection.h:3-5`) | SPIR-V via SPIRV-Reflect | DX12 kernels use the bindless root signature and need no reflection |
+| Agility SDK, DRED, GPU breadcrumbs | DX12 only | n/a | — |
+| GPU waits | Wait forever, logging every 10 s (`dx12_fence.cpp:83-96`, `dx12_fence.h:19`) | 5 s timeout, then logs and continues without reporting device loss (`vulkan_fence.cpp:93-100`) | Deadline wait on both (§3.4) |
+
+### 2.4 Not vendored
+
+- **Shader front end beyond the compiler:** `shader_pipeline*`, `shader_permutation`, `shader_dependency_graph`, `shader_hot_reload`, `shader_source_manager`, `shader_vfs`, `shader_archive`, `shader_compiler_fxc`, `slang_compiler`. They pull in FXC (`d3dcompiler_47.dll`), Slang, hot reload and a VFS. UzPainter keys its cache itself (xxHash64 over source, includes, defines, target and DXC version) on top of the vendored compiler and cache.
+- **Other RHI code:** `engine/rhi/dx11`, `engine/rhi/metal`, `engine/rhi/optimization` (PSO caches, frame pacer, meshlets, telemetry). **Engine configuration:** `engine/config`, `engine/core/cvar`.
+- **Renderer:** everything under `engine/renderer/`: `SceneRenderer`, render graph, GI/atmosphere/VFX, the FLIP pass, inspector dumps, and the scene-level ray-tracing managers. `BLASManager` hard-codes `vertexStride = 48` and `isOpaque = true` (`renderer/raytracing/blas_manager.cpp:35-37`); UzPainter builds acceleration structures through the raw RHI `CreateBLAS` with the real stride of its own vertex buffers and a per-geometry opacity flag. `ShaderTableBuilder` is not needed because no ray-tracing pipeline is used.
+- **Readback helpers:** `ipc/frame_readback` (RGBA8 only) and the `PassInspector` dump path. `TextureReadback` replaces them.
+- **Assets and mesh path — the glTF stride defect:** the glTF cook importer writes 32-byte `VertexPosNormUV` records and the UZMS→UZMH conversion reads them at a 48-byte stride and publishes stride 48 (`asset/importers/mesh_importer.cpp`, `renderer/mesh/mesh_io.cpp`; `docs/analysis/uzengine-renderer/10-review-response.md` §4.2). None of `asset/importers/**` (including the 8-bit-only `png_codec`), `asset/formats/uzmesh_format.*`, `renderer/mesh/**` or `uzcook` is vendored, and the vendoring check rejects them (§3.3). UzPainter imports meshes with its own loader (`12-mesh-import.md`). The UzEngine export preset writes textures and materials, never meshes; the external UzEngine consumer fixture (P3-UZE) loads its test mesh through a route UzEngine has qualified, not the defective glTF cook, and records which (`05-resolution.md` §3, response to `04` §2 item 13).
+- **Everything else:** the `.uztexture` writer implementation `asset/formats/uztexture_format.cpp` (UzPainter writes `.uztexture` itself; only the header is kept, as the format definition); ECS/EnTT, material graph and material system (UzPainter writes `.uzmat` itself from the format definition, validated by the external consumer fixture — `08-export.md`), job system (UzPainter has its own CPU job pool), N-API, editor, extension, TypeScript MCP, Lua, FFmpeg, DLSS, FidelityFX/Brixelizer.
+
+### 2.5 Third-party libraries of the subset
+
+D3D12MA, DirectX-Headers, DirectXMath, DXC (headers and binaries), the Agility SDK, volk, VMA, Vulkan-Headers, SPIRV-Reflect, spdlog and Tracy's public headers are vendored **from their own upstream releases**, not copied out of UzEngine's tree, at the versions UzEngine's tree uses at the selected commit (`runtime/thirdparty/README.md`; on 2026-10-10 it lists, for example, D3D12MA 3.1.0, VMA 3.2.1, volk `vulkan-sdk-1.4.304.1`, Vulkan-Headers 1.4.342, DirectX-Headers 1.619.1, DXC 1.9.2602, Agility 1.619.1, spdlog 1.17.0, Tracy 0.13.1). Each upstream package is byte-compared with UzEngine's copy. A UzEngine patch under `thirdparty/<lib>/patches/` is applied only if the build needs it and is then logged as a local modification. Licences and notices: `docs/licensing-and-clean-room.md` §3.
+
+## 3. Vendoring procedure (P0-VENDOR)
+
+### 3.1 Commit selection
+
+1. The source is a **commit object** on UzEngine's `main` branch, identified by its full hash. Files are exported from that commit (for example `git archive <hash>` into a staging folder outside both repositories), never copied from a working tree. This excludes the mid-merge tree of 2026-10-10 and any checkout with uncommitted edits.
+2. The candidate must pass all of these checks: (a) no conflict markers in any file of the manifest; (b) the include closure computed from the exported tree equals the manifest, with no unresolved include outside the listed third-party and system headers; (c) UzPainter's build of the subset and the hardware slice of `UzPainter.exe selftest` pass (§4.2); (d) every behaviour cited in §2.3 and §3.4 is re-verified at that commit. UzEngine's own build and test status at that commit is recorded as information only; it is not a UzPainter gate.
+3. Among candidates that pass, take the newest commit on `main` at the time of P0-VENDOR.
+4. State on 2026-10-10, read from the checkout's files: the PR #10 merge (`9220973`) that was in progress during the analyses has since been committed (`77b8381`, followed by commits up to `380c142`), and the checkout carries uncommitted edits. The analyses' baseline `19ffb9b` predates that merge, and the merge changed RHI files (for example the DX12 3D-texture readback path). These facts do not select the commit; the checks do.
+
+### 3.2 Layout
+
+```
+thirdparty/uzengine-render-core/
+  LICENSE            UzEngine's LICENSE at the selected commit (Apache-2.0, "Copyright 2026 Uzmi Games")
+  ORIGIN.md          repository, commit hash and date, selection evidence (§3.1), import date, importer, re-verified line numbers
+  MANIFEST.json      one entry per vendored file (§3.3)
+  MODIFICATIONS.md   local modifications log (§3.3, §3.4)
+  engine/…           files at their upstream paths relative to UzEngine runtime/
+  platform/…
+thirdparty/<library>/  each third-party library from its own upstream, with its LICENSE/NOTICE files and an ORIGIN.md
+```
+
+Upstream relative paths are kept so that includes resolve unchanged and every manifest entry maps one-to-one to an upstream file.
+
+### 3.3 Licence, attribution, manifest and modification log
+
+- **Headers.** UzEngine's source files carry **no per-file licence or copyright header** (none of the files under `runtime/engine` or `runtime/platform` contained one on 2026-10-10); the Apache-2.0 grant and the copyright line are in `LICENSE`. Unmodified files are therefore copied byte for byte, which keeps their hashes equal to upstream, and the licence travels as `thirdparty/uzengine-render-core/LICENSE`. If the selected commit adds per-file headers, they are kept verbatim (Apache-2.0 §4(c)).
+- **Modified files** carry a prominent notice at the top (Apache-2.0 §4(b)): `Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md <id>. Original: UzEngine runtime/<path> at <commit>. Licensed under the Apache License, Version 2.0.`
+- **NOTICE.** UzEngine has no `NOTICE` file (none at the repository root, in `runtime/`, or under `runtime/engine` and `runtime/platform` on 2026-10-10), so Apache-2.0 §4(d) adds no text to propagate today. UzPainter's root `NOTICE` still names the vendored UzEngine code, its copyright line and the selected commit. P0-VENDOR re-checks for a `NOTICE` at the selected commit and, if one exists, reproduces its attribution notices (`docs/licensing-and-clean-room.md` §3).
+- **Manifest** (`MANIFEST.json`): per file `{upstream_path, vendored_path, upstream_commit, upstream_blob_sha1, upstream_sha256, vendored_sha256, status: verbatim|modified, modifications: [ids]}`.
+- **Modification log** (`MODIFICATIONS.md`): per change `{id (UZP-MOD-nnn), files, reason (defect | trim | platform | capability), description, upstream behaviour cited as path:line at the selected commit, date, author, covering test}`.
+- **Vendoring check** (CI, every commit): recomputes `vendored_sha256` and fails on drift not recorded in the log, a modified file without its notice, a file outside the manifest under the folder, a path on the denylist (`asset/importers/**`, `asset/formats/uzmesh_format.*`, `asset/formats/uztexture_format.cpp`, `renderer/**`, `engine/config/**`), conflict markers, or any include/library path in the build that points outside the UzPainter repository.
+
+### 3.4 Local modifications (initial list)
+
+| Id | Files | Change | Reason |
+|---|---|---|---|
+| UZP-MOD-001 | `engine/rhi/rhi_factory.cpp` | Remove the DX11 and Metal branches (`:13-24` and their factory cases) | Trim to DX12 + Vulkan |
+| UZP-MOD-002 | `engine/rhi/rhi_config.cpp` | Remove `ResolveRHIConfig(const Config&)` (`:139`); the backend comes from `--gpu-backend` (`02-runtime-topology.md` §1) | Trim: no engine config, `.uzproject` or CVars |
+| UZP-MOD-003 | `engine/rhi/dx12/dx12_fence.*`, `engine/rhi/vulkan/vulkan_fence.*` | Deadline wait returning `signaled`, `timeout` or `device_lost` (DX12 device-removed reason; Vulkan `VK_ERROR_DEVICE_LOST`), replacing the endless DX12 wait and the Vulkan 5 s give-up | Defect: the worker watchdog needs a bounded, truthful wait |
+| UZP-MOD-004 | `engine/rhi/dx12/dx12_device.*` | Report DXR Tier 1.1 and SM 6.6 as the inline-ray-query capability, instead of Tier ≥ 1.0 only (`:336`) | Defect: `RayQuery` needs Tier 1.1 |
+| UZP-MOD-005 | `engine/rhi/dx12/dx12_device.cpp` | Align the Agility path: `dx12_agility.cpp:17` exports `D3D12SDKPath = ".\\D3D12\\"` while `TryLoadAgilitySdk` uses the executable folder itself (`dx12_device.cpp:419`); the copy uses the `D3D12\` subfolder in both | Defect: two locations for one runtime |
+| UZP-MOD-006 | `engine/shader/shader_compiler.cpp` | SPIR-V target environment `vulkan1.2`, matching the Vulkan 1.2 instance the device requests (`vulkan_device.cpp:215`), instead of `vulkan1.3` (`shader_compiler.cpp:241`); add the ray-query SPIR-V extension when requested | Defect: SPIR-V for 1.3 on a 1.2 instance |
+| UZP-MOD-007 | Vulkan backend files | Acceleration structures, ray-query capability, acceleration-structure descriptors, descriptor-indexing bindless (§2.3) | Capability added by UzPainter |
+
+Behaviour kept on purpose: `FatalErrorLoop` still aborts after repeated RHI errors (`dx12_command_list.cpp:1068-1086`); the worker boundary contains it (`02-runtime-topology.md` §1). `ShaderCompiler::Init` sets the process DLL directory to DXC's folder (`shader_compiler.cpp:122`), which is harmless because DXC sits beside the executable (§5).
+
+### 3.5 Later imports
+
+A later UzEngine fix is taken only by repeating §3.1–§3.3 for the affected files: new upstream commit per manifest entry, local modifications re-applied and re-reviewed, the vendoring check green. Nothing tracks UzEngine automatically and nothing is owed upstream; UzmiGames may still choose to send fixes to UzEngine separately.
+
+## 4. UzPainter-owned render code and build
+
+### 4.1 UzPainter-owned code on top of the copy
+
+`TextureReadback` (per-request ownership, aligned pitch, fence-linked map, drain) on both backends; backend selection and capability queries (formats, usages, ray queries, VRAM); the acceleration-structure builder for its own meshes; the shader-cache key; UV-space rasterisation pass; dilation/padding compute; resampling; mip generation (sRGB-aware, normal-renormalising, alpha-coverage); height→normal; compositor kernels; the `painter_viewport` forward pass; the `painter_iray` path tracer (inline ray queries on DXR 1.1 and Vulkan); the Vulkan additions of §3.4 (UZP-MOD-007); the DDS writer; the `.uztexture` and `.uzmat` writers; VRAM admission; the CPU job pool.
+
+### 4.2 Build and toolchain decision procedure
+
+- UzPainter has its **own build** (`build.zig`): one toolchain (Zig/clang) compiles the vendored render core as a static library, the UzPainter C++ sources and the pybind11 module; CPython 3.13 is embedded through its C API. No include path, library path or build step refers to a UzEngine checkout.
+- **Why Zig still fits:** UzEngine's own `build.zig` already compiles exactly these source files with Zig and its bundled libc++ (`runtime/build.zig:1-12`, flags `-std=c++23 -DSPDLOG_COMPILED_LIB` at `:35`; `build.zig.zon` requires Zig ≥ 0.15.2), so the vendored subset does not dictate another toolchain. UzPainter compiles it with the same language level and without the profiling defines.
+- **Decision procedure:** (1) pin the Zig release used for the selected commit in `build.zig.zon` and CI; (2) P0-TOOLCHAIN runs the selftest below; Zig stays if the hardware slice passes; (3) if only the CPython/pybind11 boundary fails, apply the fallback (the Python-facing layer as a separate DLL with a C ABI to the core) and rerun, still under Zig; (4) the toolchain changes (clang-cl or MSVC with a UzPainter-owned CMake build) only on recorded evidence that (a) a vendored file cannot compile or link under the pinned Zig without changes beyond the modification log, (b) the CPython boundary fails both directly and through the C-ABI fallback, or (c) a required prebuilt binary (`python313.dll`, `embree4.dll`, `dxcompiler.dll`, `D3D12Core.dll`) cannot be loaded or used from a Zig-built executable. Such a change updates decision 021 with the failing selftest output; it never reintroduces a dependency on UzEngine's build.
+- **Phase 0 qualification slice (P0-TOOLCHAIN):** `UzPainter.exe selftest` creates the DX12 device on the hardware adapter, compiles a compute kernel from source to DXIL and to SPIR-V, writes a 16-bit PNG through readback, embeds `python313.dll`, imports the statically linked `uzpainter` module, round-trips a 16-bit buffer, raises and catches a Python exception across the boundary, imports the vendored MCP SDK wheels, runs an Embree intersection, probes Vulkan availability (a Vulkan 1.2 device, its extensions and features) and records the result, probes ray-query support (DXR Tier 1.1 + SM 6.6; Vulkan `VK_KHR_acceleration_structure`, `VK_KHR_deferred_host_operations`, `VK_KHR_ray_query`) and runs the WARP probe. **The DX12 hardware-adapter qualification slice must pass;** the Vulkan probe never fails G0, and the Vulkan hardware selftest is part of the `P3-VULKAN` gate. **The WARP probe must report supported capabilities, executed checks and explicit unsupported reasons; WARP failure leaves that software-render path unsupported and does not fail G0 unless the owner separately makes it mandatory under Q9.** "Probe completed" and "backend qualified" are reported separately.
+
+## 5. Platform and distribution
+
+- **Platform (Q9, decision 022):** Windows 10/11 x64 only; no Linux/macOS now. DX12 primary: SM 6.6, and DXR Tier 1.1 for the path tracer and the GPU baker. Vulkan second backend: Vulkan 1.2 with the ray-query extensions above for the path tracer; compositing and preview need no ray tracing. A GPU is required for compositing, preview and path tracing; CPU baking runs on the Windows/CPU/ISA configurations qualified for the pinned Embree build, with an explicit capability error elsewhere. An unavailable backend or missing feature is an explicit error, never a silent fallback (`02-runtime-topology.md` §1).
+- **One-folder distribution and DLL footprint:**
+
+| File | Origin | Needed for | Shipped |
+|---|---|---|---|
+| `UzPainter.exe` | UzPainter build (vendored render core and libc++ linked statically) | Everything | Yes |
+| `D3D12\D3D12Core.dll` | Direct3D 12 Agility SDK, version pinned with the headers | DX12 feature set independent of the Windows build | Yes; `d3d12SDKLayers.dll` only in debug packages |
+| `dxcompiler.dll`, `dxil.dll` | DirectX Shader Compiler release, version pinned | Run-time HLSL → DXIL and SPIR-V for generated kernels and the path tracer; DXIL validation | Yes |
+| `vulkan-1.dll` | Khronos Vulkan loader installed by the GPU driver, loaded by volk at run time | Vulkan backend | **No**: the system loader is used; if it is absent or too old, the Vulkan backend reports unavailable and DX12 is unaffected |
+| `python313.dll`, `python313.zip`, `vcruntime140.dll`, `vcruntime140_1.dll`, `Lib\site-packages\` | CPython 3.13 embeddable package; pinned wheels incl. the MCP SDK closure | Supervisor MCP SDK; worker facade and scripts | Yes |
+| `embree4.dll` (+ `tbb12.dll` unless internal tasking) | Embree 4.x release | CPU baking | Yes |
+| Further Visual C++ runtime DLLs | Microsoft Visual C++ redistributable, app-local | Whatever the measured import tables of the prebuilt binaries require | Only as measured |
+| `assets\`, `capabilities.json`, `LICENSE`, `NOTICE`, `LICENSES\` | UzPainter | Presets, capability manifest, licence texts | Yes |
+| System DLLs (`d3d12.dll`, `dxgi.dll`, `dbghelp.dll`, `xinput1_4.dll`, `shcore.dll`, `winmm.dll`, …) | Windows | — | Never |
+| `d3dcompiler_47.dll` (FXC), Slang, `lua51.dll`, FFmpeg, DLSS, FidelityFX, the LunarG Vulkan SDK and its validation layers | — | Not used | Never |
+
+  The install folder stays read-only; the shader cache, logs and the supervisor's ledger live under the user's local app-data folder. The DLL closure is computed from the import tables of every shipped binary and compared with an allowlist; DLL count and footprint are measured, not promised. Verified on a clean, offline Windows machine without Python, Painter, Blender, the Vulkan SDK or the Windows SDK.
+- **CI (Q9b):** the owner's machine (GPU, licensed Painter, private oracle store) is the self-hosted GPU runner and runs both backends; hosted runners run the CPU-only lanes (`14-parity-testing.md` §7).
+
+## 6. Capacity and budgets
+
+At startup UzPainter queries VRAM budget, descriptor capacities and format/usage support on the active backend (DX12 through DXGI memory-budget queries; Vulkan through `VK_EXT_memory_budget`, which the vendored device enables when present — `vulkan_device.cpp:455-466` — and otherwise conservatively from heap sizes) and derives the tile admission budget (`04-layer-stack-and-compositing.md` §7). Texture-set creation above the budget fails explicitly. Peak RAM for high-poly ingestion is estimated before parsing.
+
+## 7. Settling evidence
+
+- **Phase 0 (P0-VENDOR, P0-TOOLCHAIN):** `ORIGIN.md`, `MANIFEST.json`, `MODIFICATIONS.md`, `LICENSE` and the `NOTICE` entry written; vendoring check green; `selftest` hardware slice green on DX12; Vulkan availability probe recorded; ray-query probe report for both backends; WARP probe report; link map and DLL import closure inspected; clean-machine start.
+- **Phase 1 (P1-CORE):** readback drain tests and compositor kernels on DX12, behind backend-neutral interfaces.
+- **Phase 3 (P3-VULKAN, P3-PATHTRACER):** `selftest` hardware slice green on Vulkan; readback drain tests and compositor kernels identical on both backends; Vulkan ray queries qualified against DXR on the analytic path-tracer fixtures.
+- **Phase 5 (P5-PACKAGE):** full distribution verified offline with the measured DLL closure; budgets measured on the corpus.

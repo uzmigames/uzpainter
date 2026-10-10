@@ -1,0 +1,11 @@
+{
+  "id": 19,
+  "slug": "d2-api-scope-capability-manifest-with-three-statuses-brush-strokes-out-of-scope",
+  "title": "D2 API scope: capability manifest with three statuses; brush strokes out of scope",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

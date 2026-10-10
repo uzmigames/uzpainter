@@ -1,0 +1,11 @@
+{
+  "id": 27,
+  "slug": "release-criterion-recreate-clean-repository-history-before-the-repository-is-made-public",
+  "title": "Release criterion: recreate clean repository history before the repository is made public",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

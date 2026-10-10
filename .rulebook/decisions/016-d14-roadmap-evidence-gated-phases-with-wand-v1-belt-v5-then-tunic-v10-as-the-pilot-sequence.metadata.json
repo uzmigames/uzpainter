@@ -1,0 +1,11 @@
+{
+  "id": 16,
+  "slug": "d14-roadmap-evidence-gated-phases-with-wand-v1-belt-v5-then-tunic-v10-as-the-pilot-sequence",
+  "title": "D14 Roadmap: evidence-gated phases with Wand v1, Belt v5 then Tunic v10 as the pilot sequence",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

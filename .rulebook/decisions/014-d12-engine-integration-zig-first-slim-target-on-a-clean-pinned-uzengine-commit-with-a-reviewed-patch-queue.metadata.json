@@ -1,0 +1,11 @@
+{
+  "id": 14,
+  "slug": "d12-engine-integration-zig-first-slim-target-on-a-clean-pinned-uzengine-commit-with-a-reviewed-patch-queue",
+  "title": "D12 Engine integration: Zig-first slim target on a clean pinned UzEngine commit with a reviewed patch queue",
+  "status": "superseded",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": 21
+}

@@ -10,6 +10,7 @@ Conventions as in [01](01-pipeline-overview.md): paths relative to `E:\UzmiGames
 | The user's presentation look is stored as a separate snapshot and never silently replaces the comparison standard | F | Same; `Docs/Pipeline/Render/Painter-Lighting-Tunica.json → scope` |
 | One `ref_match` preset per character, calibrated once from its references, for every piece, in Blender and Painter; never tune light per piece; if an asset differs under it, the paint or geometry is wrong, not the light | F | `AGENTS.override.md` → "Working mode", "Document as you go"; `Render-Comparison-Standard.json → presets.ref_match.purpose` |
 | Colour-transform validation does not prove photometric parity between Iray and Cycles | F | `Docs/Pipeline/README.md` ("A validação de cor não comprova paridade completa entre Iray e Cycles") |
+| The standard measures an approximate Painter Iray × Blender Cycles match; it does not establish render identity between Painter and any other renderer (UzEngine included) | F | `Render-Comparison-Standard.json → validation.lighting_parity` ("Approximate"), `presets.ref_match.painter.status` ("NOT live-verified") |
 
 ## 2. Common standard v2 (top-level block)
 
@@ -27,7 +28,7 @@ Conventions as in [01](01-pipeline-overview.md): paths relative to `E:\UzmiGames
 | Contract | Value | Type | Source |
 |---|---|---|---|
 | Object axes | Painter `(x,y,z)` → Blender `(x,−z,y)` (Y-up → Z-up) | F | JSON `coordinate_contract.painter_to_blender` |
-| Environment direction | Painter 0° ↔ Blender World Normal × `diag(1,1,−1)`; the earlier 180° hypothesis failed the live test (2026-10-06) | F | JSON `coordinate_contract.environment_direction`; `Docs/Pipeline/Licoes/render-orientacao-entre-motores.md` |
+| Environment direction | Painter 0° ↔ Blender World Normal × `diag(1,1,−1)`; the earlier 180° hypothesis failed the live test (2026-10-06). This is a Painter↔Blender contract; it is not automatically UzEngine's basis | F | JSON `coordinate_contract.environment_direction`; `Docs/Pipeline/Licoes/render-orientacao-entre-motores.md` |
 | Camera | Painter Euler degrees → `Rx @ Ry @ Rz`, then basis `(x,y,z) → (x,−z,y)`; use `apply_painter_camera`, never copy Euler numbers | F | JSON `coordinate_contract.camera_rotation`; `Render-Comparison.md` |
 | Textures in review | BaseColor sRGB; roughness/metallic/AO Raw; normal OpenGL Raw; Height Raw and never applied twice when already in the combined normal | F | JSON `texture_contract` |
 | Normal provenance | Study: current geometry normal + this round's Height once; delivery: current Painter combined normal; trace `Principled.Normal` to the map's round and UV | F | `Render-Comparison.md` → "Aplicar" (last paragraphs); `Docs/Pipeline/Licoes/pintura-normal-height-uma-vez.md` |
@@ -51,7 +52,7 @@ Conventions as in [01](01-pipeline-overview.md): paths relative to `E:\UzmiGames
 | Framing | Same aspect and view as the reference; orthographic camera fitted on landmarks (skull top, sole, skull centre) | F | Same; `Render-Comparison.md` → "Ref-match preset (v3)" |
 | Render | Cycles CPU, 256 samples, seed 0, 1200×1200 (piece scripts override resolution, e.g. staff 1024×1536; samples 64 in round previews) | F | Same; `Docs/Pipeline/Retopologia/cajado-v10/paintrender.py`; `Docs/Pipeline/Retopologia/cintura_v5/round.sh` |
 | Calibration | 2026-10-08 on the Skeletal Mage: key direction from albedo-independent shading profiles; softness/fill from skull and long-bone profiles; one global key level minimising mean \|dp10\|+\|dp50\|+\|dp90\| over 19 regions | F | `presets.ref_match.calibration` |
-| Painter equivalent | Documented, **not live-verified** (remote scripting was disabled on 2026-10-08): HDRI as session resource (`import_session_resource`, `Usage.ENVIRONMENT`), envRotation 0 for the front view and rotated by camera yaw for other views, Default – sRGB, shadows on, flat clear colour (141,142,148). Limits: no camera-relative environment and no gradient backdrop in Painter; realtime viewport uses prefiltered IBL; Iray is closer to Cycles | F | `presets.ref_match.painter` |
+| Painter equivalent | Documented, **not live-verified** (remote scripting was disabled on 2026-10-08): HDRI as session resource (`import_session_resource`, `Usage.ENVIRONMENT`), envRotation 0 for the front view and rotated by camera yaw for other views (sign for the side views still to be verified live), Default – sRGB, shadows on, flat clear colour (141,142,148). Limits: no camera-relative environment and no gradient backdrop in Painter; realtime viewport uses prefiltered IBL; Iray is closer to Cycles | F | `presets.ref_match.painter` |
 
 ## 6. Validation evidence
 
@@ -63,6 +64,8 @@ Conventions as in [01](01-pipeline-overview.md): paths relative to `E:\UzmiGames
 | Grimoire v3 BaseColor pair | MAE 0.539/255, p99 3/255 over 309,425 interior pixels | F | JSON `validation.asset_pair` |
 | Clear colour | With infinite sphere and no ground, toggling clear colour changed the background, not the material pixels (0–0.001/255) | F | `Render-Comparison.md` → "Condições fixas" |
 | Evidence files | `Docs/Pipeline/Render/Render-Standard-Validation.json`, `Review/Render-Control-Comparison.png`, `ref-match/ref-match-study.json` + boards | F | Listing; `Render-Comparison.md` |
+
+**F** — These residuals describe an approximate, non-identical BRDF/lighting match (`validation.lighting_parity`: "Approximate … document diffuse BRDF residual"); they are not acceptance tolerances, and the colour-transform test does not prove shading identity. UzPainter's acceptance is equal output with Painter for the same instruction sequence (Owner; `UzPainter/.rulebook/decisions/001-acceptance-criterion-output-parity-with-substance-painter.md`); its comparison protocol is still to be defined (08, G-04).
 
 ## 7. How renders and screenshots are produced
 

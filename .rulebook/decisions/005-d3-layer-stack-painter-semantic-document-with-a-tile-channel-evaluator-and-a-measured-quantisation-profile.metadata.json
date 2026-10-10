@@ -1,0 +1,11 @@
+{
+  "id": 5,
+  "slug": "d3-layer-stack-painter-semantic-document-with-a-tile-channel-evaluator-and-a-measured-quantisation-profile",
+  "title": "D3 Layer stack: Painter-semantic document with a tile/channel evaluator and a measured quantisation profile",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

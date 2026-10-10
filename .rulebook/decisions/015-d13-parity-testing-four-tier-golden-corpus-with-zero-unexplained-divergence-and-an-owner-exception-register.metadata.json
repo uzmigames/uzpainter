@@ -1,0 +1,11 @@
+{
+  "id": 15,
+  "slug": "d13-parity-testing-four-tier-golden-corpus-with-zero-unexplained-divergence-and-an-owner-exception-register",
+  "title": "D13 Parity testing: four-tier golden corpus with zero unexplained divergence and an owner exception register",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

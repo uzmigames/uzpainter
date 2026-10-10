@@ -1,6 +1,6 @@
 # 1. Acceptance criterion: output parity with Substance Painter
 
-**Status**: proposed
+**Status**: accepted
 **Date**: 2026-10-10
 
 ## Context

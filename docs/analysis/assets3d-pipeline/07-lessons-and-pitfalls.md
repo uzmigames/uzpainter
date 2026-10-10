@@ -32,6 +32,7 @@ Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Apren
 | `pintura-cor-de-amostra-nao-procedural` | Procedural dirt rejected ("pra que … procedural") → reference-derived swatches projected in 3D + 3D masks | confirmed / validated | Bitmap BaseColor fills with exact UV placement are core; procedural grunge is secondary |
 | `pintura-cor-lavada-diagnostico` | "Washed" colour fixed by blind exposure/roughness edits → isolate display/HDRI/BaseColor, then normal/roughness/specular | hypothesis / pending | Needs unlit BaseColor output and per-channel diagnostics |
 | `pintura-couro-manchas-craquelado` | Uniform Voronoi read as reptile; >10 % fine stains read as camouflage; `cracks_leather` without Levels lightened everything | confirmed / pending | Levels/contrast on masks and per-layer opacity are required |
+| `pintura-especular-feltro-veu` | Felt read washed and plastic: default dielectric specular (F0 ≈ 4 %) under the large soft studio added a grey veil of +20–30 in G/B → OpenPBR `SpecularWeight` per layer (felt 0.5, leather/iron 1.0), exported map, Blender Specular IOR Level = 0.5 × weight, glTF `KHR_materials_specular`; global sheen rejected | confirmed / validated | A specular-weight channel is part of the material and of every export/engine mapping; without it the felt regains the veil |
 | `pintura-fill-ordem-dos-canais` | Script-created fill came out white: setting `active_channels` after `set_source` resets sources | confirmed / validated | Channel activation must not reset values (API ordering hazard to avoid by design) |
 | `pintura-isolamento-materiais-todos-canais` | Masks leaked into leather/metal/rim; frontal-only projection → measure limits on geometry; check ID, Height, Normal, Roughness, Metallic | confirmed / pending | Isolation per channel, including Height/Normal |
 | `pintura-isolar-contribuicao-das-camadas` | Leopard spots on skull; lowering the suspected layer changed nothing → export with each layer hidden, measure | confirmed / validated | Per-layer contribution export (or difference maps) is a required diagnostic |
@@ -55,8 +56,8 @@ Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Apren
 |---|---|---|---|
 | `bake-halo-suporte-geometrico` | Halo from a rounded low support; cage changes did not help → fix geometry first | confirmed / validated | Bake diagnostics must point to geometry, not hide it |
 | `bake-invalida-malha-uv-mudou` | New mesh/UV used old bakes/masks → bind every map to file/object/UVMap/transforms/triangulation | confirmed / pending | Every map/resource needs provenance hashes; changes must invalidate dependents |
-| `bake-normais-tbn-por-canto` | Coincident opposite faces with zero corner normals produced 2,641 black texels in a Painter re-export | confirmed / pending | Mesh import must validate finite, non-degenerate TBN and refuse or flag |
-| `bake-raw-cobertura-estagios` | Repair modified used surface silently; centre sampling missed thin triangles → RAW + coverage + stages + per-class counts | confirmed / pending | Any UzPainter baker must expose coverage/miss maps and never silently repair used surface |
+| `bake-normais-tbn-por-canto` | Coincident opposite faces with zero corner normals produced 2,641 black texels in a Painter re-export; control A (six corner normals repaired) removed them but left residuals up to 1,472/65,535 against the delivery; the internal zero → NaN stage and the production fix are not confirmed | confirmed / pending | Mesh import must validate finite, non-degenerate TBN and refuse or flag |
+| `bake-raw-cobertura-estagios` | Repair modified used surface silently; centre sampling missed thin triangles → RAW + coverage + stages + per-class counts | confirmed / pending | Any UzPainter baker must expose coverage/miss maps and never silently repair used surface; the corrected helper does not retro-certify assets baked earlier or every cage-fill variant |
 | `bake-triangulacao-avaliada-salva` | Same polygons, different evaluated triangulation after vertices moved | confirmed / pending | Import the exact triangulated mesh; never re-triangulate |
 | `low-linhas-comuns-por-painel` | Inverted normals (black) on tab interiors from row heights chosen per column → common rows; count Z < 0 per part | confirmed / validated | Per-part Z < 0 statistics are a useful bake QA output |
 | REFERENCE: AO bake with excluded collections | Selected-to-active AO did not see the high | F — REFERENCE.md | Explicit high-mesh inputs |
@@ -69,7 +70,7 @@ Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Apren
 |---|---|---|---|
 | `uv-normalizar-todas-as-ilhas` | Zero-overlap auto UV judged sufficient → normalise every island incl. single triangles; checker | confirmed / pending | UzPainter consumes UV as given; it must not repack, but should report density |
 | `uv-margens-medidas-resolucao` | Pack parameter 7 px questioned vs measured gap 17.1 px / border 9.2 px at 4K | confirmed / validated | Padding/dilation must be judged on measured texels at the declared resolution |
-| `uv-anatomia-cartas-espelhadas` | xatlas mirrored ~half the charts → unmirror by signed area | confirmed / validated | Import must detect flipped UV triangles (signed area) |
+| `uv-anatomia-cartas-espelhadas` | xatlas mirrored ~half the charts → unmirror by signed area | confirmed / validated | Import must detect and report flipped UV triangles (signed area); zero inversions is this project's certification policy, while intentional mirroring elsewhere would need explicit tangent-handedness support |
 | `uv-perfil-variavel-slim` | Analytic column UV sheared where the profile changes → ABF + SLIM | confirmed / validated | Out of scope (Blender), but distortion stats matter for painting |
 | `geometria-camadas-antes-da-uv` | UV passed while the low had lost layers → check construction before UV and low+normal after bake | confirmed / validated | Painting must not start on a failed construction (gate input) |
 | `low-caudas-franjas-voxel` | Thin tails/fringe did not converge through voxel UV → rebuild as clean cloth or cards | confirmed / pending | Fringe/fray may need alpha cards (alpha output pending) |
@@ -79,12 +80,12 @@ Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Apren
 
 | Card / source | Symptom → cause → fix (F) | Status | Why it matters for UzPainter (R) |
 |---|---|---|---|
-| `exportacao-spp-mapas-precisao-nativa` | Saved `.spp` re-exports differed from deliveries (Normal on 56 % of pixels by ±1 8-bit level on the book; black texels on the hat); Pillow hides RGB16 differences | confirmed / pending | Deterministic, bit-reproducible export from a saved project is a hard requirement |
+| `exportacao-spp-mapas-precisao-nativa` | Saved `.spp` re-exports differed from deliveries (Normal on 56 % of pixels by ±1 8-bit level on the book; black texels on the hat); Pillow hides RGB16 differences | confirmed / pending | Repeat exports of one saved project must be identical on the same build; reproducing a historical delivery and equalling Painter's output are separate properties, each tested on its own |
 | `exportacao-rodada-coerente` | `.spp` advanced while `.blend`/maps/GLB stayed old | confirmed / pending | Export must stamp round/version and source project hash |
 | `exportacao-round-trip-normais-microfaces` | GLB import showed shading wedges; exporter dropped micro-faces | confirmed / pending | Boundary: mesh export stays in Blender, but UzPainter must not alter the mesh it was given |
 | `exportacao-escala-fisica-fonte` | Reimport kept Meshy normalisation (items ≈ 1.91 m) | confirmed / pending | Physical units must be preserved for physical-scale procedurals |
 | `exportacao-pivo-empunhadura` | Pivots were modelling-relative → grip/headband pivot convention; rigid move only (shape, UV, normals, textures unchanged) | confirmed / validated | Textures must survive a rigid pivot move unchanged (UV-space data only) |
-| QA05 SPP audit | Re-export of the hat changed procedural resource display names (`Mask Editor` → `mg_mask_editor` …) and produced black normal texels; grimoire Normal differed by quantisation | F — `Docs/analysis/skeletal-mage-review/05-auditoria-spp-10-13-20261007.md` | Resource versions must be pinned inside the project |
+| QA05 SPP audit | Re-export of the hat changed procedural resource display names (`Mask Editor` → `mg_mask_editor` …) and produced black normal texels; grimoire Normal differed by quantisation. The audit labels resource re-evaluation as an unproven hypothesis ("Hipótese (não comprovada)"); later evidence in the same file traces the black texels to zero corner normals in the saved low and states that a resource-version change is not established as the explanation | F — `Docs/analysis/skeletal-mage-review/05-auditoria-spp-10-13-20261007.md` | Resource versions must be pinned inside the project as prevention, independent of the unproven cause |
 
 ## 6. Rendering and review
 
@@ -107,7 +108,7 @@ Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Apren
 |---|---|---|---|
 | Hidden state | Session-scoped resource URLs, stale captures, previous job status, dirty flags, cached UIDs | F | Section 1 cards |
 | Silent success | Exit code 0 on failed batch, filtered logs, "SYNC_DONE" with unchanged maps | F | `operacao-sync-estado-por-sessao`; REFERENCE.md |
-| Non-reproducible exports | Cross-session Normal/Height drift; procedural resource re-resolution; NaN normals | F | Section 5 |
+| Non-reproducible exports | Cross-session Normal/Height drift; resource display names changed on re-export (cause not established); black normal texels from zero corner normals in the saved low | F | Section 5 |
 | Painting over defects | Paint started before geometry/UV/bake gates passed and was lost | F | `gate-nao-pintar-geometria-reprovada` |
 | Technical ≠ visual | All checks green, user rejected paint for missing depth | F | `pintura-qualidade-visual-nao-tecnica` |
 | Lighting confusion | Presentation presets, exposure, orientation and viewport light masked material errors | F | Section 6 cards |

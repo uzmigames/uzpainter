@@ -1,0 +1,11 @@
+{
+  "id": 9,
+  "slug": "d7-export-painter-compatible-json-compiled-into-a-validated-plan-unreal-orm-and-uzengine-presets",
+  "title": "D7 Export: Painter-compatible JSON compiled into a validated plan; Unreal ORM and UzEngine presets",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

@@ -1,0 +1,11 @@
+{
+  "id": 24,
+  "slug": "q11-project-file-policy-self-contained-portable-uzp-10-candidate-budget-checkpoint-and-revision-retention",
+  "title": "Q11 Project file policy: self-contained portable .uzp, 10 % candidate budget, checkpoint and revision retention",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

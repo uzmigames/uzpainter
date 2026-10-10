@@ -1,0 +1,11 @@
+{
+  "id": 6,
+  "slug": "d4-procedural-content-certified-uzpainter-families-plus-project-private-snapshots-no-adobe-runtime-or-content",
+  "title": "D4 Procedural content: certified UzPainter families plus project-private snapshots; no Adobe runtime or content",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

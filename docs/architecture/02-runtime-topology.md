@@ -1,0 +1,67 @@
+# 02 — Runtime topology
+
+Implements D1 (`docs/analysis/architecture-discussion/05-resolution.md` §1, §2, §3; decision 003) with the owner answers of 2026-10-10 that touch it: Q9 (decision 022: Windows 10/11 x64, DX12 primary plus Vulkan as the second GPU backend), Q12 (decision 025: trusted opt-in `run_python` behind `--allow-python`) and Q8 (decision 021: the render core is a vendored copy, `13-engine-integration.md`). Requirements: INT-01, INT-04, INT-05, INT-07, BAK-05, NFR-01, NFR-06, ARC-01, ARC-02, ARC-14 (`docs/prd.md`).
+
+## 1. Processes
+
+One executable, two roles. In stdio MCP the AI client launches the server process and owns its pipes (`docs/analysis/technology-options/05-review-response.md` finding 29), so the launched process must be the one that survives faults.
+
+| Role | Command | Owns | Must never |
+|---|---|---|---|
+| **Supervisor** | `UzPainter.exe --mcp [--mcp-http 127.0.0.1:<port>] [--roots …] [--allow-python] [--gpu-backend dx12\|vulkan]` (`--mcp-http` for a resident instance) | MCP transport and session; embedded CPython running the official Python MCP SDK (UzPainter's own code, never user scripts); command admission; per-project mutation lease; durable job ledger (SQLite file in the user's app-data folder); worker process lifecycle, including the backend choice and the Python policy passed to every worker; relaunch and reconciliation | Initialise a GPU device; hold an editable copy of the document; execute user Python |
+| **Worker** | `UzPainter.exe --worker --pipe \\.\pipe\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12\|vulkan [--allow-python]` | One open document, the project store connection, the engine thread and the RHI device of the selected backend, evaluator, bakers, exporter, renderers; embedded CPython for the `substance_painter` facade, `run` scripts and, only under `--allow-python`, `run_python` | Accept connections from anything but its supervisor; execute `run_python` when launched without `--allow-python` |
+| **Single process** | `UzPainter.exe run <script.py>`, CLI verbs, `--preview` (each accepts `--gpu-backend`) | Worker role hosting the caller directly; running a script file is the operator's explicit act, so `run` needs no flag | — |
+
+**GPU backend (Q9).** Each process that renders uses exactly one backend: DX12 (default) or Vulkan, chosen by `--gpu-backend` and fixed for the life of the supervisor; changing it means restarting the server. There is no silent fallback from one backend to the other, because the backend is part of every render receipt (`07-preview-and-render-parity.md` §5). If no device of the requested backend can be created (requirements in `13-engine-integration.md` §5), the worker still starts: operations that need the GPU (compositing, preview, path tracing, captures) fail with `gpu_backend_unavailable {backend, reason}` before mutating anything, while CPU baking (Embree) and other GPU-free operations stay available. Texture outputs are identical on both backends (Tiers 0–2 are exact); the path tracer's cross-backend agreement is defined in `07-preview-and-render-parity.md` §3.
+
+Why a boundary: the vendored DX12 command list aborts the process after repeated RHI errors (`FatalErrorLoop` → `std::abort()` in `thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_command_list.cpp`, copied unchanged from UzEngine `runtime/engine/rhi/dx12/dx12_command_list.cpp`; first cited in `04-astra-critique.md` D1); device removal (DX12) or device loss (Vulkan) requires device re-creation; and the upstream fence waits have no usable deadline (DX12 waits forever, Vulkan gives up after 5 s without reporting device loss), which the copy replaces with a deadline wait (`13-engine-integration.md` §3.4). A worker death must not end the agent's MCP session.
+
+## 2. IPC
+
+- Transport: Windows named pipe, byte stream, newline-delimited JSON frames (UTF-8, no literal newlines inside a frame). Handshake frame `{"protocol":"uzp-ipc/1","worker_pid":…,"build":"<semver+hash>","gpu_backend":"dx12|vulkan","gpu_status":"ready|unavailable","python":"allowed|disabled"}`.
+- Vocabulary: the same JSON shapes as the MCP tool calls. Request `{"id":"<uuid>","method":"tools/call","name":"<tool>","arguments":{…},"idempotency_key":"<uuid>","expected_revision":<int|null>}`; reply `{"id":…,"result":{…},"committed_revision":<int>}` or `{"id":…,"error":{"code":"<string>","message":…,"details":{…}}}`; notifications `{"job_id":…,"status":…,"progress":0..1,"message":…}` and `{"event":"revision","revision":<int>}`.
+- Large payloads never travel inline. Images, maps and dumps are written under an allowlisted root and referenced by path + SHA-256; a capture additionally returns a downscaled PNG as an MCP image block built by the supervisor from the file.
+- Protocol version, backend and Python policy are part of the handshake; a mismatch with what the supervisor requested is a fatal supervisor error, never a silent fallback.
+
+## 3. Command admission and the mutation lease
+
+- The supervisor holds one **mutation lease per open project**. A mutating call from a client without the lease returns `error.code = "lease_held"` with the holder and the active job id. Reads need no lease and use committed snapshots.
+- **Idempotency (ARC-02).** Every mutating call carries `idempotency_key`. The worker commits `{project_uuid, idempotency_key, request_hash, outcome, committed_revision}` to the project store's `operation` table **in the same SQLite transaction as the revision** (`09-project-file-format.md` §4); that row, not the supervisor's ledger, is the authority on what happened. A retry with a known key and the same `request_hash` returns the stored outcome without mutating; the same key with a different `request_hash` is rejected (`idempotency_conflict`). After a worker restart the supervisor reconciles its ledger from the `operation` rows newer than the last revision it acknowledged **before admitting any call for that project**; an unresolved outcome is never treated as a new mutation. The supervisor's ledger stays a control-plane record (jobs, leases, acknowledgements, cached outcomes), not a second editable document.
+- `expected_revision`, when given, must equal the current revision or the call is rejected (`error.code = "stale_revision"`).
+- **Python policy (Q12).** `run_python` is registered only when the supervisor starts with `--allow-python` (`11-mcp-server.md` §6). Without the flag the tool is absent from the tool list and the worker also rejects the method at the IPC boundary (`python_disabled`), so no client reaches user Python through the pipe. Every required operation is reachable through typed tools (ARC-14); their handlers are UzPainter code and do not depend on the flag.
+- Long operations return a `job_id` immediately or, with `wait=true`, block until the terminal state while streaming progress notifications. Terminal states: `succeeded`, `failed`, `cancelled`, `interrupted` (worker died; the outcome is resolved by reconciliation, §5).
+
+## 4. Threads and the GIL (worker)
+
+| Thread | Role |
+|---|---|
+| Python command thread | Interpreter main thread. Runs scripts (`run`; `run_python` only when allowed) and typed command handlers. Takes the document lock for the duration of a mutation (CPU-side, short) and releases the GIL (`py::gil_scoped_release`) around any engine or job wait. |
+| Python dispatcher thread | Delivers `substance_painter.event` events and facade callbacks after committed transitions; never holds the document lock while calling Python; survives the originating script's return (`10-python-api.md` §4). |
+| Engine thread | Sole owner of the RHI device of the selected backend (DX12 or Vulkan). Executes evaluation, capture and readback requests against revision snapshots from a queue; every GPU wait carries a deadline; signals completion through futures. |
+| Job pool | CPU jobs (Embree, encoders, parsers, zstd). Cancellation checked at tile or file boundaries. |
+| Preview thread | Optional; reads the double-buffered last evaluation; cannot block the engine thread. |
+
+The render thread computes outside the GIL. No thread invokes arbitrary Python while holding the document lock.
+
+## 5. Failure model
+
+| Failure | Behaviour |
+|---|---|
+| Failed call or script error | A failed individual mutation (typed tool, native or facade call) leaves that mutation unapplied: its transaction commits nothing and writes no `operation` row. A script (`run`, `run_python`) is not a transaction: an exception may follow calls that already committed, and those stay committed. The structured error receipt carries the traceback, the last committed revision and the partial changes (created/modified/hidden ids of each committed call). Atomic multi-call execution exists only through an explicitly declared native `Transaction` (`03-project-model.md` §6, `10-python-api.md` §5); the facade's documented grouped-modification context groups calls but rolls nothing back. |
+| Native fault in the worker (SEH, abort) | Minidump written by the vendored crash handler (`thirdparty/uzengine-render-core/platform/windows/crash_handler.h`). Supervisor marks in-flight jobs `interrupted`, relaunches the worker on the project's last committed revision, reconciles from the `operation` rows (§3), then answers pending calls; the MCP session stays open. |
+| Lost acknowledgement (worker committed, then died) | Resolved from the `operation` row: the retry returns the stored outcome; no second revision is created. |
+| GPU device removed (DX12 `DXGI_ERROR_DEVICE_REMOVED`) or lost (Vulkan `VK_ERROR_DEVICE_LOST`) | Engine thread reports `device_removed {backend, reason}`; the job fails; the worker exits deliberately; supervisor relaunches (new device, same backend). |
+| Stalled GPU | The engine thread's deadline wait (configurable, default 60 s per evaluation request) returns `timeout`; the job fails and the worker exits; supervisor relaunches. |
+| Supervisor death | The worker detects the broken pipe and exits after committing nothing further (no uncontrolled writer survives). |
+| Interrupted write | SQLite's rollback journal guarantees the file is either the previous or the new revision (`09-project-file-format.md` §4). |
+
+Recovery is never a silent replay. A key with an `operation` row returns its stored outcome. A key with no row that is newer than the store's pruning horizon did not commit (a failed or interrupted mutation writes no row), so its retry executes once against unchanged state. A key older than the horizon is answered `outcome_unknown` with the current revision and is never executed (`09-project-file-format.md` §4).
+
+## 6. Autosave and checkpoints
+
+- Every committed mutation is written to the project store as a new revision within the same transaction (cheap: manifest row, new blobs and the `operation` row). "Save" in the Painter sense names a **checkpoint** revision; `save_as` writes a new file (`09-project-file-format.md` §4).
+- The worker therefore has no separate autosave timer; the file at rest always holds the last committed revision.
+
+## 7. Settling evidence (Phase 2, node P2-SUPERVISOR)
+
+Kill the worker during a bake and during a save; kill it after the durable commit and before the acknowledgement, then retry the same request (stored outcome, no second revision) and a changed request with the same key (`idempotency_conflict`); stall the GPU; disconnect and reconnect the client. Compare a single-call failure, an unwrapped multi-call script failure and a failing native `Transaction`. Inject device removal on DX12 (`ID3D12Device5::RemoveDevice`) and device loss on Vulkan (test-only fault hook). Start with `--allow-python` off and confirm `run_python` is absent from the tool list and rejected at the IPC boundary; start with an unavailable backend and confirm `gpu_backend_unavailable` while CPU baking still runs. Assert: MCP session alive, last committed revision correct, no duplicate commit, recovery time recorded, per-call overhead measured against the single-process `run` path for the same command corpus, on both backends.

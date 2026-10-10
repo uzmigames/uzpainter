@@ -34,17 +34,14 @@ How Painter 12.1.0 exports textures and meshes from Python: the JSON export conf
 | `destChannel` / `srcChannel` | `L`, `R`, `G`, `B`, `A` | "In addition to alpha channel, either R+G+B must be specified, or either L only"; `L` read from a color map "will generate a mix of R+G+B" | Fact | `export.html` |
 | `srcMapType` | `documentMap`, `meshMap`, `virtualMap`, `defaultMap` | channel of the document, baked mesh map, generated (converted) map, constant | Fact | same |
 | `srcMapName` (documentMap) | `basecolor, height, specular, opacity, emissive, displacement, glossiness, roughness, anisotropylevel, anisotropyangle, transmissive, scattering, reflection, ior, metallic, normal, ambientOcclusion, diffuse, specularlevel, blendingmask, user0`…`user7` | doc list (does not mention OpenPBR names or `user8`–`user31`) | Fact (list); OpenPBR naming in export not confirmed | same |
-| `srcMapName` (meshMap) | str | `ambient_occlusion, id, curvature, normal_base, world_space_normals, position, thickness` (doc list); Adobe's "Mesh Maps" preset additionally outputs bent normals, height and opacity (`bent_normals`, `height`, `opacity` in Adobe's test map) | Fact | `export.html`; `MODS\engine_tests\test_baking.py` |
+| `srcMapName` (meshMap) | str | `ambient_occlusion, id, curvature, normal_base, world_space_normals, position, thickness` (doc list); Adobe's "Mesh Maps" preset additionally outputs bent normals, height and opacity ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\engine_tests\test_baking.py.]) | Fact | `export.html`; `MODS\engine_tests\test_baking.py` |
 | `srcMapName` (virtualMap) | str | `Normal_OpenGL, Normal_DirectX, AO_Mixed, Diffuse, Specular, Glossiness, Unity4Diff, Unity4Gloss, reflection, 1/ior, Glossiness2, f0, View_2D` | Fact | `export.html` |
 | `srcMapName` (defaultMap) | str | `black`, `white` | Fact | same |
 | `exportPresets[].maps[].parameters` | dict | Per-map defaults: `fileFormat`, `bitDepth`, `dithering`, `sizeLog2`, `paddingAlgorithm`, `dilationDistance` | Fact | same |
 | `exportList[]` | list | `{rootPath, filter?, exportPreset?}`; `rootPath` = Texture Set name, or `TextureSet/Stack` for layered materials | Fact | same |
 | `exportList[].filter` | dict | `outputMaps` (file-name patterns incl. wildcards), `uvTiles` (`[[u, v], …]`) | Fact | same |
 | `exportParameters[]` | list | Ordered override rules `{filter?, parameters?}`; `filter` keys `dataPaths`, `outputMaps`, `uvTiles`; `{}` matches all, `{"dataPaths": []}` matches nothing | Fact | same |
-| `exportMeshTessellation` | bool | Present in Adobe configs and in project-stored exporter settings; not documented | Fact (presence); meaning Hypothesis (export tessellated mesh with textures) | `MODS\automated_tests\test_export_texture_deps.py`; `engine_tests\test_usd_openpbr_roundtrip.py`; strings of `exporterv2.json` in `MODS\automated_tests\resources\layerstack-cube.spp` |
-| `exportUSD` | bool | Not documented; Adobe's round-trip test sets it to `True` and then looks for `<project>.usd` / `<project>.sbspt.usd` (skipping `*.geo.usd`) in the export folder | Fact (test behaviour); full semantics not confirmed | `MODS\engine_tests\test_usd_openpbr_roundtrip.py` |
-| `keepAlpha` (parameter) | bool | Used by Adobe's per-node export test; not documented | Fact (presence) | `MODS\engine_tests\test_export_layerstack_nodes.py` |
-| Stored project defaults | — | Projects store an exporter config (`exporterv2.json`, `"version": 3`) e.g. `"defaultExportPreset": "export-preset-generator://doc-channel-normal-no-alpha"`, `"dilationDistance": 16`, `"paddingAlgorithm": "infinite"`, `"exportShaderParams": false`, `"exportUSD": false`, `"exportMeshTessellation": false` | Fact (strings) | `MODS\automated_tests\resources\layerstack-cube.spp`; templates in `PAINTER\resources\starter_assets\templates\*.spt` store their own `defaultExportPreset` (e.g. `Unreal Engine.spt` → `resource://starter_assets/Unreal Engine (Packed)?version=8339356058946582545.spexp`) |
+| Undocumented keys and stored exporter values | — | [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\automated_tests\; PAINTER\resources\python\modules\engine_tests\; PAINTER\resources\python\modules\automated_tests\resources\layerstack-cube.spp; PAINTER\resources\starter_assets\templates\*.spt.] A project created from the `Unreal Engine` template is expected to default to the `Unreal Engine (Packed)` export preset. | Hypothesis (to confirm in the export window) | — |
 
 ### 2.1 Parameter resolution rules
 
@@ -58,25 +55,9 @@ How Painter 12.1.0 exports textures and meshes from Python: the JSON export conf
 
 ## 3. File formats and bit depths
 
-Adobe's export test enumerates these combinations (all expected to succeed) — **Fact**, `MODS\automated_tests\test_export_fileformats_bitdepth.py` (`parameters` list):
+`bitDepth` must be supported by `fileFormat`, and float depths are named `16f`/`32f` (**Fact**, `export.html`; changelog below). [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\automated_tests\test_export_fileformats_bitdepth.py.] The supported format / bit-depth / dithering combinations are **not confirmed**; take them from Painter's export window and Adobe's public export documentation and confirm by export (§11).
 
-| `fileFormat` | `bitDepth` values tested | Dithering tested |
-|---|---|---|
-| `png` | `8`, `16` | yes |
-| `tga` | `8` | yes |
-| `bmp` | `8` | yes |
-| `jpeg` | `8` | yes |
-| `jng` | `8` | yes |
-| `webp` | `8` | yes |
-| `pgm` | `16` | yes |
-| `j2k` | `8`, `16` | yes |
-| `jp2` | `8`, `16` | yes |
-| `psd` | `8`, `16` | yes (exported into a sub-folder in the test) |
-| `tiff` | `8`, `16`, `32f` | yes |
-| `exr` | `16f`, `32f` | yes |
-| `hdr` | `32f` | yes |
-
-API 0.2.10 fixed EXR `32f` being saved as `16f` (**Fact**, changelog in `PYDOC\index.html`). The test code also special-cases a `sbsar` format folder, but no `sbsar` row is in its parameter list (**Fact**; `sbsar` export not confirmed). The MCP bridge only accepts `png, tga, jpg, jpeg, tif, tiff, exr, bmp` and bit depths `8, 16, 32` (**Fact**, `MCP\src\substance_painter_mcp\operations.py` → `plan_texture_export`).
+API 0.2.10 fixed EXR `32f` being saved as `16f` (**Fact**, changelog in `PYDOC\index.html`). `sbsar` export is not confirmed. The MCP bridge only accepts `png, tga, jpg, jpeg, tif, tiff, exr, bmp` and bit depths `8, 16, 32` (**Fact**, `MCP\src\substance_painter_mcp\operations.py` → `plan_texture_export`).
 
 ## 4. Built-in presets
 
@@ -89,7 +70,7 @@ API 0.2.10 fixed EXR `32f` being saved as `16f` (**Fact**, changelog in `PYDOC\i
 | Adobe name | Generator URL found in the executable | Label | Source |
 |---|---|---|---|
 | 2D View | `export-preset-generator://viewport2d` | pairing Hypothesis | names: Adobe "Predefined Output templates" https://experienceleague.adobe.com/en/docs/substance-3d-painter/using/export/output-templates/default-output-templates/predefined-presets ; URLs: strings in `PAINTER\Adobe Substance 3D Painter.exe` |
-| Document channels + Normal + AO (No Alpha) | `export-preset-generator://doc-channel-normal-no-alpha` (also the default stored in projects; Adobe test uses the name verbatim) | Fact (default string, test name); pairing Hypothesis | same; `MODS\engine_tests\test_usd_openpbr_roundtrip.py` |
+| Document channels + Normal + AO (No Alpha) | `export-preset-generator://doc-channel-normal-no-alpha` ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\automated_tests\resources\layerstack-cube.spp; PAINTER\resources\python\modules\engine_tests\test_usd_openpbr_roundtrip.py.]) | pairing Hypothesis | same |
 | Document channels + Normal + AO (With Alpha) | `export-preset-generator://doc-channel-normal-with-alpha` | pairing Hypothesis | same |
 | Sketchfab | `export-preset-generator://sketchfab` | pairing Hypothesis | same |
 | Substance 3D Stager | `export-preset-generator://adobe-standard-material` | pairing Hypothesis | same |
@@ -136,19 +117,11 @@ Source: Adobe "Output templates", https://experienceleague.adobe.com/en/docs/sub
 
 ### 7.1 How the packing was obtained
 
-`.spexp` files are binary (magic `DD 2F 7C 1B`), not JSON (**Fact**, `xxd` of `PRESETS\Unreal Engine (Packed).spexp`). They embed their own schema: type `DataExportPreset {maps, uid}`, `DataExportMap {bitdepth, channels, dithering, fileformat, path, uid}`, `DataExportChannel {channelSrc, mapId, mapIdType}` (**Fact**, readable type and field names in every file). A throw-away reader was written this session (kept only in the session scratchpad, not in the repository); its layout, enough to re-implement it, is: per map it reads `bitdepth` (int32), the channel list, `dithering` (1 byte), `fileformat` and `path` (length-prefixed strings) and `uid`; each channel is `channelSrc` (int32), `mapId` (Qt-serialized variant: string for virtual maps, unsigned int otherwise) and `mapIdType` (int32). Every map record of all 34 files ended exactly at the byte offset stored in its header, which validates the field layout (**Fact**, computed). The meaning of the decoded numbers is inferred (**Hypothesis**):
-
-| Decoded value | Interpretation | Evidence |
-|---|---|---|
-| Position of a channel record | destination: 1 record = `L`; 3 = `R,G,B`; 4 = `R,G,B,A` | matches the JSON rule "R+G+B or L only, plus alpha"; the 4th record of every 4-record map is a grayscale or opacity/glossiness source (e.g. Unity HDRP `MaskMap` decodes to metallic, AO, empty, glossiness; CryEngine `ddna` to normal RGB + glossiness) |
-| `channelSrc` | 0=R, 1=G, 2=B, 3=A, 4=L | grayscale sources always use 4; normal maps use 0/1/2 (3 for alpha in Arnold) |
-| `mapIdType` | 0=empty, 1=documentMap, 2=virtualMap, 3=meshMap | virtual maps carry their string names (`Normal_DirectX`, `AO_Mixed`, `Glossiness`…); "Mesh Maps" preset uses only type 3 |
-| documentMap ids | 0=basecolor, 1=height, 2=specular, 3=opacity, 4=emissive, 6=glossiness, 7=roughness, 8=anisotropylevel, 9=anisotropyangle, 10=transmissive, 13=metallic, 24=diffuse, 25=specularlevel, 27=scattering, 64–67=user0–user3 | consistent with the output file names across all 34 presets (e.g. every "Metallic"/"Metalness" file uses 13; Unreal SSS replaces the opacity id 3 by 27 in BaseColor alpha, matching Adobe's description "replacing opacity map with subsurface scattering") |
-| meshMap ids | 0=id, 1=ambient_occlusion, 2=curvature, 3=world_space_normals, 4=position, 5=thickness, 6=normal_base, 7=height, 8=bent_normals, 9=opacity | from the "Mesh Maps" file names |
-| `bitdepth` field | 0 or 1; normals/height maps mostly 1 | meaning (e.g. 8-bit vs 16-bit) not confirmed |
-| `fileformat` | `png` in every shipped preset | Fact (plain string) |
+`.spexp` files are binary (file signature `DD 2F 7C 1B`), not JSON (**Fact**, `xxd` of `PRESETS\Unreal Engine (Packed).spexp`). [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\starter_assets\export-presets\*.spexp.] The tables in §7.2–7.6 state the resulting output layouts as behaviour — which file each preset writes and which channel feeds its R, G, B and A — and are **Hypothesis** until confirmed through the documented `list_output_maps()` calls (§11). The shelf presets write PNG files.
 
 **Recommendation**: confirm this table once inside Painter with `ResourceExportPreset.list_output_maps()` for each preset (it returns the documented JSON form) before relying on it.
+
+Labels for §7.2–7.6 and the Appendix (**Hypothesis**): the channel names are an interpretation of decoded preset data ([Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PRESETS\Unreal Engine (Packed).spexp; PRESETS\Unreal Engine SSS (Packed).spexp.]). Agreement of record boundaries validates the field layout only; it does not establish colour conversion, normal/AO derivation, alpha handling, quantization, padding or file naming — see §11.
 
 ### 7.2 PBR Metallic Roughness
 
@@ -157,8 +130,8 @@ Source: Adobe "Output templates", https://experienceleague.adobe.com/en/docs/sub
 | `$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)` | basecolor.R | basecolor.G | basecolor.B | opacity (L) | |
 | `$mesh_$textureSet_Roughness(_$colorSpace)(.$udim)` | roughness (single L channel) | | | | grayscale file |
 | `$mesh_$textureSet_Metallic(_$colorSpace)(.$udim)` | metallic (L) | | | | grayscale file |
-| `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | Normal_DirectX.R | Normal_DirectX.G | Normal_DirectX.B | — | bitdepth flag 1 |
-| `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | height (L) | | | | bitdepth flag 1 |
+| `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | Normal_DirectX.R | Normal_DirectX.G | Normal_DirectX.B | — | bit depth may differ from the other maps (not confirmed, §11; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PRESETS\PBR Metallic Roughness.spexp.]) |
+| `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | height (L) | | | | bit depth may differ from the other maps (not confirmed, §11) |
 | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | emissive.R | emissive.G | emissive.B | — | |
 
 ### 7.3 Unreal Engine (Packed) — "Unreal Engine 4 (Packed)" / ORM
@@ -170,14 +143,14 @@ Source: Adobe "Output templates", https://experienceleague.adobe.com/en/docs/sub
 | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | Normal_DirectX.R | Normal_DirectX.G | Normal_DirectX.B | — | dithering on |
 | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | emissive.R | emissive.G | emissive.B | — | |
 
-`Unreal Engine SSS (Packed)` is identical except BaseColor alpha = document id 27 (scattering, **Hypothesis**). The shipped preset is named "Unreal Engine (Packed)" (no "4") in 12.1.0 (**Fact**, `PRESETS`).
+`Unreal Engine SSS (Packed)` is identical except that BaseColor alpha carries scattering instead of opacity (**Hypothesis**; matches Adobe's description "replacing opacity map with subsurface scattering"; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PRESETS\Unreal Engine SSS (Packed).spexp.]). The shipped preset is named "Unreal Engine (Packed)" (no "4") in 12.1.0 (**Fact**, `PRESETS`).
 
 ### 7.4 Unity
 
 | Preset | Output file | R | G | B | A |
 |---|---|---|---|---|---|
 | Unity HD Render Pipeline (Metallic Standard) | `…_BaseMap…` | basecolor.R | basecolor.G | basecolor.B | opacity |
-| | `…_MaskMap…` | metallic | Mixed AO | (empty) | Glossiness (= 1 − roughness) |
+| | `…_MaskMap…` | metallic | Mixed AO | (empty) | Glossiness ("inverse of roughness"; `1 − roughness` is a Hypothesis) |
 | | `…_Normal…` | Normal_OpenGL.R | Normal_OpenGL.G | Normal_OpenGL.B | — (dithering on) |
 | | `…_Emissive…` | emissive.R | emissive.G | emissive.B | — |
 | Unity Universal Render Pipeline (Metallic Standard) | `…_AlbedoTransparency…` | basecolor.R | basecolor.G | basecolor.B | opacity |
@@ -193,28 +166,30 @@ Predefined (embedded) preset; output suffixes `_baseColor`, `_normal`, `_occlusi
 
 ### 7.6 Mesh Maps
 
-| Output file | Composition | bitdepth flag |
-|---|---|---|
-| `$textureSet_normal_base(_$colorSpace)(.$udim)` | RGB ← mesh normal_base RGB | 1 |
-| `$textureSet_world_space_normals(...)` | RGB ← mesh world_space_normals RGB | 1 |
-| `$textureSet_id(...)` | RGB ← mesh id RGB | 1 |
-| `$textureSet_position(...)` | RGB ← mesh position RGB | 1 |
-| `$textureSet_bent_normals_base(...)` | RGB ← mesh bent_normals RGB | 1 |
-| `$textureSet_ambient_occlusion(...)` | L ← mesh ambient_occlusion | 0 |
-| `$textureSet_curvature(...)` | L ← mesh curvature | 0 |
-| `$textureSet_thickness(...)` | L ← mesh thickness | 0 |
-| `$textureSet_height_base(...)` | L ← mesh height | 0 |
-| `$textureSet_opacity_base(...)` | L ← mesh opacity | 0 |
+| Output file | Composition |
+|---|---|
+| `$textureSet_normal_base(_$colorSpace)(.$udim)` | RGB ← mesh normal_base RGB |
+| `$textureSet_world_space_normals(...)` | RGB ← mesh world_space_normals RGB |
+| `$textureSet_id(...)` | RGB ← mesh id RGB |
+| `$textureSet_position(...)` | RGB ← mesh position RGB |
+| `$textureSet_bent_normals_base(...)` | RGB ← mesh bent_normals RGB |
+| `$textureSet_ambient_occlusion(...)` | L ← mesh ambient_occlusion |
+| `$textureSet_curvature(...)` | L ← mesh curvature |
+| `$textureSet_thickness(...)` | L ← mesh thickness |
+| `$textureSet_height_base(...)` | L ← mesh height |
+| `$textureSet_opacity_base(...)` | L ← mesh opacity |
 
-Adobe's baking test exports this preset per Texture Set with `fileFormat: bmp`, `bitDepth: 8`, `dithering: False`, `paddingAlgorithm: passthrough`, filtering `outputMaps` to the slots that hold a mesh map (**Fact**, `MODS\engine_tests\test_baking.py` → `_export_mesh_maps`).
+Per-map bit depth of this preset: [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PRESETS\Mesh Maps.spexp.] Confirm by export (§11).
+
+[Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\engine_tests\test_baking.py.] Whether `list_output_maps()` returns a grayscale map as a single `L` channel or as `L` copied to `R`, `G` and `B` is **not confirmed** (first §11 check); the grayscale/RGB form of a written file matters for output comparison.
 
 ## 8. Padding, dithering, size defaults in practice
 
 | Statement | Label | Source |
 |---|---|---|
 | Adobe's examples use `{"dithering": True, "paddingAlgorithm": "infinite"}` as global parameters and `sizeLog2` overrides per Texture Set. | Fact | `export.html` example |
-| Projects store `dilationDistance: 16`, `paddingAlgorithm: "infinite"` as exporter defaults. | Fact (strings) | `MODS\automated_tests\resources\layerstack-cube.spp` |
-| The MCP bridge always sends `dithering: True`, `paddingAlgorithm: "infinite"`, plus optional `sizeLog2` (5–14), `fileFormat`, `bitDepth`; it never sends inline presets, `dilationDistance`, UV-tile filters or per-map rules. | Fact | `MCP\src\substance_painter_mcp\operations.py` → `plan_texture_export` |
+| Export defaults of a new 12.1 project are not confirmed (§11). [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\automated_tests\resources\layerstack-cube.spp.] | not confirmed | — |
+| The MCP bridge always sends `dithering: True`, `paddingAlgorithm: "infinite"`, plus optional scalar `sizeLog2` (5–14; no `[w, h]` pair), `fileFormat`, `bitDepth` (`8`, `16` or `32` only: Adobe's test names float depths `16f`/`32f`, which the bridge rejects; whether Painter accepts `32` is not confirmed); it never sends per-root `exportPreset`, inline presets, `dilationDistance`, UV-tile filters or per-map rules. | Fact | `MCP\src\substance_painter_mcp\operations.py` → `plan_texture_export` |
 
 ## 9. Mesh export
 
@@ -223,228 +198,35 @@ Adobe's baking test exports this preset per Texture Set with `fileFormat: bmp`, 
 | Call | `export_mesh(file_path, option)`; format from the extension: `.usd`, `.obj`, `.fbx`, `.dae`, `.ply`, `.gltf` | Fact | `export.html` |
 | `MeshExportOption` | `BaseMesh` (no displacement/tessellation), `TriangulatedMesh` (triangulate polygons with >3 sides; only if the mesh has them), `TessellationNormalsBaseMesh` (with displacement/tessellation; only if used by the shader), `TessellationRecomputeNormals` (same, recompute vertex normals) | Fact | `PYSRC\export.py` |
 | Result | `MeshExportResult(status, message)`; raises `ProjectError`/`ValueError` on invalid input | Fact | `export.html` |
-| Combined export | glTF/GLB export with textures through the predefined glTF preset; USD through `exportUSD: true` | Fact (strings/test); full behaviour not confirmed | §4.2; §2 |
+| Combined export | glTF/GLB export with textures through the predefined glTF preset; USD export route: [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\engine_tests\test_usd_openpbr_roundtrip.py.] | glTF Fact (strings); full behaviour not confirmed | §4.2 |
 
 ## 10. Other export paths
 
 | Path | Status | Label | Source |
 |---|---|---|---|
-| Export one layer/effect node's texture | private `_substance_painter.export.export_stack_node_texture(node_uid, channel, path, json_params)` used by Adobe tests; no public equivalent | Fact | `MODS\engine_tests\test_export_layerstack_nodes.py` |
-| Export with dependency list | private `_substance_painter.export.export_project_textures_with_deps(json)` (test currently skipped by Adobe because of a cycle bug) | Fact | `MODS\automated_tests\test_export_texture_deps.py` |
+| Export one layer/effect node's texture | no public equivalent; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\engine_tests\test_export_layerstack_nodes.py.] | Fact (absence in the public API) | `PYDOC\substance_painter\export.html` |
+| Export with dependency list | no public equivalent; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\automated_tests\test_export_texture_deps.py.] | Fact (absence in the public API) | `PYDOC\substance_painter\export.html` |
 | JS map export | `alg.mapexport.save`, `saveChannelMap`, `saveMeshMap`, `saveConvertedMap`, `exportDocumentMaps`, `getPathsExportDocumentMaps`, `channelIdentifiers`, `meshMapIdentifiers`, `convertedMapIdentifiers` (reachable via `js.evaluate`) | Fact | `PAINTER\resources\javascript-doc\alg.mapexport.html` |
 
-## Appendix — decoded composition of all 34 shipped `.spexp` presets
+## 11. Validation needed inside Painter (not run)
 
-Decoded with the reader described in §7.1; destination/source naming follows the **Hypothesis** table of §7.1 (`doc:` = documentMap, `virtual:` = virtualMap, `mesh:` = meshMap; suffix = source channel). Source files: `PRESETS\<name>.spexp`.
+Each line states what a run inside Painter 12.1 must observe before the current label can be raised to **Fact**. **Recommendation**: record the inputs (project, mesh, Texture Set sizes, colour configuration, preset version) with each capture.
 
-| Preset (`.spexp`) | Output file name pattern | Composition (destination ← source) | fmt | bitdepth flag | dithering |
-|---|---|---|---|---|---|
-| Amazon Lumberyard | `$mesh_$textureSet_diff(_$colorSpace)(.$udim)` | R←doc:diffuse.R, G←doc:diffuse.G, B←doc:diffuse.B, A←doc:opacity.L | png | 0 | off |
-| Amazon Lumberyard | `$mesh_$textureSet_spec(_$colorSpace)(.$udim)` | R←doc:specular.R, G←doc:specular.G, B←doc:specular.B | png | 0 | off |
-| Amazon Lumberyard | `$mesh_$textureSet_ddna(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B, A←doc:glossiness.L | png | 0 | on |
-| Arnold (AiStandard) | `$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| Arnold (AiStandard) | `$mesh_$textureSet_Metalness(_$colorSpace)(.$udim)` | L←doc:metallic.L | png | 0 | off |
-| Arnold (AiStandard) | `$mesh_$textureSet_Roughness(_$colorSpace)(.$udim)` | L←doc:roughness.L | png | 0 | off |
-| Arnold (AiStandard) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B, A←virtual:Normal_OpenGL.A | png | 1 | off |
-| Arnold (AiStandard) | `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| Arnold (AiStandard) | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B, A←doc:emissive.A | png | 0 | off |
-| Arnold UDIM Legacy (AiStandard) | `$mesh_BaseColor(_$colorSpace).$textureSet` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| Arnold UDIM Legacy (AiStandard) | `$mesh_Metalness(_$colorSpace).$textureSet` | L←doc:metallic.L | png | 0 | off |
-| Arnold UDIM Legacy (AiStandard) | `$mesh_Roughness(_$colorSpace).$textureSet` | L←doc:roughness.L | png | 0 | off |
-| Arnold UDIM Legacy (AiStandard) | `$mesh_Normal(_$colorSpace).$textureSet` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B, A←virtual:Normal_OpenGL.A | png | 1 | off |
-| Arnold UDIM Legacy (AiStandard) | `$mesh_Height(_$colorSpace).$textureSet` | L←doc:height.L | png | 1 | off |
-| Arnold UDIM Legacy (AiStandard) | `$mesh_Emissive(_$colorSpace).$textureSet` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B, A←doc:emissive.A | png | 0 | off |
-| Blender (Principled BSDF) | `$textureSet_BaseColor(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| Blender (Principled BSDF) | `$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Blender (Principled BSDF) | `$textureSet_Metallic(_$colorSpace)(.$udim)` | R←doc:metallic.L, G←doc:metallic.L, B←doc:metallic.L | png | 0 | off |
-| Blender (Principled BSDF) | `$textureSet_Roughness(_$colorSpace)(.$udim)` | R←doc:roughness.L, G←doc:roughness.L, B←doc:roughness.L | png | 0 | off |
-| Blender (Principled BSDF) | `$textureSet_Emission(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Blender (Principled BSDF) | `$textureSet_Alpha(_$colorSpace)(.$udim)` | R←doc:opacity.L, G←doc:opacity.L, B←doc:opacity.L | png | 0 | off |
-| Blender (Principled BSDF) | `$textureSet_Displacement(_$colorSpace)(.$udim)` | R←doc:height.L, G←doc:height.L, B←doc:height.L | png | 0 | off |
-| Corona | `$mesh_$textureSet_Diffuse(_$colorSpace)(.$udim)` | R←virtual:Diffuse.R, G←virtual:Diffuse.G, B←virtual:Diffuse.B | png | 0 | off |
-| Corona | `$mesh_$textureSet_Reflection(_$colorSpace)(.$udim)` | R←virtual:reflection.R, G←virtual:reflection.G, B←virtual:reflection.B | png | 0 | off |
-| Corona | `$mesh_$textureSet_Glossiness(_$colorSpace)(.$udim)` | L←virtual:Glossiness2.L | png | 0 | off |
-| Corona | `$mesh_$textureSet_IOR(_$colorSpace)(.$udim)` | L←virtual:1/ior.L | png | 1 | off |
-| Corona | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B, A←virtual:Normal_DirectX.A | png | 1 | off |
-| Corona | `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| Corona | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B, A←doc:emissive.A | png | 0 | off |
-| CryEngine | `$mesh_$textureSet_diff(_$colorSpace)(.$udim)` | R←doc:diffuse.R, G←doc:diffuse.G, B←doc:diffuse.B, A←doc:opacity.L | png | 0 | off |
-| CryEngine | `$mesh_$textureSet_spec(_$colorSpace)(.$udim)` | R←doc:specular.R, G←doc:specular.G, B←doc:specular.B | png | 0 | off |
-| CryEngine | `$mesh_$textureSet_ddna(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B, A←doc:glossiness.L | png | 0 | on |
-| Dota 2 | `$mesh_$textureSet_color(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| Dota 2 | `$mesh_$textureSet_transparency(_$colorSpace)(.$udim)` | L←doc:opacity.L | png | 0 | off |
-| Dota 2 | `$mesh_$textureSet_normal(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B | png | 0 | on |
-| Dota 2 | `$mesh_$textureSet_detailmask(_$colorSpace)(.$udim)` | L←doc:user0.L | png | 0 | off |
-| Dota 2 | `$mesh_$textureSet_diffusemask(_$colorSpace)(.$udim)` | L←doc:user1.L | png | 0 | off |
-| Dota 2 | `$mesh_$textureSet_metalnessmask(_$colorSpace)(.$udim)` | L←doc:metallic.L | png | 0 | off |
-| Dota 2 | `$mesh_$textureSet_selfillummask(_$colorSpace)(.$udim)` | L←doc:emissive.L | png | 0 | off |
-| Dota 2 | `$mesh_$textureSet_specmask(_$colorSpace)(.$udim)` | L←doc:specular.L | png | 0 | off |
-| Dota 2 | `$mesh_$textureSet_rimmask(_$colorSpace)(.$udim)` | L←doc:user2.L | png | 0 | off |
-| Dota 2 | `$mesh_$textureSet_basetintmask(_$colorSpace)(.$udim)` | L←doc:user3.L | png | 0 | off |
-| Dota 2 | `$mesh_$textureSet_specexp(_$colorSpace)(.$udim)` | L←doc:glossiness.L | png | 0 | off |
-| KeyShot 9+ | `$project.sp/$textureSet.ts/base_color(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| KeyShot 9+ | `$project.sp/$textureSet.ts/metallic(_$colorSpace)(.$udim)` | L←doc:metallic.L | png | 0 | off |
-| KeyShot 9+ | `$project.sp/$textureSet.ts/roughness(_$colorSpace)(.$udim)` | L←doc:roughness.L | png | 0 | off |
-| KeyShot 9+ | `$project.sp/$textureSet.ts/specular(_$colorSpace)(.$udim)` | L←doc:specularlevel.L | png | 0 | off |
-| KeyShot 9+ | `$project.sp/$textureSet.ts/anisotropic(_$colorSpace)(.$udim)` | L←doc:anisotropylevel.L | png | 0 | off |
-| KeyShot 9+ | `$project.sp/$textureSet.ts/anisotropic_angle(_$colorSpace)(.$udim)` | L←doc:anisotropyangle.L | png | 1 | off |
-| KeyShot 9+ | `$project.sp/$textureSet.ts/normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| KeyShot 9+ | `$project.sp/$textureSet.ts/opacity(_$colorSpace)(.$udim)` | L←doc:opacity.L | png | 0 | off |
-| KeyShot 9+ | `$project.sp/$textureSet.ts/height(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| KeyShot 9+ | `$project.sp/$textureSet.ts/emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| KeyShot | `$mesh_$textureSet_Diffuse(_$colorSpace)(.$udim)` | R←virtual:Diffuse.R, G←virtual:Diffuse.G, B←virtual:Diffuse.B | png | 0 | off |
-| KeyShot | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B | png | 1 | off |
-| KeyShot | `$mesh_$textureSet_Reflection(_$colorSpace)(.$udim)` | R←virtual:reflection.R, G←virtual:reflection.G, B←virtual:reflection.B | png | 0 | off |
-| KeyShot | `$mesh_$textureSet_Roughness(_$colorSpace)(.$udim)` | L←doc:roughness.L | png | 0 | off |
-| KeyShot | `$mesh_$textureSet_Metallic(_$colorSpace)(.$udim)` | L←doc:metallic.L | png | 0 | off |
-| Lens Studio | `$mesh_$textureSet_base(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B, A←doc:opacity.L | png | 0 | off |
-| Lens Studio | `$mesh_$textureSet_normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 0 | on |
-| Lens Studio | `$mesh_$textureSet_materialParams(_$colorSpace)(.$udim)` | R←doc:metallic.L, G←doc:roughness.L, B←virtual:AO_Mixed.L | png | 0 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_Roughness(_$colorSpace)(.$udim)` | L←doc:roughness.L | png | 0 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_Metallic(_$colorSpace)(.$udim)` | L←doc:metallic.L | png | 0 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_AnisoLevel(_$colorSpace)(.$udim)` | L←doc:anisotropylevel.L | png | 0 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_AnisoAngle(_$colorSpace)(.$udim)` | L←doc:anisotropyangle.L | png | 1 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_AO(_$colorSpace)(.$udim)` | L←virtual:AO_Mixed.L | png | 0 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_Opacity(_$colorSpace)(.$udim)` | L←doc:opacity.L | png | 0 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_SSS(_$colorSpace)(.$udim)` | L←doc:scattering.L | png | 0 | off |
-| Maxwell (Metallic Roughness) | `$mesh_$textureSet_Emission(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_Diffuse(_$colorSpace)(.$udim)` | R←doc:diffuse.R, G←doc:diffuse.G, B←doc:diffuse.B | png | 0 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_Specular(_$colorSpace)(.$udim)` | R←doc:specular.R, G←doc:specular.G, B←doc:specular.B | png | 0 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_Glossiness(_$colorSpace)(.$udim)` | L←doc:glossiness.L | png | 0 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_AnisoLevel(_$colorSpace)(.$udim)` | L←doc:anisotropylevel.L | png | 0 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_AnisoAngle(_$colorSpace)(.$udim)` | L←doc:anisotropyangle.L | png | 1 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_AO(_$colorSpace)(.$udim)` | L←virtual:AO_Mixed.L | png | 0 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_Opacity(_$colorSpace)(.$udim)` | L←doc:opacity.L | png | 0 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_SSS(_$colorSpace)(.$udim)` | L←doc:scattering.L | png | 0 | off |
-| Maxwell (Specular Glossiness) | `$mesh_$textureSet_Emission(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Mesh Maps | `$textureSet_normal_base(_$colorSpace)(.$udim)` | R←mesh:normal_base.R, G←mesh:normal_base.G, B←mesh:normal_base.B | png | 1 | off |
-| Mesh Maps | `$textureSet_world_space_normals(_$colorSpace)(.$udim)` | R←mesh:world_space_normals.R, G←mesh:world_space_normals.G, B←mesh:world_space_normals.B | png | 1 | off |
-| Mesh Maps | `$textureSet_id(_$colorSpace)(.$udim)` | R←mesh:id.R, G←mesh:id.G, B←mesh:id.B | png | 1 | off |
-| Mesh Maps | `$textureSet_position(_$colorSpace)(.$udim)` | R←mesh:position.R, G←mesh:position.G, B←mesh:position.B | png | 1 | off |
-| Mesh Maps | `$textureSet_bent_normals_base(_$colorSpace)(.$udim)` | R←mesh:bent_normals.R, G←mesh:bent_normals.G, B←mesh:bent_normals.B | png | 1 | off |
-| Mesh Maps | `$textureSet_ambient_occlusion(_$colorSpace)(.$udim)` | L←mesh:ambient_occlusion.L | png | 0 | off |
-| Mesh Maps | `$textureSet_curvature(_$colorSpace)(.$udim)` | L←mesh:curvature.L | png | 0 | off |
-| Mesh Maps | `$textureSet_thickness(_$colorSpace)(.$udim)` | L←mesh:thickness.L | png | 0 | off |
-| Mesh Maps | `$textureSet_height_base(_$colorSpace)(.$udim)` | L←mesh:height.L | png | 0 | off |
-| Mesh Maps | `$textureSet_opacity_base(_$colorSpace)(.$udim)` | L←mesh:opacity.L | png | 0 | off |
-| Non-PBR Specular Glossiness | `$mesh_$textureSet_Diffuse(_$colorSpace)(.$udim)` | R←doc:diffuse.R, G←doc:diffuse.G, B←doc:diffuse.B, A←doc:opacity.L | png | 0 | off |
-| Non-PBR Specular Glossiness | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B | png | 0 | on |
-| Non-PBR Specular Glossiness | `$mesh_$textureSet_SpecularGlossiness(_$colorSpace)(.$udim)` | R←doc:specular.R, G←doc:specular.G, B←doc:specular.B, A←doc:glossiness.L | png | 0 | off |
-| Non-PBR Specular Glossiness | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| PBR Metallic Roughness (folders or PSD groups) | `BaseColor/$textureSet_BaseColor(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| PBR Metallic Roughness (folders or PSD groups) | `Roughness/$textureSet_Roughness(_$colorSpace)(.$udim)` | R←doc:roughness.L, G←doc:roughness.L, B←doc:roughness.L | png | 0 | off |
-| PBR Metallic Roughness (folders or PSD groups) | `Metallic/$textureSet_Metallic(_$colorSpace)(.$udim)` | R←doc:metallic.L, G←doc:metallic.L, B←doc:metallic.L | png | 0 | off |
-| PBR Metallic Roughness (folders or PSD groups) | `Normal/$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B | png | 1 | off |
-| PBR Metallic Roughness (folders or PSD groups) | `Height/$textureSet_Height(_$colorSpace)(_$colorSpace)(_$colorSpace)(_$colorSpace)(.$udim)` | R←doc:height.L, G←doc:height.L, B←doc:height.L | png | 1 | off |
-| PBR Metallic Roughness (folders or PSD groups) | `Emissive/$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| PBR Metallic Roughness | `$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B, A←doc:opacity.L | png | 0 | off |
-| PBR Metallic Roughness | `$mesh_$textureSet_Roughness(_$colorSpace)(.$udim)` | L←doc:roughness.L | png | 0 | off |
-| PBR Metallic Roughness | `$mesh_$textureSet_Metallic(_$colorSpace)(.$udim)` | L←doc:metallic.L | png | 0 | off |
-| PBR Metallic Roughness | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B | png | 1 | off |
-| PBR Metallic Roughness | `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| PBR Metallic Roughness | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| PBR Specular Glossiness (converted from Metallic Roughness) | `$mesh_$textureSet_Diffuse(_$colorSpace)(.$udim)` | R←virtual:Diffuse.R, G←virtual:Diffuse.G, B←virtual:Diffuse.B, A←doc:opacity.L | png | 0 | off |
-| PBR Specular Glossiness (converted from Metallic Roughness) | `$mesh_$textureSet_Specular(_$colorSpace)(.$udim)` | R←virtual:Specular.R, G←virtual:Specular.G, B←virtual:Specular.B | png | 0 | off |
-| PBR Specular Glossiness (converted from Metallic Roughness) | `$mesh_$textureSet_Glossiness(_$colorSpace)(.$udim)` | L←virtual:Glossiness.L | png | 0 | off |
-| PBR Specular Glossiness (converted from Metallic Roughness) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B | png | 1 | off |
-| PBR Specular Glossiness (converted from Metallic Roughness) | `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| PBR Specular Glossiness (converted from Metallic Roughness) | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| PBR Specular Glossiness | `$mesh_$textureSet_Diffuse(_$colorSpace)(.$udim)` | R←doc:diffuse.R, G←doc:diffuse.G, B←doc:diffuse.B, A←doc:opacity.L | png | 0 | off |
-| PBR Specular Glossiness | `$mesh_$textureSet_Specular(_$colorSpace)(.$udim)` | R←doc:specular.R, G←doc:specular.G, B←doc:specular.B | png | 0 | off |
-| PBR Specular Glossiness | `$mesh_$textureSet_Glossiness(_$colorSpace)(.$udim)` | L←doc:glossiness.L | png | 0 | off |
-| PBR Specular Glossiness | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B | png | 1 | off |
-| PBR Specular Glossiness | `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| PBR Specular Glossiness | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Redshift (rsMaterial) | `$mesh_$textureSet_Color(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B, A←doc:opacity.L | png | 0 | off |
-| Redshift (rsMaterial) | `$mesh_$textureSet_Roughness(_$colorSpace)(.$udim)` | L←doc:roughness.L | png | 0 | off |
-| Redshift (rsMaterial) | `$mesh_$textureSet_Metalness(_$colorSpace)(.$udim)` | L←doc:metallic.L | png | 0 | off |
-| Redshift (rsMaterial) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Redshift (rsMaterial) | `$mesh_$textureSet_DisplaceHeightField(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| Redshift (rsMaterial) | `$mesh_$textureSet_EmissionColor(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Renderman (pxrDisney) | `$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| Renderman (pxrDisney) | `$mesh_$textureSet_Roughness(_$colorSpace)(.$udim)` | L←doc:roughness.L | png | 0 | off |
-| Renderman (pxrDisney) | `$mesh_$textureSet_Metallic(_$colorSpace)(.$udim)` | L←doc:metallic.L | png | 0 | off |
-| Renderman (pxrDisney) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Renderman (pxrDisney) | `$mesh_$textureSet_Displacement(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| Renderman (pxrDisney) | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Renderman (pxrDisney) | `$mesh_$textureSet_Presence(_$colorSpace)(.$udim)` | L←doc:opacity.L | png | 0 | off |
-| Renderman (pxrSurface) | `$mesh_$textureSet_DiffuseColor(_$colorSpace)(.$udim)` | R←virtual:Diffuse.R, G←virtual:Diffuse.G, B←virtual:Diffuse.B | png | 0 | off |
-| Renderman (pxrSurface) | `$mesh_$textureSet_SpecularFaceColor(_$colorSpace)(.$udim)` | R←virtual:Specular.R, G←virtual:Specular.G, B←virtual:Specular.B | png | 0 | off |
-| Renderman (pxrSurface) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Renderman (pxrSurface) | `$mesh_$textureSet_SpecularRoughness(_$colorSpace)(.$udim)` | L←doc:roughness.L | png | 0 | off |
-| Renderman (pxrSurface) | `$mesh_$textureSet_GlowColor(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Renderman (pxrSurface) | `$mesh_$textureSet_Presence(_$colorSpace)(.$udim)` | L←doc:opacity.L | png | 0 | off |
-| Renderman (pxrSurface) | `$mesh_$textureSet_Displacement(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| Roblox (MaterialVariant) | `$textureSet_ALB` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| Roblox (MaterialVariant) | `$textureSet_NRM` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Roblox (MaterialVariant) | `$textureSet_MET` | R←doc:metallic.L, G←doc:metallic.L, B←doc:metallic.L | png | 0 | off |
-| Roblox (MaterialVariant) | `$textureSet_RGH` | R←doc:roughness.L, G←doc:roughness.L, B←doc:roughness.L | png | 0 | off |
-| Roblox (SurfaceAppearance) | `$textureSet_ColorMap` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B, A←doc:opacity.L | png | 0 | off |
-| Roblox (SurfaceAppearance) | `$textureSet_NormalMap` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Roblox (SurfaceAppearance) | `$textureSet_MetalnessMap` | R←doc:metallic.L, G←doc:metallic.L, B←doc:metallic.L | png | 0 | off |
-| Roblox (SurfaceAppearance) | `$textureSet_RoughnessMap` | R←doc:roughness.L, G←doc:roughness.L, B←doc:roughness.L | png | 0 | off |
-| Shade 3D | `$project_$textureSet_Diffuse(_$colorSpace)(.$udim)` | R←virtual:Unity4Diff.R, G←virtual:Unity4Diff.G, B←virtual:Unity4Diff.B | png | 0 | off |
-| Shade 3D | `$project_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Shade 3D | `$project_$textureSet_Roughness(_$colorSpace)(.$udim)` | L←doc:roughness.L | png | 0 | off |
-| Shade 3D | `$project_$textureSet_Specular(_$colorSpace)(.$udim)` | L←virtual:Specular.L | png | 0 | off |
-| Spark AR Studio | `$textureSet_Color(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B, A←doc:opacity.L | png | 0 | off |
-| Spark AR Studio | `$textureSet_ORM(_$colorSpace)(.$udim)` | R←virtual:AO_Mixed.L, G←doc:roughness.L, B←doc:metallic.L | png | 0 | off |
-| Spark AR Studio | `$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Spark AR Studio | `$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 0 | on |
-| Unity HD Render Pipeline (Metallic Standard) | `$mesh_$textureSet_BaseMap(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B, A←doc:opacity.L | png | 0 | off |
-| Unity HD Render Pipeline (Metallic Standard) | `$mesh_$textureSet_MaskMap(_$colorSpace)(.$udim)` | R←doc:metallic.L, G←virtual:AO_Mixed.L, B←(empty), A←virtual:Glossiness.L | png | 0 | off |
-| Unity HD Render Pipeline (Metallic Standard) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 0 | on |
-| Unity HD Render Pipeline (Metallic Standard) | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Unity HD Render Pipeline (Specular) | `$mesh_$textureSet_BaseMap(_$colorSpace)(.$udim)` | R←virtual:Diffuse.R, G←virtual:Diffuse.G, B←virtual:Diffuse.B, A←doc:opacity.L | png | 0 | off |
-| Unity HD Render Pipeline (Specular) | `$mesh_$textureSet_Specular(_$colorSpace)(.$udim)` | R←virtual:Specular.R, G←virtual:Specular.G, B←virtual:Specular.B | png | 0 | off |
-| Unity HD Render Pipeline (Specular) | `$mesh_$textureSet_MaskMap(_$colorSpace)(.$udim)` | R←doc:metallic.L, G←virtual:AO_Mixed.L, B←(empty), A←virtual:Glossiness.L | png | 0 | off |
-| Unity HD Render Pipeline (Specular) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 0 | on |
-| Unity HD Render Pipeline (Specular) | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Unity Universal Render Pipeline (Metallic Standard) | `$mesh_$textureSet_AlbedoTransparency(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B, A←doc:opacity.L | png | 0 | off |
-| Unity Universal Render Pipeline (Metallic Standard) | `$mesh_$textureSet_MetallicSmoothness(_$colorSpace)(.$udim)` | R←doc:metallic.L, G←doc:metallic.L, B←doc:metallic.L, A←virtual:Glossiness.L | png | 0 | off |
-| Unity Universal Render Pipeline (Metallic Standard) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 0 | on |
-| Unity Universal Render Pipeline (Metallic Standard) | `$mesh_$textureSet_Emission(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Unity Universal Render Pipeline (Specular) | `$mesh_$textureSet_AlbedoTransparency(_$colorSpace)(.$udim)` | R←virtual:Diffuse.R, G←virtual:Diffuse.G, B←virtual:Diffuse.B, A←doc:opacity.L | png | 0 | off |
-| Unity Universal Render Pipeline (Specular) | `$mesh_$textureSet_SpecularSmoothness(_$colorSpace)(.$udim)` | R←virtual:Specular.R, G←virtual:Specular.G, B←virtual:Specular.B, A←virtual:Glossiness.L | png | 0 | off |
-| Unity Universal Render Pipeline (Specular) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 0 | on |
-| Unity Universal Render Pipeline (Specular) | `$mesh_$textureSet_Emission(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Unreal Engine (Packed) | `$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B, A←doc:opacity.L | png | 0 | off |
-| Unreal Engine (Packed) | `$mesh_$textureSet_OcclusionRoughnessMetallic(_$colorSpace)(.$udim)` | R←virtual:AO_Mixed.L, G←doc:roughness.L, B←doc:metallic.L | png | 0 | off |
-| Unreal Engine (Packed) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B | png | 0 | on |
-| Unreal Engine (Packed) | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Unreal Engine SSS (Packed) | `$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B, A←doc:scattering.L | png | 0 | off |
-| Unreal Engine SSS (Packed) | `$mesh_$textureSet_OcclusionRoughnessMetallic(_$colorSpace)(.$udim)` | R←virtual:AO_Mixed.L, G←doc:roughness.L, B←doc:metallic.L | png | 0 | off |
-| Unreal Engine SSS (Packed) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_DirectX.R, G←virtual:Normal_DirectX.G, B←virtual:Normal_DirectX.B | png | 0 | on |
-| Unreal Engine SSS (Packed) | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Vray Next (Metallic Roughness) | `$mesh_$textureSet_BaseColor(_$colorSpace)(.$udim)` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| Vray Next (Metallic Roughness) | `$mesh_$textureSet_Roughness(_$colorSpace)(.$udim)` | L←doc:roughness.L | png | 0 | off |
-| Vray Next (Metallic Roughness) | `$mesh_$textureSet_Metallic(_$colorSpace)(.$udim)` | L←doc:metallic.L | png | 0 | off |
-| Vray Next (Metallic Roughness) | `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| Vray Next (Metallic Roughness) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Vray Next (Metallic Roughness) | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Vray Next (Metallic Roughness) | `$mesh_$textureSet_Transmissive(_$colorSpace)(.$udim)` | R←doc:transmissive.R, G←doc:transmissive.G, B←doc:transmissive.B | png | 0 | off |
-| Vray Next (Metallic Roughness) | `$mesh_$textureSet_AnisotropyAngle(_$colorSpace)(.$udim)` | L←doc:anisotropyangle.L | png | 1 | off |
-| Vray Next (Metallic Roughness) | `$mesh_$textureSet_AnisotropyLevel(_$colorSpace)(.$udim)` | L←doc:anisotropylevel.L | png | 0 | off |
-| Vray Next (Specular Glossiness) | `$mesh_$textureSet_Diffuse(_$colorSpace)(.$udim)` | R←doc:diffuse.R, G←doc:diffuse.G, B←doc:diffuse.B | png | 0 | off |
-| Vray Next (Specular Glossiness) | `$mesh_$textureSet_Specular(_$colorSpace)(.$udim)` | R←doc:specular.R, G←doc:specular.G, B←doc:specular.B | png | 0 | off |
-| Vray Next (Specular Glossiness) | `$mesh_$textureSet_Glossiness(_$colorSpace)(.$udim)` | L←doc:glossiness.L | png | 0 | off |
-| Vray Next (Specular Glossiness) | `$mesh_$textureSet_Height(_$colorSpace)(.$udim)` | L←doc:height.L | png | 1 | off |
-| Vray Next (Specular Glossiness) | `$mesh_$textureSet_Normal(_$colorSpace)(.$udim)` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Vray Next (Specular Glossiness) | `$mesh_$textureSet_Emissive(_$colorSpace)(.$udim)` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Vray Next (Specular Glossiness) | `$mesh_$textureSet_Transmissive(_$colorSpace)(.$udim)` | R←doc:transmissive.R, G←doc:transmissive.G, B←doc:transmissive.B | png | 0 | off |
-| Vray Next (Specular Glossiness) | `$mesh_$textureSet_AnisotropyAngle(_$colorSpace)(.$udim)` | L←doc:anisotropyangle.L | png | 1 | off |
-| Vray Next (Specular Glossiness) | `$mesh_$textureSet_AnisotropyLevel(_$colorSpace)(.$udim)` | L←doc:anisotropylevel.L | png | 0 | off |
-| Vray Next UDIM Legacy (Metallic Roughness) | `$mesh_BaseColor(_$colorSpace).$textureSet` | R←doc:basecolor.R, G←doc:basecolor.G, B←doc:basecolor.B | png | 0 | off |
-| Vray Next UDIM Legacy (Metallic Roughness) | `$mesh_Roughness(_$colorSpace).$textureSet` | L←doc:roughness.L | png | 0 | off |
-| Vray Next UDIM Legacy (Metallic Roughness) | `$mesh_Metallic(_$colorSpace).$textureSet` | L←doc:metallic.L | png | 0 | off |
-| Vray Next UDIM Legacy (Metallic Roughness) | `$mesh_Height(_$colorSpace).$textureSet` | L←doc:height.L | png | 1 | off |
-| Vray Next UDIM Legacy (Metallic Roughness) | `$mesh_Normal(_$colorSpace).$textureSet` | R←virtual:Normal_OpenGL.R, G←virtual:Normal_OpenGL.G, B←virtual:Normal_OpenGL.B | png | 1 | off |
-| Vray Next UDIM Legacy (Metallic Roughness) | `$mesh_Emissive(_$colorSpace).$textureSet` | R←doc:emissive.R, G←doc:emissive.G, B←doc:emissive.B | png | 0 | off |
-| Vray Next UDIM Legacy (Metallic Roughness) | `$mesh_Transmissive(_$colorSpace).$textureSet` | R←doc:transmissive.R, G←doc:transmissive.G, B←doc:transmissive.B | png | 0 | off |
-| Vray Next UDIM Legacy (Metallic Roughness) | `$mesh_AnisotropyAngle(_$colorSpace).$textureSet` | L←doc:anisotropyangle.L | png | 1 | off |
-| Vray Next UDIM Legacy (Metallic Roughness) | `$mesh_AnisotropyLevel(_$colorSpace).$textureSet` | L←doc:anisotropylevel.L | png | 0 | off |
+| Item | Current label | What an in-Painter run must confirm |
+|---|---|---|
+| Shelf preset packing (§7, Appendix) | Hypothesis (decoded) | `ResourceExportPreset.list_output_maps()` for each `.spexp` returns the documented JSON form; compare destination, `srcMapType`, `srcMapName`, `srcChannel` with the decoded tables. |
+| Predefined presets (glTF, Document channels + Normal + AO, USDz, …) | not confirmed | `PredefinedExportPreset.list_output_maps(stack)` per preset on an open project, including the `_occlusionRoughnessMetallic` packing. |
+| Bit depth written by each shelf preset | not confirmed | export each preset's maps without a `bitDepth` override and read the written files' bit depth. |
+| Export defaults of a new project (dilation distance, padding algorithm, default preset) | not confirmed | create a new project from each template and read the defaults in the export window or from an export without overrides; [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\automated_tests\resources\layerstack-cube.spp.] |
+| Virtual-map formulas (`Normal_OpenGL`/`Normal_DirectX`, `AO_Mixed`, `Glossiness`, `Glossiness2`, `Diffuse`, `Specular`, `reflection`, `1/ior`, `f0`) | Adobe prose; exact formulas not confirmed | export from a fixture with known uniform channel values and known baked maps, then compare texel values with candidate formulas. |
+| Dithering | not observed | export an 8-bit gradient with `dithering` True and False and compare; check whether True is accepted at 16-bit and float depths. |
+| `sizeLog2` scalar versus `[w, h]`; padding algorithms and `dilationDistance` | Fact (docs); output not observed | export a non-square Texture Set with both forms; export with each `paddingAlgorithm` and compare texels outside the UV islands. |
+| Optional `( … )` file-name groups; `$colorSpace`, `$udim`, `$uvTileName` | pattern Fact; behaviour Hypothesis | `list_project_textures` with and without UV tiles and colour management; compare the names. |
+| Undocumented export keys | [Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\python\modules\automated_tests\; PAINTER\resources\python\modules\engine_tests\.] | — |
+| MCP `bitDepth` `"32"` | not confirmed | `list_project_textures` / export with `"32"` and with `"32f"` for `exr`, `tiff`, `hdr`. |
+
+## Appendix — composition of the shipped `.spexp` presets
+
+[Redacted under the clean-room policy (docs/licensing-and-clean-room.md). Source withheld: PAINTER\resources\starter_assets\export-presets\*.spexp.] The output layouts needed by the current pipeline are stated as behaviour in §7.2–7.6 and below. The layout of any other preset is to be captured from Painter through the documented `ResourceExportPreset.list_output_maps()` (§11) or taken from Adobe's public output-template descriptions, never from the preset files.
+
+- **Blender (Principled BSDF)** — used by the Assets3D pipeline (`docs/analysis/assets3d-pipeline/05-export-and-consumers.md` §1): one file per map, named `$textureSet_<Map>(_$colorSpace)(.$udim)`: `BaseColor` (base colour RGB), `Normal` (OpenGL normal RGB), `Metallic`, `Roughness`, `Alpha` (opacity) and `Displacement` (height) as one grey value written to R, G and B, and `Emission` (emissive RGB). **Hypothesis** until confirmed by export.

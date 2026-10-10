@@ -1,0 +1,11 @@
+{
+  "id": 4,
+  "slug": "d2-api-scope-capability-manifest-with-three-statuses",
+  "title": "D2 API scope: capability manifest with three statuses",
+  "status": "superseded",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": 19
+}

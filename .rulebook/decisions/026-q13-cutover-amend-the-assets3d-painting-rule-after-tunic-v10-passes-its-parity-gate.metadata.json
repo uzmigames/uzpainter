@@ -1,0 +1,11 @@
+{
+  "id": 26,
+  "slug": "q13-cutover-amend-the-assets3d-painting-rule-after-tunic-v10-passes-its-parity-gate",
+  "title": "Q13 Cutover: amend the Assets3D painting rule after Tunic v10 passes its parity gate",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

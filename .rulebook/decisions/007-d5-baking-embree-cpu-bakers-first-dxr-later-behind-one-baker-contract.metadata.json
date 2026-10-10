@@ -1,0 +1,11 @@
+{
+  "id": 7,
+  "slug": "d5-baking-embree-cpu-bakers-first-dxr-later-behind-one-baker-contract",
+  "title": "D5 Baking: Embree CPU bakers first, DXR later behind one baker contract",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

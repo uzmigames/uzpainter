@@ -1,0 +1,11 @@
+{
+  "id": 2,
+  "slug": "license-apache-2-0-with-a-strict-clean-room-policy-toward-substance-painter",
+  "title": "License: Apache 2.0 with a strict clean-room policy toward Substance Painter",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

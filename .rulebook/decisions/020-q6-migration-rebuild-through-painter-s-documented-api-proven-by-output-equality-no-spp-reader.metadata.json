@@ -1,0 +1,11 @@
+{
+  "id": 20,
+  "slug": "q6-migration-rebuild-through-painter-s-documented-api-proven-by-output-equality-no-spp-reader",
+  "title": "Q6 Migration: rebuild through Painter's documented API, proven by output equality; no .spp reader",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

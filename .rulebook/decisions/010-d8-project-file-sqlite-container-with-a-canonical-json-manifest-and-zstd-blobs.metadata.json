@@ -1,0 +1,11 @@
+{
+  "id": 10,
+  "slug": "d8-project-file-sqlite-container-with-a-canonical-json-manifest-and-zstd-blobs",
+  "title": "D8 Project file: SQLite container with a canonical JSON manifest and zstd blobs",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

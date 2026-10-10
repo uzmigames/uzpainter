@@ -1,0 +1,11 @@
+{
+  "id": 8,
+  "slug": "d6-render-parity-clean-room-painter-viewport-pass-as-the-target-engine-preview-as-consumer-test",
+  "title": "D6 Render parity: clean-room painter_viewport pass as the target; engine_preview as consumer test",
+  "status": "superseded",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": 18
+}

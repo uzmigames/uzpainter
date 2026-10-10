@@ -4,6 +4,8 @@ Scope: which parts of `E:\UzmiGames\UzEngine` can be linked into a standalone, e
 
 Source root for all relative paths below: `E:\UzmiGames\UzEngine\`.
 
+**Baseline** (added after the Astra review, see `10-review-response.md`): line numbers refer to UzEngine `HEAD 19ffb9b` (2026-07-27), the commit checked out when this analysis was written. Since 2026-10-10 00:05 the working tree is mid-merge with `9220973` (PR #10) and contains unresolved conflict markers; where that merge changes a cited behaviour, the text says so. Every statement below is source reading only; nothing was built or run.
+
 ## 1. Repository layers
 
 | Layer | Path | Language / build | Depends on Electron/VSCode? | Evidence |
@@ -13,7 +15,7 @@ Source root for all relative paths below: `E:\UzmiGames\UzEngine\`.
 | VSCode extension | `extension/` | TypeScript | Yes | **Fact** — `extension/src/runtime-client.ts` |
 | MCP server | `mcp/` | TypeScript, `@modelcontextprotocol/sdk` | No, but also does not talk to the engine (see `08-mcp-and-ipc-patterns.md`) | **Fact** — `mcp/src/server.ts` |
 
-UzPainter only needs the **Runtime** layer. The N-API and extension layers are reference material for hosting patterns only.
+**Recommendation** — UzPainter needs only the **Runtime** layer. The N-API and extension layers are reference material for hosting patterns only.
 
 ## 2. Engine module inventory (`runtime/engine/`)
 
@@ -36,9 +38,9 @@ UzPainter only needs the **Runtime** layer. The N-API and extension layers are r
 | `platform/` | `runtime/platform/windows/` (`platform_window.h`, `file_system.h`, `file_watcher.h`, `crash_handler.h`, `dll_loader.h`, `process.h`, `shared_memory.h`, `memory_mapped_file.h`, `native_dialogs.h`, …) | Win32 window, crash handler (minidumps), file watcher. | Window (hidden HWND for swapchain) and crash handler yes |
 | `editor/` | `runtime/editor/` (`font/`, `gizmo/`, `grid/`, `input/`, `outline/`, `screenshot/`, `selection/`, `stats/`, `toolbar/`, `uzeditor.h`) | Editor overlays **and** `ScreenshotCapture` / `CompareGrid` / `ImageDiff`. | `screenshot/` yes (readback→PNG), rest no |
 
-**Fact** — `editor.lib` is built unconditionally on Windows (`runtime/build.zig` lines ~1010-1050: `const editor_lib = blk: { … if (is_windows) { … b.addLibrary(.{ .name = "editor" …`), and the `-Deditor` option is currently consumed but unused (`_ = build_editor; // consumed: future use`). The CMake mirror compiles `editor/screenshot` into `uzengine_runtime` itself (`runtime/CMakeLists.txt` line 427).
+**Fact** — `editor.lib` is built unconditionally on Windows (`runtime/build.zig` lines ~1010-1050: `const editor_lib = blk: { … if (is_windows) { … b.addLibrary(.{ .name = "editor" …`), and the `-Deditor` option is currently consumed but unused (`_ = build_editor; // consumed: future use`). In the CMake mirror at HEAD, `editor/screenshot` is only an **include directory** of `uzengine_runtime` (`runtime/CMakeLists.txt` line 427); no HEAD CMake target compiles the screenshot `.cpp` files. The incoming merge adds a separate `uzengine_editor` target that tools link together with `uzengine_runtime` (working tree `CMakeLists.txt` lines 902-913, 1072).
 
-**Fact** — `ScreenshotCapture` (readback→PNG/base64) lives in `runtime/editor/screenshot/screenshot_capture.h`, i.e. in `editor.lib`, not in `runtime.lib`. UzPainter must either link `editor.lib` or reimplement the ~100-line class on top of `IRHICommandList::CopyTextureToBuffer` + `PngCodec::EncodeMemory` (`engine/asset/importers/png_codec.h`).
+**Fact** — `ScreenshotCapture` (readback→PNG/base64) lives in `runtime/editor/screenshot/screenshot_capture.h`, i.e. in `editor.lib`, not in `runtime.lib`. UzPainter must either link `editor.lib` or reimplement the class (287-line `screenshot_capture.cpp` + 144-line header at HEAD) on top of `IRHICommandList::CopyTextureToBuffer` + `PngCodec::EncodeMemory` (`engine/asset/importers/png_codec.h`).
 
 ## 3. Dependency rules and ordering
 
@@ -66,7 +68,7 @@ No circular dependencies. No d3d12.h/vulkan.h/metal.h above rhi/dx12, rhi/vulkan
 5. plus `luajit/src/lua51.lib`, `ffmpeg/lib/{avcodec,avutil,swscale}.lib`,
 6. plus Win32 system libs `d3d12 d3d11 dxgi dxguid gdi32 user32 xinput1_4 ole32 shcore shell32 comdlg32`.
 
-**Fact** — CMake mirror: `runtime/CMakeLists.txt` lines 676-684 globs `tools/*.cpp` and links each to `uzengine_runtime` (static).
+**Fact** — CMake mirror: `runtime/CMakeLists.txt` lines 676-684 globs `tools/*.cpp` and links each to `uzengine_runtime` (static). In the incoming merge each tool links `uzengine_editor uzengine_runtime` (working tree line 1072).
 
 **Fact** — Existing build artifacts on this machine (`runtime/build/bin/`, dated 2026-07-27): `uzengine.exe` (72.7 MB), `uzcook.exe` (33.1 MB), `uzmesh.exe` (20.0 MB), `uzpack.exe` (11.3 MB), `uzembed.exe`, `test_runtime.exe` (141 MB), plus DLLs `D3D12Core.dll`, `d3d12SDKLayers.dll`, `dxcompiler.dll`, `dxil.dll`, `d3dcompiler_47.dll`, `lua51.dll`, `avcodec-62.dll` (69.9 MB), `avutil-60.dll`, `swscale-9.dll`, `nvngx_dlss.dll` (65.5 MB); `runtime/build/lib/runtime.lib` (543 MB, debug) and `editor.lib` (17.6 MB). These are debug-configuration sizes (`zig build` default is `Debug`, `docs/engine/06-build-toolchain/05-build-configs.md`).
 
@@ -76,17 +78,17 @@ No circular dependencies. No d3d12.h/vulkan.h/metal.h above rhi/dx12, rhi/vulkan
 
 | Entry point | File | What it gives | Status |
 |---|---|---|---|
-| CLI runtime | `runtime/tools/uzengine.cpp` | Full pipeline: config → RHI → hidden/visible HWND → swapchain → `World` + `LooseFileVFS` + Lua → `SceneRenderer` → screenshot / pass-dump / diag / FLIP modes | **Fact** — implemented (1088 lines) |
+| CLI runtime | `runtime/tools/uzengine.cpp` | Full pipeline: config → RHI → hidden/visible HWND → swapchain → `World` + `LooseFileVFS` + Lua → `SceneRenderer` → screenshot / pass-dump / diag / FLIP modes | **Fact** — implemented (1088 lines at HEAD; 1527 in the mid-merge working tree) |
 | C API | `runtime/engine/app/runtime.h` / `runtime.cpp` | `uz_runtime_init`, `uz_create_viewport(parent_hwnd,w,h)`, `uz_render_frame`, `uz_load_scene`, entity/component JSON get/set, `uz_capture_screenshot` (PNG bytes), H.264 encode, input forwarding, log callback | **Fact** — implemented; used by `napi/` and by `runtime/tests/engine/app/test_runtime_api.cpp` |
 | `Application` / `EngineLoop` | `runtime/engine/app/application.h`, `engine_loop.h` | Second app framework used by demos (`DemoApplication` referenced in `uzengine.cpp` comments) | Listed only; not read in detail — **not confirmed** which features it exposes |
 | `SceneRenderer` | `runtime/engine/renderer/scene/scene_renderer.h` | `Init(device, PlatformWindow*, w, h)`, `RenderFrame(cmdList, swapChain, World*, IVFS*, dt, frame)`, `LoadMesh`, `LoadTexture`, `RequestScreenshot`, `GetPassInspector`, `GetDevice`, `GetShaderManager`, debug view modes | **Fact** — lines 162-815 |
-| Raw RHI | `engine/rhi/*.h` | Device/command list/compute/readback without any renderer — proven by the FLIP mode in `uzengine.cpp` lines 361-482 (device + compute + readback, no window) | **Fact** |
+| Raw RHI | `engine/rhi/*.h` | Device/command list/compute/readback without any renderer — a source path exists in the FLIP mode, `uzengine.cpp` lines 361-482 (device + compute + readback, no window); not executed in this analysis | **Fact** (source path) |
 
 ## 6. Reuse verdict per module (for the architect)
 
 | Verdict | Modules |
 |---|---|
-| Reuse as-is | `rhi` (all backends), `shader` (DXC pipeline + cache), `asset/formats` (`.uztexture`, `.uzmesh`, `.uzpak` writers/readers), `asset/importers/png_codec`, `texture_importer` (etcpak BC path), `asset/mesh/mikktspace_tangents`, `lightmap_uv_generator` (xatlas), `job`, `logging`, `paths`, `config`, `cvar`, `platform/windows` (window, crash handler, file watcher), `ipc/frame_readback`, `editor/screenshot`, `renderer/raytracing` (BLAS/TLAS/SBT), `renderer/upload` (staging ring, async decoder), `renderer/render_graph` |
-| Reuse with extension | `renderer/scene/SceneRenderer` (needs an offscreen-target mode, see `02-…`), `material/*` (graph compiler + GPU baker need RGBA16F/arbitrary-pin output and texture inputs), `renderer/passes/postprocess/flip_pass` (perceptual diff for AI feedback), `renderer/mesh` (single UV set, see `05-…`) |
+| Reuse candidates — evidence is API/source presence only; each needs an operation-specific test against the pinned baseline (**Recommendation**) | `rhi` (DX12 primary; Vulkan has no ray tracing; `Null` is declared but not implemented, `03-…` §1), `shader` (DXC pipeline + cache), `asset/importers/png_codec` (16-bit output only through `EncodeMemory`, `06-…` §5), `texture_importer` (etcpak BC path; decodes to RGBA8), `asset/mesh/mikktspace_tangents`, `lightmap_uv_generator` (xatlas), `job`, `logging`, `paths`, `config`, `cvar`, `platform/windows` (window, crash handler, file watcher), `editor/screenshot` (swapchain RGBA8/BGRA8 only), `renderer/raytracing` (BLAS/TLAS/SBT; `BLASManager` hardcodes a 48-byte stride and opaque geometry, `05-…` §2), `renderer/upload` (staging ring, async decoder), `renderer/render_graph` |
+| Reuse with fixes or extension | `asset/formats` (`.uztexture` readers do not enforce the documented validation, `04-…` §5.2; the UZMS→UZMH conversion reads 32-byte glTF records at a 48-byte stride, `05-…` §1), `ipc/frame_readback` (RGBA8 only, no slot-reuse/backpressure check, `02-…` §3.2), `renderer/scene/SceneRenderer` (needs an offscreen-target mode, see `02-…`), `material/*` (graph compiler + GPU baker: RGBA8 output, zeroed parameters, no texture-binding environment, `03-…` §4), `renderer/passes/postprocess/flip_pass` (perceptual diff for AI feedback), `renderer/mesh` (single UV set, see `05-…`) |
 | Not needed | `vfx`, `animation`, `atmosphere`, `gi`, `editor/gizmo|grid|toolbar|outline|selection`, `ipc/h264_encoder` (optional), `napi/`, `extension/`, `mcp/` (docs search only) |
-| Missing entirely | UV-space rasterization, baking shaders, dilation, layer compositor, noise library, GPU mip-gen, BC6H, Python, native MCP — see `09-gaps-and-risks.md` |
+| Missing entirely | UV-space rasterization, baking shaders, dilation, layer compositor, noise library, GPU mip-gen, an integrated BC6H encode path (Basis encoder source is vendored but not built, `06-…` §1), Python API, native MCP — see `09-gaps-and-risks.md` |

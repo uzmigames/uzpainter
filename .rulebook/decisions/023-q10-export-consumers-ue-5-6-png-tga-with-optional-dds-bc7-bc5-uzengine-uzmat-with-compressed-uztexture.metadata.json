@@ -1,0 +1,11 @@
+{
+  "id": 23,
+  "slug": "q10-export-consumers-ue-5-6-png-tga-with-optional-dds-bc7-bc5-uzengine-uzmat-with-compressed-uztexture",
+  "title": "Q10 Export consumers: UE 5.6 PNG/TGA with optional DDS BC7/BC5; UzEngine .uzmat with compressed .uztexture",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}

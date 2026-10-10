@@ -1,0 +1,11 @@
+{
+  "id": 3,
+  "slug": "d1-runtime-topology-one-executable-with-supervisor-and-worker-roles",
+  "title": "D1 Runtime topology: one executable with supervisor and worker roles",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase2_docs-architecture"
+  ],
+  "supersededBy": null
+}
