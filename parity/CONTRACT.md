@@ -92,6 +92,7 @@ Tier 1 fixtures are rebuilt through Painter's documented API and proven by outpu
 - **Public repository** (independently authored or public data only): manifests `parity/manifests/**/*.json` (schema `golden-public.json`), fitted formulas `parity/semantics/*.json`, the register, comparison reports (numbers only).
 - **Private store only** (`UZP_PARITY_STORE`, content-addressed by SHA-256, on the owner's machine, never uploaded, never shipped): every recorded Painter output (schema `golden-private.json`): exported maps, Iray references, API readbacks (JSON included), effective-default and template captures, operator-recorded render settings and settings-panel evidence, asset recipes extracted or dumped from Painter projects; and anything derived pixel for pixel from one (difference maps, crops). Public templates and default tables are independently authored from documented semantics with provenance.
 - A missing or hash-mismatched blob yields `oracle_unavailable` (§3).
+- Store layout, the `uzpainter parity init|record|fetch|verify` prototype, the recorder hand-off and the CI lanes: `parity/STORE.md`.
 
 ## 7. Schemas
 

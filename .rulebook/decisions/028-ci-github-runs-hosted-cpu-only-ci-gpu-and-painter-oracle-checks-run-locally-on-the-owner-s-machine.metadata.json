@@ -1,0 +1,11 @@
+{
+  "id": 28,
+  "slug": "ci-github-runs-hosted-cpu-only-ci-gpu-and-painter-oracle-checks-run-locally-on-the-owner-s-machine",
+  "title": "CI: GitHub runs hosted CPU-only CI; GPU and Painter-oracle checks run locally on the owner's machine",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase0.5_private-oracle-store"
+  ],
+  "supersededBy": null
+}

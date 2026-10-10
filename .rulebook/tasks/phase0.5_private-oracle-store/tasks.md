@@ -9,6 +9,9 @@
 - [ ] 3.1 On the owner's machine: record an authored sample with `parity record`, delete the local copy, `parity fetch` it by manifest and `parity verify` the hash
 - [ ] 3.2 On the same commit: the guard blocks a recorded PNG and a recorded JSON readback and passes an authored fixture image and an authored expectation JSON
 
+## 3a. Runner registration (moved from phase0.3_oracle-store-cli 2.5, owner answer q1 2026-10-10)
+- [ ] 3a.1 Register the owner's machine as the self-hosted GPU runner (GPU, licensed Painter 12.1.0, `UZP_PARITY_STORE`) per `parity/STORE.md` §5.1 (owner's GitHub credentials), set the repository variable `UZP_GPU_RUNNER=registered` and confirm the `oracle` job of `.github/workflows/parity.yml` runs on it
+
 ## 4. Acceptance
 - [ ] 4.1 Acceptance gate (P0-STORE): fetch/verify round trip on the owner's machine; guard blocks a recorded PNG and a recorded JSON readback and passes an authored fixture image and an authored expectation JSON
 

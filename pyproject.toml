@@ -25,6 +25,11 @@ exclude = ["^thirdparty/"]
 module = ["jsonschema", "jsonschema.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# PyYAML (tests reading the CI workflows) ships no type information; types-PyYAML is not installed.
+module = ["yaml"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

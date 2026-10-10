@@ -1,0 +1,32 @@
+{
+  "status": "in-progress",
+  "createdAt": "2026-10-10T06:01:46.277Z",
+  "updatedAt": "2026-10-10T07:32:26.867Z",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Will you register this machine as the self-hosted GitHub Actions runner now (procedure in parity/STORE.md §5.1), or defer it?",
+      "status": "answered",
+      "askedAt": "2026-10-10T07:31:42.143Z",
+      "context": "Registration needs a runner token from the repository's Settings → Actions → Runners, i.e. your GitHub credentials, so an agent cannot do it (decision 022). Everything else is done: store, init/record/fetch/verify, tests, and .github/workflows/parity.yml with a hosted CPU lane and an `oracle` job pinned to [self-hosted, windows, x64, uzpainter-gpu]. The oracle job stays off until the repository variable UZP_GPU_RUNNER=registered is set, and never runs for pull requests. Steps: init the store outside the repo, download the runner to e.g. C:\\actions-runner, `config.cmd --url ... --token ... --labels uzpainter-gpu`, add UZP_PARITY_STORE to the runner's .env, start `run.cmd` in your logged-in session, set UZP_GPU_RUNNER=registered, then dispatch the Parity workflow.",
+      "options": [
+        {
+          "label": "Register now",
+          "description": "I follow parity/STORE.md §5.1 and report back; 2.5 closes and the task archives"
+        },
+        {
+          "label": "Defer to the parent phase0.5_private-oracle-store",
+          "description": "this task archives with 2.5 moved to the parent; the oracle lane stays disabled until then"
+        },
+        {
+          "label": "Change the procedure (e.g. Windows service or other labels)",
+          "description": "say how"
+        }
+      ],
+      "recommended": "Register now",
+      "blocks": "2.5 Register the owner's machine as the self-hosted GPU runner",
+      "answer": "Owner (2026-10-10): defer to the parent phase0.5_private-oracle-store. Archive this task with item 2.5 moved to the parent; the oracle CI lane stays disabled until the runner is registered there.",
+      "answeredAt": "2026-10-10T07:32:26.867Z"
+    }
+  ]
+}
