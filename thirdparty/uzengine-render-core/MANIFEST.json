@@ -1,0 +1,976 @@
+{
+  "upstream_repository": "UzEngine (UzmiGames)",
+  "upstream_root": "runtime/",
+  "files": [
+    {
+      "upstream_path": "runtime/engine/assertions/engine_assert.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/assertions/engine_assert.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "29290677d84e1c4fae385d3e066a3f69b44e372a",
+      "upstream_sha256": "8cdaef2b4a4636f747f1d02068297a3a3125d4b7f4b9f9b307239b571024a4b1",
+      "vendored_sha256": "8cdaef2b4a4636f747f1d02068297a3a3125d4b7f4b9f9b307239b571024a4b1",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/assertions/engine_assert.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/assertions/engine_assert.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "fbfbad68ffc05935fdc2aedc3c5399f1afb9be36",
+      "upstream_sha256": "13798497f703c3be40c83c90330f53f0137a0ebe11fde3261c7d1dad23271bcd",
+      "vendored_sha256": "13798497f703c3be40c83c90330f53f0137a0ebe11fde3261c7d1dad23271bcd",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/asset/formats/uztexture_format.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/asset/formats/uztexture_format.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "d158753d63d4b4e8f6bfc25a61c5231fae41195f",
+      "upstream_sha256": "5048adefe210f15b32efa388c8c422d3a20c198dfce2b44a9f616a69d7d3a7ef",
+      "vendored_sha256": "5048adefe210f15b32efa388c8c422d3a20c198dfce2b44a9f616a69d7d3a7ef",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/logging/log.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/logging/log.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "9f384107d455ddaccde580a16c1c6d632d0e989d",
+      "upstream_sha256": "bc2ac8d5b3e502e2861ed37cc29da1bebce4512d23ab2dba85a8d4d2897fea34",
+      "vendored_sha256": "bc2ac8d5b3e502e2861ed37cc29da1bebce4512d23ab2dba85a8d4d2897fea34",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/logging/log.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/logging/log.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "d96029a6e57590a6f8b6dbe16fb64bc61421d801",
+      "upstream_sha256": "2ceed482f8fe0ff4b6367f5f76e94cea851cadaed66259d847e550c918e2b2a6",
+      "vendored_sha256": "2ceed482f8fe0ff4b6367f5f76e94cea851cadaed66259d847e550c918e2b2a6",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/basis.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/basis.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "811c3aa9ebf76cdd9088aff247e82adafa6f7d49",
+      "upstream_sha256": "349f1ac13dfcb408085e31b8a65d0379b31937bbf261b0583bc3d76717e7846f",
+      "vendored_sha256": "349f1ac13dfcb408085e31b8a65d0379b31937bbf261b0583bc3d76717e7846f",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/color.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/color.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "dac4cf01142248a22bb8083b6ab2755f9252bb28",
+      "upstream_sha256": "dc3bb45b390a29aa16c573218a095d026618b8c36aa9624a98fc9e4658a1d4eb",
+      "vendored_sha256": "dc3bb45b390a29aa16c573218a095d026618b8c36aa9624a98fc9e4658a1d4eb",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/color_utils.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/color_utils.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "a8dc9d7b0753ea5413b90945d452c2e919d74410",
+      "upstream_sha256": "ef9fd15a2b34e1028e818dbbfe9ac5ee4c1c3b5946e0a34b05f31bc7b3626733",
+      "vendored_sha256": "ef9fd15a2b34e1028e818dbbfe9ac5ee4c1c3b5946e0a34b05f31bc7b3626733",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/geometry.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/geometry.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "82cbd6ab0f18edd43563b8a437338d71e2b01dc3",
+      "upstream_sha256": "9674e2fe030d69b2272fda0a2c4537665f5e014b56a531bb7867a6fa02e09a6b",
+      "vendored_sha256": "9674e2fe030d69b2272fda0a2c4537665f5e014b56a531bb7867a6fa02e09a6b",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/halton.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/halton.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "b749788acc7da2aacec5c482f4bdaf1f721ac639",
+      "upstream_sha256": "49ec8ff43230a02878c2b734b6185aa3af72cb3a3eda64b6310cc4fea85b0b61",
+      "vendored_sha256": "49ec8ff43230a02878c2b734b6185aa3af72cb3a3eda64b6310cc4fea85b0b61",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/mat4.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/mat4.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "ac4829a1f1b68db26a550fbf9dbc006af199e2f6",
+      "upstream_sha256": "2d59641759f4d3360ec144291e96d56951477d33b4f016ddd18da39ede56f185",
+      "vendored_sha256": "2d59641759f4d3360ec144291e96d56951477d33b4f016ddd18da39ede56f185",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/mat4.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/mat4.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "fd57fabd9a51c0a01136741448edec150fcbc556",
+      "upstream_sha256": "173510d53bb8eeb5eb7872cf2c2e943896a92f8feaaa7678cfb7097c2a5d9122",
+      "vendored_sha256": "173510d53bb8eeb5eb7872cf2c2e943896a92f8feaaa7678cfb7097c2a5d9122",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/math_defs.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/math_defs.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "829bdb3379ff0d3c0fc03ca5cc1982129d0f908e",
+      "upstream_sha256": "d7ad7f28372d4d00a45dd23a13052783b03540f49bc45d8d8e2de98fb715c448",
+      "vendored_sha256": "d7ad7f28372d4d00a45dd23a13052783b03540f49bc45d8d8e2de98fb715c448",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/math_funcs.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/math_funcs.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "bc7ee5257b7297187532df94c82b386be4fd92ff",
+      "upstream_sha256": "879edfdef4ffc7fb0c2018f05e51034f7bb75df74ad60ff810d7ae20dfe925f8",
+      "vendored_sha256": "879edfdef4ffc7fb0c2018f05e51034f7bb75df74ad60ff810d7ae20dfe925f8",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/quaternion.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/quaternion.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "fb4ffc35e384115c756548a7c08ee55a998105f6",
+      "upstream_sha256": "2339326f498011eec9c10ba7f77685f3f3a8df7dea3e12e0c328c8d1af22f2d0",
+      "vendored_sha256": "2339326f498011eec9c10ba7f77685f3f3a8df7dea3e12e0c328c8d1af22f2d0",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/quaternion.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/quaternion.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "0340906cdcee07c28ca319215c6ba05c568e0e50",
+      "upstream_sha256": "9b0f77a1d05edd63301545ea69a0f841eb623ddb2fa9e153b3788c2754807b81",
+      "vendored_sha256": "9b0f77a1d05edd63301545ea69a0f841eb623ddb2fa9e153b3788c2754807b81",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/rect2.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/rect2.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "53a8e8d70a211784bde556bad465ef3e987ade2a",
+      "upstream_sha256": "f05281562219c1f5d11e475a334bc65472709ec0746a66a504b4cbc2424f8edd",
+      "vendored_sha256": "f05281562219c1f5d11e475a334bc65472709ec0746a66a504b4cbc2424f8edd",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/transform.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/transform.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "68359ade43f061a0cbaefc1005f107bef6049fb2",
+      "upstream_sha256": "c6ea82302bcd4b986c6005a5ef8c5f462d229ebdec9ce99b23ee623b34b4bca5",
+      "vendored_sha256": "c6ea82302bcd4b986c6005a5ef8c5f462d229ebdec9ce99b23ee623b34b4bca5",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/transform.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/transform.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "73ee7aad22a83acd5b774856be067f1085bfd30c",
+      "upstream_sha256": "69d9cdad3bd3513d2feb62d2549a4b709a29acd5a0e9b25969e240f3243f2ff8",
+      "vendored_sha256": "69d9cdad3bd3513d2feb62d2549a4b709a29acd5a0e9b25969e240f3243f2ff8",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/units.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/units.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "2d63ef3eaba8922001443bd04d4c429650e89c52",
+      "upstream_sha256": "1027eea4647dc42e908a751760da4907f321c2b0ab78567d718fa7e290caa3c5",
+      "vendored_sha256": "1027eea4647dc42e908a751760da4907f321c2b0ab78567d718fa7e290caa3c5",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/vector2.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/vector2.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "6f00384a8031091dcb25029cb1bec65b89c99d49",
+      "upstream_sha256": "9c125e5b5bc9694cdd5b7641beaaf49b5fa936349f11947b5b3eccf2e73d6586",
+      "vendored_sha256": "9c125e5b5bc9694cdd5b7641beaaf49b5fa936349f11947b5b3eccf2e73d6586",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/vector2.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/vector2.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "e347b6d06dd3ae2e3f65821551fbf5a4155656fa",
+      "upstream_sha256": "b50c0ebcf178fbd9bbd79410b00dc5b65371e70431fbd8747efca62101dc3fb3",
+      "vendored_sha256": "b50c0ebcf178fbd9bbd79410b00dc5b65371e70431fbd8747efca62101dc3fb3",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/vector3.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/vector3.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "949a2b0c7325a1f9b43a7b1b1588867c353dbfa5",
+      "upstream_sha256": "aebe75605a8971632d2171dc876b97dd4f188a77ab84dd7f23ed5fef1d113547",
+      "vendored_sha256": "aebe75605a8971632d2171dc876b97dd4f188a77ab84dd7f23ed5fef1d113547",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/vector3.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/vector3.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "449867ddd1a6390453a1342f4d65d350166c5ab4",
+      "upstream_sha256": "eb76acf09494c48b5d5857f8f2a7d5560debd706c105b456129ea57912e0f500",
+      "vendored_sha256": "eb76acf09494c48b5d5857f8f2a7d5560debd706c105b456129ea57912e0f500",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/vector4.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/vector4.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "71a00f12a5a56ebbae4cde0db0ce689b246e895b",
+      "upstream_sha256": "7c3c5099808b29703fc4c2f1e5505c2a0cce9f6d52d244c05ecc5f2975376400",
+      "vendored_sha256": "7c3c5099808b29703fc4c2f1e5505c2a0cce9f6d52d244c05ecc5f2975376400",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/math/vector4.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/math/vector4.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "8aefeaffd77c65271f13984168220f804b590604",
+      "upstream_sha256": "ad110a1ac5acc27c5cb681291b34ff20a5ee7f39654aa2e6423ee415e5c780f3",
+      "vendored_sha256": "ad110a1ac5acc27c5cb681291b34ff20a5ee7f39654aa2e6423ee415e5c780f3",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/paths/paths.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/paths/paths.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "e99c8c9007ea0cf9720f541d5c35fda537cfe3d3",
+      "upstream_sha256": "dfa801bd64bad811e8df56d655459d24fb8be970467fa69708f0dfb7d705c67a",
+      "vendored_sha256": "dfa801bd64bad811e8df56d655459d24fb8be970467fa69708f0dfb7d705c67a",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/paths/paths.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/paths/paths.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "5d972f4492b8cfd85dbb21ca88b59f35e229b89d",
+      "upstream_sha256": "9d5d354963cdd429bec56883a3ad2028f0916a7ef91841e514393f0bdb2f6d71",
+      "vendored_sha256": "9d5d354963cdd429bec56883a3ad2028f0916a7ef91841e514393f0bdb2f6d71",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/profiling/profiler.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/profiling/profiler.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "b27bae1ef7c0fb9b647c85f894fb8cd553a5c605",
+      "upstream_sha256": "0a1905fc5649532b7d3f83d8d347aaf9c7b025536429790dc39aa57ee3af7840",
+      "vendored_sha256": "0a1905fc5649532b7d3f83d8d347aaf9c7b025536429790dc39aa57ee3af7840",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/profiling/profiler.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/profiling/profiler.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "e8836db1f9fa23237bdf179b6360a0dbf7d25241",
+      "upstream_sha256": "657b59376ae8731c72e282d60b739fb6a0f630a94bb616f1fbd047a8e482a64c",
+      "vendored_sha256": "657b59376ae8731c72e282d60b739fb6a0f630a94bb616f1fbd047a8e482a64c",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_agility.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_agility.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "d2703eef25263361f22889d6599f6c37f64af10e",
+      "upstream_sha256": "1abcb9b81097e77da575589dddc3a99681f120700da338b00f0114575e862a7b",
+      "vendored_sha256": "1abcb9b81097e77da575589dddc3a99681f120700da338b00f0114575e862a7b",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_buffer_creation.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_buffer_creation.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "846f831c4be64b6c90cdd912da4e9cd187c2f7ee",
+      "upstream_sha256": "24c5a71cdec6d2c0b646121a44596cff691965c1d0307180db71f1879665b421",
+      "vendored_sha256": "24c5a71cdec6d2c0b646121a44596cff691965c1d0307180db71f1879665b421",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_command_list.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_command_list.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "7b0de9478f9fb3b62d2662820ad08862fb1eefee",
+      "upstream_sha256": "6998d7d16136a0609338d869e2c88b94f0914b9267fd196e96b04281a8aebca2",
+      "vendored_sha256": "6998d7d16136a0609338d869e2c88b94f0914b9267fd196e96b04281a8aebca2",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_command_list.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_command_list.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "624ece370f828ab0a40e5b430b52431f94aa2f7a",
+      "upstream_sha256": "347d3a900ccc0dff9dde48de7969da801f4aad52dd5bc151d12a9535fff7d3e7",
+      "vendored_sha256": "347d3a900ccc0dff9dde48de7969da801f4aad52dd5bc151d12a9535fff7d3e7",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_compat.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_compat.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "1194d80ddf4aa9da7186bf68fc1c704756cb37f0",
+      "upstream_sha256": "18f80e172850dbbff5b2cc9b9ad7d94ddaea24ee98e87c80cf6d1ff5f34cd1cb",
+      "vendored_sha256": "18f80e172850dbbff5b2cc9b9ad7d94ddaea24ee98e87c80cf6d1ff5f34cd1cb",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_d3d12ma.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_d3d12ma.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "e23692540c445447b1215bde84fc0aec57317373",
+      "upstream_sha256": "6797675a2187d1113775b7e9363837e74d8bfda5c4cda34769537df52560490b",
+      "vendored_sha256": "6797675a2187d1113775b7e9363837e74d8bfda5c4cda34769537df52560490b",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_descriptor_allocator.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_descriptor_allocator.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "430d7330997960b8683cc18f055725b4d5a33975",
+      "upstream_sha256": "c3a2818c6d5f94c44a311fc0070180c53f5177935cd92830a5d0bb4796127403",
+      "vendored_sha256": "c3a2818c6d5f94c44a311fc0070180c53f5177935cd92830a5d0bb4796127403",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_descriptor_allocator.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_descriptor_allocator.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "3676847ed2c41a6e5506af938b05b733a088e43c",
+      "upstream_sha256": "49d2a6a6bba7ce48933762394b16140bafc786e3f4987e003770c60d6c3cc56b",
+      "vendored_sha256": "49d2a6a6bba7ce48933762394b16140bafc786e3f4987e003770c60d6c3cc56b",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_device.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_device.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "64c44fdc8cee2119be9080f0ad403701f51be471",
+      "upstream_sha256": "7426b3438b43fdf4afbe094164a660658d6e17fc1fcd8847b070fac3ba2135c3",
+      "vendored_sha256": "7426b3438b43fdf4afbe094164a660658d6e17fc1fcd8847b070fac3ba2135c3",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_device.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_device.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "607373b957ac6ddc4f47b0214d50cedc1e332b19",
+      "upstream_sha256": "00b644a53af8c5613656a9bef5095b0c32c79138088e713419659bafde2228b4",
+      "vendored_sha256": "00b644a53af8c5613656a9bef5095b0c32c79138088e713419659bafde2228b4",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_fence.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_fence.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "88b16227b7fc52949e35497099b54450b5c9b98d",
+      "upstream_sha256": "beddbeef05228d7c57d7be91715325fdfb21c22a9f8c7aa77c3626a2997b2d5c",
+      "vendored_sha256": "beddbeef05228d7c57d7be91715325fdfb21c22a9f8c7aa77c3626a2997b2d5c",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_fence.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_fence.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "3cc3a5fb6859cb40286cec25014791b851da332d",
+      "upstream_sha256": "225587bc5285e1c5ef9f94c3f1575e88d849ee6f240fbd4b4ac75f80db683681",
+      "vendored_sha256": "225587bc5285e1c5ef9f94c3f1575e88d849ee6f240fbd4b4ac75f80db683681",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_gpu_breadcrumbs.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_gpu_breadcrumbs.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "ac055b8567c5e6d66fd5c1a8614572b3121f4267",
+      "upstream_sha256": "4136cc3e4cb8006dbf9034e16701bd1b311ad529abbcd4b308eea7c66340b3c6",
+      "vendored_sha256": "4136cc3e4cb8006dbf9034e16701bd1b311ad529abbcd4b308eea7c66340b3c6",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_gpu_breadcrumbs.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_gpu_breadcrumbs.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "01a4a44cdae5f28ae10c7877f67b0bcfd38a49ca",
+      "upstream_sha256": "94418db501eee8f01e6f3468099b9da3a2d0c83ffa46ab892d592ea294825467",
+      "vendored_sha256": "94418db501eee8f01e6f3468099b9da3a2d0c83ffa46ab892d592ea294825467",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_gpu_profiler.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_gpu_profiler.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "e89412bc9337349c765d8e207de2b28ad62798e4",
+      "upstream_sha256": "b82f48d12c5a914f8e0dbdbbab1ae45ad45de67b8aeca7b14b5f23572d8f19b0",
+      "vendored_sha256": "b82f48d12c5a914f8e0dbdbbab1ae45ad45de67b8aeca7b14b5f23572d8f19b0",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_gpu_profiler.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_gpu_profiler.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "bfda5c7b1a0296b2e07b5d0221a24531bb24be0e",
+      "upstream_sha256": "b5801223a11c4ad8fa35833031c0992716a392fe43c83c6bb67069aa3c5e4e68",
+      "vendored_sha256": "b5801223a11c4ad8fa35833031c0992716a392fe43c83c6bb67069aa3c5e4e68",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_guids.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_guids.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "cb88665f73efd85d164e02bed00ffd4cb2bb93be",
+      "upstream_sha256": "d1cc4365db71f274e7ad58b671b4c70dbba1c92e31078ffc3efe623f6fa5f1e4",
+      "vendored_sha256": "d1cc4365db71f274e7ad58b671b4c70dbba1c92e31078ffc3efe623f6fa5f1e4",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_guids.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_guids.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "3b785108c30dbc2c79d671f8abee63f8a8c8e23c",
+      "upstream_sha256": "84eb413985a638d35fff6d7ac50f4d020545cbfea6a0a80d0cc291cc35b445e9",
+      "vendored_sha256": "84eb413985a638d35fff6d7ac50f4d020545cbfea6a0a80d0cc291cc35b445e9",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_pso_creation.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_pso_creation.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "8fd94746e436ca9f68da7883c89c8e8e0689aadb",
+      "upstream_sha256": "8d247da5d5170f9c6c110aa26cb8d36fcc996d207123481a989caca95e1e4492",
+      "vendored_sha256": "8d247da5d5170f9c6c110aa26cb8d36fcc996d207123481a989caca95e1e4492",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_resource_creation.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_resource_creation.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "aa4e765e4c2fa1574c38f6fc5a5dc2a535de0a94",
+      "upstream_sha256": "46fac996cbd8441ab6dab14463c9c78c2669b082391041d5785a29cc2a7cb97b",
+      "vendored_sha256": "46fac996cbd8441ab6dab14463c9c78c2669b082391041d5785a29cc2a7cb97b",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_resources.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_resources.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "f4563e852968ea069fb97991fc4c599f3dcd62ca",
+      "upstream_sha256": "3dcd851892e66b087b6bb525fc0c33511bd9d45e6140f5866e07634430396680",
+      "vendored_sha256": "3dcd851892e66b087b6bb525fc0c33511bd9d45e6140f5866e07634430396680",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_swapchain.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_swapchain.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "7e6d8978b42e1bcf62c0e8fbc2342676a16f9f58",
+      "upstream_sha256": "6ed945bf3d4dd3a5fcbe3f1a614d19ba90002f894a100c08c0ad881d605ddc7f",
+      "vendored_sha256": "6ed945bf3d4dd3a5fcbe3f1a614d19ba90002f894a100c08c0ad881d605ddc7f",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_swapchain.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_swapchain.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "1ed72e2c5e367ddabcd1e9fa358039131e07ef2f",
+      "upstream_sha256": "eccab442162c6ada9b9ed07bc74e0d30eb4122f23f97d6126e3303a090e805f4",
+      "vendored_sha256": "eccab442162c6ada9b9ed07bc74e0d30eb4122f23f97d6126e3303a090e805f4",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/dx12/dx12_texture_creation.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/dx12/dx12_texture_creation.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "b2049904400880dc5f61f9f31e4bd4b9d11593bf",
+      "upstream_sha256": "9bb7163a4f5816b1dfdbad2d4ad6a88c04259ef9409e200e9e5d6bad6bc45803",
+      "vendored_sha256": "9bb7163a4f5816b1dfdbad2d4ad6a88c04259ef9409e200e9e5d6bad6bc45803",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "e28b806483c07a728cb25f568368189c5bdf12ef",
+      "upstream_sha256": "4d1e3905863fa78da61cdede6240b507d93756a439ecf7a5c5f0c4cb75a86e80",
+      "vendored_sha256": "4d1e3905863fa78da61cdede6240b507d93756a439ecf7a5c5f0c4cb75a86e80",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_backend.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_backend.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "d22194868c2703b6a2b273e2ddb69ec445d6e94f",
+      "upstream_sha256": "d539a0f61efd20c81875dd5ea4a4736116a563f0ea6d639bb068b834c406779d",
+      "vendored_sha256": "d539a0f61efd20c81875dd5ea4a4736116a563f0ea6d639bb068b834c406779d",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_command_list.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_command_list.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "d5a9d17d8a7e1e929cb25e7f4a9f66a5f111b6c7",
+      "upstream_sha256": "cbbc60445135588653bdbbd5fd96276d9011cdcdbb2031510708a04444639cc7",
+      "vendored_sha256": "cbbc60445135588653bdbbd5fd96276d9011cdcdbb2031510708a04444639cc7",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_config.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_config.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "4ee4d7128a681071f2c491a3fe8e423d38bd4a59",
+      "upstream_sha256": "e000f86b403bee9c8625e5dcb00b4702f85af1f85fc2f25a52626cd0e2f556f9",
+      "vendored_sha256": "e000f86b403bee9c8625e5dcb00b4702f85af1f85fc2f25a52626cd0e2f556f9",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_config.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_config.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "88bd648c8416a15e353f585e09dabc327a0ac143",
+      "upstream_sha256": "db78f9db577aa3f00d745a137234bc843f939b08bedf0d7df0d97c31b8a5a06a",
+      "vendored_sha256": "db78f9db577aa3f00d745a137234bc843f939b08bedf0d7df0d97c31b8a5a06a",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_device.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_device.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "59af3ecc47ef998c46d79eaf4fe91d37abdf52be",
+      "upstream_sha256": "123623a603eb37500bed893f0e163cd8a5b4ddf08d7e36fc51c2ff0050cc0f0d",
+      "vendored_sha256": "123623a603eb37500bed893f0e163cd8a5b4ddf08d7e36fc51c2ff0050cc0f0d",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_factory.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_factory.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "73398eb56b34d5a6bdc38bb4287e7717b66676d9",
+      "upstream_sha256": "473f3279ec6552177af53106fbf835d5e1c2acb49a30367d35507b8a77a5d49f",
+      "vendored_sha256": "473f3279ec6552177af53106fbf835d5e1c2acb49a30367d35507b8a77a5d49f",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_fence.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_fence.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "6a2f0baa29f653d3745abdf787f01beca53be37a",
+      "upstream_sha256": "76b4725243929252c3061df338bb83aed669e4dd4a5843b9feda2939da1397e2",
+      "vendored_sha256": "76b4725243929252c3061df338bb83aed669e4dd4a5843b9feda2939da1397e2",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_frame_limiter.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_frame_limiter.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "c8dde7c5390b213d3d3bbe5759b6082abba30046",
+      "upstream_sha256": "90bc1781b806aec8f6ac70b40dfd1be3c7f61114d4b96c70836ecb2f0678f663",
+      "vendored_sha256": "90bc1781b806aec8f6ac70b40dfd1be3c7f61114d4b96c70836ecb2f0678f663",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_gpu_profiler_types.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_gpu_profiler_types.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "88af2037ce53abc0dd78cdf6bb96b40736af6dee",
+      "upstream_sha256": "bd7763da2566e5b59cfd87c251d65e794197df4fc242bce3a49453afb0c57367",
+      "vendored_sha256": "bd7763da2566e5b59cfd87c251d65e794197df4fc242bce3a49453afb0c57367",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_resource_pool.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_resource_pool.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "bd4106f189a4208beaf72a9ddb3a767b09481d05",
+      "upstream_sha256": "1eabfc319cecf08042aeb629cfd5148bb732337e7ab8bc493b93979c12cf520d",
+      "vendored_sha256": "1eabfc319cecf08042aeb629cfd5148bb732337e7ab8bc493b93979c12cf520d",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_swapchain.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_swapchain.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "8257c1637d4b1dbb5b085df5e7738c2f23cad7ba",
+      "upstream_sha256": "8a777f4dc900c95a25bb7e6c71f5bfa55951f09ecfd403d5cd9b023b823e09bd",
+      "vendored_sha256": "8a777f4dc900c95a25bb7e6c71f5bfa55951f09ecfd403d5cd9b023b823e09bd",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/rhi_types.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/rhi_types.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "116ef0cbbaff3f29bd50914971e00fea53961085",
+      "upstream_sha256": "df6437fca7af9259c832736e823b1e3dc786e500cbe292f40c4cd9759538ff21",
+      "vendored_sha256": "df6437fca7af9259c832736e823b1e3dc786e500cbe292f40c4cd9759538ff21",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_command_list.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_command_list.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "2bd554ff735da731e9560b1242a9ae894989e869",
+      "upstream_sha256": "bf664eb3c4c7fd84d8a656da8737e59ac80ca786abbab2a69cad5fb076376b84",
+      "vendored_sha256": "bf664eb3c4c7fd84d8a656da8737e59ac80ca786abbab2a69cad5fb076376b84",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_command_list.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_command_list.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "6164f102e85162a118d3f6a727887a6504bb051b",
+      "upstream_sha256": "ed950e1d7477b1e9f4e659df24ba930ee95cb622992e9d4c28eddcd913f850a6",
+      "vendored_sha256": "ed950e1d7477b1e9f4e659df24ba930ee95cb622992e9d4c28eddcd913f850a6",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_device.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_device.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "63f512fe6c9f806757e074e5293314e3a44ac885",
+      "upstream_sha256": "b899c6f3079035d800d5ed1ad67231ff6adbae4f300b5cabfe3d84ff37fa362c",
+      "vendored_sha256": "b899c6f3079035d800d5ed1ad67231ff6adbae4f300b5cabfe3d84ff37fa362c",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_device.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_device.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "07c013f71b0dbd72814ffd66fe68fa95f3c8b297",
+      "upstream_sha256": "27ddd5e10a98bbbd5464e0fc3b2c9f5ed8f62f52358e384a72876b034ba9ac66",
+      "vendored_sha256": "27ddd5e10a98bbbd5464e0fc3b2c9f5ed8f62f52358e384a72876b034ba9ac66",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_fence.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_fence.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "d6e4c92816797bb151f8f64eb4f7e218811674fe",
+      "upstream_sha256": "8a05e8591843babd1ba2ea0765dddff70ef698baf86893aa135f684fb35316c2",
+      "vendored_sha256": "8a05e8591843babd1ba2ea0765dddff70ef698baf86893aa135f684fb35316c2",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_fence.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_fence.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "80a6c635c7524ca9702cd3c50201e96620af6b96",
+      "upstream_sha256": "63cb4a48c2970552644f6143543997eb6a07afd83e5f50b2669477d835f5d024",
+      "vendored_sha256": "63cb4a48c2970552644f6143543997eb6a07afd83e5f50b2669477d835f5d024",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_format_helpers.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_format_helpers.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "7cc7db806600b286375530473508559908b26333",
+      "upstream_sha256": "99401fe222b73f48b402f4c5cc182eb09d9e1deb77f40bfa4b2b94babdc5cc7f",
+      "vendored_sha256": "99401fe222b73f48b402f4c5cc182eb09d9e1deb77f40bfa4b2b94babdc5cc7f",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_gpu_profiler.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_gpu_profiler.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "1ff44da1da6dec3a42bdab99d919c36fa0385ac3",
+      "upstream_sha256": "3d18741fad2aa153ecb82d1f2bd4ac25ec1f338ab0e540a0286aaa28807b25ac",
+      "vendored_sha256": "3d18741fad2aa153ecb82d1f2bd4ac25ec1f338ab0e540a0286aaa28807b25ac",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_gpu_profiler.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_gpu_profiler.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "b83186c2cdff2b3e630bf90c9a5815d2f9517746",
+      "upstream_sha256": "6616e606e1e68ef06986465928cbdcb7ae9c835d01a5fb4048b2293d4e7f7bc1",
+      "vendored_sha256": "6616e606e1e68ef06986465928cbdcb7ae9c835d01a5fb4048b2293d4e7f7bc1",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_resources.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_resources.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "0673a8971ab7021d7b32b8311ca98d8d1e90efe5",
+      "upstream_sha256": "1e167ec20734f9fa0514205dfee4bf5ab68956b6a982138f021eab878ca0e411",
+      "vendored_sha256": "1e167ec20734f9fa0514205dfee4bf5ab68956b6a982138f021eab878ca0e411",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_resources.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_resources.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "2d15775b0aa1cd29b0a301268706e8c30797116c",
+      "upstream_sha256": "c1650e5d7be8207ff5df8eb58b099ff49ca271167d724d9425ed2ec52ad8d0cb",
+      "vendored_sha256": "c1650e5d7be8207ff5df8eb58b099ff49ca271167d724d9425ed2ec52ad8d0cb",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_swapchain.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_swapchain.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "2b3d58667a3c2fab17a0125c0030c8cbb8043635",
+      "upstream_sha256": "41993a64358a17305d9dd599776a8c12dc619c24a20ee4cc6733ce4786b8e1d7",
+      "vendored_sha256": "41993a64358a17305d9dd599776a8c12dc619c24a20ee4cc6733ce4786b8e1d7",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/rhi/vulkan/vulkan_swapchain.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/rhi/vulkan/vulkan_swapchain.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "573390700b9488c9eec2c066335a68bd53827b9c",
+      "upstream_sha256": "0687fd5d15d5eda5a2a70e8955ce50a5c71873b75853831fa4763b1fbc13f6ef",
+      "vendored_sha256": "0687fd5d15d5eda5a2a70e8955ce50a5c71873b75853831fa4763b1fbc13f6ef",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/shader/shader_cache.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/shader/shader_cache.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "e92bfe4b6da4fc105e9c03bfeb706ca4dcbc8899",
+      "upstream_sha256": "4d4428451e74e7f878560064669b42bfadfbcb131deb2afa176644fb5005d65b",
+      "vendored_sha256": "4d4428451e74e7f878560064669b42bfadfbcb131deb2afa176644fb5005d65b",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/shader/shader_cache.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/shader/shader_cache.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "54c6878e640803eff9fc4f535730d4ee4e38d17b",
+      "upstream_sha256": "018c46a25b9394a5df53c03b17e30f9276718a2a71f1f11e6a46a1d670e301d5",
+      "vendored_sha256": "018c46a25b9394a5df53c03b17e30f9276718a2a71f1f11e6a46a1d670e301d5",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/shader/shader_compiler.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/shader/shader_compiler.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "e50a63309c8e3b54e9e38854d518c29b9d18f42c",
+      "upstream_sha256": "664cbbb4150c92c69b18818ae0c52851fe9690cdca1ddf7f122a258a86ec6932",
+      "vendored_sha256": "664cbbb4150c92c69b18818ae0c52851fe9690cdca1ddf7f122a258a86ec6932",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/shader/shader_compiler.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/shader/shader_compiler.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "5eda9ffed67d1fd21e9d1b7a50063d7bce81d821",
+      "upstream_sha256": "ca450ac7f6fcc0b0686470414a75ab3348cee0766e356b817948b0c3baf59d8b",
+      "vendored_sha256": "ca450ac7f6fcc0b0686470414a75ab3348cee0766e356b817948b0c3baf59d8b",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/shader/shader_reflection.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/shader/shader_reflection.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "99caccb7709bf95d797916d289beadf25ee56dc6",
+      "upstream_sha256": "f8c28d3e021575664369ceec4dd38aeb95d33add5412e2c72763ed0f25518919",
+      "vendored_sha256": "f8c28d3e021575664369ceec4dd38aeb95d33add5412e2c72763ed0f25518919",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/engine/shader/shader_reflection.h",
+      "vendored_path": "thirdparty/uzengine-render-core/engine/shader/shader_reflection.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "95451f9be1c1c7d8fc1051cde09161d72ea29f1c",
+      "upstream_sha256": "7a9ed321585860118c555ac53273a3ba7375f0cb32f3f880640228abc55ea44c",
+      "vendored_sha256": "7a9ed321585860118c555ac53273a3ba7375f0cb32f3f880640228abc55ea44c",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/platform_types.h",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/platform_types.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "8631ecc3ee6ac776e49641c9d0388de74952000d",
+      "upstream_sha256": "51dda5369cc93e016777230dd4adc5a23d28619fdd33768c111eb8f4ac5380b2",
+      "vendored_sha256": "51dda5369cc93e016777230dd4adc5a23d28619fdd33768c111eb8f4ac5380b2",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/windows/crash_handler.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/windows/crash_handler.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "0d1ee1eca921ad091bf02f68f9e619251d802211",
+      "upstream_sha256": "9ef1bbe0d5ad7af09e420db70bd67cf413f5d08e4f07bce34c79bfd39b0cd54e",
+      "vendored_sha256": "9ef1bbe0d5ad7af09e420db70bd67cf413f5d08e4f07bce34c79bfd39b0cd54e",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/windows/crash_handler.h",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/windows/crash_handler.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "c048adf25a57c47287945a52c313239f0b308309",
+      "upstream_sha256": "b62412ccca5358e20552b671b10df6b6af9aa9948b1b82992afdfedf0648a1da",
+      "vendored_sha256": "b62412ccca5358e20552b671b10df6b6af9aa9948b1b82992afdfedf0648a1da",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/windows/file_system.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/windows/file_system.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "9fd0691af2e74c5bb9c8aaacf27f99a7d33c5765",
+      "upstream_sha256": "4645ab45fa5e1f27f9ac0ddb3b81c548028894d1a504699ba8452b0eb7b677c8",
+      "vendored_sha256": "4645ab45fa5e1f27f9ac0ddb3b81c548028894d1a504699ba8452b0eb7b677c8",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/windows/file_system.h",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/windows/file_system.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "5d2f3ee3d09c64d29be10a12671b90efb5595f22",
+      "upstream_sha256": "bb1b146a3958d33c1148263c397f0093174c98876e80de28fe120550c8a8eb29",
+      "vendored_sha256": "bb1b146a3958d33c1148263c397f0093174c98876e80de28fe120550c8a8eb29",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/windows/input.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/windows/input.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "07b37ac9c74b7c829490bd199a7b5c622a6b865a",
+      "upstream_sha256": "b14975990acd410a9a0a7098d0028d5de220098fcce29a0a874ed01fb0d84101",
+      "vendored_sha256": "b14975990acd410a9a0a7098d0028d5de220098fcce29a0a874ed01fb0d84101",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/windows/input.h",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/windows/input.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "54175e98ab4973fb98c61576e40fbaff875b7292",
+      "upstream_sha256": "5f2442bbb0ff45c4e198b76042442caa3897c846b8eb45a2dd645cb14b381ae1",
+      "vendored_sha256": "5f2442bbb0ff45c4e198b76042442caa3897c846b8eb45a2dd645cb14b381ae1",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/windows/platform_window.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/windows/platform_window.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "cbbdf7a79da1884ef418583a48c289bd7414edd1",
+      "upstream_sha256": "d55bd9f11a74a57dfa01cc57650664c28ae26175eb5464bd08e737de2ba6f67c",
+      "vendored_sha256": "d55bd9f11a74a57dfa01cc57650664c28ae26175eb5464bd08e737de2ba6f67c",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/windows/platform_window.h",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/windows/platform_window.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "6bc1350f0998accc51894564f20d6defd59375bb",
+      "upstream_sha256": "733c79aaef13bff5f455b9d8b1bb39d9caff540cbc116858bcd9a70f673cffdc",
+      "vendored_sha256": "733c79aaef13bff5f455b9d8b1bb39d9caff540cbc116858bcd9a70f673cffdc",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/windows/stack_walker.cpp",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/windows/stack_walker.cpp",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "3dfcbe95e2a7443df8822b9af587619e7d9258c7",
+      "upstream_sha256": "fcaacb161ccc06552babf771b2b5a91de1efdbf7012917d41905db746fdf5c99",
+      "vendored_sha256": "fcaacb161ccc06552babf771b2b5a91de1efdbf7012917d41905db746fdf5c99",
+      "status": "verbatim",
+      "modifications": []
+    },
+    {
+      "upstream_path": "runtime/platform/windows/stack_walker.h",
+      "vendored_path": "thirdparty/uzengine-render-core/platform/windows/stack_walker.h",
+      "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+      "upstream_blob_sha1": "7f536b6d105f01d516b2e3ffbe061670e9c4fd12",
+      "upstream_sha256": "caa1b670f9fb4e2e65705ad5b7e3d2c915939819cb4bef94e51dbc2d7db26999",
+      "vendored_sha256": "caa1b670f9fb4e2e65705ad5b7e3d2c915939819cb4bef94e51dbc2d7db26999",
+      "status": "verbatim",
+      "modifications": []
+    }
+  ]
+}

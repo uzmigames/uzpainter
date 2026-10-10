@@ -13,6 +13,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Vendored UzEngine render core (task `phase0.1_vendor-core-copy`): 97 files copied byte-equal from UzEngine commit `380c142e` into `thirdparty/uzengine-render-core/` with `LICENSE`, `ORIGIN.md` and `MANIFEST.json`; root `NOTICE`; `.gitattributes` keeps the vendored folder free of line-ending conversion; Python tooling base (`pyproject.toml`: ruff, mypy strict, pytest) with vendoring checks in `tools/vendoring/` and tests in `tests/vendoring/`.
 - Apache-2.0 licence for the project: `LICENSE`.
 - Product documents: `docs/vision.md` (product definition, acceptance premise), `docs/prd.md` (numbered requirements with acceptance criteria), `docs/roadmap.md` (evidence-gated phases G0–G5), `docs/dag.md` (work-package graph with stable rulebook task ids), `docs/open-questions.md` (owner questions Q1–Q14, all answered 2026-10-10), `docs/licensing-and-clean-room.md` (clean-room rules, third-party licence inventory); index and reading order in `docs/README.md`.
 - Fourteen architecture documents, `docs/architecture/01-overview.md` to `docs/architecture/14-parity-testing.md`: overview, runtime topology, project model, layer stack and compositing, procedural content, baking, preview and render parity, export, project file format, Python API, MCP server, mesh import, engine integration, parity testing.

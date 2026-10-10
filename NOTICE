@@ -1,0 +1,25 @@
+UzPainter
+Copyright 2026 UzmiGames
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+------------------------------------------------------------------------------
+UzEngine render core (vendored copy)
+------------------------------------------------------------------------------
+
+This product includes software copied from UzEngine, in
+thirdparty/uzengine-render-core/ (RHI with DX12 and Vulkan backends, shader
+compiler/reflection/cache, .uztexture format header, math, logging, assertions,
+profiling, paths and Windows platform files).
+
+  Copyright 2026 Uzmi Games
+  Licensed under the Apache License, Version 2.0
+  (thirdparty/uzengine-render-core/LICENSE).
+
+  Source: UzEngine repository, branch main, commit
+  380c142e481d56fe16b045f63315b42359e86a7d (2026-10-10).
+
+UzEngine has no NOTICE file at that commit (checked at the repository root,
+runtime/, runtime/engine and runtime/platform), so no upstream attribution
+notice is reproduced here. Provenance and per-file hashes:
+thirdparty/uzengine-render-core/ORIGIN.md and MANIFEST.json.
