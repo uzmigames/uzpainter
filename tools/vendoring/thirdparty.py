@@ -59,6 +59,10 @@ IMPORTER_CPYTHON = (
     "Rulebook task `phase0.7_toolchain-cpython`, run with "
     "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
 )
+IMPORTER_NORMAL = (
+    "Rulebook task `phase0.9_normal-convention-fixture`, run with "
+    "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
+)
 CPYTHON_VERSION_SOURCE = (
     "UzPainter's selection: CPython 3.13 because Painter 12.1 ships 3.13.9 "
     "(`docs/architecture/10-python-api.md` §1); 3.13.16 (tag `v3.13.16`, released 2026-09-30) is "
@@ -819,6 +823,53 @@ LIBRARIES: tuple[Library, ...] = (
         ),
         core=False,
         importer=IMPORTER_CPYTHON,
+    ),
+    Library(
+        name="mikktspace",
+        folder="mikktspace",
+        upstream="https://github.com/mmikk/MikkTSpace",
+        version="master@3e895b49",
+        commit="3e895b49d05ea07e4c2133156cfa94369e19e409",
+        archive_url=(
+            "https://github.com/mmikk/MikkTSpace/archive/"
+            "3e895b49d05ea07e4c2133156cfa94369e19e409.tar.gz"
+        ),
+        archive_name="MikkTSpace-3e895b49d05ea07e4c2133156cfa94369e19e409.tar.gz",
+        archive_sha256="aeba65ddee85a679133d510d71d00b108f603752f90b15b9ecf7777033f6e351",
+        archive_root="MikkTSpace-3e895b49d05ea07e4c2133156cfa94369e19e409/",
+        version_source=(
+            "`runtime/thirdparty/mikktspace` holds the same upstream code (its `mikktspace.c` "
+            "carries one local patch, below); upstream has no release tags, so UzPainter pins "
+            "commit `3e895b49`, the head of `master` on the retrieval date (approved source "
+            "S-MIKK, `docs/architecture/12-mesh-import.md` §3)"
+        ),
+        select=("mikktspace.c", "mikktspace.h"),
+        licence_files=("mikktspace.h",),
+        include_dirs=(".",),
+        sources=("mikktspace.c",),
+        licence=(
+            "zlib licence, stated in the comment block at the top of `mikktspace.h` (the same "
+            "notice heads `mikktspace.c`)"
+        ),
+        role=(
+            "build-only: compiled into `uzp-normal-prototype.exe`, the Phase 0 tangent-frame "
+            "prototype of `phase0.9_normal-convention-fixture`; not shipped"
+        ),
+        features=(
+            "`mikktspace.c` compiled as C11 (`genTangSpaceDefault`, per-corner tangents and "
+            "bitangent sign); the repository's `README.md` is not vendored"
+        ),
+        uzengine_folder="mikktspace",
+        differences={
+            "mikktspace.c": (
+                "UzEngine patched the rotate in `QuickSort`'s pivot generator (a shift by 32 when "
+                "the rotate amount is 0, undefined in C, which Zig's Debug sanitizer traps); "
+                "UzPainter vendors the upstream file unchanged and compiles it with "
+                "`-fno-sanitize=undefined` instead (`build.zig`)"
+            ),
+        },
+        core=False,
+        importer=IMPORTER_NORMAL,
     ),
 )
 

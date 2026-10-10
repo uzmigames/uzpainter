@@ -1,0 +1,89 @@
+{
+  "schema": "uzpainter/normal-convention-consumer/1",
+  "consumer": "UzEngine",
+  "uzengine_commit": "f4dcfc467b79b0538ef5f0aa615f16e15e8820ab",
+  "verdict": "directx",
+  "summary": [
+    "UzEngine's own executables, built from its repository as an external consumer (no UzEngine code is linked into UzPainter): commit `f4dcfc467b79b0538ef5f0aa615f16e15e8820ab`, extracted with `git archive`, provisioned with its `scripts/setup-native.ps1` and built with `zig build -Doptimize=ReleaseFast` (Zig 0.15.2, VS 2022 Build Tools 17.14, Windows SDK 10.0.26100.0) outside both repositories. The plane-dome low mesh was cooked by `uzmesh` from the OBJ and shaded by `uzengine --hidden --screenshot` with the prototype's OpenGL map of the plane-dome pair (`PerFragment-inverse-opengl`): grey, rough, non-metal material, normalIntensity 1, one directional light; anti-aliasing, post effects, GI, AO, sky and auto exposure switched off by cvar; camera looking along the plane normal.",
+    "",
+    "**Verdict: UzEngine reads green as -v (DirectX convention) for meshes `uzmesh` cooks from OBJ.** With the light from the OBJ -Z side (the +v side of the UVs), the half of the dome whose texels lean towards +v in the OpenGL map is the darker one, and the reverse with the light from +Z; the red control behaves as expected (light from +X brightens the +X half). The G-buffer world normal agrees: in the green > 1/2 half its mean points towards OBJ +Z (-v). This matches the engine's source at the same commit: `uzmesh` flips V on OBJ import and builds the bitangent along dP/dV of the flipped V (Lengyel tangents), and its G-buffer shader decodes `rg * 2 - 1` with no green flip. An OpenGL-convention map (Painter's or UzPainter's) therefore needs its green inverted, or a DirectX export, for this consumer path.",
+    "",
+    "Side observations: `uzmesh`'s OBJ path ignores the file's `vn` and recomputes normals from the reversed winding, so the cooked plane's shading normal points down and the renders light the plane from below (elevation -35 degrees); the engine loads the 16-bit PNG but decodes every texture to 8 bits (the 16-bit and 8-bit maps rendered identically).",
+    "",
+    "Mean linear luminance of each half of the dome footprint (halves taken in texture space, OBJ axes; the dome map's +v half is the -Z half):"
+  ],
+  "measurements": [
+    {
+      "render": "dome16_fromNegZ",
+      "light_from": "OBJ -Z",
+      "normal_map": "dome (OpenGL map)",
+      "minus_z": 0.01554,
+      "plus_z": 0.0944,
+      "minus_x": 0.05357,
+      "plus_x": 0.05344
+    },
+    {
+      "render": "dome16_fromPosZ",
+      "light_from": "OBJ +Z",
+      "normal_map": "dome (OpenGL map)",
+      "minus_z": 0.09494,
+      "plus_z": 0.01561,
+      "minus_x": 0.05368,
+      "plus_x": 0.05391
+    },
+    {
+      "render": "dome16_fromPosX",
+      "light_from": "OBJ +X",
+      "normal_map": "dome (OpenGL map)",
+      "minus_z": 0.0361,
+      "plus_z": 0.03613,
+      "minus_x": 0.02339,
+      "plus_x": 0.04846
+    },
+    {
+      "render": "dome16_fromNegX",
+      "light_from": "OBJ -X",
+      "normal_map": "dome (OpenGL map)",
+      "minus_z": 0.03616,
+      "plus_z": 0.03606,
+      "minus_x": 0.04847,
+      "plus_x": 0.02336
+    },
+    {
+      "render": "flat_fromNegZ",
+      "light_from": "OBJ -Z",
+      "normal_map": "flat",
+      "minus_z": 0.03168,
+      "plus_z": 0.05585,
+      "minus_x": 0.04368,
+      "plus_x": 0.04362
+    },
+    {
+      "render": "flat_fromPosZ",
+      "light_from": "OBJ +Z",
+      "normal_map": "flat",
+      "minus_z": 0.0575,
+      "plus_z": 0.03259,
+      "minus_x": 0.0449,
+      "plus_x": 0.04496
+    },
+    {
+      "render": "flat_fromPosX",
+      "light_from": "OBJ +X",
+      "normal_map": "flat",
+      "minus_z": 0.04483,
+      "plus_z": 0.04471,
+      "minus_x": 0.0573,
+      "plus_x": 0.03248
+    },
+    {
+      "render": "flat_fromNegX",
+      "light_from": "OBJ -X",
+      "normal_map": "flat",
+      "minus_z": 0.04378,
+      "plus_z": 0.04382,
+      "minus_x": 0.03179,
+      "plus_x": 0.05604
+    }
+  ]
+}

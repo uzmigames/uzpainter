@@ -1,5 +1,5 @@
 """Tests of phase0.3_vendor-modifications: UzPainter's own static-library build of the vendored
-render core (`build.zig`) and the local modifications UZP-MOD-001…006
+render core (`build.zig`) and the local modifications UZP-MOD-001…006 and UZP-MOD-008
 (`thirdparty/uzengine-render-core/MODIFICATIONS.md`).
 
 The native cases run `uzp-vendor-tests.exe` (`tests/native/vendor_modifications_test.cpp`),
@@ -363,6 +363,52 @@ def test_spirv_targets_vulkan_1_2_with_ray_query(build: Build, tmp_path: Path) -
     assert "SPV_KHR_ray_query" in extensions
 
 
+# ── UZP-MOD-008 ───────────────────────────────────────────────────────────────────────────
+
+OP_DECORATE = 71
+DECORATION_NO_CONTRACTION = 42
+DXIL_FLOAT_OP_RE = re.compile(r"= (fmul|fadd|fsub|fdiv)\b([^%]*)%")
+
+
+def _no_contraction_count(path: Path) -> int:
+    """Number of `OpDecorate <id> NoContraction` instructions in a SPIR-V module."""
+    data = path.read_bytes()
+    words = struct.unpack(f"<{len(data) // 4}I", data)
+    count, index = 0, 5
+    while index < len(words):
+        length, opcode = words[index] >> 16, words[index] & 0xFFFF
+        assert length > 0
+        if opcode == OP_DECORATE and words[index + 2] == DECORATION_NO_CONTRACTION:
+            count += 1
+        index += length
+    return count
+
+
+def _dxil_float_ops(path: Path) -> list[tuple[str, bool]]:
+    """(opcode, carries a fast-math flag) of every float arithmetic line of a disassembly."""
+    ops = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = DXIL_FLOAT_OP_RE.search(line)
+        if match:
+            ops.append((match.group(1), "fast" in match.group(2).split()))
+    return ops
+
+
+def test_ieee_strict_arithmetic(build: Build, tmp_path: Path) -> None:
+    """UZP-MOD-008: with `ieeeStrict` DXC is passed `-Gis`: DXIL float arithmetic loses its
+    fast-math flags and SPIR-V arithmetic is decorated NoContraction; without it the same
+    kernel is compiled `fast` (DXIL) and without NoContraction (SPIR-V)."""
+    out = tmp_path / "ieee"
+    passed, _, _ = _run(build, tmp_path, "ieee", str(out))
+    assert {"ieee-off compiles to DXIL", "ieee-on compiles to SPIR-V"} <= passed
+    relaxed = _dxil_float_ops(out / "ieee-off.dxil.txt")
+    strict = _dxil_float_ops(out / "ieee-on.dxil.txt")
+    assert relaxed and all(fast for _, fast in relaxed), relaxed
+    assert strict and not any(fast for _, fast in strict), strict
+    assert _no_contraction_count(out / "ieee-off.spv") == 0
+    assert _no_contraction_count(out / "ieee-on.spv") >= 3
+
+
 # ── Notices, log and manifest (2.9, 3.7) ──────────────────────────────────────────────────
 
 
@@ -370,7 +416,8 @@ def test_notices_log_and_manifest_agree() -> None:
     """3.7: every modified file starts with its §4(b) notice, is logged with a covering test
     that exists, and its manifest entry carries the logged ids and its current hash."""
     log = load_log(REPO_ROOT)
-    assert [m.id for m in log] == [f"UZP-MOD-00{n}" for n in range(1, 7)]
+    # UZP-MOD-007 (Vulkan acceleration structures) is planned for phase3.3 and not applied yet.
+    assert [m.id for m in log] == [f"UZP-MOD-00{n}" for n in (1, 2, 3, 4, 5, 6, 8)]
     manifest = load(VENDORED / "MANIFEST.json")
     assert problems(REPO_ROOT, manifest, log) == []
     modified = {e.vendored_path for e in manifest.files if e.status == "modified"}

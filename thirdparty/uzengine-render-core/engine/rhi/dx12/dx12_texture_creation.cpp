@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-009. Original: UzEngine runtime/engine/rhi/dx12/dx12_texture_creation.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// UzEngine — DX12 Texture Creation
 ///
 /// Format conversion utilities and texture resource creation/destruction.
@@ -57,6 +59,9 @@ DXGI_FORMAT ToDxgiFormat(RHIFormat format) {
         case RHIFormat::BC5Unorm:       return DXGI_FORMAT_BC5_UNORM;
         case RHIFormat::BC7Unorm:       return DXGI_FORMAT_BC7_UNORM;
         case RHIFormat::BC7Srgb:        return DXGI_FORMAT_BC7_UNORM_SRGB;
+        case RHIFormat::R16Unorm:       return DXGI_FORMAT_R16_UNORM;
+        case RHIFormat::RG16Unorm:      return DXGI_FORMAT_R16G16_UNORM;
+        case RHIFormat::RGBA16Unorm:    return DXGI_FORMAT_R16G16B16A16_UNORM;
         default:                        return DXGI_FORMAT_UNKNOWN;
     }
 }

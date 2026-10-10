@@ -8,6 +8,8 @@
 //   rayquery-decision    UZP-MOD-004: DXR tier / shader model decision
 //   agility              UZP-MOD-005: Agility SDK runtime loaded from D3D12\ beside the exe
 //   spirv <out-dir>      UZP-MOD-006: writes plain.spv and rayquery.spv for inspection
+//   ieee <out-dir>       UZP-MOD-008: writes one float kernel compiled with and without
+//                        `ieeeStrict` as DXIL (with DXC's disassembly) and as SPIR-V
 //
 // Output: one line per check, `PASS <check>` or `FAIL <check>: <detail>`, plus `INFO` lines.
 // Exit code 0 when every check passed, 1 when one failed, 2 on a usage error, 77 when the
@@ -33,6 +35,7 @@
 
 #include <windows.h>
 #include <psapi.h>
+#include <unknwn.h>
 
 #include <chrono>
 #include <cstdio>
@@ -433,6 +436,126 @@ int RunSpirv(const std::filesystem::path& outDir) {
     return g_failures == 0 ? 0 : 1;
 }
 
+// ── UZP-MOD-008 ──────────────────────────────────────────────────────────────
+
+/// DXC's interface ids, parsed from the `CROSS_PLATFORM_UUIDOF` strings of dxcapi.h (zig's
+/// clang has no `__declspec(uuid)`; the same approach as shader_compiler.cpp).
+constexpr uint8_t HexDigit(char c) {
+    return (c >= '0' && c <= '9')   ? static_cast<uint8_t>(c - '0')
+           : (c >= 'a' && c <= 'f') ? static_cast<uint8_t>(c - 'a' + 10)
+           : (c >= 'A' && c <= 'F') ? static_cast<uint8_t>(c - 'A' + 10)
+                                    : 0;
+}
+constexpr uint8_t HexPair(const char* s, int i) {
+    return static_cast<uint8_t>(HexDigit(s[i]) << 4 | HexDigit(s[i + 1]));
+}
+constexpr GUID ParseGuid(const char* s) {
+    uint32_t d1 = 0;
+    for (int i = 0; i < 8; ++i) d1 = d1 << 4 | HexDigit(s[i]);
+    uint16_t d2 = 0, d3 = 0;
+    for (int i = 9; i < 13; ++i) d2 = static_cast<uint16_t>(d2 << 4 | HexDigit(s[i]));
+    for (int i = 14; i < 18; ++i) d3 = static_cast<uint16_t>(d3 << 4 | HexDigit(s[i]));
+    return GUID{d1, d2, d3,
+                {HexPair(s, 19), HexPair(s, 21), HexPair(s, 24), HexPair(s, 26), HexPair(s, 28),
+                 HexPair(s, 30), HexPair(s, 32), HexPair(s, 34)}};
+}
+
+} // namespace
+
+#undef CROSS_PLATFORM_UUIDOF
+#define CROSS_PLATFORM_UUIDOF(iface, spec) \
+    struct iface;                          \
+    static constexpr IID IID_##iface = ParseGuid(spec);
+#include "dxcapi.h"
+
+namespace {
+
+/// One multiply-add DXC contracts or marks `fast` unless arithmetic is IEEE-strict.
+constexpr const char* kFloatKernel = R"(
+cbuffer Params : register(b0) {
+    float g_a;
+    float g_b;
+    float g_c;
+};
+RWStructuredBuffer<float> output : register(u0);
+
+[numthreads(64, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID) {
+    output[id.x] = g_a * float(id.x) + g_b * g_c;
+}
+)";
+
+/// DXC's text disassembly of a DXIL container, empty when it cannot be produced.
+std::string DisassembleDxil(const std::vector<uint8_t>& dxil) {
+    HMODULE dxc = GetModuleHandleW(L"dxcompiler.dll");
+    auto create = dxc ? reinterpret_cast<DxcCreateInstanceProc>(
+                            reinterpret_cast<void*>(GetProcAddress(dxc, "DxcCreateInstance")))
+                      : nullptr;
+    IDxcCompiler3* compiler = nullptr;
+    if (!create || FAILED(create(CLSID_DxcCompiler, IID_IDxcCompiler3,
+                                 reinterpret_cast<void**>(&compiler)))) {
+        return {};
+    }
+    std::string text;
+    const DxcBuffer buffer{dxil.data(), dxil.size(), 0};
+    IDxcResult* result = nullptr;
+    if (SUCCEEDED(compiler->Disassemble(&buffer, IID_IDxcResult,
+                                        reinterpret_cast<void**>(&result)))) {
+        IDxcBlobUtf8* blob = nullptr;
+        result->GetOutput(DXC_OUT_DISASSEMBLY, IID_IDxcBlobUtf8, reinterpret_cast<void**>(&blob),
+                          nullptr);
+        if (blob) {
+            text.assign(blob->GetStringPointer(), blob->GetStringLength());
+            blob->Release();
+        }
+        result->Release();
+    }
+    compiler->Release();
+    return text;
+}
+
+void WriteFile(const std::filesystem::path& path, const void* data, size_t size) {
+    std::ofstream file(path, std::ios::binary);
+    file.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
+    Check(static_cast<bool>(file), path.filename().string() + " written", path.string());
+}
+
+int RunIeee(const std::filesystem::path& outDir) {
+    LogCapture log;
+    ShaderCompiler compiler;
+    const bool ready = compiler.Init("dxcompiler.dll");
+    Check(ready, "DXC loads from beside the exe");
+    if (!ready) return 1;
+    std::filesystem::create_directories(outDir);
+    for (const bool strict : {false, true}) {
+        const std::string name = strict ? "ieee-on" : "ieee-off";
+        ShaderCompileDesc desc;
+        desc.source = kFloatKernel;
+        desc.sourceName = name + ".hlsl";
+        desc.stage = ShaderStageCompile::Compute;
+        desc.model = ShaderModelCompile::SM6_6;
+        desc.ieeeStrict = strict;
+        for (const ShaderOutputFormat output :
+             {ShaderOutputFormat::DXIL, ShaderOutputFormat::SPIRV}) {
+            const bool dxil = output == ShaderOutputFormat::DXIL;
+            desc.output = output;
+            const ShaderCompileResult result = compiler.Compile(desc);
+            const std::string target = dxil ? "DXIL" : "SPIR-V";
+            Check(result.success && !result.bytecode.empty(), name + " compiles to " + target,
+                  result.errors);
+            if (!result.success) continue;
+            WriteFile(outDir / (name + (dxil ? ".dxil" : ".spv")), result.bytecode.data(),
+                      result.bytecode.size());
+            if (dxil) {
+                const std::string text = DisassembleDxil(result.bytecode);
+                Check(!text.empty(), name + " DXIL disassembles");
+                WriteFile(outDir / (name + ".dxil.txt"), text.data(), text.size());
+            }
+        }
+    }
+    return g_failures == 0 ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -443,8 +566,9 @@ int main(int argc, char** argv) {
     if (mode == "rayquery-decision") return RunRayQueryDecision();
     if (mode == "agility") return RunAgility();
     if (mode == "spirv" && argc > 2) return RunSpirv(argv[2]);
+    if (mode == "ieee" && argc > 2) return RunIeee(argv[2]);
     std::fprintf(stderr,
                  "usage: uzp-vendor-tests factory | fence dx12|vulkan | rayquery-decision | "
-                 "agility | spirv <out-dir>\n");
+                 "agility | spirv <out-dir> | ieee <out-dir>\n");
     return 2;
 }

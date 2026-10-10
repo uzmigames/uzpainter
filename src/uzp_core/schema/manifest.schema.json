@@ -1,0 +1,542 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uzmigames.dev/uzpainter/schema/manifest/1",
+  "title": "UzPainter project manifest",
+  "description": "The canonical JSON document of one project revision and the public schema of the .uzp file (docs/architecture/03-project-model.md, 04-layer-stack-and-compositing.md section 1, 09-project-file-format.md). Keys this version does not know are allowed everywhere and preserved verbatim. Rules the schema cannot express (unique ids below next_id, per-node channels drawn from the stack's channels, bindings to stored resources, unaliased paint planes, acyclic anchor references) are enforced by the model validation in src/uzp_core/types/validation.cpp; key reference: src/uzp_core/MANIFEST.md.",
+  "type": "object",
+  "required": ["schema", "versions", "next_id", "settings", "mesh", "texture_sets", "resources", "display", "export_defaults", "metadata"],
+  "properties": {
+    "schema": { "const": "uzpainter/manifest/1" },
+    "versions": {
+      "type": "object",
+      "required": ["format_version", "app_version", "evaluator_profile", "compat_profile", "painter_reference"],
+      "properties": {
+        "format_version": { "type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$" },
+        "app_version": { "$ref": "#/$defs/nonEmpty" },
+        "evaluator_profile": { "$ref": "#/$defs/nonEmpty" },
+        "compat_profile": { "$ref": "#/$defs/nonEmpty" },
+        "painter_reference": {
+          "type": "object",
+          "required": ["build", "recorded_from"],
+          "properties": { "build": { "type": "string" }, "recorded_from": { "type": "string" } }
+        }
+      }
+    },
+    "next_id": { "type": "integer", "minimum": 1, "maximum": 9223372036854775807 },
+    "settings": {
+      "type": "object",
+      "required": ["normal_map_format", "tangent_space", "workflow", "default_resolution", "mesh_unit_scale", "color_management", "import_cameras", "auto_unwrap"],
+      "properties": {
+        "normal_map_format": { "$ref": "#/$defs/normalMapFormat" },
+        "tangent_space": { "enum": ["PerVertex", "PerFragment"] },
+        "workflow": { "enum": ["Default", "UVTile", "TextureSetPerUVTile"] },
+        "default_resolution": { "$ref": "#/$defs/resolution" },
+        "mesh_unit_scale": { "type": "number", "exclusiveMinimum": 0 },
+        "color_management": {
+          "type": "object",
+          "required": ["mode", "config_hash", "working_space", "io_rules"],
+          "properties": {
+            "mode": { "type": "string" },
+            "config_hash": { "anyOf": [{ "const": "" }, { "$ref": "#/$defs/sha256" }] },
+            "working_space": { "type": "string" },
+            "io_rules": { "type": "array" }
+          }
+        },
+        "import_cameras": { "type": "boolean" },
+        "auto_unwrap": { "type": "boolean" }
+      }
+    },
+    "mesh": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["resource", "import_report"],
+          "properties": { "resource": { "$ref": "#/$defs/sha256" }, "import_report": { "type": "object" } }
+        }
+      ]
+    },
+    "texture_sets": { "type": "array", "items": { "$ref": "#/$defs/textureSet" } },
+    "resources": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/sha256" },
+      "additionalProperties": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/resourceMeta" } }
+    },
+    "display": {
+      "type": "object",
+      "required": ["environment", "color_lut", "tone_mapping", "shader", "cameras", "background", "shadows", "post_effects"],
+      "properties": {
+        "environment": {
+          "type": "object",
+          "required": ["resource", "rotation", "exposure", "opacity", "blur"],
+          "properties": {
+            "resource": { "$ref": "#/$defs/optionalSha256" },
+            "rotation": { "type": "number" },
+            "exposure": { "type": "number" },
+            "opacity": { "type": "number" },
+            "blur": { "type": "number" }
+          }
+        },
+        "color_lut": { "$ref": "#/$defs/optionalSha256" },
+        "tone_mapping": { "enum": ["Linear", "ACES"] },
+        "shader": {
+          "type": "object",
+          "required": ["id", "hash", "parameters"],
+          "properties": { "id": { "type": "string" }, "hash": { "type": "string" }, "parameters": { "type": "object" } }
+        },
+        "cameras": { "type": "array" },
+        "background": { "type": "object" },
+        "shadows": { "type": "boolean" },
+        "post_effects": { "type": "object" }
+      }
+    },
+    "export_defaults": { "type": "object" },
+    "metadata": { "type": "object", "additionalProperties": { "type": "object" } }
+  },
+  "$defs": {
+    "nonEmpty": { "type": "string", "minLength": 1 },
+    "id": { "type": "integer", "minimum": 1, "maximum": 9223372036854775807 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "optionalSha256": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+    "optionalString": { "type": ["string", "null"] },
+    "assetUrl": { "type": "string", "pattern": "^uzasset://[a-z0-9_.-]+/[a-z0-9_.-]+@[A-Za-z0-9_.+-]+$" },
+    "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+    "normalMapFormat": { "enum": ["OpenGL", "DirectX"] },
+    "channelType": {
+      "enum": ["AO", "Anisotropylevel", "BaseColor", "BaseMetalness", "BaseWeight", "Displacement", "EmissionColor", "Emissive", "Height", "Metallic", "Normal", "Opacity", "Roughness", "Scattering", "SpecularColor", "SpecularRoughness", "SpecularWeight", "User0", "User1", "User2", "User3", "User4", "User5", "User6", "User7"]
+    },
+    "channelFormat": { "enum": ["sRGB8", "L8", "RGB8", "L16", "RGB16", "L16F", "RGB16F", "L32F", "RGB32F"] },
+    "meshMapUsage": { "enum": ["AO", "BentNormals", "Curvature", "Height", "ID", "Normal", "Opacity", "Position", "Thickness", "WorldSpaceNormal"] },
+    "blendingMode": {
+      "enum": ["Normal", "PassThrough", "Disable", "Replace", "Multiply", "Divide", "InverseDivide", "Darken", "Lighten", "LinearDodge", "Subtract", "InverseSubtract", "Difference", "Exclusion", "SignedAddition", "Overlay", "Screen", "LinearBurn", "ColorBurn", "ColorDodge", "SoftLight", "HardLight", "VividLight", "LinearLight", "PinLight", "Tint", "Saturation", "Color", "Value", "NormalMapCombine", "NormalMapDetail", "NormalMapInverseDetail"]
+    },
+    "powerOfTwo": { "enum": [128, 256, 512, 1024, 2048, 4096, 8192] },
+    "resolution": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": { "width": { "$ref": "#/$defs/powerOfTwo" }, "height": { "$ref": "#/$defs/powerOfTwo" } }
+    },
+    "blending": {
+      "type": "object",
+      "required": ["mode", "opacity"],
+      "properties": { "mode": { "$ref": "#/$defs/blendingMode" }, "opacity": { "$ref": "#/$defs/opacity" } }
+    },
+    "channelBlending": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/channelType" },
+      "additionalProperties": { "$ref": "#/$defs/blending" }
+    },
+    "channelList": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/channelType" } },
+    "resourceBinding": {
+      "type": "object",
+      "required": ["sha256", "alias"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "alias": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/nonEmpty" }] }
+      }
+    },
+    "levels": {
+      "type": "object",
+      "required": ["affected_channel", "components"],
+      "properties": {
+        "affected_channel": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/channelType" }] },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["input_min", "input_max", "gamma", "output_min", "output_max", "clamp"],
+            "properties": {
+              "input_min": { "type": "number" },
+              "input_max": { "type": "number" },
+              "gamma": { "type": "number", "exclusiveMinimum": 0 },
+              "output_min": { "type": "number" },
+              "output_max": { "type": "number" },
+              "clamp": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "proceduralRef": {
+      "type": "object",
+      "required": ["asset", "params", "preset", "image_inputs", "output_mapping", "mask_output", "resolution_override"],
+      "properties": {
+        "asset": { "$ref": "#/$defs/assetUrl" },
+        "params": { "type": "object" },
+        "preset": { "$ref": "#/$defs/optionalString" },
+        "image_inputs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/resourceBinding" } },
+        "output_mapping": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/channelType" },
+          "additionalProperties": { "$ref": "#/$defs/nonEmpty" }
+        },
+        "mask_output": { "$ref": "#/$defs/optionalString" },
+        "resolution_override": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/resolution" }] }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "enum": ["uniform_color", "bitmap", "vector", "font", "procedural", "reference"] } },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "uniform_color" } } },
+          "then": {
+            "required": ["rgb", "color_space"],
+            "properties": {
+              "rgb": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+              "color_space": { "type": "string" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "bitmap" } } },
+          "then": {
+            "required": ["resource", "color_space"],
+            "properties": { "resource": { "$ref": "#/$defs/resourceBinding" }, "color_space": { "type": "string" } }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "enum": ["vector", "font"] } } },
+          "then": {
+            "required": ["resource", "params"],
+            "properties": { "resource": { "$ref": "#/$defs/resourceBinding" }, "params": { "type": "object" } }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "procedural" } } },
+          "then": { "$ref": "#/$defs/proceduralRef" }
+        },
+        {
+          "if": { "properties": { "type": { "const": "reference" } } },
+          "then": {
+            "required": ["anchor", "channel_mapping", "referenced_channel", "alpha_matte", "levels"],
+            "properties": {
+              "anchor": { "$ref": "#/$defs/id" },
+              "channel_mapping": {
+                "type": "object",
+                "propertyNames": { "$ref": "#/$defs/channelType" },
+                "additionalProperties": { "$ref": "#/$defs/channelType" }
+              },
+              "referenced_channel": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/channelType" }] },
+              "alpha_matte": { "type": "boolean" },
+              "levels": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/levels" }] }
+            }
+          }
+        }
+      ]
+    },
+    "optionalSource": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/source" }] },
+    "projection": {
+      "type": "object",
+      "required": ["mode", "uv", "params"],
+      "properties": {
+        "mode": { "enum": ["Fill", "UV", "Triplanar", "Planar", "Spherical", "Cylindrical", "Warp", "UVSetToUVSet"] },
+        "uv": {
+          "type": "object",
+          "required": ["filtering_mode", "uv_wrapping_mode", "uv_transformation"],
+          "properties": {
+            "filtering_mode": { "enum": ["BilinearHQ", "BilinearSharp", "Nearest"] },
+            "uv_wrapping_mode": { "enum": ["RepeatNone", "RepeatHorizontally", "RepeatVertically", "Repeat"] },
+            "uv_transformation": {
+              "type": "object",
+              "required": ["scale_mode", "scale", "rotation", "offset"],
+              "properties": {
+                "scale_mode": { "enum": ["Factors", "MaterialPhysicalSize", "CustomPhysicalSize"] },
+                "scale": { "$ref": "#/$defs/numberPair" },
+                "rotation": { "type": "number" },
+                "offset": { "$ref": "#/$defs/numberPair" }
+              }
+            }
+          }
+        },
+        "params": { "type": "object" }
+      }
+    },
+    "numberPair": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
+    "symmetry": {
+      "type": "object",
+      "required": ["enabled", "params"],
+      "properties": { "enabled": { "type": "boolean" }, "params": { "type": "object" } }
+    },
+    "contentFill": {
+      "type": "object",
+      "required": ["source_mode", "sources", "material_source", "active_channels", "projection", "symmetry"],
+      "properties": {
+        "source_mode": { "enum": ["Split", "Material"] },
+        "sources": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/channelType" },
+          "additionalProperties": { "$ref": "#/$defs/source" }
+        },
+        "material_source": { "$ref": "#/$defs/optionalSource" },
+        "active_channels": { "$ref": "#/$defs/channelList" },
+        "projection": { "$ref": "#/$defs/projection" },
+        "symmetry": { "$ref": "#/$defs/symmetry" }
+      }
+    },
+    "maskFill": {
+      "type": "object",
+      "required": ["source", "projection", "symmetry"],
+      "properties": {
+        "source": { "$ref": "#/$defs/optionalSource" },
+        "projection": { "$ref": "#/$defs/projection" },
+        "symmetry": { "$ref": "#/$defs/symmetry" }
+      }
+    },
+    "contentPaint": {
+      "type": "object",
+      "required": ["planes"],
+      "properties": {
+        "planes": { "type": "object", "propertyNames": { "$ref": "#/$defs/channelType" }, "additionalProperties": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "maskPaint": {
+      "type": "object",
+      "required": ["plane"],
+      "properties": { "plane": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/id" }] } }
+    },
+    "presetRef": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["kind", "asset"],
+          "properties": { "kind": { "enum": ["smart_material", "smart_mask"] }, "asset": { "$ref": "#/$defs/assetUrl" } }
+        }
+      ]
+    },
+    "effectCommon": {
+      "type": "object",
+      "required": ["uid", "kind", "name", "visible", "blending", "preset_ref"],
+      "properties": {
+        "uid": { "$ref": "#/$defs/id" },
+        "name": { "type": "string" },
+        "visible": { "type": "boolean" },
+        "preset_ref": { "$ref": "#/$defs/presetRef" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "enum": ["generator", "filter"] } } },
+          "then": { "required": ["procedural"], "properties": { "procedural": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/proceduralRef" }] } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "levels" } } },
+          "then": { "required": ["levels"], "properties": { "levels": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/levels" }] } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "compare_mask" } } },
+          "then": { "required": ["compare_mask"], "properties": { "compare_mask": { "type": ["object", "null"] } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "color_selection" } } },
+          "then": { "required": ["color_selection"], "properties": { "color_selection": { "type": ["object", "null"] } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "anchor" } } },
+          "then": { "required": ["anchor_name"], "properties": { "anchor_name": { "type": "string" } } }
+        }
+      ]
+    },
+    "contentEffect": {
+      "description": "An effect of a layer's content stack: per-channel blending; compare mask and colour selection effects are allowed only in mask stacks.",
+      "$ref": "#/$defs/effectCommon",
+      "required": ["active_channels"],
+      "properties": {
+        "kind": { "enum": ["fill", "paint", "generator", "filter", "levels", "anchor"] },
+        "blending": { "$ref": "#/$defs/channelBlending" },
+        "active_channels": { "$ref": "#/$defs/channelList" }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "fill" } } }, "then": { "required": ["fill"], "properties": { "fill": { "$ref": "#/$defs/contentFill" } } } },
+        { "if": { "properties": { "kind": { "const": "paint" } } }, "then": { "required": ["paint"], "properties": { "paint": { "$ref": "#/$defs/contentPaint" } } } }
+      ]
+    },
+    "maskEffect": {
+      "description": "An effect of a layer's mask stack: mono-channel blending, sources and planes.",
+      "$ref": "#/$defs/effectCommon",
+      "properties": {
+        "kind": { "enum": ["fill", "paint", "generator", "filter", "levels", "compare_mask", "color_selection", "anchor"] },
+        "blending": { "$ref": "#/$defs/blending" }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "fill" } } }, "then": { "required": ["fill"], "properties": { "fill": { "$ref": "#/$defs/maskFill" } } } },
+        { "if": { "properties": { "kind": { "const": "paint" } } }, "then": { "required": ["paint"], "properties": { "paint": { "$ref": "#/$defs/maskPaint" } } } }
+      ]
+    },
+    "layer": {
+      "type": "object",
+      "required": ["uid", "kind", "name", "visible", "blending", "content_effects", "mask", "geometry_mask", "preset_ref"],
+      "properties": {
+        "uid": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["fill", "paint", "group", "instance"] },
+        "name": { "type": "string" },
+        "visible": { "type": "boolean" },
+        "blending": { "$ref": "#/$defs/channelBlending" },
+        "content_effects": { "type": "array", "items": { "$ref": "#/$defs/contentEffect" } },
+        "mask": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["background", "enabled", "blending", "effects"],
+              "properties": {
+                "background": { "enum": ["Black", "White"] },
+                "enabled": { "type": "boolean" },
+                "blending": { "$ref": "#/$defs/blending" },
+                "effects": { "type": "array", "items": { "$ref": "#/$defs/maskEffect" } }
+              }
+            }
+          ]
+        },
+        "geometry_mask": {
+          "type": "object",
+          "required": ["type", "inclusion_list", "items"],
+          "properties": {
+            "type": { "enum": ["Mesh", "UVTile"] },
+            "inclusion_list": { "type": "boolean" },
+            "items": { "type": "array", "items": { "$ref": "#/$defs/nonEmpty" } }
+          }
+        },
+        "preset_ref": { "$ref": "#/$defs/presetRef" }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "fill" } } }, "then": { "required": ["fill"], "properties": { "fill": { "$ref": "#/$defs/contentFill" } } } },
+        { "if": { "properties": { "kind": { "const": "paint" } } }, "then": { "required": ["paint"], "properties": { "paint": { "$ref": "#/$defs/contentPaint" } } } },
+        {
+          "if": { "properties": { "kind": { "const": "group" } } },
+          "then": {
+            "required": ["children", "collapsed"],
+            "properties": { "children": { "type": "array", "items": { "$ref": "#/$defs/layer" } }, "collapsed": { "type": "boolean" } }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "instance" } } },
+          "then": { "required": ["instance_source"], "properties": { "instance_source": { "$ref": "#/$defs/id" } } }
+        }
+      ]
+    },
+    "stack": {
+      "type": "object",
+      "required": ["id", "name", "channels", "root_layers"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string" },
+        "channels": {
+          "description": "At most one channel per ChannelType: the type is the key.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/channelType" },
+          "additionalProperties": {
+            "type": "object",
+            "required": ["format", "label"],
+            "properties": { "format": { "$ref": "#/$defs/channelFormat" }, "label": { "type": "string" } }
+          }
+        },
+        "root_layers": { "type": "array", "items": { "$ref": "#/$defs/layer" } }
+      }
+    },
+    "meshMapBinding": {
+      "type": "object",
+      "required": ["resource", "format", "color_space", "provenance", "invalid", "invalid_report"],
+      "properties": {
+        "resource": { "$ref": "#/$defs/sha256" },
+        "format": { "$ref": "#/$defs/channelFormat" },
+        "color_space": { "type": "string" },
+        "provenance": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["kind", "source_path", "source_sha256", "declared_role", "declared_convention", "units"],
+              "properties": {
+                "kind": { "const": "imported" },
+                "source_path": { "type": "string" },
+                "source_sha256": { "$ref": "#/$defs/sha256" },
+                "declared_role": { "enum": ["geometry_only", "combined"] },
+                "declared_convention": { "$ref": "#/$defs/normalMapFormat" },
+                "units": { "type": "string" }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["kind", "baker_version", "backend", "settings_hash", "high_meshes", "cage", "mesh_hashes", "effective_normalization"],
+              "properties": {
+                "kind": { "const": "baked" },
+                "baker_version": { "$ref": "#/$defs/nonEmpty" },
+                "backend": { "enum": ["embree", "dx12_rt", "vulkan_rt"] },
+                "settings_hash": { "$ref": "#/$defs/sha256" },
+                "high_meshes": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+                "cage": { "$ref": "#/$defs/optionalSha256" },
+                "mesh_hashes": {
+                  "type": "object",
+                  "required": ["positions", "uvs", "corner_normals", "triangulation"],
+                  "properties": {
+                    "positions": { "$ref": "#/$defs/sha256" },
+                    "uvs": { "$ref": "#/$defs/sha256" },
+                    "corner_normals": { "$ref": "#/$defs/sha256" },
+                    "triangulation": { "$ref": "#/$defs/sha256" }
+                  }
+                },
+                "effective_normalization": { "type": "object" }
+              }
+            }
+          ]
+        },
+        "invalid": { "type": "boolean" },
+        "invalid_report": { "type": ["object", "null"] }
+      }
+    },
+    "textureSet": {
+      "type": "object",
+      "required": ["id", "name", "original_name", "description", "material_id", "resolution", "uv_tiles", "mesh_maps", "bake_settings", "stacks"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmpty" },
+        "original_name": { "type": "string" },
+        "description": { "type": "string" },
+        "material_id": { "type": "string" },
+        "resolution": { "$ref": "#/$defs/resolution" },
+        "uv_tiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "udim"],
+            "properties": { "id": { "$ref": "#/$defs/id" }, "udim": { "type": "integer", "minimum": 1001, "maximum": 2000 } }
+          }
+        },
+        "mesh_maps": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/meshMapUsage" },
+          "additionalProperties": { "$ref": "#/$defs/meshMapBinding" }
+        },
+        "bake_settings": {
+          "type": "object",
+          "required": ["common", "detail", "per_baker"],
+          "properties": {
+            "common": { "type": "object" },
+            "detail": { "type": "object" },
+            "per_baker": { "type": "object", "additionalProperties": { "type": "object" } }
+          }
+        },
+        "stacks": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/stack" } }
+      }
+    },
+    "resourceMeta": {
+      "type": "object",
+      "required": ["id", "name", "mime", "size", "usage", "origin", "imported_at", "color_space", "session"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmpty" },
+        "mime": { "type": "string" },
+        "size": { "type": "integer", "minimum": 0 },
+        "usage": { "type": "string" },
+        "origin": { "type": "string" },
+        "imported_at": { "type": "string" },
+        "color_space": { "type": "string" },
+        "session": { "type": "boolean" }
+      }
+    }
+  }
+}

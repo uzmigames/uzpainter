@@ -126,7 +126,7 @@
           }
         },
         "bake_backend": {
-          "description": "Painter's bake backend for Tier 2b goldens (CPU recorded); null when nothing is baked.",
+          "description": "Painter's bake backend for Tier 2b goldens (CPU recorded); null when nothing is baked, or when the backend is not readable through the documented API (the public manifest then lists it in `uncontrolled_settings`).",
           "oneOf": [{ "enum": ["cpu", "gpu"] }, { "type": "null" }]
         },
         "render_state": {

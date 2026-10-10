@@ -377,6 +377,21 @@ UPSTREAM_CITATIONS: tuple[Citation, ...] = (
         r"requestedVersion = VK_API_VERSION_1_2",
         "Vulkan 1.2 instance requested",
     ),
+    # UZP-MOD-008
+    _cite(
+        "engine/shader/shader_compiler.h",
+        84,
+        95,
+        r"struct ShaderCompileDesc \{[\s\S]*bool disableOptimizations = false;[^\n]*\n\};",
+        "the compile description has no request for IEEE-strict arithmetic",
+    ),
+    _cite(
+        "engine/shader/shader_compiler.cpp",
+        261,
+        263,
+        r'if \(desc\.disableOptimizations\) \{\s*args\.push_back\(L"-Od"\);',
+        "the last code-generation flag BuildArguments passes; `-Gis` is never passed",
+    ),
     # Kept on purpose
     _cite(
         "engine/rhi/dx12/dx12_command_list.cpp",

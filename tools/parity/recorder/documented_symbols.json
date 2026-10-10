@@ -47,6 +47,18 @@
       "documented_as": "substance_painter.baking.BakingParameters.is_textureset_enabled",
       "page": "substance_painter/baking.html"
     },
+    "substance_painter.baking.BakingParameters.set": {
+      "documented_as": "substance_painter.baking.BakingParameters.set",
+      "page": "substance_painter/baking.html"
+    },
+    "substance_painter.baking.BakingParameters.set_enabled_bakers": {
+      "documented_as": "substance_painter.baking.BakingParameters.set_enabled_bakers",
+      "page": "substance_painter/baking.html"
+    },
+    "substance_painter.baking.bake_async": {
+      "documented_as": "substance_painter.baking.bake_async",
+      "page": "substance_painter/baking.html"
+    },
     "substance_painter.colormanagement": {
       "documented_as": "substance_painter/colormanagement",
       "page": "substance_painter/colormanagement.html"
@@ -177,6 +189,14 @@
     },
     "substance_painter.event": {
       "documented_as": "substance_painter.event",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.BakingProcessEnded": {
+      "documented_as": "substance_painter.event.BakingProcessEnded",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.BakingProcessEnded.status": {
+      "documented_as": "substance_painter.event.BakingProcessEnded",
       "page": "substance_painter/event.html"
     },
     "substance_painter.event.BusyStatusChanged": {

@@ -19,7 +19,7 @@ import re
 import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 from tools.parity.recorder import vocabulary as ps
@@ -29,7 +29,14 @@ from tools.parity.recorder.capture import (
     verify_current_outputs,
     write_fence,
 )
-from tools.parity.recorder.job import INPUT_ARGS, ExportStep, Job, OutputMap, sha256_file
+from tools.parity.recorder.job import (
+    INPUT_ARGS,
+    OPTIONAL_INPUT_ARGS,
+    ExportStep,
+    Job,
+    OutputMap,
+    sha256_file,
+)
 from tools.parity.recorder.output import ensure_outside_repository, run_name, write_run
 from tools.parity.recorder.session import (
     PainterCallError,
@@ -49,6 +56,13 @@ SOURCE_CHANNEL_OF_MAP = {
     "normal_directx": "normal",
     "ao_mixed": "ao",
 }
+
+# A bake (every texture set it covers) must end within this time.
+BAKE_TIMEOUT_S = 1800.0
+
+# Path characters a `file:///` URL carries without percent-encoding (RFC 3986 unreserved, the
+# path separator and the drive colon); any other character makes the URL ambiguous.
+URL_SAFE_PATH = re.compile(r"[A-Za-z0-9._~/:-]+")
 
 
 def utc_now() -> datetime:
@@ -71,6 +85,36 @@ def stage_inputs(job: Job, directory: Path) -> dict[str, Path]:
     return staged
 
 
+def file_url(path: PurePath) -> str:
+    """The `file:///` URL of a staged file, as the documented baking example builds it
+    (`QUrl.fromLocalFile(path).toString()`); refuses a path that would need percent-encoding."""
+    posix = path.as_posix()
+    if not path.is_absolute() or not URL_SAFE_PATH.fullmatch(posix):
+        raise RecorderError(
+            f"{posix}: a file URL of this path would need percent-encoding; use a work directory "
+            "whose path holds only letters, digits and . _ ~ / : -"
+        )
+    return "file://" + posix if posix.startswith("/") else "file:///" + posix
+
+
+def wait_baked(session: PainterSession, step: int, timeout_s: float = BAKE_TIMEOUT_S) -> Any:
+    """Poll `baking_state` until the bake a step launched has ended; any status other than
+    `Success` refuses the golden."""
+    deadline = session.monotonic() + timeout_s
+    while True:
+        state = session.call("baking_state")
+        if state["ended"]:
+            break
+        if session.monotonic() >= deadline:
+            raise RecorderError(
+                f"step {step}: timed out after {timeout_s:.0f} s waiting for BakingProcessEnded"
+            )
+        session.sleep(session.poll_interval_s)
+    if state["status"] != ps.BAKE_SUCCESS:
+        raise RecorderError(f"step {step}: the bake ended with status {state['status']}")
+    return state
+
+
 def replay(session: PainterSession, job: Job, staged: dict[str, Path]) -> dict[str, Any]:
     """Apply the state steps; returns the effective defaults read along the way."""
     defaults: dict[str, Any] = {"insert_fill": {}}
@@ -79,10 +123,21 @@ def replay(session: PainterSession, job: Job, staged: dict[str, Path]) -> dict[s
         key = INPUT_ARGS.get(step.call)
         if key is not None:
             resolved[key] = staged[step.args[key]].as_posix()
+        key = OPTIONAL_INPUT_ARGS.get(step.call)
+        if key is not None and key in step.args:
+            resolved[key] = file_url(staged[step.args[key]])
         result = session.call(
             "apply_step", step=step.step, call=step.call, args=step.args, resolved=resolved
         )
-        if step.call == ps.CREATE:
+        if step.call == ps.BAKE:
+            ended = wait_baked(session, step.step)
+            session.wait_ready()
+            defaults.setdefault("bakes", {})[str(step.step)] = {
+                "status": ended["status"],
+                "texture_sets": ended["baked"],
+                "enabled_bakers": result["enabled_bakers"],
+            }
+        elif step.call == ps.CREATE:
             session.wait_ready()
             defaults["project.create"] = session.call("template_capture")
             defaults["colour_management"] = result["colour_management"]
@@ -97,10 +152,27 @@ def replay(session: PainterSession, job: Job, staged: dict[str, Path]) -> dict[s
     return defaults
 
 
+def bake_readback_specs(job: Job, defaults: dict[str, Any]) -> list[dict[str, Any]]:
+    """`get_mesh_map_resource` of every usage enabled when each bake ran (known after replay)."""
+    specs: list[dict[str, Any]] = []
+    for step in job.state_steps:
+        if step.call != ps.BAKE:
+            continue
+        enabled = defaults["bakes"][str(step.step)]["enabled_bakers"]
+        scope = {"texture_set": step.args["texture_set"]} if "texture_set" in step.args else {}
+        for usage in sorted({name for names in enabled.values() for name in names}):
+            specs.append({"call": ps.GET_MESH_MAP, "args": {"usage": usage, **scope}})
+    return specs
+
+
 def readback_outputs(
-    session: PainterSession, job: Job, template: dict[str, Any]
+    session: PainterSession,
+    job: Job,
+    template: dict[str, Any],
+    extra_specs: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     specs = job.readback_specs()
+    specs += [spec for spec in extra_specs or [] if spec not in specs]
     if any(step.call == ps.SET_RESOLUTIONS for step in job.state_steps):
         specs += [
             {"call": ps.GET_RESOLUTION, "args": {"texture_set": name}}
@@ -196,6 +268,9 @@ def export_outputs(
             elif out.map_type == "defaultMap":
                 # The documented constant maps (`black`, `white`): 0 and 1 in any encoding.
                 encoding, basis = "linear", "constant_default_map"
+            elif out.map_type == "meshMap":
+                # Baked mesh maps hold data (directions, occlusion, positions), not colour.
+                encoding, basis = "linear", "baked_mesh_map"
             else:
                 if channel_names is None:
                     reported = session.call("channel_names")
@@ -236,6 +311,7 @@ def record_once(
     recording_id: str,
     condition: str,
     now: Now,
+    extra_readbacks: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], list[Path]]:
     session.wait_ready()
     template = session.call("template_capture")
@@ -247,7 +323,7 @@ def record_once(
             "values": template,
         }
     ]
-    outputs += readback_outputs(session, job, template)
+    outputs += readback_outputs(session, job, template, extra_readbacks)
     blobs: list[Path] = []
     for export in job.exports:
         exported, files = export_outputs(session, export, template, directory)
@@ -307,12 +383,13 @@ def record_texture_golden(
     staged = stage_inputs(job, directory / "inputs")
     try:
         defaults = replay(session, job, staged)
+        baked = bake_readback_specs(job, defaults)
         first, first_blobs = record_once(
-            session, job, identity, directory / "r1", "r1", "same_session", now
+            session, job, identity, directory / "r1", "r1", "same_session", now, baked
         )
         save_and_reopen(session, directory / "project" / "golden.spp")
         second, second_blobs = record_once(
-            session, job, identity, directory / "r2", "r2", "after_save_reopen", now
+            session, job, identity, directory / "r2", "r2", "after_save_reopen", now, baked
         )
     finally:
         close_quietly(session)

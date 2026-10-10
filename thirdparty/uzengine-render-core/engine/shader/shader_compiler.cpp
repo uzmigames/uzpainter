@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-006. Original: UzEngine runtime/engine/shader/shader_compiler.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-006, UZP-MOD-008. Original: UzEngine runtime/engine/shader/shader_compiler.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 /// ShaderCompiler Implementation
 ///
@@ -266,6 +266,11 @@ std::vector<std::wstring> ShaderCompiler::BuildArguments(
     // Disable optimizations
     if (desc.disableOptimizations) {
         args.push_back(L"-Od");
+    }
+
+    // IEEE-strict arithmetic (UZP-MOD-008)
+    if (desc.ieeeStrict) {
+        args.push_back(L"-Gis");
     }
 
     // Preprocessor defines

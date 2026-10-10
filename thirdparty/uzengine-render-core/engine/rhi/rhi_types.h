@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-009. Original: UzEngine runtime/engine/rhi/rhi_types.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// UzEngine RHI Type Definitions — Enums, Descriptors, and Resource Handles.
@@ -202,6 +204,13 @@ enum class RHIFormat : uint8_t {
     D32Float,                 ///< 32-bit float depth, no stencil.
     D24UnormS8Uint,           ///< 24-bit depth + 8-bit stencil.
     D32FloatS8Uint,           ///< 32-bit float depth + 8-bit stencil (+ 24 padding).
+
+    // ── 16-bit unsigned normalized color formats (UzPainter, UZP-MOD-009) ──
+    // Appended so the values of the formats above are unchanged.
+
+    R16Unorm,                 ///< Single channel, 16-bit unsigned normalized [0,1].
+    RG16Unorm,                ///< Two channels, 16-bit unsigned normalized.
+    RGBA16Unorm,              ///< Four channels, 16-bit unsigned normalized.
 };
 
 /// Returns the number of bytes per texel for the given format.
@@ -260,6 +269,9 @@ enum class RHIFormat : uint8_t {
         case RHIFormat::D32Float:       return 4;
         case RHIFormat::D24UnormS8Uint: return 4;
         case RHIFormat::D32FloatS8Uint: return 8;
+        case RHIFormat::R16Unorm:       return 2;
+        case RHIFormat::RG16Unorm:      return 4;
+        case RHIFormat::RGBA16Unorm:    return 8;
         default:                        return 0;
     }
 }

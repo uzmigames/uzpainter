@@ -849,10 +849,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "e50a63309c8e3b54e9e38854d518c29b9d18f42c",
       "upstream_sha256": "664cbbb4150c92c69b18818ae0c52851fe9690cdca1ddf7f122a258a86ec6932",
-      "vendored_sha256": "955096cda3656c209cc472621cdce209a090457bd4879ec99902a68070bf872e",
+      "vendored_sha256": "d901c9a4d7c76b2250745d93de33d90a7224bbf9772b59efd8a7ed259ee9bdc1",
       "status": "modified",
       "modifications": [
-        "UZP-MOD-006"
+        "UZP-MOD-006",
+        "UZP-MOD-008"
       ]
     },
     {
@@ -861,10 +862,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "5eda9ffed67d1fd21e9d1b7a50063d7bce81d821",
       "upstream_sha256": "ca450ac7f6fcc0b0686470414a75ab3348cee0766e356b817948b0c3baf59d8b",
-      "vendored_sha256": "62aefdff6a1d1c526c09337f704c2af196ff7e53f59151c72aee33e5e197003a",
+      "vendored_sha256": "6cd3b1ef16398107d403ae85a1b40d913bff0c7914970cbfa30219581cfe7344",
       "status": "modified",
       "modifications": [
-        "UZP-MOD-006"
+        "UZP-MOD-006",
+        "UZP-MOD-008"
       ]
     },
     {

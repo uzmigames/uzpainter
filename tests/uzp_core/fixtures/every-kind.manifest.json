@@ -1,0 +1,1004 @@
+{
+  "display": {
+    "background": {},
+    "cameras": [],
+    "color_lut": null,
+    "environment": {
+      "blur": 0.0,
+      "exposure": 0.5,
+      "opacity": 1.0,
+      "resource": "e400855121dfce270d9dd3740b5d8a0443cdf84434c71b0b5f181fc2f9ee69f4",
+      "rotation": 90.0
+    },
+    "post_effects": {},
+    "shader": {
+      "hash": "e137e75a5e0e7a623ca39de480667a55b43e0eedec58767634ebaef07c33383a",
+      "id": "pbr-metal-rough",
+      "parameters": {
+        "emissive_intensity": 1.0
+      }
+    },
+    "shadows": false,
+    "tone_mapping": "ACES"
+  },
+  "export_defaults": {
+    "bit_depth": 16,
+    "padding": "infinite"
+  },
+  "mesh": {
+    "import_report": {
+      "triangles": 128
+    },
+    "resource": "21b3b73e5cd1cba72fc5573cc44450935cd83b0a491d50afb39c26e8ce1c2b22"
+  },
+  "metadata": {
+    "assets3d": {
+      "asset": "tunic"
+    },
+    "pipeline": {
+      "stage": "painting",
+      "version": 10
+    }
+  },
+  "next_id": 100,
+  "resources": {
+    "21292d59be48ec94f363360f357a56e212abc739caea3e9b5da6367274f868da": [
+      {
+        "color_space": "sRGB",
+        "id": 40,
+        "imported_at": "2026-10-10T00:00:00Z",
+        "mime": "image/png",
+        "name": "M_piping",
+        "origin": "import",
+        "session": false,
+        "size": 10,
+        "usage": "TEXTURE"
+      },
+      {
+        "color_space": "sRGB",
+        "id": 41,
+        "imported_at": "2026-10-10T00:00:00Z",
+        "mime": "image/png",
+        "name": "Source_v10_M_piping",
+        "origin": "import",
+        "session": false,
+        "size": 10,
+        "usage": "TEXTURE"
+      }
+    ],
+    "21b3b73e5cd1cba72fc5573cc44450935cd83b0a491d50afb39c26e8ce1c2b22": [
+      {
+        "color_space": "sRGB",
+        "id": 44,
+        "imported_at": "2026-10-10T00:00:00Z",
+        "mime": "model/fbx",
+        "name": "tunic.fbx",
+        "origin": "import",
+        "session": false,
+        "size": 40,
+        "usage": "MESH"
+      }
+    ],
+    "5b7fc73825a80060cc138db37cfa07f2e620882054e93267c8a86b08dd749c4f": [
+      {
+        "color_space": "sRGB",
+        "id": 42,
+        "imported_at": "2026-10-10T00:00:00Z",
+        "mime": "image/svg+xml",
+        "name": "logo.svg",
+        "origin": "import",
+        "session": false,
+        "size": 20,
+        "usage": "TEXTURE"
+      }
+    ],
+    "9eb25eef403670357b666261d79a3d837d1513b0296c8f300eb6a1a7eed609d3": [
+      {
+        "color_space": "sRGB",
+        "id": 46,
+        "imported_at": "2026-10-10T00:00:00Z",
+        "mime": "image/png",
+        "name": "normal.png",
+        "origin": "import",
+        "session": false,
+        "size": 60,
+        "usage": "TEXTURE"
+      }
+    ],
+    "cfcf6c372d4f5f3370908a35ed6d9b7a9fbd188d003df4027c9f874142c4a73d": [
+      {
+        "color_space": "sRGB",
+        "id": 45,
+        "imported_at": "2026-10-10T00:00:00Z",
+        "mime": "image/png",
+        "name": "ao.png",
+        "origin": "import",
+        "session": false,
+        "size": 50,
+        "usage": "TEXTURE"
+      }
+    ],
+    "e400855121dfce270d9dd3740b5d8a0443cdf84434c71b0b5f181fc2f9ee69f4": [
+      {
+        "color_space": "sRGB",
+        "id": 47,
+        "imported_at": "2026-10-10T00:00:00Z",
+        "mime": "image/vnd.radiance",
+        "name": "studio.hdr",
+        "origin": "import",
+        "session": false,
+        "size": 70,
+        "usage": "ENVIRONMENT"
+      }
+    ],
+    "ee2e88308610019dce3856035fb572b7675dc9d4c990091374349476b5beecb1": [
+      {
+        "color_space": "sRGB",
+        "id": 43,
+        "imported_at": "2026-10-10T00:00:00Z",
+        "mime": "font/ttf",
+        "name": "font.ttf",
+        "origin": "import",
+        "session": false,
+        "size": 30,
+        "usage": "TEXTURE"
+      }
+    ]
+  },
+  "schema": "uzpainter/manifest/1",
+  "settings": {
+    "auto_unwrap": false,
+    "color_management": {
+      "config_hash": "",
+      "io_rules": [],
+      "mode": "legacy",
+      "working_space": "sRGB"
+    },
+    "default_resolution": {
+      "height": 2048,
+      "width": 2048
+    },
+    "import_cameras": false,
+    "mesh_unit_scale": 0.01,
+    "normal_map_format": "OpenGL",
+    "tangent_space": "PerFragment",
+    "workflow": "Default"
+  },
+  "texture_sets": [
+    {
+      "bake_settings": {
+        "common": {
+          "output_size": 2048
+        },
+        "detail": {},
+        "per_baker": {
+          "AO": {
+            "secondary_rays": 64
+          }
+        }
+      },
+      "description": "",
+      "id": 1,
+      "material_id": "material-0",
+      "mesh_maps": {
+        "AO": {
+          "color_space": "Raw",
+          "format": "L16",
+          "invalid": false,
+          "invalid_report": null,
+          "provenance": {
+            "backend": "embree",
+            "baker_version": "uzp-bake-1",
+            "cage": null,
+            "effective_normalization": {
+              "curvature_bounds": [
+                -1.0,
+                1.0
+              ]
+            },
+            "high_meshes": [
+              "6ef7c9b15ecdd69083724b84cfdc2100351963488b51b4ea2fcbddf493fbec94"
+            ],
+            "kind": "baked",
+            "mesh_hashes": {
+              "corner_normals": "d8a097f8bb7d834d7e4296b6b001be10d0b4892366517f95f963395dd8a0fb5c",
+              "positions": "f50871d14c198e22c629a383ccd1e1cf0dfe355d4bece706a0407abbd3de7973",
+              "triangulation": "5b72fd8854e740a6892c66197f009901cef24b81a7268431bc6ee069b95b3b61",
+              "uvs": "262feb6fcbd92362fb6939008b9848c392a433d8fe80bf107e660e04b19fa1d9"
+            },
+            "settings_hash": "cde0fb0dec1400c54a0f7e7eafa73624c53e4da258bbd34b3380a0defeba95c1"
+          },
+          "resource": "cfcf6c372d4f5f3370908a35ed6d9b7a9fbd188d003df4027c9f874142c4a73d"
+        },
+        "Normal": {
+          "color_space": "Raw",
+          "format": "RGB16",
+          "invalid": true,
+          "invalid_report": {
+            "changed_triangles": 12
+          },
+          "provenance": {
+            "declared_convention": "OpenGL",
+            "declared_role": "geometry_only",
+            "kind": "imported",
+            "source_path": "A3D/tunic/normal.png",
+            "source_sha256": "9eb25eef403670357b666261d79a3d837d1513b0296c8f300eb6a1a7eed609d3",
+            "units": "cm"
+          },
+          "resource": "9eb25eef403670357b666261d79a3d837d1513b0296c8f300eb6a1a7eed609d3"
+        }
+      },
+      "name": "M_tunic",
+      "original_name": "M_tunic",
+      "resolution": {
+        "height": 2048,
+        "width": 2048
+      },
+      "stacks": [
+        {
+          "channels": {
+            "BaseColor": {
+              "format": "sRGB8",
+              "label": ""
+            },
+            "Height": {
+              "format": "L16F",
+              "label": ""
+            },
+            "Metallic": {
+              "format": "L8",
+              "label": ""
+            },
+            "Normal": {
+              "format": "RGB16F",
+              "label": ""
+            },
+            "Roughness": {
+              "format": "L8",
+              "label": ""
+            },
+            "User0": {
+              "format": "L32F",
+              "label": "dirt"
+            }
+          },
+          "id": 2,
+          "name": "",
+          "root_layers": [
+            {
+              "blending": {},
+              "content_effects": [],
+              "geometry_mask": {
+                "inclusion_list": false,
+                "items": [],
+                "type": "Mesh"
+              },
+              "instance_source": 14,
+              "kind": "instance",
+              "mask": null,
+              "name": "Leather instance",
+              "preset_ref": null,
+              "uid": 16,
+              "visible": true
+            },
+            {
+              "blending": {
+                "BaseColor": {
+                  "mode": "PassThrough",
+                  "opacity": 1.0
+                }
+              },
+              "children": [
+                {
+                  "blending": {},
+                  "content_effects": [],
+                  "fill": {
+                    "active_channels": [],
+                    "material_source": null,
+                    "projection": {
+                      "mode": "UV",
+                      "params": {},
+                      "uv": {
+                        "filtering_mode": "BilinearHQ",
+                        "uv_transformation": {
+                          "offset": [
+                            0.0,
+                            0.0
+                          ],
+                          "rotation": 0.0,
+                          "scale": [
+                            1.0,
+                            1.0
+                          ],
+                          "scale_mode": "Factors"
+                        },
+                        "uv_wrapping_mode": "Repeat"
+                      }
+                    },
+                    "source_mode": "Split",
+                    "sources": {
+                      "Roughness": {
+                        "color_space": "sRGB",
+                        "rgb": [
+                          0.6,
+                          0.6,
+                          0.6
+                        ],
+                        "type": "uniform_color"
+                      }
+                    },
+                    "symmetry": {
+                      "enabled": false,
+                      "params": {}
+                    }
+                  },
+                  "geometry_mask": {
+                    "inclusion_list": false,
+                    "items": [],
+                    "type": "Mesh"
+                  },
+                  "kind": "fill",
+                  "mask": null,
+                  "name": "Leather",
+                  "preset_ref": null,
+                  "uid": 15,
+                  "visible": true
+                }
+              ],
+              "collapsed": true,
+              "content_effects": [],
+              "geometry_mask": {
+                "inclusion_list": false,
+                "items": [],
+                "type": "Mesh"
+              },
+              "kind": "group",
+              "mask": null,
+              "name": "Smart leather",
+              "preset_ref": {
+                "asset": "uzasset://smart-material/leather@3.0.0",
+                "kind": "smart_material"
+              },
+              "uid": 14,
+              "visible": true
+            },
+            {
+              "blending": {
+                "BaseColor": {
+                  "mode": "Overlay",
+                  "opacity": 0.4
+                }
+              },
+              "content_effects": [],
+              "geometry_mask": {
+                "inclusion_list": false,
+                "items": [],
+                "type": "Mesh"
+              },
+              "kind": "paint",
+              "mask": null,
+              "name": "Paint",
+              "paint": {
+                "planes": {
+                  "BaseColor": 1004
+                }
+              },
+              "preset_ref": null,
+              "uid": 13,
+              "visible": true
+            },
+            {
+              "blending": {},
+              "content_effects": [],
+              "fill": {
+                "active_channels": [],
+                "material_source": {
+                  "color_space": "sRGB",
+                  "rgb": [
+                    0.1,
+                    0.1,
+                    0.1
+                  ],
+                  "type": "uniform_color"
+                },
+                "projection": {
+                  "mode": "UV",
+                  "params": {},
+                  "uv": {
+                    "filtering_mode": "BilinearHQ",
+                    "uv_transformation": {
+                      "offset": [
+                        0.0,
+                        0.0
+                      ],
+                      "rotation": 0.0,
+                      "scale": [
+                        1.0,
+                        1.0
+                      ],
+                      "scale_mode": "Factors"
+                    },
+                    "uv_wrapping_mode": "Repeat"
+                  }
+                },
+                "source_mode": "Material",
+                "sources": {
+                  "BaseColor": {
+                    "alpha_matte": false,
+                    "anchor": 25,
+                    "channel_mapping": {
+                      "BaseColor": "BaseColor"
+                    },
+                    "levels": null,
+                    "referenced_channel": null,
+                    "type": "reference"
+                  },
+                  "Roughness": {
+                    "alpha_matte": true,
+                    "anchor": 25,
+                    "channel_mapping": {},
+                    "levels": {
+                      "affected_channel": null,
+                      "components": [
+                        {
+                          "clamp": false,
+                          "gamma": 1.0,
+                          "input_max": 1.0,
+                          "input_min": 0.0,
+                          "output_max": 1.0,
+                          "output_min": 0.0
+                        }
+                      ]
+                    },
+                    "referenced_channel": "Roughness",
+                    "type": "reference"
+                  }
+                },
+                "symmetry": {
+                  "enabled": false,
+                  "params": {}
+                }
+              },
+              "geometry_mask": {
+                "inclusion_list": false,
+                "items": [],
+                "type": "Mesh"
+              },
+              "kind": "fill",
+              "mask": null,
+              "name": "M_piping",
+              "preset_ref": null,
+              "uid": 12,
+              "visible": true
+            },
+            {
+              "blending": {},
+              "content_effects": [],
+              "fill": {
+                "active_channels": [],
+                "material_source": null,
+                "projection": {
+                  "mode": "UV",
+                  "params": {},
+                  "uv": {
+                    "filtering_mode": "BilinearHQ",
+                    "uv_transformation": {
+                      "offset": [
+                        0.0,
+                        0.0
+                      ],
+                      "rotation": 0.0,
+                      "scale": [
+                        1.0,
+                        1.0
+                      ],
+                      "scale_mode": "Factors"
+                    },
+                    "uv_wrapping_mode": "Repeat"
+                  }
+                },
+                "source_mode": "Split",
+                "sources": {
+                  "BaseColor": {
+                    "color_space": "sRGB",
+                    "resource": {
+                      "alias": "Source_v9_M_piping",
+                      "sha256": "21292d59be48ec94f363360f357a56e212abc739caea3e9b5da6367274f868da"
+                    },
+                    "type": "bitmap"
+                  }
+                },
+                "symmetry": {
+                  "enabled": false,
+                  "params": {}
+                }
+              },
+              "geometry_mask": {
+                "inclusion_list": false,
+                "items": [],
+                "type": "Mesh"
+              },
+              "kind": "fill",
+              "mask": null,
+              "name": "M_piping",
+              "preset_ref": null,
+              "uid": 11,
+              "visible": true
+            },
+            {
+              "blending": {
+                "BaseColor": {
+                  "mode": "Normal",
+                  "opacity": 1.0
+                },
+                "Height": {
+                  "mode": "LinearDodge",
+                  "opacity": 0.5
+                }
+              },
+              "content_effects": [
+                {
+                  "active_channels": [],
+                  "blending": {
+                    "BaseColor": {
+                      "mode": "Multiply",
+                      "opacity": 0.3
+                    }
+                  },
+                  "fill": {
+                    "active_channels": [
+                      "BaseColor"
+                    ],
+                    "material_source": null,
+                    "projection": {
+                      "mode": "UV",
+                      "params": {},
+                      "uv": {
+                        "filtering_mode": "BilinearHQ",
+                        "uv_transformation": {
+                          "offset": [
+                            0.0,
+                            0.0
+                          ],
+                          "rotation": 0.0,
+                          "scale": [
+                            1.0,
+                            1.0
+                          ],
+                          "scale_mode": "Factors"
+                        },
+                        "uv_wrapping_mode": "Repeat"
+                      }
+                    },
+                    "source_mode": "Split",
+                    "sources": {
+                      "BaseColor": {
+                        "color_space": "sRGB",
+                        "rgb": [
+                          0.5,
+                          0.5,
+                          0.5
+                        ],
+                        "type": "uniform_color"
+                      }
+                    },
+                    "symmetry": {
+                      "enabled": false,
+                      "params": {}
+                    }
+                  },
+                  "kind": "fill",
+                  "name": "Tint",
+                  "preset_ref": null,
+                  "uid": 20,
+                  "visible": true
+                },
+                {
+                  "active_channels": [],
+                  "blending": {},
+                  "kind": "paint",
+                  "name": "Touch-up",
+                  "paint": {
+                    "planes": {
+                      "BaseColor": 1001,
+                      "Roughness": 1002
+                    }
+                  },
+                  "preset_ref": null,
+                  "uid": 21,
+                  "visible": true
+                },
+                {
+                  "active_channels": [
+                    "Roughness"
+                  ],
+                  "blending": {},
+                  "kind": "generator",
+                  "name": "Position",
+                  "preset_ref": null,
+                  "procedural": {
+                    "asset": "uzasset://generator/position@1.0.0",
+                    "image_inputs": {
+                      "mask": {
+                        "alias": null,
+                        "sha256": "21292d59be48ec94f363360f357a56e212abc739caea3e9b5da6367274f868da"
+                      }
+                    },
+                    "mask_output": null,
+                    "output_mapping": {
+                      "Roughness": "output"
+                    },
+                    "params": {
+                      "axis": "y",
+                      "contrast": 0.25
+                    },
+                    "preset": "default",
+                    "resolution_override": {
+                      "height": 512,
+                      "width": 512
+                    }
+                  },
+                  "uid": 22,
+                  "visible": true
+                },
+                {
+                  "active_channels": [
+                    "BaseColor"
+                  ],
+                  "blending": {},
+                  "kind": "filter",
+                  "name": "Blur",
+                  "preset_ref": null,
+                  "procedural": {
+                    "asset": "uzasset://filter/blur@2.1.0",
+                    "image_inputs": {},
+                    "mask_output": null,
+                    "output_mapping": {},
+                    "params": {
+                      "radius": 3
+                    },
+                    "preset": null,
+                    "resolution_override": null
+                  },
+                  "uid": 23,
+                  "visible": true
+                },
+                {
+                  "active_channels": [],
+                  "blending": {},
+                  "kind": "levels",
+                  "levels": {
+                    "affected_channel": "BaseColor",
+                    "components": [
+                      {
+                        "clamp": false,
+                        "gamma": 1.0,
+                        "input_max": 1.0,
+                        "input_min": 0.0,
+                        "output_max": 1.0,
+                        "output_min": 0.0
+                      },
+                      {
+                        "clamp": false,
+                        "gamma": 1.0,
+                        "input_max": 1.0,
+                        "input_min": 0.0,
+                        "output_max": 1.0,
+                        "output_min": 0.0
+                      },
+                      {
+                        "clamp": false,
+                        "gamma": 1.0,
+                        "input_max": 1.0,
+                        "input_min": 0.0,
+                        "output_max": 1.0,
+                        "output_min": 0.0
+                      }
+                    ]
+                  },
+                  "name": "Levels",
+                  "preset_ref": null,
+                  "uid": 24,
+                  "visible": true
+                },
+                {
+                  "active_channels": [],
+                  "anchor_name": "Base anchor",
+                  "blending": {},
+                  "kind": "anchor",
+                  "name": "Base anchor",
+                  "preset_ref": null,
+                  "uid": 25,
+                  "visible": true
+                }
+              ],
+              "fill": {
+                "active_channels": [
+                  "BaseColor",
+                  "Height",
+                  "Metallic",
+                  "Roughness",
+                  "User0"
+                ],
+                "material_source": null,
+                "projection": {
+                  "mode": "Triplanar",
+                  "params": {
+                    "hardness": 0.5
+                  },
+                  "uv": {
+                    "filtering_mode": "BilinearHQ",
+                    "uv_transformation": {
+                      "offset": [
+                        0.0,
+                        0.0
+                      ],
+                      "rotation": 0.0,
+                      "scale": [
+                        1.0,
+                        1.0
+                      ],
+                      "scale_mode": "Factors"
+                    },
+                    "uv_wrapping_mode": "Repeat"
+                  }
+                },
+                "source_mode": "Split",
+                "sources": {
+                  "BaseColor": {
+                    "color_space": "sRGB",
+                    "rgb": [
+                      0.8,
+                      0.2,
+                      0.1
+                    ],
+                    "type": "uniform_color"
+                  },
+                  "Height": {
+                    "color_space": "Raw",
+                    "resource": {
+                      "alias": "Source_v10_M_piping",
+                      "sha256": "21292d59be48ec94f363360f357a56e212abc739caea3e9b5da6367274f868da"
+                    },
+                    "type": "bitmap"
+                  },
+                  "Metallic": {
+                    "params": {
+                      "text": "UZ"
+                    },
+                    "resource": {
+                      "alias": null,
+                      "sha256": "ee2e88308610019dce3856035fb572b7675dc9d4c990091374349476b5beecb1"
+                    },
+                    "type": "font"
+                  },
+                  "Roughness": {
+                    "asset": "uzasset://generator/position@1.0.0",
+                    "image_inputs": {
+                      "mask": {
+                        "alias": null,
+                        "sha256": "21292d59be48ec94f363360f357a56e212abc739caea3e9b5da6367274f868da"
+                      }
+                    },
+                    "mask_output": null,
+                    "output_mapping": {
+                      "Roughness": "output"
+                    },
+                    "params": {
+                      "axis": "y",
+                      "contrast": 0.25
+                    },
+                    "preset": "default",
+                    "resolution_override": {
+                      "height": 512,
+                      "width": 512
+                    },
+                    "type": "procedural"
+                  },
+                  "User0": {
+                    "params": {
+                      "fill": "even-odd"
+                    },
+                    "resource": {
+                      "alias": null,
+                      "sha256": "5b7fc73825a80060cc138db37cfa07f2e620882054e93267c8a86b08dd749c4f"
+                    },
+                    "type": "vector"
+                  }
+                },
+                "symmetry": {
+                  "enabled": true,
+                  "params": {
+                    "axis": "x"
+                  }
+                }
+              },
+              "geometry_mask": {
+                "inclusion_list": true,
+                "items": [
+                  "body",
+                  "sleeves"
+                ],
+                "type": "Mesh"
+              },
+              "kind": "fill",
+              "mask": {
+                "background": "Black",
+                "blending": {
+                  "mode": "Normal",
+                  "opacity": 1.0
+                },
+                "effects": [
+                  {
+                    "blending": {
+                      "mode": "Normal",
+                      "opacity": 1.0
+                    },
+                    "fill": {
+                      "projection": {
+                        "mode": "UV",
+                        "params": {},
+                        "uv": {
+                          "filtering_mode": "BilinearHQ",
+                          "uv_transformation": {
+                            "offset": [
+                              0.0,
+                              0.0
+                            ],
+                            "rotation": 0.0,
+                            "scale": [
+                              1.0,
+                              1.0
+                            ],
+                            "scale_mode": "Factors"
+                          },
+                          "uv_wrapping_mode": "Repeat"
+                        }
+                      },
+                      "source": {
+                        "color_space": "sRGB",
+                        "rgb": [
+                          1.0,
+                          1.0,
+                          1.0
+                        ],
+                        "type": "uniform_color"
+                      },
+                      "symmetry": {
+                        "enabled": false,
+                        "params": {}
+                      }
+                    },
+                    "kind": "fill",
+                    "name": "Mask fill",
+                    "preset_ref": null,
+                    "uid": 30,
+                    "visible": true
+                  },
+                  {
+                    "blending": {
+                      "mode": "Multiply",
+                      "opacity": 1.0
+                    },
+                    "compare_mask": {
+                      "operation": "greater",
+                      "threshold": 0.5
+                    },
+                    "kind": "compare_mask",
+                    "name": "Compare",
+                    "preset_ref": null,
+                    "uid": 31,
+                    "visible": true
+                  },
+                  {
+                    "blending": {
+                      "mode": "Lighten",
+                      "opacity": 1.0
+                    },
+                    "color_selection": {
+                      "colors": [
+                        [
+                          1.0,
+                          0.0,
+                          0.0
+                        ]
+                      ],
+                      "tolerance": 0.1
+                    },
+                    "kind": "color_selection",
+                    "name": "ID pick",
+                    "preset_ref": null,
+                    "uid": 32,
+                    "visible": true
+                  },
+                  {
+                    "blending": {
+                      "mode": "Normal",
+                      "opacity": 1.0
+                    },
+                    "kind": "levels",
+                    "levels": {
+                      "affected_channel": null,
+                      "components": [
+                        {
+                          "clamp": true,
+                          "gamma": 2.2,
+                          "input_max": 1.0,
+                          "input_min": 0.0,
+                          "output_max": 1.0,
+                          "output_min": 0.0
+                        }
+                      ]
+                    },
+                    "name": "Mask levels",
+                    "preset_ref": null,
+                    "uid": 33,
+                    "visible": true
+                  },
+                  {
+                    "blending": {
+                      "mode": "Normal",
+                      "opacity": 1.0
+                    },
+                    "kind": "paint",
+                    "name": "Mask paint",
+                    "paint": {
+                      "plane": 1003
+                    },
+                    "preset_ref": null,
+                    "uid": 34,
+                    "visible": true
+                  },
+                  {
+                    "blending": {
+                      "mode": "Screen",
+                      "opacity": 0.75
+                    },
+                    "kind": "generator",
+                    "name": "Edge wear",
+                    "preset_ref": {
+                      "asset": "uzasset://smart-mask/edges@1.0.0",
+                      "kind": "smart_mask"
+                    },
+                    "procedural": {
+                      "asset": "uzasset://generator/edge-wear@1.0.0",
+                      "image_inputs": {},
+                      "mask_output": "mask",
+                      "output_mapping": {},
+                      "params": {},
+                      "preset": null,
+                      "resolution_override": null
+                    },
+                    "uid": 35,
+                    "visible": true
+                  }
+                ],
+                "enabled": true
+              },
+              "name": "Base",
+              "preset_ref": null,
+              "uid": 10,
+              "visible": true
+            }
+          ]
+        }
+      ],
+      "uv_tiles": [
+        {
+          "id": 3,
+          "udim": 1001
+        }
+      ]
+    }
+  ],
+  "versions": {
+    "app_version": "0.0.0",
+    "compat_profile": "painter-12.1-api-0.3.7",
+    "evaluator_profile": "painter-12.1-layerq-linear",
+    "format_version": "1.0.0",
+    "painter_reference": {
+      "build": "12.1.0",
+      "recorded_from": "tier0"
+    }
+  }
+}

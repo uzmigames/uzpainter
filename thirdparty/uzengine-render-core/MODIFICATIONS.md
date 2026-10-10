@@ -90,6 +90,19 @@ below against the selected commit, and runs the covering tests.
 | Author | UzmiGames (rulebook task `phase0.3_vendor-modifications`) |
 | Covering test | `tests/vendoring/test_modifications.py::test_spirv_targets_vulkan_1_2_with_ray_query` |
 
+## UZP-MOD-008 — IEEE-strict arithmetic on request
+
+| Field | Value |
+|---|---|
+| Id | UZP-MOD-008 |
+| Files | `engine/shader/shader_compiler.h`, `engine/shader/shader_compiler.cpp` |
+| Reason | capability |
+| Description | New `ShaderCompileDesc::ieeeStrict`: DXC is passed `-Gis`, so DXIL floating-point instructions carry no fast-math flags and SPIR-V arithmetic is decorated `NoContraction`. UzPainter's generated kernels are compiled with it (`src/render/kernel_cache.cpp`): their outputs must be byte-identical on DX12 and Vulkan (`docs/architecture/04-layer-stack-and-compositing.md` §7), and without `-Gis` DXC marks every DXIL float operation `fast` and leaves SPIR-V contraction to the driver. |
+| Upstream behaviour | `engine/shader/shader_compiler.h:84-95` has no request for IEEE-strict arithmetic; `engine/shader/shader_compiler.cpp:261-263` is the last code-generation flag `BuildArguments` passes, and `-Gis` is never passed |
+| Date | 2026-10-10 |
+| Author | UzmiGames (rulebook task `phase1.1_core-device-kernels`) |
+| Covering test | `tests/vendoring/test_modifications.py::test_ieee_strict_arithmetic` |
+
 ## Behaviours kept on purpose
 
 - `DX12CommandList::FatalErrorLoop` still aborts the process after repeated RHI errors

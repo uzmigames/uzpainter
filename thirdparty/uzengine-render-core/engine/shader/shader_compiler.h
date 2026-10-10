@@ -1,4 +1,4 @@
-// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-006. Original: UzEngine runtime/engine/shader/shader_compiler.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-006, UZP-MOD-008. Original: UzEngine runtime/engine/shader/shader_compiler.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
 
 /// UzEngine Shader Compiler
 ///
@@ -100,6 +100,10 @@ struct ShaderCompileDesc {
     /// `-fspv-extension=SPV_KHR_ray_query`, so the module declares that extension and the
     /// `RayQueryKHR` capability. Ignored for DXIL.
     bool enableRayQuery = false;
+    /// IEEE-strict arithmetic: DXC is passed `-Gis`, so DXIL floating-point instructions
+    /// carry no fast-math flags and SPIR-V arithmetic is decorated `NoContraction` (no
+    /// reassociation, no fused multiply-add), as if every value were declared `precise`.
+    bool ieeeStrict = false;
 };
 
 /// Result of a shader compilation.

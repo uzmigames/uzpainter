@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-009. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_format_helpers.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// Vulkan format and state conversion helpers.
@@ -51,6 +53,9 @@ inline VkFormat ToVkFormat(RHIFormat format) {
         case RHIFormat::BC5Unorm:       return VK_FORMAT_BC5_UNORM_BLOCK;
         case RHIFormat::BC7Unorm:       return VK_FORMAT_BC7_UNORM_BLOCK;
         case RHIFormat::BC7Srgb:        return VK_FORMAT_BC7_SRGB_BLOCK;
+        case RHIFormat::R16Unorm:       return VK_FORMAT_R16_UNORM;
+        case RHIFormat::RG16Unorm:      return VK_FORMAT_R16G16_UNORM;
+        case RHIFormat::RGBA16Unorm:    return VK_FORMAT_R16G16B16A16_UNORM;
         default:                        return VK_FORMAT_UNDEFINED;
     }
 }

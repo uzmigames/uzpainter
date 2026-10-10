@@ -1,0 +1,704 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "tangent-frame",
+  "description": "Normal-map convention and tangent frame of Painter's baked tangent-space normal (P0-NORMAL): green-channel direction for the OpenGL and DirectX formats, and which MikkTSpace frame mode (PerVertex or PerFragment) and sampler transform the UzPainter prototype must use to equal Painter's bake, with residuals against the normal-convention goldens.",
+  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "corpus": [
+    "phase0/normal-convention/hemisphere/per-fragment",
+    "phase0/normal-convention/hemisphere/per-vertex",
+    "phase0/normal-convention/hemisphere/project-default",
+    "phase0/normal-convention/plane-dome/directx",
+    "phase0/normal-convention/plane-dome/opengl"
+  ],
+  "entries": [
+    {
+      "entry_id": "green-channel-opengl",
+      "subject": "Green channel of Painter's baked tangent-space normal, Opengl normal map format (plane-dome pair, hit texels)",
+      "status": "calibrated",
+      "formula": "On the plane-dome pair the low frame is T = +u direction, B = +v direction (sign +1), N = the plane normal at every texel, so the baked value is the hit triangle's normal n expressed as t = (n.T, n.B, n.N). Encoding: code = floor(65535 (t / 2 + 1/2) + 1/2) per channel, RGB = (x, y, z); OpenGL: green encodes +y, i.e. +v (up in UV space).",
+      "public_sources": [
+        {
+          "source_id": "S-GLTF",
+          "locator": "Materials, additional textures: normalTexture (+X right, +Y up)"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.project.NormalMapFormat"
+        },
+        {
+          "source_id": "S-MIKK",
+          "locator": "mikktspace.h: setTSpaceBasic, normal-map sampler"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "normal_map_format",
+          "value": "opengl",
+          "origin": "authored"
+        },
+        {
+          "name": "expected_green_sign_towards_plus_v",
+          "value": 1,
+          "origin": "public_documentation"
+        },
+        {
+          "name": "observed_green_sign_towards_plus_v",
+          "value": 1,
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "phase0/normal-convention/plane-dome/opengl",
+          "map": "normal_base/PerFragment-inverse-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.002173643575577277,
+            "p99": 0,
+            "differing": 491,
+            "total": 225888,
+            "affected_texels": 491,
+            "texels": 75296
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/plane-dome/opengl",
+          "map": "normal_base/PerFragment-inverse-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.002173643575577277,
+            "p99": 0,
+            "differing": 491,
+            "total": 225888,
+            "affected_texels": 491,
+            "texels": 75296
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "green-channel-directx",
+      "subject": "Green channel of Painter's baked tangent-space normal, DirectX normal map format (plane-dome pair, hit texels)",
+      "status": "exact",
+      "formula": "On the plane-dome pair the low frame is T = +u direction, B = +v direction (sign +1), N = the plane normal at every texel, so the baked value is the hit triangle's normal n expressed as t = (n.T, n.B, n.N). Encoding: code = floor(65535 (t / 2 + 1/2) + 1/2) per channel, RGB = (x, y, z); DirectX conversion: the green code becomes 65535 - green (y negated), red and blue unchanged.",
+      "public_sources": [
+        {
+          "source_id": "S-GLTF",
+          "locator": "Materials, additional textures: normalTexture (+X right, +Y up)"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.project.NormalMapFormat"
+        },
+        {
+          "source_id": "S-MIKK",
+          "locator": "mikktspace.h: setTSpaceBasic, normal-map sampler"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "normal_map_format",
+          "value": "directx",
+          "origin": "authored"
+        },
+        {
+          "name": "expected_green_sign_towards_plus_v",
+          "value": -1,
+          "origin": "public_documentation"
+        },
+        {
+          "name": "observed_green_sign_towards_plus_v",
+          "value": -1,
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "phase0/normal-convention/plane-dome/directx",
+          "map": "normal_base/PerFragment-inverse-directx",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 225888,
+            "affected_texels": 0,
+            "texels": 75296
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/plane-dome/directx",
+          "map": "normal_base/PerFragment-inverse-directx",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 225888,
+            "affected_texels": 0,
+            "texels": 75296
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "no-hit-texels",
+      "subject": "Texels whose bake ray hits no high-poly triangle (plane-dome pair)",
+      "status": "exact",
+      "formula": "A texel inside the low UV triangles whose ray hits no high triangle is left empty: code 0 in every channel. The bake's dilation (DilationWidth, default 32 px) then fills empty texels near hit texels; only texels more than 40 texels from every hit texel are compared.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.baking.bake_async"
+        },
+        {
+          "source_id": "S-MIKK",
+          "locator": "mikktspace.h: setTSpaceBasic, normal-map sampler"
+        }
+      ],
+      "parameters": [],
+      "residuals": [
+        {
+          "golden_id": "phase0/normal-convention/plane-dome/opengl",
+          "map": "normal_base/PerFragment-inverse-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 172980,
+            "affected_texels": 0,
+            "texels": 57660
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/plane-dome/opengl",
+          "map": "normal_base/PerFragment-inverse-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 172980,
+            "affected_texels": 0,
+            "texels": 57660
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "tangent-frame-per-fragment",
+      "subject": "Tangent frame of Painter's baked normal with tangent space PerFragment (hemisphere pair, OpenGL, hit texels)",
+      "status": "calibrated",
+      "formula": "Per-corner MikkTSpace frames (t_i, sign_i) of the low mesh (genTangSpaceDefault), interpolated at the texel centre with the UV barycentric weights w_i: vT = sum w_i t_i, vN = sum w_i n_i (unnormalized). PerVertex: vB = sum w_i sign_i cross(n_i, t_i); PerFragment: vB = sign cross(vN, vT). inverse: t = normalize(s (n.cross(vB, vN), n.cross(vN, vT), n.cross(vT, vB))), s = sign of vT.cross(vB, vN); projection: t = normalize(n.T, n.B, n.N) with T, B, N normalized. Closest: PerFragment-inverse-opengl.",
+      "public_sources": [
+        {
+          "source_id": "S-MIKK",
+          "locator": "mikktspace.h: setTSpaceBasic, normal-map sampler"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.project.TangentSpace"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "identified_mode",
+          "value": "PerFragment",
+          "origin": "fitted"
+        },
+        {
+          "name": "closest_candidate",
+          "value": "PerFragment-inverse-opengl",
+          "origin": "fitted"
+        },
+        {
+          "name": "best_mean_abs_difference",
+          "value": 0.07598030230824689,
+          "origin": "fitted",
+          "unit": "16-bit code value"
+        },
+        {
+          "name": "other_mode_best_mean_abs_difference",
+          "value": 68.86606302772584,
+          "origin": "fitted",
+          "unit": "16-bit code value"
+        },
+        {
+          "name": "identification_ratio",
+          "value": 0.1,
+          "origin": "authored"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-fragment",
+          "map": "normal_base/PerVertex-inverse-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 801,
+            "mean": 68.86606302772584,
+            "p99": 444,
+            "differing": 312074,
+            "total": 327348,
+            "affected_texels": 108821,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-fragment",
+          "map": "normal_base/PerVertex-projection-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 9110,
+            "mean": 443.8980931607952,
+            "p99": 4430,
+            "differing": 324826,
+            "total": 327348,
+            "affected_texels": 109116,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-fragment",
+          "map": "normal_base/PerFragment-inverse-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.07598030230824689,
+            "p99": 1,
+            "differing": 24872,
+            "total": 327348,
+            "affected_texels": 23049,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-fragment",
+          "map": "normal_base/PerFragment-projection-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 6904,
+            "mean": 206.00655876926083,
+            "p99": 2614,
+            "differing": 322250,
+            "total": 327348,
+            "affected_texels": 109112,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-fragment",
+          "map": "normal_base/PerVertex-inverse-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 801,
+            "mean": 68.86606302772584,
+            "p99": 444,
+            "differing": 312074,
+            "total": 327348,
+            "affected_texels": 108821,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-fragment",
+          "map": "normal_base/PerVertex-projection-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 9110,
+            "mean": 443.8980931607952,
+            "p99": 4430,
+            "differing": 324826,
+            "total": 327348,
+            "affected_texels": 109116,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-fragment",
+          "map": "normal_base/PerFragment-inverse-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.07598030230824689,
+            "p99": 1,
+            "differing": 24872,
+            "total": 327348,
+            "affected_texels": 23049,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-fragment",
+          "map": "normal_base/PerFragment-projection-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 6904,
+            "mean": 206.00655876926083,
+            "p99": 2614,
+            "differing": 322250,
+            "total": 327348,
+            "affected_texels": 109112,
+            "texels": 109116
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "tangent-frame-per-vertex",
+      "subject": "Tangent frame of Painter's baked normal with tangent space PerVertex (hemisphere pair, OpenGL, hit texels)",
+      "status": "calibrated",
+      "formula": "Per-corner MikkTSpace frames (t_i, sign_i) of the low mesh (genTangSpaceDefault), interpolated at the texel centre with the UV barycentric weights w_i: vT = sum w_i t_i, vN = sum w_i n_i (unnormalized). PerVertex: vB = sum w_i sign_i cross(n_i, t_i); PerFragment: vB = sign cross(vN, vT). inverse: t = normalize(s (n.cross(vB, vN), n.cross(vN, vT), n.cross(vT, vB))), s = sign of vT.cross(vB, vN); projection: t = normalize(n.T, n.B, n.N) with T, B, N normalized. Closest: PerVertex-inverse-opengl.",
+      "public_sources": [
+        {
+          "source_id": "S-MIKK",
+          "locator": "mikktspace.h: setTSpaceBasic, normal-map sampler"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.project.TangentSpace"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "identified_mode",
+          "value": "PerVertex",
+          "origin": "fitted"
+        },
+        {
+          "name": "closest_candidate",
+          "value": "PerVertex-inverse-opengl",
+          "origin": "fitted"
+        },
+        {
+          "name": "best_mean_abs_difference",
+          "value": 0.07361584613316714,
+          "origin": "fitted",
+          "unit": "16-bit code value"
+        },
+        {
+          "name": "other_mode_best_mean_abs_difference",
+          "value": 68.85375808008602,
+          "origin": "fitted",
+          "unit": "16-bit code value"
+        },
+        {
+          "name": "identification_ratio",
+          "value": 0.1,
+          "origin": "authored"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-vertex",
+          "map": "normal_base/PerVertex-inverse-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.07361584613316714,
+            "p99": 1,
+            "differing": 24098,
+            "total": 327348,
+            "affected_texels": 22384,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-vertex",
+          "map": "normal_base/PerVertex-projection-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 8462,
+            "mean": 463.6511510685876,
+            "p99": 4417,
+            "differing": 325262,
+            "total": 327348,
+            "affected_texels": 109116,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-vertex",
+          "map": "normal_base/PerFragment-inverse-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 800,
+            "mean": 68.85375808008602,
+            "p99": 444,
+            "differing": 312005,
+            "total": 327348,
+            "affected_texels": 108816,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-vertex",
+          "map": "normal_base/PerFragment-projection-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 6746,
+            "mean": 190.80184696408716,
+            "p99": 2640,
+            "differing": 321304,
+            "total": 327348,
+            "affected_texels": 109116,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-vertex",
+          "map": "normal_base/PerVertex-inverse-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.07361584613316714,
+            "p99": 1,
+            "differing": 24098,
+            "total": 327348,
+            "affected_texels": 22384,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-vertex",
+          "map": "normal_base/PerVertex-projection-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 8462,
+            "mean": 463.6511510685876,
+            "p99": 4417,
+            "differing": 325262,
+            "total": 327348,
+            "affected_texels": 109116,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-vertex",
+          "map": "normal_base/PerFragment-inverse-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 800,
+            "mean": 68.85375808008602,
+            "p99": 444,
+            "differing": 312005,
+            "total": 327348,
+            "affected_texels": 108816,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/per-vertex",
+          "map": "normal_base/PerFragment-projection-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 6746,
+            "mean": 190.80184696408716,
+            "p99": 2640,
+            "differing": 321304,
+            "total": 327348,
+            "affected_texels": 109116,
+            "texels": 109116
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "tangent-frame-project-default",
+      "subject": "Tangent frame of Painter's baked normal with tangent space the project default (not set) (hemisphere pair, OpenGL, hit texels)",
+      "status": "calibrated",
+      "formula": "Per-corner MikkTSpace frames (t_i, sign_i) of the low mesh (genTangSpaceDefault), interpolated at the texel centre with the UV barycentric weights w_i: vT = sum w_i t_i, vN = sum w_i n_i (unnormalized). PerVertex: vB = sum w_i sign_i cross(n_i, t_i); PerFragment: vB = sign cross(vN, vT). inverse: t = normalize(s (n.cross(vB, vN), n.cross(vN, vT), n.cross(vT, vB))), s = sign of vT.cross(vB, vN); projection: t = normalize(n.T, n.B, n.N) with T, B, N normalized. Closest: PerVertex-inverse-opengl.",
+      "public_sources": [
+        {
+          "source_id": "S-MIKK",
+          "locator": "mikktspace.h: setTSpaceBasic, normal-map sampler"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.project.TangentSpace"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "identified_mode",
+          "value": "PerVertex",
+          "origin": "fitted"
+        },
+        {
+          "name": "closest_candidate",
+          "value": "PerVertex-inverse-opengl",
+          "origin": "fitted"
+        },
+        {
+          "name": "best_mean_abs_difference",
+          "value": 0.07361584613316714,
+          "origin": "fitted",
+          "unit": "16-bit code value"
+        },
+        {
+          "name": "other_mode_best_mean_abs_difference",
+          "value": 68.85375808008602,
+          "origin": "fitted",
+          "unit": "16-bit code value"
+        },
+        {
+          "name": "identification_ratio",
+          "value": 0.1,
+          "origin": "authored"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/project-default",
+          "map": "normal_base/PerVertex-inverse-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.07361584613316714,
+            "p99": 1,
+            "differing": 24098,
+            "total": 327348,
+            "affected_texels": 22384,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/project-default",
+          "map": "normal_base/PerVertex-projection-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 8462,
+            "mean": 463.6511510685876,
+            "p99": 4417,
+            "differing": 325262,
+            "total": 327348,
+            "affected_texels": 109116,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/project-default",
+          "map": "normal_base/PerFragment-inverse-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 800,
+            "mean": 68.85375808008602,
+            "p99": 444,
+            "differing": 312005,
+            "total": 327348,
+            "affected_texels": 108816,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/project-default",
+          "map": "normal_base/PerFragment-projection-opengl",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 6746,
+            "mean": 190.80184696408716,
+            "p99": 2640,
+            "differing": 321304,
+            "total": 327348,
+            "affected_texels": 109116,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/project-default",
+          "map": "normal_base/PerVertex-inverse-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.07361584613316714,
+            "p99": 1,
+            "differing": 24098,
+            "total": 327348,
+            "affected_texels": 22384,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/project-default",
+          "map": "normal_base/PerVertex-projection-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 8462,
+            "mean": 463.6511510685876,
+            "p99": 4417,
+            "differing": 325262,
+            "total": 327348,
+            "affected_texels": 109116,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/project-default",
+          "map": "normal_base/PerFragment-inverse-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 800,
+            "mean": 68.85375808008602,
+            "p99": 444,
+            "differing": 312005,
+            "total": 327348,
+            "affected_texels": 108816,
+            "texels": 109116
+          }
+        },
+        {
+          "golden_id": "phase0/normal-convention/hemisphere/project-default",
+          "map": "normal_base/PerFragment-projection-opengl",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 6746,
+            "mean": 190.80184696408716,
+            "p99": 2640,
+            "differing": 321304,
+            "total": 327348,
+            "affected_texels": 109116,
+            "texels": 109116
+          }
+        }
+      ]
+    }
+  ]
+}

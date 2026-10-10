@@ -1,0 +1,99 @@
+# Project manifest and document model (`src/uzp_core/`)
+
+Task `phase1.1_docmodel-types-manifest` (P1-DOCMODEL). Implements the document part of D3 in
+`docs/architecture/03-project-model.md` §1-§5 and `04-layer-stack-and-compositing.md` §1, and the
+manifest of `09-project-file-format.md` §1 and §5. The manifest is the public schema of the `.uzp`
+file: `uzpainter inspect` prints it, every revision stores it, and its SHA-256 is the recipe digest.
+
+## 1. Layout
+
+| Path | Content |
+|---|---|
+| `types/enums.h` | Enumerations and their manifest spellings (documented Painter member names; lower-case kinds of `04-…` §1) |
+| `types/ids.h` | Persistent 64-bit ids |
+| `types/layers.h` | Layers, effects, masks, sources, projections, paint planes, smart-preset provenance |
+| `types/project.h` | Project, settings, mesh reference, texture sets, UV tiles, mesh-map bindings, bake settings, stacks, channels, resources, display state, versions |
+| `types/resource_url.h` | `resource://project/<name>?version=<sha256>` and `uzasset://<family>/<id>@<version>` |
+| `types/receipt.h` | Result-record header of every export, capture, bake and dump receipt (ARC-11) |
+| `types/validation.h` | Model validation, documented insertion rules, anchor/instance cycle check |
+| `types/errors.h` | `ValueError` (model rule violated; Python `ValueError`) and `ManifestError` (unreadable manifest) |
+| `manifest/json.h` | JSON values, strict parser, canonical writer |
+| `manifest/sha256.h` | SHA-256 (FIPS 180-4) |
+| `manifest/manifest.h` | Project ⇄ manifest, `SaveManifest`, `LoadManifest`, `ManifestDigest` |
+| `schema/manifest.schema.json` | JSON Schema (draft 2020-12) of the manifest |
+
+## 2. Canonical form and digest
+
+`SaveManifest` validates the project and writes UTF-8 JSON with no insignificant whitespace,
+object keys sorted by their UTF-8 bytes, integers in decimal, other numbers in the shortest
+round-trip form laid out like Python's `repr` (`1.0`, `0.0001`, `1e-05`, `1e+16`) and strings
+escaped only where JSON requires it. The bytes equal Python's
+`json.dumps(v, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
+(`tools/parity/recorder/job.py`, `canonical_json`), so the digest is the same in both languages
+and independent of the order in which maps were filled. Unordered collections are written in a
+fixed order: maps by key, `active_channels` by name, UV tiles by UDIM, resource entries by name.
+Lists with meaning keep their order: texture sets (mesh material order), stacks, root layers and
+sub-layers (top first, as Painter lists them), effects (stack order).
+
+The parser rejects duplicate keys, invalid UTF-8, lone surrogates, non-finite numbers and integers
+outside the signed 64-bit range, so a manifest that loads has exactly one canonical form.
+
+## 3. Identity
+
+Every node (layer or effect), texture set, stack, UV tile and resource entry has an id from the
+project counter `next_id`, written to the manifest and kept on reload; ids are 1..2^63-1, unique
+across the project and below `next_id`. Names are never identity: two layers named `M_piping`
+keep distinct ids. Paint planes are referenced by `plane_id` (`09-…` §1), and no plane is bound to
+two nodes.
+
+## 4. Top-level keys
+
+`schema` (`uzpainter/manifest/1`), `versions` (`format_version` semver, `app_version`,
+`evaluator_profile`, `compat_profile` = `painter-12.1-api-0.3.7`, `painter_reference`), `next_id`,
+`settings`, `mesh`, `texture_sets`, `resources` (SHA-256 → named entries sharing the bytes),
+`display`, `export_defaults`, `metadata` (context → object). The schema lists every key; nodes in
+a mask stack use mono-channel forms (`blending` is one `{mode, opacity}`, a fill has one `source`,
+a paint node one `plane`), nodes in a content stack the per-channel forms.
+
+A reader refuses a `format_version` of a newer major (`ManifestError`) and reads older or newer
+minors. Keys this version does not know are kept at every level (`extra` members) and written back
+unchanged.
+
+## 5. Validation
+
+`Validate` (run by `SaveManifest`, `LoadManifest` and `InsertNode`) throws `ValueError` for:
+duplicate or out-of-range ids; resolutions that are not powers of two in 128-8192; a Default
+workflow set without exactly the tile 1001; duplicate texture-set or stack names; per-node
+channels that the stack does not have; opacities outside 0..1; payloads that do not match the node
+kind; compare mask or colour selection effects outside mask stacks; per-channel forms in mask
+stacks and mono forms in content stacks; smart-material provenance on anything but a group and
+smart-mask provenance on anything but a mask effect; bindings to resources that are not stored;
+malformed hashes and asset URLs; an instance of a layer of another stack; a reference to anything
+but an anchor point of the same texture set; and any cycle of anchor references and instances
+(`anchor reference cycle: …`). An effect may use an anchor that precedes it in the same list.
+
+`InsertNode` applies the documented insertion positions: layers at the top of a stack, beside a
+layer or inside a group's sub-stack; effects beside an effect or inside a layer's content or mask
+stack (the mask must exist); compare mask and colour selection effects only in mask stacks. A
+rejected insertion throws `ValueError` and leaves the project unchanged. New nodes get structural
+defaults only; Painter's default parameter values for new nodes are Tier 0 observations and are
+applied by the operations that create nodes, not by this model.
+
+## 6. Known limits
+
+`ChannelType` lists the 25 members whose documentation pages are recorded in
+`tools/parity/recorder/documented_symbols.json` (approved source A-PYDOC). The documented enum has
+further members (other OpenPBR names and legacy aliases); each is added to `types/enums.h` and the
+schema together with its documentation page when it is recorded there. A manifest naming another
+channel type is refused with `ManifestError`, never misread.
+
+## 7. Tests
+
+`zig build uzp-core-tests` builds `uzp-core-tests.exe` (`tests/uzp_core/uzp_core_test.cpp`; own
+code compiled with `-Wall -Wextra -Werror`). `python -m pytest tests/uzp_core` builds it, runs its
+native cases and checks: a fixture covering every node, effect and source kind and both mesh-map
+provenances round-trips (`tests/uzp_core/fixtures/every-kind.manifest.json`, digest pinned in the
+test); the digest is the same for maps filled in either order, in two processes and in Python;
+the schema accepts serialised manifests and rejects two channels of one type, resolution 3000, an
+unknown `ChannelFormat` and a compare mask in a content stack; unknown keys survive; insertion
+rules and anchor cycles raise; ids persist and same-named nodes keep distinct ids. No GPU is used.

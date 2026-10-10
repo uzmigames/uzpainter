@@ -24,6 +24,18 @@ EXPORT = "substance_painter.export.export_project_textures"
 # Step arguments naming an input by input_id; the recorder passes the input's file path.
 INPUT_ARGS = {ps.CREATE: "mesh", ps.SET_ENVIRONMENT: "environment", ps.IMPORT_RESOURCE: "input"}
 
+# Optional step arguments naming an input by input_id; when given, the recorder passes the
+# staged file's `file:///` URL (a file baking parameter, e.g. the high-poly mesh).
+OPTIONAL_INPUT_ARGS = {ps.BAKING_SET: "input"}
+
+# Baking-configuration steps: they must come before the last `bake_async` of the job.
+BAKING_SETTINGS = frozenset({ps.BAKING_SET, ps.BAKING_SET_ENABLED_BAKERS})
+
+# Common baking parameter naming the high-poly mesh: only an `input` may set it, so that the
+# file Painter bakes from is a hashed, staged input.
+HIPOLY_MESH = "HipolyMesh"
+BAKING_VALUE_ARGS = ("value", "enum_label", "input")
+
 STATE_CALLS = frozenset(
     {
         ps.CREATE,
@@ -53,6 +65,9 @@ STATE_CALLS = frozenset(
         ps.INSERT_GENERATOR,
         ps.INSERT_SMART_MATERIAL,
         ps.SET_PARAMETERS,
+        ps.BAKING_SET,
+        ps.BAKING_SET_ENABLED_BAKERS,
+        ps.BAKE,
     }
 )
 
@@ -187,6 +202,50 @@ def export_step(step: Step) -> ExportStep:
     return ExportStep(step.step, tuple(parse_output_map(str(m)) for m in maps), parameters)
 
 
+def baking_readback(step: Step) -> dict[str, Any]:
+    """Readback of a baking-configuration step, per texture set: the `Property.value()` of the
+    parameter it set, or the enabled bakers."""
+    scope = {"texture_set": step.args["texture_set"]} if "texture_set" in step.args else {}
+    if step.call == ps.BAKING_SET_ENABLED_BAKERS:
+        return {"call": ps.BAKING_ENABLED_BAKERS, "args": scope}
+    args = {k: step.args[k] for k in ("parameter", "usage") if k in step.args}
+    return {"call": ps.GET_PROPERTY_VALUE, "args": args | scope}
+
+
+def check_baking_step(step: Step) -> None:
+    """Refuse a malformed baking step before Painter is touched."""
+    args = step.args
+    where = f"step {step.step}"
+    if step.call == ps.BAKE:
+        if set(args) - {"texture_set"}:
+            raise RecorderError(f"{where}: bake_async takes only an optional `texture_set`")
+        return
+    if step.call == ps.BAKING_SET_ENABLED_BAKERS:
+        usages = args.get("usages")
+        if not isinstance(usages, list) or set(args) - {"usages", "texture_set"}:
+            raise RecorderError(f"{where}: set_enabled_bakers takes `usages` and `texture_set`")
+        unknown = sorted(str(u) for u in usages if u not in ps.BAKER_USAGES)
+        if unknown:
+            raise RecorderError(f"{where}: {unknown} are not MeshMapUsage members")
+        return
+    unknown = sorted(set(args) - set(ps.BAKING_SET_ARGS))
+    if unknown:
+        raise RecorderError(f"{where}: BakingParameters.set does not take {unknown}")
+    if not isinstance(args.get("parameter"), str) or not args["parameter"]:
+        raise RecorderError(f"{where}: BakingParameters.set needs a `parameter` name")
+    given = [k for k in BAKING_VALUE_ARGS if k in args]
+    if len(given) != 1:
+        raise RecorderError(f"{where}: give exactly one of `value`, `enum_label`, `input`")
+    if "usage" in args and args["usage"] not in ps.BAKER_USAGES:
+        raise RecorderError(f"{where}: usage {args['usage']!r} is not a MeshMapUsage member")
+    if args.get("value", "") is None:
+        raise RecorderError(f"{where}: a baking parameter value cannot be null")
+    if "enum_label" in args and not isinstance(args["enum_label"], str):
+        raise RecorderError(f"{where}: `enum_label` must be a label string")
+    if args["parameter"] == HIPOLY_MESH and given != ["input"]:
+        raise RecorderError(f"{where}: {HIPOLY_MESH} is set only from an `input` (an input id)")
+
+
 @dataclass(frozen=True)
 class Job:
     manifest: dict[str, Any]
@@ -220,6 +279,10 @@ class Job:
             if step.call in READBACK_OF:
                 getter, keys = READBACK_OF[step.call]
                 spec = {"call": getter, "args": {k: step.args[k] for k in keys}}
+                if spec not in specs:
+                    specs.append(spec)
+            if step.call in BAKING_SETTINGS:
+                spec = baking_readback(step)
                 if spec not in specs:
                     specs.append(spec)
         return specs
@@ -277,7 +340,18 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
         key = INPUT_ARGS.get(step.call)
         if key is not None and step.args.get(key) not in inputs:
             raise RecorderError(f"step {step.step}: `{key}` must name an input with a path")
+        key = OPTIONAL_INPUT_ARGS.get(step.call)
+        if key is not None and key in step.args and step.args[key] not in inputs:
+            raise RecorderError(f"step {step.step}: `{key}` must name an input with a path")
+        if step.call in BAKING_SETTINGS or step.call == ps.BAKE:
+            check_baking_step(step)
         state.append(step)
     if not state or state[0].call != ps.CREATE:
         raise RecorderError("the instruction sequence must start with project.create")
+    bakes = [s.step for s in state if s.call == ps.BAKE]
+    for step in state:
+        if step.call in BAKING_SETTINGS and bakes and step.step > bakes[-1]:
+            raise RecorderError(
+                f"step {step.step}: baking settings must precede the last bake_async step"
+            )
     return Job(manifest, inputs, tuple(state), tuple(exports), tuple(captures))

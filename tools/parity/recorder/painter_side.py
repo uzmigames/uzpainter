@@ -25,6 +25,7 @@ import substance_painter.application
 import substance_painter.baking
 import substance_painter.colormanagement
 import substance_painter.display
+import substance_painter.event
 import substance_painter.export
 import substance_painter.js
 import substance_painter.layerstack
@@ -42,6 +43,17 @@ NODES: dict[int, Any] = {}
 
 # Resources imported by the instruction sequence, by step number (this namespace only).
 RESOURCES: dict[int, Any] = {}
+
+# The bake a `bake_async` step launched (this namespace only): texture sets still queued, the
+# one baking, the status the `BakingProcessEnded` handler received, each finished set's status,
+# and whether the handler is connected.
+BAKE_STATE: dict[str, Any] = {
+    "queue": [],
+    "current": None,
+    "status": None,
+    "baked": [],
+    "connected": False,
+}
 
 # State-changing calls of the instruction-sequence vocabulary (UzmiGames-authored steps).
 CREATE = "substance_painter.project.create"
@@ -98,6 +110,17 @@ BAKING_BAKER = "substance_painter.baking.BakingParameters.baker"
 BAKING_CURVATURE_METHOD = "substance_painter.baking.BakingParameters.get_curvature_method"
 BAKING_ENABLED_BAKERS = "substance_painter.baking.BakingParameters.get_enabled_bakers"
 BAKING_TEXTURESET_ENABLED = "substance_painter.baking.BakingParameters.is_textureset_enabled"
+
+# Baking jobs (phase0.9_normal-convention-fixture): parameters, enabled bakers, the bake itself.
+BAKING_SET = "substance_painter.baking.BakingParameters.set"
+BAKING_SET_ENABLED_BAKERS = "substance_painter.baking.BakingParameters.set_enabled_bakers"
+BAKE = "substance_painter.baking.bake_async"
+GET_PROPERTY_VALUE = "substance_painter.properties.Property.value"
+# Arguments of a `BakingParameters.set` step: the parameter, its value (exactly one of `value`,
+# `enum_label`, `input`), the baker `usage` (else a common parameter), the texture set.
+BAKING_SET_ARGS = ("parameter", "value", "enum_label", "input", "usage", "texture_set")
+# `baking.BakingStatus` member name of a bake that completed.
+BAKE_SUCCESS = "Success"
 
 # The ten bakers (textureset.MeshMapUsage members), in the order of 06-baking.md §2.
 BAKER_USAGES = (
@@ -647,6 +670,101 @@ def baking_capture(args: dict[str, Any]) -> dict[str, Any]:
     return {"texture_sets": sets}
 
 
+def baking_parameter(texture_set: Any, params: dict[str, Any]) -> Any:
+    """The `properties.Property` a step names: `parameter` among the common parameters, or among
+    those of the baker its `usage` (a `MeshMapUsage` member name) names."""
+    baking = substance_painter.baking.BakingParameters.from_texture_set(texture_set)
+    usage = params.get("usage")
+    if usage is None:
+        group = baking.common()
+    else:
+        group = baking.baker(member(MESH_MAP_USAGES, "MeshMapUsage", usage))
+    key = params["parameter"]
+    if key not in group:
+        raise ValueError(f"{key!r} is not a {usage or 'common'} baking parameter")
+    return group[key]
+
+
+def set_baking_parameter(params: dict[str, Any], resolved: dict[str, Any]) -> None:
+    """One documented `BakingParameters.set` call per texture set for the step's parameter: its
+    `value` (a list as a tuple), an `enum_label` through the documented `Property.enum_value`,
+    or the `file:///` URL of an `input` (resolved by the host)."""
+    for texture_set in texture_sets_of(params):
+        prop = baking_parameter(texture_set, params)
+        if "input" in resolved:
+            value = resolved["input"]
+        elif "enum_label" in params:
+            value = prop.enum_value(params["enum_label"])
+        elif isinstance(params["value"], list):
+            value = tuple(params["value"])
+        else:
+            value = params["value"]
+        substance_painter.baking.BakingParameters.set({prop: value})
+
+
+def enabled_bakers(texture_set: Any) -> list[str]:
+    baking = substance_painter.baking.BakingParameters.from_texture_set(texture_set)
+    return sorted(usage.name for usage in baking.get_enabled_bakers())
+
+
+def on_baking_ended(event: Any) -> None:
+    """`event.BakingProcessEnded` handler: keeps the status for `baking_state` to report."""
+    BAKE_STATE["status"] = event.status.name
+
+
+def bake_disconnect() -> None:
+    if BAKE_STATE["connected"]:
+        substance_painter.event.DISPATCHER.disconnect(
+            substance_painter.event.BakingProcessEnded, on_baking_ended
+        )
+        BAKE_STATE["connected"] = False
+
+
+def bake_next() -> None:
+    """Launch the bake of the next queued texture set; it ends with `BakingProcessEnded`."""
+    queue = BAKE_STATE["queue"]
+    BAKE_STATE["queue"] = queue[1:]
+    BAKE_STATE["current"], BAKE_STATE["status"] = queue[0].name(), None
+    substance_painter.baking.bake_async(queue[0])
+
+
+def start_bake(params: dict[str, Any]) -> dict[str, Any]:
+    """Connect the `BakingProcessEnded` handler, then launch the first texture set's bake.
+
+    Returns at once (the bake is asynchronous); the host polls `baking_state`, which launches
+    the remaining texture sets one after another.
+    """
+    if BAKE_STATE["current"] is not None:
+        raise RuntimeError("a bake launched by the recorder has not ended")
+    texture_sets = texture_sets_of(params)
+    enabled = {texture_set.name(): enabled_bakers(texture_set) for texture_set in texture_sets}
+    if not BAKE_STATE["connected"]:
+        substance_painter.event.DISPATCHER.connect(
+            substance_painter.event.BakingProcessEnded, on_baking_ended
+        )
+        BAKE_STATE["connected"] = True
+    BAKE_STATE["queue"], BAKE_STATE["baked"] = texture_sets, []
+    bake_next()
+    return {"enabled_bakers": enabled}
+
+
+def baking_state(args: dict[str, Any]) -> dict[str, Any]:
+    """Whether the launched bake has ended, and its status (never waits)."""
+    if BAKE_STATE["current"] is None:
+        raise RuntimeError("no bake launched by the recorder is in progress")
+    status = BAKE_STATE["status"]
+    busy = substance_painter.project.is_busy()
+    if status is None:
+        return {"ended": False, "texture_set": BAKE_STATE["current"], "busy": busy}
+    BAKE_STATE["baked"].append({"texture_set": BAKE_STATE["current"], "status": status})
+    if status == BAKE_SUCCESS and BAKE_STATE["queue"]:
+        bake_next()
+        return {"ended": False, "texture_set": BAKE_STATE["current"], "busy": busy}
+    BAKE_STATE["current"] = None
+    bake_disconnect()
+    return {"ended": True, "status": status, "baked": list(BAKE_STATE["baked"]), "busy": busy}
+
+
 def insert_position(args: dict[str, Any]) -> Any:
     layerstack = substance_painter.layerstack
     if "above_step" in args:
@@ -889,6 +1007,15 @@ def apply_step(args: dict[str, Any]) -> dict[str, Any]:
         source.set_parameters(
             {params["parameter"]: tuple(value) if isinstance(value, list) else value}
         )
+    elif call == BAKING_SET:
+        set_baking_parameter(params, resolved)
+    elif call == BAKING_SET_ENABLED_BAKERS:
+        usages = [member(MESH_MAP_USAGES, "MeshMapUsage", name) for name in params["usages"]]
+        for texture_set in texture_sets_of(params):
+            baking = substance_painter.baking.BakingParameters.from_texture_set(texture_set)
+            baking.set_enabled_bakers(usages)
+    elif call == BAKE:
+        result = start_bake(params)
     else:
         raise ValueError(f"call {call!r} is not in the recorder vocabulary")
     result["done_at"] = time.time()
@@ -972,6 +1099,13 @@ def readback(args: dict[str, Any]) -> Any:
         return substance_description(NODES[int(params["node_step"])].get_source())
     if call == GET_SUB_LAYERS:
         return node_structure(NODES[int(params["node_step"])])
+    if call == GET_PROPERTY_VALUE:
+        return {
+            ts.name(): json_value(baking_parameter(ts, params).value())
+            for ts in texture_sets_of(params)
+        }
+    if call == BAKING_ENABLED_BAKERS:
+        return {ts.name(): enabled_bakers(ts) for ts in texture_sets_of(params)}
     raise ValueError(f"readback {call!r} is not in the recorder vocabulary")
 
 
@@ -1088,6 +1222,8 @@ def close_project(args: dict[str, Any]) -> dict[str, Any]:
         substance_painter.project.close()
     NODES.clear()
     RESOURCES.clear()
+    bake_disconnect()
+    BAKE_STATE["queue"], BAKE_STATE["current"] = [], None
     return {"closed_at": time.time()}
 
 
@@ -1184,6 +1320,7 @@ OPERATIONS = {
     "channel_names": channel_names,
     "shipped_templates": shipped_templates,
     "baking_capture": baking_capture,
+    "baking_state": baking_state,
     "scene_bounding_box": scene_bounding_box,
     "import_resource": import_resource,
     "set_color_lut": set_color_lut,

@@ -182,6 +182,25 @@ class CurvatureMethod(enum.Enum):
     FromNormalMap = 2
 
 
+class BakingStatus(enum.Enum):
+    Success = 0
+    Cancel = 1
+    Fail = 2
+
+
+# Documented `meshMap` export names of the bakers the fake bakes.
+MESH_MAP_EXPORTS = {
+    "normal_base": MeshMapUsage.Normal,
+    "world_space_normals": MeshMapUsage.WorldSpaceNormal,
+    "ambient_occlusion": MeshMapUsage.AO,
+}
+
+
+class BakingProcessEnded:
+    def __init__(self, status: BakingStatus) -> None:
+        self.status = status
+
+
 CHANNEL_FORMATS = {
     ChannelType.BaseColor: ChannelFormat.sRGB8,
     ChannelType.Roughness: ChannelFormat.L8,
@@ -230,9 +249,11 @@ class Property:
         return self.text
 
 
-@dataclass
+@dataclass(eq=False)
 class BakingProperty:
-    """A baking parameter with the documented `properties.Property` getters (authored values)."""
+    """A baking parameter with the documented `properties.Property` getters (authored values).
+
+    Hashable by identity: `BakingParameters.set` takes a dict keyed by properties."""
 
     key: str
     widget: str
@@ -273,6 +294,7 @@ def fake_baking_parameters() -> dict[str, dict[str, BakingProperty]]:
             "fake_tint": BakingProperty(
                 "fake_tint", "Color", Color(0.25, 0.5, 0.75, GenericColorSpace.Working)
             ),
+            "HipolyMesh": BakingProperty("HipolyMesh", "FileList", ""),
         }
     }
     for usage in MeshMapUsage:
@@ -368,6 +390,14 @@ class FakeWorld:
         self.shelf_path: Path | None = None  # application shelf (templates are its .spt files)
         self.template_channels: dict[str, dict[ChannelType, ChannelFormat]] = {}
         self.baking = fake_baking_parameters()
+        self.enabled_bakers = [MeshMapUsage.Normal, MeshMapUsage.AO]
+        # A bake ends after `bake_polls` busy polls with `bake_status` (BakingProcessEnded).
+        self.bake_polls = 3
+        self.bake_status = BakingStatus.Success
+        self.bake_running: dict[str, Any] | None = None
+        self.bakes: list[str] = []  # texture sets in the order their bakes were launched
+        self.baked_maps: dict[MeshMapUsage, str] = {}  # resource URL of each baked mesh map
+        self.event_handlers: dict[type, list[Callable[[Any], None]]] = {}
         self.version = "12.1.0"
         self.version_info = (12, 1, 0)
         self.modules = build_modules(self)
@@ -375,6 +405,22 @@ class FakeWorld:
     def require_open(self) -> None:
         if not self.project_open:
             raise ProjectError("no project is opened")
+
+    def advance_bake(self) -> bool:
+        """One busy poll of a running bake; the last poll ends it, stores the baked mesh maps
+        (on `Success`) and dispatches `BakingProcessEnded`. True while the bake still runs."""
+        if self.bake_running is None:
+            return False
+        self.bake_running["polls"] -= 1
+        if self.bake_running["polls"] > 0:
+            return True
+        self.bake_running = None
+        if self.bake_status == BakingStatus.Success:
+            for usage in self.enabled_bakers:
+                self.baked_maps[usage] = f"resource://project0/baked_{usage.name}"
+        for handler in list(self.event_handlers.get(BakingProcessEnded, [])):
+            handler(BakingProcessEnded(self.bake_status))
+        return False
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -470,6 +516,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         size = settings.kwargs.get("default_texture_resolution") or 1024
         world.resolution = (size, size)
         world.layers = []
+        world.baked_maps = {}
 
     def save_as(path: str, mode: ProjectSaveMode) -> None:
         world.require_open()
@@ -512,7 +559,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         ProjectSaveMode=ProjectSaveMode,
         is_open=lambda: world.project_open,
         is_in_edition_state=is_in_edition_state,
-        is_busy=lambda: world.busy,
+        is_busy=lambda: world.advance_bake() or world.busy,
         file_path=file_path,
         get_scene_bounding_box=get_scene_bounding_box,
         create=create,
@@ -539,6 +586,10 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
 
         def all_stacks(self) -> list[Stack]:
             return [Stack(self.set_name, "")]
+
+        def get_mesh_map_resource(self, usage: MeshMapUsage) -> ResourceID | None:
+            url = world.baked_maps.get(usage)
+            return None if url is None else ResourceID.from_url(url)
 
     class Stack:
         def __init__(self, texture_set: str, stack: str) -> None:
@@ -687,11 +738,18 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
                 name = preset_map["fileName"].replace("$textureSet", texture_set)
                 path = out_dir / f"{name}.png"
                 source = preset_map["channels"][0]["srcMapName"]
-                kind = next(k for k in ChannelType if k.name.lower() == source.lower())
-                r, g, b = world.composite(kind)
                 width, height = world.resolution[0] // 64 or 1, world.resolution[1] // 64 or 1
-                code = tuple(round(min(max(c, 0.0), 1.0) * 65535) for c in (r, g, b))
-                write_png(path, width, height, [code] * (width * height))
+                if preset_map["channels"][0]["srcMapType"] == "meshMap":
+                    # A baked mesh map: written only once baked, with no encoding chunk.
+                    if MESH_MAP_EXPORTS[source] not in world.baked_maps:
+                        continue
+                    flat = (32768, 32768, 65535)
+                    write_png(path, width, height, [flat] * (width * height))
+                else:
+                    kind = next(k for k in ChannelType if k.name.lower() == source.lower())
+                    r, g, b = world.composite(kind)
+                    code = tuple(round(min(max(c, 0.0), 1.0) * 65535) for c in (r, g, b))
+                    write_png(path, width, height, [code] * (width * height))
                 if world.export_hook is not None:
                     world.export_hook(path)
                 written.setdefault((texture_set, ""), []).append(path.as_posix())
@@ -805,15 +863,48 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             return CurvatureMethod.FromMesh
 
         def get_enabled_bakers(self) -> list[MeshMapUsage]:
-            return [MeshMapUsage.Normal, MeshMapUsage.AO]
+            return list(world.enabled_bakers)
+
+        def set_enabled_bakers(self, enabled_usages: list[MeshMapUsage]) -> None:
+            world.enabled_bakers = list(enabled_usages)
 
         def is_textureset_enabled(self) -> bool:
             return True
 
+        @staticmethod
+        def set(property_values: dict[BakingProperty, Any]) -> None:
+            world.require_open()
+            for prop, value in property_values.items():
+                prop.data = value
+
+    def bake_async(texture_set: TextureSet) -> object:
+        world.require_open()
+        if world.bake_running is not None:
+            raise RuntimeError("a bake is already running")
+        world.bake_running = {"texture_set": texture_set.name(), "polls": world.bake_polls}
+        world.bakes.append(texture_set.name())
+        return object()  # stands for the documented StopSource
+
     baking = module(
         "substance_painter.baking",
         BakingParameters=BakingParameters,
+        BakingStatus=BakingStatus,
         CurvatureMethod=CurvatureMethod,
+        bake_async=bake_async,
+    )
+
+    class Dispatcher:
+        def connect(self, event_cls: type, callback: Callable[[Any], None]) -> None:
+            world.event_handlers.setdefault(event_cls, []).append(callback)
+
+        def disconnect(self, event_cls: type, callback: Callable[[Any], None]) -> None:
+            world.event_handlers[event_cls].remove(callback)
+
+    event = module(
+        "substance_painter.event",
+        DISPATCHER=Dispatcher(),
+        Dispatcher=Dispatcher,
+        BakingProcessEnded=BakingProcessEnded,
     )
 
     def evaluate(code: str) -> str:
@@ -833,6 +924,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             "substance_painter.colormanagement", Color=Color, GenericColorSpace=GenericColorSpace
         ),
         "substance_painter.display": display,
+        "substance_painter.event": event,
         "substance_painter.export": export,
         "substance_painter.js": module("substance_painter.js", evaluate=evaluate),
         "substance_painter.layerstack": layerstack,

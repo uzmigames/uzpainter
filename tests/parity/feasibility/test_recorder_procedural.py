@@ -276,6 +276,7 @@ class World:
                 "substance_painter.colormanagement", Color=type("Color", (), {})
             ),
             "substance_painter.display": module("substance_painter.display"),
+            "substance_painter.event": module("substance_painter.event"),
             "substance_painter.export": module("substance_painter.export"),
             "substance_painter.js": module("substance_painter.js"),
             "substance_painter.layerstack": module(

@@ -1,0 +1,11 @@
+{
+  "id": 31,
+  "slug": "tangent-space-default-follows-painter-pervertex-the-assets3d-pipeline-keeps-setting-perfragment-explicitly",
+  "title": "Tangent-space default follows Painter (PerVertex); the Assets3D pipeline keeps setting PerFragment explicitly",
+  "status": "accepted",
+  "date": "2026-10-10",
+  "relatedTasks": [
+    "phase0.9_normal-convention-fixture"
+  ],
+  "supersededBy": null
+}

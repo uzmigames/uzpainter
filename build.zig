@@ -14,6 +14,12 @@
 //!   `Lib/site-packages/` (`zig-out/bin/`, the one-folder layout of `13-engine-integration.md` §5)
 //! - `zig build probe-tests`  `uzp-probe-tests.exe`, the native tests of the `selftest` probe
 //!   decisions (`tests/native/selftest_probes_test.cpp`)
+//! - `zig build render-tests` `uzp-render-tests.exe`, the native tests of the render layer
+//!   (`src/render/`, `tests/render/render_core_test.cpp`) with the DX run-time files beside it
+//! - `zig build normal-prototype` `uzp-normal-prototype.exe`, the Phase 0 tangent-frame
+//!   prototype of the normal-convention fixture (`src/prototype/`, mikktspace, spng, zlib)
+//! - `zig build uzp-core-tests` `uzp-core-tests.exe`, the native tests of the document model and
+//!   the canonical manifest (`src/uzp_core/`, `tests/uzp_core/uzp_core_test.cpp`)
 //!
 //! Every include and library path is inside this repository. Windows system headers and import
 //! libraries come from the MinGW-w64 files bundled with the pinned Zig release; nothing refers
@@ -153,6 +159,19 @@ const app_sources = [_][]const u8{
     "python/uzpainter_module.cpp",
 };
 
+/// UzPainter's render layer over the vendored RHI (`src/render/`, P1-CORE), relative to `src/`:
+/// compiled into `UzPainter.exe` and into `uzp-render-tests.exe`.
+const render_sources = [_][]const u8{
+    "render/backend.cpp",
+    "render/capabilities.cpp",
+    "render/device.cpp",
+    "render/engine_thread.cpp",
+    "render/kernel_cache.cpp",
+    "render/xxhash64.cpp",
+};
+/// Warnings are errors in UzPainter's render layer and its tests (never in vendored code).
+const own_warning_flags = [_][]const u8{ "-Wall", "-Wextra", "-Werror" };
+
 /// Third-party code only `UzPainter.exe` uses (`tools/vendoring/thirdparty.py`, libraries with
 /// `core=False`): include directories in the order of `build_include_dirs(core=False)`, and the
 /// C sources of `compiled_sources(core=False)`. Embree contributes headers only: its DLL is loaded
@@ -179,6 +198,29 @@ const zlib_sources = [_][]const u8{
 };
 /// spng without DLL import/export decorations, on zlib (`SPNG_USE_MINIZ` undefined).
 const spng_flags = [_][]const u8{ "-std=c11", "-DSPNG_STATIC" };
+/// Mikkelsen's reference `mikktspace.c`, vendored unpatched: its `QuickSort` pivot rotate shifts a
+/// 32-bit value by 32 when the rotate amount is 0, which the Debug sanitizer traps, so it is
+/// compiled without it (`thirdparty/mikktspace/ORIGIN.md`).
+const mikktspace_flags = [_][]const u8{ "-std=c11", "-fno-sanitize=undefined" };
+/// Include directories of `uzp-normal-prototype.exe` (`src/prototype/`), the Phase 0
+/// tangent-frame prototype: mikktspace and the PNG encoder only, no render core.
+const prototype_include_dirs = [_][]const u8{
+    "thirdparty/mikktspace",
+    "thirdparty/zlib",
+    "thirdparty/spng/spng",
+};
+/// The document model (`src/uzp_core/`, `docs/architecture/03-project-model.md`, `04-…` §1,
+/// `09-project-file-format.md`), relative to `src/`. No third-party code.
+const uzp_core_sources = [_][]const u8{
+    "uzp_core/manifest/json.cpp",
+    "uzp_core/manifest/sha256.cpp",
+    "uzp_core/manifest/manifest.cpp",
+    "uzp_core/types/receipt.cpp",
+    "uzp_core/types/resource_url.cpp",
+    "uzp_core/types/validation.cpp",
+};
+/// Warnings are errors in UzPainter's document model and its tests (never in vendored code).
+const uzp_core_flags = cxx_flags ++ [_][]const u8{ "-Wall", "-Wextra", "-Werror" };
 
 /// Run-time files installed beside the executables (`zig-out/bin/`) as in the distribution
 /// (`13-engine-integration.md` §5): repository path, then the path below `bin/`.
@@ -340,6 +382,11 @@ pub fn build(b: *std.Build) void {
         .flags = &(cxx_flags ++ [_][]const u8{"-DSPNG_STATIC"} ++ app_defines),
     });
     app_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &render_sources,
+        .flags = &(cxx_flags ++ own_warning_flags),
+    });
+    app_mod.addCSourceFiles(.{
         .root = b.path(core_root),
         .files = &.{agility_export_source},
         .flags = &cxx_flags,
@@ -414,6 +461,109 @@ pub fn build(b: *std.Build) void {
     const probe_tests_step = b.step("probe-tests", "Build the native tests of the selftest probe decisions");
     probe_tests_step.dependOn(&b.addInstallArtifact(probe_tests_exe, .{}).step);
     b.getInstallStep().dependOn(probe_tests_step);
+
+    // ── Native tests of the render layer (src/render/, tests/render/) ─────────────────────────
+
+    const render_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, render_tests_mod);
+    render_tests_mod.addIncludePath(b.path("src"));
+    render_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/render"),
+        .files = &.{"render_core_test.cpp"},
+        .flags = &(cxx_flags ++ own_warning_flags),
+    });
+    render_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &render_sources,
+        .flags = &(cxx_flags ++ own_warning_flags),
+    });
+    render_tests_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    render_tests_mod.linkLibrary(core_lib);
+    for (system_libraries) |name| render_tests_mod.linkSystemLibrary(name, .{});
+    // File version resources (the DXC identity in the kernel cache key).
+    render_tests_mod.linkSystemLibrary("version", .{});
+
+    const render_tests_exe = b.addExecutable(.{
+        .name = "uzp-render-tests",
+        .root_module = render_tests_mod,
+    });
+    const render_tests_step = b.step("render-tests", "Build the native tests of the render layer");
+    render_tests_step.dependOn(&b.addInstallArtifact(render_tests_exe, .{}).step);
+    for (dx_runtime) |step| render_tests_step.dependOn(step);
+    b.getInstallStep().dependOn(render_tests_step);
+
+    // ── Tangent-frame prototype of the normal-convention fixture (phase0.9) ───────────────────
+
+    const prototype_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    for (prototype_include_dirs) |dir| prototype_mod.addIncludePath(b.path(dir));
+    prototype_mod.addCSourceFiles(.{
+        .root = b.path("src/prototype"),
+        .files = &.{"normal_prototype.cpp"},
+        .flags = &(cxx_flags ++ [_][]const u8{"-DSPNG_STATIC"}),
+    });
+    prototype_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/mikktspace"),
+        .files = &.{"mikktspace.c"},
+        .flags = &mikktspace_flags,
+    });
+    prototype_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/zlib"),
+        .files = &zlib_sources,
+        .flags = &.{"-std=c11"},
+    });
+    prototype_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/spng/spng"),
+        .files = &.{"spng.c"},
+        .flags = &spng_flags,
+    });
+    const prototype_exe = b.addExecutable(.{
+        .name = "uzp-normal-prototype",
+        .root_module = prototype_mod,
+    });
+    const prototype_step = b.step("normal-prototype", "Build the tangent-frame prototype of the normal-convention fixture");
+    prototype_step.dependOn(&b.addInstallArtifact(prototype_exe, .{}).step);
+    b.getInstallStep().dependOn(prototype_step);
+
+    // ── Native tests of the document model (phase1.1_docmodel-types-manifest) ─────────────────
+
+    const uzp_core_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    uzp_core_tests_mod.addIncludePath(b.path("src"));
+    uzp_core_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &uzp_core_sources,
+        .flags = &uzp_core_flags,
+    });
+    uzp_core_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/uzp_core"),
+        .files = &.{"uzp_core_test.cpp"},
+        .flags = &uzp_core_flags,
+    });
+    const uzp_core_tests_exe = b.addExecutable(.{
+        .name = "uzp-core-tests",
+        .root_module = uzp_core_tests_mod,
+    });
+    const uzp_core_tests_step = b.step("uzp-core-tests", "Build the native tests of the document model");
+    uzp_core_tests_step.dependOn(&b.addInstallArtifact(uzp_core_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(uzp_core_tests_step);
 }
 
 /// Installs every wheel of a folder into `<prefix>/bin/<subdir>` the way an installer lays out a
