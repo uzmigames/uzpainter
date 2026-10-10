@@ -32,7 +32,7 @@ CLAUDE.local.md
 
 # Python bytecode and tool caches
 __pycache__/
-*.py[cod]
+*.py[co]
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
