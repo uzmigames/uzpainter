@@ -7,15 +7,43 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from tools.vendoring.vcruntime import FILES, FOLDER, folder_problems
+import pytest
+
+from tools.vendoring.vcruntime import FILES, FOLDER, SIGNER, folder_problems, signature
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Authenticode is a Windows check")
 
 
 def test_folder_matches_the_pinned_files() -> None:
     """Hashes, metadata and (on Windows, which checks Authenticode) the Microsoft signer."""
     assert folder_problems(REPO_ROOT, check_signature=sys.platform == "win32") == []
     assert {f.name for f in FILES} == {"msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"}
+
+
+@windows_only
+def test_signature_ignores_the_parent_module_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A PowerShell 7 parent (hosted CI's default shell) exports a `PSModulePath` whose
+    `Microsoft.PowerShell.Security` Windows PowerShell cannot load; inheriting it made
+    `Get-AuthenticodeSignature` fail with an empty verdict."""
+    module = tmp_path / "Modules" / "Microsoft.PowerShell.Security"
+    module.mkdir(parents=True)
+    (module / "Microsoft.PowerShell.Security.psd1").write_text(
+        "@{ ModuleVersion = '7.0.0.0'; RootModule = 'missing.psm1'; "
+        "CmdletsToExport = 'Get-AuthenticodeSignature' }\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PSModulePath", str(tmp_path / "Modules"))
+    status, subject, thumbprint = signature(REPO_ROOT / FOLDER / FILES[0].name)
+    assert (status, subject, thumbprint) == ("Valid", SIGNER, FILES[0].thumbprint)
+
+
+@windows_only
+def test_signature_tool_failure_raises(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="did not run \\(powershell exit 1\\)"):
+        signature(tmp_path / "absent.dll")
 
 
 def test_release_blocker_and_bytes_kept() -> None:

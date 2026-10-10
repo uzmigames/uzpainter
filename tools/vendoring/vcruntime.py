@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -80,19 +81,36 @@ METADATA_FILES = frozenset({"MANIFEST.json", "ORIGIN.md"})
 
 
 def signature(path: Path) -> tuple[str, str, str]:
-    """(status, signer subject, signer thumbprint) from Windows' Authenticode check."""
+    """(status, signer subject, signer thumbprint) from Windows' Authenticode check.
+
+    Windows PowerShell runs without the parent's `PSModulePath`: a PowerShell 7 parent (the default
+    shell of hosted CI steps) exports module paths that Windows PowerShell cannot load and that
+    shadow its own `Microsoft.PowerShell.Security`, so `Get-AuthenticodeSignature` fails with
+    `CouldNotAutoloadMatchingModule` (about_PSModulePath, "Starting Windows PowerShell from
+    PowerShell 7"). A failure of the check itself raises `RuntimeError` instead of a verdict.
+    """
     script = (
+        "$ErrorActionPreference = 'Stop'; "
         f"$s = Get-AuthenticodeSignature -LiteralPath '{path}'; "
+        "if ($null -eq $s) { throw 'Get-AuthenticodeSignature returned nothing' }; "
         '"$($s.Status)|$($s.SignerCertificate.Subject)|$($s.SignerCertificate.Thumbprint)"'
     )
-    out = subprocess.run(
+    env = {k: v for k, v in os.environ.items() if k.upper() != "PSMODULEPATH"}
+    proc = subprocess.run(
         ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
         capture_output=True,
         text=True,
+        errors="replace",
         timeout=120,
-        check=True,
-    ).stdout.strip()
-    status, subject, thumbprint = out.split("|", 2)
+        env=env,
+    )
+    fields = proc.stdout.strip().split("|", 2)
+    if proc.returncode != 0 or len(fields) != 3 or not fields[0]:
+        raise RuntimeError(
+            f"Authenticode check of {path} did not run (powershell exit {proc.returncode}): "
+            f"{proc.stderr.strip() or proc.stdout.strip() or 'no output'}"
+        )
+    status, subject, thumbprint = fields
     return status, subject, thumbprint
 
 
