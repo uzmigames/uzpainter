@@ -1,0 +1,687 @@
+{
+  "description": "substance_painter symbols the recorder uses, each with the python-doc object that documents it (Painter 12.1.0 Python API documentation, approved source A-PYDOC). `documented_as` equals the symbol, or names the class whose page documents the member (constructor parameter, enum member, or the `.name` attribute every enum documents). Checked by tests/parity/recorder/test_provenance.py.",
+  "source_id": "A-PYDOC",
+  "edition": "Adobe Substance 3D Painter 12.1.0 python-doc (Python API 0.3.5)",
+  "symbols": {
+    "substance_painter.application": {
+      "documented_as": "substance_painter.application",
+      "page": "substance_painter/application.html"
+    },
+    "substance_painter.application.engine_computations_status": {
+      "documented_as": "substance_painter.application.engine_computations_status",
+      "page": "substance_painter/application.html"
+    },
+    "substance_painter.application.version": {
+      "documented_as": "substance_painter.application.version",
+      "page": "substance_painter/application.html"
+    },
+    "substance_painter.application.version_info": {
+      "documented_as": "substance_painter.application.version_info",
+      "page": "substance_painter/application.html"
+    },
+    "substance_painter.colormanagement": {
+      "documented_as": "substance_painter/colormanagement",
+      "page": "substance_painter/colormanagement.html"
+    },
+    "substance_painter.colormanagement.Color": {
+      "documented_as": "substance_painter.colormanagement.Color",
+      "page": "substance_painter/colormanagement.html"
+    },
+    "substance_painter.colormanagement.Color.working": {
+      "documented_as": "substance_painter.colormanagement.Color.working",
+      "page": "substance_painter/colormanagement.html"
+    },
+    "substance_painter.colormanagement.GenericColorSpace": {
+      "documented_as": "substance_painter.colormanagement.GenericColorSpace",
+      "page": "substance_painter/colormanagement.html"
+    },
+    "substance_painter.colormanagement.GenericColorSpace.Raw": {
+      "documented_as": "substance_painter.colormanagement.GenericColorSpace",
+      "page": "substance_painter/colormanagement.html"
+    },
+    "substance_painter.colormanagement.GenericColorSpace.Working": {
+      "documented_as": "substance_painter.colormanagement.GenericColorSpace",
+      "page": "substance_painter/colormanagement.html"
+    },
+    "substance_painter.colormanagement.GenericColorSpace.sRGB": {
+      "documented_as": "substance_painter.colormanagement.GenericColorSpace",
+      "page": "substance_painter/colormanagement.html"
+    },
+    "substance_painter.display": {
+      "documented_as": "substance_painter.display",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.Camera.aperture": {
+      "documented_as": "substance_painter.display.Camera.aperture",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.Camera.field_of_view": {
+      "documented_as": "substance_painter.display.Camera.field_of_view",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.Camera.focal_length": {
+      "documented_as": "substance_painter.display.Camera.focal_length",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.Camera.focus_distance": {
+      "documented_as": "substance_painter.display.Camera.focus_distance",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.Camera.get_default_camera": {
+      "documented_as": "substance_painter.display.Camera.get_default_camera",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.Camera.orthographic_height": {
+      "documented_as": "substance_painter.display.Camera.orthographic_height",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.Camera.position": {
+      "documented_as": "substance_painter.display.Camera.position",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.Camera.projection_type": {
+      "documented_as": "substance_painter.display.Camera.projection_type",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.Camera.rotation": {
+      "documented_as": "substance_painter.display.Camera.rotation",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.CameraProjectionType": {
+      "documented_as": "substance_painter.display.CameraProjectionType",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.CameraProjectionType.Orthographic": {
+      "documented_as": "substance_painter.display.CameraProjectionType",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.CameraProjectionType.Perspective": {
+      "documented_as": "substance_painter.display.CameraProjectionType",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.ToneMappingFunction": {
+      "documented_as": "substance_painter.display.ToneMappingFunction",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.ToneMappingFunction.ACES": {
+      "documented_as": "substance_painter.display.ToneMappingFunction",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.ToneMappingFunction.Linear": {
+      "documented_as": "substance_painter.display.ToneMappingFunction",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.get_color_lut_resource": {
+      "documented_as": "substance_painter.display.get_color_lut_resource",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.get_environment_resource": {
+      "documented_as": "substance_painter.display.get_environment_resource",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.get_tone_mapping": {
+      "documented_as": "substance_painter.display.get_tone_mapping",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.set_environment_resource": {
+      "documented_as": "substance_painter.display.set_environment_resource",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.display.set_tone_mapping": {
+      "documented_as": "substance_painter.display.set_tone_mapping",
+      "page": "substance_painter/display.html"
+    },
+    "substance_painter.export": {
+      "documented_as": "substance_painter.export",
+      "page": "substance_painter/export.html"
+    },
+    "substance_painter.export.TextureExportResult.message": {
+      "documented_as": "substance_painter.export.TextureExportResult",
+      "page": "substance_painter/export.html"
+    },
+    "substance_painter.export.TextureExportResult.status": {
+      "documented_as": "substance_painter.export.TextureExportResult",
+      "page": "substance_painter/export.html"
+    },
+    "substance_painter.export.TextureExportResult.textures": {
+      "documented_as": "substance_painter.export.TextureExportResult",
+      "page": "substance_painter/export.html"
+    },
+    "substance_painter.export.export_project_textures": {
+      "documented_as": "substance_painter.export.export_project_textures",
+      "page": "substance_painter/export.html"
+    },
+    "substance_painter.js": {
+      "documented_as": "substance_painter.js",
+      "page": "substance_painter/js.html"
+    },
+    "substance_painter.js.evaluate": {
+      "documented_as": "substance_painter.js.evaluate",
+      "page": "substance_painter/js.html"
+    },
+    "substance_painter.layerstack": {
+      "documented_as": "substance_painter.layerstack",
+      "page": "substance_painter/layerstack/index.html"
+    },
+    "substance_painter.layerstack.BlendingMode": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Color": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.ColorBurn": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.ColorDodge": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Darken": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Difference": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Disable": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Divide": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Exclusion": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.HardLight": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.InverseDivide": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.InverseSubtract": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Lighten": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.LinearBurn": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.LinearDodge": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.LinearLight": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Multiply": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Normal": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.NormalMapCombine": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.NormalMapDetail": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.NormalMapInverseDetail": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Overlay": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.PassThrough": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.PinLight": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Replace": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Saturation": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Screen": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.SignedAddition": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.SoftLight": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Subtract": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Tint": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.Value": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.BlendingMode.VividLight": {
+      "documented_as": "substance_painter.layerstack.BlendingMode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.FillLayerNode.active_channels": {
+      "documented_as": "substance_painter.layerstack.FillLayerNode.active_channels",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.layerstack.FillLayerNode.get_source": {
+      "documented_as": "substance_painter.layerstack.FillLayerNode.get_source",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.layerstack.FillLayerNode.set_source": {
+      "documented_as": "substance_painter.layerstack.FillLayerNode.set_source",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.layerstack.FillLayerNode.source_mode": {
+      "documented_as": "substance_painter.layerstack.FillLayerNode.source_mode",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.layerstack.InsertPosition.above_node": {
+      "documented_as": "substance_painter.layerstack.InsertPosition.above_node",
+      "page": "substance_painter/layerstack/edition.html"
+    },
+    "substance_painter.layerstack.InsertPosition.below_node": {
+      "documented_as": "substance_painter.layerstack.InsertPosition.below_node",
+      "page": "substance_painter/layerstack/edition.html"
+    },
+    "substance_painter.layerstack.InsertPosition.from_textureset_stack": {
+      "documented_as": "substance_painter.layerstack.InsertPosition.from_textureset_stack",
+      "page": "substance_painter/layerstack/edition.html"
+    },
+    "substance_painter.layerstack.Node.get_blending_mode": {
+      "documented_as": "substance_painter.layerstack.Node.get_blending_mode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.Node.get_opacity": {
+      "documented_as": "substance_painter.layerstack.Node.get_opacity",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.Node.get_stack": {
+      "documented_as": "substance_painter.layerstack.Node.get_stack",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.Node.set_blending_mode": {
+      "documented_as": "substance_painter.layerstack.Node.set_blending_mode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.Node.set_opacity": {
+      "documented_as": "substance_painter.layerstack.Node.set_opacity",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.Node.uid": {
+      "documented_as": "substance_painter.layerstack.Node.uid",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.get_root_layer_nodes": {
+      "documented_as": "substance_painter.layerstack.get_root_layer_nodes",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.insert_fill": {
+      "documented_as": "substance_painter.layerstack.insert_fill",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.project": {
+      "documented_as": "substance_painter.project",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.NormalMapFormat": {
+      "documented_as": "substance_painter.project.NormalMapFormat",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.NormalMapFormat.DirectX": {
+      "documented_as": "substance_painter.project.NormalMapFormat",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.NormalMapFormat.OpenGL": {
+      "documented_as": "substance_painter.project.NormalMapFormat",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.ProjectSaveMode.Full": {
+      "documented_as": "substance_painter.project.ProjectSaveMode",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.ProjectWorkflow": {
+      "documented_as": "substance_painter.project.ProjectWorkflow",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.ProjectWorkflow.Default": {
+      "documented_as": "substance_painter.project.ProjectWorkflow",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.ProjectWorkflow.TextureSetPerUVTile": {
+      "documented_as": "substance_painter.project.ProjectWorkflow",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.ProjectWorkflow.UVTile": {
+      "documented_as": "substance_painter.project.ProjectWorkflow",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.Settings": {
+      "documented_as": "substance_painter.project.Settings",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.TangentSpace": {
+      "documented_as": "substance_painter.project.TangentSpace",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.TangentSpace.PerFragment": {
+      "documented_as": "substance_painter.project.TangentSpace",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.TangentSpace.PerVertex": {
+      "documented_as": "substance_painter.project.TangentSpace",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.close": {
+      "documented_as": "substance_painter.project.close",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.create": {
+      "documented_as": "substance_painter.project.create",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.file_path": {
+      "documented_as": "substance_painter.project.file_path",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.is_busy": {
+      "documented_as": "substance_painter.project.is_busy",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.is_in_edition_state": {
+      "documented_as": "substance_painter.project.is_in_edition_state",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.is_open": {
+      "documented_as": "substance_painter.project.is_open",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.open": {
+      "documented_as": "substance_painter.project.open",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.save_as": {
+      "documented_as": "substance_painter.project.save_as",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.properties.Property.label": {
+      "documented_as": "substance_painter.properties.Property.label",
+      "page": "substance_painter/properties.html"
+    },
+    "substance_painter.properties.Property.value": {
+      "documented_as": "substance_painter.properties.Property.value",
+      "page": "substance_painter/properties.html"
+    },
+    "substance_painter.properties.Property.widget_type": {
+      "documented_as": "substance_painter.properties.Property.widget_type",
+      "page": "substance_painter/properties.html"
+    },
+    "substance_painter.resource": {
+      "documented_as": "substance_painter.resource",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Resource.identifier": {
+      "documented_as": "substance_painter.resource.Resource.identifier",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.ResourceID.from_url": {
+      "documented_as": "substance_painter.resource.ResourceID.from_url",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.ResourceID.url": {
+      "documented_as": "substance_painter.resource.ResourceID.url",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Usage.ENVIRONMENT": {
+      "documented_as": "substance_painter.resource.Usage",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.import_project_resource": {
+      "documented_as": "substance_painter.resource.import_project_resource",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.source": {
+      "documented_as": "substance_painter.source",
+      "page": "substance_painter/source/index.html"
+    },
+    "substance_painter.source.SourceSubstance": {
+      "documented_as": "substance_painter.source.SourceSubstance",
+      "page": "substance_painter/source/substance.html"
+    },
+    "substance_painter.source.SourceSubstance.get_properties": {
+      "documented_as": "substance_painter.source.SourceSubstance.get_properties",
+      "page": "substance_painter/source/substance.html"
+    },
+    "substance_painter.source.SourceUniformColor": {
+      "documented_as": "substance_painter.source.SourceUniformColor",
+      "page": "substance_painter/source/uniformcolor.html"
+    },
+    "substance_painter.source.SourceUniformColor.get_color": {
+      "documented_as": "substance_painter.source.SourceUniformColor.get_color",
+      "page": "substance_painter/source/uniformcolor.html"
+    },
+    "substance_painter.textureset": {
+      "documented_as": "substance_painter.textureset",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.Channel.bit_depth": {
+      "documented_as": "substance_painter.textureset.Channel.bit_depth",
+      "page": "substance_painter/textureset/channel.html"
+    },
+    "substance_painter.textureset.Channel.format": {
+      "documented_as": "substance_painter.textureset.Channel.format",
+      "page": "substance_painter/textureset/channel.html"
+    },
+    "substance_painter.textureset.Channel.is_color": {
+      "documented_as": "substance_painter.textureset.Channel.is_color",
+      "page": "substance_painter/textureset/channel.html"
+    },
+    "substance_painter.textureset.Channel.is_floating": {
+      "documented_as": "substance_painter.textureset.Channel.is_floating",
+      "page": "substance_painter/textureset/channel.html"
+    },
+    "substance_painter.textureset.Channel.label": {
+      "documented_as": "substance_painter.textureset.Channel.label",
+      "page": "substance_painter/textureset/channel.html"
+    },
+    "substance_painter.textureset.ChannelType": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.AO": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.BaseColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.BaseMetalness": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.BaseWeight": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Displacement": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.EmissionColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Emissive": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Height": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Metallic": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Normal": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Opacity": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.Roughness": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.SpecularColor": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.SpecularRoughness": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.SpecularWeight": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User0": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User1": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User2": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.ChannelType.User3": {
+      "documented_as": "substance_painter.textureset.ChannelType",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.Resolution": {
+      "documented_as": "substance_painter.textureset.Resolution",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.Resolution.height": {
+      "documented_as": "substance_painter.textureset.Resolution",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.Resolution.width": {
+      "documented_as": "substance_painter.textureset.Resolution",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.Stack.all_channels": {
+      "documented_as": "substance_painter.textureset.Stack.all_channels",
+      "page": "substance_painter/textureset/stack.html"
+    },
+    "substance_painter.textureset.Stack.from_name": {
+      "documented_as": "substance_painter.textureset.Stack.from_name",
+      "page": "substance_painter/textureset/stack.html"
+    },
+    "substance_painter.textureset.Stack.material": {
+      "documented_as": "substance_painter.textureset.Stack.material",
+      "page": "substance_painter/textureset/stack.html"
+    },
+    "substance_painter.textureset.Stack.name": {
+      "documented_as": "substance_painter.textureset.Stack.name",
+      "page": "substance_painter/textureset/stack.html"
+    },
+    "substance_painter.textureset.TextureSet.all_stacks": {
+      "documented_as": "substance_painter.textureset.TextureSet.all_stacks",
+      "page": "substance_painter/textureset/textureset.html"
+    },
+    "substance_painter.textureset.TextureSet.from_name": {
+      "documented_as": "substance_painter.textureset.TextureSet.from_name",
+      "page": "substance_painter/textureset/textureset.html"
+    },
+    "substance_painter.textureset.TextureSet.get_resolution": {
+      "documented_as": "substance_painter.textureset.TextureSet.get_resolution",
+      "page": "substance_painter/textureset/textureset.html"
+    },
+    "substance_painter.textureset.TextureSet.name": {
+      "documented_as": "substance_painter.textureset.TextureSet.name",
+      "page": "substance_painter/textureset/textureset.html"
+    },
+    "substance_painter.textureset.all_texture_sets": {
+      "documented_as": "substance_painter.textureset.all_texture_sets",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.get_active_stack": {
+      "documented_as": "substance_painter.textureset.get_active_stack",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.textureset.set_resolutions": {
+      "documented_as": "substance_painter.textureset.set_resolutions",
+      "page": "substance_painter/textureset/index.html"
+    },
+    "substance_painter.ui": {
+      "documented_as": "substance_painter.ui",
+      "page": "substance_painter/ui.html"
+    },
+    "substance_painter.ui.UIMode": {
+      "documented_as": "substance_painter.ui.UIMode",
+      "page": "substance_painter/ui.html"
+    },
+    "substance_painter.ui.UIMode.Baking": {
+      "documented_as": "substance_painter.ui.UIMode",
+      "page": "substance_painter/ui.html"
+    },
+    "substance_painter.ui.UIMode.Edition": {
+      "documented_as": "substance_painter.ui.UIMode",
+      "page": "substance_painter/ui.html"
+    },
+    "substance_painter.ui.UIMode.Visualisation": {
+      "documented_as": "substance_painter.ui.UIMode",
+      "page": "substance_painter/ui.html"
+    },
+    "substance_painter.ui.get_current_mode": {
+      "documented_as": "substance_painter.ui.get_current_mode",
+      "page": "substance_painter/ui.html"
+    },
+    "substance_painter.ui.switch_to_mode": {
+      "documented_as": "substance_painter.ui.switch_to_mode",
+      "page": "substance_painter/ui.html"
+    }
+  }
+}

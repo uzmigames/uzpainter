@@ -1,0 +1,234 @@
+"""Recording jobs: a public manifest (`golden-public.json`) read as the instruction to record.
+
+The job is the UzmiGames-authored manifest of a golden with its `private_records` still empty:
+inputs with provenance, the instruction sequence over documented `substance_painter` calls, the
+applied settings. The recorder replays the state-changing steps once, then performs the capture
+steps for every recording (task items 2.2, 2.3, 2.6). Only the vocabulary below is replayed;
+anything else is refused before Painter is touched.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from tools.parity.recorder import vocabulary as ps
+from tools.parity.recorder.session import RecorderError
+from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
+
+EXPORT = "substance_painter.export.export_project_textures"
+
+# Step arguments naming an input by input_id; the recorder passes the input's file path.
+INPUT_ARGS = {ps.CREATE: "mesh", ps.SET_ENVIRONMENT: "environment"}
+
+STATE_CALLS = frozenset(
+    {
+        ps.CREATE,
+        ps.INSERT_FILL,
+        ps.SET_SOURCE,
+        ps.SET_ACTIVE_CHANNELS,
+        ps.SET_BLENDING_MODE,
+        ps.SET_OPACITY,
+        ps.SET_RESOLUTIONS,
+        ps.SET_ENVIRONMENT,
+        ps.SET_TONE_MAPPING,
+        *(ps.CAMERA + name for name in ps.CAMERA_PROPERTIES),
+    }
+)
+
+# Getter recorded after each setter (readback of the documented property it changed).
+READBACK_OF = {
+    ps.SET_SOURCE: (ps.GET_SOURCE, ("node_step", "channel")),
+    ps.SET_ACTIVE_CHANNELS: (ps.GET_ACTIVE_CHANNELS, ("node_step",)),
+    ps.SET_BLENDING_MODE: (ps.GET_BLENDING_MODE, ("node_step", "channel")),
+    ps.SET_OPACITY: (ps.GET_OPACITY, ("node_step", "channel")),
+}
+
+EXPORT_PRESET = "uzp_recorder"
+MAP_CHANNELS = {"RGB": "RGB", "RGBA": "RGBA", "L": "L"}
+
+
+def canonical_json(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
+
+
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+@dataclass(frozen=True)
+class Step:
+    step: int
+    call: str
+    args: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class OutputMap:
+    """One map of the recorder's export preset: `<map_type>/<name>:<channels>`."""
+
+    map_type: str
+    name: str
+    channels: str
+
+    @property
+    def file_name(self) -> str:
+        return f"$textureSet_{self.name}"
+
+    def preset_map(self) -> dict[str, Any]:
+        return {
+            "fileName": self.file_name,
+            "channels": [
+                {
+                    "destChannel": channel,
+                    "srcChannel": channel,
+                    "srcMapType": self.map_type,
+                    "srcMapName": self.name,
+                }
+                for channel in self.channels
+            ],
+        }
+
+
+def parse_output_map(spec: str) -> OutputMap:
+    kind_name, _, channels = spec.partition(":")
+    map_type, _, name = kind_name.rpartition("/")
+    if not name or channels not in MAP_CHANNELS:
+        raise RecorderError(f"export map {spec!r} is not `<mapType>/<name>:<RGB|RGBA|L>`")
+    return OutputMap(map_type or "documentMap", name, channels)
+
+
+@dataclass(frozen=True)
+class ExportStep:
+    step: int
+    maps: tuple[OutputMap, ...]
+    parameters: dict[str, Any]
+
+    def config(self, export_path: Path, roots: list[str]) -> dict[str, Any]:
+        """The documented `json_config` of `export_project_textures`."""
+        return {
+            "exportPath": export_path.as_posix(),
+            "exportShaderParams": False,
+            "defaultExportPreset": EXPORT_PRESET,
+            "exportPresets": [{"name": EXPORT_PRESET, "maps": [m.preset_map() for m in self.maps]}],
+            "exportList": [{"rootPath": root} for root in roots],
+            "exportParameters": [{"parameters": dict(self.parameters)}],
+        }
+
+
+def export_step(step: Step) -> ExportStep:
+    args = step.args
+    maps = args.get("maps")
+    if not isinstance(maps, list) or not maps:
+        raise RecorderError(f"step {step.step}: export needs a non-empty `maps` list")
+    parameters: dict[str, Any] = {
+        "fileFormat": str(args.get("file_format", "png")),
+        "bitDepth": str(args["bit_depth"]),
+        "dithering": bool(args.get("dithering", False)),
+        "paddingAlgorithm": str(args["padding"]),
+    }
+    if "dilation" in args:
+        parameters["dilationDistance"] = int(args["dilation"])
+    if "size_log2" in args:
+        parameters["sizeLog2"] = int(args["size_log2"])
+    return ExportStep(step.step, tuple(parse_output_map(str(m)) for m in maps), parameters)
+
+
+@dataclass(frozen=True)
+class Job:
+    manifest: dict[str, Any]
+    inputs: dict[str, Path]
+    state_steps: tuple[Step, ...]
+    exports: tuple[ExportStep, ...]
+
+    @property
+    def golden_id(self) -> str:
+        return str(self.manifest["golden_id"])
+
+    @property
+    def tier(self) -> str:
+        return str(self.manifest["tier"])
+
+    @property
+    def instruction_sequence_sha256(self) -> str:
+        return sha256_bytes(canonical_json(self.manifest["instruction_sequence"]))
+
+    def input_hashes(self) -> list[dict[str, str]]:
+        return [{"input_id": i["input_id"], "sha256": i["sha256"]} for i in self.manifest["inputs"]]
+
+    def readback_specs(self) -> list[dict[str, Any]]:
+        specs: list[dict[str, Any]] = []
+        for step in self.state_steps:
+            if step.call in READBACK_OF:
+                getter, keys = READBACK_OF[step.call]
+                spec = {"call": getter, "args": {k: step.args[k] for k in keys}}
+                if spec not in specs:
+                    specs.append(spec)
+        return specs
+
+    def project_settings(self) -> dict[str, Any]:
+        """Settings the instruction sequence gives `project.create` (all other values: defaults)."""
+        for step in self.state_steps:
+            if step.call == ps.CREATE:
+                return {k: v for k, v in step.args.items() if k != "mesh"}
+        return {}
+
+
+def load_job(path: Path, repo_root: Path = REPO_ROOT) -> Job:
+    manifest = load_json(path)
+    problems = validation_errors(manifest, Schema.GOLDEN_PUBLIC)
+    if problems:
+        raise RecorderError(f"{path}: not a valid public manifest: {problems}")
+    return job_from_manifest(manifest, repo_root)
+
+
+def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> Job:
+    inputs: dict[str, Path] = {}
+    for item in manifest["inputs"]:
+        if "path" not in item:
+            continue
+        file = repo_root / item["path"]
+        if not file.is_file():
+            raise RecorderError(f"input {item['input_id']}: {item['path']} does not exist")
+        actual = sha256_file(file)
+        if actual != item["sha256"]:
+            raise RecorderError(
+                f"input {item['input_id']}: sha256 {actual} differs from the manifest"
+            )
+        inputs[item["input_id"]] = file
+    steps = [
+        Step(s["step"], s["call"], dict(s.get("args", {})))
+        for s in manifest["instruction_sequence"]["steps"]
+    ]
+    if [s.step for s in steps] != list(range(1, len(steps) + 1)):
+        raise RecorderError("instruction steps must be numbered 1..n in order")
+    state: list[Step] = []
+    exports: list[ExportStep] = []
+    for step in steps:
+        if step.call == EXPORT:
+            exports.append(export_step(step))
+            continue
+        if exports:
+            raise RecorderError(f"step {step.step}: state steps must precede the captures")
+        if step.call not in STATE_CALLS:
+            raise RecorderError(f"step {step.step}: {step.call} is not in the recorder vocabulary")
+        key = INPUT_ARGS.get(step.call)
+        if key is not None and step.args.get(key) not in inputs:
+            raise RecorderError(f"step {step.step}: `{key}` must name an input with a path")
+        state.append(step)
+    if not state or state[0].call != ps.CREATE:
+        raise RecorderError("the instruction sequence must start with project.create")
+    return Job(manifest, inputs, tuple(state), tuple(exports))

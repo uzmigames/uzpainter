@@ -1,0 +1,722 @@
+"""A fake `substance_painter` package and remote endpoint for recorder tests (no Painter needed).
+
+The fake implements just the documented surface `painter_side.py` uses, with simple behaviour
+(it does not model Painter's compositing). `LocalTransport` mimics the documented remote control:
+an expression returns its JSON-encoded value, statements return null, errors come back as
+`{"error": {"description": ...}}`, and the namespace persists for the life of one fake process.
+"""
+
+from __future__ import annotations
+
+import enum
+import json
+import struct
+import sys
+import types
+import zlib
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from tools.parity.recorder.session import RemoteError
+
+
+def write_png(
+    path: Path,
+    width: int,
+    height: int,
+    pixels: list[tuple[int, ...]],
+    bit_depth: int = 16,
+    srgb_chunk: bool = False,
+    filters: list[int] | None = None,
+) -> None:
+    """Write a non-interlaced grey/GA/RGB/RGBA PNG; `filters` gives each row's filter type."""
+    channels = len(pixels[0])
+    color_type = {1: 0, 2: 4, 3: 2, 4: 6}[channels]
+    size = bit_depth // 8
+    bpp = channels * size
+    rows = []
+    for y in range(height):
+        line = b"".join(
+            v.to_bytes(size, "big") for px in pixels[y * width : (y + 1) * width] for v in px
+        )
+        rows.append(line)
+    raw = bytearray()
+    previous = bytes(len(rows[0]))
+    for y, line in enumerate(rows):
+        kind = filters[y] if filters else 0
+        out = bytearray()
+        for i, value in enumerate(line):
+            left = line[i - bpp] if i >= bpp else 0
+            up = previous[i]
+            upper_left = previous[i - bpp] if i >= bpp else 0
+            if kind == 0:
+                predicted = 0
+            elif kind == 1:
+                predicted = left
+            elif kind == 2:
+                predicted = up
+            elif kind == 3:
+                predicted = (left + up) // 2
+            else:
+                p = left + up - upper_left
+                pa, pb, pc = abs(p - left), abs(p - up), abs(p - upper_left)
+                predicted = left if pa <= pb and pa <= pc else up if pb <= pc else upper_left
+            out.append((value - predicted) & 0xFF)
+        raw += bytes([kind]) + out
+        previous = line
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        crc = zlib.crc32(kind + body) & 0xFFFFFFFF
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", crc)
+
+    header = struct.pack(">IIBBBBB", width, height, bit_depth, color_type, 0, 0, 0)
+    data = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header)
+    if srgb_chunk:
+        data += chunk(b"sRGB", b"\x00")
+    data += chunk(b"IDAT", zlib.compress(bytes(raw))) + chunk(b"IEND", b"")
+    path.write_bytes(data)
+
+
+class ProjectError(Exception):
+    pass
+
+
+class ChannelType(enum.Enum):
+    BaseColor = 1
+    Roughness = 2
+    Metallic = 3
+    Normal = 4
+    Height = 5
+
+
+class ChannelFormat(enum.Enum):
+    sRGB8 = 1
+    L8 = 2
+    RGB16 = 3
+    RGB16F = 4
+
+
+class BlendingMode(enum.Enum):
+    Normal = 1
+    Multiply = 2
+    Screen = 3
+
+
+class SourceMode(enum.Enum):
+    Split = 1
+    Material = 2
+
+
+class GenericColorSpace(enum.Enum):
+    sRGB = 1
+    Working = 2
+    Raw = 3
+
+
+class NormalMapFormat(enum.Enum):
+    OpenGL = 1
+    DirectX = 2
+
+
+class TangentSpace(enum.Enum):
+    PerVertex = 1
+    PerFragment = 2
+
+
+class ProjectWorkflow(enum.Enum):
+    Default = 1
+
+
+class ProjectSaveMode(enum.Enum):
+    Full = 1
+    Incremental = 2
+
+
+class ExportStatus(enum.Enum):
+    Success = 0
+    Cancelled = 1
+    Warning = 2
+    Error = 3
+
+
+class UIMode(enum.Enum):
+    Edition = 1
+    Visualisation = 2
+    Baking = 4
+
+
+class CameraProjectionType(enum.Enum):
+    Perspective = 1
+    Orthographic = 2
+
+
+class ToneMappingFunction(enum.Enum):
+    Linear = 1
+    ACES = 2
+
+
+class Usage(enum.Enum):
+    ENVIRONMENT = 1
+    TEXTURE = 2
+
+
+CHANNEL_FORMATS = {
+    ChannelType.BaseColor: ChannelFormat.sRGB8,
+    ChannelType.Roughness: ChannelFormat.L8,
+    ChannelType.Metallic: ChannelFormat.L8,
+    ChannelType.Normal: ChannelFormat.RGB16F,
+    ChannelType.Height: ChannelFormat.L8,
+}
+
+
+class Color:
+    def __init__(self, r: float, g: float, b: float, color_space: Any = None) -> None:
+        self.values = (r, g, b)
+        self.color_space = color_space
+
+    @property
+    def working(self) -> tuple[float, float, float]:
+        if self.color_space == GenericColorSpace.sRGB:
+            r, g, b = (
+                c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in self.values
+            )
+            return (r, g, b)
+        return self.values
+
+
+class SourceUniformColor:
+    def __init__(self, color: Color) -> None:
+        self.color = color
+
+    def get_color(self) -> Color:
+        return Color(*self.color.working, GenericColorSpace.Working)
+
+
+@dataclass
+class Property:
+    data: Any
+    widget: str
+    text: str
+
+    def value(self) -> Any:
+        return self.data
+
+    def widget_type(self) -> str:
+        return self.widget
+
+    def label(self) -> str:
+        return self.text
+
+
+class SourceSubstance:
+    """A procedural source; its properties are fixed fake values."""
+
+    def __init__(self, url: str) -> None:
+        self.url = url
+
+    def get_properties(self) -> dict[str, Property]:
+        return {
+            "scale": Property(1.5, "Slider", "Scale"),
+            "tint": Property(
+                (Color(0.25, 0.5, 1.0, GenericColorSpace.Working), 0.5), "Color", "Tint"
+            ),
+            "seed": Property(7, "RandomSeed", "Random Seed"),
+        }
+
+
+class Resolution:
+    def __init__(self, width: int = 1024, height: int = 1024) -> None:
+        self.width = width
+        self.height = height
+
+
+@dataclass
+class Channel:
+    kind: ChannelType
+
+    def format(self) -> ChannelFormat:
+        return CHANNEL_FORMATS[self.kind]
+
+    def bit_depth(self) -> int:
+        return 16 if self.kind == ChannelType.Normal else 8
+
+    def is_color(self) -> bool:
+        return self.kind in (ChannelType.BaseColor, ChannelType.Normal)
+
+    def is_floating(self) -> bool:
+        return self.kind == ChannelType.Normal
+
+    def label(self) -> str:
+        return ""
+
+
+@dataclass
+class Layer:
+    uid_value: int
+    channels: set[ChannelType]
+    sources: dict[ChannelType, Color] = field(default_factory=dict)
+    substances: dict[ChannelType, str] = field(default_factory=dict)
+    blending: dict[ChannelType, BlendingMode] = field(default_factory=dict)
+    opacity: dict[ChannelType, float] = field(default_factory=dict)
+
+
+class FakeWorld:
+    """State of one fake Painter process."""
+
+    def __init__(self, export_hook: Callable[[Path], None] | None = None) -> None:
+        self.project_open = False
+        self.edition_polls = 0
+        self.busy = False
+        self.file_path: str | None = None
+        self.texture_set = "uzp_plane"
+        self.resolution = (1024, 1024)
+        self.layers: list[Layer] = []  # bottom to top
+        self.next_uid = 100
+        self.ui_mode = UIMode.Edition
+        self.environment: str | None = None
+        self.tone_mapping = ToneMappingFunction.Linear
+        self.camera: dict[str, Any] = {
+            "projection_type": CameraProjectionType.Perspective,
+            "position": [0.0, 0.0, 50.0],
+            "rotation": [0.0, 0.0, 0.0],
+            "field_of_view": 40.0,
+            "focal_length": 50.0,
+            "focus_distance": 10.0,
+            "aperture": 0.1,
+            "orthographic_height": 10.0,
+        }
+        self.export_hook = export_hook
+        self.version = "12.1.0"
+        self.version_info = (12, 1, 0)
+        self.modules = build_modules(self)
+
+    def require_open(self) -> None:
+        if not self.project_open:
+            raise ProjectError("no project is opened")
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "resolution": list(self.resolution),
+            "layers": [
+                {
+                    "uid": layer.uid_value,
+                    "channels": sorted(c.name for c in layer.channels),
+                    "sources": {c.name: list(v.working) for c, v in layer.sources.items()},
+                    "substances": {c.name: url for c, url in layer.substances.items()},
+                    "blending": {c.name: m.name for c, m in layer.blending.items()},
+                    "opacity": {c.name: o for c, o in layer.opacity.items()},
+                }
+                for layer in self.layers
+            ],
+        }
+
+    def restore(self, data: dict[str, Any]) -> None:
+        self.resolution = (data["resolution"][0], data["resolution"][1])
+        self.layers = [
+            Layer(
+                uid_value=item["uid"] + 1000,  # uids change across reopen
+                channels={ChannelType[c] for c in item["channels"]},
+                sources={
+                    ChannelType[c]: Color(v[0], v[1], v[2], GenericColorSpace.Working)
+                    for c, v in item["sources"].items()
+                },
+                substances={ChannelType[c]: url for c, url in item["substances"].items()},
+                blending={ChannelType[c]: BlendingMode[m] for c, m in item["blending"].items()},
+                opacity={ChannelType[c]: o for c, o in item["opacity"].items()},
+            )
+            for item in data["layers"]
+        ]
+
+    def composite(self, channel: ChannelType) -> tuple[float, float, float]:
+        value = (0.0, 0.0, 0.0)
+        for layer in self.layers:
+            if channel not in layer.channels or channel not in layer.sources:
+                continue
+            top = layer.sources[channel].working
+            if layer.blending.get(channel, BlendingMode.Normal) == BlendingMode.Multiply:
+                top = (top[0] * value[0], top[1] * value[1], top[2] * value[2])
+            alpha = layer.opacity.get(channel, 1.0)
+            value = tuple(v + (t - v) * alpha for v, t in zip(value, top, strict=True))  # type: ignore[assignment]
+        return value
+
+
+def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
+    """The fake `substance_painter` package bound to one world."""
+
+    def module(name: str, **members: Any) -> types.ModuleType:
+        mod = types.ModuleType(name)
+        for key, value in members.items():
+            setattr(mod, key, value)
+        return mod
+
+    class Settings:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+    def is_in_edition_state() -> bool:
+        world.require_open()
+        world.edition_polls += 1
+        return world.edition_polls > 1  # loading is asynchronous: ready on the second poll
+
+    def create(mesh_file_path: str, settings: Settings) -> None:
+        if world.project_open:
+            raise ProjectError("there is already an opened project")
+        if not Path(mesh_file_path).is_file():
+            raise ValueError("mesh file does not exist")
+        world.project_open, world.edition_polls, world.file_path = True, 0, None
+        size = settings.kwargs.get("default_texture_resolution") or 1024
+        world.resolution = (size, size)
+        world.layers = []
+
+    def save_as(path: str, mode: ProjectSaveMode) -> None:
+        world.require_open()
+        Path(path).write_text(json.dumps(world.snapshot()), encoding="utf-8")
+        world.file_path = path
+
+    def close() -> None:
+        world.require_open()
+        world.project_open, world.layers, world.file_path = False, [], None
+
+    def open_(path: str) -> None:
+        if world.project_open:
+            raise ProjectError("there is already an opened project")
+        world.restore(json.loads(Path(path).read_text(encoding="utf-8")))
+        world.project_open, world.edition_polls, world.file_path = True, 0, path
+
+    def file_path() -> str | None:
+        world.require_open()
+        return world.file_path
+
+    project = module(
+        "substance_painter.project",
+        Settings=Settings,
+        NormalMapFormat=NormalMapFormat,
+        TangentSpace=TangentSpace,
+        ProjectWorkflow=ProjectWorkflow,
+        ProjectSaveMode=ProjectSaveMode,
+        is_open=lambda: world.project_open,
+        is_in_edition_state=is_in_edition_state,
+        is_busy=lambda: world.busy,
+        file_path=file_path,
+        create=create,
+        save_as=save_as,
+        close=close,
+        open=open_,
+    )
+
+    class TextureSet:
+        def __init__(self, name: str) -> None:
+            self.set_name = name
+
+        @staticmethod
+        def from_name(name: str) -> TextureSet:
+            if name != world.texture_set:
+                raise ValueError(f"no texture set {name}")
+            return TextureSet(name)
+
+        def name(self) -> str:
+            return self.set_name
+
+        def get_resolution(self) -> Resolution:
+            return Resolution(*world.resolution)
+
+        def all_stacks(self) -> list[Stack]:
+            return [Stack(self.set_name, "")]
+
+    class Stack:
+        def __init__(self, texture_set: str, stack: str) -> None:
+            self.texture_set, self.stack = texture_set, stack
+
+        @staticmethod
+        def from_name(texture_set_name: str, stack_name: str = "") -> Stack:
+            return Stack(texture_set_name, stack_name)
+
+        def name(self) -> str:
+            return self.stack
+
+        def material(self) -> TextureSet:
+            return TextureSet(self.texture_set)
+
+        def all_channels(self) -> dict[ChannelType, Channel]:
+            return {kind: Channel(kind) for kind in CHANNEL_FORMATS}
+
+    def set_resolutions(sets: list[TextureSet], resolution: Resolution) -> None:
+        world.resolution = (resolution.width, resolution.height)
+
+    textureset = module(
+        "substance_painter.textureset",
+        ChannelType=ChannelType,
+        ChannelFormat=ChannelFormat,
+        Resolution=Resolution,
+        TextureSet=TextureSet,
+        Stack=Stack,
+        all_texture_sets=lambda: [TextureSet(world.texture_set)],
+        get_active_stack=lambda: Stack(world.texture_set, ""),
+        set_resolutions=set_resolutions,
+    )
+
+    class FillLayerNode:
+        def __init__(self, layer: Layer) -> None:
+            self.layer = layer
+
+        @property
+        def active_channels(self) -> set[ChannelType]:
+            return set(self.layer.channels)
+
+        @active_channels.setter
+        def active_channels(self, channels: set[ChannelType]) -> None:
+            self.layer.channels = set(channels)
+
+        @property
+        def source_mode(self) -> SourceMode:
+            return SourceMode.Split
+
+        def require(self, channel: ChannelType) -> None:
+            if channel not in self.layer.channels:
+                raise RuntimeError(f"channel {channel.name} is not active")
+
+        def set_source(self, channel: ChannelType, source: Any) -> Any:
+            self.require(channel)
+            if isinstance(source, ResourceID):
+                self.layer.substances[channel] = source.url()
+                self.layer.sources.pop(channel, None)
+                return SourceSubstance(source.url())
+            self.layer.sources[channel] = source
+            self.layer.substances.pop(channel, None)
+            return SourceUniformColor(source)
+
+        def get_source(self, channel: ChannelType) -> Any:
+            self.require(channel)
+            if channel in self.layer.substances:
+                return SourceSubstance(self.layer.substances[channel])
+            return SourceUniformColor(self.layer.sources.get(channel, Color(0.0, 0.0, 0.0)))
+
+        def get_blending_mode(self, channel: ChannelType) -> BlendingMode:
+            self.require(channel)
+            return self.layer.blending.get(channel, BlendingMode.Normal)
+
+        def set_blending_mode(self, mode: BlendingMode, channel: ChannelType) -> None:
+            self.require(channel)
+            self.layer.blending[channel] = mode
+
+        def get_opacity(self, channel: ChannelType) -> float:
+            self.require(channel)
+            return self.layer.opacity.get(channel, 1.0)
+
+        def set_opacity(self, opacity: float, channel: ChannelType) -> None:
+            self.require(channel)
+            self.layer.opacity[channel] = opacity
+
+        def get_stack(self) -> Stack:
+            return Stack(world.texture_set, "")
+
+        def uid(self) -> int:
+            return self.layer.uid_value
+
+    @dataclass
+    class InsertPosition:
+        index: int
+
+        @staticmethod
+        def from_textureset_stack(stack: Stack) -> InsertPosition:
+            return InsertPosition(len(world.layers))
+
+        @staticmethod
+        def above_node(node: FillLayerNode) -> InsertPosition:
+            return InsertPosition(world.layers.index(node.layer) + 1)
+
+        @staticmethod
+        def below_node(node: FillLayerNode) -> InsertPosition:
+            return InsertPosition(world.layers.index(node.layer))
+
+    def insert_fill(position: InsertPosition) -> FillLayerNode:
+        world.require_open()
+        world.next_uid += 1
+        layer = Layer(world.next_uid, set(CHANNEL_FORMATS))
+        world.layers.insert(position.index, layer)
+        return FillLayerNode(layer)
+
+    def get_root_layer_nodes(stack: Stack) -> list[FillLayerNode]:
+        return [FillLayerNode(layer) for layer in reversed(world.layers)]  # top first
+
+    layerstack = module(
+        "substance_painter.layerstack",
+        BlendingMode=BlendingMode,
+        InsertPosition=InsertPosition,
+        insert_fill=insert_fill,
+        get_root_layer_nodes=get_root_layer_nodes,
+    )
+
+    @dataclass
+    class TextureExportResult:
+        status: ExportStatus
+        message: str
+        textures: dict[tuple[str, str], list[str]]
+
+    def export_project_textures(config: dict[str, Any]) -> TextureExportResult:
+        world.require_open()
+        out_dir = Path(config["exportPath"])
+        written: dict[tuple[str, str], list[str]] = {}
+        for entry in config["exportList"]:
+            texture_set = entry["rootPath"]
+            for preset_map in config["exportPresets"][0]["maps"]:
+                name = preset_map["fileName"].replace("$textureSet", texture_set)
+                path = out_dir / f"{name}.png"
+                source = preset_map["channels"][0]["srcMapName"]
+                kind = next(k for k in ChannelType if k.name.lower() == source.lower())
+                r, g, b = world.composite(kind)
+                width, height = world.resolution[0] // 64 or 1, world.resolution[1] // 64 or 1
+                code = tuple(round(min(max(c, 0.0), 1.0) * 65535) for c in (r, g, b))
+                write_png(path, width, height, [code] * (width * height))
+                if world.export_hook is not None:
+                    world.export_hook(path)
+                written.setdefault((texture_set, ""), []).append(path.as_posix())
+        return TextureExportResult(ExportStatus.Success, "Export done", written)
+
+    export = module(
+        "substance_painter.export",
+        ExportStatus=ExportStatus,
+        export_project_textures=export_project_textures,
+    )
+
+    class Camera:
+        @staticmethod
+        def get_default_camera() -> Camera:
+            world.require_open()
+            return Camera()
+
+    for name in world.camera:
+
+        def getter(self: Camera, key: str = name) -> Any:
+            return world.camera[key]
+
+        def setter(self: Camera, value: Any, key: str = name) -> None:
+            world.camera[key] = value
+
+        setattr(Camera, name, property(getter, setter))
+
+    @dataclass
+    class ResourceID:
+        name: str
+        context: str = "project0"
+
+        @staticmethod
+        def from_url(url: str) -> ResourceID:
+            if not url.startswith("resource://"):
+                raise ValueError(f"not a resource URL: {url}")
+            context, _, name = url[len("resource://") :].partition("/")
+            return ResourceID(name, context)
+
+        def url(self) -> str:
+            return f"resource://{self.context}/{self.name}"
+
+    @dataclass
+    class Resource:
+        rid: ResourceID
+
+        def identifier(self) -> ResourceID:
+            return self.rid
+
+    def set_environment_resource(rid: ResourceID) -> None:
+        world.environment = rid.name
+
+    display = module(
+        "substance_painter.display",
+        Camera=Camera,
+        CameraProjectionType=CameraProjectionType,
+        ToneMappingFunction=ToneMappingFunction,
+        get_environment_resource=lambda: (
+            None if world.environment is None else ResourceID(world.environment)
+        ),
+        set_environment_resource=set_environment_resource,
+        get_color_lut_resource=lambda: None,
+        get_tone_mapping=lambda: world.tone_mapping,
+        set_tone_mapping=lambda f: setattr(world, "tone_mapping", f),
+    )
+    resource = module(
+        "substance_painter.resource",
+        Usage=Usage,
+        ResourceID=ResourceID,
+        import_project_resource=lambda path, usage: Resource(ResourceID(Path(path).stem)),
+    )
+    ui = module(
+        "substance_painter.ui",
+        UIMode=UIMode,
+        get_current_mode=lambda: world.ui_mode,
+        switch_to_mode=lambda mode: setattr(world, "ui_mode", mode),
+    )
+
+    def evaluate(code: str) -> str:
+        if code == "alg.version.api":
+            return "1.1.20"
+        raise RuntimeError(f"unsupported javascript {code!r}")
+
+    modules = {
+        "substance_painter.application": module(
+            "substance_painter.application",
+            version=lambda: world.version,
+            version_info=lambda: world.version_info,
+            engine_computations_status=lambda: True,
+        ),
+        "substance_painter.colormanagement": module(
+            "substance_painter.colormanagement", Color=Color, GenericColorSpace=GenericColorSpace
+        ),
+        "substance_painter.display": display,
+        "substance_painter.export": export,
+        "substance_painter.js": module("substance_painter.js", evaluate=evaluate),
+        "substance_painter.layerstack": layerstack,
+        "substance_painter.project": project,
+        "substance_painter.resource": resource,
+        "substance_painter.source": module(
+            "substance_painter.source",
+            SourceUniformColor=SourceUniformColor,
+            SourceSubstance=SourceSubstance,
+        ),
+        "substance_painter.textureset": textureset,
+        "substance_painter.ui": ui,
+    }
+    root = module("substance_painter")
+    for name, mod in modules.items():
+        setattr(root, name.split(".", 1)[1], mod)
+    modules["substance_painter"] = root
+    return modules
+
+
+@contextmanager
+def installed(world: FakeWorld) -> Iterator[None]:
+    saved = {name: sys.modules.get(name) for name in world.modules}
+    sys.modules.update(world.modules)
+    try:
+        yield
+    finally:
+        for name, previous in saved.items():
+            if previous is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = previous
+
+
+class LocalTransport:
+    """The documented remote-control behaviour, executing in this process against a FakeWorld."""
+
+    def __init__(self, world: FakeWorld) -> None:
+        self.world = world
+        self.namespace: dict[str, Any] = {}
+        self.sent: list[str] = []
+
+    def run(self, code: str) -> Any:
+        self.sent.append(code)
+        with installed(self.world):
+            try:
+                try:
+                    compiled = compile(code, "<string>", "eval")
+                except SyntaxError:
+                    exec(compile(code, "<string>", "exec"), self.namespace)
+                    return None
+                value = eval(compiled, self.namespace)
+            except Exception as error:  # the endpoint reports any failure as an error object
+                raise RemoteError(f"Painter could not execute the sent code: {error}") from error
+        return json.loads(json.dumps(value))

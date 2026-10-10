@@ -26,6 +26,11 @@ module = ["jsonschema", "jsonschema.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# Painter's runtime package: tools/parity/recorder/painter_side.py runs only inside Painter.
+module = ["substance_painter", "substance_painter.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # PyYAML (tests reading the CI workflows) ships no type information; types-PyYAML is not installed.
 module = ["yaml"]
 ignore_missing_imports = true
