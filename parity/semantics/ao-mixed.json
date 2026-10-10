@@ -1,0 +1,231 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "ao-mixed",
+  "description": "The AO_Mixed virtual map operator: baked AO mesh map times the AO channel, its 8-bit quantisation, and the empty AO channel base, fitted on the Tier 0 ao-mixed golden.",
+  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "corpus": [
+    "tier0/semantics/ao-mixed"
+  ],
+  "entries": [
+    {
+      "entry_id": "ao-mixed-operator",
+      "subject": "AO_Mixed virtual map: baked AO mesh map combined with the AO channel",
+      "status": "calibrated",
+      "formula": "AO_Mixed = a * c, the product (multiply) of the baked AO mesh map value a and the AO channel value c, both linear in [0, 1] (a = mesh map code / 65535, c = stored L16 code / 65535; no colour transfer). The result is written at 8-bit precision: v = a * c is truncated to 12 fractional bits (j = floor(v * 4096)), then code8 = floor((j * 255 + 2047) / 4096), the nearest 8-bit code with ties down; the PNG 16 export writes code8 * 257. An AO channel with no layer stores its base 1.0 (code 65535), so AO_Mixed equals the mesh map quantised to 8 bits. No clamp is needed (a * c is in [0, 1]).",
+      "public_sources": [
+        {
+          "source_id": "A-HELP-EXPORT",
+          "locator": "Output templates: virtual maps, Mixed AO"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "textureset: MeshMapUsage.AO; ChannelType.AO"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "operator",
+          "value": "multiply",
+          "origin": "fitted"
+        },
+        {
+          "name": "result_bits",
+          "value": 8,
+          "origin": "fitted",
+          "unit": "bits"
+        },
+        {
+          "name": "truncation_bits",
+          "value": 12,
+          "origin": "fitted",
+          "unit": "fractional bits"
+        },
+        {
+          "name": "empty_channel_base",
+          "value": 1.0,
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/ao-mixed",
+          "map": "s0/AO_Mixed",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed",
+          "map": "s0/AO_Mixed",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed",
+          "map": "s1/AO_Mixed",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 0.117645263671875,
+            "p99": 0,
+            "differing": 30,
+            "total": 65536,
+            "affected_texels": 30,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed",
+          "map": "s1/AO_Mixed",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 0.0666656494140625,
+            "p99": 0,
+            "differing": 17,
+            "total": 65536,
+            "affected_texels": 17,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed",
+          "map": "s2/AO_Mixed",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed",
+          "map": "s2/AO_Mixed",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed",
+          "map": "s3/AO_Mixed",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed",
+          "map": "s3/AO_Mixed",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        }
+      ],
+      "notes": "Whole image (one quad per set, full 0-1 UVs). min(a, c) misses by up to 16448 export codes; a 16-bit product misses by up to 145. Every recorded AO_Mixed value is on the 8-bit lattice (multiple of 257). Plain round-to-nearest of 255 * a * c leaves 2060 (s0) and about 2400 (s1) values one 8-bit code high, all at fractions 0.50-0.56; the 12-bit truncation removes them (the same n + 4 bit truncation fits the 16-bit normal maps, height-to-normal.json). s0, s2 and s3 are exact against both recordings. s1 (fill at opacity 0.5) leaves 30 (r1) and 17 (r2) values one 8-bit code (257) off, every one within 0.03 of a 2^-12 step; the oracle is unstable on the same values (r1 and r2 differ in 27 values, max 257, all within 0.03 of a step), so an exact fit against both recordings is impossible there. Using the unquantised blend 0.5 + 0.5 * b in place of the stored L16 channel fits worse (29 and 50 values)."
+    },
+    {
+      "entry_id": "ao-channel-empty-base",
+      "subject": "AO channel (L16) with no layer: its stored base value",
+      "status": "exact",
+      "formula": "Every texel stores 1.0 (code 65535 on L16): the base of an empty AO channel is white (no occlusion), so AO_Mixed of an empty channel is the baked mesh map alone.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "textureset: ChannelType.AO"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "base",
+          "value": 1.0,
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/ao-mixed",
+          "map": "s3/ambientOcclusion",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed",
+          "map": "s3/ambientOcclusion",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        }
+      ],
+      "notes": "Observed on the operands: the uniform 0.5 fill of s2 rounds the L16 tie 0.5 * 65535 down, while the opacity-0.5 fill of grey B over the base (s1) rounds the same tie up where its blend is 0.5 (b = 0); the L16 channel stack itself belongs to the blend fits."
+    }
+  ]
+}

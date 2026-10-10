@@ -1,0 +1,979 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "evaluator-profile",
+  "description": "Evaluator profile settled by the three-1/3-opacity-fills experiment (04 section 4, task phase0.7_tier0-stability-fits): end against per-layer quantisation on every ChannelFormat member and encoded against linear blending on sRGB8. Residuals are |delta| in storage units against both recordings.",
+  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "corpus": [
+    "tier0/semantics/quantisation-thirds"
+  ],
+  "entries": [
+    {
+      "entry_id": "quantisation-end",
+      "subject": "Quantisation at the end of the stack only (exact model)",
+      "status": "calibrated",
+      "formula": "acc_0 = 1 (empty stack); acc_i = acc_(i-1) + (c_i - acc_(i-1)) * alpha with alpha = float32(1/3) in float64 arithmetic; an L channel takes the mean of the colour's three components. Quantiser Q: RGB16/L16 round(x*65535), RGB8/L8 round(x*255), RGB16F/L16F nearest half, RGB32F/L32F nearest float32, sRGB8 round(255*encode(x)) with encode/decode IEC 61966-2-1 (blending on linear values). End model: acc stays unquantised; Q is applied once to the final acc.",
+      "public_sources": [
+        {
+          "source_id": "S-W3C-BLEND",
+          "locator": "\u00a75.1 Normal blend mode; \u00a76 simple alpha compositing"
+        },
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 \u00a75.2-5.3 (transfer functions)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM, FLOAT to FLOAT16"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "opacity",
+          "value": 0.3333333432674408,
+          "origin": "authored"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.3333333333333333,
+            "p99": 1,
+            "differing": 262144,
+            "total": 786432,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.4166666666666667,
+            "p99": 1,
+            "differing": 327680,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user1",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.5833333333333334,
+            "p99": 1,
+            "differing": 458752,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user1",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.6666666666666666,
+            "p99": 1,
+            "differing": 524288,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 196608,
+            "total": 786432,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.16666666666666666,
+            "p99": 1,
+            "differing": 131072,
+            "total": 786432,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user3",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.00018310546875,
+            "p99": 0.00048828125,
+            "differing": 327680,
+            "total": 786432,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user3",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.0009765625,
+            "mean": 0.0005289713541666666,
+            "p99": 0.0009765625,
+            "differing": 720896,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user4",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 9.934107462565104e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 131072,
+            "total": 786432,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user4",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 1.1920928955078125e-07,
+            "mean": 4.470348358154297e-08,
+            "p99": 1.1920928955078125e-07,
+            "differing": 458752,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user5",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 1.0,
+            "p99": 1,
+            "differing": 262144,
+            "total": 262144,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user5",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.75,
+            "p99": 1,
+            "differing": 196608,
+            "total": 262144,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user6",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user6",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user7",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0003662109375,
+            "p99": 0.00048828125,
+            "differing": 196608,
+            "total": 262144,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user7",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.0009765625,
+            "mean": 0.0006103515625,
+            "p99": 0.0009765625,
+            "differing": 262144,
+            "total": 262144,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/scattering",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 1.4901161193847656e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/scattering",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 1.4901161193847656e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "quantisation-per-layer",
+      "subject": "Quantisation after every layer (per-layer-quantised model)",
+      "status": "calibrated",
+      "formula": "acc_0 = 1 (empty stack); acc_i = acc_(i-1) + (c_i - acc_(i-1)) * alpha with alpha = float32(1/3) in float64 arithmetic; an L channel takes the mean of the colour's three components. Quantiser Q: RGB16/L16 round(x*65535), RGB8/L8 round(x*255), RGB16F/L16F nearest half, RGB32F/L32F nearest float32, sRGB8 round(255*encode(x)) with encode/decode IEC 61966-2-1 (blending on linear values). Per-layer model: each layer's content c_i and the accumulator after each layer are quantised with Q.",
+      "public_sources": [
+        {
+          "source_id": "S-W3C-BLEND",
+          "locator": "\u00a75.1 Normal blend mode; \u00a76 simple alpha compositing"
+        },
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 \u00a75.2-5.3 (transfer functions)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM, FLOAT to FLOAT16"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "opacity",
+          "value": 0.3333333432674408,
+          "origin": "authored"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.16666666666666666,
+            "p99": 1,
+            "differing": 131072,
+            "total": 786432,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 196608,
+            "total": 786432,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user1",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 2,
+            "mean": 0.5833333333333334,
+            "p99": 2,
+            "differing": 393216,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user1",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 2,
+            "mean": 0.6666666666666666,
+            "p99": 2,
+            "differing": 458752,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 196608,
+            "total": 786432,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.16666666666666666,
+            "p99": 1,
+            "differing": 131072,
+            "total": 786432,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user3",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0002644856770833333,
+            "p99": 0.00048828125,
+            "differing": 458752,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user3",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.0009765625,
+            "mean": 0.0005289713541666666,
+            "p99": 0.0009765625,
+            "differing": 720896,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user4",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 1.9868214925130207e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 262144,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user4",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 1.1920928955078125e-07,
+            "mean": 5.463759104410807e-08,
+            "p99": 1.1920928955078125e-07,
+            "differing": 458752,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user5",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 1.0,
+            "p99": 1,
+            "differing": 262144,
+            "total": 262144,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user5",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.75,
+            "p99": 1,
+            "differing": 196608,
+            "total": 262144,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user6",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user6",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user7",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0001220703125,
+            "p99": 0.00048828125,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user7",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.0009765625,
+            "mean": 0.0003662109375,
+            "p99": 0.0009765625,
+            "differing": 131072,
+            "total": 262144,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/scattering",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 1.4901161193847656e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/scattering",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 1.4901161193847656e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "srgb8-blending-space-encoded",
+      "subject": "sRGB8 blending on encoded values (rejected candidate)",
+      "status": "calibrated",
+      "formula": "acc_i = acc_(i-1) + (encode(c_i) - acc_(i-1)) * alpha on IEC 61966-2-1 encoded values, rounded to an 8-bit code after each layer.",
+      "public_sources": [
+        {
+          "source_id": "S-W3C-BLEND",
+          "locator": "\u00a75.1 Normal blend mode; \u00a76 simple alpha compositing"
+        },
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 \u00a75.2-5.3 (transfer functions)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM, FLOAT to FLOAT16"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "opacity",
+          "value": 0.3333333432674408,
+          "origin": "authored"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 29,
+            "mean": 15.333333333333334,
+            "p99": 29,
+            "differing": 786432,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 29,
+            "mean": 15.416666666666666,
+            "p99": 29,
+            "differing": 786432,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "evaluator-profile",
+      "subject": "Evaluator profile painter-12.1-layerq-linear (provisional)",
+      "status": "calibrated",
+      "formula": "acc_0 = 1 (empty stack); acc_i = acc_(i-1) + (c_i - acc_(i-1)) * alpha with alpha = float32(1/3) in float64 arithmetic; an L channel takes the mean of the colour's three components. Quantiser Q: RGB16/L16 round(x*65535), RGB8/L8 round(x*255), RGB16F/L16F nearest half, RGB32F/L32F nearest float32, sRGB8 round(255*encode(x)) with encode/decode IEC 61966-2-1 (blending on linear values). Selected: the per-layer model, sRGB8 channels blended on linear values.",
+      "public_sources": [
+        {
+          "source_id": "S-W3C-BLEND",
+          "locator": "\u00a75.1 Normal blend mode; \u00a76 simple alpha compositing"
+        },
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 \u00a75.2-5.3 (transfer functions)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM, FLOAT to FLOAT16"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "evaluator_profile",
+          "value": "painter-12.1-layerq-linear",
+          "origin": "fitted"
+        },
+        {
+          "name": "quantisation_points",
+          "value": "per-layer",
+          "origin": "fitted"
+        },
+        {
+          "name": "srgb8_blending_space",
+          "value": "linear",
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.16666666666666666,
+            "p99": 1,
+            "differing": 131072,
+            "total": 786432,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 196608,
+            "total": 786432,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user1",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 2,
+            "mean": 0.5833333333333334,
+            "p99": 2,
+            "differing": 393216,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user1",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 2,
+            "mean": 0.6666666666666666,
+            "p99": 2,
+            "differing": 458752,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 196608,
+            "total": 786432,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.16666666666666666,
+            "p99": 1,
+            "differing": 131072,
+            "total": 786432,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user3",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0002644856770833333,
+            "p99": 0.00048828125,
+            "differing": 458752,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user3",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.0009765625,
+            "mean": 0.0005289713541666666,
+            "p99": 0.0009765625,
+            "differing": 720896,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user4",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 1.9868214925130207e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 262144,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user4",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 1.1920928955078125e-07,
+            "mean": 5.463759104410807e-08,
+            "p99": 1.1920928955078125e-07,
+            "differing": 458752,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user5",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 1.0,
+            "p99": 1,
+            "differing": 262144,
+            "total": 262144,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user5",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.75,
+            "p99": 1,
+            "differing": 196608,
+            "total": 262144,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user6",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user6",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.25,
+            "p99": 1,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user7",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0001220703125,
+            "p99": 0.00048828125,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user7",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.0009765625,
+            "mean": 0.0003662109375,
+            "p99": 0.0009765625,
+            "differing": 131072,
+            "total": 262144,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/scattering",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 1.4901161193847656e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/scattering",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 1.4901161193847656e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        }
+      ],
+      "notes": "Differing values over the nine channel formats and both recordings: end model 4718592 (max |delta| 1), per-layer model 4325376 (max 2). sRGB8: linear per-layer 327680 (max 1) against encoded 1572864 (max 29), so sRGB8 channels blend on linear values. Neither quantisation model reproduces the golden exactly and the golden is unstable (r1 and r2 differ on 16 of 36 maps), so the profile is provisional: quantisation points stay an open item."
+    }
+  ]
+}

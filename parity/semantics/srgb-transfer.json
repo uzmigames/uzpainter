@@ -1,0 +1,326 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "srgb-transfer",
+  "description": "Transfer functions of uniform colours and channel storage (04 section 4, task phase0.7_tier0-stability-fits): fitted against IEC 61966-2-1 from the Tier 0 colour ramps (288 values per colour space) and the exported sRGB8 codes of the blend inputs. Residuals are |delta| in storage units against both recordings (r1 same session, r2 after save and reopen).",
+  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "corpus": [
+    "tier0/semantics/blend-inputs",
+    "tier0/semantics/colour-ramps-raw",
+    "tier0/semantics/colour-ramps-srgb",
+    "tier0/semantics/colour-ramps-working"
+  ],
+  "entries": [
+    {
+      "entry_id": "uniform-colour-rgb16",
+      "subject": "Uniform colour stored on an RGB16 channel (legacy colour management)",
+      "status": "exact",
+      "formula": "code = round(v * 65535) of the uniform colour component v in [0, 1], clamped; no transfer function is applied: the colour spaces sRGB, Working and Raw give the same codes in a project whose colour management mode is legacy (the mode the recorder captured). Export to PNG 16 writes the code unchanged.",
+      "public_sources": [
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM (round to nearest)"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: ColorSpace of uniform colour sources"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "scale",
+          "value": 65535,
+          "origin": "public_documentation",
+          "unit": "code per unit"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/colour-ramps-srgb",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-srgb",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-working",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-working",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-raw",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-raw",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        }
+      ],
+      "notes": "Residuals pool the 24 texture sets and four RGB16 channels (288 values, three components each, every texel of each map) per golden and recording."
+    },
+    {
+      "entry_id": "uniform-colour-srgb8-store",
+      "subject": "Uniform colour stored on an sRGB8 channel (legacy colour management)",
+      "status": "calibrated",
+      "formula": "code = round(255 * encode(v)), with encode the IEC 61966-2-1 linear-to-sRGB function (12.92 v for v <= 0.0031308, else 1.055 v^(1/2.4) - 0.055) and v the colour component taken as linear; same codes for the sRGB, Working and Raw colour spaces (legacy colour management). Storage codes are recovered from the 16-bit export through the export calibration of the entry srgb8-export.",
+      "public_sources": [
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 \u00a75.3 (encoding transfer function)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to SRGB (UNORM_SRGB)"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "linear_segment_slope",
+          "value": 12.92,
+          "origin": "public_documentation"
+        },
+        {
+          "name": "threshold",
+          "value": 0.0031308,
+          "origin": "public_documentation"
+        },
+        {
+          "name": "exponent",
+          "value": 2.4,
+          "origin": "public_documentation"
+        },
+        {
+          "name": "offset",
+          "value": 0.055,
+          "origin": "public_documentation"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/colour-ramps-srgb",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.041666666666666664,
+            "p99": 1,
+            "differing": 786432,
+            "total": 18874368,
+            "affected_texels": 786432,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-srgb",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.041666666666666664,
+            "p99": 1,
+            "differing": 786432,
+            "total": 18874368,
+            "affected_texels": 786432,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-working",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.041666666666666664,
+            "p99": 1,
+            "differing": 786432,
+            "total": 18874368,
+            "affected_texels": 786432,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-working",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.041666666666666664,
+            "p99": 1,
+            "differing": 786432,
+            "total": 18874368,
+            "affected_texels": 786432,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-raw",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r1",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.041666666666666664,
+            "p99": 1,
+            "differing": 786432,
+            "total": 18874368,
+            "affected_texels": 786432,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-raw",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r2",
+          "unit": "8-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.041666666666666664,
+            "p99": 1,
+            "differing": 786432,
+            "total": 18874368,
+            "affected_texels": 786432,
+            "texels": 6291456
+          }
+        }
+      ],
+      "notes": "Every differing code is one code off, and all but one sit within 0.06 code of a rounding boundary of 255 * encode(v): a hardware sRGB conversion with a tolerance (Direct3D allows a tolerance on sRGB conversions) is the likely cause; the exact rounding is not reproduced (open item)."
+    },
+    {
+      "entry_id": "srgb8-export",
+      "subject": "Export of an sRGB8 channel to a 16-bit PNG",
+      "status": "calibrated",
+      "formula": "export = round(65535 * R8(decode(c / 255))) for the storage code c, with decode the IEC 61966-2-1 sRGB-to-linear function (c'/12.92 for c' <= 0.04045, else ((c' + 0.055)/1.055)^2.4) and R8 rounding to 8 significant binary digits (the export values lie on an 8-significant-bit grid). The 16-bit export of an sRGB8 channel is therefore approximately linear, although the PNG is tagged sRGB.",
+      "public_sources": [
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 \u00a75.2 (decoding transfer function)"
+        },
+        {
+          "source_id": "A-HELP-EXPORT",
+          "locator": "Export settings: bit depth and colour space of PNG output"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "significant_bits",
+          "value": 8,
+          "origin": "fitted",
+          "unit": "bits"
+        },
+        {
+          "name": "scale",
+          "value": 65535,
+          "origin": "public_documentation",
+          "unit": "code per unit"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s0-s1/user2-user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 256,
+            "mean": 12.9427490234375,
+            "p99": 256,
+            "differing": 50976,
+            "total": 786432,
+            "affected_texels": 41254,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s0-s1/user2-user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 256,
+            "mean": 12.9427490234375,
+            "p99": 256,
+            "differing": 50976,
+            "total": 786432,
+            "affected_texels": 41254,
+            "texels": 262144
+          }
+        }
+      ],
+      "notes": "Over the 256 storage codes the model differs on 26 codes (max |delta| 256 export codes). The export grid has 8 significant bits, but the underlying curve deviates from the IEC decode by up to about 0.25 % of full scale at mid range (an approximation of the transfer function inside Painter's export path); not reproduced exactly (open item)."
+    }
+  ]
+}

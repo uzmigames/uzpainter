@@ -1,0 +1,693 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "height-to-normal",
+  "description": "Height to normal with the project's default method: finite-difference kernel, scale, border handling, encoding to 16-bit and the OpenGL/DirectX green flip, fitted on the Tier 0 height-normal goldens.",
+  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "corpus": [
+    "tier0/semantics/height-normal-bevelled-cube",
+    "tier0/semantics/height-normal-plane-amplitudes",
+    "tier0/semantics/height-normal-sphere"
+  ],
+  "entries": [
+    {
+      "entry_id": "height-normal-default-opengl",
+      "subject": "Normal_OpenGL virtual map from the Height channel, project default method and strength",
+      "status": "calibrated",
+      "formula": "Input: the stored height h of the Height channel (L16F; the bitmap code c maps to about (2c/65535 - 1) times the layer opacity). In image index space (row 0 is the top row, v up), with wrap-around at the texture borders: dx = h[r,c] - h[r,c-1], dy = h[r,c] - h[r-1,c] (backward differences, one texel). n = normalize(-k dx, k dy, 1), k = 2.56 per unit of height difference at 256 px, computed in float32 (normalize = v * rsqrt(dot(v, v)), rsqrt correctly rounded). Encoding: e = n * 0.5 + 0.5 in float32 for x, y and z. 16-bit code = UNORM16(e): e is truncated to 20 fractional bits (j = floor(e * 2^20)), then code = floor((j * 65535 + 2^19 - 1) / 2^20), the nearest code with ties down (the 0.5 of a flat normal's x and y rounds down). No clamp is needed (e is in [0, 1]). Normal_OpenGL writes (x, y, z) as RGB (y up).",
+      "public_sources": [
+        {
+          "source_id": "P-PBRT",
+          "locator": "Bump mapping: displacement gradient by finite differences"
+        },
+        {
+          "source_id": "A-HELP-GUIDE",
+          "locator": "Project configuration: normal map format (OpenGL / DirectX)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "gradient_scale",
+          "value": 2.56,
+          "origin": "fitted",
+          "unit": "per unit height difference at 256 px"
+        },
+        {
+          "name": "difference_kernel",
+          "value": [
+            -1,
+            1
+          ],
+          "origin": "fitted",
+          "unit": "previous texel, current texel"
+        },
+        {
+          "name": "truncation_bits",
+          "value": 20,
+          "origin": "fitted",
+          "unit": "fractional bits"
+        },
+        {
+          "name": "resolution",
+          "value": 256,
+          "origin": "authored",
+          "unit": "px"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 5.0862630208333336e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 196608,
+            "affected_texels": 10,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 5.0862630208333336e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 196608,
+            "affected_texels": 10,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 9.663899739583333e-05,
+            "p99": 0,
+            "differing": 19,
+            "total": 196608,
+            "affected_texels": 19,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 9.663899739583333e-05,
+            "p99": 0,
+            "differing": 19,
+            "total": 196608,
+            "affected_texels": 19,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s2/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 5.0862630208333336e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 196608,
+            "affected_texels": 10,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s2/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 5.0862630208333336e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 196608,
+            "affected_texels": 10,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s3/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 3.0517578125e-05,
+            "p99": 0,
+            "differing": 6,
+            "total": 196608,
+            "affected_texels": 6,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s3/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 3.0517578125e-05,
+            "p99": 0,
+            "differing": 6,
+            "total": 196608,
+            "affected_texels": 6,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 5.667392092854552e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 176448,
+            "affected_texels": 10,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 5.667392092854552e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 176448,
+            "affected_texels": 10,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 6.530825496342738e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 153120,
+            "affected_texels": 10,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 6.530825496342738e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 153120,
+            "affected_texels": 10,
+            "texels": 51040
+          }
+        }
+      ],
+      "notes": "Domains: the grid2x2 sets (one quad, full 0-1 UVs) compare the whole image, borders included (the wrap-around is exercised there); the sphere and the bevelled cube compare their UV coverage eroded by one texel (58816 and 51040 texels); outside it the export holds padding. Inside the coverage the stored height of the sphere and cube equals that of the plane at opacity 1, so the normal is computed in texture space only (mesh geometry, UV seams and island borders do not enter except through padding read at island edges). Search: forward, central, Sobel-like mixed kernels miss by thousands of codes; the backward one-texel difference with k = 2.56 leaves only +-1 code; k = 2.56 * (1 +- 0.001) gives about 25000 differing values per set. Plain round-to-nearest leaves 1600-2700 values per set 1 code high at fractions 0.5-0.56; truncation to 20 bits before rounding removes them. Remaining +-1 code values (tens per set) sit within 0.06 of a 2^-20 step: float32 rounding of the GPU's rsqrt and multiply order. The scale is fitted at one resolution: whether it is 0.01 x resolution (a UV-space gradient) or fixed per texel is not separable here. The empty Normal channel (base 127/255, 127/255, 1) does not tilt the result: it acts as (0, 0, 1)."
+    },
+    {
+      "entry_id": "height-normal-default-directx",
+      "subject": "Normal_DirectX virtual map: the OpenGL normal with the green (y) component negated",
+      "status": "calibrated",
+      "formula": "Input: the stored height h of the Height channel (L16F; the bitmap code c maps to about (2c/65535 - 1) times the layer opacity). In image index space (row 0 is the top row, v up), with wrap-around at the texture borders: dx = h[r,c] - h[r,c-1], dy = h[r,c] - h[r-1,c] (backward differences, one texel). n = normalize(-k dx, k dy, 1), k = 2.56 per unit of height difference at 256 px, computed in float32 (normalize = v * rsqrt(dot(v, v)), rsqrt correctly rounded). Encoding: e = n * 0.5 + 0.5 in float32 for x, y and z. 16-bit code = UNORM16(e): e is truncated to 20 fractional bits (j = floor(e * 2^20)), then code = floor((j * 65535 + 2^19 - 1) / 2^20), the nearest code with ties down (the 0.5 of a flat normal's x and y rounds down). No clamp is needed (e is in [0, 1]). Normal_DirectX writes (x, -y, z): the y component is negated in float32 before the encoding.",
+      "public_sources": [
+        {
+          "source_id": "P-PBRT",
+          "locator": "Bump mapping: displacement gradient by finite differences"
+        },
+        {
+          "source_id": "A-HELP-GUIDE",
+          "locator": "Project configuration: normal map format (OpenGL / DirectX)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "gradient_scale",
+          "value": 2.56,
+          "origin": "fitted",
+          "unit": "per unit height difference at 256 px"
+        },
+        {
+          "name": "green_sign",
+          "value": -1,
+          "origin": "public_documentation"
+        },
+        {
+          "name": "truncation_bits",
+          "value": 20,
+          "origin": "fitted",
+          "unit": "fractional bits"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 6.103515625e-05,
+            "p99": 0,
+            "differing": 12,
+            "total": 196608,
+            "affected_texels": 12,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 6.103515625e-05,
+            "p99": 0,
+            "differing": 12,
+            "total": 196608,
+            "affected_texels": 12,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s1/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 9.663899739583333e-05,
+            "p99": 0,
+            "differing": 19,
+            "total": 196608,
+            "affected_texels": 19,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s1/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 9.663899739583333e-05,
+            "p99": 0,
+            "differing": 19,
+            "total": 196608,
+            "affected_texels": 19,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s2/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 5.0862630208333336e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 196608,
+            "affected_texels": 10,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s2/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 5.0862630208333336e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 196608,
+            "affected_texels": 10,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s3/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 3.5603841145833336e-05,
+            "p99": 0,
+            "differing": 7,
+            "total": 196608,
+            "affected_texels": 7,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s3/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 3.5603841145833336e-05,
+            "p99": 0,
+            "differing": 7,
+            "total": 196608,
+            "affected_texels": 7,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 6.234131302140008e-05,
+            "p99": 0,
+            "differing": 11,
+            "total": 176448,
+            "affected_texels": 11,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 6.234131302140008e-05,
+            "p99": 0,
+            "differing": 11,
+            "total": 176448,
+            "affected_texels": 11,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 6.530825496342738e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 153120,
+            "affected_texels": 10,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 6.530825496342738e-05,
+            "p99": 0,
+            "differing": 10,
+            "total": 153120,
+            "affected_texels": 10,
+            "texels": 51040
+          }
+        }
+      ],
+      "notes": "R and B equal those of Normal_OpenGL in every recorded texel. Domains as in height-normal-default-opengl (whole image for grid2x2, eroded UV coverage for the sphere and the bevelled cube)."
+    },
+    {
+      "entry_id": "height-normal-default-normal-channel-base",
+      "subject": "Empty Normal channel (no layer) exported as OpenEXR 32f: its base value",
+      "status": "exact",
+      "formula": "Every texel = (float32(127/255), float32(127/255), 1.0): the 8-bit flat normal code (127, 127, 255) read as UNORM8, not a half value of the RGB16F storage. The height normal of the virtual maps treats this base as the flat normal (0, 0, 1).",
+      "public_sources": [
+        {
+          "source_id": "A-HELP-EXPORT",
+          "locator": "Export: document channel maps"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "base",
+          "value": [
+            0.4980392156862745,
+            0.4980392156862745,
+            1.0
+          ],
+          "origin": "fitted",
+          "unit": "UNORM8 code / 255"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s1/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s1/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s2/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s2/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s3/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s3/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        }
+      ],
+      "notes": "Compared over the whole image (the channel holds no layer, padding included)."
+    },
+    {
+      "entry_id": "height-normal-second-method-and-strength",
+      "subject": "Second height-to-normal method and the strength sweep (moved to a UI-recorded task)",
+      "status": "gap",
+      "formula": "Not fitted here. The height-to-normal method and its strength are project or shader settings the Python API can neither set nor read; the owner moved the second method and the strength sweep to phase0.7_tier0-semantics-ui-cases (recorded through Painter's UI, decision 029). Until that task records them they are release gaps.",
+      "public_sources": [
+        {
+          "source_id": "A-HELP-GUIDE",
+          "locator": "Project configuration: height and normal settings"
+        }
+      ],
+      "parameters": [],
+      "residuals": []
+    }
+  ]
+}
