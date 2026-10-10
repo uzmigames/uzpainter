@@ -16,7 +16,7 @@ Root: `UZP_PARITY_STORE` when set, else `%LOCALAPPDATA%\UzPainter\parity-store`.
 | Path under the root | Content |
 |---|---|
 | `store.json` | Layout marker `{"schema": "uzpainter/parity/store/1", "hash": "sha256"}` |
-| `index.json` | `{"schema": "uzpainter/parity/store-index/1", "sha256": [...]}`: the sorted SHA-256 of every stored blob. The repository guard (`phase0.4_oracle-store-guard`) matches files against it; it is the only part of the store a hosted job may ever receive |
+| `index.json` | `{"schema": "uzpainter/parity/store-index/1", "sha256": [...]}`: the sorted SHA-256 of every stored blob. The repository guard (`phase0.4_oracle-store-guard`, `parity/GUARD.md`) matches files against it; it is the only part of the store a hosted job may ever receive |
 | `blobs/<aa>/<sha256>` | The bytes, named by their SHA-256 (`<aa>` = its first two hex digits), read-only |
 | `corpora/<Painter build id>/<golden id>/<record id>.json` | Write-once entry `{"schema": "uzpainter/parity/store-entry/1", painter_build_id, golden_id, record_id, kind, sha256, size_bytes, file_name}`, read-only |
 

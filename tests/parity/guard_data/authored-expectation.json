@@ -1,0 +1,48 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "guard/tier0/srgb8-checker-decode",
+  "tier": "0",
+  "domain": "tier0/decode/srgb8/BaseColor",
+  "description": "Authored guard test input (tests/parity/test_guard.py): an 8x8 greyscale checker of 8-bit sRGB texels 0 and 188, written by tools for this test, imported as a project resource. Nothing here was recorded from Painter.",
+  "inputs": [
+    {
+      "input_id": "checker",
+      "kind": "image",
+      "path": "parity/fixtures/images/authored-checker.png",
+      "sha256": "734b854bc38de1d99e449f833f17a646d2ec804c4c8145fa4176b2ddddd0f49d",
+      "provenance": { "origin": "uzmigames_authored", "licence": "Apache-2.0" }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": { "file_path": "checker", "usage": "texture" }
+      }
+    ]
+  },
+  "applied_settings": [],
+  "expectations": [
+    {
+      "expectation_id": "light-texel-linear",
+      "quantity": "Linear value of the light checker texel (8-bit sRGB code 188)",
+      "value": 0.5028864580325687,
+      "derivation": "public_documentation",
+      "source_id": "S-SRGB",
+      "locator": "IEC 61966-2-1, sRGB electro-optical transfer function"
+    }
+  ],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.0",
+      "build_id": "not-recorded"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

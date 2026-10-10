@@ -105,7 +105,7 @@ All schemas are JSON Schema draft 2020-12 under `parity/schema/`; `tools/parity/
 | `exceptions.json` | The register (§5) | — |
 | `comparison-report.json` | The comparison-tool output (§8) | Numbers and hashes only |
 
-Samples under `parity/schema/samples/` are synthetic (invented values and hashes; nothing recorded from Painter): `public/` (valid manifests), `private/` (private-shaped records: exported map, JSON readback, default and template capture, Iray reference), `exceptions/` (register entries), `reports/` (a report). The repository guard of P0-STORE must accept `samples/private/` only as these synthetic test inputs. Tests: `tests/parity/test_schemas.py`.
+Samples under `parity/schema/samples/` are synthetic (invented values and hashes; nothing recorded from Painter): `public/` (valid manifests), `private/` (private-shaped records: exported map, JSON readback, default and template capture, Iray reference), `exceptions/` (register entries), `reports/` (a report). The repository guard of P0-STORE (`parity/GUARD.md`) must accept `samples/private/` only as these synthetic test inputs. Tests: `tests/parity/test_schemas.py`.
 
 ## 8. Comparison-tool specification
 

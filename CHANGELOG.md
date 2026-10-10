@@ -13,6 +13,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Oracle guard (task `phase0.4_oracle-store-guard`): `python -m tools.parity.guard` blocks recorded Painter outputs from the repository (store-hash, private-record and public-schema rules; synthetic samples allowed only when fully marked), `.githooks/pre-commit` (enable with `git config core.hooksPath .githooks`), guard step in hosted CI, `parity/GUARD.md`.
 - P0-VENDOR acceptance (task `phase0.5_vendor-render-core`): the vendored render core builds from a copy of the package outside the repository with empty Zig caches, reading only the copy and Zig's own files; no submodule, `runtime.lib`, patch queue or package pin; vendoring check green; native modification tests pass on the hardware adapter (`tests/vendoring/test_render_core_integration.py`).
 - Vendoring check (task `phase0.4_vendor-check`): `python -m tools.vendoring.vendor_check` enforces manifest, hash drift, notices, coverage, denylist, conflict markers and build paths (no UzEngine or fetched-package include paths); hosted CI workflow is CPU-only (decision 028) with `UZP_NO_GPU=1` skipping device tests.
 - Private oracle store (task `phase0.3_oracle-store-cli`): content-addressed store outside the repository (`python -m tools.parity.store init|record|fetch|verify`, `UZP_PARITY_STORE`), recorder inbox hand-off, `parity/STORE.md`, hosted CI workflow `.github/workflows/parity.yml`; decision 028: GitHub runs hosted CPU-only CI, GPU and oracle checks run locally.
