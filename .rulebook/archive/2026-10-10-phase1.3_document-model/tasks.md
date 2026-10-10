@@ -9,10 +9,10 @@
 
 ## 3. Tests
 - [x] 3.1 Integrated round trip: build a fixture document through transactions, serialise the manifest, reload it, and compare documents and digests
-- [ ] 3.2 Digest stability across two processes and two machines (hosted CPU lane and a local run on the owner's machine, decision 028) for the same fixture documents
+- [x] 3.2 Digest stability across two processes and two machines (hosted CPU lane and a local run on the owner's machine, decision 028) for the same fixture documents
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance (P1-DOCMODEL gate): round-trip tests green and digest stable; results recorded for the G1 gate record
+- [x] 4.1 Acceptance (P1-DOCMODEL gate): round-trip tests green and digest stable; results recorded for the G1 gate record
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation

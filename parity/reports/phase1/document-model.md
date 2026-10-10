@@ -2,7 +2,7 @@
 
 Task `phase1.3_document-model`, the parent and acceptance task of P1-DOCMODEL (`docs/dag.md`: "Round-trip tests; digest stable"). Children, all archived on 2026-10-10: `phase1.1_docmodel-types-manifest`, `phase1.2_docmodel-transactions`, `phase1.2_docmodel-capability-manifest`; prerequisite `phase0.2_parity-contract` archived. Decision 028: the digest must be the same on the hosted CPU lane and in a local run on the owner's machine. This report is the evidence for the G1 gate record.
 
-**Result on the owner's machine: round-trip tests green, digests stable across processes and builds. Hosted CPU lane: not yet run on this change (see "Hosted CPU lane").**
+**Result: P1-DOCMODEL gate met. Round-trip tests green and digests identical across processes, builds and two machines (the owner's machine and the hosted CPU lane, Parity run `38088050428` on `1e90914`).**
 
 ## Integration added by this task
 
@@ -30,7 +30,15 @@ Tests: `python -m pytest tests/uzp_core tests/capabilities`: 70 passed, also wit
 
 ## Hosted CPU lane
 
-The hosted lane (`.github/workflows/parity.yml`, `UZP_NO_GPU=1`, step "Tests") runs the same two pinned-digest tests. It has not run on this change: the remote `main` is at `92ef830` (phase0.6), the later local commits are not pushed, and pushing is the coordinator's step. The second-machine half of item 3.2 is met when that workflow passes on the commit that contains this task; its run id belongs in this section.
+The hosted lane (`.github/workflows/parity.yml`, `UZP_NO_GPU=1`, step "Tests") runs the same two pinned-digest tests on a GitHub-hosted `windows-latest` runner without a GPU.
+
+| Item | Value |
+|---|---|
+| Run | Parity run `38088050428` (https://github.com/uzmigames/uzpainter/actions/runs/38088050428), job "Hosted CPU lane (no GPU, no oracle store)" `114318601978`, 31m28s, conclusion `success` |
+| Commit | `1e90914`, which contains this task (`tests/uzp_core/test_transactions.py` pins `INTEGRATED_DIGEST = c2f28a5f…e0c2`) |
+| Tests step | 884 passed, 72 skipped; `tests/uzp_core/test_document_model.py` 28 passed, `test_transactions.py` 18 passed, `test_channel_types.py` 2 passed, none skipped |
+
+Both pinned digests (`dc572509…1db3` and `c2f28a5f…e0c2`) held on the hosted lane as on the owner's machine: item 3.2 is met.
 
 ## Reproduce
 
