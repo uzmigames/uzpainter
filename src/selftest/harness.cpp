@@ -4,7 +4,10 @@
 #define NOMINMAX
 #include "harness.h"
 
+#include "cpython_stages.h"
 #include "hardware_slice.h"
+#include "json_text.h"
+#include "probes.h"
 
 #include "log.h"
 #include "paths.h"
@@ -115,28 +118,6 @@ std::string UtcNow() {
     char buf[32];
     std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &utc);
     return buf;
-}
-
-std::string JsonString(const std::string& text) {
-    std::string out = "\"";
-    for (const unsigned char c : text) {
-        switch (c) {
-            case '"':  out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
-            default:
-                if (c < 0x20) {
-                    char buf[8];
-                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-                    out += buf;
-                } else {
-                    out += static_cast<char>(c);
-                }
-        }
-    }
-    return out + "\"";
 }
 
 void WriteDetails(std::ostream& out, const Details& details, const char* indent) {
@@ -262,6 +243,11 @@ int Selftest::Run(SelftestContext& context) {
         out << "\n    }";
     }
     out << "\n  ],\n";
+    out << "  \"probes\": [";
+    for (size_t i = 0; i < context.probeReports.size(); ++i) {
+        out << (i ? "," : "") << "\n    " << context.probeReports[i];
+    }
+    out << (context.probeReports.empty() ? "]" : "\n  ]") << ",\n";
     out << "  \"hardware_slice\": " << JsonString(slice) << ",\n";
     out << "  \"result\": " << JsonString(failed ? "failed" : "passed") << ",\n";
     out << "  \"exit_code\": " << exitCode << "\n}\n";
@@ -356,6 +342,8 @@ int RunSelftestCommand(const std::vector<std::string>& args) {
     SelftestContext context(std::move(options));
     Selftest selftest;
     RegisterHardwareSlice(selftest);
+    RegisterProbes(selftest);
+    RegisterCpythonStages(selftest);
     const int code = selftest.Run(context);
     uz::LogFlushAll();
     if (context.gpuUnrecoverable) {
@@ -365,6 +353,7 @@ int RunSelftestCommand(const std::vector<std::string>& args) {
         TerminateProcess(GetCurrentProcess(), static_cast<UINT>(code));
     }
     TeardownHardwareSlice(context);
+    TeardownCpython();
     uz::LogShutdown();
     return code;
 }

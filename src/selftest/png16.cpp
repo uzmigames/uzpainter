@@ -34,10 +34,15 @@ std::string SpngError(const char* call, int code) {
 
 StageOutcome RunPng16(SelftestContext& context) {
     const bool fromGpu = !context.readback.empty();
+    return Png16RoundTrip(fromGpu ? context.readback : ExpectedPattern(),
+                          fromGpu ? "gpu-readback" : "cpu-pattern",
+                          context.options.outDir / "selftest-pattern16.png");
+}
+
+StageOutcome Png16RoundTrip(const std::vector<uint16_t>& source, const char* sourceName,
+                            const std::filesystem::path& file) {
     const std::vector<uint16_t> expected = ExpectedPattern();
-    const std::vector<uint16_t>& source = fromGpu ? context.readback : expected;
-    const std::filesystem::path file = context.options.outDir / "selftest-pattern16.png";
-    Details details = {{"source", fromGpu ? "gpu-readback" : "cpu-pattern"},
+    Details details = {{"source", sourceName},
                        {"file", file.string()},
                        {"spng_version", spng_version_string()}};
 

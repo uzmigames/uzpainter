@@ -21,6 +21,8 @@ class IRHIDevice;
 
 namespace uzp::selftest {
 
+struct VulkanProbeState;
+
 /// Process exit codes of `selftest`.
 inline constexpr int kExitPassed = 0;      ///< Every executed mandatory stage passed.
 inline constexpr int kExitFailed = 1;      ///< A mandatory stage failed.
@@ -71,6 +73,12 @@ struct SelftestContext {
 
     /// The 16-bit pattern read back from the GPU (stage `compute-readback`), row-major.
     std::vector<uint16_t> readback;
+
+    /// What the Vulkan availability probe gathered (stage `vulkan-availability`, probes.h).
+    std::shared_ptr<VulkanProbeState> vulkan;
+    /// The probe reports of the run as JSON objects (probe_report.h), written as the report's
+    /// `probes` array.
+    std::vector<std::string> probeReports;
 };
 
 using StageFn = std::function<StageOutcome(SelftestContext&)>;

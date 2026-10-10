@@ -228,6 +228,8 @@ def test_build_script_paths_stay_in_the_repository() -> None:
     # A lone "/" is the separator of `core_root ++ "/" ++ dir`, not a path.
     assert not [s for s in literals if re.match(r"^([A-Za-z]:[\\/]|/.|\\\\)", s)]
     assert not [s for s in literals if ".." in s.replace("\\", "/").split("/")]
-    for banned in ("cwd_relative", "addSystemIncludePath", "addLibraryPath", "addObjectFile"):
+    for banned in ("cwd_relative", "addSystemIncludePath", "addLibraryPath"):
         assert banned not in code, banned
+    # An object file or import library (`python313.lib`) only through `b.path`.
+    assert code.count("addObjectFile(") == code.count("addObjectFile(b.path(")
     assert "uzengine" not in code.replace("uzengine-render-core", "").lower()

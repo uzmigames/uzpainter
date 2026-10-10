@@ -9,8 +9,11 @@
 //!   Agility SDK's `D3D12\D3D12Core.dll` beside it (`zig-out/bin/`)
 //! - `zig build painter`      `UzPainter.exe` (`src/`, the render core and libc++ linked
 //!   statically) with the same run-time files plus Embree's `embree4.dll` and `tbb12.dll` and
-//!   the Visual C++ runtime they import (`zig-out/bin/`, the one-folder layout of
-//!   `13-engine-integration.md` §5)
+//!   the Visual C++ runtime they import, and the embedded CPython: the embeddable package
+//!   (`python313.dll`, `python313.zip`, ...), `python313._pth` and the pinned wheels unpacked into
+//!   `Lib/site-packages/` (`zig-out/bin/`, the one-folder layout of `13-engine-integration.md` §5)
+//! - `zig build probe-tests`  `uzp-probe-tests.exe`, the native tests of the `selftest` probe
+//!   decisions (`tests/native/selftest_probes_test.cpp`)
 //!
 //! Every include and library path is inside this repository. Windows system headers and import
 //! libraries come from the MinGW-w64 files bundled with the pinned Zig release; nothing refers
@@ -141,17 +144,28 @@ const app_sources = [_][]const u8{
     "selftest/hardware_slice.cpp",
     "selftest/png16.cpp",
     "selftest/embree_stage.cpp",
+    "selftest/probe_report.cpp",
+    "selftest/probes.cpp",
+    "selftest/dx12_probes.cpp",
+    "selftest/vulkan_probes.cpp",
+    "selftest/cpython_stages.cpp",
+    "python/interpreter.cpp",
+    "python/uzpainter_module.cpp",
 };
 
 /// Third-party code only `UzPainter.exe` uses (`tools/vendoring/thirdparty.py`, libraries with
 /// `core=False`): include directories in the order of `build_include_dirs(core=False)`, and the
 /// C sources of `compiled_sources(core=False)`. Embree contributes headers only: its DLL is loaded
-/// at run time.
+/// at run time. CPython contributes its C API headers and the import library of `python313.dll`
+/// (`thirdparty/cpython-dev/`), pybind11 its headers.
 const app_thirdparty_include_dirs = [_][]const u8{
     "thirdparty/embree/include",
     "thirdparty/zlib",
     "thirdparty/spng/spng",
+    "thirdparty/cpython-dev/include",
+    "thirdparty/pybind11/include",
 };
+const python_import_library = "thirdparty/cpython-dev/libs/python313.lib";
 const zlib_sources = [_][]const u8{
     "adler32.c",
     "compress.c",
@@ -174,14 +188,27 @@ const dx_runtime_files = [_][2][]const u8{
     .{ "thirdparty/agility/build/native/bin/x64/D3D12Core.dll", "D3D12/D3D12Core.dll" },
 };
 /// Embree, and the Visual C++ runtime its prebuilt DLLs import, app-local
-/// (`tools/vendoring/vcruntime.py`).
+/// (`tools/vendoring/vcruntime.py`). `vcruntime140.dll` and `vcruntime140_1.dll` come with the
+/// CPython embeddable package (`thirdparty/cpython/`, file version 14.51), which is newer than
+/// `thirdparty/vc-runtime/`'s (14.44) and so serves Embree, `msvcp140.dll` and CPython alike.
 const embree_runtime_files = [_][2][]const u8{
     .{ "thirdparty/embree/bin/embree4.dll", "embree4.dll" },
     .{ "thirdparty/embree/bin/tbb12.dll", "tbb12.dll" },
     .{ "thirdparty/vc-runtime/msvcp140.dll", "msvcp140.dll" },
-    .{ "thirdparty/vc-runtime/vcruntime140.dll", "vcruntime140.dll" },
-    .{ "thirdparty/vc-runtime/vcruntime140_1.dll", "vcruntime140_1.dll" },
 };
+/// The CPython embeddable package (`thirdparty/cpython/`): every vendored file is installed
+/// beside the executable except the licence text and the vendoring metadata.
+const cpython_package_dir = "thirdparty/cpython";
+const cpython_package_excluded = [_][]const u8{ ".txt", ".md", ".json" };
+/// UzPainter's module search path of the embedded interpreter, beside `python313.dll`.
+const cpython_pth_file = "src/python/python313._pth";
+/// The pinned wheel closure of the MCP SDK (`tools/vendoring/wheels.py`), unpacked into
+/// `bin/Lib/site-packages/`.
+const wheels_dir = "thirdparty/python-wheels";
+/// Top-level wheel folders left out of the install, with the reasons in
+/// `tools/vendoring/wheels.py` (`NOT_INSTALLED`): pywin32's Pythonwin (needs the MFC runtime,
+/// which is not shipped) and `adodbapi` (LGPL-2.1); the MCP SDK uses neither.
+const wheel_folders_not_installed = [_][]const u8{ "pythonwin", "adodbapi" };
 
 /// Windows system libraries the core links against (import libraries from Zig's MinGW-w64).
 const system_libraries = [_][]const u8{
@@ -333,6 +360,8 @@ pub fn build(b: *std.Build) void {
     app_mod.linkSystemLibrary("psapi", .{});
     app_mod.linkSystemLibrary("version", .{});
     app_mod.linkSystemLibrary("advapi32", .{});
+    // `UzPainter.exe` imports `python313.dll` (the embedded interpreter, `src/python/`).
+    app_mod.addObjectFile(b.path(python_import_library));
 
     const app_exe = b.addExecutable(.{
         .name = "UzPainter",
@@ -345,8 +374,110 @@ pub fn build(b: *std.Build) void {
     for (embree_runtime_files) |file| {
         painter_step.dependOn(&b.addInstallBinFile(b.path(file[0]), file[1]).step);
     }
+    painter_step.dependOn(&b.addInstallDirectory(.{
+        .source_dir = b.path(cpython_package_dir),
+        .install_dir = .bin,
+        .install_subdir = "",
+        .exclude_extensions = &cpython_package_excluded,
+    }).step);
+    painter_step.dependOn(&b.addInstallBinFile(b.path(cpython_pth_file), "python313._pth").step);
+    painter_step.dependOn(&InstallWheels.create(b, b.path(wheels_dir), "Lib/site-packages").step);
     b.getInstallStep().dependOn(painter_step);
+
+    // ── Native tests of the probe decisions (src/selftest/probe_report.h) ─────────────────────
+
+    const probe_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, probe_tests_mod);
+    probe_tests_mod.addIncludePath(b.path("src"));
+    probe_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/native"),
+        .files = &.{"selftest_probes_test.cpp"},
+        .flags = &cxx_flags,
+    });
+    probe_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{"selftest/probe_report.cpp"},
+        .flags = &cxx_flags,
+    });
+    probe_tests_mod.linkLibrary(core_lib);
+    for (system_libraries) |name| probe_tests_mod.linkSystemLibrary(name, .{});
+
+    const probe_tests_exe = b.addExecutable(.{
+        .name = "uzp-probe-tests",
+        .root_module = probe_tests_mod,
+    });
+    const probe_tests_step = b.step("probe-tests", "Build the native tests of the selftest probe decisions");
+    probe_tests_step.dependOn(&b.addInstallArtifact(probe_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(probe_tests_step);
 }
+
+/// Installs every wheel of a folder into `<prefix>/bin/<subdir>` the way an installer lays out a
+/// wheel: its archive unpacked as is. The pinned wheels have no installation scheme besides
+/// console scripts (`<name>.data/scripts/`, checked by `tools/vendoring/wheels.py`), which are
+/// removed, as are `wheel_folders_not_installed`. The destination is emptied first, so files of
+/// earlier pins never linger.
+const InstallWheels = struct {
+    step: std.Build.Step,
+    source: std.Build.LazyPath,
+    subdir: []const u8,
+
+    fn create(b: *std.Build, source: std.Build.LazyPath, subdir: []const u8) *InstallWheels {
+        const self = b.allocator.create(InstallWheels) catch @panic("OOM");
+        self.* = .{
+            .step = std.Build.Step.init(.{
+                .id = .custom,
+                .name = b.fmt("install wheels to bin/{s}", .{subdir}),
+                .owner = b,
+                .makeFn = make,
+            }),
+            .source = source,
+            .subdir = subdir,
+        };
+        source.addStepDependencies(&self.step);
+        return self;
+    }
+
+    fn make(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
+        _ = options;
+        const self: *InstallWheels = @fieldParentPtr("step", step);
+        const b = step.owner;
+        const dest_path = b.getInstallPath(.bin, self.subdir);
+        std.fs.cwd().deleteTree(dest_path) catch |err| {
+            return step.fail("cannot empty {s}: {s}", .{ dest_path, @errorName(err) });
+        };
+        try std.fs.cwd().makePath(dest_path);
+        var dest = try std.fs.cwd().openDir(dest_path, .{ .iterate = true });
+        defer dest.close();
+        var source = try std.fs.cwd().openDir(self.source.getPath2(b, step), .{ .iterate = true });
+        defer source.close();
+        var wheels = source.iterate();
+        while (try wheels.next()) |entry| {
+            if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".whl")) continue;
+            var file = try source.openFile(entry.name, .{});
+            defer file.close();
+            var buffer: [64 * 1024]u8 = undefined;
+            var reader = file.reader(&buffer);
+            std.zip.extract(dest, &reader, .{}) catch |err| {
+                return step.fail("cannot unpack {s}: {s}", .{ entry.name, @errorName(err) });
+            };
+        }
+        // Console scripts are not installed: drop every `<name>.data` folder.
+        var data_dirs: std.ArrayList([]const u8) = .empty;
+        var installed = dest.iterate();
+        while (try installed.next()) |entry| {
+            if (entry.kind == .directory and std.mem.endsWith(u8, entry.name, ".data")) {
+                try data_dirs.append(b.allocator, b.dupe(entry.name));
+            }
+        }
+        for (data_dirs.items) |name| try dest.deleteTree(name);
+        for (wheel_folders_not_installed) |name| try dest.deleteTree(name);
+    }
+};
 
 fn addCoreIncludePaths(b: *std.Build, mod: *std.Build.Module) void {
     inline for (core_include_dirs) |dir| mod.addIncludePath(b.path(core_root ++ "/" ++ dir));

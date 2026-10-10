@@ -3,8 +3,9 @@
 
 Every library is taken from its own upstream release archive, never from a UzEngine tree. The
 render core's libraries (`Library.core`) are pinned at the version UzEngine's tree uses at the
-selected commit; the libraries UzPainter selects itself (Embree, zlib, spng; first needed by the
-`selftest` hardware slice, `phase0.6_toolchain-hardware-slice`) at the release recorded in their
+selected commit; the libraries UzPainter selects itself (Embree, zlib, spng, first needed by the
+`selftest` hardware slice, `phase0.6_toolchain-hardware-slice`; CPython and pybind11, first
+needed by its CPython stages, `phase0.7_toolchain-cpython`) at the release recorded in their
 `version_source`. `LIBRARIES` pins each archive (URL and SHA-256), the files selected from it, the
 include directories the build adds, the licence result and the causes of every difference from
 UzEngine's copy, where UzEngine has one. Each `thirdparty/<folder>/` holds the selected files at
@@ -53,6 +54,15 @@ IMPORTER = (
 IMPORTER_SLICE = (
     "Rulebook task `phase0.6_toolchain-hardware-slice`, run with "
     "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
+)
+IMPORTER_CPYTHON = (
+    "Rulebook task `phase0.7_toolchain-cpython`, run with "
+    "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
+)
+CPYTHON_VERSION_SOURCE = (
+    "UzPainter's selection: CPython 3.13 because Painter 12.1 ships 3.13.9 "
+    "(`docs/architecture/10-python-api.md` §1); 3.13.16 (tag `v3.13.16`, released 2026-09-30) is "
+    "the newest 3.13 release with Windows binaries on the retrieval date"
 )
 
 COMPILED = "shipped: compiled into `UzPainter.exe`"
@@ -681,6 +691,135 @@ LIBRARIES: tuple[Library, ...] = (
         core=False,
         importer=IMPORTER_SLICE,
     ),
+    Library(
+        name="CPython",
+        folder="cpython",
+        upstream="https://www.python.org/downloads/release/python-31316/",
+        version="v3.13.16",
+        commit="cbc944f4bc59639a444dd971c737788ba2283a91",
+        archive_url="https://www.python.org/ftp/python/3.13.16/python-3.13.16-embed-amd64.zip",
+        archive_name="python-3.13.16-embed-amd64.zip",
+        archive_sha256="97dae5274cc54867065e8d5a3226e48c35017ed332a0fdb0e27d5b5821961297",
+        archive_root="",
+        version_source=CPYTHON_VERSION_SOURCE,
+        select=(
+            "LICENSE.txt",
+            "python313.dll",
+            "python313.zip",
+            "python3.dll",
+            "vcruntime140.dll",
+            "vcruntime140_1.dll",
+            "libcrypto-3.dll",
+            "libffi-8.dll",
+            "libssl-3.dll",
+            "sqlite3.dll",
+            "*.pyd",
+        ),
+        licence_files=("LICENSE.txt",),
+        include_dirs=(),
+        licence=(
+            "PSF License Version 2 with the historical BeOpen, CNRI and CWI licences, the "
+            "Zero-Clause BSD licence for documentation code and the licences of the incorporated "
+            "software (bzip2, libffi, OpenSSL, SQLite, expat, mpdecimal, zlib and others), all in "
+            '`LICENSE.txt`; its section "Additional Conditions for this Windows binary build" '
+            "covers the Microsoft Distributable Code linked into every `.exe`, `.dll` and `.pyd`"
+        ),
+        role=(
+            "shipped: every selected file beside `UzPainter.exe` (`13-engine-integration.md` "
+            "§5); `python313.dll` is imported by `UzPainter.exe`, which embeds the interpreter"
+        ),
+        features=(
+            "The Windows x64 embeddable package without `python.exe`, `pythonw.exe`, "
+            "`python313._pth` (UzPainter installs its own, `src/python/python313._pth`) and the "
+            "catalog `python.cat`: `python313.dll`, the standard library as `python313.zip`, the "
+            "standard extension modules (`*.pyd`) and the DLLs they load, `python3.dll` for "
+            "stable-ABI wheels, and the package's `vcruntime140.dll` and `vcruntime140_1.dll` "
+            "(file version 14.51.36247.0, newer than `thirdparty/vc-runtime/`'s 14.44, so these "
+            "two are the ones installed)"
+        ),
+        uzengine_folder=None,
+        uzengine_note=(
+            "UzEngine's tree at the commit has no CPython, so there is nothing to compare."
+        ),
+        licence_notes=(
+            "The package's `python313.dll`, `python3.dll`, `vcruntime140.dll`, "
+            "`vcruntime140_1.dll` and `LICENSE.txt` are byte-equal to those of "
+            "`python-3.13.16-amd64.zip` (`thirdparty/cpython-dev/`), whose SHA-256 python.org "
+            "publishes in its signed release index `windows-3.13.16.json`.",
+            "`vcruntime140.dll` and `vcruntime140_1.dll` are Microsoft Visual C++ Distributable "
+            "Code like `thirdparty/vc-runtime/`: their redistribution falls under release blocker "
+            "RB-VCRT-TERMS (`docs/licensing-and-clean-room.md` §3).",
+        ),
+        core=False,
+        importer=IMPORTER_CPYTHON,
+    ),
+    Library(
+        name="CPython headers",
+        folder="cpython-dev",
+        upstream="https://www.python.org/downloads/release/python-31316/",
+        version="v3.13.16",
+        commit="cbc944f4bc59639a444dd971c737788ba2283a91",
+        archive_url="https://www.python.org/ftp/python/3.13.16/python-3.13.16-amd64.zip",
+        archive_name="python-3.13.16-amd64.zip",
+        archive_sha256="bbf675bb5e763c1efbb09a3a461b259d81598a63c30c4b0d7ea11b9f063df159",
+        archive_root="",
+        version_source=CPYTHON_VERSION_SOURCE
+        + "; the headers and import library come from the release's full Windows x64 package "
+        "(the embeddable package has neither), listed with this SHA-256 in python.org's signed "
+        "release index `windows-3.13.16.json`",
+        select=("include/*", "libs/python313.lib", "LICENSE.txt"),
+        licence_files=("LICENSE.txt",),
+        include_dirs=("include",),
+        licence="PSF License Version 2 and the incorporated licences (`LICENSE.txt`, the same "
+        "file as in `thirdparty/cpython/`)",
+        role=(
+            "build-only: the C API headers and the import library `libs/python313.lib` "
+            "`UzPainter.exe` links against; nothing of it is shipped"
+        ),
+        features=(
+            "`include/` as distributed (the generated Windows `pyconfig.h`, GIL-enabled build) "
+            "and `libs/python313.lib`; no `python3.lib`, `DLLs/`, `Lib/`, tools or Tcl/Tk"
+        ),
+        uzengine_folder=None,
+        uzengine_note=(
+            "UzEngine's tree at the commit has no CPython, so there is nothing to compare."
+        ),
+        core=False,
+        importer=IMPORTER_CPYTHON,
+    ),
+    Library(
+        name="pybind11",
+        folder="pybind11",
+        upstream="https://github.com/pybind/pybind11",
+        version="v3.1.0",
+        commit="97bf890db679505a14dfe547a5e77bb2bd05dc90",
+        archive_url="https://github.com/pybind/pybind11/archive/refs/tags/v3.1.0.tar.gz",
+        archive_name="pybind11-v3.1.0.tar.gz",
+        archive_sha256="ef712655692a2e9bf7bb7874c022564a45f91d847ddee987e720cd9e28849665",
+        archive_root="pybind11-3.1.0/",
+        version_source=(
+            "UzPainter's selection: the newest pybind11 release on the retrieval date (tag "
+            "`v3.1.0`, published 2026-08-06; `docs/architecture/10-python-api.md` §1)"
+        ),
+        select=("include/pybind11/*", "LICENSE"),
+        licence_files=("LICENSE",),
+        include_dirs=("include",),
+        licence="BSD-3-Clause (`LICENSE`)",
+        role=(
+            "shipped: header-only, compiled into `UzPainter.exe` (the `uzpainter` module and the "
+            "embedding)"
+        ),
+        features=(
+            "The headers `include/pybind11/` (embedding through `pybind11/embed.h`); no CMake "
+            "files, tests, docs or the `pybind11` Python package"
+        ),
+        uzengine_folder=None,
+        uzengine_note=(
+            "UzEngine's tree at the commit has no pybind11, so there is nothing to compare."
+        ),
+        core=False,
+        importer=IMPORTER_CPYTHON,
+    ),
 )
 
 LIBRARY_BY_NAME = {lib.name: lib for lib in LIBRARIES}
@@ -1256,8 +1395,8 @@ def include_problems(thirdparty_root: Path) -> list[str]:
 
 
 # Includes made by the third-party files compiled into `UzPainter.exe` only (zlib, spng, the
-# Embree headers) that stay unresolved because they name a toolchain or Windows header or sit in
-# a branch the Windows x64 build never takes.
+# Embree, CPython and pybind11 headers) that stay unresolved because they name a toolchain or
+# Windows header or sit in a branch the Windows x64 build never takes.
 APPLICATION_SYSTEM_INCLUDES: dict[str, str] = {
     "alloc.h": "zlib's Borland/Turbo C branch, not built",
     "arm64_neon.h": _ARM,
@@ -1278,10 +1417,23 @@ APPLICATION_SYSTEM_INCLUDES: dict[str, str] = {
     "sys/types.h": _CRT,
     "miniz.h": "spng with `SPNG_USE_MINIZ`, not enabled (zlib is used)",
     "tests/framac_stubs.h": "spng's Frama-C analysis branch (`__FRAMAC__`), not built",
+    "basetsd.h": _WINSDK + " (CPython's `pyconfig.h`, `_MSC_VER` branch)",
+    "winapifamily.h": _WINSDK + " (CPython's `pyconfig.h`)",
+    "intrin.h": _INTRINSICS + " (CPython's MSVC branches)",
+    "stat.h": "CPython's `HAVE_STAT_H` branch, not defined by the Windows `pyconfig.h`",
+    "bits/alltypes.h": "CPython's WASI branch (`pthread_stubs.h`), not built",
+    "cxxabi.h": "pybind11's `__GNUG__` branch; the C++ ABI header of Zig's libc++abi",
+    "yvals.h": "pybind11's MSVC debug branch (`_MSC_VER` and `_DEBUG`), not built",
+    "crtdefs.h": "pybind11's MSVC debug branch (`_MSC_VER` and `_DEBUG`), not built",
 }
 
-# The Embree header `UzPainter.exe` includes; the rest of the API is reached through it.
-APPLICATION_HEADERS = ("embree/include/embree4/rtcore.h",)
+# The headers of third-party code `UzPainter.exe` includes directly (Embree's C API, CPython's C
+# API through pybind11's embedding header); the rest is reached through them.
+APPLICATION_HEADERS = (
+    "embree/include/embree4/rtcore.h",
+    "pybind11/include/pybind11/embed.h",
+    "cpython-dev/include/Python.h",
+)
 
 
 def application_include_problems(thirdparty_root: Path) -> list[str]:

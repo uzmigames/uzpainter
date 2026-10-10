@@ -120,7 +120,8 @@ def test_hardware_slice_green(painter_bin: Path, tmp_path: Path) -> None:
     assert code == 0, output
     assert report["result"] == "passed" and report["hardware_slice"] == "passed"
     by_name = stages(report)
-    assert list(by_name) == list(HARDWARE_SLICE)
+    # Later stages (probes, CPython) follow the slice; they are not part of it.
+    assert [n for n, s in by_name.items() if s["hardware_slice"]] == list(HARDWARE_SLICE)
     for name in HARDWARE_SLICE:
         assert by_name[name]["status"] == "passed", by_name[name]
         assert by_name[name]["mandatory"] and by_name[name]["hardware_slice"]
@@ -145,8 +146,9 @@ def test_no_gpu_run_skips_gpu_stages_with_reason(painter_bin: Path, tmp_path: Pa
     assert code == 0, output
     assert report["result"] == "passed" and report["hardware_slice"] == "skipped"
     assert report["environment"]["gpu_stages"] == "skipped"
-    for name, stage in stages(report).items():
-        if name in GPU_STAGES:
+    assert all(stages(report)[name]["needs_gpu"] for name in GPU_STAGES)
+    for stage in stages(report).values():
+        if stage["needs_gpu"]:
             assert stage["status"] == "skipped"
             assert stage["reason"] == "no GPU: --no-gpu on the command line"
         else:
@@ -245,12 +247,20 @@ def test_png16_round_trip_is_bit_exact(painter_bin: Path, tmp_path: Path) -> Non
 def test_built_folder_matches_allowlist(painter_bin: Path) -> None:
     """3.5, static half: the built output folder matches the allowlist and every import resolves
     inside it or to a Windows system DLL, the Visual C++ runtime the prebuilt Embree DLLs import
-    included (shipped app-local, `thirdparty/vc-runtime/`)."""
+    included (shipped app-local, `thirdparty/vc-runtime/`), and so do the embedded CPython's
+    (phase0.7_toolchain-cpython): the embeddable package's DLLs and extension modules beside the
+    executable and the pinned wheels' binaries in `Lib/site-packages/`."""
     report = check_folder(painter_bin)
     assert report.problems == []
     assert report.missing_app_local == {}
     assert report.clean_machine_ready
-    names = {Path(b.path).name.lower() for b in report.binaries}
+    wheel_binaries = [b for b in report.binaries if b.path.lower().startswith("lib/site-packages/")]
+    extensions = {b.path for b in report.binaries if "/" not in b.path and b.path.endswith(".pyd")}
+    names = {
+        Path(b.path).name.lower()
+        for b in report.binaries
+        if b not in wheel_binaries and b.path not in extensions
+    }
     assert names == {
         "uzpainter.exe",
         "d3d12core.dll",
@@ -261,9 +271,22 @@ def test_built_folder_matches_allowlist(painter_bin: Path) -> None:
         "msvcp140.dll",
         "vcruntime140.dll",
         "vcruntime140_1.dll",
+        "python313.dll",
+        "python3.dll",
+        "libcrypto-3.dll",
+        "libssl-3.dll",
+        "libffi-8.dll",
+        "sqlite3.dll",
+    }
+    cpython = json.loads((REPO_ROOT / "thirdparty/cpython/MANIFEST.json").read_text("utf-8"))
+    assert extensions == {f["path"] for f in cpython["files"] if f["path"].endswith(".pyd")}
+    assert wheel_binaries
+    assert {b.role for b in wheel_binaries} == {
+        "pinned wheel of the MCP SDK closure (`thirdparty/python-wheels/`)"
     }
     exe = next(b for b in report.binaries if b.path == "UzPainter.exe")
     assert not any(dll.lower() in VC_RUNTIME for dll in exe.load_time)
+    assert "python313.dll" in [dll.lower() for dll in exe.load_time]
 
 
 def test_starts_without_sdk_or_tool_paths(painter_bin: Path, tmp_path: Path) -> None:
@@ -285,5 +308,5 @@ def test_starts_without_sdk_or_tool_paths(painter_bin: Path, tmp_path: Path) -> 
         folder / "UzPainter.exe", tmp_path / "out", "--no-gpu", env=env
     )
     assert code == 0, output
-    for name, stage in stages(report).items():
-        assert stage["status"] == ("skipped" if name in GPU_STAGES else "passed"), stage
+    for stage in stages(report).values():
+        assert stage["status"] == ("skipped" if stage["needs_gpu"] else "passed"), stage

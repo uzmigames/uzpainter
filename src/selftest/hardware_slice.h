@@ -15,6 +15,7 @@
 #include "harness.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <vector>
 
 namespace uzp::selftest {
@@ -46,5 +47,16 @@ StageOutcome RunShaderCompile(SelftestContext& context);
 StageOutcome RunComputeReadback(SelftestContext& context);
 StageOutcome RunPng16(SelftestContext& context);
 StageOutcome RunEmbree(SelftestContext& context);
+
+/// The work of `compute-readback` on any DX12 device (the WARP probe runs it on WARP): the DXIL
+/// kernel writes the pattern, which is read back into `pattern` and compared bit for bit. Sets
+/// `unrecoverable` when the GPU timed out or was lost (the device must then not be torn down).
+StageOutcome DispatchPattern16(uz::IRHIDevice& device, const std::vector<uint8_t>& kernelDxil,
+                               bool& unrecoverable, std::vector<uint16_t>& pattern);
+
+/// The work of `png16` on any 16-bit pattern: written to `file` as a 16-bit grayscale PNG and
+/// decoded back equal to `ExpectedPattern()`; `sourceName` is recorded as the `source` fact.
+StageOutcome Png16RoundTrip(const std::vector<uint16_t>& source, const char* sourceName,
+                            const std::filesystem::path& file);
 
 }  // namespace uzp::selftest

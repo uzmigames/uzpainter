@@ -1,0 +1,15 @@
+# UzPainter's module search path for the embedded CPython 3.13 (installed beside python313.dll;
+# docs/architecture/13-engine-integration.md section 5). A ._pth file next to python313.dll
+# replaces the whole sys.path calculation and puts the interpreter in isolated mode: PYTHONPATH,
+# PYTHONHOME, the user site-packages, the registry and any installed Python are ignored. Paths
+# are relative to this file's folder.
+#
+# The standard library of the embeddable package.
+python313.zip
+# The embeddable package's extension modules (*.pyd) beside python313.dll.
+.
+# The pinned wheels (thirdparty/python-wheels/), unpacked by `zig build painter`.
+Lib\site-packages
+# Run site.main(): processes the .pth files of Lib\site-packages (pywin32.pth); the user
+# site-packages stays disabled in isolated mode.
+import site

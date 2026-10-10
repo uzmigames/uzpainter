@@ -282,7 +282,7 @@ namespace {
 /// The slice's GPU objects, destroyed in reverse order unless the GPU is unrecoverable.
 struct ComputeObjects {
     uz::IRHIDevice& device;
-    SelftestContext& context;
+    bool& unrecoverable;
     uz::RHITextureHandle texture = uz::RHITextureHandle::Invalid();
     uz::RHIShaderHandle shader = uz::RHIShaderHandle::Invalid();
     uz::RHIPipelineHandle pipeline = uz::RHIPipelineHandle::Invalid();
@@ -291,7 +291,7 @@ struct ComputeObjects {
     uz::IRHIFence* fence = nullptr;
 
     ~ComputeObjects() {
-        if (context.gpuUnrecoverable) return;
+        if (unrecoverable) return;
         if (fence) device.DestroyFence(fence);
         if (commands) device.DestroyCommandList(commands);
         if (readback.IsValid()) device.DestroyBuffer(readback);
@@ -313,8 +313,16 @@ const char* WaitStatusName(uz::FenceWaitStatus status) {
 }  // namespace
 
 StageOutcome RunComputeReadback(SelftestContext& context) {
-    uz::IRHIDevice& device = *context.device;
-    ComputeObjects gpu{device, context};
+    std::vector<uint16_t> data;
+    StageOutcome outcome =
+        DispatchPattern16(*context.device, context.kernelDxil, context.gpuUnrecoverable, data);
+    if (outcome.status == StageStatus::Passed) context.readback = std::move(data);
+    return outcome;
+}
+
+StageOutcome DispatchPattern16(uz::IRHIDevice& device, const std::vector<uint8_t>& kernelDxil,
+                               bool& unrecoverable, std::vector<uint16_t>& pattern) {
+    ComputeObjects gpu{device, unrecoverable};
 
     uz::RHITextureDesc textureDesc;
     textureDesc.width = kPatternWidth;
@@ -327,8 +335,8 @@ StageOutcome RunComputeReadback(SelftestContext& context) {
     if (uav == UINT32_MAX) return StageOutcome::Fail("R16_FLOAT texture with a UAV not created");
 
     uz::RHIShaderDesc shaderDesc;
-    shaderDesc.bytecode = context.kernelDxil.data();
-    shaderDesc.bytecodeSize = context.kernelDxil.size();
+    shaderDesc.bytecode = kernelDxil.data();
+    shaderDesc.bytecodeSize = kernelDxil.size();
     shaderDesc.stage = uz::RHIShaderStage::Compute;
     shaderDesc.debugName = "selftest_pattern16";
     gpu.shader = device.CreateShader(shaderDesc);
@@ -381,7 +389,7 @@ StageOutcome RunComputeReadback(SelftestContext& context) {
                        {"row_pitch", std::to_string(rowPitch)},
                        {"fence_wait", WaitStatusName(wait.status)}};
     if (wait.status != uz::FenceWaitStatus::Signaled) {
-        context.gpuUnrecoverable = true;
+        unrecoverable = true;
         return StageOutcome::Fail(std::string("GPU work did not complete: fence wait ") +
                                       WaitStatusName(wait.status) + ", backend reason " +
                                       Hex(static_cast<uint32_t>(wait.backendReason)),
@@ -414,7 +422,7 @@ StageOutcome RunComputeReadback(SelftestContext& context) {
                                       " read-back values differ from the pattern; " + first,
                                   details);
     }
-    context.readback = std::move(data);
+    pattern = std::move(data);
     return StageOutcome::Pass(std::move(details));
 }
 

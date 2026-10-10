@@ -1,0 +1,1612 @@
+{
+  "library": "CPython headers",
+  "upstream": "https://www.python.org/downloads/release/python-31316/",
+  "version": "v3.13.16",
+  "commit": "cbc944f4bc59639a444dd971c737788ba2283a91",
+  "archive_url": "https://www.python.org/ftp/python/3.13.16/python-3.13.16-amd64.zip",
+  "archive_sha256": "bbf675bb5e763c1efbb09a3a461b259d81598a63c30c4b0d7ea11b9f063df159",
+  "archive_root": "",
+  "files": [
+    {
+      "path": "LICENSE.txt",
+      "sha256": "62bec384df47b0328307db41455ff6ea2559e5546b394ac69148561b21703120",
+      "size": 33861
+    },
+    {
+      "path": "include/Python.h",
+      "sha256": "1092f5e36a87909d0b0f5d0b0d8f8505454753c99a65c115df396bc13ced8cd0",
+      "size": 4178
+    },
+    {
+      "path": "include/abstract.h",
+      "sha256": "b87fe23702186c3cc1105d638bf77d41ad6ff0b5afe971a9b294a5ec7ae103f0",
+      "size": 33675
+    },
+    {
+      "path": "include/bltinmodule.h",
+      "sha256": "9bc7d4f6546ad38715880208ebe004616ccb76413009b664bd8fe1d3eba06f59",
+      "size": 278
+    },
+    {
+      "path": "include/boolobject.h",
+      "sha256": "6c81040162ee7daf687ef184f52cc6379381d4c0b34868e5aff7e0c53f5ce50f",
+      "size": 1659
+    },
+    {
+      "path": "include/bytearrayobject.h",
+      "sha256": "cebcd3142f4a89f5d8e16a91a353b4b0fa1efd156c41f0f7667b08502348dbc4",
+      "size": 1510
+    },
+    {
+      "path": "include/bytesobject.h",
+      "sha256": "1d70ed362e79a81457707f583704590e95f3f2ed700a8f8bc25b5e654ec96e99",
+      "size": 2635
+    },
+    {
+      "path": "include/ceval.h",
+      "sha256": "5bf6da77990bd3c312eed27f300a1c0f6fca79c38208758786051ca353839b32",
+      "size": 5264
+    },
+    {
+      "path": "include/codecs.h",
+      "sha256": "f27660a56550c6214fee5f53070501adcc9e96f9fae1ec8f8896330cfd41c176",
+      "size": 5611
+    },
+    {
+      "path": "include/compile.h",
+      "sha256": "233e46abc04b0cef0169f0108695287dcde0c31468e734d4afa8d2c228cad76a",
+      "size": 470
+    },
+    {
+      "path": "include/complexobject.h",
+      "sha256": "2c3db293a8b3921b7c9c2adee62b0cc0ffed5d7d1d388084605b76970d029a5b",
+      "size": 758
+    },
+    {
+      "path": "include/cpython/abstract.h",
+      "sha256": "32aacbc7445348d12eda2eec530385760bfd7ff6421d8ea0b5beed5e212ea09c",
+      "size": 3486
+    },
+    {
+      "path": "include/cpython/bytearrayobject.h",
+      "sha256": "30a61ff55514c0b0955a0954cd130fe6878c64d79c1a3034c0f54a5d3cad2e52",
+      "size": 1197
+    },
+    {
+      "path": "include/cpython/bytesobject.h",
+      "sha256": "12aa56f4e77d787f34fb017bc0762594a5a19760d18c913f30ad2fbecf5a28e9",
+      "size": 1217
+    },
+    {
+      "path": "include/cpython/cellobject.h",
+      "sha256": "41b60e8da674956162f886d3b6a005cc16f1551171ae8329cbd8fcaee08c1f52",
+      "size": 1120
+    },
+    {
+      "path": "include/cpython/ceval.h",
+      "sha256": "2c1bcc16ecd1a76dbc1564002189540e9f03636f53a460c3bdcd564fda95901f",
+      "size": 1140
+    },
+    {
+      "path": "include/cpython/classobject.h",
+      "sha256": "67036807d38844ce2bb25d7bb68d77d82ee27c256e87e6c12e8eb309f8d7b726",
+      "size": 2316
+    },
+    {
+      "path": "include/cpython/code.h",
+      "sha256": "60db4796fac87ba13326996fba798d7062d2cb54c7d80512fee1c2ab8c4a0a1b",
+      "size": 15565
+    },
+    {
+      "path": "include/cpython/compile.h",
+      "sha256": "9e24df827a6754676b7aae4580b6be88d0f686b259f60cd2ea607c3b5f10cc88",
+      "size": 2171
+    },
+    {
+      "path": "include/cpython/complexobject.h",
+      "sha256": "0af0cc984cca50288959b2cb23143279fe47dd69d07e8fc2ed5b7b3014d8cf35",
+      "size": 942
+    },
+    {
+      "path": "include/cpython/context.h",
+      "sha256": "0d789bd3cc6cb813ac9a9a1ba18f8e926608099e5e518014b9a992aec59235d8",
+      "size": 1911
+    },
+    {
+      "path": "include/cpython/critical_section.h",
+      "sha256": "bc8417db9748174c8ab3be3cf8cfebe2a11d2b5f8f5c8c4c848ab48da6e96ce6",
+      "size": 5722
+    },
+    {
+      "path": "include/cpython/descrobject.h",
+      "sha256": "0523b353e5aedf374df9da0e126476836b6472fa9921be38be1f114bfdd061c1",
+      "size": 1655
+    },
+    {
+      "path": "include/cpython/dictobject.h",
+      "sha256": "949ea4b69711dab61a451b2abf212253ac73eebcd7bdb2bc33ef5a3a265dc032",
+      "size": 3972
+    },
+    {
+      "path": "include/cpython/fileobject.h",
+      "sha256": "a3bcce7e9c1ef894f8c5785b1d747bd22d3e4aaec14e54524f80d89e21085842",
+      "size": 668
+    },
+    {
+      "path": "include/cpython/fileutils.h",
+      "sha256": "bfd7f53cba3c135801c129087bc84866312dd998ed7e1ec13b30cb2a800f3704",
+      "size": 240
+    },
+    {
+      "path": "include/cpython/floatobject.h",
+      "sha256": "dce978016fa9d32ad9f3679c9b1b6e614b727b323b2527e0298f23331dac804b",
+      "size": 927
+    },
+    {
+      "path": "include/cpython/frameobject.h",
+      "sha256": "c7d3a43c61aa0c2d65166e3c1555ecb895c1eb7595a3c502fc4d151c890b0a0c",
+      "size": 1234
+    },
+    {
+      "path": "include/cpython/funcobject.h",
+      "sha256": "0bdff81b62c7e6e83e49c0d83156d018c8ba71342c9e44539ccd7f70261e11be",
+      "size": 7233
+    },
+    {
+      "path": "include/cpython/genobject.h",
+      "sha256": "d136ec7081474250d7b85ce2817ab7a8deeb41390778dc71af275238bdc98fe5",
+      "size": 3080
+    },
+    {
+      "path": "include/cpython/import.h",
+      "sha256": "e19ea9625485959c7ec0680850efa8613a1233b3673e8529a601aa046aa73870",
+      "size": 750
+    },
+    {
+      "path": "include/cpython/initconfig.h",
+      "sha256": "a73540e60404e663af57a015fa31ec25d1c51e5df517feb8e47817af2c4bdb39",
+      "size": 8471
+    },
+    {
+      "path": "include/cpython/listobject.h",
+      "sha256": "8e0749cd81e8c3d9eec958cca9145d7296a70555af20676e808c45b0d66a5edd",
+      "size": 1854
+    },
+    {
+      "path": "include/cpython/lock.h",
+      "sha256": "a987cab39f3637ece30199ae1e3c79b8778c2f58b90828247a1d42509ff715e5",
+      "size": 1826
+    },
+    {
+      "path": "include/cpython/longintrepr.h",
+      "sha256": "a33b58529575887bf95cae2d81fc928435927f12b0cb2ec8e1add840f447733a",
+      "size": 5265
+    },
+    {
+      "path": "include/cpython/longobject.h",
+      "sha256": "d76a2490be1cd429d758cb7ae477a42d6539e3653316a83a925c9829f47091d8",
+      "size": 5699
+    },
+    {
+      "path": "include/cpython/memoryobject.h",
+      "sha256": "dee3080d720756bd606ef0e83c086b8f2ac0a88552723a2cd2421a7b460695bb",
+      "size": 2273
+    },
+    {
+      "path": "include/cpython/methodobject.h",
+      "sha256": "38293361cbdfd45df12e1893bf033c25f2ffe3d9dad13b0fd3fcbc98c7997c49",
+      "size": 2342
+    },
+    {
+      "path": "include/cpython/modsupport.h",
+      "sha256": "0569533f78e79799b0ef0ebfa9f89c8538323fccb24b49cd573e5bfcb34e6a7e",
+      "size": 1068
+    },
+    {
+      "path": "include/cpython/monitoring.h",
+      "sha256": "2d93bab52c8505a109eb3c0197ca160262de69972abfd75c321fac73821bca1e",
+      "size": 7954
+    },
+    {
+      "path": "include/cpython/object.h",
+      "sha256": "9822fd39bbc8c4e3a6130716035eae001e53dbd0e3b48a9a2f5344fe78120c7a",
+      "size": 19996
+    },
+    {
+      "path": "include/cpython/objimpl.h",
+      "sha256": "a1977ce8e5622afa0a93796fb8d094356cdb119a6f847188dd1f012474a7a4cf",
+      "size": 3924
+    },
+    {
+      "path": "include/cpython/odictobject.h",
+      "sha256": "1c53b02fce72611a21a403ce367903ddb21f523965179ae5c77d3281eec1d696",
+      "size": 1354
+    },
+    {
+      "path": "include/cpython/picklebufobject.h",
+      "sha256": "ecb05c81e6ec87a0442dd01faa6dea7ff10c81555cb43a8d9d5a0a2ea7e3be92",
+      "size": 879
+    },
+    {
+      "path": "include/cpython/pthread_stubs.h",
+      "sha256": "7beefe87a5440a63acd9981038179941f4a6b8b5d7c0a3f880777d6d906149dc",
+      "size": 4031
+    },
+    {
+      "path": "include/cpython/pyatomic.h",
+      "sha256": "716644e5f325bf0ad476b001f9286db8381032ffd4eb4d6c8f081b2a10d4a524",
+      "size": 17083
+    },
+    {
+      "path": "include/cpython/pyatomic_gcc.h",
+      "sha256": "a11d69e22f4e43d0fde19680323b71fdb2e812d8a450a02016c8106d263c1c9d",
+      "size": 19682
+    },
+    {
+      "path": "include/cpython/pyatomic_msc.h",
+      "sha256": "078d213e48ace5d56e9beb95c385e77343f4752407eadac845a24079a343be2f",
+      "size": 30336
+    },
+    {
+      "path": "include/cpython/pyatomic_std.h",
+      "sha256": "1781d31ea2f76b3f4d31e7097bfd70e87eb2787ff40d32d2d9a6dbdd6f696f89",
+      "size": 25312
+    },
+    {
+      "path": "include/cpython/pyctype.h",
+      "sha256": "5b0cf2697e86e054d0a0721670d0a8e0318ed9acb05ea0e93cd543e263f2f97a",
+      "size": 1426
+    },
+    {
+      "path": "include/cpython/pydebug.h",
+      "sha256": "3a12471fff6dc26957cc4c8a540d291b1dbb4d1ca1e2181538272520cbbc5077",
+      "size": 1451
+    },
+    {
+      "path": "include/cpython/pyerrors.h",
+      "sha256": "17eb8b4fbdfdea0e97542f92b7df751e30625cf442844ac7d4920c478a0e1866",
+      "size": 3064
+    },
+    {
+      "path": "include/cpython/pyfpe.h",
+      "sha256": "b8b42e4f39dbc5f267e8e1ff0c4a52b431a422e6cb58c2380826a0c478334316",
+      "size": 459
+    },
+    {
+      "path": "include/cpython/pyframe.h",
+      "sha256": "fbe73894ba52686c31b1f51b00a1359c9f5d8d924e0e8d06d5dcb3971c496ff3",
+      "size": 1992
+    },
+    {
+      "path": "include/cpython/pyhash.h",
+      "sha256": "6ee20a2b069da91220a95c4380087b3c8e1aa8b939dcf0c9a463b2a977faa103",
+      "size": 1429
+    },
+    {
+      "path": "include/cpython/pylifecycle.h",
+      "sha256": "990f5dec48cf8813b0eec53539b461848b8ddf178ecd9e6d22c7ca5093edb074",
+      "size": 2909
+    },
+    {
+      "path": "include/cpython/pymem.h",
+      "sha256": "620f9bdc60257595dbb458510fd14eb3b21f7357d914061470d79827ede5df48",
+      "size": 2927
+    },
+    {
+      "path": "include/cpython/pystate.h",
+      "sha256": "e8d761cab659f3b4822c3a1f20f020036c5aaa00d7e14dac3605569f1533868a",
+      "size": 9788
+    },
+    {
+      "path": "include/cpython/pystats.h",
+      "sha256": "216183110b05d452557a88d4710538362a8380263feb9669b0809f47947ae203",
+      "size": 5609
+    },
+    {
+      "path": "include/cpython/pythonrun.h",
+      "sha256": "9399d2c72d9cddaafdcd4199c44e71cabf49bdefbfae3406e36a0849d332a602",
+      "size": 4565
+    },
+    {
+      "path": "include/cpython/pythread.h",
+      "sha256": "ae9f5fc0fd475f76c32ed296d8ea7946fc530ec66be2d455deb870887cba3b6c",
+      "size": 1553
+    },
+    {
+      "path": "include/cpython/pytime.h",
+      "sha256": "63458d3d3ef8ad46f6691623a084fd0b184c6fc046c3f27badc34f58cbff3653",
+      "size": 734
+    },
+    {
+      "path": "include/cpython/setobject.h",
+      "sha256": "1b7bff240da8b5a42af6dd9d3eac236997730509c45152d8b7616c569442ac7d",
+      "size": 2117
+    },
+    {
+      "path": "include/cpython/sysmodule.h",
+      "sha256": "c230afaf4174d13f8e71b41dd72650173ae0853d3775fadfa528bc39d1f09cad",
+      "size": 797
+    },
+    {
+      "path": "include/cpython/traceback.h",
+      "sha256": "af7f0f28ae4162ccdb48b8d9ba7842c97ed694d5baaf54727ae8d3d4b9eaa75a",
+      "size": 295
+    },
+    {
+      "path": "include/cpython/tracemalloc.h",
+      "sha256": "028b1af8c2311bb7a71e3e7e80e8cd84b33e247805f4df9c550f87c4611ad8b3",
+      "size": 855
+    },
+    {
+      "path": "include/cpython/tupleobject.h",
+      "sha256": "fc9c2bd71a6ad7502559007307a64604c1de29c876efa3515e26d53598107e15",
+      "size": 1367
+    },
+    {
+      "path": "include/cpython/unicodeobject.h",
+      "sha256": "34161bfd028e2dcb5b3923ff730306a74d6f84a5dca40fdaa95918b16078d2b8",
+      "size": 25777
+    },
+    {
+      "path": "include/cpython/warnings.h",
+      "sha256": "ed804f27a16bd31574f523d2539a6efc97164af32589dbe8363df556e05754f2",
+      "size": 584
+    },
+    {
+      "path": "include/cpython/weakrefobject.h",
+      "sha256": "7724623a8f1931a350cc602177e8034edb0e3b89ccad2f5f7f8d0232f8794047",
+      "size": 2312
+    },
+    {
+      "path": "include/critical_section.h",
+      "sha256": "c59acc4a326f90e219709e0e04ef84e318817e600addf69076dabc77fde6945c",
+      "size": 330
+    },
+    {
+      "path": "include/datetime.h",
+      "sha256": "19c1ea449f85e317ba55c23c95732a68f6203c777d8cf17f85c94d0c136eb9a2",
+      "size": 10036
+    },
+    {
+      "path": "include/descrobject.h",
+      "sha256": "2e4f09c249040a11c26428eaaa0619960a658dfddc20ed34d3d4cf818f2a4867",
+      "size": 3180
+    },
+    {
+      "path": "include/dictobject.h",
+      "sha256": "741455947c42ad055c62b9c828468fe29eeaec0502fc7aee29a8b3d45113017a",
+      "size": 4489
+    },
+    {
+      "path": "include/dynamic_annotations.h",
+      "sha256": "db5dc3bb9430f8c3a6787cdc4885bb4dc2084e176ca9ca6a2dbb86d244ccf9ac",
+      "size": 22991
+    },
+    {
+      "path": "include/enumobject.h",
+      "sha256": "469c8a7bbca8a67fd17bc728a1d6d4225c4c0566475774b5deb655462f058659",
+      "size": 270
+    },
+    {
+      "path": "include/errcode.h",
+      "sha256": "39cc76eed2de40dd6d621b591ad994b48021c4a3bc00dc04513933036cda46d2",
+      "size": 2019
+    },
+    {
+      "path": "include/exports.h",
+      "sha256": "7692e9b2474c657a92b096c8a0586cbdca3023562c574f9b9cc53afed4d66771",
+      "size": 4703
+    },
+    {
+      "path": "include/fileobject.h",
+      "sha256": "169899c68601f4bbb0798bc53fbc61d36253f9540f1f0fd52f3d4035376f237e",
+      "size": 1398
+    },
+    {
+      "path": "include/fileutils.h",
+      "sha256": "2a7ed5d1f92eb80f0a479a00c667e0e9b25e3d9cd2a767dc8f172bbfe1072ac9",
+      "size": 1481
+    },
+    {
+      "path": "include/floatobject.h",
+      "sha256": "6171dbc3e6b93d92e55385dab1bc7a31b41717627bb0c6ad7c61a42d483e29e8",
+      "size": 1586
+    },
+    {
+      "path": "include/frameobject.h",
+      "sha256": "52e7b1f56da8f7e78a2567fe9af98c6f97250f0bbb81951df4215c8bd1c468f7",
+      "size": 356
+    },
+    {
+      "path": "include/genericaliasobject.h",
+      "sha256": "3ebd563f70f3d317558774e74916af1c294852fd943e041a79dc46c8fbcc458e",
+      "size": 348
+    },
+    {
+      "path": "include/import.h",
+      "sha256": "f6eef054bddf86d41f8b077dcc70e0feecf93edeea76f34c0ddcbdeca4ce6b76",
+      "size": 3338
+    },
+    {
+      "path": "include/internal/mimalloc/mimalloc.h",
+      "sha256": "4afbee1702c7605cb983b21ef3b4c7ddffc6bc00aaeb8c7a8b28be194918640a",
+      "size": 36636
+    },
+    {
+      "path": "include/internal/mimalloc/mimalloc/atomic.h",
+      "sha256": "d1ba3d51f97b8dcf3333643d98ececda85f39cb0e166bf45961f814ca019e922",
+      "size": 17190
+    },
+    {
+      "path": "include/internal/mimalloc/mimalloc/internal.h",
+      "sha256": "16a3152e30b2d272c42dde3f06ab23927b8ae598cd233195d8d6d38a795c1844",
+      "size": 37824
+    },
+    {
+      "path": "include/internal/mimalloc/mimalloc/prim.h",
+      "sha256": "f41d6d66db0199a65c1720670947ef548e50e2d0b85b640a630c81e4f1502c81",
+      "size": 14766
+    },
+    {
+      "path": "include/internal/mimalloc/mimalloc/track.h",
+      "sha256": "d94934f0ec924e9d91595823fbe740968fec7aed72f54437cd887ec19111ff60",
+      "size": 5600
+    },
+    {
+      "path": "include/internal/mimalloc/mimalloc/types.h",
+      "sha256": "068dee34b03ec849438c01903518bad2f1970f4159410c0261ebf49403a0a280",
+      "size": 30607
+    },
+    {
+      "path": "include/internal/pycore_abstract.h",
+      "sha256": "f931789981d7c5d07261167390865ac3394f1c888fcccfd8b00b39fa5d85c40c",
+      "size": 1976
+    },
+    {
+      "path": "include/internal/pycore_asdl.h",
+      "sha256": "528062fc59b7d04054cf23d05998bbb265681c6c25f192a75f31a91b9c9c061e",
+      "size": 3147
+    },
+    {
+      "path": "include/internal/pycore_ast.h",
+      "sha256": "5b1b892ead9345eaff33b84a0622ca39d26214f1767f63a3d9787fb6296ef3fc",
+      "size": 32446
+    },
+    {
+      "path": "include/internal/pycore_ast_state.h",
+      "sha256": "5d82362bebc015b22d8df32b7905cf80418e958e5eca73bfbdb59566e9aee2af",
+      "size": 7047
+    },
+    {
+      "path": "include/internal/pycore_atexit.h",
+      "sha256": "6b7fab82d6af2242350ffa05792cdee36803e10e6aba4c8b75402fd1ae0494c1",
+      "size": 1500
+    },
+    {
+      "path": "include/internal/pycore_backoff.h",
+      "sha256": "e908789f07bf039f5739153aa63ea97dd26b2383bacd2113c363a8a2145fb3c7",
+      "size": 4131
+    },
+    {
+      "path": "include/internal/pycore_bitutils.h",
+      "sha256": "b61beed73d8335fb4868bf5ac00628c2c688c4940ff404f1522f427859a2dd10",
+      "size": 6212
+    },
+    {
+      "path": "include/internal/pycore_blocks_output_buffer.h",
+      "sha256": "bed41db6d6da2c3981c9903b30fabcf2f9e8928c97dd56c947cca2e6e9edabfa",
+      "size": 9093
+    },
+    {
+      "path": "include/internal/pycore_brc.h",
+      "sha256": "95b04083f8922dbf166ad7ec0bc84d7f01acd2acdf5e6adf18eaf788baa07a85",
+      "size": 2176
+    },
+    {
+      "path": "include/internal/pycore_bytes_methods.h",
+      "sha256": "83c7cb44763adfc467acf60d4e85eb4916600ee81644dfc38f64e16b07f77336",
+      "size": 4015
+    },
+    {
+      "path": "include/internal/pycore_bytesobject.h",
+      "sha256": "db896980e5ca466ca5ea341278acd5aa6e453c57cde63d85c496b08f71f7274a",
+      "size": 5251
+    },
+    {
+      "path": "include/internal/pycore_call.h",
+      "sha256": "2ec60179807e28ab07b0bd56d7b7974c0f0829ae905e8f468d350f579bf91ab3",
+      "size": 6340
+    },
+    {
+      "path": "include/internal/pycore_capsule.h",
+      "sha256": "a5fc463541ecc6e19922847d23679632d34786d67cac9a0d769b7d29c0225f34",
+      "size": 414
+    },
+    {
+      "path": "include/internal/pycore_cell.h",
+      "sha256": "186a5779761d06e9114c2d7ba629fe2bb64d503a31088ecceca9bc46190b465a",
+      "size": 1105
+    },
+    {
+      "path": "include/internal/pycore_ceval.h",
+      "sha256": "6609777d8e2a49b79dc43b98fa49c2cf1e10721399f6074bba86b8c4ea11e334",
+      "size": 11689
+    },
+    {
+      "path": "include/internal/pycore_ceval_state.h",
+      "sha256": "ea2135cd0086946e8950ccf36a6a09cc5ebe86ee50ce6bd842d402b0e8082ece",
+      "size": 4173
+    },
+    {
+      "path": "include/internal/pycore_code.h",
+      "sha256": "3d0785f66bf1fd06bb8723fedc3ce02eb6849a2f689467d6cd1c1d6587f59184",
+      "size": 20869
+    },
+    {
+      "path": "include/internal/pycore_codecs.h",
+      "sha256": "97bf2f207c852bcde660c52a587c20780a525caf45ce117c7a3b518fbceecb7e",
+      "size": 2551
+    },
+    {
+      "path": "include/internal/pycore_compile.h",
+      "sha256": "4a3c3bf859756e05fa10ef719c9d169e6c0036c790ed90522ef37b32467d2831",
+      "size": 3868
+    },
+    {
+      "path": "include/internal/pycore_complexobject.h",
+      "sha256": "518f5d94203efd05e0832add3b7a263b0f699ea2a50b25df818ecbef6a032b51",
+      "size": 613
+    },
+    {
+      "path": "include/internal/pycore_condvar.h",
+      "sha256": "d64154013129ea0e919faf577398dcc2093a3dfd8564b2200790b79d64b09a75",
+      "size": 2797
+    },
+    {
+      "path": "include/internal/pycore_context.h",
+      "sha256": "7640b96497da7b8d2709df234a3e3046a21f3dda22854eebb68a12ba12d0aba9",
+      "size": 1243
+    },
+    {
+      "path": "include/internal/pycore_critical_section.h",
+      "sha256": "5fb8064990d69324d4aa86c113dbcf3df80afa01052c8c62c88196b12f8794cc",
+      "size": 8201
+    },
+    {
+      "path": "include/internal/pycore_crossinterp.h",
+      "sha256": "90f20ec44ae341efaeee8fd156e21e2e321944998a91a1d7da2e10561bc61314",
+      "size": 12468
+    },
+    {
+      "path": "include/internal/pycore_descrobject.h",
+      "sha256": "79a4efd9c1dc5199bfccb0f04ed2babe558b6ee791f6bc96c40c4b8b053f4d6a",
+      "size": 571
+    },
+    {
+      "path": "include/internal/pycore_dict.h",
+      "sha256": "e919edc495c67ab7b4af8e843e7a7f059e6dcfa39cfc07d6e43b747f15340c48",
+      "size": 12604
+    },
+    {
+      "path": "include/internal/pycore_dict_state.h",
+      "sha256": "51220a4be3df49accf288f03446a1879a8bcdd05e424ad5e6e60f5a26c42b8ed",
+      "size": 764
+    },
+    {
+      "path": "include/internal/pycore_dtoa.h",
+      "sha256": "71e580470888fe3221daacd1f629c913e3d029da2d95d8b7fa87f142ad64a400",
+      "size": 1802
+    },
+    {
+      "path": "include/internal/pycore_emscripten_signal.h",
+      "sha256": "377b20f5191de6c97987c96d9d314fdfdb37801a273be3709b090be633bfe308",
+      "size": 715
+    },
+    {
+      "path": "include/internal/pycore_emscripten_trampoline.h",
+      "sha256": "6daf26e8ec77185b0d928cacb526401cee1119b0fbc82d391a7915ea4295bb84",
+      "size": 3261
+    },
+    {
+      "path": "include/internal/pycore_exceptions.h",
+      "sha256": "12870b7c273a8a5215bb7c4d60cd5d74af9b8b35ce183de1c853e6337a377d9e",
+      "size": 940
+    },
+    {
+      "path": "include/internal/pycore_faulthandler.h",
+      "sha256": "54ee74cb2c4338f8f825d9e5d3c030f6934044c84b27b2759ecd8145a9081dfb",
+      "size": 2344
+    },
+    {
+      "path": "include/internal/pycore_fileutils.h",
+      "sha256": "ce9472c8665bc389e862b55d374d7b7de69fda0fc6e2181f0c8715d7520867cf",
+      "size": 9803
+    },
+    {
+      "path": "include/internal/pycore_fileutils_windows.h",
+      "sha256": "6e12a15dfea3b4184f7392161779a752db4476b7472a9533d671811f7d84ff33",
+      "size": 2811
+    },
+    {
+      "path": "include/internal/pycore_floatobject.h",
+      "sha256": "9788318cae486e341147f1f8302ddfab4ba5f7aa57f96c373fc746339fe4a66d",
+      "size": 1557
+    },
+    {
+      "path": "include/internal/pycore_flowgraph.h",
+      "sha256": "d8996445a384ef8965f2cc300ad68172a98361418992dd2d9e393a3ba529f1e7",
+      "size": 1529
+    },
+    {
+      "path": "include/internal/pycore_format.h",
+      "sha256": "b0e56d87f2c63f609632ee20d1208bed13cf0ea445118ebb1d9a7773750195cb",
+      "size": 507
+    },
+    {
+      "path": "include/internal/pycore_frame.h",
+      "sha256": "e6da631c6bf74e6b687126453f8a9fa49db901b1fba186c67db6b8591dec5e91",
+      "size": 12735
+    },
+    {
+      "path": "include/internal/pycore_freelist.h",
+      "sha256": "937f1e5bc07224d9592f11845a0520877bd79a273047d4c7b5d1f1d7f09b49c0",
+      "size": 4963
+    },
+    {
+      "path": "include/internal/pycore_function.h",
+      "sha256": "12fc7d03bcd66493566f884c52be44c83899087f33432b722c2c2b0436ceb995",
+      "size": 1593
+    },
+    {
+      "path": "include/internal/pycore_gc.h",
+      "sha256": "c78a405f6af6b4d1e23bf83e0c2c987f9a1da47a295cc9ec0f7f96707babc3e2",
+      "size": 13332
+    },
+    {
+      "path": "include/internal/pycore_genobject.h",
+      "sha256": "93187ce9bba27b40be73c0dcb73f55cf85f8877dc45a9c5ec90520a8719dfc7b",
+      "size": 891
+    },
+    {
+      "path": "include/internal/pycore_getopt.h",
+      "sha256": "4592e97f536c2ab2392057abe08caaa0e0e755750f2998d31637e427ec95a05c",
+      "size": 512
+    },
+    {
+      "path": "include/internal/pycore_gil.h",
+      "sha256": "2874410c44a2d6c17e156bea28cee3b7e1f4622e5e4059aa84029bc26c0c572e",
+      "size": 2262
+    },
+    {
+      "path": "include/internal/pycore_global_objects.h",
+      "sha256": "7b66ddf2e9e2f09bce27704bb070786b1b57c7a9ec0c21976226585901e1c257",
+      "size": 3195
+    },
+    {
+      "path": "include/internal/pycore_global_objects_fini_generated.h",
+      "sha256": "83f439e9ece05cd8110af1c15ee4914aaaf74ea9f90c0231e4b32efe61237669",
+      "size": 119358
+    },
+    {
+      "path": "include/internal/pycore_global_strings.h",
+      "sha256": "a1492e2fe5ba4703dc16f2e386a8e1997d8b65b541c98e0b46e813caa8d78472",
+      "size": 27520
+    },
+    {
+      "path": "include/internal/pycore_hamt.h",
+      "sha256": "1b064c93d0e36cc1ab8ae298c88eb8c2a9d6467224741baa9b946d9088286803",
+      "size": 3876
+    },
+    {
+      "path": "include/internal/pycore_hashtable.h",
+      "sha256": "d08c14e2be20a3aa33f8a3d4d98d2a0146dc43c9eb0d9b62c6d47185b6ad400b",
+      "size": 4511
+    },
+    {
+      "path": "include/internal/pycore_identifier.h",
+      "sha256": "ea096a5c41eb71f2e5132e8840ac1b8bb1b3aee7d80ab51845c55172773c56a5",
+      "size": 535
+    },
+    {
+      "path": "include/internal/pycore_import.h",
+      "sha256": "47949f4efe74e4580212e728f0fcd81478c681287dea78fba686a884d233ee1b",
+      "size": 7944
+    },
+    {
+      "path": "include/internal/pycore_importdl.h",
+      "sha256": "ec01cf6c828863af339d00dad2f19b5512c5694f159c21c2845d4b06c75cc818",
+      "size": 4194
+    },
+    {
+      "path": "include/internal/pycore_initconfig.h",
+      "sha256": "385da1248958d3ae03aa1daa9a869357e694d435118ceb9d6b7d71a543db9076",
+      "size": 6575
+    },
+    {
+      "path": "include/internal/pycore_instruction_sequence.h",
+      "sha256": "8fdbbada73eb82fa72bab4cbe37fbff13991ba5c51afc437b8f6dc95fe4034be",
+      "size": 2234
+    },
+    {
+      "path": "include/internal/pycore_instruments.h",
+      "sha256": "b5379969f6bd7f5800a25fefe3f5eeae22eb53d5b728b3345aaa2afa00675cb1",
+      "size": 2406
+    },
+    {
+      "path": "include/internal/pycore_interp.h",
+      "sha256": "a06b40a389cfe819f23cc2efe0014b729143a74d76c180a6d5068222b376c8b3",
+      "size": 15496
+    },
+    {
+      "path": "include/internal/pycore_intrinsics.h",
+      "sha256": "8dad7bd54bd2b068153a09ea19bea52b6a236a9da7764f3932cf76e7c5512743",
+      "size": 1807
+    },
+    {
+      "path": "include/internal/pycore_jit.h",
+      "sha256": "8f85e61549cc6beba7ea71a9562f0ebad98e6f1b40568961a79cee140b4afa2f",
+      "size": 552
+    },
+    {
+      "path": "include/internal/pycore_list.h",
+      "sha256": "f35402a3b9b7f0ea8fd614a5776b1b0f9185071d0d1c5a8b4002b515369de979",
+      "size": 1925
+    },
+    {
+      "path": "include/internal/pycore_llist.h",
+      "sha256": "2f10d6e872ec9ad605d184a9c0695c85a1aea147c4d50457517eddec852fed26",
+      "size": 2526
+    },
+    {
+      "path": "include/internal/pycore_lock.h",
+      "sha256": "f0f7c43e5c77975aec253422531eb750e1a6a4465dc975011b344fe5a49095b8",
+      "size": 8779
+    },
+    {
+      "path": "include/internal/pycore_long.h",
+      "sha256": "c910e6946de89cfac1963af11723386b7d2f8fff02a27d47cc1b007e14aef691",
+      "size": 11036
+    },
+    {
+      "path": "include/internal/pycore_memoryobject.h",
+      "sha256": "1442817e82268a519b069dc30145930a19f5832d307b9257e76ff793ed06fd4e",
+      "size": 447
+    },
+    {
+      "path": "include/internal/pycore_mimalloc.h",
+      "sha256": "5d10ec9322fd18fbfc0b2a1822db33295447914a0edf2e65c4e0d747fdcb6e81",
+      "size": 1706
+    },
+    {
+      "path": "include/internal/pycore_modsupport.h",
+      "sha256": "60751cead4b3cfe8d9ae35aae45ffedb39c8bdabd15175d1dd77988d8496af96",
+      "size": 3458
+    },
+    {
+      "path": "include/internal/pycore_moduleobject.h",
+      "sha256": "484e6d630487c068908baa1e628f6d036a90eb2ff4b352d8ac67abe22e3f570d",
+      "size": 1628
+    },
+    {
+      "path": "include/internal/pycore_namespace.h",
+      "sha256": "efe8a5ea08818278fa5c63a8833cb03773a0f74b3de231ea245ce8d04957ed43",
+      "size": 456
+    },
+    {
+      "path": "include/internal/pycore_object.h",
+      "sha256": "bdb36387cd3fff986a3862a25534134fc7a764fec3d5ac875f4c0813803f7375",
+      "size": 28849
+    },
+    {
+      "path": "include/internal/pycore_object_alloc.h",
+      "sha256": "37d6ef622815d975714868127440ff4e441ad807e068624ef32b7edf999679db",
+      "size": 2247
+    },
+    {
+      "path": "include/internal/pycore_object_stack.h",
+      "sha256": "d6e9dced0c1beb42ccfe11b76a93e13ddfce7ccbd38942175ae449cc5743e273",
+      "size": 2481
+    },
+    {
+      "path": "include/internal/pycore_object_state.h",
+      "sha256": "8d74421a48fe82b65b06bc09e689fc1cecdaa0d60efa52528d68aa36c379f52e",
+      "size": 983
+    },
+    {
+      "path": "include/internal/pycore_obmalloc.h",
+      "sha256": "eca42421a991128aa0413694a18ee22ea8815a1d2d99a69b22eec3139725126e",
+      "size": 28120
+    },
+    {
+      "path": "include/internal/pycore_obmalloc_init.h",
+      "sha256": "94964bacf02e46ac638e353058d16ee112e678bff2857f9f2e8cedce32d6aeb4",
+      "size": 2001
+    },
+    {
+      "path": "include/internal/pycore_opcode_metadata.h",
+      "sha256": "94b57bf0546caeee98b813f6dc09a5d0054bc00fa609a00cbeba53a4d17173a7",
+      "size": 86796
+    },
+    {
+      "path": "include/internal/pycore_opcode_utils.h",
+      "sha256": "f46ad82c2195df2d6c21874c723132a3a58917b60b4027d8a7ac9989c10fda65",
+      "size": 2195
+    },
+    {
+      "path": "include/internal/pycore_optimizer.h",
+      "sha256": "1ec43851351949cfd66c5073119c39cb1cf3e834a112479b90e756eeae083ba5",
+      "size": 8575
+    },
+    {
+      "path": "include/internal/pycore_parking_lot.h",
+      "sha256": "f2cc174cc5d8760f55b5ccab6da122ac7a0e1936d0479b0f798bc7d0e35d8da8",
+      "size": 3448
+    },
+    {
+      "path": "include/internal/pycore_parser.h",
+      "sha256": "b1b7560e360566671bbfe03255af90af90bd98f2692d2eb98c145d1bfab6e7c6",
+      "size": 2184
+    },
+    {
+      "path": "include/internal/pycore_pathconfig.h",
+      "sha256": "4a7d441ddc499842cb9f2ec53006647fff6c74a04bb788dc2b077ca4da43b3ce",
+      "size": 684
+    },
+    {
+      "path": "include/internal/pycore_pyarena.h",
+      "sha256": "43ece091905710d5f91a9d19e89ed4e1f0c777a31f09d432f4ac6906d1defc3b",
+      "size": 2930
+    },
+    {
+      "path": "include/internal/pycore_pyatomic_ft_wrappers.h",
+      "sha256": "47aceec6ff5db8df97119902c942224daebe626eb497c4ad1e2d55153a07b5e0",
+      "size": 8221
+    },
+    {
+      "path": "include/internal/pycore_pybuffer.h",
+      "sha256": "ff51b76e7c86dda9a5730ae15f1d6c2d6fe57cd9bb440d4b208028b981fa53d8",
+      "size": 531
+    },
+    {
+      "path": "include/internal/pycore_pyerrors.h",
+      "sha256": "9e0c603170e661c4f1b210105d8e6b9ad3e9c7ee42d83a896f4209603dad9d7e",
+      "size": 5150
+    },
+    {
+      "path": "include/internal/pycore_pyhash.h",
+      "sha256": "627138ad1f74a519a273f8d9e7dc5577f4dbea5de1d8d6b9386273c7770302f7",
+      "size": 3020
+    },
+    {
+      "path": "include/internal/pycore_pylifecycle.h",
+      "sha256": "583e8f037f924a9082cd177b8a4d1cb53851a695cf137ecb2f86b95d3f467eb3",
+      "size": 4427
+    },
+    {
+      "path": "include/internal/pycore_pymath.h",
+      "sha256": "06ef96fea4341ee1091e10e4c9ad4c8d9517ab4fc85bbb59ef16551a011c5b61",
+      "size": 8805
+    },
+    {
+      "path": "include/internal/pycore_pymem.h",
+      "sha256": "6e89209196c99a21282ef3ae5b7d0163350e5ce229adadb32e25d1d27ee43784",
+      "size": 5527
+    },
+    {
+      "path": "include/internal/pycore_pymem_init.h",
+      "sha256": "44da6dd4ea62a2a0159ee4898e69e353fb853c37abd4eb1a2049122f99d32a18",
+      "size": 3623
+    },
+    {
+      "path": "include/internal/pycore_pystate.h",
+      "sha256": "a5f56a05702e21348afdadb7739407beb8a5f2757c5663e9fbe18d96fc3ad118",
+      "size": 10263
+    },
+    {
+      "path": "include/internal/pycore_pystats.h",
+      "sha256": "d0920bd697d4be1c0867065ece894bc30d0319844d2099b7e17083e9392e10fb",
+      "size": 441
+    },
+    {
+      "path": "include/internal/pycore_pythonrun.h",
+      "sha256": "b3b582c83d4e8bf1cf28650195868b2f545296107732fb401dca156ffae67ae1",
+      "size": 873
+    },
+    {
+      "path": "include/internal/pycore_pythread.h",
+      "sha256": "f713b3ba4b0763826d97486ff848459677eeae2858799b7347b9d86ebe32ce9c",
+      "size": 6262
+    },
+    {
+      "path": "include/internal/pycore_qsbr.h",
+      "sha256": "8849cfb0e5e963b53585cbf99e203991a1e4f089d4adf43053f5cf0a12525086",
+      "size": 5697
+    },
+    {
+      "path": "include/internal/pycore_range.h",
+      "sha256": "a5eb6ba5f8698c73a2c7ed116473f70de41373afdb011dc9efdc4fb4ccf9a466",
+      "size": 367
+    },
+    {
+      "path": "include/internal/pycore_runtime.h",
+      "sha256": "2fcbffbf78fb21b6be7c17f51e8679a9b9e234458cc258273e1e3b2bcdec40f7",
+      "size": 13575
+    },
+    {
+      "path": "include/internal/pycore_runtime_init.h",
+      "sha256": "0c844dcbda9a45b0696d01ccea58da5bbfafa37fe100320fe30a2f2de0163008",
+      "size": 13374
+    },
+    {
+      "path": "include/internal/pycore_runtime_init_generated.h",
+      "sha256": "9d503b4b2eda00b57d1b142434cafb0e1670c2d3f075fa318310409a520abb46",
+      "size": 48371
+    },
+    {
+      "path": "include/internal/pycore_semaphore.h",
+      "sha256": "52fb06d2e40c805a0c61ee37e6ded09fc027418151caac5f4267851efa5ada44",
+      "size": 1798
+    },
+    {
+      "path": "include/internal/pycore_setobject.h",
+      "sha256": "2722fcb6e2b2bbe4efae0675939356e298bc336d0620b56810eb532a0e7cb5c0",
+      "size": 990
+    },
+    {
+      "path": "include/internal/pycore_signal.h",
+      "sha256": "d02e873413270f5e7ed576f5f10a65455e2d683956dae96303cad43584c64c0c",
+      "size": 3039
+    },
+    {
+      "path": "include/internal/pycore_sliceobject.h",
+      "sha256": "50bdeab86eb32632867cca2db26aa3ced1f0634928ab8bbebd6f629f272ea7d6",
+      "size": 389
+    },
+    {
+      "path": "include/internal/pycore_stackref.h",
+      "sha256": "1e77a0d2760a5175ec065a4de7fadfd5468a57e1c22cfb5648629f5dbe9d849f",
+      "size": 5381
+    },
+    {
+      "path": "include/internal/pycore_strhex.h",
+      "sha256": "fd088cd86d38a7a3da2dab70e43f5f1ad204fc8ca51766303949ba9a0dd54a48",
+      "size": 1052
+    },
+    {
+      "path": "include/internal/pycore_structseq.h",
+      "sha256": "1a43d973b91a8ee7901753046070f897f3ee2e6a429e337b42e40fda43924e3e",
+      "size": 1003
+    },
+    {
+      "path": "include/internal/pycore_symtable.h",
+      "sha256": "4516a53c3fe8107303cca64ae8a264d4f1b35b4c41f58c785044911c607ef5c2",
+      "size": 8875
+    },
+    {
+      "path": "include/internal/pycore_sysmodule.h",
+      "sha256": "34e8dd9811d5a63de142d09db33bbf28f14f79100c92be7444ea5dd23a95394b",
+      "size": 1215
+    },
+    {
+      "path": "include/internal/pycore_time.h",
+      "sha256": "8ce182aa7775f4bc07c73c35bb3cedb4e59c2f054aa644a236cf8eb7bae86040",
+      "size": 12131
+    },
+    {
+      "path": "include/internal/pycore_token.h",
+      "sha256": "ded7261ad0663ca7172c300ff88bd312d582ce46f3683eab776351ad330f9a56",
+      "size": 3107
+    },
+    {
+      "path": "include/internal/pycore_traceback.h",
+      "sha256": "f5e9b7536f8eb004f59be31e0d42a97cda6044d1499d57e64da466459744e351",
+      "size": 3735
+    },
+    {
+      "path": "include/internal/pycore_tracemalloc.h",
+      "sha256": "5915913ed6f40f83e690a923dab447835a1222f552d1fe5e01a7b871af70e9f5",
+      "size": 4703
+    },
+    {
+      "path": "include/internal/pycore_tstate.h",
+      "sha256": "fa16502e72e093e082ac8345553a78a8503c88df8c72cdde12a7ddf7ba8f20fe",
+      "size": 1400
+    },
+    {
+      "path": "include/internal/pycore_tuple.h",
+      "sha256": "887a3012da7810c4f5572ba1bb5d3e048868e5c86e8017fffe62276e83f1f05e",
+      "size": 855
+    },
+    {
+      "path": "include/internal/pycore_typeobject.h",
+      "sha256": "f90fcb70548c9d84b1ea25971a8ae607dfde99dd9c3d958b8032302d3337de47",
+      "size": 9122
+    },
+    {
+      "path": "include/internal/pycore_typevarobject.h",
+      "sha256": "94d22758585b377341a396c25267a8792c223a6984788340decde27118b3d229",
+      "size": 951
+    },
+    {
+      "path": "include/internal/pycore_ucnhash.h",
+      "sha256": "260366413b9a70a87717b0ab3bedbed2902e088444e2820530e1802a111873cb",
+      "size": 994
+    },
+    {
+      "path": "include/internal/pycore_unicodeobject.h",
+      "sha256": "164eae74414e8cd7eadc72ce19dc632f59a450d82d3e22257a0d201012d1b0ba",
+      "size": 13621
+    },
+    {
+      "path": "include/internal/pycore_unicodeobject_generated.h",
+      "sha256": "2a4482a4e31ae08cac26dae302281edecb292b16a0c1ab104c1e30f9b8999ffe",
+      "size": 135120
+    },
+    {
+      "path": "include/internal/pycore_unionobject.h",
+      "sha256": "d57da78acc1eba67d5967d29b275956d4e72d4723a24c31cf8f4c5d9d87c6fc8",
+      "size": 767
+    },
+    {
+      "path": "include/internal/pycore_uop_ids.h",
+      "sha256": "4d357f280534d615e69fd0beb6bc4b514c804146070d97bbe798c3935fa48e13",
+      "size": 10601
+    },
+    {
+      "path": "include/internal/pycore_uop_metadata.h",
+      "sha256": "295f0f5cdc1ed4a93ef3da6959159208ef59ffc9559118920471897a82adccce",
+      "size": 40658
+    },
+    {
+      "path": "include/internal/pycore_warnings.h",
+      "sha256": "9a4e050a16c5a2346128c9e5bbe10b900f82aa40d4413e99a8d14563dfd97fba",
+      "size": 871
+    },
+    {
+      "path": "include/internal/pycore_weakref.h",
+      "sha256": "f2406644818829390766f8cc42eb2ebee36b3bdb373e3cce36bcc82952574ed4",
+      "size": 4022
+    },
+    {
+      "path": "include/intrcheck.h",
+      "sha256": "603b5762b1151cc48d183f33b6329d6de6bfd8eec5c6893f4625c4a6d5dcbe34",
+      "size": 558
+    },
+    {
+      "path": "include/iterobject.h",
+      "sha256": "e35df65f4d1b0fdf0bd44f7cea506bdc1acf5dc817adc4bfe5a7353d815a76ab",
+      "size": 549
+    },
+    {
+      "path": "include/listobject.h",
+      "sha256": "dd719773d2ee7a08e2b5b68e71a648c71d575c4f7c1385c3b3b1bf12a0b82afc",
+      "size": 1973
+    },
+    {
+      "path": "include/lock.h",
+      "sha256": "4bb91e724b1582d586dac6db0d7b2cd7096b5b3a12866d2ffaf650b6094447a5",
+      "size": 258
+    },
+    {
+      "path": "include/longobject.h",
+      "sha256": "f37d12b17b4578e5a464fe7355cad86620ae025ae3d622df58eb092750b401bf",
+      "size": 4007
+    },
+    {
+      "path": "include/marshal.h",
+      "sha256": "8f8d8b4453b83b023176fc156435330e25bcbf0b36e18106429824abc69269d5",
+      "size": 858
+    },
+    {
+      "path": "include/memoryobject.h",
+      "sha256": "76a9031fa94c7d9a8681fab065f9cee0bbd9c91f4355b91bc407bf992c100796",
+      "size": 1115
+    },
+    {
+      "path": "include/methodobject.h",
+      "sha256": "660950e5c2b9fc7232de3292b6758d48cbdf8374f265d81a92e721709d5c8ada",
+      "size": 5477
+    },
+    {
+      "path": "include/modsupport.h",
+      "sha256": "baab56be232c09773176f9653adb54a966e558b1d108155ffcba8a106126400d",
+      "size": 5782
+    },
+    {
+      "path": "include/moduleobject.h",
+      "sha256": "3d30f89ecf6ad395f00c35285767b08bc723e502f81073bb497c934e2b2468f5",
+      "size": 3801
+    },
+    {
+      "path": "include/monitoring.h",
+      "sha256": "45449f52b155156746d3fe11f80fd7a578fbccc67c0c18212a7f79607c26e21e",
+      "size": 349
+    },
+    {
+      "path": "include/object.h",
+      "sha256": "c11c8f1b538c448f16f6f1744022942e3ee922238e415e152de4aa285743bf65",
+      "size": 49156
+    },
+    {
+      "path": "include/objimpl.h",
+      "sha256": "c47ba9867fa1fd38ba8dc30815cf8668f8223951bf1e24fbd1e990e5dc0ad432",
+      "size": 8591
+    },
+    {
+      "path": "include/opcode.h",
+      "sha256": "80f49c8a6051d86e7a678ec1fe00a16236073a924682387ef2bc2431e3c5d72f",
+      "size": 1581
+    },
+    {
+      "path": "include/opcode_ids.h",
+      "sha256": "74df826001ff9176b8533368fa77fd244ca413c53ab7ce92ee99029061b5b3fc",
+      "size": 12089
+    },
+    {
+      "path": "include/osdefs.h",
+      "sha256": "64324b8832b90647fa3dda1f6a11e111f68cf90ed17860c84284be1aaa2e33e4",
+      "size": 905
+    },
+    {
+      "path": "include/osmodule.h",
+      "sha256": "c3cf9eb8d709f9032e86e9ecefdf2a26fdfcf5f3a0afb6c3a1b470e8e97d6a0b",
+      "size": 308
+    },
+    {
+      "path": "include/patchlevel.h",
+      "sha256": "2f59a34a9ce4dae7ca9d7b541574142e5a662fa02cb9c977e55a21329108c905",
+      "size": 1336
+    },
+    {
+      "path": "include/py_curses.h",
+      "sha256": "db7df99e6810e8e0dc3493dde42ad183b33d96ef681389f49c3f41cc50e9540b",
+      "size": 3883
+    },
+    {
+      "path": "include/pyatomic.h",
+      "sha256": "7e34f18181ac32f5ff5dfa1de1ea8a4f2e4c71cd1579621b8ffa3266f4f24484",
+      "size": 273
+    },
+    {
+      "path": "include/pybuffer.h",
+      "sha256": "0d147574d7beea4f959763520bb1aac472f1b9e3392e2de07d230ce21a3b7ed2",
+      "size": 5427
+    },
+    {
+      "path": "include/pycapsule.h",
+      "sha256": "d370bcd045e8d6811ff9e266c3e53deb2b6b30a8cc68763d172281eee394a7ff",
+      "size": 1784
+    },
+    {
+      "path": "include/pyconfig.h",
+      "sha256": "5ea7287cd27e2fada2666603c58cce21c6e0aff78072445eddaa0fcb37e0bc54",
+      "size": 23573
+    },
+    {
+      "path": "include/pydtrace.h",
+      "sha256": "ab4304567d6f16e04159ada9734d05b3f3c12c48de39ec1386f38adb3c5012bd",
+      "size": 2463
+    },
+    {
+      "path": "include/pyerrors.h",
+      "sha256": "45cf369eaa1817ae5263400258f4e71d3641301853603b308a2489575d3ba0eb",
+      "size": 13303
+    },
+    {
+      "path": "include/pyexpat.h",
+      "sha256": "556261d70a4fa3e4599f7336a0f2721cfd5294283e5aa1af7ed14c2457ea11ee",
+      "size": 3365
+    },
+    {
+      "path": "include/pyframe.h",
+      "sha256": "f9bf8550e78682111c980dbe556b7337fd6c23cf99c2b604180a59161b1ace6a",
+      "size": 577
+    },
+    {
+      "path": "include/pyhash.h",
+      "sha256": "e9d76467c8e1da8890fd150cbe169091a5a3813a3eb4fd55bad0a7aecb24e9ad",
+      "size": 1715
+    },
+    {
+      "path": "include/pylifecycle.h",
+      "sha256": "35e1b086f37dc5c63d1d107e25abdce6880121da2c0cf4133a437c05dd795cb0",
+      "size": 2492
+    },
+    {
+      "path": "include/pymacconfig.h",
+      "sha256": "1570edbfaf617299ea759d2657157d4d9c39f0affd0c0c4b222d3a2155aca78f",
+      "size": 2588
+    },
+    {
+      "path": "include/pymacro.h",
+      "sha256": "7204a39497eae40f5a878d704ea173bd6ba83681872bd62e7ab6feefb2be57ca",
+      "size": 7898
+    },
+    {
+      "path": "include/pymath.h",
+      "sha256": "935d36ed3717ce1240b36e4a9b1124d40c17d907071b564571ed97a6e83156ba",
+      "size": 1750
+    },
+    {
+      "path": "include/pymem.h",
+      "sha256": "1fe9d55b8e0bc95d0f6b1a15571a4abe8ea3f6b8aaa694e8f6c0fac5c378c9dc",
+      "size": 4548
+    },
+    {
+      "path": "include/pyport.h",
+      "sha256": "78a64778c6bca86206834def8a2cb34db6d6f1ea9bb83b4a3a9808fe0e48a3f7",
+      "size": 20927
+    },
+    {
+      "path": "include/pystate.h",
+      "sha256": "6cde444261c623bcf2c5ffc2d35178a77e8d130225daa80a34b365bd35e87bf8",
+      "size": 4766
+    },
+    {
+      "path": "include/pystats.h",
+      "sha256": "d20da5a00e02d37e8e3c132f53164d2a521ea03add261782308bf7346ab2d6d6",
+      "size": 622
+    },
+    {
+      "path": "include/pystrcmp.h",
+      "sha256": "2dd23b6fb3b7a7fef62b33170a7215f0b68f2cdd6edba5548d0d563c5b124055",
+      "size": 459
+    },
+    {
+      "path": "include/pystrtod.h",
+      "sha256": "38773d14709b6d3ee00779cdf7e0d6b423591555a264015c50eb99a9a9b76981",
+      "size": 1284
+    },
+    {
+      "path": "include/pythonrun.h",
+      "sha256": "b2d57b6e0a1c7409a6564d9c8bbf2ff4123952fc8b995c20c222845f76139db9",
+      "size": 1362
+    },
+    {
+      "path": "include/pythread.h",
+      "sha256": "e6a8484fd2d1e55dfc5eb7da9fc688b82dfdc96d358279b02a943ab309381097",
+      "size": 5015
+    },
+    {
+      "path": "include/pytypedefs.h",
+      "sha256": "cfe86e7dff6e86b1f0c81991db870d31fd5e38e3c7fdc7e898bd908876b38029",
+      "size": 881
+    },
+    {
+      "path": "include/rangeobject.h",
+      "sha256": "b923dc6cc084607666daa74eb05d5893bdd0a83b1023b4794794fedf77b10d34",
+      "size": 657
+    },
+    {
+      "path": "include/setobject.h",
+      "sha256": "0ec874216eec40f88f61d9e473298f9aa0f7b9d21d897858b9ef439d7310a59c",
+      "size": 1606
+    },
+    {
+      "path": "include/sliceobject.h",
+      "sha256": "57b3101afea8f4f3688aa730a297b1c34a1c3dc45790821d71c6297fe2a0bb6d",
+      "size": 2731
+    },
+    {
+      "path": "include/structmember.h",
+      "sha256": "e20883b9a81f1fc559dd89b1c454c86adaeccf37241eddfa2321e325ff0d612f",
+      "size": 1701
+    },
+    {
+      "path": "include/structseq.h",
+      "sha256": "2f9264685baf626f33fe09b7248d2ce204bf5f7be6cca0419f1f674ee51a16a2",
+      "size": 1354
+    },
+    {
+      "path": "include/sysmodule.h",
+      "sha256": "b4ea60f1e53c200c89f7a69333edfbc4999ec5839bf70f383c3fab7630752f3a",
+      "size": 1295
+    },
+    {
+      "path": "include/traceback.h",
+      "sha256": "e04e98f4be7ea98b6d3ff299dd345ae69c2808628d01299d6f451e1c9d0de009",
+      "size": 611
+    },
+    {
+      "path": "include/tupleobject.h",
+      "sha256": "8b44f7c8a2d0b97a1e1d7d0af41d26f49108781f34267e22c79bb5ab700855ff",
+      "size": 1661
+    },
+    {
+      "path": "include/typeslots.h",
+      "sha256": "8e0de9c630d01ead35dfb5346b7cfe43858e465ea1c394f72a784ddd64141751",
+      "size": 2430
+    },
+    {
+      "path": "include/unicodeobject.h",
+      "sha256": "5238a2496e03ba8e92803a9a1ade459bfdc849a6fb3c65460300a897caa06d7a",
+      "size": 36442
+    },
+    {
+      "path": "include/warnings.h",
+      "sha256": "d0bdc1c452bf8cd25d64c0236ce4a6769793ece14fa5c98d7105e4222248fac4",
+      "size": 1174
+    },
+    {
+      "path": "include/weakrefobject.h",
+      "sha256": "20b711d574da699b6fbba50a5001561091c5e799263c11d8785daa7f30f4b0f4",
+      "size": 1437
+    },
+    {
+      "path": "libs/python313.lib",
+      "sha256": "dc0393b1fb215eb5927eedbe2cdb5746073d93d75392c4b0072a48d8c0bd1c17",
+      "size": 369358
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": null,
+  "comparison": [],
+  "not_in_uzengine": [
+    "LICENSE.txt",
+    "include/Python.h",
+    "include/abstract.h",
+    "include/bltinmodule.h",
+    "include/boolobject.h",
+    "include/bytearrayobject.h",
+    "include/bytesobject.h",
+    "include/ceval.h",
+    "include/codecs.h",
+    "include/compile.h",
+    "include/complexobject.h",
+    "include/cpython/abstract.h",
+    "include/cpython/bytearrayobject.h",
+    "include/cpython/bytesobject.h",
+    "include/cpython/cellobject.h",
+    "include/cpython/ceval.h",
+    "include/cpython/classobject.h",
+    "include/cpython/code.h",
+    "include/cpython/compile.h",
+    "include/cpython/complexobject.h",
+    "include/cpython/context.h",
+    "include/cpython/critical_section.h",
+    "include/cpython/descrobject.h",
+    "include/cpython/dictobject.h",
+    "include/cpython/fileobject.h",
+    "include/cpython/fileutils.h",
+    "include/cpython/floatobject.h",
+    "include/cpython/frameobject.h",
+    "include/cpython/funcobject.h",
+    "include/cpython/genobject.h",
+    "include/cpython/import.h",
+    "include/cpython/initconfig.h",
+    "include/cpython/listobject.h",
+    "include/cpython/lock.h",
+    "include/cpython/longintrepr.h",
+    "include/cpython/longobject.h",
+    "include/cpython/memoryobject.h",
+    "include/cpython/methodobject.h",
+    "include/cpython/modsupport.h",
+    "include/cpython/monitoring.h",
+    "include/cpython/object.h",
+    "include/cpython/objimpl.h",
+    "include/cpython/odictobject.h",
+    "include/cpython/picklebufobject.h",
+    "include/cpython/pthread_stubs.h",
+    "include/cpython/pyatomic.h",
+    "include/cpython/pyatomic_gcc.h",
+    "include/cpython/pyatomic_msc.h",
+    "include/cpython/pyatomic_std.h",
+    "include/cpython/pyctype.h",
+    "include/cpython/pydebug.h",
+    "include/cpython/pyerrors.h",
+    "include/cpython/pyfpe.h",
+    "include/cpython/pyframe.h",
+    "include/cpython/pyhash.h",
+    "include/cpython/pylifecycle.h",
+    "include/cpython/pymem.h",
+    "include/cpython/pystate.h",
+    "include/cpython/pystats.h",
+    "include/cpython/pythonrun.h",
+    "include/cpython/pythread.h",
+    "include/cpython/pytime.h",
+    "include/cpython/setobject.h",
+    "include/cpython/sysmodule.h",
+    "include/cpython/traceback.h",
+    "include/cpython/tracemalloc.h",
+    "include/cpython/tupleobject.h",
+    "include/cpython/unicodeobject.h",
+    "include/cpython/warnings.h",
+    "include/cpython/weakrefobject.h",
+    "include/critical_section.h",
+    "include/datetime.h",
+    "include/descrobject.h",
+    "include/dictobject.h",
+    "include/dynamic_annotations.h",
+    "include/enumobject.h",
+    "include/errcode.h",
+    "include/exports.h",
+    "include/fileobject.h",
+    "include/fileutils.h",
+    "include/floatobject.h",
+    "include/frameobject.h",
+    "include/genericaliasobject.h",
+    "include/import.h",
+    "include/internal/mimalloc/mimalloc.h",
+    "include/internal/mimalloc/mimalloc/atomic.h",
+    "include/internal/mimalloc/mimalloc/internal.h",
+    "include/internal/mimalloc/mimalloc/prim.h",
+    "include/internal/mimalloc/mimalloc/track.h",
+    "include/internal/mimalloc/mimalloc/types.h",
+    "include/internal/pycore_abstract.h",
+    "include/internal/pycore_asdl.h",
+    "include/internal/pycore_ast.h",
+    "include/internal/pycore_ast_state.h",
+    "include/internal/pycore_atexit.h",
+    "include/internal/pycore_backoff.h",
+    "include/internal/pycore_bitutils.h",
+    "include/internal/pycore_blocks_output_buffer.h",
+    "include/internal/pycore_brc.h",
+    "include/internal/pycore_bytes_methods.h",
+    "include/internal/pycore_bytesobject.h",
+    "include/internal/pycore_call.h",
+    "include/internal/pycore_capsule.h",
+    "include/internal/pycore_cell.h",
+    "include/internal/pycore_ceval.h",
+    "include/internal/pycore_ceval_state.h",
+    "include/internal/pycore_code.h",
+    "include/internal/pycore_codecs.h",
+    "include/internal/pycore_compile.h",
+    "include/internal/pycore_complexobject.h",
+    "include/internal/pycore_condvar.h",
+    "include/internal/pycore_context.h",
+    "include/internal/pycore_critical_section.h",
+    "include/internal/pycore_crossinterp.h",
+    "include/internal/pycore_descrobject.h",
+    "include/internal/pycore_dict.h",
+    "include/internal/pycore_dict_state.h",
+    "include/internal/pycore_dtoa.h",
+    "include/internal/pycore_emscripten_signal.h",
+    "include/internal/pycore_emscripten_trampoline.h",
+    "include/internal/pycore_exceptions.h",
+    "include/internal/pycore_faulthandler.h",
+    "include/internal/pycore_fileutils.h",
+    "include/internal/pycore_fileutils_windows.h",
+    "include/internal/pycore_floatobject.h",
+    "include/internal/pycore_flowgraph.h",
+    "include/internal/pycore_format.h",
+    "include/internal/pycore_frame.h",
+    "include/internal/pycore_freelist.h",
+    "include/internal/pycore_function.h",
+    "include/internal/pycore_gc.h",
+    "include/internal/pycore_genobject.h",
+    "include/internal/pycore_getopt.h",
+    "include/internal/pycore_gil.h",
+    "include/internal/pycore_global_objects.h",
+    "include/internal/pycore_global_objects_fini_generated.h",
+    "include/internal/pycore_global_strings.h",
+    "include/internal/pycore_hamt.h",
+    "include/internal/pycore_hashtable.h",
+    "include/internal/pycore_identifier.h",
+    "include/internal/pycore_import.h",
+    "include/internal/pycore_importdl.h",
+    "include/internal/pycore_initconfig.h",
+    "include/internal/pycore_instruction_sequence.h",
+    "include/internal/pycore_instruments.h",
+    "include/internal/pycore_interp.h",
+    "include/internal/pycore_intrinsics.h",
+    "include/internal/pycore_jit.h",
+    "include/internal/pycore_list.h",
+    "include/internal/pycore_llist.h",
+    "include/internal/pycore_lock.h",
+    "include/internal/pycore_long.h",
+    "include/internal/pycore_memoryobject.h",
+    "include/internal/pycore_mimalloc.h",
+    "include/internal/pycore_modsupport.h",
+    "include/internal/pycore_moduleobject.h",
+    "include/internal/pycore_namespace.h",
+    "include/internal/pycore_object.h",
+    "include/internal/pycore_object_alloc.h",
+    "include/internal/pycore_object_stack.h",
+    "include/internal/pycore_object_state.h",
+    "include/internal/pycore_obmalloc.h",
+    "include/internal/pycore_obmalloc_init.h",
+    "include/internal/pycore_opcode_metadata.h",
+    "include/internal/pycore_opcode_utils.h",
+    "include/internal/pycore_optimizer.h",
+    "include/internal/pycore_parking_lot.h",
+    "include/internal/pycore_parser.h",
+    "include/internal/pycore_pathconfig.h",
+    "include/internal/pycore_pyarena.h",
+    "include/internal/pycore_pyatomic_ft_wrappers.h",
+    "include/internal/pycore_pybuffer.h",
+    "include/internal/pycore_pyerrors.h",
+    "include/internal/pycore_pyhash.h",
+    "include/internal/pycore_pylifecycle.h",
+    "include/internal/pycore_pymath.h",
+    "include/internal/pycore_pymem.h",
+    "include/internal/pycore_pymem_init.h",
+    "include/internal/pycore_pystate.h",
+    "include/internal/pycore_pystats.h",
+    "include/internal/pycore_pythonrun.h",
+    "include/internal/pycore_pythread.h",
+    "include/internal/pycore_qsbr.h",
+    "include/internal/pycore_range.h",
+    "include/internal/pycore_runtime.h",
+    "include/internal/pycore_runtime_init.h",
+    "include/internal/pycore_runtime_init_generated.h",
+    "include/internal/pycore_semaphore.h",
+    "include/internal/pycore_setobject.h",
+    "include/internal/pycore_signal.h",
+    "include/internal/pycore_sliceobject.h",
+    "include/internal/pycore_stackref.h",
+    "include/internal/pycore_strhex.h",
+    "include/internal/pycore_structseq.h",
+    "include/internal/pycore_symtable.h",
+    "include/internal/pycore_sysmodule.h",
+    "include/internal/pycore_time.h",
+    "include/internal/pycore_token.h",
+    "include/internal/pycore_traceback.h",
+    "include/internal/pycore_tracemalloc.h",
+    "include/internal/pycore_tstate.h",
+    "include/internal/pycore_tuple.h",
+    "include/internal/pycore_typeobject.h",
+    "include/internal/pycore_typevarobject.h",
+    "include/internal/pycore_ucnhash.h",
+    "include/internal/pycore_unicodeobject.h",
+    "include/internal/pycore_unicodeobject_generated.h",
+    "include/internal/pycore_unionobject.h",
+    "include/internal/pycore_uop_ids.h",
+    "include/internal/pycore_uop_metadata.h",
+    "include/internal/pycore_warnings.h",
+    "include/internal/pycore_weakref.h",
+    "include/intrcheck.h",
+    "include/iterobject.h",
+    "include/listobject.h",
+    "include/lock.h",
+    "include/longobject.h",
+    "include/marshal.h",
+    "include/memoryobject.h",
+    "include/methodobject.h",
+    "include/modsupport.h",
+    "include/moduleobject.h",
+    "include/monitoring.h",
+    "include/object.h",
+    "include/objimpl.h",
+    "include/opcode.h",
+    "include/opcode_ids.h",
+    "include/osdefs.h",
+    "include/osmodule.h",
+    "include/patchlevel.h",
+    "include/py_curses.h",
+    "include/pyatomic.h",
+    "include/pybuffer.h",
+    "include/pycapsule.h",
+    "include/pyconfig.h",
+    "include/pydtrace.h",
+    "include/pyerrors.h",
+    "include/pyexpat.h",
+    "include/pyframe.h",
+    "include/pyhash.h",
+    "include/pylifecycle.h",
+    "include/pymacconfig.h",
+    "include/pymacro.h",
+    "include/pymath.h",
+    "include/pymem.h",
+    "include/pyport.h",
+    "include/pystate.h",
+    "include/pystats.h",
+    "include/pystrcmp.h",
+    "include/pystrtod.h",
+    "include/pythonrun.h",
+    "include/pythread.h",
+    "include/pytypedefs.h",
+    "include/rangeobject.h",
+    "include/setobject.h",
+    "include/sliceobject.h",
+    "include/structmember.h",
+    "include/structseq.h",
+    "include/sysmodule.h",
+    "include/traceback.h",
+    "include/tupleobject.h",
+    "include/typeslots.h",
+    "include/unicodeobject.h",
+    "include/warnings.h",
+    "include/weakrefobject.h",
+    "libs/python313.lib"
+  ]
+}

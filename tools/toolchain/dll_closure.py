@@ -6,9 +6,10 @@
 Reads the import tables (load-time and delay-load) of every binary in the output folder and
 compares them with the allowlist of §5. The allowlist check fails when
 
-- a binary in the folder is neither a listed shipped file (`SHIPPED`) nor a Visual C++ runtime
-  DLL (`VC_RUNTIME`) that some binary in the folder imports ("only as measured"); a Windows
-  system DLL (`SYSTEM`) in the folder fails as such;
+- a binary in the folder is neither a listed shipped file (`SHIPPED`, `SHIPPED_PATTERNS`, an
+  extension module of the CPython embeddable package beside the executable) nor a Visual C++
+  runtime DLL (`VC_RUNTIME`) that some binary in the folder imports ("only as measured"); a
+  Windows system DLL (`SYSTEM`) in the folder fails as such;
 - an imported DLL is neither in the folder, nor a Windows system DLL, nor a Visual C++ runtime
   DLL; the message names the DLL and the binaries that import it.
 
@@ -44,7 +45,21 @@ SHIPPED: dict[str, str] = {
     "embree4.dll": "Embree 4.x release",
     "tbb12.dll": "Embree 4.x release (oneTBB tasking)",
     "python313.dll": "CPython 3.13 embeddable package",
+    "python3.dll": "CPython 3.13 embeddable package (stable-ABI forwarder)",
+    "libcrypto-3.dll": "CPython 3.13 embeddable package (OpenSSL of `_ssl`, `_hashlib`)",
+    "libssl-3.dll": "CPython 3.13 embeddable package (OpenSSL of `_ssl`)",
+    "libffi-8.dll": "CPython 3.13 embeddable package (libffi of `_ctypes`)",
+    "sqlite3.dll": "CPython 3.13 embeddable package (SQLite of `_sqlite3`)",
 }
+# Files shipped by pattern (path relative to the folder, lower case; `*` also crosses `/`).
+SHIPPED_PATTERNS: tuple[tuple[str, str], ...] = (
+    (
+        "lib/site-packages/*",
+        "pinned wheel of the MCP SDK closure (`thirdparty/python-wheels/`)",
+    ),
+)
+# The standard extension modules (`*.pyd`) of the embeddable package sit beside the executable.
+EMBEDDABLE_EXTENSION = "CPython 3.13 embeddable package (standard extension module)"
 
 # Visual C++ runtime DLLs: shipped app-local only when an import requires them (§5, "Further
 # Visual C++ runtime DLLs ... only as measured"; CPython's embeddable package brings its own
@@ -66,7 +81,9 @@ VC_RUNTIME: frozenset[str] = frozenset(
 
 # DLLs that are part of Windows 10/11 x64 itself: imported, never shipped (§5 "System DLLs").
 # API sets (`api-ms-win-*`, `ext-ms-win-*`) are resolved by the loader's API set schema.
-# `vulkan-1.dll` comes with the GPU driver and is loaded by volk at run time (§5).
+# `vulkan-1.dll` comes with the GPU driver and is loaded by volk at run time (§5). The second
+# group is imported by the CPython embeddable package and the pinned wheels (measured for
+# phase0.7_toolchain-cpython).
 SYSTEM: frozenset[str] = frozenset(
     {
         "advapi32.dll",
@@ -106,6 +123,35 @@ SYSTEM: frozenset[str] = frozenset(
         "wintrust.dll",
         "ws2_32.dll",
         "xinput1_4.dll",
+        # CPython embeddable package and pinned wheels
+        "aclui.dll",
+        "activeds.dll",
+        "bcryptprimitives.dll",
+        "credui.dll",
+        "dsound.dll",
+        "iphlpapi.dll",
+        "ktmw32.dll",
+        "loadperf.dll",
+        "lz32.dll",
+        "mpr.dll",
+        "msimg32.dll",
+        "mswsock.dll",
+        "netapi32.dll",
+        "ntdsapi.dll",
+        "odbc32.dll",
+        "oleacc.dll",
+        "pdh.dll",
+        "propsys.dll",
+        "query.dll",
+        "rasapi32.dll",
+        "secur32.dll",
+        "sfc.dll",
+        "urlmon.dll",
+        "wevtapi.dll",
+        "winhttp.dll",
+        "wininet.dll",
+        "winspool.drv",
+        "wtsapi32.dll",
     }
 )
 SYSTEM_PATTERNS = ("api-ms-win-*.dll", "ext-ms-win-*.dll")
@@ -177,8 +223,20 @@ def check_folder(folder: Path) -> ClosureReport:
         if parsed.machine != MACHINE_AMD64:
             report.problems.append(f"{rel}: machine 0x{parsed.machine:04x} is not x64")
         name = path.name.lower()
+        pattern_role = next(
+            (
+                role
+                for pattern, role in SHIPPED_PATTERNS
+                if fnmatch.fnmatchcase(rel.lower(), pattern)
+            ),
+            None,
+        )
         if rel.lower() in SHIPPED:
             role = SHIPPED[rel.lower()]
+        elif pattern_role is not None:
+            role = pattern_role
+        elif "/" not in rel and name.endswith(".pyd"):
+            role = EMBEDDABLE_EXTENSION
         elif name in VC_RUNTIME:
             role = "Visual C++ runtime, app-local"
         elif is_system(name):

@@ -31,6 +31,12 @@ module = ["substance_painter", "substance_painter.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# OpenEXR Python binding (BSD-3-Clause): decodes float exports in tools/parity/fit on the
+# owner's machine only; it ships no type information.
+module = ["OpenEXR"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # PyYAML (tests reading the CI workflows) ships no type information; types-PyYAML is not installed.
 module = ["yaml"]
 ignore_missing_imports = true
