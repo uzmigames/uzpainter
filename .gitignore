@@ -29,3 +29,10 @@ tmp/
 
 CLAUDE.local.md
 .rulebook/backup/
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
