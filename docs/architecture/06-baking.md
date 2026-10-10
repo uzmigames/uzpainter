@@ -1,6 +1,6 @@
 # 06 — Baking
 
-Implements D5 (`05-resolution.md`) and owner answer Q9 (decision 022: CPU baking needs no GPU; the GPU path runs on DX12 and Vulkan). Requirements: BAK-01…08, INT-13, PRJ-04 (`docs/prd.md`). Painter facts: `docs/analysis/substance-parity/03-baking.md`; pipeline practice: `docs/analysis/assets3d-pipeline/03-bake-settings.md`.
+Implements D5 (`05-resolution.md`) and owner answer Q9 (decision 022: CPU baking needs no GPU; the GPU path runs on DX12 and Vulkan). Requirements: BAK-01…08, INT-13, PRJ-04 (`docs/prd.md`). Painter facts: the public `baking` API documentation and Adobe's public mesh-map settings pages (`docs/analysis/substance-parity/03-baking.md` is quarantined, historical context only); pipeline practice: `docs/analysis/assets3d-pipeline/03-bake-settings.md`.
 
 ## 1. Backends
 

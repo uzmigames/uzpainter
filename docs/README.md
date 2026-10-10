@@ -20,6 +20,7 @@ Historical analyses and discussion files are not implementation inputs until an 
 |---|---|
 | `vision.md` | Product definition, owner requirements, acceptance premise (decision 001), licence and clean-room decision (002), non-goals, success metrics |
 | `licensing-and-clean-room.md` | Apache-2.0 release, clean-room rules (what may and may not be consulted), third-party dependency inventory with licence compatibility |
+| `approved-sources.md` | Approved-source index (P0-SOURCES): every source an implementer may use, with revision or hash, licence and cleared scope; the cleared revisions of historical analyses; the quarantine list. Checked by `python -m tools.sources.check` |
 | `prd.md` | Product Requirements Document: numbered requirements with priority, source, acceptance criterion and satisfying architecture doc; personas; constraints; v1 release criteria |
 | `architecture/01-overview.md` | System context: components, process roles, threads, data flow, shared vocabulary |
 | `architecture/02-runtime-topology.md` | Supervisor/worker processes, IPC vocabulary, threads, GIL rules, failure and recovery model |

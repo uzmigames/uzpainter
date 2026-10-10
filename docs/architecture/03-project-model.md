@@ -1,6 +1,6 @@
 # 03 — Project model
 
-Implements D3 (document part) and parts of D8/D9 (`05-resolution.md`). Requirements: PRJ-01…10, RES-01…04, BAK-01, BAK-06, LAY-06, LAY-07, LAY-13, SAV-01…04, NFR-08 (`docs/prd.md`). Painter facts: `docs/analysis/substance-parity/02-layer-stack-model.md`, `05-project-and-spp.md`.
+Implements D3 (document part) and parts of D8/D9 (`05-resolution.md`). Requirements: PRJ-01…10, RES-01…04, BAK-01, BAK-06, LAY-06, LAY-07, LAY-13, SAV-01…04, NFR-08 (`docs/prd.md`). Painter facts come from the public API documentation (`PAINTER\resources\python-doc\**\*.html`) and black-box observation. `docs/analysis/substance-parity/02-layer-stack-model.md` and `05-project-and-spp.md` are quarantined in the approved-source index, `docs/approved-sources.md`, and are historical context only.
 
 ## 1. Containment
 
@@ -22,14 +22,14 @@ Project
 └── versions: format_version, app_version, evaluator_profile, compat_profile ("painter-12.1-api-0.3.7"), painter_reference {build, recorded_from}
 ```
 
-Identity: every node, set, stack, tile and resource has a 64-bit id persisted in the file (UzPainter guarantee; Painter promises only an in-session integer — `substance-parity-astra-review.md` V03). Names are not unique (Painter semantics); the API resolves by id, and name lookups return all matches. Name-addressed mutations (LAY-06) are idempotent within an explicit `{project, set, stack, parent}` scope: an ambiguous match fails before mutation and lists the candidate ids; repeating the same named operation does not create duplicate nodes. Tests cover ambiguity and repeats as well as save/reopen.
+Identity: every node, set, stack, tile and resource has a 64-bit id persisted in the file (UzPainter guarantee; Painter promises only an in-session integer — `substance-parity-astra-review.md` V03, historical context; confirmed through the documented API by the Tier 0 probes, P0-TIER0). Names are not unique (Painter semantics); the API resolves by id, and name lookups return all matches. Name-addressed mutations (LAY-06) are idempotent within an explicit `{project, set, stack, parent}` scope: an ambiguous match fails before mutation and lists the candidate ids; repeating the same named operation does not create duplicate nodes. Tests cover ambiguity and repeats as well as save/reopen.
 
 ## 2. Texture sets, stacks, channels
 
 - One texture set per mesh material, in file order; material identity is separate from object/group identity (`12-mesh-import.md`). Names must be unique and may be renamed; `original_name` keeps the import name.
 - Resolution per set: power of two, 128–8192; the engine thread checks the VRAM budget at creation (`13-engine-integration.md` §6) and refuses with an explicit error rather than failing later.
 - Workflow `Default` (one tile) in v1; the data model carries `uv_tiles[]` so `UVTile` can be enabled without a schema change (release gap, `roadmap.md` Phase 4).
-- A stack holds at most one channel per `ChannelType` (OpenPBR names with the legacy aliases, `02-layer-stack-model.md` §6.1); each channel has a `ChannelFormat` among the nine Painter formats (`sRGB8, L8, RGB8, L16, RGB16, L16F, RGB16F, L32F, RGB32F`). Default channel sets and formats per template are observed in Tier 0; the captures are private oracle records (`14-parity-testing.md` §6). The template JSON UzPainter ships is authored by UzmiGames from documented semantics, with a provenance record per entry (public source, or the hash of the private observation it must equal); it is never generated from a capture and is checked against the captures on the self-hosted runner. A project records its channels explicitly.
+- A stack holds at most one channel per `ChannelType` (OpenPBR names with the legacy aliases, as the public `textureset` API documentation lists them; `02-layer-stack-model.md` §6.1 is historical context); each channel has a `ChannelFormat` among the nine Painter formats (`sRGB8, L8, RGB8, L16, RGB16, L16F, RGB16F, L32F, RGB32F`). Default channel sets and formats per template are observed in Tier 0; the captures are private oracle records (`14-parity-testing.md` §6). The template JSON UzPainter ships is authored by UzmiGames from documented semantics, with a provenance record per entry (public source, or the hash of the private observation it must equal); it is never generated from a capture and is checked against the captures on the self-hosted runner. A project records its channels explicitly.
 - Material layering (several named stacks) is modelled but a release gap until its template is authored and verified.
 
 ## 3. Resources
@@ -60,7 +60,7 @@ A mesh reload compares the stored mesh hashes with the new mesh and marks bindin
 - `sync_stack` (LAY-07) rebuilds only the named root group; other root groups are hidden, never deleted, unless an explicit supported option preserves their visibility. Tests check that unrelated roots and resources survive and only the addressed group is rebuilt.
 - A failed individual mutation leaves that mutation unapplied. A script exception may follow previously committed calls; its error receipt reports the last committed revision and the partial changes. Atomic multi-call execution is available only through an explicitly declared native `Transaction` (`10-python-api.md`).
 - A transaction's result enumerates created/modified/removed/hidden node ids and resource hashes imported or skipped (QG-03).
-- `ScopedModification` (facade) batches evaluation invalidation, exactly as Painter groups recomputation; it does not provide rollback (Painter does not either, `substance-parity/08-review-response.md` F04).
+- `ScopedModification` (facade) batches evaluation invalidation, exactly as Painter groups recomputation; it does not provide rollback (Painter does not either: the public API documentation describes `ScopedModification` as grouping computation and documents no undo; `substance-parity/08-review-response.md` F04 is historical context).
 
 ## 7. Recipe dump and inspect
 

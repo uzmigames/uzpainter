@@ -1,6 +1,6 @@
 # 10 — Python API
 
-Implements D2 and D9 (`05-resolution.md`). Requirements: INT-01, INT-02, INT-10, INT-20, INT-23, LAY-01, LAY-06, LAY-07, LAY-08, LAY-12, QG-03, ARC-03, ARC-13, ARC-14 (`docs/prd.md`). Painter facts: `docs/analysis/substance-parity/01-python-api-inventory.md` (572 inventory rows; 545 documented anchors after the review), `02-layer-stack-model.md`, `08-review-response.md`.
+Implements D2 and D9 (`05-resolution.md`). Requirements: INT-01, INT-02, INT-10, INT-20, INT-23, LAY-01, LAY-06, LAY-07, LAY-08, LAY-12, QG-03, ARC-03, ARC-13, ARC-14 (`docs/prd.md`). Painter facts: the public API documentation (`PAINTER\resources\python-doc\**\*.html`). The earlier inventory `docs/analysis/substance-parity/01-python-api-inventory.md`, `02-layer-stack-model.md` and `08-review-response.md` are quarantined in the approved-source index, `docs/approved-sources.md`, and are historical context only.
 
 ## 0. Provenance rule
 
@@ -54,7 +54,7 @@ Rules:
 
 ## 5. Mutation contract (both packages)
 
-- Handles are thin objects with `__slots__`; assigning an unknown attribute raises `AttributeError` (the community bridge's false success on `PaintLayerNode.active_channels` cannot recur — `08-review-response.md` F01).
+- Handles are thin objects with `__slots__`; assigning an unknown attribute raises `AttributeError` (the community bridge's false success on `PaintLayerNode.active_channels` cannot recur — `08-review-response.md` F01, historical context).
 - Every setter has a getter; readback goes through a freshly resolved handle (`layerstack.get_node_by_uid`); tests assert set → get → save → reopen → get.
 - Every operation takes an explicit `(texture_set, stack)` address; the active stack is only a default.
 - One API call = one transaction (`03-project-model.md` §6); composite operations attach on success only; results enumerate created/modified/hidden ids and imported/skipped resources. A failed call leaves that mutation unapplied. A script that raises after earlier calls keeps those calls committed; its error receipt reports the last committed revision and the partial changes. Atomic multi-call execution exists only through the native `Transaction` (§7); the facade's documented grouped-modification context (`layerstack.ScopedModification`) groups calls but is not an atomic commit and rolls nothing back on an exception.
@@ -63,7 +63,7 @@ Rules:
 
 ## 6. The three pipeline scripts
 
-`A3D\Docs\Pipeline\Retopologia\cajado-v10\painter_create.py`, `painter_export.py` and `A3D\Docs\Pipeline\Pintura\painter_layer_stack.py` (`sync`, `smart`, `capture`, `run`) use only supported symbols, apart from the private viewport-capture call served by the adapter's shim (§2) (`docs/analysis/assets3d-pipeline/02-painter-usage.md` §4; checked symbol by symbol in `docs/analysis/architecture-discussion/01-claude-proposal.md` D9). These scripts are UzmiGames code and may be read freely. Required host-side changes: the transport (`painter_mcp_client.py execute_python` → `UzPainter.exe run`), absolute paths unchanged. Resource names in `smart` configs resolve through the internal compatibility alias table (`05-procedural-content.md`; CLR-06, decision 002). The tunic's per-layer overrides (`F03 → M_piping_lining_v9`) are expressed as explicit bindings, never a global filename replacement (LAY-07, LAY-13).
+`A3D\Docs\Pipeline\Retopologia\cajado-v10\painter_create.py`, `painter_export.py` and `A3D\Docs\Pipeline\Pintura\painter_layer_stack.py` (`sync`, `smart`, `capture`, `run`) use only supported symbols, apart from the private viewport-capture call served by the adapter's shim (§2) (`docs/analysis/assets3d-pipeline/02-painter-usage.md` §4; checked symbol by symbol in `docs/analysis/architecture-discussion/01-claude-proposal.md` D9, historical context; the facade check re-runs against the public API documentation). These scripts are UzmiGames code and may be read freely. Required host-side changes: the transport (`painter_mcp_client.py execute_python` → `UzPainter.exe run`), absolute paths unchanged. Resource names in `smart` configs resolve through the internal compatibility alias table (`05-procedural-content.md`; CLR-06, decision 002). The tunic's per-layer overrides (`F03 → M_piping_lining_v9`) are expressed as explicit bindings, never a global filename replacement (LAY-07, LAY-13).
 
 Behaviour the scripts rely on, tested directly:
 - **Name addressing (LAY-06):** name-addressed operations are idempotent within an explicit project/set/stack/parent scope; an ambiguous match fails before mutation; repeating the same named operation creates no duplicate node. Tests: ambiguous names, repeated operations, save/reopen.

@@ -13,6 +13,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Approved-source index (task `phase0.1_approved-source-index`): `docs/approved-sources.md` lists the public specifications, public Adobe documentation, UzmiGames files and the 21 cleared `docs/analysis/` files (pinned by blob hash), plus the quarantine list (25 files and every uncleared revision); architecture citations aligned; citation and revision checks in `tools/sources/` with tests in `tests/sources/`.
 - Vendored UzEngine render core (task `phase0.1_vendor-core-copy`): 97 files copied byte-equal from UzEngine commit `380c142e` into `thirdparty/uzengine-render-core/` with `LICENSE`, `ORIGIN.md` and `MANIFEST.json`; root `NOTICE`; `.gitattributes` keeps the vendored folder free of line-ending conversion; Python tooling base (`pyproject.toml`: ruff, mypy strict, pytest) with vendoring checks in `tools/vendoring/` and tests in `tests/vendoring/`.
 - Apache-2.0 licence for the project: `LICENSE`.
 - Product documents: `docs/vision.md` (product definition, acceptance premise), `docs/prd.md` (numbered requirements with acceptance criteria), `docs/roadmap.md` (evidence-gated phases G0–G5), `docs/dag.md` (work-package graph with stable rulebook task ids), `docs/open-questions.md` (owner questions Q1–Q14, all answered 2026-10-10), `docs/licensing-and-clean-room.md` (clean-room rules, third-party licence inventory); index and reading order in `docs/README.md`.
