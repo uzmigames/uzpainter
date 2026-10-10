@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-004, UZP-MOD-005. Original: UzEngine runtime/engine/rhi/dx12/dx12_device.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// DX12 Device Implementation
 ///
 /// Initializes the full D3D12 stack: debug layer, DXGI factory, adapter, device,
@@ -328,14 +330,19 @@ bool DX12Device::Init(const RHIDeviceDesc& desc) {
         }
     }
 
-    // Detect DXR (ray tracing) support
+    // Detect DXR (ray tracing) support. Acceleration structures need Tier 1.0; inline ray
+    // queries need Tier 1.1 and SM 6.6 (DX12SupportsInlineRayQuery).
     {
         D3D12_FEATURE_DATA_D3D12_OPTIONS5 opts5 = {};
         if (SUCCEEDED(m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5,
                                                      &opts5, sizeof(opts5)))) {
             m_supportsRayTracing = (opts5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_0);
+            m_supportsInlineRayQuery = DX12SupportsInlineRayQuery(opts5.RaytracingTier,
+                                                                  m_highestShaderModel);
         }
-        UZ_LOG(RHI, Info, "DXR ray tracing: {}", m_supportsRayTracing ? "supported" : "not supported");
+        UZ_LOG(RHI, Info, "DXR ray tracing: {}; inline ray queries (DXR 1.1 + SM 6.6): {}",
+               m_supportsRayTracing ? "supported" : "not supported",
+               m_supportsInlineRayQuery ? "supported" : "not supported");
     }
 
     // Initialize GPU timestamp profiler (non-fatal)
@@ -359,6 +366,10 @@ bool DX12Device::Init(const RHIDeviceDesc& desc) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Initialization Steps
 // ─────────────────────────────────────────────────────────────────────────────
+
+bool DX12SupportsInlineRayQuery(D3D12_RAYTRACING_TIER tier, D3D_SHADER_MODEL highestShaderModel) {
+    return tier >= D3D12_RAYTRACING_TIER_1_1 && highestShaderModel >= D3D_SHADER_MODEL_6_6;
+}
 
 bool DX12Device::TryLoadAgilitySdk() {
     // Use the programmatic SDK configuration API (Win10 20H2+ / Build 19042+)
@@ -412,11 +423,13 @@ bool DX12Device::TryLoadAgilitySdk() {
         return false;
     }
 
-    // Build the SDK path — the directory containing D3D12Core.dll.
+    // Build the SDK path — the directory containing D3D12Core.dll: the "D3D12"
+    // subfolder of the executable directory, the same folder as the exported
+    // D3D12SDKPath (dx12_agility.cpp) and the distribution layout.
     // GetExeDir() respects the SetEngineDir() override, so in DLL-hosted mode
     // it returns the addon directory (where D3D12Core.dll is deployed), not
     // the host process directory (e.g., VS Code's install dir).
-    std::string sdkPath = GetExeDir().string() + "\\";
+    std::string sdkPath = GetExeDir().string() + "\\D3D12\\";
 
     // Create a device factory scoped to our Agility SDK version.
     // This bypasses the global SetSDKVersion limitation where another device
@@ -667,6 +680,7 @@ void DX12Device::NegotiateShaderModel(std::optional<ShaderModel> forceModel) {
             break;
         }
     }
+    m_highestShaderModel = smData.HighestShaderModel;
 
     // Negotiate: pick the highest SM the hardware actually supports
     if (hasTier3 && smData.HighestShaderModel >= D3D_SHADER_MODEL_6_9) {

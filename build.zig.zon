@@ -1,0 +1,14 @@
+.{
+    .name = .uzpainter,
+    .version = "0.0.0",
+    .fingerprint = 0xf4cfc9ca3af11acf,
+    // The build is pinned to exactly this release; build.zig refuses any other compiler.
+    .minimum_zig_version = "0.15.2",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "thirdparty",
+        "tests/native",
+    },
+    .dependencies = .{},
+}

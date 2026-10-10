@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-006. Original: UzEngine runtime/engine/shader/shader_compiler.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// ShaderCompiler Implementation
 ///
 /// Dynamically loads dxcompiler.dll via LoadLibrary/GetProcAddress.
@@ -235,10 +237,13 @@ std::vector<std::wstring> ShaderCompiler::BuildArguments(
     args.push_back(L"-T");
     args.push_back(GetTargetProfile(desc.stage, desc.model));
 
-    // SPIRV output
+    // SPIRV output — Vulkan 1.2 (SPIR-V 1.5), the instance version the Vulkan device requests
     if (desc.output == ShaderOutputFormat::SPIRV) {
         args.push_back(L"-spirv");
-        args.push_back(L"-fspv-target-env=vulkan1.3");
+        args.push_back(L"-fspv-target-env=vulkan1.2");
+        if (desc.enableRayQuery) {
+            args.push_back(L"-fspv-extension=SPV_KHR_ray_query");
+        }
 
         // Explicit register-to-binding shifts so we know the exact SPIRV layout:
         //   t registers → binding 0..15  (SAMPLED_IMAGE)

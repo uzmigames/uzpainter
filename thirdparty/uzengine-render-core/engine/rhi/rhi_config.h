@@ -1,9 +1,11 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-002. Original: UzEngine runtime/engine/rhi/rhi_config.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
-/// UzEngine RHI Configuration Resolution
+/// UzEngine RHI Configuration
 ///
-/// Resolves the active RHI backend and shader model from multiple sources
-/// with cascading precedence: CLI > .uzproject > platform auto-detect.
+/// The RHI configuration value type and its conversion to a device
+/// descriptor. The caller supplies the backend (UzPainter: `--gpu-backend`).
 
 #include "rhi_backend.h"
 
@@ -11,8 +13,6 @@
 #include <string>
 
 namespace uz {
-
-class Config; // forward declare
 
 /// Shader model levels supported by the engine.
 ///
@@ -36,7 +36,7 @@ enum class ShaderModel : uint8_t {
 
 /// Resolved RHI configuration from all sources.
 ///
-/// Produced by `ResolveRHIConfig()`, consumed by `ToDeviceDesc()` for device creation.
+/// Filled by the caller, consumed by `ToDeviceDesc()` for device creation.
 /// All fields have safe defaults matching the highest-capability path (DX12 + SM6.6).
 ///
 /// # Lifetime
@@ -50,21 +50,6 @@ struct RHIConfig {
     bool enableBreadcrumbs = false;                  ///< Enable DRED auto-breadcrumbs for device-removed diagnosis (DX12 only).
     uint32_t adapterIndex = 0;                       ///< GPU adapter index (0 = system default / high-performance preference).
 };
-
-/// Resolves RHI configuration from all available sources.
-///
-/// Priority (highest to lowest):
-/// 1. CLI arguments: --rhi, --shader-model, --gpu-validation, --gpu-breadcrumbs
-/// 2. .uzproject config: render.rhi, render.shader_model
-/// 3. Auto-detect: platform default backend (DX12 on Windows, Vulkan elsewhere)
-///
-/// CLI flag formats:
-/// - `--rhi dx12|vulkan|metal|null`
-/// - `--shader-model sm5|sm5.1|sm6|sm6.1|sm6.2|sm6.3|sm6.4|sm6.5|sm6.6|sm6.7`
-/// - `--gpu-validation` (boolean flag)
-/// - `--gpu-breadcrumbs` (boolean flag)
-/// - `--adapter N` (GPU index)
-[[nodiscard]] RHIConfig ResolveRHIConfig(const Config& config);
 
 /// Converts RHIBackend enum to display string.
 [[nodiscard]] const char* RHIBackendToString(RHIBackend backend);

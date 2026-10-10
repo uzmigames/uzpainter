@@ -6,7 +6,7 @@
 | Commit | `380c142e481d56fe16b045f63315b42359e86a7d` |
 | Commit date | 2026-10-10T01:44:55-03:00 ("docs: add three reference images (WhatsApp, 2026-03-06/07)") |
 | Upstream root | `runtime/` (paths in this folder are relative to it) |
-| Files | 97 files, 28,128 lines, all copied verbatim (`MANIFEST.json`) |
+| Files | 97 files, 28,128 lines, copied verbatim (`MANIFEST.json`); 12 of them since changed by the local modifications UZP-MOD-001…006 (`MODIFICATIONS.md`) |
 | Licence | Apache-2.0, "Copyright 2026 Uzmi Games" (`LICENSE` = UzEngine root `LICENSE`, blob `57ff3b22d0e71b46b74de4e5b2e0bbb57a75c633`; `runtime/LICENSE` is the same blob) |
 | Import date | 2026-10-10 |
 | Importer | Rulebook task `phase0.1_vendor-core-copy`, run with `python -m tools.vendoring.import_core` for UzmiGames |
@@ -35,7 +35,7 @@ Candidates are the commits of `main`, newest first. The newest, `380c142e`, pass
 | Exported bytes = commit blobs | Pass: 97 of 97 blob ids equal the `git ls-tree` entries |
 | (a) No conflict markers in the subset | Pass: none in the 97 files |
 | (b) Include closure equals the subset | Pass, see below |
-| (c) UzPainter build of the subset and hardware `selftest` | Pending: confirmed by `phase0.3_vendor-modifications` and `phase0.6_toolchain-hardware-slice`, recorded here when they pass |
+| (c) UzPainter build of the subset and hardware `selftest` | Build: pass on 2026-10-10 (`phase0.3_vendor-modifications`: the subset with UZP-MOD-001…006 compiles as the static library `uzrendercore` from UzPainter's `build.zig` under Zig 0.15.2 with `-std=c++23`, `tests/vendoring/test_modifications.py`). Hardware `selftest`: pending, confirmed by `phase0.6_toolchain-hardware-slice` |
 | (d) Cited behaviours re-verified | Pass: all 31 citations hold at the line numbers below |
 | UzEngine's own build and tests at the commit | Information only, not a gate: not run by this import (UzEngine is read-only for UzPainter and building it writes into its checkout) |
 
@@ -53,7 +53,8 @@ header, to a fixed point. `engine/asset/formats/uztexture_format.h` is header on
   `engine/rhi/rhi_config.cpp` → `"config.h"` (UZP-MOD-002; would reach `engine/config/config.*`
   and `engine/core/cvar.*`); `engine/rhi/rhi_factory.cpp` → `"dx11/dx11_device.h"` and
   `"metal/metal_device.h"` (UZP-MOD-001; would reach `engine/rhi/dx11/*` and `engine/rhi/metal/*`).
-  Until `phase0.3_vendor-modifications` lands, these three includes do not resolve in this folder.
+  At the commit these three includes do not resolve in this folder; the modifications removed
+  them, so the vendored files no longer contain them (`MODIFICATIONS.md`).
 - Unresolved includes, all with an allowed origin:
 
 | Origin | Headers |
@@ -117,9 +118,10 @@ cited in `13-engine-integration.md` hold unchanged at this commit.
 
 At this commit `runtime/build.zig:35` compiles with `-std=c++17` plus the profiling defines
 (`-DUZ_PROFILING_ENABLED -DTRACY_ENABLE -DTRACY_ON_DEMAND`), and `runtime/build.zig.zon` declares
-`minimum_zig_version = "0.14.0"`. `13-engine-integration.md` §4.2 cites `-std=c++23` and Zig ≥
-0.15.2; the language level and Zig pin are settled by `phase0.6_toolchain-hardware-slice`, not by
-this copy.
+`minimum_zig_version = "0.14.0"`. UzPainter's own build compiles the vendored subset with
+`-std=c++23` under Zig 0.15.2, pinned exactly (`build.zig`, `build.zig.zon`; set by
+`phase0.3_vendor-modifications`, which found the subset compiling and linking cleanly at that
+level); `13-engine-integration.md` §4.2 records both.
 
 ## Licence and notices (§3.3)
 

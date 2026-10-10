@@ -36,3 +36,7 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# Zig build cache and output (build.zig)
+.zig-cache/
+zig-out/

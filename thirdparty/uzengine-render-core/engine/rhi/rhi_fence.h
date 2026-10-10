@@ -1,10 +1,36 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-003. Original: UzEngine runtime/engine/rhi/rhi_fence.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// RHI fence interface for CPU-GPU synchronization.
 
+#include <chrono>
 #include <cstdint>
 
 namespace uz {
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bounded fence wait
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Outcome of a bounded CPU wait on a fence (`IRHIFence::WaitCPU`).
+enum class FenceWaitStatus : uint8_t {
+    Signaled,    ///< The fence reached the value before the deadline.
+    Timeout,     ///< The deadline passed and the device is still alive.
+    DeviceLost,  ///< The device is lost or the wait itself failed; `backendReason` says why.
+};
+
+/// Result of `IRHIFence::WaitCPU`.
+struct FenceWaitResult {
+    FenceWaitStatus status = FenceWaitStatus::Signaled;
+    /// The backend's reason when `status` is `DeviceLost`, 0 otherwise: on DX12 the
+    /// device-removed reason (`ID3D12Device::GetDeviceRemovedReason`, an `HRESULT`), on
+    /// Vulkan the `VkResult` of the wait (for example `VK_ERROR_DEVICE_LOST`).
+    int32_t backendReason = 0;
+};
+
+/// Point in time after which `IRHIFence::WaitCPU` stops waiting.
+using FenceDeadline = std::chrono::steady_clock::time_point;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IRHIFence — CPU/GPU synchronization primitive
@@ -31,8 +57,11 @@ namespace uz {
 /// cmdList->End();
 /// cmdList->Execute();
 /// fence->Signal(fenceValue);
-/// fence->WaitCPU(fenceValue);
-/// // GPU work is now complete
+/// FenceWaitResult r = fence->WaitCPU(fenceValue,
+///     std::chrono::steady_clock::now() + std::chrono::seconds(10));
+/// if (r.status == FenceWaitStatus::Signaled) {
+///     // GPU work is now complete
+/// }
 ///
 /// device->DestroyFence(fence);
 /// ```
@@ -47,13 +76,21 @@ public:
     ///   than any previously signaled value.
     virtual void Signal(uint64_t value) = 0;
 
-    /// Blocks the calling CPU thread until the fence reaches the given value.
+    /// Blocks the calling CPU thread until the fence reaches the given value, the
+    /// deadline passes or the device is lost, whichever comes first.
     ///
-    /// Returns immediately if the fence has already reached or passed `value`.
+    /// Returns `Signaled` at once if the fence has already reached or passed `value`
+    /// on a live device. Never waits past `deadline` (plus scheduling latency); a
+    /// device loss the backend reports is returned as `DeviceLost`, never as
+    /// `Signaled` or `Timeout`.
     ///
     /// # Arguments
     /// * `value` — The fence value to wait for.
-    virtual void WaitCPU(uint64_t value) = 0;
+    /// * `deadline` — Latest point in time to return by.
+    ///
+    /// # Returns
+    /// `Signaled`, `Timeout`, or `DeviceLost` with the backend's reason.
+    [[nodiscard]] virtual FenceWaitResult WaitCPU(uint64_t value, FenceDeadline deadline) = 0;
 
     /// Returns true if the fence has reached or passed the given value.
     ///

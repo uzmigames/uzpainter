@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-006. Original: UzEngine runtime/engine/shader/shader_compiler.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// UzEngine Shader Compiler
 ///
 /// Dynamically loads DXC (dxcompiler.dll) and compiles HLSL to DXIL or SPIRV.
@@ -7,7 +9,9 @@
 /// - DXIL SM6.6: `-T vs_6_6 / ps_6_6 / cs_6_6`
 /// - DXIL SM6.0: `-T vs_6_0 / ps_6_0 / cs_6_0`
 /// - DXIL SM5.1: `-T vs_5_1 / ps_5_1 / cs_5_1` (DXC, not FXC)
-/// - SPIRV:      `-spirv -fspv-target-env=vulkan1.3`
+/// - SPIRV:      `-spirv -fspv-target-env=vulkan1.2` (SPIR-V 1.5, matching the
+///               Vulkan 1.2 instance the device requests), plus
+///               `-fspv-extension=SPV_KHR_ray_query` when ray queries are requested
 ///
 /// # Thread Safety
 /// Each ShaderCompiler instance owns its own DXC compiler/utils objects.
@@ -92,6 +96,10 @@ struct ShaderCompileDesc {
     std::vector<std::string> includeDirs; ///< Include search directories (passed as `-I` to DXC)
     bool generateDebugInfo = false;      ///< Include debug info (`-Zi`) for PIX/RenderDoc
     bool disableOptimizations = false;   ///< Disable optimizations (`-Od`) for debugging
+    /// SPIR-V only: the kernel uses inline ray queries (`RayQuery`); DXC is passed
+    /// `-fspv-extension=SPV_KHR_ray_query`, so the module declares that extension and the
+    /// `RayQueryKHR` capability. Ignored for DXIL.
+    bool enableRayQuery = false;
 };
 
 /// Result of a shader compilation.

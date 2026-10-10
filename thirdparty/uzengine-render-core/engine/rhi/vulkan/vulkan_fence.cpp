@@ -1,8 +1,10 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-003. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_fence.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// Vulkan Fence Implementation
 ///
 /// Uses VK_KHR_timeline_semaphore for native timeline fence support.
 /// Signal submits a timeline semaphore signal via vkQueueSubmit2.
-/// WaitCPU uses vkWaitSemaphores with a timeout.
+/// WaitCPU uses vkWaitSemaphores with the time left until the caller's deadline.
 /// IsComplete/GetCompletedValue use vkGetSemaphoreCounterValue.
 
 #define VK_NO_PROTOTYPES
@@ -16,6 +18,8 @@
 
 #include "log.h"
 #include "profiler.h"
+
+#include <chrono>
 
 namespace uz {
 
@@ -80,9 +84,12 @@ void VulkanFence::Signal(uint64_t value) {
     }
 }
 
-void VulkanFence::WaitCPU(uint64_t value) {
+FenceWaitResult VulkanFence::WaitCPU(uint64_t value, FenceDeadline deadline) {
     UZ_PROFILE_FUNCTION();
-    if (!m_device || m_timelineSemaphore == VK_NULL_HANDLE) return;
+    if (!m_device || m_timelineSemaphore == VK_NULL_HANDLE) {
+        UZ_LOG(RHI, Error, "VulkanFence::WaitCPU -- fence not initialized, cannot wait for value {}", value);
+        return {FenceWaitStatus::DeviceLost, static_cast<int32_t>(VK_ERROR_INITIALIZATION_FAILED)};
+    }
 
     VkSemaphoreWaitInfo waitInfo = {};
     waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
@@ -90,13 +97,30 @@ void VulkanFence::WaitCPU(uint64_t value) {
     waitInfo.pSemaphores = &m_timelineSemaphore;
     waitInfo.pValues = &value;
 
-    // 5 second timeout to avoid infinite hangs
-    constexpr uint64_t kTimeoutNs = 5'000'000'000ULL;
-    VkResult result = vkWaitSemaphores(m_device->GetVkDevice(), &waitInfo, kTimeoutNs);
-    if (result == VK_TIMEOUT) {
-        UZ_LOG(RHI, Error, "VulkanFence::WaitCPU -- timed out waiting for value {}", value);
-    } else if (result != VK_SUCCESS) {
-        UZ_LOG(RHI, Error, "VulkanFence::WaitCPU -- vkWaitSemaphores failed, result={}", static_cast<int>(result));
+    // Waits for the time left until the deadline (0 polls without blocking). A driver may
+    // report VK_TIMEOUT slightly before the deadline; the wait then resumes, so `Timeout`
+    // always means the deadline has passed.
+    VkResult result = VK_TIMEOUT;
+    for (;;) {
+        const auto now = std::chrono::steady_clock::now();
+        const uint64_t timeoutNs = deadline > now
+            ? static_cast<uint64_t>(std::chrono::ceil<std::chrono::nanoseconds>(deadline - now).count())
+            : 0;
+        result = vkWaitSemaphores(m_device->GetVkDevice(), &waitInfo, timeoutNs);
+        if (result != VK_TIMEOUT || std::chrono::steady_clock::now() >= deadline) {
+            break;
+        }
+    }
+    switch (result) {
+        case VK_SUCCESS:
+            return {FenceWaitStatus::Signaled, 0};
+        case VK_TIMEOUT:
+            UZ_LOG(RHI, Warning, "VulkanFence::WaitCPU -- deadline passed waiting for value {}", value);
+            return {FenceWaitStatus::Timeout, 0};
+        default:
+            UZ_LOG(RHI, Error, "VulkanFence::WaitCPU -- vkWaitSemaphores failed waiting for value {}, result={}",
+                   value, static_cast<int>(result));
+            return {FenceWaitStatus::DeviceLost, static_cast<int32_t>(result)};
     }
 }
 

@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-003. Original: UzEngine runtime/engine/rhi/vulkan/vulkan_fence.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// Vulkan backend implementation of IRHIFence using VK_KHR_timeline_semaphore.
@@ -51,8 +53,10 @@ public:
     /// Signals the fence by submitting a timeline semaphore signal to the GPU queue.
     void Signal(uint64_t value) override;
 
-    /// Blocks the calling CPU thread until the timeline semaphore reaches the given value.
-    void WaitCPU(uint64_t value) override;
+    /// Waits with `vkWaitSemaphores` until the timeline semaphore reaches `value`, `deadline`
+    /// passes or the wait reports an error. `VK_TIMEOUT` returns `Timeout`;
+    /// `VK_ERROR_DEVICE_LOST` (or any other error) returns `DeviceLost` with that `VkResult`.
+    [[nodiscard]] FenceWaitResult WaitCPU(uint64_t value, FenceDeadline deadline) override;
 
     /// Returns true if the timeline semaphore has reached or passed the given value.
     bool IsComplete(uint64_t value) const override;

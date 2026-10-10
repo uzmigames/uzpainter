@@ -19,6 +19,7 @@ from tools.vendoring.checks import (
 from tools.vendoring.hashing import git_blob_sha1
 from tools.vendoring.import_core import check_tree
 from tools.vendoring.manifest import Manifest, load
+from tools.vendoring.modifications import ids_by_file, load_log
 from tools.vendoring.subset import METADATA_FILES, VENDORED_DIR, expand_seeds
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -40,19 +41,26 @@ def _relative(manifest: Manifest) -> set[str]:
 
 
 def test_manifest_is_the_declared_subset_from_one_commit(manifest: Manifest) -> None:
+    """Every file comes from the selected commit; the files MODIFICATIONS.md logs are
+    `modified` with their ids (phase0.3_vendor-modifications), all others verbatim."""
     assert len(manifest.files) == 97
     assert _relative(manifest) == set(expand_seeds(VENDORED))
+    logged = ids_by_file(load_log(REPO_ROOT))
     for entry in manifest.files:
+        relative = entry.vendored_path.removeprefix(f"{VENDORED_DIR}/")
         assert entry.upstream_commit == SELECTED_COMMIT
-        assert entry.upstream_path == "runtime/" + entry.vendored_path.removeprefix(
-            f"{VENDORED_DIR}/"
-        )
-        assert entry.status == "verbatim"
-        assert entry.modifications == []
+        assert entry.upstream_path == "runtime/" + relative
+        if relative in logged:
+            assert entry.status == "modified"
+            assert entry.modifications == logged[relative]
+        else:
+            assert entry.status == "verbatim"
+            assert entry.modifications == []
 
 
 def test_byte_equality(manifest: Manifest) -> None:
-    """3.1: vendored_sha256 == upstream_sha256 and the blob id of the bytes is recorded."""
+    """3.1: every file hashes to its vendored_sha256; verbatim files also equal upstream
+    (vendored_sha256 == upstream_sha256, blob id recorded)."""
     assert manifest_problems(REPO_ROOT, VENDORED_DIR, manifest) == []
 
 

@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-004. Original: UzEngine runtime/engine/rhi/dx12/dx12_device.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// DX12 backend implementation of `IRHIDevice`.
@@ -55,6 +57,17 @@ static constexpr uint32_t kMaxRtvDescriptors = 256;
 
 /// Maximum depth-stencil view descriptors (non-shader-visible).
 static constexpr uint32_t kMaxDsvDescriptors = 64;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inline ray-query capability
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Decides the inline-ray-query capability (`RayQuery` in compute shaders) from the
+/// device's DXR tier and the highest shader model it reports: DXR Tier 1.1 or higher
+/// and Shader Model 6.6 or higher. `RayQuery` needs Tier 1.1 (Tier 1.0 has none), and
+/// UzPainter's kernels target SM 6.6.
+[[nodiscard]] bool DX12SupportsInlineRayQuery(D3D12_RAYTRACING_TIER tier,
+                                              D3D_SHADER_MODEL highestShaderModel);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DX12Device
@@ -181,6 +194,10 @@ public:
 
     /// Returns true if the DX12 device supports DXR 1.0+.
     bool SupportsRayTracing() const override { return m_supportsRayTracing; }
+
+    /// Returns true if compute shaders can use inline ray queries: DXR Tier 1.1 and
+    /// SM 6.6 (`DX12SupportsInlineRayQuery`). DXR Tier 1.0 alone does not qualify.
+    [[nodiscard]] bool SupportsInlineRayQuery() const { return m_supportsInlineRayQuery; }
 
     /// Returns the BLAS resource pool (for command list access).
     ResourcePool<DX12BLAS>& GetBLASPool() { return m_blasPool; }
@@ -434,6 +451,9 @@ private:
     ResourcePool<DX12TLAS>         m_tlasPool;
     ResourcePool<DX12RTPipeline>   m_rtPipelinePool;
     bool                           m_supportsRayTracing = false;
+    bool                           m_supportsInlineRayQuery = false;  ///< DXR Tier 1.1 + SM 6.6.
+    /// Highest shader model the device reports (before negotiation or a forced override).
+    D3D_SHADER_MODEL               m_highestShaderModel = D3D_SHADER_MODEL_5_1;
 
     /// Global bindless root signature — shared by all graphics pipelines.
     ID3D12RootSignature*           m_rootSignature = nullptr;

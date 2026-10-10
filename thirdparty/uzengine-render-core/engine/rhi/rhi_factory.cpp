@@ -1,10 +1,16 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-001. Original: UzEngine runtime/engine/rhi/rhi_factory.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// Unified RHI Device Factory
 ///
 /// Dispatches `CreateRHIDevice()` to the correct backend implementation
 /// based on `RHIDeviceDesc::backend`. Returns `std::unique_ptr<IRHIDevice>`
 /// for RAII-safe ownership transfer.
+///
+/// UzPainter builds DX12 and Vulkan only; any other backend is rejected
+/// with an explicit error.
 
 #include "rhi_backend.h"
+#include "rhi_config.h"
 #include "log.h"
 
 #include <memory>
@@ -12,16 +18,10 @@
 // Include backend device headers (Windows-only backends)
 #ifdef _WIN32
 #include "dx12/dx12_device.h"
-#include "dx11/dx11_device.h"
 #endif
 
 // Vulkan backend (cross-platform — Windows and Linux)
 #include "vulkan/vulkan_device.h"
-
-// Metal backend (macOS/iOS only)
-#if defined(__APPLE__)
-#include "metal/metal_device.h"
-#endif
 
 namespace uz {
 
@@ -46,17 +46,6 @@ std::unique_ptr<IRHIDevice> CreateRHIDevice(const RHIDeviceDesc& desc) {
             g_activeShaderModel = device->GetShaderModel();
             return device;
         }
-
-        case RHIBackend::DX11: {
-            auto device = std::make_unique<DX11Device>();
-            if (!device->Init(desc)) {
-                UZ_LOG(RHI, Error, "CreateRHIDevice: DX11Device::Init failed");
-                return nullptr;
-            }
-            g_activeBackend = desc.backend;
-            g_activeShaderModel = device->GetShaderModel();
-            return device;
-        }
 #endif
 
         case RHIBackend::Vulkan: {
@@ -70,25 +59,9 @@ std::unique_ptr<IRHIDevice> CreateRHIDevice(const RHIDeviceDesc& desc) {
             return device;
         }
 
-#if defined(__APPLE__)
-        case RHIBackend::Metal: {
-            auto device = std::make_unique<MetalDevice>();
-            if (!device->Init(desc)) {
-                UZ_LOG(RHI, Error, "CreateRHIDevice: MetalDevice::Init failed");
-                return nullptr;
-            }
-            g_activeBackend = desc.backend;
-            return device;
-        }
-#else
-        case RHIBackend::Metal:
-            UZ_LOG(RHI, Error, "CreateRHIDevice: Metal backend requires macOS or iOS");
-            return nullptr;
-#endif
-
         default:
-            UZ_LOG(RHI, Error, "CreateRHIDevice: unsupported backend {}",
-                   static_cast<int>(desc.backend));
+            UZ_LOG(RHI, Error, "CreateRHIDevice: backend {} is not supported (DX12 and Vulkan only)",
+                   RHIBackendToString(desc.backend));
             return nullptr;
     }
 }

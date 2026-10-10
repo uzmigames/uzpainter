@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-003. Original: UzEngine runtime/engine/rhi/dx12/dx12_fence.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// DX12 backend implementation of IRHIFence.
@@ -13,9 +15,10 @@
 
 namespace uz {
 
-/// Period of the GPU wait watchdog: a CPU wait on a fence (frame fence, WaitIdle) that lasts
-/// longer than this logs an error with the device-removed reason and keeps waiting. A hung
-/// GPU used to stop the process in an INFINITE wait with nothing in the log.
+/// Period of the GPU wait watchdog of `DX12Device::WaitIdle`: a wait that lasts longer than
+/// this logs an error with the device-removed reason and keeps waiting. A hung GPU used to
+/// stop the process in an INFINITE wait with nothing in the log. `DX12Fence::WaitCPU` is
+/// bounded by its caller's deadline instead.
 static constexpr uint32_t kGpuWaitWatchdogMs = 10000;
 
 using Microsoft::WRL::ComPtr;
@@ -54,8 +57,12 @@ public:
     /// command lists on this queue have completed execution.
     void Signal(uint64_t value) override;
 
-    /// Blocks the calling CPU thread until the fence reaches the given value.
-    void WaitCPU(uint64_t value) override;
+    /// Waits until the fence reaches `value`, `deadline` passes or the device is removed.
+    ///
+    /// A removed device reports `UINT64_MAX` as the completed value, so the removed reason
+    /// is checked before the value: removal returns `DeviceLost` with the reason
+    /// (`GetDeviceRemovedReason`), never `Signaled`.
+    [[nodiscard]] FenceWaitResult WaitCPU(uint64_t value, FenceDeadline deadline) override;
 
     /// Returns true if the fence has reached or passed the given value.
     bool IsComplete(uint64_t value) const override;
