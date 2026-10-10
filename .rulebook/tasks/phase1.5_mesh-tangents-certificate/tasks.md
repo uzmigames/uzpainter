@@ -3,7 +3,7 @@
 
 ## 2. Implementation
 - [ ] 2.1 Vendor `mikktspace.c` from upstream with its licence; compute per-corner tangents and signs
-- [ ] 2.2 Implement the `PerVertex` and `PerFragment` frame rules, defaulting to `PerFragment`, with the OpenGL (+Y) convention from the P0-NORMAL verdict
+- [ ] 2.2 Implement the `PerVertex` and `PerFragment` frame rules (unset = PerVertex (Painter default, decision 031); PerFragment on request), with the OpenGL (+Y) convention from the P0-NORMAL verdict
 - [ ] 2.3 Implement the certificate corner and face counters (non-finite/zero normals, zero tangents/bitangents, degenerate TBN, flipped handedness, coincident opposite faces, zero-area and flipped UV triangles, n-gons triangulated)
 - [ ] 2.4 Implement the per-set UV metrics (outside 0–1, overlap px, islands, density px/cm, anisotropy, gap and border px) in the mesh module without the GPU
 - [ ] 2.5 Compute `status` pass|warn|fail, store the certificate with the mesh hash, and never modify the mesh

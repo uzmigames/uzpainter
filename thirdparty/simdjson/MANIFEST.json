@@ -1,0 +1,40 @@
+{
+  "library": "simdjson",
+  "upstream": "https://github.com/simdjson/simdjson",
+  "version": "v4.6.11",
+  "commit": "f5de14f09256982933af2849beb43778bd421ca7",
+  "archive_url": "https://github.com/simdjson/simdjson/archive/refs/tags/v4.6.11.tar.gz",
+  "archive_sha256": "61d948fc24f0d793829ad658058e7597d064988a89b4607ea02e401a82df98ff",
+  "archive_root": "simdjson-4.6.11/",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "5fa8894e890bd77958f93b165433e0fb0dffa5bc982bfb147e4748e95bad24e5",
+      "size": 11355
+    },
+    {
+      "path": "LICENSE-MIT",
+      "sha256": "9ed0a34979f22fc33fc13d942233f22d44906c236d876bd05fadf18cb5abf7da",
+      "size": 1065
+    },
+    {
+      "path": "singleheader/simdjson.cpp",
+      "sha256": "66c818d1a6b3841febef7a8336ff297f0a52e250a436b598bcdecf010d626243",
+      "size": 2758235
+    },
+    {
+      "path": "singleheader/simdjson.h",
+      "sha256": "a5c467c33c7871262eb4c82775490430758939c1c516fbdaeb662f8255860a60",
+      "size": 7742579
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": null,
+  "comparison": [],
+  "not_in_uzengine": [
+    "LICENSE",
+    "LICENSE-MIT",
+    "singleheader/simdjson.cpp",
+    "singleheader/simdjson.h"
+  ]
+}

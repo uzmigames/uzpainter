@@ -1,0 +1,232 @@
+{
+  "schema": "uzpainter/template/1",
+  "kind": "project",
+  "id": "dota-2",
+  "name": "Dota 2",
+  "painter_template": "templates/Dota 2.spt",
+  "provenance": {
+    "author": "UzmiGames",
+    "licence": "Apache-2.0",
+    "channel_set": {
+      "golden_id": "tier0/defaults-templates/project-templates",
+      "record_sha256": "d546c51c1697bc16a9874989696625588978902cb1902306205a93e17f42b0fd",
+      "note": "channel set and formats read through the documented textureset API (template capture)"
+    },
+    "base_values": {
+      "golden_id": "tier0/semantics/base-values-dota-2",
+      "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60"
+    }
+  },
+  "channels": [
+    {
+      "type": "BaseColor",
+      "format": "sRGB8",
+      "base": [
+        0.7340657711029053,
+        0.7340657711029053,
+        0.7340657711029053
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-dota-2",
+        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "map": "uzp_plane/basecolor",
+        "export16": [
+          48107,
+          48107,
+          48107
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "BaseMetalness",
+      "format": "L8",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-dota-2",
+        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "map": "uzp_plane/metallic",
+        "export16": [
+          0,
+          0,
+          0
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "EmissionColor",
+      "format": "L8",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-dota-2",
+        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "map": "uzp_plane/emissive",
+        "export16": [
+          0,
+          0,
+          0
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "Glossiness",
+      "format": "L8",
+      "base": [
+        0.6980392336845398,
+        0.6980392336845398,
+        0.6980392336845398
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-dota-2",
+        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "map": "uzp_plane/glossiness",
+        "export16": [
+          45746,
+          45746,
+          45746
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "Opacity",
+      "format": "L8",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-dota-2",
+        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "map": "uzp_plane/opacity",
+        "export16": [
+          65535,
+          65535,
+          65535
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "Specular",
+      "format": "L8",
+      "base": [
+        0.21866178512573242,
+        0.03921568766236305,
+        0.21866178512573242
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-dota-2",
+        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "map": "uzp_plane/specular",
+        "export16": [
+          14330,
+          2570,
+          14330
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "User0",
+      "format": "L8",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-dota-2",
+        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "map": "uzp_plane/user0",
+        "export16": [
+          65535,
+          65535,
+          65535
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "User1",
+      "format": "L8",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-dota-2",
+        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "map": "uzp_plane/user1",
+        "export16": [
+          65535,
+          65535,
+          65535
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "User2",
+      "format": "L8",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-dota-2",
+        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "map": "uzp_plane/user2",
+        "export16": [
+          65535,
+          65535,
+          65535
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "User3",
+      "format": "L8",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-dota-2",
+        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "map": "uzp_plane/user3",
+        "export16": [
+          65535,
+          65535,
+          65535
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    }
+  ]
+}

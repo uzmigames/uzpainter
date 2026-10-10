@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: MikkTSpace tangent frames
-Tangent frames SHALL be computed per corner with MikkTSpace, in `PerFragment` mode by default and `PerVertex` on request, using the convention settled by the P0-NORMAL fixture.
+Tangent frames SHALL be computed per corner with MikkTSpace, in `PerVertex` mode when the project does not set the mode (Painter's default, decision 031) and `PerFragment` on request, using the convention settled by the P0-NORMAL fixture.
 
 #### Scenario: Hemisphere fixture
 Given the P0-NORMAL hemisphere fixture

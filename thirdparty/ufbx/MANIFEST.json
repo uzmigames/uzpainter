@@ -1,0 +1,52 @@
+{
+  "library": "ufbx",
+  "upstream": "https://github.com/ufbx/ufbx",
+  "version": "v0.23.1",
+  "commit": "26a482ae66871d7de36eb722aa060bce95bce274",
+  "archive_url": "https://github.com/ufbx/ufbx/archive/refs/tags/v0.23.1.tar.gz",
+  "archive_sha256": "21edd1021dfb430e37aa6214c9b3bbaa5634b1859cbbef7231e738af4f19c956",
+  "archive_root": "ufbx-0.23.1/",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "0dd48ebadf52273c736256325c8f078c03c8bb4facee22a4122de0ad3f615391",
+      "size": 2631
+    },
+    {
+      "path": "ufbx.c",
+      "sha256": "4a956c26a708e40d82ecb0aeaee54da709d5ba7c144c9642174970059bda7e1d",
+      "size": 1181511
+    },
+    {
+      "path": "ufbx.h",
+      "sha256": "f787be529af577efc04f3e3e735844a08556718dbb613d1211c2b313d72895dc",
+      "size": 223898
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/ufbx",
+  "comparison": [
+    {
+      "path": "LICENSE",
+      "uzengine_blob": "5db259b50e3a49019073b6ad69f9514d60638e8a",
+      "upstream_sha256": "0dd48ebadf52273c736256325c8f078c03c8bb4facee22a4122de0ad3f615391",
+      "upstream_lf_sha256": "0dd48ebadf52273c736256325c8f078c03c8bb4facee22a4122de0ad3f615391",
+      "result": "identical"
+    },
+    {
+      "path": "ufbx.c",
+      "uzengine_blob": "2d13c78bd8c3203421393447f397d80c486b4ecb",
+      "upstream_sha256": "4a956c26a708e40d82ecb0aeaee54da709d5ba7c144c9642174970059bda7e1d",
+      "upstream_lf_sha256": "4a956c26a708e40d82ecb0aeaee54da709d5ba7c144c9642174970059bda7e1d",
+      "result": "different"
+    },
+    {
+      "path": "ufbx.h",
+      "uzengine_blob": "8d856edaad096dd2e14436190461aa263162f9a5",
+      "upstream_sha256": "f787be529af577efc04f3e3e735844a08556718dbb613d1211c2b313d72895dc",
+      "upstream_lf_sha256": "f787be529af577efc04f3e3e735844a08556718dbb613d1211c2b313d72895dc",
+      "result": "different"
+    }
+  ],
+  "not_in_uzengine": []
+}

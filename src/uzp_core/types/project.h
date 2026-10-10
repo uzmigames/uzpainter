@@ -40,7 +40,9 @@ struct ColorManagement {
 
 struct ProjectSettings {
     NormalMapFormat normal_map_format = NormalMapFormat::OpenGL;
-    TangentSpace tangent_space = TangentSpace::PerFragment;
+    /// Unset = `PerVertex`, Painter 12.1.0's observed default; `PerFragment` when the caller sets
+    /// it, as the Assets3D pipeline does (decision 031).
+    TangentSpace tangent_space = TangentSpace::PerVertex;
     ProjectWorkflow workflow = ProjectWorkflow::Default;
     Resolution default_resolution;
     double mesh_unit_scale = 1.0;

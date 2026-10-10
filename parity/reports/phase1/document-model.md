@@ -26,6 +26,8 @@ Task `phase1.3_document-model`, the parent and acceptance task of P1-DOCMODEL (`
 | `tests/uzp_core/fixtures/every-kind.manifest.json` (every node, effect and source kind) | `dc572509c528d6e520230df4d226099fd7711267cd9f53480594d954b21f1db3` | 2 native processes and Python: identical, equal to the pinned value |
 | Document built through transactions (`integrated-manifest`) | `c2f28a5f8c7296319b31e5d9286acb85257aac5022d091aed9fdc7fcb803e0c2` | 2 native processes, two separate builds (scratch prefix and `zig-out`) and Python: identical, equal to the pinned value |
 
+Later change: `phase1.4_mesh-importers` made `PerVertex` the default tangent space (decision 031), the only setting this document leaves unset. The `integrated-manifest` digest is now pinned at `ec8de0f0b16ca66f95b4da628d9d5066087435d57f70b9d68bb1b6e3db03325c`. Writing `PerFragment` back into `settings.tangent_space` gives the value above, so no other byte changed.
+
 Tests: `python -m pytest tests/uzp_core tests/capabilities`: 70 passed, also with `UZP_NO_GPU=1` (the hosted-lane setting). Native: `uzp-core-tests.exe run` 11 cases, `uzp-core-transaction-tests.exe run` 11 cases, all PASS. Full gate: `python -m mypy` (161 files, no issues), `ruff check .`, `ruff format --check .`, `python -m pytest` (945 passed), `python -m tools.parity.guard` (0 blocked).
 
 ## Hosted CPU lane

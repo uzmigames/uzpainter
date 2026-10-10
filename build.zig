@@ -27,6 +27,16 @@
 //!   the canonical manifest (`src/uzp_core/`, `tests/uzp_core/uzp_core_test.cpp`)
 //! - `zig build uzp-core-transaction-tests` `uzp-core-transaction-tests.exe`, the native tests of
 //!   transactions, operation records and name addressing (`tests/uzp_core/transaction_test.cpp`)
+//! - `zig build evaluator-tests` `uzp-evaluator-tests.exe`, the native tests of the compositor's
+//!   tile DAG, cache, admission, templates and kernels (`src/evaluator/`,
+//!   `tests/evaluator/evaluator_test.cpp`) with the DX run-time files and `assets/templates/`
+//!   beside it
+//! - `zig build uzp-store`    the project store as a static library (`zig-out/lib/uzp_store.lib`,
+//!   `src/store/` with SQLite and zstd); `zig build uzp-store-tests` `uzp-store-tests.exe`, its
+//!   native tests with the test-only fault hooks (`tests/store/store_test.cpp`)
+//! - `zig build mesh-tests`   `uzp-mesh-tests.exe`: the mesh importers (`src/mesh/` with ufbx,
+//!   fastgltf and simdjson, the static library `uzp_mesh`) and their native tests
+//!   (`tests/mesh/mesh_test.cpp`)
 //!
 //! Every include and library path is inside this repository. Windows system headers and import
 //! libraries come from the MinGW-w64 files bundled with the pinned Zig release; nothing refers
@@ -239,6 +249,116 @@ const uzp_core_sources = [_][]const u8{
 };
 /// Warnings are errors in UzPainter's document model and its tests (never in vendored code).
 const uzp_core_flags = cxx_flags ++ [_][]const u8{ "-Wall", "-Wextra", "-Werror" };
+/// The compositor (`src/evaluator/`, P1-COMPOSITOR, `04-layer-stack-and-compositing.md` §7),
+/// relative to `src/`: compiled into `UzPainter.exe` and into `uzp-evaluator-tests.exe` over the
+/// render layer and the document model. Contraction is off so that every float operation of its
+/// CPU reference is one IEEE operation, as in its kernels (`src/evaluator/arith.h`).
+const evaluator_sources = [_][]const u8{
+    "evaluator/admission.cpp",
+    "evaluator/arith.cpp",
+    "evaluator/cpu_store.cpp",
+    "evaluator/dag.cpp",
+    "evaluator/error.cpp",
+    "evaluator/evaluate.cpp",
+    "evaluator/evaluator.cpp",
+    "evaluator/gpu_store.cpp",
+    "evaluator/hash.cpp",
+    "evaluator/kernelgen.cpp",
+    "evaluator/templates.cpp",
+};
+const evaluator_flags = cxx_flags ++ own_warning_flags ++ [_][]const u8{"-ffp-contract=off"};
+/// The project templates the evaluator reads (`src/evaluator/templates.h`), installed beside the
+/// executables as `bin/assets/templates/`.
+const templates_dir = "assets/templates";
+/// The mesh importers (`src/mesh/`, `docs/architecture/12-mesh-import.md`), relative to `src/`,
+/// compiled with `uzp_core_flags` into `uzp_mesh.lib`.
+const mesh_sources = [_][]const u8{
+    "mesh/texturing_mesh.cpp",
+    "mesh/mesh_builder.cpp",
+    "mesh/obj_parser.cpp",
+    "mesh/fbx_import.cpp",
+    "mesh/gltf_import.cpp",
+    "mesh/mesh_import.cpp",
+    "mesh/mask_image.cpp",
+};
+/// Third-party include directories of the mesh importers (`tools/vendoring/thirdparty.py`): ufbx,
+/// fastgltf and the simdjson it parses with, and the PNG decoder of the orientation contract.
+const mesh_thirdparty_include_dirs = [_][]const u8{
+    "thirdparty/ufbx",
+    "thirdparty/fastgltf/include",
+    "thirdparty/simdjson/singleheader",
+    "thirdparty/zlib",
+    "thirdparty/spng/spng",
+};
+/// ufbx's single C file, vendored unpatched.
+const ufbx_flags = [_][]const u8{"-std=c11"};
+/// fastgltf's units and the simdjson amalgamation it includes as `<simdjson.h>`, vendored
+/// unpatched. Both select SIMD kernels at run time through function target attributes, which
+/// Zig 0.15.2's clang no longer completes from the attribute alone: fastgltf's SSE4.2 CRC-32C
+/// needs the `crc32` feature (`-mcrc32`) and simdjson's AVX-512 kernel the `evex512` feature
+/// (`-mevex512`; both `ORIGIN.md` files). Zig passes the target's feature list after `-cflags`,
+/// so the two features are added to the target of the library `uzp_gltf` instead. Neither
+/// enables an instruction set by itself (`crc32` only backs the intrinsics, `evex512` only
+/// widens AVX-512 code that a target region enables); the kernels still run only on processors
+/// whose run-time check selects them.
+const fastgltf_sources = [_][]const u8{ "fastgltf.cpp", "base64.cpp", "io.cpp" };
+
+/// The project store (`src/store/`, `docs/architecture/09-project-file-format.md`), relative to
+/// `src/`, compiled with `uzp_core_flags` into `uzp_store.lib` with SQLite and zstd.
+const store_sources = [_][]const u8{
+    "store/container.cpp",
+    "store/blobs.cpp",
+    "store/versioning.cpp",
+    "store/integrity.cpp",
+    "store/commit.cpp",
+    "store/planes.cpp",
+    "store/plane_integrity.cpp",
+    "store/project_store.cpp",
+};
+/// Test-only fault hooks of the store (`src/store/fault.h`): compiled, with
+/// `-DUZP_STORE_FAULT_HOOKS=1` on every store source, into `uzp-store-tests.exe` only, never into
+/// `uzp_store.lib`.
+const store_fault_source = "store/fault.cpp";
+const store_thirdparty_include_dirs = [_][]const u8{ "thirdparty/sqlite", "thirdparty/zstd/lib" };
+/// The SQLite amalgamation with the options recorded in `thirdparty/sqlite/ORIGIN.md`.
+const sqlite_flags = [_][]const u8{
+    "-std=c11",
+    "-DSQLITE_THREADSAFE=1",
+    "-DSQLITE_DQS=0",
+    "-DSQLITE_DEFAULT_FOREIGN_KEYS=1",
+    "-DSQLITE_OMIT_LOAD_EXTENSION",
+    "-DSQLITE_OMIT_DEPRECATED",
+};
+/// zstd without its x86-64 assembly (not vendored), multithreading or legacy formats.
+const zstd_flags = [_][]const u8{ "-std=c11", "-DZSTD_DISABLE_ASM" };
+const zstd_sources = [_][]const u8{
+    "common/debug.c",
+    "common/entropy_common.c",
+    "common/error_private.c",
+    "common/fse_decompress.c",
+    "common/pool.c",
+    "common/threading.c",
+    "common/xxhash.c",
+    "common/zstd_common.c",
+    "compress/fse_compress.c",
+    "compress/hist.c",
+    "compress/huf_compress.c",
+    "compress/zstd_compress.c",
+    "compress/zstd_compress_literals.c",
+    "compress/zstd_compress_sequences.c",
+    "compress/zstd_compress_superblock.c",
+    "compress/zstd_double_fast.c",
+    "compress/zstd_fast.c",
+    "compress/zstd_lazy.c",
+    "compress/zstd_ldm.c",
+    "compress/zstd_opt.c",
+    "compress/zstd_preSplit.c",
+    "compress/zstdmt_compress.c",
+    "decompress/huf_decompress.c",
+    "decompress/zstd_ddict.c",
+    "decompress/zstd_decompress.c",
+    "decompress/zstd_decompress_block.c",
+};
 
 /// Run-time files installed beside the executables (`zig-out/bin/`) as in the distribution
 /// (`13-engine-integration.md` §5): repository path, then the path below `bin/`.
@@ -655,6 +775,216 @@ pub fn build(b: *std.Build) void {
     const uzp_core_txn_tests_step = b.step("uzp-core-transaction-tests", "Build the native tests of transactions and name addressing");
     uzp_core_txn_tests_step.dependOn(&b.addInstallArtifact(uzp_core_txn_tests_exe, .{}).step);
     b.getInstallStep().dependOn(uzp_core_txn_tests_step);
+
+    // ── Mesh importers (phase1.4_mesh-importers) ─────────────────────────────────────────────
+    // UzPainter's own OBJ parser and its FBX (ufbx) and glTF (fastgltf on simdjson) loaders, over
+    // the document model; CPU only, so the tests run on the hosted CPU lane. `src/mesh/` compiles
+    // with `-Wall -Wextra -Werror` including the ufbx and fastgltf headers it uses; the vendored
+    // sources keep their own flags.
+
+    const mesh_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    mesh_mod.addIncludePath(b.path("src"));
+    for (mesh_thirdparty_include_dirs) |dir| mesh_mod.addIncludePath(b.path(dir));
+    mesh_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &mesh_sources,
+        .flags = &(uzp_core_flags ++ [_][]const u8{"-DSPNG_STATIC"}),
+    });
+    mesh_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/ufbx"),
+        .files = &.{"ufbx.c"},
+        .flags = &ufbx_flags,
+    });
+    var gltf_query = target.query;
+    gltf_query.cpu_features_add.addFeature(@intFromEnum(std.Target.x86.Feature.crc32));
+    gltf_query.cpu_features_add.addFeature(@intFromEnum(std.Target.x86.Feature.evex512));
+    const gltf_mod = b.createModule(.{
+        .target = b.resolveTargetQuery(gltf_query),
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    gltf_mod.addIncludePath(b.path("thirdparty/fastgltf/include"));
+    gltf_mod.addIncludePath(b.path("thirdparty/simdjson/singleheader"));
+    gltf_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/simdjson/singleheader"),
+        .files = &.{"simdjson.cpp"},
+        .flags = &cxx_flags,
+    });
+    gltf_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/fastgltf/src"),
+        .files = &fastgltf_sources,
+        .flags = &cxx_flags,
+    });
+    mesh_mod.linkLibrary(b.addLibrary(.{
+        .linkage = .static,
+        .name = "uzp_gltf",
+        .root_module = gltf_mod,
+    }));
+    mesh_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/zlib"),
+        .files = &zlib_sources,
+        .flags = &.{"-std=c11"},
+    });
+    mesh_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/spng/spng"),
+        .files = &.{"spng.c"},
+        .flags = &spng_flags,
+    });
+    mesh_mod.linkLibrary(uzp_core_lib);
+    const mesh_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "uzp_mesh",
+        .root_module = mesh_mod,
+    });
+
+    const mesh_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    mesh_tests_mod.addIncludePath(b.path("src"));
+    mesh_tests_mod.linkLibrary(mesh_lib);
+    mesh_tests_mod.linkLibrary(uzp_core_lib);
+    mesh_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/mesh"),
+        .files = &.{"mesh_test.cpp"},
+        .flags = &uzp_core_flags,
+    });
+    const mesh_tests_exe = b.addExecutable(.{
+        .name = "uzp-mesh-tests",
+        .root_module = mesh_tests_mod,
+    });
+    const mesh_tests_step = b.step("mesh-tests", "Build the mesh importers and their native tests");
+    mesh_tests_step.dependOn(&b.addInstallArtifact(mesh_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(mesh_tests_step);
+
+    // ── Project store (phase1.4_store-container-operations) ──────────────────────────────────
+    // The `.uzp` container over the document model: SQLite and zstd compiled in, CPU only, so the
+    // tests run on the hosted CPU lane. `sqlite3.h` and `zstd.h` compile warning-free under the
+    // store's `-Wall -Wextra -Werror`. The test executable compiles the store sources again with
+    // the fault hooks; the library never contains them.
+
+    const store_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addStoreSources(b, store_mod, &uzp_core_flags);
+    store_mod.linkLibrary(uzp_core_lib);
+    const store_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "uzp_store",
+        .root_module = store_mod,
+    });
+    const install_store = b.addInstallArtifact(store_lib, .{});
+    const store_step = b.step("uzp-store", "Build the project store as a static library");
+    store_step.dependOn(&install_store.step);
+    b.getInstallStep().dependOn(&install_store.step);
+
+    const store_hook_flags = uzp_core_flags ++ [_][]const u8{"-DUZP_STORE_FAULT_HOOKS=1"};
+    const store_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addStoreSources(b, store_tests_mod, &store_hook_flags);
+    store_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{store_fault_source},
+        .flags = &store_hook_flags,
+    });
+    store_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/store"),
+        .files = &.{"store_test.cpp"},
+        .flags = &store_hook_flags,
+    });
+    store_tests_mod.linkLibrary(uzp_core_lib);
+    const store_tests_exe = b.addExecutable(.{
+        .name = "uzp-store-tests",
+        .root_module = store_tests_mod,
+    });
+    const store_tests_step = b.step("uzp-store-tests", "Build the native tests of the project store (with its fault hooks)");
+    store_tests_step.dependOn(&b.addInstallArtifact(store_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(store_tests_step);
+
+    // ── The compositor (phase1.5_compositor-tile-dag) ─────────────────────────────────────────
+    // `src/evaluator/` joins `UzPainter.exe` (over the render layer and the document model) and
+    // gets its own test executable; both carry `assets/templates/` beside them.
+
+    app_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &evaluator_sources,
+        .flags = &evaluator_flags,
+    });
+    app_mod.linkLibrary(uzp_core_lib);
+    const install_templates = b.addInstallDirectory(.{
+        .source_dir = b.path(templates_dir),
+        .install_dir = .bin,
+        .install_subdir = "assets/templates",
+    });
+    painter_step.dependOn(&install_templates.step);
+
+    const evaluator_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, evaluator_tests_mod);
+    evaluator_tests_mod.addIncludePath(b.path("src"));
+    evaluator_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/evaluator"),
+        .files = &.{"evaluator_test.cpp"},
+        .flags = &evaluator_flags,
+    });
+    evaluator_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &evaluator_sources,
+        .flags = &evaluator_flags,
+    });
+    evaluator_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &render_sources,
+        .flags = &(cxx_flags ++ own_warning_flags),
+    });
+    evaluator_tests_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    evaluator_tests_mod.linkLibrary(core_lib);
+    evaluator_tests_mod.linkLibrary(uzp_core_lib);
+    for (system_libraries) |name| evaluator_tests_mod.linkSystemLibrary(name, .{});
+    // File version resources (the DXC identity in the kernel cache key).
+    evaluator_tests_mod.linkSystemLibrary("version", .{});
+
+    const evaluator_tests_exe = b.addExecutable(.{
+        .name = "uzp-evaluator-tests",
+        .root_module = evaluator_tests_mod,
+    });
+    const evaluator_tests_step = b.step("evaluator-tests", "Build the native tests of the compositor's tile DAG");
+    evaluator_tests_step.dependOn(&b.addInstallArtifact(evaluator_tests_exe, .{}).step);
+    for (dx_runtime) |step| evaluator_tests_step.dependOn(step);
+    evaluator_tests_step.dependOn(&install_templates.step);
+    b.getInstallStep().dependOn(evaluator_tests_step);
+}
+
+/// The project store's sources (`store_sources`, compiled with `flags`) with SQLite and zstd.
+fn addStoreSources(b: *std.Build, mod: *std.Build.Module, flags: []const []const u8) void {
+    mod.addIncludePath(b.path("src"));
+    for (store_thirdparty_include_dirs) |dir| mod.addIncludePath(b.path(dir));
+    mod.addCSourceFiles(.{ .root = b.path("src"), .files = &store_sources, .flags = flags });
+    mod.addCSourceFiles(.{ .root = b.path("thirdparty/sqlite"), .files = &.{"sqlite3.c"}, .flags = &sqlite_flags });
+    mod.addCSourceFiles(.{ .root = b.path("thirdparty/zstd/lib"), .files = &zstd_sources, .flags = &zstd_flags });
 }
 
 /// Installs every wheel of a folder into `<prefix>/bin/<subdir>` the way an installer lays out a

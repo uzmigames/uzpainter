@@ -554,6 +554,8 @@ void AnchorCycles() {
 
 /// 2.1-2.5 constraints on hand-built documents.
 void ModelConstraints() {
+    // Decision 031: a project that does not set the tangent space uses Painter's default.
+    CHECK(ProjectSettings{}.tangent_space == TangentSpace::PerVertex);
     const auto invalid = [](const std::function<void(Project&)>& edit) {
         Project p = BuildFixture(false);
         edit(p);

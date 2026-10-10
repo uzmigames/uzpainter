@@ -1,0 +1,537 @@
+{
+  "schema": "uzpainter/template/1",
+  "kind": "channel-defaults",
+  "id": "channel-defaults",
+  "name": "Base values of channels added to a stack",
+  "painter_template": null,
+  "provenance": {
+    "author": "UzmiGames",
+    "licence": "Apache-2.0",
+    "note": "a channel added with add_channel starts from these values whatever its format; a channel type absent here fails evaluation explicitly (missing_base_value)"
+  },
+  "channels": [
+    {
+      "type": "AO",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "fitted",
+        "semantics": "parity/semantics/ao-mixed.json",
+        "entry": "ao-channel-empty-base",
+        "note": "every texel stores 1.0 (code 65535 on L16): the base of an empty AO channel is white (exact)"
+      }
+    },
+    {
+      "type": "Normal",
+      "base": [
+        0.49803921580314636,
+        0.49803921580314636,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "fitted",
+        "semantics": "parity/semantics/height-to-normal.json",
+        "entry": "height-normal-default-normal-channel-base",
+        "note": "float32(127/255), float32(127/255), 1.0 (height-to-normal.json, height-normal-default-normal-channel-base, exact): the 8-bit flat normal read as UNORM8"
+      }
+    },
+    {
+      "type": "SubsurfaceRadiusScale",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/scattering",
+        "note": "Scattering (alias SubsurfaceRadiusScale) added as L32F exports 1.0 (OpenEXR 32f)"
+      }
+    },
+    {
+      "type": "User0",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User1",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user1",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User10",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User11",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User12",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User13",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User14",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User15",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User16",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User17",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User18",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User19",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User2",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user2",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User20",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User21",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User22",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User23",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User24",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User25",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User26",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User27",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User28",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User29",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User3",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user3",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User30",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User31",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User4",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user4",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User5",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user5",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User6",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user6",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User7",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User8",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    },
+    {
+      "type": "User9",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-default",
+        "record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2",
+        "map": "uzp_plane/user0-user7",
+        "note": "base-values-default: User0-User7 added with every ChannelFormat member export white (1.0 on every format); evaluator-profile.json acc_0 = 1 (empty stack)"
+      }
+    }
+  ]
+}

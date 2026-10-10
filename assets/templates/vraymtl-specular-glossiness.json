@@ -1,0 +1,200 @@
+{
+  "schema": "uzpainter/template/1",
+  "kind": "project",
+  "id": "vraymtl-specular-glossiness",
+  "name": "VrayMtl - Specular Glossiness",
+  "painter_template": "templates/VrayMtl - Specular Glossiness.spt",
+  "provenance": {
+    "author": "UzmiGames",
+    "licence": "Apache-2.0",
+    "channel_set": {
+      "golden_id": "tier0/defaults-templates/project-templates",
+      "record_sha256": "d546c51c1697bc16a9874989696625588978902cb1902306205a93e17f42b0fd",
+      "note": "channel set and formats read through the documented textureset API (template capture)"
+    },
+    "base_values": {
+      "golden_id": "tier0/semantics/base-values-vraymtl-specular-glossiness",
+      "record_sha256": "c472395bf03c931045792079629a9f9bd4658a98b936658ab24b8fcf03b6383a"
+    }
+  },
+  "channels": [
+    {
+      "type": "Anisotropyangle",
+      "format": "L16",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-vraymtl-specular-glossiness",
+        "record_sha256": "c472395bf03c931045792079629a9f9bd4658a98b936658ab24b8fcf03b6383a",
+        "map": "uzp_plane/anisotropyangle",
+        "export16": [
+          0,
+          0,
+          0
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "Diffuse",
+      "format": "sRGB8",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-vraymtl-specular-glossiness",
+        "record_sha256": "c472395bf03c931045792079629a9f9bd4658a98b936658ab24b8fcf03b6383a",
+        "map": "uzp_plane/diffuse",
+        "export16": [
+          0,
+          0,
+          0
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "EmissionColor",
+      "format": "sRGB8",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-vraymtl-specular-glossiness",
+        "record_sha256": "c472395bf03c931045792079629a9f9bd4658a98b936658ab24b8fcf03b6383a",
+        "map": "uzp_plane/emissive",
+        "export16": [
+          0,
+          0,
+          0
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "Glossiness",
+      "format": "L8",
+      "base": [
+        0.6980392336845398,
+        0.6980392336845398,
+        0.6980392336845398
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-vraymtl-specular-glossiness",
+        "record_sha256": "c472395bf03c931045792079629a9f9bd4658a98b936658ab24b8fcf03b6383a",
+        "map": "uzp_plane/glossiness",
+        "export16": [
+          45746,
+          45746,
+          45746
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "Height",
+      "format": "L16F",
+      "base": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-vraymtl-specular-glossiness",
+        "record_sha256": "c472395bf03c931045792079629a9f9bd4658a98b936658ab24b8fcf03b6383a",
+        "map": "uzp_plane/height",
+        "note": "L16F export code 32767 = write rule of 0.5 (ties down); the EXR export of an empty Height channel is not recorded; 0.5 is the documented neutral height"
+      }
+    },
+    {
+      "type": "Normal",
+      "format": "RGB16F",
+      "base": [
+        0.49803921580314636,
+        0.49803921580314636,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "fitted",
+        "semantics": "parity/semantics/height-to-normal.json",
+        "entry": "height-normal-default-normal-channel-base",
+        "note": "float32(127/255), float32(127/255), 1.0 (height-to-normal.json, height-normal-default-normal-channel-base, exact): the 8-bit flat normal read as UNORM8"
+      }
+    },
+    {
+      "type": "Specular",
+      "format": "sRGB8",
+      "base": [
+        0.21866178512573242,
+        0.21866178512573242,
+        0.21866178512573242
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-vraymtl-specular-glossiness",
+        "record_sha256": "c472395bf03c931045792079629a9f9bd4658a98b936658ab24b8fcf03b6383a",
+        "map": "uzp_plane/specular",
+        "export16": [
+          14330,
+          14330,
+          14330
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "SpecularRoughnessAnisotropy",
+      "format": "L8",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-vraymtl-specular-glossiness",
+        "record_sha256": "c472395bf03c931045792079629a9f9bd4658a98b936658ab24b8fcf03b6383a",
+        "map": "uzp_plane/anisotropylevel",
+        "export16": [
+          0,
+          0,
+          0
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "Transmissive",
+      "format": "sRGB8",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-vraymtl-specular-glossiness",
+        "record_sha256": "c472395bf03c931045792079629a9f9bd4658a98b936658ab24b8fcf03b6383a",
+        "map": "uzp_plane/transmissive",
+        "export16": [
+          0,
+          0,
+          0
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    }
+  ]
+}

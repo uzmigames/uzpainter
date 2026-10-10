@@ -22,6 +22,11 @@
 /thirdparty/pybind11/** -text
 /thirdparty/python-wheels/** -text
 /thirdparty/mikktspace/** -text
+/thirdparty/sqlite/** -text
+/thirdparty/zstd/** -text
+/thirdparty/ufbx/** -text
+/thirdparty/simdjson/** -text
+/thirdparty/fastgltf/** -text
 # Parity fixtures are hashed in public manifests: keep their bytes identical on every machine.
 /parity/fixtures/** -text
 # Git hooks run under sh: keep LF endings on every checkout (parity/GUARD.md).

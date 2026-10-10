@@ -1,0 +1,158 @@
+{
+  "schema": "uzpainter/template/1",
+  "kind": "project",
+  "id": "pbr-metallic-roughness-alpha-blend",
+  "name": "PBR - Metallic Roughness Alpha-blend",
+  "painter_template": "templates/PBR - Metallic Roughness Alpha-blend.spt",
+  "provenance": {
+    "author": "UzmiGames",
+    "licence": "Apache-2.0",
+    "channel_set": {
+      "golden_id": "tier0/defaults-templates/project-templates",
+      "record_sha256": "d546c51c1697bc16a9874989696625588978902cb1902306205a93e17f42b0fd",
+      "note": "channel set and formats read through the documented textureset API (template capture)"
+    },
+    "base_values": {
+      "golden_id": "tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend",
+      "record_sha256": "c56ddb58e99ac5f472e9562f2e935198a74b9f26b3796cfe75443e9581842ce6"
+    }
+  },
+  "channels": [
+    {
+      "type": "BaseColor",
+      "format": "sRGB8",
+      "base": [
+        0.7340657711029053,
+        0.7340657711029053,
+        0.7340657711029053
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend",
+        "record_sha256": "c56ddb58e99ac5f472e9562f2e935198a74b9f26b3796cfe75443e9581842ce6",
+        "map": "uzp_plane/basecolor",
+        "export16": [
+          48107,
+          48107,
+          48107
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "BaseMetalness",
+      "format": "L8",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend",
+        "record_sha256": "c56ddb58e99ac5f472e9562f2e935198a74b9f26b3796cfe75443e9581842ce6",
+        "map": "uzp_plane/metallic",
+        "export16": [
+          0,
+          0,
+          0
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "EmissionColor",
+      "format": "sRGB8",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend",
+        "record_sha256": "c56ddb58e99ac5f472e9562f2e935198a74b9f26b3796cfe75443e9581842ce6",
+        "map": "uzp_plane/emissive",
+        "export16": [
+          0,
+          0,
+          0
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "Height",
+      "format": "L16F",
+      "base": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend",
+        "record_sha256": "c56ddb58e99ac5f472e9562f2e935198a74b9f26b3796cfe75443e9581842ce6",
+        "map": "uzp_plane/height",
+        "note": "L16F export code 32767 = write rule of 0.5 (ties down); the EXR export of an empty Height channel is not recorded; 0.5 is the documented neutral height"
+      }
+    },
+    {
+      "type": "Normal",
+      "format": "RGB16F",
+      "base": [
+        0.49803921580314636,
+        0.49803921580314636,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "fitted",
+        "semantics": "parity/semantics/height-to-normal.json",
+        "entry": "height-normal-default-normal-channel-base",
+        "note": "float32(127/255), float32(127/255), 1.0 (height-to-normal.json, height-normal-default-normal-channel-base, exact): the 8-bit flat normal read as UNORM8"
+      }
+    },
+    {
+      "type": "Opacity",
+      "format": "L8",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend",
+        "record_sha256": "c56ddb58e99ac5f472e9562f2e935198a74b9f26b3796cfe75443e9581842ce6",
+        "map": "uzp_plane/opacity",
+        "export16": [
+          65535,
+          65535,
+          65535
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    },
+    {
+      "type": "SpecularRoughness",
+      "format": "L8",
+      "base": [
+        0.2980392277240753,
+        0.2980392277240753,
+        0.2980392277240753
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend",
+        "record_sha256": "c56ddb58e99ac5f472e9562f2e935198a74b9f26b3796cfe75443e9581842ce6",
+        "map": "uzp_plane/roughness",
+        "export16": [
+          19532,
+          19532,
+          19532
+        ],
+        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+      }
+    }
+  ]
+}

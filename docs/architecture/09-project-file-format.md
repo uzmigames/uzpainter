@@ -21,6 +21,7 @@ CREATE TABLE operation (idempotency_key TEXT PRIMARY KEY, project_uuid TEXT, req
                         committed_revision INTEGER REFERENCES revision, created_at TEXT);
 CREATE TABLE cache     (key TEXT PRIMARY KEY, revision INTEGER, evaluator_profile TEXT, sha256 TEXT);   -- regenerable; dropped by `compact`
 CREATE TABLE checkpoint(name TEXT PRIMARY KEY, revision INTEGER, created_at TEXT, note TEXT, protected INTEGER /* QG-05 */);   -- includes 'current' and 'previous'
+CREATE TABLE locator   (sha256 TEXT PRIMARY KEY, path TEXT NOT NULL);   -- {path, sha256} locators of an explicitly non-portable project (§2); empty in portable mode
 ```
 
 Node ids live inside the manifest; bindings are part of the manifest (node → sha256 + alias), so `blob` is referenced only by hash.

@@ -63,6 +63,24 @@ IMPORTER_NORMAL = (
     "Rulebook task `phase0.9_normal-convention-fixture`, run with "
     "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
 )
+IMPORTER_STORE = (
+    "Rulebook task `phase1.4_store-container-operations`, run with "
+    "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
+)
+STORE_ROLE = (
+    "shipped: compiled into `uzp_store.lib`, the project store library (`src/store/`, "
+    "`docs/architecture/09-project-file-format.md` §1); its native tests link it today, "
+    "`UzPainter.exe` once the worker opens projects"
+)
+IMPORTER_MESH = (
+    "Rulebook task `phase1.4_mesh-importers`, run with "
+    "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
+)
+MESH_ROLE = (
+    "build-only today: compiled into `uzp_mesh.lib` (UzPainter's mesh importers, `src/mesh/`) "
+    "and its native tests `uzp-mesh-tests.exe` (`phase1.4_mesh-importers`); shipped once "
+    "`UzPainter.exe` links the importers"
+)
 CPYTHON_VERSION_SOURCE = (
     "UzPainter's selection: CPython 3.13 because Painter 12.1 ships 3.13.9 "
     "(`docs/architecture/10-python-api.md` §1); 3.13.16 (tag `v3.13.16`, released 2026-09-30) is "
@@ -871,6 +889,265 @@ LIBRARIES: tuple[Library, ...] = (
         core=False,
         importer=IMPORTER_NORMAL,
     ),
+    Library(
+        name="SQLite",
+        folder="sqlite",
+        upstream="https://www.sqlite.org/",
+        version="3.54.0",
+        commit="be8d059e9a49089ab2dce5ed26dd87aaf598fdc5fbe0b107c0dd758464bcd5e3",
+        archive_url="https://www.sqlite.org/2026/sqlite-amalgamation-3540000.zip",
+        archive_name="sqlite-amalgamation-3540000.zip",
+        archive_sha256="68e913b0fe8ec6b4e5f391c594a28872884e80d6cd042a1e50c957be46b5aa4d",
+        archive_root="sqlite-amalgamation-3540000/",
+        version_source=(
+            "UzPainter's selection: the newest SQLite release on the retrieval date (3.54.0, "
+            "check-in of 2026-10-09 named by `SQLITE_SOURCE_ID` in `sqlite3.h`); the `.uzp` "
+            "container of decision 010 (`docs/architecture/09-project-file-format.md` §1)"
+        ),
+        select=("sqlite3.c", "sqlite3.h"),
+        licence_files=("sqlite3.h",),
+        include_dirs=(".",),
+        sources=("sqlite3.c",),
+        licence=(
+            "Public domain: the author's dedication (\"The author disclaims copyright to this "
+            'source code") heads `sqlite3.h` and every part of `sqlite3.c` '
+            "(https://www.sqlite.org/copyright.html)"
+        ),
+        role=STORE_ROLE,
+        features=(
+            "The amalgamation `sqlite3.c` compiled as C11 with `SQLITE_THREADSAFE=1`, "
+            "`SQLITE_DQS=0`, `SQLITE_DEFAULT_FOREIGN_KEYS=1`, `SQLITE_OMIT_LOAD_EXTENSION` and "
+            "`SQLITE_OMIT_DEPRECATED`; no shell (`shell.c`) and no `sqlite3ext.h`"
+        ),
+        uzengine_folder=None,
+        uzengine_note=(
+            "UzEngine's tree at the commit has no SQLite (`runtime/thirdparty/` holds no SQLite "
+            "folder), so there is nothing to compare."
+        ),
+        core=False,
+        importer=IMPORTER_STORE,
+    ),
+    Library(
+        name="zstd",
+        folder="zstd",
+        upstream="https://github.com/facebook/zstd",
+        version="v1.5.7",
+        commit="f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+        archive_url="https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz",
+        archive_name="zstd-1.5.7.tar.gz",
+        archive_sha256="eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3",
+        archive_root="zstd-1.5.7/",
+        version_source=(
+            "UzPainter's selection: the newest zstd release on the retrieval date (tag `v1.5.7`, "
+            "published 2025-02-19; the archive SHA-256 equals the release's `.sha256` asset); "
+            "payload compression of the `.uzp` container (decision 010, "
+            "`docs/architecture/09-project-file-format.md` §1)"
+        ),
+        select=(
+            "LICENSE",
+            "lib/zstd.h",
+            "lib/zstd_errors.h",
+            "lib/common/*",
+            "lib/compress/*",
+            "lib/decompress/*.c",
+            "lib/decompress/*.h",
+        ),
+        licence_files=("LICENSE",),
+        include_dirs=("lib",),
+        sources=(
+            "lib/common/debug.c",
+            "lib/common/entropy_common.c",
+            "lib/common/error_private.c",
+            "lib/common/fse_decompress.c",
+            "lib/common/pool.c",
+            "lib/common/threading.c",
+            "lib/common/xxhash.c",
+            "lib/common/zstd_common.c",
+            "lib/compress/fse_compress.c",
+            "lib/compress/hist.c",
+            "lib/compress/huf_compress.c",
+            "lib/compress/zstd_compress.c",
+            "lib/compress/zstd_compress_literals.c",
+            "lib/compress/zstd_compress_sequences.c",
+            "lib/compress/zstd_compress_superblock.c",
+            "lib/compress/zstd_double_fast.c",
+            "lib/compress/zstd_fast.c",
+            "lib/compress/zstd_lazy.c",
+            "lib/compress/zstd_ldm.c",
+            "lib/compress/zstd_opt.c",
+            "lib/compress/zstd_preSplit.c",
+            "lib/compress/zstdmt_compress.c",
+            "lib/decompress/huf_decompress.c",
+            "lib/decompress/zstd_ddict.c",
+            "lib/decompress/zstd_decompress.c",
+            "lib/decompress/zstd_decompress_block.c",
+        ),
+        licence=(
+            "BSD-3-Clause (`LICENSE`), elected from upstream's dual licence (BSD or GPLv2, "
+            "stated in every source file; the GPLv2 text `COPYING` is not vendored and not used)"
+        ),
+        role=STORE_ROLE,
+        features=(
+            "The compression and decompression units of `lib/` compiled as C11 with "
+            "`ZSTD_DISABLE_ASM` (the x86-64 assembly `huf_decompress_amd64.S` is not vendored) and "
+            "without `ZSTD_MULTITHREAD` or `ZSTD_LEGACY_SUPPORT`; no dictionary builder, legacy "
+            "formats, deprecated API, programs, contrib or tests"
+        ),
+        uzengine_folder=None,
+        uzengine_note=(
+            "UzEngine's tree at the commit has no zstd (`runtime/thirdparty/` holds no zstd "
+            "folder), so there is nothing to compare."
+        ),
+        core=False,
+        importer=IMPORTER_STORE,
+    ),
+    Library(
+        name="ufbx",
+        folder="ufbx",
+        upstream="https://github.com/ufbx/ufbx",
+        version="v0.23.1",
+        commit="26a482ae66871d7de36eb722aa060bce95bce274",
+        archive_url="https://github.com/ufbx/ufbx/archive/refs/tags/v0.23.1.tar.gz",
+        archive_name="ufbx-v0.23.1.tar.gz",
+        archive_sha256="21edd1021dfb430e37aa6214c9b3bbaa5634b1859cbbef7231e738af4f19c956",
+        archive_root="ufbx-0.23.1/",
+        version_source=(
+            "`runtime/thirdparty/README.md` lists ufbx 0.14.3; UzPainter selects the newest ufbx "
+            "release on the retrieval date instead (tag `v0.23.1`, tagged 2026-09-25; ufbx "
+            "publishes its releases as annotated tags, not GitHub releases), for the FBX importer "
+            "of `docs/architecture/12-mesh-import.md` §2"
+        ),
+        select=("ufbx.c", "ufbx.h", "LICENSE"),
+        licence_files=("LICENSE",),
+        include_dirs=(".",),
+        sources=("ufbx.c",),
+        licence=(
+            'MIT or public domain, the user\'s choice (`LICENSE`: "ALTERNATIVE A - MIT License", '
+            'Copyright (c) 2020 Samuli Raivio; "ALTERNATIVE B - Public Domain '
+            '(www.unlicense.org)"); `ufbx.c` and `ufbx.h` carry no notice of their own'
+        ),
+        role=MESH_ROLE,
+        features=(
+            "`ufbx.c` compiled as C11 with the default configuration (no `UFBX_CONFIG_HEADER`, "
+            "`UFBX_CONFIG_SOURCE` or `UFBX_HEADER_PATH`); the `extra/` helpers, language "
+            "bindings, examples, tests, test data and `misc/` tools are not vendored"
+        ),
+        uzengine_folder="ufbx",
+        differences={
+            "ufbx.c": (
+                "version, not a patch: UzEngine's blob is byte-equal to `ufbx.c` of upstream tag "
+                "`v0.14.3` (commit `19bdb7e7`); UzPainter vendors `v0.23.1`"
+            ),
+            "ufbx.h": (
+                "version, not a patch: UzEngine's blob is byte-equal to `ufbx.h` of upstream tag "
+                "`v0.14.3` (`UFBX_HEADER_VERSION` 0.14.3); UzPainter vendors `v0.23.1`"
+            ),
+        },
+        core=False,
+        importer=IMPORTER_MESH,
+    ),
+    Library(
+        name="simdjson",
+        folder="simdjson",
+        upstream="https://github.com/simdjson/simdjson",
+        version="v4.6.11",
+        commit="f5de14f09256982933af2849beb43778bd421ca7",
+        archive_url="https://github.com/simdjson/simdjson/archive/refs/tags/v4.6.11.tar.gz",
+        archive_name="simdjson-v4.6.11.tar.gz",
+        archive_sha256="61d948fc24f0d793829ad658058e7597d064988a89b4607ea02e401a82df98ff",
+        archive_root="simdjson-4.6.11/",
+        version_source=(
+            "UzPainter's selection: the simdjson version fastgltf `v0.9.1` pins "
+            '(`cmake/dependencies.cmake`: `SIMDJSON_TARGET_VERSION` "4.6.11", whose '
+            "`singleheader/simdjson.h` and `singleheader/simdjson.cpp` fastgltf's build "
+            "downloads); tag `v4.6.11`, released 2026-09-05. The newer 5.0.x releases "
+            "(2026-09-28 to 2026-10-08) start a major version fastgltf v0.9.1 does not name"
+        ),
+        select=("singleheader/simdjson.h", "singleheader/simdjson.cpp", "LICENSE", "LICENSE-MIT"),
+        licence_files=("LICENSE", "LICENSE-MIT"),
+        include_dirs=("singleheader",),
+        sources=("singleheader/simdjson.cpp",),
+        licence=(
+            "Apache-2.0 (`LICENSE`) or MIT (`LICENSE-MIT`), the user's choice (`README.md` "
+            '"License"); the amalgamation embeds code under its own notices (licence notes below)'
+        ),
+        role=MESH_ROLE,
+        features=(
+            "The amalgamated single-header build: `singleheader/simdjson.cpp` compiled as C++ "
+            "with run-time selection of the SIMD kernels (no architecture flags; `-mevex512` lets "
+            "Zig 0.15.2's clang compile the AVX-512 `icelake` kernel's target regions against the "
+            "baseline x86-64 CPU), `singleheader/simdjson.h` included by fastgltf; the split "
+            "`include/` and `src/` trees, the amalgamation script and demo, `singleheader.zip`, "
+            "benchmarks, tools, tests and documentation are not vendored"
+        ),
+        uzengine_folder=None,
+        uzengine_note=(
+            "UzEngine's tree at the commit has no simdjson (`runtime/thirdparty/` holds no "
+            "simdjson folder; its `fastgltf` entry is a submodule link without files), so there "
+            "is nothing to compare."
+        ),
+        licence_notes=(
+            "The tag has no `NOTICE` file, so Apache-2.0 §4(d) adds no attribution text.",
+            "Both amalgamated files embed `simdjson/internal/instruction_set.h`, adapted from "
+            "PyTorch's `simd.h` under BSD-3-Clause with its notice in place (Facebook, Idiap "
+            "Research Institute, Deepmind Technologies, NEC Laboratories America, NYU); clause 2 "
+            "requires binary distributions to reproduce that notice.",
+            "`simdjson.cpp` embeds `to_chars.cpp`, the Grisu2 conversion adapted from JSON for "
+            'Modern C++, which states "distributed under the MIT license, Copyright (c) 2009 '
+            'Florian Loitsch"; its UTF-8 validator is credited "based on code from Google '
+            'Fuchsia (Apache Licensed)".',
+            "string-view lite (Boost Software License 1.0, Martin Moene) is embedded inside "
+            "`#ifndef SIMDJSON_HAS_STRING_VIEW`, a branch a C++17-or-later build never compiles.",
+        ),
+        core=False,
+        importer=IMPORTER_MESH,
+    ),
+    Library(
+        name="fastgltf",
+        folder="fastgltf",
+        upstream="https://github.com/spnda/fastgltf",
+        version="v0.9.1",
+        commit="705564d4d54500ae88befb0db9e361e447923655",
+        archive_url="https://github.com/spnda/fastgltf/archive/refs/tags/v0.9.1.tar.gz",
+        archive_name="fastgltf-v0.9.1.tar.gz",
+        archive_sha256="d8705a496deb2831775baeef5009be36d24bf3d10f8d29ab016e977d0119c872",
+        archive_root="fastgltf-0.9.1/",
+        version_source=(
+            "UzPainter's selection: the newest fastgltf release on the retrieval date (tag "
+            "`v0.9.1`, published 2026-09-27), for the glTF/GLB importer of "
+            "`docs/architecture/12-mesh-import.md` §2; its JSON parser is `thirdparty/simdjson/`"
+        ),
+        select=("include/fastgltf/*", "src/*.cpp", "LICENSE.md"),
+        licence_files=("LICENSE.md",),
+        include_dirs=("include",),
+        sources=("src/base64.cpp", "src/fastgltf.cpp", "src/io.cpp"),
+        licence=(
+            "MIT (`LICENSE.md`, Copyright (c) 2022 - 2026 Sean Apeler; every selected header and "
+            "source carries the same notice)"
+        ),
+        role=MESH_ROLE,
+        features=(
+            "The three library units `src/base64.cpp`, `src/fastgltf.cpp` and `src/io.cpp` "
+            "compiled as C++ against `thirdparty/simdjson/` (`src/fastgltf.cpp` with `-mcrc32`, "
+            "which its `sse4.2` CRC-32C target region needs under Zig 0.15.2's clang; the "
+            "function is chosen at run time only on CPUs with SSE4.2) with the CMake option "
+            "defaults (`FASTGLTF_USE_CUSTOM_SMALLVECTOR`, `FASTGLTF_DISABLE_CUSTOM_MEMORY_POOL`, "
+            "`FASTGLTF_USE_64BIT_FLOAT`, `FASTGLTF_ENABLE_KHR_IMPLICIT_SHAPES` and "
+            "`FASTGLTF_ENABLE_KHR_PHYSICS_RIGID_BODIES` all off); the headers `include/fastgltf/` "
+            "(the DirectXMath and glm element-trait headers are vendored with them but no "
+            "compiled unit includes them); no C++ module interface `src/fastgltf.ixx`, CMake "
+            "files, downloaded `deps/`, tests, examples or documentation"
+        ),
+        uzengine_folder="fastgltf",
+        uzengine_note=(
+            "UzEngine's tree records `runtime/thirdparty/fastgltf` only as a submodule link "
+            "(gitlink to fastgltf commit `d4734a7e55d8d25155e755d895e018e423845cd0`, committed "
+            "upstream 2024-07-25) with no `.gitmodules` and no files at the commit, so there is "
+            "nothing to compare."
+        ),
+        core=False,
+        importer=IMPORTER_MESH,
+    ),
 )
 
 LIBRARY_BY_NAME = {lib.name: lib for lib in LIBRARIES}
@@ -1469,13 +1746,105 @@ APPLICATION_SYSTEM_INCLUDES: dict[str, str] = {
     "miniz.h": "spng with `SPNG_USE_MINIZ`, not enabled (zlib is used)",
     "tests/framac_stubs.h": "spng's Frama-C analysis branch (`__FRAMAC__`), not built",
     "basetsd.h": _WINSDK + " (CPython's `pyconfig.h`, `_MSC_VER` branch)",
-    "winapifamily.h": _WINSDK + " (CPython's `pyconfig.h`)",
-    "intrin.h": _INTRINSICS + " (CPython's MSVC branches)",
+    "winapifamily.h": _WINSDK + " (CPython's `pyconfig.h`; fastgltf's `core.hpp`, `_WIN32`)",
+    "intrin.h": _INTRINSICS + " (MSVC branches of CPython, simdjson and fastgltf)",
     "stat.h": "CPython's `HAVE_STAT_H` branch, not defined by the Windows `pyconfig.h`",
     "bits/alltypes.h": "CPython's WASI branch (`pthread_stubs.h`), not built",
     "cxxabi.h": "pybind11's `__GNUG__` branch; the C++ ABI header of Zig's libc++abi",
     "yvals.h": "pybind11's MSVC debug branch (`_MSC_VER` and `_DEBUG`), not built",
     "crtdefs.h": "pybind11's MSVC debug branch (`_MSC_VER` and `_DEBUG`), not built",
+    "process.h": _CRT,
+    "stdalign.h": _CRT,
+    "mmintrin.h": _INTRINSICS,
+    "emmintrin.h": _INTRINSICS,
+    "TargetConditionals.h": "SQLite's `__APPLE__` branch, not built",
+    "sys/sysctl.h": "SQLite's Apple zone allocator and fastgltf's Apple ARM CRC branch "
+    "(`__APPLE__`), not built",
+    "malloc/malloc.h": "SQLite's Apple zone allocator (`__APPLE__`), not built",
+    "libkern/OSAtomic.h": "SQLite's Apple zone allocator (`__APPLE__`), not built",
+    "mingw.h": "SQLite's `_HAVE_MINGW_H` branch (autoconf builds only), not defined",
+    "_mingw.h": "SQLite's `_HAVE__MINGW_H` branch (autoconf builds only), not defined",
+    "sqlite_cfg.h": "SQLite's `_HAVE_SQLITE_CONFIG_H` branch (autoconf builds only), not defined",
+    "cmnintrin.h": "SQLite's Windows CE branch (`_WIN32_WCE`), not built",
+    "profileapi.h": "SQLite's `hwtime.h` MSVC branch (`_MSC_VER`), not built; " + _WINSDK,
+    "vxWorks.h": "SQLite's VxWorks branch (`__RTP__`, `_WRS_KERNEL`), not built",
+    "semaphore.h": "SQLite's Unix VFS, VxWorks branch (`SQLITE_OS_UNIX`), not built",
+    "sys/cygwin.h": "SQLite's Cygwin branch (`__CYGWIN__`), not built",
+    "sys/time.h": "SQLite's kvvfs (`SQLITE_OS_KV`), not built",
+    "sys/ioctl.h": "SQLite's Unix VFS (`SQLITE_OS_UNIX`), not built",
+    "sys/mman.h": "SQLite's Unix VFS (`SQLITE_OS_UNIX`), simdjson's `#ifndef _WIN32` and "
+    "fastgltf's Apple/Linux memory-mapping branches, not built",
+    "sys/file.h": "SQLite's Unix VFS (`SQLITE_OS_UNIX`) and fastgltf's Apple/Linux "
+    "memory-mapping branch, not built",
+    "sys/param.h": "SQLite's Unix VFS (`SQLITE_OS_UNIX`), not built",
+    "sys/mount.h": "SQLite's Unix VFS (`SQLITE_OS_UNIX`), not built",
+    "sys/dcmd_blk.h": "SQLite's Unix VFS, QNX branch (`SQLITE_OS_UNIX`), not built",
+    "sys/statvfs.h": "SQLite's Unix VFS, QNX branch (`SQLITE_OS_UNIX`), not built",
+    "utime.h": "SQLite's Unix VFS (`SQLITE_OS_UNIX`, `HAVE_UTIME`), not built",
+    "dlfcn.h": "SQLite's Unix VFS extension loading (`SQLITE_OMIT_LOAD_EXTENSION` is set)",
+    "sys/uio.h": "SQLite's `carray` extension (`SQLITE_ENABLE_CARRAY`), not enabled",
+    "sqlite3rtree.h": "SQLite's non-amalgamation branch (`SQLITE_AMALGAMATION` is defined)",
+    "tclsqlite.h": "SQLite's test harness branch (`SQLITE_TEST`), not built",
+    "unicode/ubrk.h": "SQLite's ICU extension (`SQLITE_ENABLE_ICU`), not enabled",
+    "unicode/ucol.h": "SQLite's ICU extension (`SQLITE_ENABLE_ICU`), not enabled",
+    "unicode/uregex.h": "SQLite's ICU extension (`SQLITE_ENABLE_ICU`), not enabled",
+    "unicode/ustring.h": "SQLite's ICU extension (`SQLITE_ENABLE_ICU`), not enabled",
+    "unicode/utf16.h": "SQLite's ICU extension (`SQLITE_ENABLE_ICU`), not enabled",
+    "unicode/utypes.h": "SQLite's ICU extension (`SQLITE_ENABLE_ICU`), not enabled",
+    "intrinsics.h": "zstd's IAR ARM branch (`__ICCARM__`), not built",
+    "cet.h": "zstd's ELF branch (`__ELF__`), not built for Windows",
+    "altivec.h": "zstd's xxHash POWER branch and simdjson's `ppc64` kernel, not built for x64",
+    "s390intrin.h": "zstd's xxHash s390x branch, not built for x64",
+    "arm_sve.h": _ARM,
+    "sys/times.h": "zstd's multithreaded debug branch (`ZSTD_MULTITHREAD`), not built",
+    "../legacy/zstd_legacy.h": "zstd's legacy formats (`ZSTD_LEGACY_SUPPORT`), not built",
+    "xmmintrin.h": _INTRINSICS + " (ufbx's x64 SSE branch)",
+    "nmmintrin.h": _INTRINSICS + " (fastgltf's x86 CRC-32C branch)",
+    "x86intrin.h": _INTRINSICS + " (simdjson's x86 kernels outside Visual Studio)",
+    "smmintrin.h": _INTRINSICS + " (fastgltf's x86 Clang/GCC base64 branch; simdjson's "
+    "`SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built)",
+    "avxintrin.h": _INTRINSICS + " (fastgltf's x86 Clang/GCC base64 branch; simdjson's "
+    "`SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built)",
+    "avx2intrin.h": _INTRINSICS + " (fastgltf's x86 Clang/GCC base64 branch; simdjson's "
+    "`SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built)",
+    "tmmintrin.h": _INTRINSICS + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "wmmintrin.h": _INTRINSICS + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "bmiintrin.h": _INTRINSICS + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "lzcntintrin.h": _INTRINSICS + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "avx512fintrin.h": _INTRINSICS
+    + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "avx512dqintrin.h": _INTRINSICS
+    + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "avx512cdintrin.h": _INTRINSICS
+    + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "avx512bwintrin.h": _INTRINSICS
+    + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "avx512vlintrin.h": _INTRINSICS
+    + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "avx512vbmiintrin.h": _INTRINSICS
+    + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "avx512vbmi2intrin.h": _INTRINSICS
+    + ", simdjson's `SIMDJSON_CLANG_VISUAL_STUDIO` branch, not built",
+    "cpuid.h": _INTRINSICS
+    + ", simdjson's `HAVE_GCC_GET_CPUID` and `USE_GCC_GET_CPUID` branch, neither defined",
+    "CppCoreCheck\\Warnings.h": "simdjson's Visual Studio Code Analysis branch (`_MSC_VER`), "
+    "not built",
+    "nonstd/string_view.tweak.hpp": "simdjson's string-view lite (`SIMDJSON_HAS_STRING_VIEW` "
+    "undefined, before C++17 only), not built",
+    "meta": "simdjson's static reflection (`SIMDJSON_STATIC_REFLECTION`, 0 by default), not built",
+    "strings.h": "simdjson's non-Windows branch (`#ifndef _WIN32`), not built",
+    "endian.h": "simdjson's non-Windows byte-order branch, not built",
+    "machine/endian.h": "simdjson's Apple/FreeBSD byte-order branch, not built",
+    "sys/byteorder.h": "simdjson's Solaris byte-order branch, not built",
+    "sys/endian.h": "simdjson's z/OS and FreeBSD byte-order branches, not built",
+    "byteswap.h": "simdjson's Linux byte-swap branch (`__linux__`), not built",
+    "sys/auxv.h": "simdjson's LoongArch Linux CPU detection, not built for x64",
+    "lsxintrin.h": "simdjson's LoongArch kernels (`lsx`, `lasx`), not built for x64",
+    "lasxintrin.h": "simdjson's LoongArch kernels (`lasx`), not built for x64",
+    "riscv_vector.h": "simdjson's RISC-V kernels (`rvv`), not built for x64",
+    "riscv_bitmanip.h": "simdjson's RISC-V kernels (`__riscv_zbc`), not built for x64",
+    "arm_acle.h": _ARM + " (fastgltf's `FASTGLTF_ENABLE_ARMV8_CRC`)",
+    "android/asset_manager.h": "fastgltf's Android branch (`__ANDROID__`), not built",
 }
 
 # The headers of third-party code `UzPainter.exe` includes directly (Embree's C API, CPython's C

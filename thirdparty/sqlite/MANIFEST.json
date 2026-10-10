@@ -1,0 +1,28 @@
+{
+  "library": "SQLite",
+  "upstream": "https://www.sqlite.org/",
+  "version": "3.54.0",
+  "commit": "be8d059e9a49089ab2dce5ed26dd87aaf598fdc5fbe0b107c0dd758464bcd5e3",
+  "archive_url": "https://www.sqlite.org/2026/sqlite-amalgamation-3540000.zip",
+  "archive_sha256": "68e913b0fe8ec6b4e5f391c594a28872884e80d6cd042a1e50c957be46b5aa4d",
+  "archive_root": "sqlite-amalgamation-3540000/",
+  "files": [
+    {
+      "path": "sqlite3.c",
+      "sha256": "2da161e310ef0aba3465f22a4d12b8a43723236f0942fa76e8aac523c3317243",
+      "size": 9580800
+    },
+    {
+      "path": "sqlite3.h",
+      "sha256": "cd20a2877bc82b94e36c1093b727dd87cfa3c1d581aac6e240925535cbd90166",
+      "size": 695737
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": null,
+  "comparison": [],
+  "not_in_uzengine": [
+    "sqlite3.c",
+    "sqlite3.h"
+  ]
+}

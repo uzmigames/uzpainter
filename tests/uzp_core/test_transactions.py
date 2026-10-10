@@ -27,8 +27,9 @@ SCHEMA_PATH = REPO_ROOT / "src" / "uzp_core" / "schema" / "manifest.schema.json"
 # SHA-256 of the canonical manifest of the document `integrated-manifest` builds through
 # transactions (phase1.3_document-model 3.2). Pinned: the hosted CPU lane and a local run on the
 # owner's machine (decision 028) both assert this value, so equal results on the two machines
-# are a passing test on each.
-INTEGRATED_DIGEST = "c2f28a5f8c7296319b31e5d9286acb85257aac5022d091aed9fdc7fcb803e0c2"
+# are a passing test on each. Re-pinned by phase1.4_mesh-importers for decision 031 (unset tangent
+# space = PerVertex); the only byte that changed is settings.tangent_space.
+INTEGRATED_DIGEST = "ec8de0f0b16ca66f95b4da628d9d5066087435d57f70b9d68bb1b6e3db03325c"
 
 NATIVE_CASES = (
     "snapshot_immutability",  # 3.1

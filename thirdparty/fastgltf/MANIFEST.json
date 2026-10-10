@@ -1,0 +1,88 @@
+{
+  "library": "fastgltf",
+  "upstream": "https://github.com/spnda/fastgltf",
+  "version": "v0.9.1",
+  "commit": "705564d4d54500ae88befb0db9e361e447923655",
+  "archive_url": "https://github.com/spnda/fastgltf/archive/refs/tags/v0.9.1.tar.gz",
+  "archive_sha256": "d8705a496deb2831775baeef5009be36d24bf3d10f8d29ab016e977d0119c872",
+  "archive_root": "fastgltf-0.9.1/",
+  "files": [
+    {
+      "path": "LICENSE.md",
+      "sha256": "3b46ffb0349f0fcf6c6d26fcb0d7d98f89f42285adff866f9fc94c7a3029a043",
+      "size": 1101
+    },
+    {
+      "path": "include/fastgltf/base64.hpp",
+      "sha256": "9f96a3931839b5c6b95a69a87e92bafdfbed301bbe3b6bd4804929ecb1cd9264",
+      "size": 4426
+    },
+    {
+      "path": "include/fastgltf/core.hpp",
+      "sha256": "9687c65e4baabad385aa3e5f596b7dd4ad9beaaedbde11526ae3647155d5859b",
+      "size": 46502
+    },
+    {
+      "path": "include/fastgltf/dxmath_element_traits.hpp",
+      "sha256": "ed5385625d1a15e36451951d36e2095377fc662bb3278b1c12931bec8fc7cf2e",
+      "size": 4005
+    },
+    {
+      "path": "include/fastgltf/glm_element_traits.hpp",
+      "sha256": "953240c7c7d5ce547ea38cf1e1f8bedb196b7d22de47e26d67c652b9ab971286",
+      "size": 4006
+    },
+    {
+      "path": "include/fastgltf/math.hpp",
+      "sha256": "a9193b46410525b93f730d6bec7db4dba0982ca8205576efb1581b9ee0da27ce",
+      "size": 33836
+    },
+    {
+      "path": "include/fastgltf/tools.hpp",
+      "sha256": "667c88480db7fa86bf91c515a85aeefd6fd69443b2ae3b991d8fe67ee66a0cf1",
+      "size": 39580
+    },
+    {
+      "path": "include/fastgltf/types.hpp",
+      "sha256": "1420914aaf068f09f3d235a88d19c028746fc38a579b48089906091cfff5fb45",
+      "size": 87580
+    },
+    {
+      "path": "include/fastgltf/util.hpp",
+      "sha256": "2124c5c553603e768631cc0136fac6156ef75e77765a88f7dcfe7d0d8ab91acf",
+      "size": 19028
+    },
+    {
+      "path": "src/base64.cpp",
+      "sha256": "f2beb881a56a73a094f4672daf27941ab84c28c91ac426e372da7d299de3fe25",
+      "size": 17866
+    },
+    {
+      "path": "src/fastgltf.cpp",
+      "sha256": "228c36a750dd47bb0ef0850701b37a0b6a50b3e1ef336167ee4042197a5db178",
+      "size": 260908
+    },
+    {
+      "path": "src/io.cpp",
+      "sha256": "72c059181dde0a42e07695a4dd8ac94de97e2c538691e12e59d45b30b991b3a3",
+      "size": 13637
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/fastgltf",
+  "comparison": [],
+  "not_in_uzengine": [
+    "LICENSE.md",
+    "include/fastgltf/base64.hpp",
+    "include/fastgltf/core.hpp",
+    "include/fastgltf/dxmath_element_traits.hpp",
+    "include/fastgltf/glm_element_traits.hpp",
+    "include/fastgltf/math.hpp",
+    "include/fastgltf/tools.hpp",
+    "include/fastgltf/types.hpp",
+    "include/fastgltf/util.hpp",
+    "src/base64.cpp",
+    "src/fastgltf.cpp",
+    "src/io.cpp"
+  ]
+}

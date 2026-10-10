@@ -1,0 +1,133 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "polygon-triangulation",
+  "description": "Triangulation of polygonal faces at mesh import (12-mesh-import.md section 3): the triangles Painter splits each polygon of an OBJ into, identified from its Position bake of non-planar quads, a pentagon and hexagons, against the rule of UzPainter's production importer (src/mesh/mesh_builder.cpp).",
+  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "corpus": [
+    "phase1/mesh-import/polygon-triangulation"
+  ],
+  "entries": [
+    {
+      "entry_id": "polygon-split",
+      "subject": "Triangles a face c0 .. c(n-1) of an imported OBJ is split into",
+      "status": "exact",
+      "formula": "A face c0 .. c(n-1) with n > 3 becomes the fan from its last corner: the triangles (c[i], c[i+1], c(n-1)) for i = 0 .. n-3, following the face's corner order whatever the polygon's shape, planarity or shortest diagonal; a quad is split along c1-c3.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.baking.BakingParameters; textureset.MeshMapUsage.Position"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "rule",
+          "value": "fan_from_last_corner",
+          "origin": "fitted"
+        },
+        {
+          "name": "uzpainter_polygon_a",
+          "value": "c1-c3",
+          "origin": "authored"
+        },
+        {
+          "name": "painter_polygon_a",
+          "value": "c1-c3",
+          "origin": "fitted"
+        },
+        {
+          "name": "uzpainter_polygon_b",
+          "value": "c1-c3",
+          "origin": "authored"
+        },
+        {
+          "name": "painter_polygon_b",
+          "value": "c1-c3",
+          "origin": "fitted"
+        },
+        {
+          "name": "uzpainter_polygon_c",
+          "value": "c1-c3",
+          "origin": "authored"
+        },
+        {
+          "name": "painter_polygon_c",
+          "value": "c1-c3",
+          "origin": "fitted"
+        },
+        {
+          "name": "uzpainter_polygon_d",
+          "value": "c1-c3",
+          "origin": "authored"
+        },
+        {
+          "name": "painter_polygon_d",
+          "value": "c1-c3",
+          "origin": "fitted"
+        },
+        {
+          "name": "uzpainter_polygon_e",
+          "value": "c1-c4+c2-c4",
+          "origin": "authored"
+        },
+        {
+          "name": "painter_polygon_e",
+          "value": "c1-c4+c2-c4",
+          "origin": "fitted"
+        },
+        {
+          "name": "uzpainter_polygon_f",
+          "value": "c1-c5+c2-c5+c3-c5",
+          "origin": "authored"
+        },
+        {
+          "name": "painter_polygon_f",
+          "value": "c1-c5+c2-c5+c3-c5",
+          "origin": "fitted"
+        },
+        {
+          "name": "uzpainter_polygon_g",
+          "value": "c1-c5+c2-c5+c3-c5",
+          "origin": "authored"
+        },
+        {
+          "name": "painter_polygon_g",
+          "value": "c1-c5+c2-c5+c3-c5",
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "phase1/mesh-import/polygon-triangulation",
+          "map": "position/triangulation-per-polygon",
+          "compared_against": "r1",
+          "unit": "polygons triangulated otherwise",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 93540
+          }
+        },
+        {
+          "golden_id": "phase1/mesh-import/polygon-triangulation",
+          "map": "position/triangulation-per-polygon",
+          "compared_against": "r2",
+          "unit": "polygons triangulated otherwise",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 93540
+          }
+        }
+      ]
+    }
+  ]
+}
