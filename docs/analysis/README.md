@@ -28,6 +28,7 @@ Clean-room note (decision 002, `docs/licensing-and-clean-room.md`): some of thes
 | `reviews/uzengine-renderer-astra-review.md` | 20 findings, 48 ledger claims (3 blockers: parity contract, baseline, stride defect) |
 | `reviews/technology-options-astra-review.md` | 32 findings, 10 missing options |
 | `reviews/docs-set-astra-review.md` | Final review of the `docs/` set: 24 document verdicts, 23 findings (3 blockers: F01 preset provenance, F02 storage-document internals, F03 recorded oracle data shown as public), licence audit, remaining disagreements |
+| `reviews/docs-set-astra-verification.md` | Verification of the round-4 corrections: 21 findings closed, R01 (idempotency after pruning) and R02 (fixed-name export delivery) partial, new N01 (migration exclusions), N02 (revert raster binding), N03 (MCP acceptance by milestone), N04 (Phase 2 capture modes); all corrected in the architecture docs, PRD, roadmap and DAG |
 
 ## Review responses
 

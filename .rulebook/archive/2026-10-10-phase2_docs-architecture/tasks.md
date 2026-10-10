@@ -7,3 +7,5 @@
 - [x] 2.1 Update or create documentation covering the implementation (the deliverable of this task is documentation; `docs/README.md` indexes it)
 - [ ] 2.2 Write tests covering the new behavior (waive: documentation-only task, no code)
 - [ ] 2.3 Run tests and confirm they pass (waive: documentation-only task, no code)
+
+<!-- tail-waiver: documentation-only task: no code exists, so no tests to write or run; docs lint (codespell) passes; Astra's final verification findings R01, R02, N01-N04 applied -->

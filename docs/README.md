@@ -42,6 +42,7 @@ Historical analyses and discussion files are not implementation inputs until an 
 | `analysis/clean-room-redactions.md` | Record of the clean-room sanitisation pass over `docs/analysis/`: every redaction by file and category, and the borderline passages kept with the reason |
 | `analysis/substance-parity/08-review-response.md`, `analysis/assets3d-pipeline/09-review-response.md`, `analysis/uzengine-renderer/10-review-response.md`, `analysis/technology-options/05-review-response.md` | Review responses: per-finding dispositions of Astra's four analysis reviews and the corrections applied to the analyses |
 | `analysis/reviews/docs-set-astra-review.md` | Astra's final review of this documentation set: document verdicts, 23 findings (3 blockers), licence audit |
+| `analysis/reviews/docs-set-astra-verification.md` | Astra's verification after round 4: 21 of 23 findings closed, 2 partial (R01, R02) and 4 new (N01–N04), all corrected afterwards |
 | `analysis/architecture-discussion/06-round4-changes.md` | Round-4 change record: how the owner's answers of 2026-10-10 and the docs-set review were applied to this set |
 
 ## How to use these docs when building a subsystem

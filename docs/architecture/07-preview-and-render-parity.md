@@ -132,5 +132,5 @@ All UzPainter captures are window-independent (VIS-02, NFR-01); there is no hidd
 ## 8. Settling evidence
 
 - **Phase 0 (P0-FEAS-RENDER):** an answer, with evidence, for every "not confirmed" row of §2.1; the qualified capture procedure; two session-separated references plus one k·S reference per analytic fixture; the noise-floor report; first clean-room lobe fits with residuals; DXR Tier 1.1 and Vulkan ray-query probes on the owner's GPU; the analytic fixture values proposed to the owner.
-- **Phase 2 (P2-PREVIEW):** `painter_viewport`, display presets, `capture` in all modes, preview window.
+- **Phase 2 (P2-PREVIEW):** `painter_viewport`, display presets, preview window. Phase 2 provides capture for preview and diagnostic modes; `painter_iray` remains an explicit unavailable capability until P3-PATHTRACER passes.
 - **Phase 3 (P3-PATHTRACER):** `painter_iray` on both backends; the cross-backend report; Vulkan ray tracing qualified against DXR on the analytic fixtures (`13-engine-integration.md` §7); the Tier 3 report with the exception proposals the owner must approve.
