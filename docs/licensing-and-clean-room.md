@@ -68,7 +68,7 @@ Compatibility means distribution alongside Apache-2.0 UzPainter code while retai
 | tinyexr (+ miniz) | EXR | BSD-3-Clause (tinyexr); MIT (miniz) | yes | |
 | ufbx | FBX parsing | MIT or public domain (dual) | yes | |
 | fastgltf | glTF parsing | MIT | yes | |
-| mikktspace (Mikkelsen) | Tangent basis | zlib-style licence in its header | yes | |
+| mikktspace (Mikkelsen) (`thirdparty/mikktspace/`) | Tangent basis | zlib licence, in the comment block heading `mikktspace.h` and `mikktspace.c` | yes | **Confirmed** 2026-10-10 against the pinned package (`ORIGIN.md`: commit, archive SHA-256, files, comparison with UzEngine's copy); upstream has no tags, commit `3e895b49` (head of `master`); vendored unpatched (UzEngine's copy patches an undefined shift; UzPainter compiles the upstream file with `-fno-sanitize=undefined`); build-only today: compiled into the Phase 0 prototype `uzp-normal-prototype.exe` (`phase0.9_normal-convention-fixture`) |
 | meshoptimizer | Vertex dedup | MIT | yes | |
 | nlohmann/json | JSON | MIT | yes | |
 | OpenColorIO 2.x | Colour management, if linked | BSD-3-Clause | yes | Only UzmiGames- or user-supplied configs; Adobe's OCIO configs are never shipped |
@@ -78,6 +78,7 @@ Compatibility means distribution alongside Apache-2.0 UzPainter code while retai
 | pbrt-v4 | Literature (§2) | Apache-2.0 (source); book text is the authors' copyright | yes | Consulted; any copied code is vendored with its notice |
 | HDRIs for UzPainter's own display presets | Reference lighting | Poly Haven CC0 or UzmiGames-authored | yes | Adobe's environments are never shipped; users may point to their own files by hash |
 | GoogleTest | Tests | BSD-3-Clause | yes | Not shipped |
+| OpenEXR Python binding (`OpenEXR` on PyPI) | Dev-only tool dependency: decodes Painter's float (OpenEXR 32f) exports in `tools/parity/fit/decode.py` on the owner's machine (stability classification and fits, `parity/FITS.md`) | BSD-3-Clause ("Copyright (c) Contributors to the OpenEXR Project", `LICENSE.md` in the wheel's `dist-info/licenses/`, upstream `AcademySoftwareFoundation/openexr`) | yes (tool, not shipped) | Version 3.4.8 (wheel `cp313-win_amd64`, installed with pip in the owner's Python 3.13; checked 2026-10-10); approved source S-EXR; not vendored, not in the release closure; hosted CI does not need it (oracle tests skip without the store) |
 | Zig toolchain | Build | MIT | yes (tool, not shipped) | |
 | EnTT, astcenc, basis_universal, FFmpeg, DLSS, LuaJIT, Slang, FXC, FidelityFX/Brixelizer (present in UzEngine's tree) | — | MIT / Apache-2.0 / Apache-2.0 / LGPL-2.1 / NVIDIA proprietary / MIT / MIT or Apache-2.0 / Microsoft / MIT | — | **Not vendored** (13 §2.4); outside the closure |
 
