@@ -5,7 +5,8 @@ render core (`build.zig`) and the local modifications UZP-MOD-001…006
 The native cases run `uzp-vendor-tests.exe` (`tests/native/vendor_modifications_test.cpp`),
 built once per module from a fresh cache so the build log lists every compile and link
 command. Cases that need a DX12 or Vulkan adapter skip when the executable reports none
-(exit code 77); on the owner's machine they run on the hardware adapter.
+(exit code 77) or when `UZP_NO_GPU=1` (set by hosted CI, decision 028); on the owner's machine
+they run on the hardware adapter.
 """
 
 from __future__ import annotations
@@ -42,6 +43,9 @@ UZENGINE_REPO = Path(os.environ.get("UZENGINE_REPO", r"E:\UzmiGames\UzEngine"))
 ZIG = shutil.which("zig")
 PINNED_ZIG = "0.15.2"
 EXIT_SKIP = 77
+# Native cases that create a DX12 or Vulkan device, and the flag hosted CI sets (no GPU).
+ADAPTER_CASES = frozenset({"factory", "fence", "agility"})
+NO_GPU_ENV = "UZP_NO_GPU"
 TEST_SOURCE = REPO_ROOT / "tests" / "native" / "vendor_modifications_test.cpp"
 ABSOLUTE_PATH_RE = re.compile(r"[A-Za-z]:[\\/][^\s\"'<>|]*")
 
@@ -123,7 +127,15 @@ def _inside(path: Path, roots: list[Path]) -> bool:
 
 
 def _run(build: Build, cwd: Path, *args: str) -> tuple[set[str], list[str], str]:
-    """Run one native case; return the passed checks, the failed checks and the output."""
+    """Run one native case; return the passed checks, the failed checks and the output.
+
+    Cases that create a DX12 or Vulkan device skip under `UZP_NO_GPU=1` (hosted CI has no
+    GPU, decision 028); they run on the owner's machine."""
+    if args[0] in ADAPTER_CASES and os.environ.get(NO_GPU_ENV) == "1":
+        pytest.skip(
+            f"{NO_GPU_ENV}=1: `{' '.join(args)}` needs a DX12/Vulkan hardware adapter; "
+            "run it locally on the owner's machine (decision 028)"
+        )
     proc = subprocess.run(
         [str(build.exe), *args],
         cwd=cwd,

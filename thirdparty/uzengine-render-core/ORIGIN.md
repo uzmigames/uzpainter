@@ -130,3 +130,23 @@ level); `13-engine-integration.md` §4.2 records both.
   `runtime/platform`, so Apache-2.0 §4(d) adds no text. UzPainter's root `NOTICE` names this code,
   its copyright line and the commit.
 - None of the 97 files carries a per-file licence or copyright header at the commit.
+
+## Vendoring check (§3.3)
+
+`python -m tools.vendoring.vendor_check` guards this folder on every commit (hosted CPU lane of
+`.github/workflows/parity.yml`). It prints one `[rule] message` line per failure and exits 1:
+
+| Rule | Fails on |
+|---|---|
+| `manifest` | `MANIFEST.json` or `MODIFICATIONS.md` unreadable, or a malformed entry |
+| `hash-drift` | a SHA-256 that differs from `vendored_sha256`; a `verbatim` file that differs from upstream; a `modified` entry whose id `MODIFICATIONS.md` does not log for that file |
+| `notice` | a `modified` file whose first line is not its Apache-2.0 §4(b) notice (ids, original path, commit) |
+| `coverage` | a file here without a manifest entry (`LICENSE`, `ORIGIN.md`, `MANIFEST.json`, `MODIFICATIONS.md` excepted), or an entry without its file |
+| `denylist` | a §2.4 exclusion (`asset/importers/**`, `asset/formats/uzmesh_format.*`, `asset/formats/uztexture_format.cpp`, `renderer/**`, `engine/config/**`, and the other `subset.DENYLIST` paths) |
+| `conflict-marker` | a git merge-conflict marker in any file here |
+| `build-path` | an include or library path of `zig build render-core native-tests --verbose-cc --verbose-link` outside the repository, the pinned Zig toolchain (installation, `lib_dir`, global cache except fetched packages) and the Windows SDK; a path into a UzEngine checkout is named as one |
+
+`--no-build` runs the folder rules only; `--build-log <file>` reads an existing verbose build log.
+After a logged change, run `python -m tools.vendoring.modifications` first so the manifest
+records the new hashes. `tests/vendoring/test_vendor_check.py` holds one broken copy of this
+folder per rule.

@@ -1,9 +1,7 @@
-# CI lanes of docs/architecture/14-parity-testing.md §7 and parity/STORE.md §5.
-# Hosted lane: no GPU, no private store; oracle comparisons there must report oracle_unavailable.
-# Oracle lane: the owner's machine (self-hosted GPU runner with Painter 12.1.0 and
-# UZP_PARITY_STORE), the only lane that compares against recorded Painter values. It runs only
-# after the owner registers the runner and sets the repository variable UZP_GPU_RUNNER=registered,
-# and never for pull requests.
+# Hosted CI of docs/architecture/14-parity-testing.md §7 and parity/STORE.md §5.
+# GitHub runs hosted CPU-only jobs (decision 028): no GPU, no self-hosted runner, no private
+# store. Oracle comparisons there must report oracle_unavailable; tests that need a DX12/Vulkan
+# adapter skip under UZP_NO_GPU=1. GPU and Painter-oracle checks run locally on the owner's machine.
 name: Parity
 
 on:
@@ -18,8 +16,10 @@ permissions:
 
 jobs:
   hosted:
-    name: Hosted CPU lane (no oracle store)
+    name: Hosted CPU lane (no GPU, no oracle store)
     runs-on: windows-latest
+    env:
+      UZP_NO_GPU: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -31,8 +31,16 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Zig (pinned, build.zig.zon)
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
       - name: Tools
         run: python -m pip install jsonschema==4.25.1 pyyaml==6.0.3 ruff==0.14.3 mypy==1.20.1 pytest==9.1.1
+
+      - name: Vendoring check (13-engine-integration.md §3.3)
+        run: python -m tools.vendoring.vendor_check
 
       - name: Type-check
         run: python -m mypy
@@ -51,23 +59,3 @@ jobs:
           $output
           if ($code -ne 1 -or -not ($output -match 'oracle_unavailable')) { exit 1 }
           exit 0
-
-  oracle:
-    name: Oracle lane (owner's machine, self-hosted GPU runner)
-    if: vars.UZP_GPU_RUNNER == 'registered' && github.event_name != 'pull_request'
-    runs-on: [ self-hosted, windows, x64, uzpainter-gpu ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Store integrity
-        shell: pwsh
-        run: python -m tools.parity.store verify
-
-      - name: Every public manifest resolves from the store
-        shell: pwsh
-        run: |
-          if (Test-Path parity/manifests) {
-            python -m tools.parity.store verify parity/manifests
-            exit $LASTEXITCODE
-          }

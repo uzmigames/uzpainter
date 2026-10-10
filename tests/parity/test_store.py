@@ -389,27 +389,21 @@ def _labels(job: dict[str, Any]) -> list[str]:
     return [runs_on] if isinstance(runs_on, str) else list(runs_on)
 
 
-def test_oracle_comparisons_run_only_on_the_owners_self_hosted_runner() -> None:
+def test_ci_is_hosted_cpu_only() -> None:
+    """Decision 028: no self-hosted or GPU runner, no store access, no oracle comparison of the
+    public manifests in CI (those run locally on the owner's machine), and the hosted lane sets
+    the GPU-skip flag."""
     jobs = _jobs()
-    compares = {
-        name
-        for name, job in jobs.items()
-        if any("parity/manifests" in step.get("run", "") for step in job["steps"])
-    }
-    assert compares == {"oracle"}
-    oracle = jobs["oracle"]
-    assert {"self-hosted", "windows", "x64", "uzpainter-gpu"} <= set(_labels(oracle))
-    assert "vars.UZP_GPU_RUNNER == 'registered'" in oracle["if"]
-    assert "github.event_name != 'pull_request'" in oracle["if"]
     for name, job in jobs.items():
-        if "self-hosted" not in _labels(job):
-            assert STORE_ENV not in json.dumps(job), name
-            assert "uzpainter-gpu" not in _labels(job), name
-    assert not any(
-        "tools.parity.store record" in step.get("run", "")
-        for job in jobs.values()
-        for step in job["steps"]
-    )
+        labels = set(_labels(job))
+        assert not labels & {"self-hosted", "uzpainter-gpu"}, name
+        assert STORE_ENV not in json.dumps(job), name
+        assert "UZP_GPU_RUNNER" not in json.dumps(job), name
+        for step in job["steps"]:
+            run = step.get("run", "")
+            assert "parity/manifests" not in run, name
+            assert "tools.parity.store record" not in run, name
+    assert jobs["hosted"]["env"]["UZP_NO_GPU"] == "1"
 
 
 def test_hosted_lane_checks_oracle_unavailable() -> None:
