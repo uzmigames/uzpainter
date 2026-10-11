@@ -191,8 +191,10 @@ ISOLATED_NOTES = (
     "on 9 of these 16 values). The after-reopen "
     "recording r2 differs from r1 itself on 16 of the experiment's 36 maps and on the sRGB8 and "
     "RGB8 maps of blend-inputs s2 (parity/reports/phase0/tier0-stability.md): both goldens are "
-    "unstable, so under decision 017 their comparisons are blocked, never passed; no exception "
-    "is proposed or in force (parity/exceptions.json unchanged). Run: "
+    "unstable, so under decision 032 r1 is their exact target and the register entries EXC-001 "
+    "and EXC-002 (parity/exceptions.json) bound their r2 comparisons by the r2 residuals below; "
+    "the 32-bit float residual against r1 stays a divergence "
+    "(phase1.10_compositor-float32-residual). Run: "
     "parity/reports/phase1/compositor-quantisation-profile.md."
 )
 LAYERQ_NOTES = (

@@ -687,7 +687,7 @@ int Project(const std::filesystem::path& path, const ImportSettings& settings) {
     core::DocumentState state;
     state.project_uuid = "00000000-0000-4000-8000-000000000001";
     state.project.versions.app_version = "0.0.0";
-    state.project.versions.evaluator_profile = "painter-12.1-layerq-linear";
+    state.project.versions.evaluator_profile = "painter-12.1-isolated-linear";
     core::Document doc(std::move(state));
     std::optional<ImportResult> result;
     try {

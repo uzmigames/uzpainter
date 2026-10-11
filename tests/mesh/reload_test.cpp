@@ -146,7 +146,7 @@ std::unique_ptr<Fixture> MakeFixture(std::string_view name) {
     core::DocumentState state;
     state.project_uuid = "00000000-0000-4000-8000-000000000016";
     state.project.versions.app_version = "0.0.0";
-    state.project.versions.evaluator_profile = "painter-12.1-layerq-linear";
+    state.project.versions.evaluator_profile = "painter-12.1-isolated-linear";
     state.project.settings.default_resolution = {128, 128, {}};
     f->doc = std::make_unique<core::Document>(std::move(state));
     const auto created = core::Execute(*f->doc, f->Request("project_create"), [&](core::Edit& edit) {

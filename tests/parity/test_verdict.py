@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from tools.parity.schemas import SCHEMA_DIR, Schema, is_valid, load_json
+from tools.parity.schemas import REGISTER_PATH, SCHEMA_DIR, Schema, is_valid, load_json
 from tools.parity.verdict import Comparison, Outcome, diagnose, evaluate, in_force
 
 ENTRIES = SCHEMA_DIR / "samples" / "exceptions"
@@ -191,3 +191,82 @@ def test_tier3_noise_floor_entry_covers_an_unstable_iray_oracle() -> None:
     verdict = evaluate(comparison, [entry])
     assert verdict.outcome is Outcome.PASS
     assert verdict.exceptions_relied_on == (("EXC-002", 1),)
+
+
+# --- decision 032: unstable Painter oracle, r1 the exact target ---------------------------------
+
+
+def decision_032_entries() -> list[dict[str, Any]]:
+    register: dict[str, Any] = load_json(REGISTER_PATH)
+    entries = [e for e in register["entries"] if e["decision_id"] == "032"]
+    assert {e["domain"]["selector"] for e in entries} == {
+        "tier0/quantisation/thirds",
+        "tier0/blend/inputs",
+    }
+    return entries
+
+
+def golden_verdicts(
+    entry: dict[str, Any], r1: list[float], r2: list[float], candidate: list[float]
+) -> tuple[Outcome, Outcome]:
+    """The candidate against both recordings of an unstable golden, with the published register."""
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    domain = entry["domain"]["selector"]
+    tier = entry["tier"]
+    exact = Comparison(tier, domain, r1, candidate, oracle_stable=False, exact_target=True)
+    other = Comparison(tier, domain, r2, candidate, oracle_stable=False)
+    return evaluate(exact, register).outcome, evaluate(other, register).outcome
+
+
+def recordings(entry: dict[str, Any]) -> tuple[list[float], list[float]]:
+    """r1 and an r2 that differs from it within the entry's bounds (one value at the max)."""
+    r1 = [float(1000 + i) for i in range(64)]
+    r2 = list(r1)
+    r2[7] += max(b["max"] for b in entry["bounds"] if b["metric"] == "max_abs_diff")
+    return r1, r2
+
+
+def test_decision_032_r1_equality_passes_through_the_entry() -> None:
+    for entry in decision_032_entries():
+        r1, r2 = recordings(entry)
+        assert golden_verdicts(entry, r1, r2, list(r1)) == (Outcome.PASS, Outcome.PASS)
+        exact = Comparison(
+            entry["tier"],
+            entry["domain"]["selector"],
+            r1,
+            list(r1),
+            oracle_stable=False,
+            exact_target=True,
+        )
+        verdict = evaluate(exact, [entry])
+        assert verdict.exceptions_relied_on == ((entry["exception_id"], entry["version"]),)
+        assert evaluate(exact, []).outcome is Outcome.BLOCKED
+
+
+def test_decision_032_entries_catch_injected_defects() -> None:
+    """Every injected defect fails one of the golden's comparisons (the entries' defect test)."""
+    for entry in decision_032_entries():
+        r1, r2 = recordings(entry)
+        defects: dict[str, list[float]] = {}
+        one = list(r1)
+        one[30] += 1.0
+        defects["one_value_off_by_one_code"] = one
+        defects["uniform_offset_one_code"] = [v + 1.0 for v in r1]
+        region = list(r1)
+        for i in range(16, 32):
+            region[i] += 4096.0
+        defects["one_wrong_texel_region"] = region
+        floats = [float(i) / 64.0 for i in range(64)]
+        last_place = list(floats)
+        last_place[5] += 2.0**-24  # the RGB32F residual of phase1.10: never a pass
+        assert set(defects) | {"float32_last_place_residual"} == set(
+            entry["defect_detection_test"]["injected_defects"]
+        )
+        for name, candidate in defects.items():
+            exact, other = golden_verdicts(entry, r1, r2, candidate)
+            assert exact is Outcome.FAIL, name
+            if name == "one_wrong_texel_region":
+                assert other is not Outcome.PASS, name
+        exact, _ = golden_verdicts(entry, floats, list(floats), last_place)
+        assert exact is Outcome.FAIL
+        assert entry["defect_detection_test"]["outcome"] == "every_injected_defect_fails"

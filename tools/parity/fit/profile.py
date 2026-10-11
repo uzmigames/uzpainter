@@ -11,6 +11,10 @@ per `ChannelFormat` member. Two quantisation models are compared with both recor
 For sRGB8 two blending spaces are compared: linear (values decoded with IEC 61966-2-1, blended,
 re-encoded) and encoded (blending the encoded values directly). A uniform colour on an L channel
 is the mean of its three components (measured on this golden).
+
+Superseded for the evaluator by `parity/semantics/quantisation-profile.json` (task
+phase1.9_compositor-quantisation-profile, profile painter-12.1-isolated-linear); this fit stays
+the phase0.7 record of the provisional profile, with its numbers unchanged.
 """
 
 from __future__ import annotations
@@ -225,7 +229,9 @@ def fit(ctx: Context) -> dict[str, Any]:
         "Evaluator profile settled by the three-1/3-opacity-fills experiment (04 section 4, "
         "task phase0.7_tier0-stability-fits): end against per-layer quantisation on every "
         "ChannelFormat member and encoded against linear blending on sRGB8. Residuals are "
-        "|delta| in storage units against both recordings.",
+        "|delta| in storage units against both recordings. Superseded for the evaluator by "
+        "quantisation-profile.json (task phase1.9_compositor-quantisation-profile, profile "
+        "painter-12.1-isolated-linear); kept as the phase0.7 record of the provisional profile.",
         [GOLDEN],
         entries,
     )

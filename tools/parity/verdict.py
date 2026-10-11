@@ -10,6 +10,9 @@
   instability or, in Tier 3, the noise floor (which includes Iray's run-to-run difference).
 - Without a covering entry, Tier 3 and comparisons against an unstable oracle are `blocked`;
   every other difference `fail`s. A shape mismatch is structural and fails in every tier.
+- Decision 032: against an unstable Painter oracle (Tiers 0-2b) the same-session recording r1 is
+  the exact target. The comparison against r1 passes only when every value is equal and an
+  instability entry names the domain; any difference from r1 `fail`s, whatever the register holds.
 - Diagnostics are computed and reported; they never grant a pass on their own.
 """
 
@@ -63,6 +66,8 @@ class Comparison:
     """One compared quantity: oracle values (None when the blob is unavailable) and candidate.
 
     `oracle_stable` is the oracle-stability result of the golden (its recordings are equal).
+    `exact_target` marks, for an unstable oracle, the comparison against the same-session
+    recording r1 (decision 032).
     """
 
     tier: str
@@ -72,6 +77,7 @@ class Comparison:
     extra_metrics: Mapping[str, float] = field(default_factory=dict)
     region_metrics: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     oracle_stable: bool = True
+    exact_target: bool = False
 
 
 def _equal(a: float, b: float) -> bool:
@@ -130,6 +136,25 @@ def in_force(entries: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
 _UNSTABLE_BASES = {False: {"oracle_instability"}, True: {"oracle_instability", "noise_floor"}}
 
 
+def _exact_target(
+    comparison: Comparison, diagnostics: Diagnostics, register_entries: Sequence[Mapping[str, Any]]
+) -> Verdict:
+    """The comparison against r1 of an unstable Tiers 0-2b golden (decision 032)."""
+    if diagnostics.differing_count:
+        return Verdict(Outcome.FAIL, diagnostics, reason="divergence from the exact target r1")
+    covering = [
+        entry
+        for entry in in_force(register_entries)
+        if entry["tier"] == comparison.tier
+        and entry["domain"]["selector"] == comparison.domain
+        and entry["evidence"]["basis"] == "oracle_instability"
+    ]
+    if not covering:
+        return Verdict(Outcome.BLOCKED, diagnostics, reason="unstable oracle without an entry")
+    relied = tuple(sorted((e["exception_id"], e["version"]) for e in covering))
+    return Verdict(Outcome.PASS, diagnostics, relied, reason="exact target r1 equal")
+
+
 def evaluate(comparison: Comparison, register_entries: Sequence[Mapping[str, Any]]) -> Verdict:
     """Apply the contract to one comparison, given the validated register's entries."""
     if comparison.oracle is None:
@@ -140,6 +165,8 @@ def evaluate(comparison: Comparison, register_entries: Sequence[Mapping[str, Any
     stable = comparison.oracle_stable
     if diagnostics.differing_count == 0 and comparison.tier != "3" and stable:
         return Verdict(Outcome.PASS, diagnostics, reason="exact equality")
+    if not stable and comparison.exact_target and comparison.tier != "3":
+        return _exact_target(comparison, diagnostics, register_entries)
     metrics = {**diagnostics.metrics(), **comparison.extra_metrics}
     covering = [
         entry

@@ -236,7 +236,7 @@ Fixture MakeFixture(const fs::path& dir, bool portable = true) {
     state.project_uuid = kUuid;
     Project& p = state.project;
     p.versions.app_version = "0.0.0";
-    p.versions.evaluator_profile = "painter-12.1-layerq-linear";
+    p.versions.evaluator_profile = "painter-12.1-isolated-linear";
     TextureSet set;
     set.id = f.set = p.AllocateId();
     set.name = "M_body";
@@ -335,7 +335,7 @@ void InspectFields() {
     CHECK(TextAt(r, "versions.format_version") == "1.0.0" && TextAt(r, "versions.file_format_version") == "1.0.0");
     CHECK(TextAt(r, "versions.app_version") == "0.0.0");
     CHECK(At(r, "versions.painter_reference").IsObject());
-    CHECK(TextAt(r, "profiles.evaluator_profile") == "painter-12.1-layerq-linear");
+    CHECK(TextAt(r, "profiles.evaluator_profile") == "painter-12.1-isolated-linear");
     CHECK(TextAt(r, "profiles.compat_profile") == "painter-12.1-api-0.3.7");
     CHECK(TextAt(r, "settings.normal_map_format") == "OpenGL");
     CHECK(TextAt(r, "mesh.resource") == f.mesh);
@@ -448,7 +448,7 @@ void InspectExternalDependencies() {
     state.project_uuid = kUuid;
     Project& p = state.project;
     p.versions.app_version = "0.0.0";
-    p.versions.evaluator_profile = "painter-12.1-layerq-linear";
+    p.versions.evaluator_profile = "painter-12.1-isolated-linear";
     TextureSet set;
     set.id = p.AllocateId();
     set.name = "M_body";
@@ -636,7 +636,7 @@ void BundleRoundTrip() {
     cased.project_uuid = kUuid;
     Project& p = cased.project;
     p.versions.app_version = "0.0.0";
-    p.versions.evaluator_profile = "painter-12.1-layerq-linear";
+    p.versions.evaluator_profile = "painter-12.1-isolated-linear";
     const std::string mesh = "FBX" + Noise(500, 41);
     p.resources[Sha256Hex(mesh)] = {Meta(p, "cased.fbx", "model/fbx", mesh.size(), "MESH")};
     p.mesh = MeshReference{Sha256Hex(mesh), json::Object{{"triangles", 12}}, {}};

@@ -2,7 +2,7 @@
 
 Child of `phase1.14_compositor-core` (P1-COMPOSITOR; `docs/architecture/04-layer-stack-and-compositing.md` §4). Decision 028: the Tier 0 comparisons against the private oracle store and the GPU checks run locally on the owner's machine, and this report is their evidence. Numbers and hashes only; every recorded Painter output stays in the private store. Run on 2026-10-11 on the tree of commit `defca40` with this task's working-tree changes (`src/evaluator/`, `tests/evaluator/`, `build.zig`, `parity/semantics/quantisation-profile.json`).
 
-**Result: the settled profile is `painter-12.1-isolated-linear`. It reproduces the same-session recording (r1) of the quantisation experiment exactly on every UNORM, sRGB8 and 16-bit float map and on every map of the one-layer partial-coverage stack; 6 of the 16 32-bit float values differ by 2^-25 or 2^-24 (open item). Both goldens are unstable (the after-reopen recording r2 differs from r1), so under decision 017 their comparisons are blocked, not passed; no exception is proposed or in force.** Unit tests green; the GPU equals the CPU bit for bit.
+**Result: the settled profile is `painter-12.1-isolated-linear`. It reproduces the same-session recording (r1) of the quantisation experiment exactly on every UNORM, sRGB8 and 16-bit float map and on every map of the one-layer partial-coverage stack; 6 of the 16 32-bit float values differ by 2^-25 or 2^-24, a divergence tracked by `phase1.10_compositor-float32-residual`. Both goldens are unstable (the after-reopen recording r2 differs from r1); under decision 032 r1 is their exact target and the register entries `EXC-001` (`quantisation-thirds`) and `EXC-002` (`blend-inputs`) in `parity/exceptions.json` cover their r2 comparisons with the published r2 residuals.** Unit tests green; the GPU equals the CPU bit for bit.
 
 ## Run record
 
@@ -34,15 +34,15 @@ Every row was compared on the CPU store and on the GPU store; |Δ| statistics ar
 
 | Golden | Maps | vs r1 | vs r2 |
 |---|---|---|---|
-| `quantisation-thirds` s0-s3 | sRGB8 (User0, linear blending), RGB8, RGB16, RGB16F, L8, L16, L16F | exact (0 differing values) | blocked: r2 differs from r1 on 16 of 36 maps; the evaluator differs from r2 on sRGB8 (1 code, s2), RGB8 (1 code, s1), RGB16 (1 code, s3), L8 (1 code, s0), RGB16F and L16F (one half step, toward zero against nearest) |
-| `quantisation-thirds` s0-s3 | RGB32F (User4), L32F (Scattering) | 6 of 16 values off: s0 G and B, s1 R, s3 R, L32F s0 and s3 (|Δ| 2^-25 or 2^-24) | blocked (r1 and r2 differ on 9 of the 16 values) |
-| `blend-inputs` s2 | RGB16 ×2, sRGB8 ×2, RGB8, RGB16F, L16, RGB32F | exact (0 of 1 245 184 values) | RGB16, RGB16F, L16, RGB32F exact; sRGB8 and RGB8 blocked (r2 differs from r1 on 22 912 and 11 520 values) |
+| `quantisation-thirds` s0-s3 | sRGB8 (User0, linear blending), RGB8, RGB16, RGB16F, L8, L16, L16F | exact (0 differing values) | within `EXC-001` (decision 032): r2 differs from r1 on 16 of 36 maps; the evaluator differs from r2 on sRGB8 (1 code, s2), RGB8 (1 code, s1), RGB16 (1 code, s3), L8 (1 code, s0), RGB16F and L16F (one half step, toward zero against nearest) |
+| `quantisation-thirds` s0-s3 | RGB32F (User4), L32F (Scattering) | divergence, 6 of 16 values off: s0 G and B, s1 R, s3 R, L32F s0 and s3 (|Δ| 2^-25 or 2^-24; `phase1.10_compositor-float32-residual`) | within `EXC-001` bounds (r1 and r2 differ on 9 of the 16 values); the r1 divergence stands |
+| `blend-inputs` s2 | RGB16 ×2, sRGB8 ×2, RGB8, RGB16F, L16, RGB32F | exact (0 of 1 245 184 values) | RGB16, RGB16F, L16, RGB32F exact; sRGB8 and RGB8 within `EXC-002` (decision 032; r2 differs from r1 on 22 912 and 11 520 values) |
 
 The shipped templates use sRGB8, RGB8, RGB16, RGB16F, L8, L16 and L16F (`assets/templates/`), all exact against r1; no template uses a 32-bit float format.
 
-### Treatment under decision 017
+### Treatment under decisions 017 and 032
 
-`quantisation-thirds` and `blend-inputs` are classified unstable in `parity/reports/phase0/tier0-stability.md` (not admitted as exact goldens). Two recordings of the same instructions that differ cannot both be equalled by a deterministic evaluator, so the exact target is not defined; decision 017 makes such a comparison blocked, never passed, and no tolerance applies. This task therefore records: (a) r1 equality, value for value, as the evidence that selected the profile; (b) every r2 residual and the 32-bit float residual in the published fit; (c) no exception: proposing one (evidence: the stability report's per-map statistics above) is the owner's decision. The 32-bit float residual is an open item: the float32 operation order of Painter's source-over within a partly covered stack is not identified, and the oracle itself varies at that level between recordings.
+`quantisation-thirds` and `blend-inputs` are classified unstable in `parity/reports/phase0/tier0-stability.md` (not admitted as exact goldens). Two recordings of the same instructions that differ cannot both be equalled by a deterministic evaluator. Decision 032 (owner, 2026-10-11, the exception under decision 017; `parity/CONTRACT.md` §5) makes the same-session recording r1 the exact target: (a) r1 equality, value for value, is required and holds on every map the templates use; (b) every r2 residual and the 32-bit float residual are published in the fit; (c) the register entries `EXC-001` (`tier0/quantisation/thirds`) and `EXC-002` (`tier0/blend/inputs`) name decision 032 and bound the r2 comparisons by those residuals (defect test `tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects`). Any r1 mismatch stays a divergence: the 32-bit float residual is not covered and is tracked by `phase1.10_compositor-float32-residual`: the float32 operation order of Painter's source-over within a partly covered stack is not identified, and the oracle itself varies at that level between recordings.
 
 ## Profile registry and pinning
 
@@ -73,6 +73,6 @@ The shipped templates use sRGB8, RGB8, RGB16, RGB16F, L8, L16 and L16F (`assets/
 
 ## Open items
 
-- 32-bit float channels of partly covered stacks: 6 of 16 values of the experiment within 2^-24 of r1 (above).
-- `src/store/census.cpp` and the test fixtures outside `src/evaluator/` stamp `painter-12.1-layerq-linear`, which stays registered and evaluates as before; new projects should be stamped with `evaluator::kCurrentProfile` by the code that creates them.
-- `parity/semantics/evaluator-profile.json` (generated by `tools/parity/fit`, phase0.7) still names the provisional profile; `quantisation-profile.json` supersedes it for the evaluator.
+- 32-bit float channels of partly covered stacks: 6 of 16 values of the experiment within 2^-24 of r1 (above), a divergence; task `phase1.10_compositor-float32-residual` (no shipped template uses a 32-bit float format).
+- Resolved after the archive: `src/store/census.cpp` and the store and mesh test fixtures stamp `painter-12.1-isolated-linear` (the id of `evaluator::kCurrentProfile`, spelled out because the store does not depend on the evaluator; `tests/evaluator/test_compositor_quantisation_profile.py` checks they agree). The document-model fixtures of phase1.1 keep `painter-12.1-layerq-linear` (still registered), because their manifest digests are pinned evidence.
+- Resolved after the archive: `parity/semantics/evaluator-profile.json` and `tools/parity/fit/profile.py` state that `quantisation-profile.json` supersedes them for the evaluator; the phase0.7 fit and its numbers are unchanged (`python -m tools.parity.fit check --fit profile` reproduces it).

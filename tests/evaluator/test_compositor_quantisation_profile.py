@@ -8,14 +8,15 @@ oracle store through `tools.parity` and skip on a machine without it; the local 
 Both goldens compared here are classified unstable (`parity/reports/phase0/tier0-stability.md`):
 the after-reopen recording r2 differs from the same-session recording r1 on 16 of the 36 maps
 of `quantisation-thirds` and on the sRGB8 and RGB8 maps of `blend-inputs` s2. No evaluator can
-equal both; under decision 017 an unstable golden is not an exact target and its r2 comparisons
-are blocked, never passed (no exception is in force). The tests below compare against r1 value
-for value (CONTRACT §3: no tolerance); the residuals against both recordings are published in
-`parity/semantics/quantisation-profile.json`.
+equal both; under decision 032 r1 is the exact target and the register entries EXC-001 and
+EXC-002 (`parity/exceptions.json`) cover the r2 comparisons. The tests below compare against r1
+value for value (CONTRACT §3, §5: no tolerance); the residuals against both recordings are
+published in `parity/semantics/quantisation-profile.json`.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +98,19 @@ def test_profile_registry_dispatch_and_pinning(evaluator_tests: Path) -> None:
             f"{fmt}: a project stamped painter-12.1-isolated-linear evaluates its root isolated, "
             "composited over the base at read-out"
         ) in passed
+
+
+def test_new_projects_are_stamped_with_the_current_profile() -> None:
+    """The store stamps new (census) projects with the id of `evaluator::kCurrentProfile`; it
+    spells the id out because the store does not depend on the evaluator."""
+    src = Path(__file__).resolve().parents[2] / "src"
+    header = (src / "evaluator" / "profile.h").read_text(encoding="utf-8")
+    current = re.search(r"kCurrentProfile = (\w+);", header)
+    assert current is not None
+    value = re.search(rf'{current.group(1)} = "([^"]+)";', header)
+    assert value is not None and value.group(1) == "painter-12.1-isolated-linear"
+    census = (src / "store" / "census.cpp").read_text(encoding="utf-8")
+    assert re.findall(r'evaluator_profile = "([^"]+)";', census) == [value.group(1)]
 
 
 # ── Tier 0 goldens (owner's machine: private store, decision 028) ────────────

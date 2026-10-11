@@ -78,7 +78,7 @@ const InsertPosition kTop = InsertPosition::FromStack(kSet, kStack);
 Project BaseProject() {
     Project p;
     p.versions.app_version = "0.0.0";
-    p.versions.evaluator_profile = "painter-12.1-layerq-linear";
+    p.versions.evaluator_profile = "painter-12.1-isolated-linear";
     TextureSet set;
     set.id = p.AllocateId();
     set.name = "M_body";

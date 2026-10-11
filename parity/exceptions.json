@@ -1,4 +1,76 @@
 {
   "schema": "uzpainter/parity/exceptions/1",
-  "entries": []
+  "entries": [
+    {
+      "exception_id": "EXC-001",
+      "version": 1,
+      "tier": "0",
+      "domain": { "kind": "channel", "selector": "tier0/quantisation/thirds" },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 512 },
+        { "metric": "mean_abs_diff", "scope": "whole", "max": 257 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Painter is unstable on tier0/semantics/quantisation-thirds: its after-reopen recording r2 differs from its same-session recording r1 on 16 of the 36 maps (parity/reports/phase0/tier0-stability.md §4). Under decision 032 r1 is the exact target and every comparison against r1 must be exact; this entry covers only the comparisons against r2, per map in native units (16-bit codes of the 16-bit PNG exports, float values of the OpenEXR exports). Its bounds are the evaluator's published r2 residuals (parity/semantics/quantisation-profile.json, entry quantisation-isolated-root): max |delta| 512 codes (sRGB8, one 8-bit code), per-map mean at most 257 (L8, one 8-bit code on every texel of a map). Not covered: the RGB32F and L32F residuals against r1 (6 of 16 values off by 2^-25 or 2^-24), which stay divergences (task phase1.10_compositor-float32-residual).",
+        "private_evidence": [
+          {
+            "sha256": "238ccd015d2d5edf8f02fb941953f3e037c9e80cda2fc5b7f171af227ba061b5",
+            "description": "private golden record of tier0/semantics/quantisation-thirds: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "Evaluator profile painter-12.1-isolated-linear equals r1 exactly on every UNORM, sRGB8 and 16-bit float map (parity/reports/phase1/compositor-quantisation-profile.md)."
+    },
+    {
+      "exception_id": "EXC-002",
+      "version": 1,
+      "tier": "0",
+      "domain": { "kind": "channel", "selector": "tier0/blend/inputs" },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 768 },
+        { "metric": "mean_abs_diff", "scope": "whole", "max": 58.7917 },
+        { "metric": "differing_percent", "scope": "whole", "max": 11.6537 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Painter is unstable on tier0/semantics/blend-inputs set s2 (fields A at opacity 0.5 over the base): r2 differs from r1 on the two sRGB8 maps (22 912 of 196 608 values each) and the RGB8 map (11 520 values) (parity/reports/phase0/tier0-stability.md §4); every other map of the golden is stable. Under decision 032 r1 is the exact target and every comparison against r1 must be exact; this entry covers only the comparisons against r2, per map in native units (16-bit codes). Its bounds are the evaluator's published r2 residuals on s2 (parity/semantics/quantisation-profile.json, entry quantisation-isolated-root): max |delta| 768, mean 58.7917, 11.6537 % differing values (the sRGB8 maps); RGB16, RGB16F, L16 and RGB32F equal r2.",
+        "private_evidence": [
+          {
+            "sha256": "08bccde04a00ed886c7a1908365e7ec0bf7b227bfd1227cfe93fc2c5d1c6bb51",
+            "description": "private golden record of tier0/semantics/blend-inputs: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "Evaluator profile painter-12.1-isolated-linear equals r1 exactly on every map of s2, 1 245 184 values (parity/reports/phase1/compositor-quantisation-profile.md)."
+    }
+  ]
 }

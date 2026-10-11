@@ -1,0 +1,11 @@
+{
+  "id": 32,
+  "slug": "unstable-painter-oracle-the-same-session-recording-is-the-exact-target-second-recording-residuals-published",
+  "title": "Unstable Painter oracle: the same-session recording is the exact target, second-recording residuals published",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.9_compositor-quantisation-profile"
+  ],
+  "supersededBy": null
+}

@@ -310,7 +310,9 @@ Value CensusProject(const CensusProjectInput& input, const CensusOptions& option
     state.project_uuid = UuidFor(input.id);
     core::Project& p = state.project;
     p.versions.app_version = "0.0.0";
-    p.versions.evaluator_profile = "painter-12.1-layerq-linear";
+    // New projects carry the evaluator's current profile (`evaluator::kCurrentProfile`,
+    // src/evaluator/profile.h), spelled out because the store does not depend on the evaluator.
+    p.versions.evaluator_profile = "painter-12.1-isolated-linear";
     CreateOptions create;
     std::set<std::string, std::less<>> embedded;
     std::int64_t dependency_files = 0, dependency_bytes = 0;

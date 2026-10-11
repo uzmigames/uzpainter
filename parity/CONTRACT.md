@@ -30,7 +30,7 @@ A report never merges them into one number. Equality to Painter compares against
    | Outcome | When |
    |---|---|
    | `pass` | Tiers 0–2b with a stable oracle: all compared values are equal. Otherwise only when an in-force register entry whose tier and domain match and whose every bound holds covers the comparison (the report lists the entries relied on); against an unstable oracle that entry's evidence must be the oracle instability (Tier 3: or the noise floor) |
-   | `fail` | Tiers 0–2b: any difference without a covering entry; any tier: a structural difference (shape, missing map or channel, wrong binding) |
+   | `fail` | Tiers 0–2b: any difference without a covering entry, and any difference from the exact target r1 of an unstable golden (§5, decision 032); any tier: a structural difference (shape, missing map or channel, wrong binding) |
    | `blocked` | Tier 3 without a covering entry (even when the values happen to be equal); an unstable oracle without a covering instability entry; a gate fixture marked `not_migratable` without an owner scope decision (§6.3) |
    | `oracle_unavailable` | The private blob a public manifest names is missing from the store or fails its hash. **Never a pass.** Nothing is compared |
 
@@ -72,6 +72,8 @@ The reference implementation of rules 3.1 and 3.3 for one compared quantity is `
 | `decision_id`, `approved_by`, `approved_on` | The owner decision recorded under `.rulebook/decisions/`; `approved_by` is always `owner` |
 
 `tools.parity.schemas.register_problems` adds the two rules a schema cannot state: each (`exception_id`, `version`) appears once, and each `decision_id` names a recorded decision. Every report lists the entries it relied on (§8.4).
+
+**Unstable Painter oracle (decision 032).** When Painter's same-session recording r1 and its after-save/reopen recording r2 of a Tiers 0–2b golden differ, r1 is the exact target. The comparison against r1 passes only when every compared value is equal and an in-force entry with basis `oracle_instability`, naming that golden's domain and decision `032`, is in the register; without the entry it is `blocked`, and any difference from r1 is a divergence that `fail`s whatever the register holds. The comparisons against r2 pass through that entry's bounds, which are UzPainter's r2 residuals, published with the run (`tools/parity/verdict.py`, `Comparison.exact_target`).
 
 ## 6. Oracle, goldens and storage
 

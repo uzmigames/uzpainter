@@ -97,7 +97,7 @@ Readback rule: the resource context counter Painter increments per opened projec
 
 ## 4. Exception evidence (unstable goldens)
 
-An unstable golden is not admitted as an exact golden (`14-…` §5); its statistics below are the evidence an exception proposal would cite. No exception is proposed or in force; the register (`parity/exceptions.json`) is unchanged.
+An unstable golden is not admitted as an exact golden (`14-…` §5); its statistics below are the evidence an exception proposal cites. The entries in force are those of the register (`parity/exceptions.json`); under decision 032 the same-session recording r1 stays the exact target (`parity/CONTRACT.md` §5).
 
 | Golden | Map | Storage format | Recordings | Blob SHA-256 (first, other) | max \|Δ\| | mean \|Δ\| | p99 \|Δ\| | Differing values / compared | Differing texels / texels |
 |---|---|---|---|---|---|---|---|---|---|
