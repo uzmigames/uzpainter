@@ -1,0 +1,12 @@
+{
+  "id": 63,
+  "slug": "p0-feas-render-stays-open-until-the-qualification-sphere-has-its-term-c-and-the-owner-signs-the-path-tracer-entry-gate-record",
+  "title": "P0-FEAS-RENDER stays open until the qualification sphere has its term (c) and the owner signs the path-tracer entry gate record",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase0.9_render-reference-capture",
+    "phase3.7_path-tracer"
+  ],
+  "supersededBy": null
+}
