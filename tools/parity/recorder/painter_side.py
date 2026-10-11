@@ -928,11 +928,18 @@ def apply_step(args: dict[str, Any]) -> dict[str, Any]:
     elif call.startswith(CAMERA) and call[len(CAMERA) :] in CAMERA_PROPERTIES:
         set_camera(call[len(CAMERA) :], params["value"])
     elif call == SET_ENVIRONMENT:
-        resource = substance_painter.resource.import_project_resource(
-            resolved["environment"], substance_painter.resource.Usage.ENVIRONMENT
-        )
-        substance_painter.display.set_environment_resource(resource.identifier())
-        result = {"environment_url": resource.identifier().url()}
+        if "resource_url" in params:  # a resource Painter already has (e.g. a shelf asset)
+            identifier = substance_painter.resource.ResourceID.from_url(params["resource_url"])
+        elif "session_environment" in params:  # the ref_match preset's session resource
+            identifier = substance_painter.resource.import_session_resource(
+                resolved["environment"], substance_painter.resource.Usage.ENVIRONMENT
+            ).identifier()
+        else:
+            identifier = substance_painter.resource.import_project_resource(
+                resolved["environment"], substance_painter.resource.Usage.ENVIRONMENT
+            ).identifier()
+        substance_painter.display.set_environment_resource(identifier)
+        result = {"environment_url": identifier.url()}
     elif call == SET_TONE_MAPPING:
         function = member(TONE_MAPPINGS, "ToneMappingFunction", params["function"])
         substance_painter.display.set_tone_mapping(function)
@@ -1283,6 +1290,17 @@ def import_resource(args: dict[str, Any]) -> dict[str, Any]:
     return {"url": resource.identifier().url(), "imported_at": time.time()}
 
 
+def set_session_environment(args: dict[str, Any]) -> dict[str, Any]:
+    """Import an environment file as a session resource and display it (the `ref_match`
+    preset's procedure, decision 038); returns the readback URL."""
+    resource = substance_painter.resource.import_session_resource(
+        args["path"], substance_painter.resource.Usage.ENVIRONMENT
+    )
+    substance_painter.display.set_environment_resource(resource.identifier())
+    current = substance_painter.display.get_environment_resource()
+    return {"environment_url": None if current is None else current.url(), "done_at": time.time()}
+
+
 def set_color_lut(args: dict[str, Any]) -> dict[str, Any]:
     """Set the colour-profile LUT; returns the readback and the time it was set."""
     lut = substance_painter.resource.ResourceID.from_url(args["url"])
@@ -1324,6 +1342,7 @@ OPERATIONS = {
     "scene_bounding_box": scene_bounding_box,
     "import_resource": import_resource,
     "set_color_lut": set_color_lut,
+    "set_session_environment": set_session_environment,
 }
 
 

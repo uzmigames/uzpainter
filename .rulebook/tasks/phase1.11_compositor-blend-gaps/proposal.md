@@ -16,7 +16,7 @@ Three gaps remain:
 
 ## Dependencies
 - `phase1.10_compositor-blend-kernels` (the kernels, the hardware arithmetic tables and the published fit).
-- Not a prerequisite of `phase1.14_compositor-core`. The Wand v1 pilot stacks (Assets3D `Docs/Pipeline/Retopologia/varinha11-v1/paint/stack-wand.json` and `stack-wand-v3.json`, synced by `painter_layer_stack.py`) use only `Normal`, `LinearDodge` on Height, and groups in their default mode (`Normal`, or `Normal` on Height for `replace_height`). None of the seven modes, and no PassThrough group, appears; none of their layers sets a `blend` key. This task becomes a prerequisite of any later gate whose content uses one of these modes (check Belt v5 and Tunic v10 before their gates).
+- Not a prerequisite of `phase1.14_compositor-core`. The Wand v1 pilot stacks (Assets3D `Pipeline/retopology/wand11-v1/paint/stack-wand.json` and `stack-wand-v3.json`, synced by `painter_layer_stack.py`) use only `Normal`, `LinearDodge` on Height, and groups in their default mode (`Normal`, or `Normal` on Height for `replace_height`). None of the seven modes, and no PassThrough group, appears; none of their layers sets a `blend` key. This task becomes a prerequisite of any later gate whose content uses one of these modes (check Belt v5 and Tunic v10 before their gates).
 
 ## Acceptance
 `blend-component` s0–s6 every channel, and `blend-normal-channel` s1–s3, exact on CPU and GPU against both recordings in a local DX12 run (decision 028). PassThrough must be either recorded and exact or ruled `not_migratable` by the owner. Anything that remains needs an owner-approved exception-register entry.

@@ -1,0 +1,9 @@
+{
+  "id": 41,
+  "slug": "a-poisoned-zig-cache-entry-is-purged-not-worked-around-in-store-code",
+  "title": "A poisoned Zig cache entry is purged, not worked around in store code",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": ["phase1.7_store-inspect-census"],
+  "supersededBy": null
+}

@@ -16,11 +16,19 @@ Project
 │     └── Stack { id, name ("" for the ordinary stack), channels{type → {format, label}}, root_layers[] }   (04-…)
 ├── resources{sha256 → ResourceMeta {mime, size, name, usage, origin, imported_at, color_space}}
 ├── display: environment ref + rotation/exposure/opacity/blur, color LUT ref, tone_mapping (Linear|ACES),
-│            shader {id, hash, parameters}, cameras[], background, shadows, post-effects (all off by default)
+│            shader {id, hash, parameters}, cameras[], background, shadows, post-effects (all off by default);
+│            values limited to the fixed render pipeline (decisions 038, 042; see below)
 ├── export_defaults (Painter exporter settings equivalent)
 ├── metadata{context → {key → json}}            (project.Metadata)
 └── versions: format_version, app_version, evaluator_profile, compat_profile ("painter-12.1-api-0.3.7"), painter_reference {build, recorded_from}
 ```
+
+Display state covers only the fixed render pipeline: the Assets3D render comparison standard (approved source `U-A3D-RENDERSTD-2`: v2 common block, `ref_match` v3, `base_color` diagnostic; decision 038). The fields stay so the documented `substance_painter.display` symbols keep working (decision 042), but each field accepts only the pipeline's values, and any other value fails with an explicit unsupported-value error:
+- display transform: OCIO with Painter's substance config and the view `Default - sRGB`; `tone_mapping` does not apply to a colour-managed project, and Legacy `Linear`/`ACES` are not supported;
+- colour LUT: none; post-effects: off;
+- shader: Painter's default `open-pbr` instance at its default parameters;
+- environment: Linear, exposure 0, opacity 0, blur 0, infinite-sphere dome, no ground, the preset's clear colour and shadows; rotation 0, or the `ref_match` per-view rotation;
+- cameras: free.
 
 Identity: every node, set, stack, tile and resource has a 64-bit id persisted in the file (UzPainter guarantee; Painter promises only an in-session integer — `substance-parity-astra-review.md` V03, historical context; confirmed through the documented API by the Tier 0 probes, P0-TIER0). Names are not unique (Painter semantics); the API resolves by id, and name lookups return all matches. Name-addressed mutations (LAY-06) are idempotent within an explicit `{project, set, stack, parent}` scope: an ambiguous match fails before mutation and lists the candidate ids; repeating the same named operation does not create duplicate nodes. Tests cover ambiguity and repeats as well as save/reopen.
 

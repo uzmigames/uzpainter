@@ -4,8 +4,9 @@
 // plane). Mirrors ProjectTexel, SampleValue and the store of cpu_store.cpp operation for
 // operation: the UV transform in double precision (each operation one IEEE double operation,
 // compiled IEEE-strict and `precise`), the fixed-point coordinates and weights in integers, the
-// texels as float32(c / M) correctly rounded, the bilinear dot product exact in double and
-// rounded once to float32, and the channel's write rule.
+// texels as float32(c / M) correctly rounded, the bilinear filter in integers (BilinearFilter:
+// operands aligned to the largest weighed texel, rounded once to float32, ties up), and the
+// channel's write rule.
 //
 // Parameters: a block of 32 uints in the arena behind root constant 0, block index in root
 // constant 1 (kernelgen.h, ProjectParam). The bitmap is a structured buffer of uints holding its
@@ -100,6 +101,37 @@ float DivNearest(uint s, uint d) {
         else break;
     }
     return q;
+}
+
+// projection_uv.h BilinearFilter on float32 texels in [0, 1]: E the frexp exponent of the largest
+// texel of non-zero weight (positive floats order as their bits), each operand floor(t 2^(28 - E))
+// from the texel's bits, the exact integer sum (below 2^37) rounded to 24 significant bits, ties
+// up, scaled by 2^(E - 36) with an exact power of two.
+uint Operand(float t, int exponent) {
+    const uint bits = asuint(t);
+    if (bits == 0u) return 0u;
+    const uint significand = (bits & 0x7FFFFFu) | 0x800000u;  // t = significand 2^(field - 150)
+    const int shift = (int)(bits >> 23) - 150 + 28 - exponent;
+    if (shift >= 0) return significand << (uint)shift;
+    return shift > -32 ? significand >> (uint)(-shift) : 0u;
+}
+
+float BilinearFilter(uint4 w, float4 t) {
+    uint largest = 0u;
+    [unroll] for (uint k = 0; k < 4u; ++k) {
+        if (w[k] != 0u) largest = max(largest, asuint(t[k]));
+    }
+    if (largest == 0u) return 0.0f;
+    const int exponent = (int)(largest >> 23) - 126;
+    uint64_t sum = 0;
+    [unroll] for (uint q = 0; q < 4u; ++q) sum += (uint64_t)w[q] * (uint64_t)Operand(t[q], exponent);
+    const uint high = (uint)(sum >> 32);
+    const int length = high != 0u ? 33 + (int)firstbithigh(high) : 1 + (int)firstbithigh((uint)sum);
+    const int shift = max(length - 24, 0);
+    uint significand = (uint)(sum >> (uint)shift);
+    if (shift > 0 && ((sum >> (uint)(shift - 1)) & 1u) != 0u) significand += 1u;
+    const float scale = asfloat((uint)(shift + exponent - 36 + 127) << 23);  // 2^(shift + E - 36)
+    return (float)significand * scale;
 }
 
 // ── Storage (cpu_store.cpp StoreValue; evaluator_blend.hlsl) ─────────────────
@@ -220,18 +252,11 @@ void main(uint3 id : SV_DispatchThreadID) {
             const int64_t ya = Address(y0, imageHeight, repeatY);
             const int64_t yb = Address(y0 + 1, imageHeight, repeatY);
             [unroll] for (uint c = 0; c < 3u; ++c) {
-                // Exact products and sum in double, one rounding at the conversion to float.
                 const float t00 = DivNearest(Code(srv, sixteen, imageWidth, channels, xa, ya, c), range);
                 const float t10 = DivNearest(Code(srv, sixteen, imageWidth, channels, xb, ya, c), range);
                 const float t01 = DivNearest(Code(srv, sixteen, imageWidth, channels, xa, yb, c), range);
                 const float t11 = DivNearest(Code(srv, sixteen, imageWidth, channels, xb, yb, c), range);
-                precise double sum = 0.0;
-                sum = sum + (double)w00 * (double)t00;
-                sum = sum + (double)w10 * (double)t10;
-                sum = sum + (double)w01 * (double)t01;
-                sum = sum + (double)w11 * (double)t11;
-                precise const double scaled = sum * (1.0 / 256.0);
-                value[c] = (float)scaled;
+                value[c] = BilinearFilter(uint4(w00, w10, w01, w11), float4(t00, t10, t01, t11));
             }
         }
     }

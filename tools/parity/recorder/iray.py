@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -46,7 +47,14 @@ from tools.parity.recorder.environment import DIFFERS, UNKNOWN, envelope_match
 from tools.parity.recorder.job import Job, canonical_json, sha256_bytes, sha256_file
 from tools.parity.recorder.output import ensure_outside_repository, run_name, slug, write_run
 from tools.parity.recorder.session import PainterSession, RecorderError
-from tools.parity.recorder.texture import Now, close_quietly, replay, stage_inputs, utc_now
+from tools.parity.recorder.texture import (
+    Now,
+    close_quietly,
+    replay,
+    stage_inputs,
+    stage_session_files,
+    utc_now,
+)
 from tools.parity.render_procedure.projection import (
     DEFAULT_ORDER,
     ROTATION_ORDERS,
@@ -67,6 +75,10 @@ CAPTURE_ENCODING = "capture.encoding"
 CAPTURE_PROCEDURE = "capture.procedure"
 CAPTURE_ROUTE = "capture.route"
 ROTATION_ORDER = "capture.camera_rotation_order"
+CAPTURE_BACKGROUND = "capture.background_srgb8"
+CAPTURE_BITS = "capture.bits_per_channel"
+CAPTURE_TRANSFORM = "capture.display_transform"
+DISPLAY_TRANSFORM_PANEL = "Viewport display transform"
 PROCEDURE_VERSION = "iray-capture/1"
 SAVE_RENDER = "save_render"
 TIME_UNITS = {"s": 1.0, "min": 60.0, "h": 3600.0}
@@ -109,6 +121,9 @@ class SettingsSheet:
     capture_encoding: str | None
     sha256: str
     rotation_order: str | None = None
+    background_srgb8: tuple[int, ...] | None = None
+    bits_per_channel: int | None = None
+    display_transform: str | None = None
 
 
 def settings_sheet(job: Job) -> SettingsSheet:
@@ -147,6 +162,12 @@ def settings_sheet(job: Job) -> SettingsSheet:
     order = capture.get(ROTATION_ORDER)
     if order is not None and order not in ROTATION_ORDERS:
         raise RecorderError(f"{ROTATION_ORDER} must be one of {ROTATION_ORDERS}")
+    background = None
+    if CAPTURE_BACKGROUND in capture:
+        background = tuple(int(v) for v in capture[CAPTURE_BACKGROUND].split(","))
+        if len(background) != 3 or not all(0 <= v <= 255 for v in background):
+            raise RecorderError(f"{CAPTURE_BACKGROUND} must be three 8-bit codes R,G,B")
+    bits = int(capture[CAPTURE_BITS]) if CAPTURE_BITS in capture else None
     sheet = {
         "golden_id": manifest["golden_id"],
         "instruction_sequence": manifest["instruction_sequence"],
@@ -162,6 +183,9 @@ def settings_sheet(job: Job) -> SettingsSheet:
         capture_encoding=capture.get(CAPTURE_ENCODING),
         sha256=sha256_bytes(canonical_json(sheet)),
         rotation_order=order,
+        background_srgb8=background,
+        bits_per_channel=bits,
+        display_transform=capture.get(CAPTURE_TRANSFORM),
     )
 
 
@@ -209,7 +233,14 @@ def operator_form(
     images: list[Path] = []
     evidence_dir = directory / "panels"
     evidence_dir.mkdir(parents=True)
-    for panel in sorted({s.panel for s in sheet.panel_settings}):
+    panels = sorted({s.panel for s in sheet.panel_settings})
+    if sheet.display_transform is not None:
+        operator.tell(
+            f"The viewport display transform must read {sheet.display_transform!r} "
+            "(Painter's fresh-session default; no interface sets it)."
+        )
+        panels.append(DISPLAY_TRANSFORM_PANEL)
+    for panel in panels:
         source = Path(operator.ask(f"Path of an image of the '{panel}' panel as set:"))
         if not source.is_file() or source.suffix.lower() not in PANEL_IMAGE_TYPES:
             raise RecorderError(f"panel image {source} is not an existing PNG or JPEG file")
@@ -301,7 +332,21 @@ def capture_render(
             f"render is {image.width}x{image.height}, "
             f"the sheet overrides {sheet.width}x{sheet.height}"
         )
-    check_silhouette(target, silhouette)
+    if sheet.bits_per_channel is not None and measured.bits_per_channel != sheet.bits_per_channel:
+        raise RecorderError(
+            f"render is {measured.bits_per_channel}-bit, the sheet requires "
+            f"{sheet.bits_per_channel}-bit"
+        )
+    result = check_silhouette(target, silhouette)
+    if sheet.background_srgb8 is not None:
+        top = (1 << measured.bits_per_channel) - 1
+        shown = tuple(round(v * 255 / top) for v in result.background_value[:3])
+        if shown != sheet.background_srgb8:
+            raise RecorderError(
+                f"render background reads {list(shown)} in 8-bit codes, the sheet expects "
+                f"{list(sheet.background_srgb8)} (clear colour through the display transform): "
+                "wrong display transform, clear colour or frame"
+            )
     if measured.encoding is not None:
         encoding = measured.encoding
     elif sheet.capture_encoding is not None:
@@ -369,6 +414,27 @@ def complete(staged: list[StagedRecording]) -> bool:
     return len(sessions) >= 2 and has_k
 
 
+def staging_dir(work: Path, job: Job) -> Path:
+    return ensure_outside_repository(work) / "iray-staging" / job.golden_id.replace("/", "__")
+
+
+def reference_needed(job: Job, condition: str, work: Path) -> bool:
+    """Whether a series run still has to record `condition` for this golden: not once the
+    golden is admitted (its manifest names private records), nor once its staging holds two
+    separate sessions (`separate_session`) or a k*S reference (`k_times_samples`)."""
+    if job.manifest.get("private_records"):
+        return False
+    staged = load_staged(staging_dir(work, job))
+    if condition == SEPARATE_SESSION:
+        sessions = {
+            s.recording["session_id"]
+            for s in staged
+            if s.recording["condition"] == SEPARATE_SESSION
+        }
+        return len(sessions) < 2
+    return not any(s.recording["condition"] == K_TIMES_SAMPLES for s in staged)
+
+
 def record_iray_reference(
     session: PainterSession,
     job: Job,
@@ -380,11 +446,18 @@ def record_iray_reference(
     now: Now = utc_now,
     *,
     operator_id: str = UNKNOWN,
+    session_files: Sequence[Path] = (),
 ) -> Path | None:
     """Record one Iray reference; returns the inbox run once the golden is complete, else None.
 
     Every reference stages its session's environment record with `operator_id`; the references
-    of one golden must share one envelope (decision 034 (a)), else assembly is refused."""
+    of one golden must share one envelope (decision 034 (a)), else assembly is refused.
+    `session_files` are the files that session-environment steps name by SHA-256 (the
+    `ref_match` HDRI, which stays outside the repository).
+
+    A sheet that names a display transform belongs to the fixed pipeline, which is OCIO colour
+    managed (decision 038): a Painter started without `OCIO` would render a Legacy project whose
+    background reads the same 89,89,89, so the mode is checked before anything is recorded."""
     if job.tier != "3":
         raise RecorderError("Iray references are Tier 3 goldens")
     if job.exports:
@@ -400,7 +473,14 @@ def record_iray_reference(
     else:
         raise RecorderError(f"condition must be {SEPARATE_SESSION} or {K_TIMES_SAMPLES}")
     identity = session.connect()
-    golden_dir = ensure_outside_repository(work) / "iray-staging" / job.golden_id.replace("/", "__")
+    if sheet.display_transform is not None and identity.colour_management.get("mode") != "ocio":
+        close_quietly(session)
+        raise RecorderError(
+            f"the sheet names the display transform {sheet.display_transform!r} of the fixed "
+            "pipeline, which is OCIO colour managed: start Painter with OCIO naming its "
+            f"resources/ocio/substance/config.ocio (found {identity.colour_management!r})"
+        )
+    golden_dir = staging_dir(work, job)
     for prior in load_staged(golden_dir):
         if prior.recording["session_id"] == identity.session_id:
             raise RecorderError(
@@ -410,6 +490,7 @@ def record_iray_reference(
     directory = ensure_outside_repository(work) / "iray" / job.golden_id.replace("/", "__")
     directory = directory / run_name(identity.session_id, now())
     staged_inputs = stage_inputs(job, directory / "inputs")
+    staged_inputs |= stage_session_files(job, list(session_files), directory / "session-files")
     try:
         defaults = replay(session, job, staged_inputs)
         render_state = session.call("render_state")
@@ -436,7 +517,7 @@ def record_iray_reference(
         },
         "resource_hashes": [
             {"resource": input_id, "sha256": sha256_file(path)}
-            for input_id, path in sorted(job.inputs.items())
+            for input_id, path in sorted(staged_inputs.items())
         ],
         "bake_backend": None,
         "render_state": render_state,

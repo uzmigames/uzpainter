@@ -17,9 +17,14 @@ When the preview thread is stalled by a test hook during an export
 Then the export completes with the same bytes as without a preview
 
 ### Requirement: Unsupported Display Configuration Fails Explicitly
-A display configuration that is not pinned and tested MUST fail with an explicit error before rendering.
+The only supported display configuration SHALL be OCIO with Painter's substance config and the view `Default - sRGB` (decision 038). Any other configuration, including Legacy `Linear` and `ACES`, MUST fail with an explicit error before rendering.
 
 #### Scenario: ACE-mode project
 Given a project created in ACE colour-management mode
 When the viewport is asked to render it
 Then rendering fails with an explicit unsupported-configuration error
+
+#### Scenario: Legacy project
+Given a project created without OCIO colour management (Legacy mode)
+When the viewport is asked to render it
+Then rendering fails with an explicit unsupported-configuration error naming decision 038 and nothing is drawn

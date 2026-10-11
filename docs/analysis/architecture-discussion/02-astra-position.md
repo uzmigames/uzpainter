@@ -132,7 +132,7 @@ flowchart TD
 
 #### Rationale
 
-**Fact (SP1; RS coverage ledger/F11):** SP1 inventories 18 package submodules plus the separate plugin module; its 572 physical rows are not 572 unique public symbols. RS counts 545 installed documented anchors and identifies inherited `UVTile.u`, `UVTile.v`, `TextureSet.material_id` and two constructor omissions, plus private-helper classification corrections. **Recommendation:** include those public members, exclude private mixins from the supported-public denominator and report coverage by qualified symbol/class/context/operation. **Fact (SP1; SP2; SP5; SP7):** API visibility does not imply public implementations of painting strokes, shader control or viewport capture; wrappers rely on private native Painter functionality. **Fact (AP2; `A/Docs/Pipeline/Pintura/painter_layer_stack.py`):** active-stack context and ordered channel/source writes are used by real scripts.
+**Fact (SP1; RS coverage ledger/F11):** SP1 inventories 18 package submodules plus the separate plugin module; its 572 physical rows are not 572 unique public symbols. RS counts 545 installed documented anchors and identifies inherited `UVTile.u`, `UVTile.v`, `TextureSet.material_id` and two constructor omissions, plus private-helper classification corrections. **Recommendation:** include those public members, exclude private mixins from the supported-public denominator and report coverage by qualified symbol/class/context/operation. **Fact (SP1; SP2; SP5; SP7):** API visibility does not imply public implementations of painting strokes, shader control or viewport capture; wrappers rely on private native Painter functionality. **Fact (AP2; `A/Pipeline/painting/painter_layer_stack.py`):** active-stack context and ordered channel/source writes are used by real scripts.
 
 #### Risks
 
@@ -265,7 +265,7 @@ flowchart TD
 
 #### Rationale
 
-**Fact (AP6; RP R05–R07; `A/Docs/Pipeline/Render/Render-Comparison-Standard.json`):** the pipeline compares Iray/Cycles approximately; the Painter `ref_match` equivalent is not live-verified. **Fact (UE2; RE source ledger C05/C08 and F08):** existing hidden rendering uses a window/swapchain, a null-swapchain scene call renders nothing, and diagnostic readback is not arbitrary-precision export. **Recommendation:** implement explicit offscreen scene targets and native readback, including linear and display-referred captures.
+**Fact (AP6; RP R05–R07; `A/Pipeline/render/Render-Comparison-Standard.json`):** the pipeline compares Iray/Cycles approximately; the Painter `ref_match` equivalent is not live-verified. **Fact (UE2; RE source ledger C05/C08 and F08):** existing hidden rendering uses a window/swapchain, a null-swapchain scene call renders nothing, and diagnostic readback is not arbitrary-precision export. **Recommendation:** implement explicit offscreen scene targets and native readback, including linear and display-referred captures.
 
 #### Risks
 
@@ -305,7 +305,7 @@ flowchart TD
 
 #### Risks
 
-**Hypothesis:** virtual-map composition, padding, conversion and lossy compression can each introduce divergence. **Fact (RP finding 5; `A/Docs/Pipeline/Retopologia/chapeu-v6/deliver_v8.py`):** a recorded Blender SpecularWeight handoff is not fully implemented by the checked commented link. **Recommendation:** validate saved consumer materials, not reports or suffixes alone; record compression error separately from Painter-authoring equality.
+**Hypothesis:** virtual-map composition, padding, conversion and lossy compression can each introduce divergence. **Fact (RP finding 5; `A/Pipeline/retopology/hat-v6/deliver_v8.py`):** a recorded Blender SpecularWeight handoff is not fully implemented by the checked commented link. **Recommendation:** validate saved consumer materials, not reports or suffixes alone; record compression error separately from Painter-authoring equality.
 
 #### Cost to reverse
 
@@ -521,7 +521,7 @@ flowchart TD
 
 **Recommendation:** first freeze the render/equality contract and investigate the required proprietary evaluator/dependency path. Establish a clean engine pin and golden recorder before building broad APIs. Deliver thin end-to-end slices that include save/reopen, coherent jobs, export and capture, then expand exact capability coverage.
 
-**Recommendation:** select `18-Tunica` approved painting v10 as the principal painting pilot, using its recovered per-layer sources and exact material recipe. Use `varinha11-v1` as a smaller import/export smoke fixture, locked left/right bracers for proprietary material parity, current hat v8 for SpecularWeight/seven-map and complex-stack coverage, and body v6b for multi-set persistence/memory stress. Technical/alpha/rig/artistic pending items remain pending; choosing an approved paint pilot does not certify the complete asset or newer rounds.
+**Recommendation:** select `18-Tunica` approved painting v10 as the principal painting pilot, using its recovered per-layer sources and exact material recipe. Use `wand11-v1` as a smaller import/export smoke fixture, locked left/right bracers for proprietary material parity, current hat v8 for SpecularWeight/seven-map and complex-stack coverage, and body v6b for multi-set persistence/memory stress. Technical/alpha/rig/artistic pending items remain pending; choosing an approved paint pilot does not certify the complete asset or newer rounds.
 
 #### Rationale
 

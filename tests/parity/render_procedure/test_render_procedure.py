@@ -189,8 +189,13 @@ def test_answers_cover_every_unconfirmed_row_of_07() -> None:
         assert row in data["rows"]
     assert len(unconfirmed) == len(answered_by)
     assert re.search(r"bump or as displacement", text) and "height" in data["rows"]
-    for row in pending(data):
-        assert data["rows"][row]["status"] in STATUSES
+    assert pending(data) == []
+    for row, entry in data["rows"].items():
+        assert entry["status"] in STATUSES and entry["status"] != "pending_probe", row
+    for row in data["uncontrolled"]:
+        assert data["rows"][row]["status"] == "uncontrolled"
+    assert data["presets"]["ref_match"]["applied_and_verified"] is True
+    assert data["presets"]["base_color"]["applied_and_verified"] is True
 
 
 def test_problems_catch_unsettled_rows_without_evidence() -> None:
@@ -198,17 +203,18 @@ def test_problems_catch_unsettled_rows_without_evidence() -> None:
     broken = {**data, "rows": {**data["rows"]}}
     broken["rows"]["denoiser"] = {"status": "uncontrolled", "answer": "x", "evidence": []}
     del broken["rows"]["height"]
+    pinned = {**broken["rows"]["colour_lut"], "details": {}}
+    broken["rows"]["colour_lut"] = pinned
     found = problems(broken)
     assert "denoiser: settled without evidence" in found
     assert "height: no answer" in found
+    assert "colour_lut: not_required without its pinned value" in found
 
 
 def test_probe_fixture_outputs_are_deterministic(tmp_path: Path) -> None:
-    lut = fixtures.magenta_lut()
-    assert lut == fixtures.magenta_lut()
-    path = tmp_path / "lut.exr"
-    path.write_bytes(lut)
-    assert measure_storage_format(path).sample_type == "half"
+    environment = tmp_path / "sky.exr"
+    environment.write_bytes(fixtures.committed_fixtures()["sky-patch.exr"])
+    assert measure_storage_format(environment).sample_type == "half"
     height = tmp_path / "height.png"
     height.write_bytes(fixtures.stripe_height_png())
     assert measure_storage_format(height).bits_per_channel == 16
@@ -222,6 +228,8 @@ def test_qualification_job_is_a_qualified_procedure_sheet() -> None:
     job = load_job(
         REPO_ROOT
         / "parity"
+        / "envelopes"
+        / "painter-12.1.5_js-api.1.1.20"
         / "manifests"
         / "tier3"
         / "render-procedure"
@@ -229,6 +237,12 @@ def test_qualification_job_is_a_qualified_procedure_sheet() -> None:
     )
     sheet = settings_sheet(job)
     assert (sheet.samples, sheet.width, sheet.height, sheet.max_time_s) == (256, 1200, 1200, 3600.0)
+    assert (sheet.background_srgb8, sheet.bits_per_channel) == ((89, 89, 89), 16)
+    assert (sheet.display_transform, sheet.rotation_order) == ("Default - sRGB", "ZYX")
+    from tools.parity.recorder.iray_probe import V2_SHEET
+
+    named = {f"{s.panel}/{s.setting}": s.value for s in sheet.panel_settings}
+    assert named == {f"{s.panel}/{s.setting}": s.value for s in V2_SHEET}
     camera = Camera((0.0, 0.0, 60.0), (0.0, 0.0, 0.0), 40.0, "Perspective")
     mask = silhouette_mask(load_obj(SPHERE), camera, sheet.width, sheet.height)
     assert mask[0].count(BACKGROUND) == sheet.width and mask[600][600] == OBJECT

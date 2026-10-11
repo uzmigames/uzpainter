@@ -76,6 +76,12 @@ PYDOC_RESOURCE = source("A-PYDOC", "resource: import_project_resource; layerstac
 PBRT = source("P-PBRT", "Image texture: bilinear and point (nearest) filtering, wrap modes")
 EXPORT = source("A-HELP-EXPORT", "Export settings: bit depth, padding")
 
+BILINEAR_HARDWARE = (
+    "the linear filter of a float32 texture on the GPU the goldens were recorded on (NVIDIA "
+    "GeForce RTX 4090), measured by `uzp-evaluator-tests bilinear-hardware` at every 8-bit weight "
+    "pair (16 777 216 samples, equal to the rule); the GPU rounds w11 ties up, which Painter's "
+    "bottom-up bitmap turns into the ties down above"
+)
 HARDWARE = (
     "the D3D12 RGBA8_UNORM_SRGB conversions of the GPU the goldens were recorded on (NVIDIA "
     "GeForce RTX 4090), measured by `uzp-evaluator-tests srgb8-hardware` (store: the smallest "
@@ -478,8 +484,10 @@ def uv_sampling(ev: Evaluations, exe: Path) -> dict[str, Any]:
         + "Fixed point: X = floor(256 x + 0.5), x0 = X >> 8, fx = X & 255 (same for y); weights "
         "w11 = (fx fy + 127) >> 8, w10 = fx - w11, w01 = fy - w11, w00 = 256 - fx - fy + w11 on "
         "the taps (x0, y0), (x0 + 1, y0), (x0, y0 + 1), (x0 + 1, y0 + 1); texels t = "
-        "float32(c / 65535); value = float32 of the exact sum of (w / 256) t (one rounding), "
-        "stored with the channel's write rule. "
+        "float32(c / 65535); with E the binary exponent of the largest texel of non-zero weight "
+        "(in [2^(E-1), 2^E)), operands floor(t 2^(28 - E)); value = their weighted sum times "
+        "2^(E - 36), rounded to the nearest float32 with ties up (a texel weighed 256 is "
+        "unchanged), stored with the channel's write rule. This is " + BILINEAR_HARDWARE + ". "
     )
     entries = [
         entry(
@@ -500,14 +508,20 @@ def uv_sampling(ev: Evaluations, exe: Path) -> dict[str, Any]:
             [
                 parameter("subtexel_bits", 8, "fitted", "bits"),
                 parameter("weight_bits", 8, "fitted", "bits"),
+                parameter("operand_bits", 28, "fitted", "bits"),
                 parameter("uv_pivot", [0.5, 0.5], "fitted"),
             ],
             set_residuals("s0", "s0/user0-5,7") + set_residuals("s1", "s1/user0-5,7"),
-            notes="One value differs, by one code, in s0 and s1 user2 (scale 1.37 x 2.11), both "
-            "recordings: its exact sum lies 2^-34.7 above the midpoint between two float32 values "
-            "and Painter rounded it down; no fixed-point truncation of the sum (26 to 41 bits) or "
-            "texel conversion variant reproduces it without breaking others. Replaces the 20-bit "
-            "integer value rule of resampling.json (about 280 values per map one code off).",
+            notes="The filter's 28-bit operands are what Painter's values need: with the float32 "
+            "texels summed exactly one value of s0 and s1 user2 (scale 1.37 x 2.11, texel "
+            "(175, 18), green) is one code high, its sum lying 2^-9.7 ulp above a float32 "
+            "midpoint where Painter rounds it down; operands of 27 bits break 16 values of "
+            "s0, s1 and s3 (3 867 033 values), 29 to 33 bits keep the miss; truncating the "
+            "sum or each product, round-toward-zero and float32 orders of the sum (at least "
+            "1630) do not fit. The GPU measurement fixes the rest of the rule (the exponent "
+            "of the largest weighed texel, ties up), which the corpus cannot separate (task "
+            "phase1.9_compositor-resample-gaps). Replaces the 20-bit integer value rule of "
+            "resampling.json (about 280 values per map one code off).",
         ),
         entry(
             "uv-bilinear-repeatnone",
@@ -517,7 +531,10 @@ def uv_sampling(ev: Evaluations, exe: Path) -> dict[str, Any]:
             "the projected tile). RepeatHorizontally / RepeatVertically repeat one axis and treat "
             "the other as RepeatNone (not observed).",
             [PYDOC_UV, PYDOC_WRAP, D3D_FILTER, PBRT],
-            [parameter("subtexel_bits", 8, "fitted", "bits")],
+            [
+                parameter("subtexel_bits", 8, "fitted", "bits"),
+                parameter("operand_bits", 28, "fitted", "bits"),
+            ],
             set_residuals("s3", "s3/user0-5,7"),
         ),
         entry(

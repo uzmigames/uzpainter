@@ -4,7 +4,7 @@ Finding-by-finding response to `docs\analysis\reviews\substance-parity-astra-rev
 
 ## Conventions
 
-- `PAINTER` = `C:\Program Files\Adobe\Adobe Substance 3D Painter`; `PYSRC` = `PAINTER\resources\python\modules\substance_painter`; `PYDOC` = `PAINTER\resources\python-doc\substance_painter`; `MODS` = `PAINTER\resources\python\modules`; `OPS` / `SRV` / `CLIENT` = `E:\UzmiGames\Assets3D\Tools\SubstancePainterMCP\src\substance_painter_mcp\{operations,server,client}.py`; `PIPE` = `E:\UzmiGames\Assets3D\Docs\Pipeline\MCP`; `CUBE` = `MODS\automated_tests\resources\layerstack-cube.spp`. `X:n` = line n of file X.
+- `PAINTER` = `C:\Program Files\Adobe\Adobe Substance 3D Painter`; `PYSRC` = `PAINTER\resources\python\modules\substance_painter`; `PYDOC` = `PAINTER\resources\python-doc\substance_painter`; `MODS` = `PAINTER\resources\python\modules`; `OPS` / `SRV` / `CLIENT` = `E:\UzmiGames\Assets3D\Tools\SubstancePainterMCP\src\substance_painter_mcp\{operations,server,client}.py`; `PIPE` = `E:\UzmiGames\Assets3D\Pipeline\mcp`; `CUBE` = `MODS\automated_tests\resources\layerstack-cube.spp`. `X:n` = line n of file X.
 - Verdicts: **accepted** (source confirms; correction applied), **partially accepted** (part confirmed and applied, the rest already present or not supported), **rejected** (source contradicts), **forwarded to architecture** (a decision, not a documentation fix).
 - Method (**Fact**): every cited line was read in the shipped `.py` wrappers, HTML/JS docs, Adobe tests, `OPS`/`SRV`/`CLIENT` and the local patch; `CUBE` was spot-checked with a byte read. Nothing was executed in Painter and the bridge was not called; "Fact (static)" means the code path establishes the behaviour without a run.
 

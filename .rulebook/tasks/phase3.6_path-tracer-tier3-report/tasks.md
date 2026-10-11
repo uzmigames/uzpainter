@@ -2,7 +2,7 @@
 - [ ] 1.1 Prerequisites accepted: phase3.4_path-tracer-transport, phase3.5_path-tracer-materials
 
 ## 2. Implementation
-- [ ] 2.1 Write production-profile settings sheets for Wand v1, Belt v5 and Tunic v10 (environment by hash, display configuration, cameras) and author their fixture descriptions in `parity/manifests/`
+- [ ] 2.1 Write production-profile settings sheets for Wand v1, Belt v5 and Tunic v10 (environment by hash, display configuration, cameras) and author their fixture descriptions in `parity/manifests/`; settings limited to the fixed pipeline of decision 038 (v2 common block or `ref_match`), display configuration pinned to OCIO `Default - sRGB` and shader to the `open-pbr` defaults by decision 038; Tunic v10 subject to the "Double sided" scope point of decision 042
 - [ ] 2.2 Capture the production-project Iray references per `07-…` §2.2 (two session-separated captures plus one at k·S), storing blobs and panel evidence privately and hashes publicly
 - [ ] 2.3 Implement the noise measurement of `07-…` §4 step 1 for every analytic and production fixture
 - [ ] 2.4 Implement the comparison in the reference's own encoding with per-region statistics, mean signed Δ and standard error, 2×/4×/8× downsampled statistics and pinned FLIP (diagnostic only)

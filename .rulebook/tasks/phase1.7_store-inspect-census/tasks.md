@@ -47,4 +47,5 @@ which no hosted machine has.
 | `python -m pytest` (full suite) | see `parity/reports/phase1/store-inspect-census.md` §1 |
 | `mypy`, `ruff check`, `ruff format --check` | clean (178 files) |
 | `python -m tools.parity.guard` | 2313 files checked, 0 blocked (census report covered by the new `PATH_RULES` entry) |
+| Full-suite hang (2026-10-11) | not a store defect. A `save.obj` and a `compact.obj` compiled while `lock.h` was being edited were cached under the new header's hash. Zig records header hashes after the compile, so `Close` locked the wrong offset and hung. The entries were purged (decision 041). After the purge, 7 native cases took 0.15-2.6 s, `tests/store` had 49 passed, and two concurrent sessions of `test_store_inspect.py` each passed 14/14 in 24.6 s |
 | Census | 5 projects measured; tunic v10 at 6.2 % of its `.spp`, hat v8 53.2 %, body v5/v6/v6b 17.5 / 14.2 / 13.0 %. Store overhead is a fraction of a percent: the ratio is decided by which dependency content each side holds, and `not_measured` names the content the corpus no longer keeps as files. Full-content comparison: `phase4.1_coverage-body-v6b`. |

@@ -20,7 +20,7 @@ Compact, task-shaped tools for the operations the pipeline performs, plus typed 
 | Recipes | `sync_stack {stack_json, masks_dir, state?, resource_prefix, resource_group, keep_visible, texture_set}` (the `painter_layer_stack.py sync` semantics), `apply_smart {config_json, texture_set}`, `batch {calls[], stop_on_error}` |
 | Baking | `bake_inspect`, `bake_configure {set, enabled, bakers, uv_tiles, curvature_method, common, per_baker}`, `bake_set_mesh_inputs`, `bake_start {sets[], wait?}`, `bake_capture_preset`, `bake_apply_preset` |
 | Export | `export {config|preset, output_dir, texture_sets?, size_log2?, file_format?, bit_depth?, dry_run?}` → plan or receipt, `export_presets_list` |
-| Render | `capture {mode, camera?, size, samples?, seed?, preset?, path}` → receipt + downscaled image block (modes of `07-preview-and-render-parity.md` §5: the parity mode `painter_iray`, the preview `painter_viewport`, and the diagnostic views), `display_get/display_set`, `shader_get/shader_set`, `camera_get/camera_set` |
+| Render | `capture {mode, camera?, size, samples?, seed?, preset?, path}` → receipt + downscaled image block (modes of `07-preview-and-render-parity.md` §5: the parity mode `painter_iray`, the preview `painter_viewport`, and the diagnostic views), `display_get/display_set`, `shader_get/shader_set`, `camera_get/camera_set` (setters limited to the fixed render pipeline's values, `10-python-api.md` §4 Display row; decisions 038, 042) |
 | Diagnostics | `snapshot_layer_tree`, `diff_snapshots`, `isolate_layer {uid, channels, path}`, `material_views {mask, path}`, `region_stats {mask, map}` |
 | Mesh | `mesh_reload {path, settings, wait?}`, `mesh_certificate` |
 | Jobs and lease | `job_status {job_id}`, `job_result`, `job_cancel`, `job_list`, `lease_acquire {owner}`, `lease_release`, `lease_status` |
@@ -45,7 +45,7 @@ Schemas carry numeric bounds, enums and object references; the server validates 
 
 ## 5. Path roots
 
-`--roots project=<dir>;mesh=<dir>;bake_mesh=<dir>;resource=<dir>;export=<dir>` (the Assets3D client sets all five to `E:\UzmiGames\Assets3D` today — `A3D\Docs\Pipeline\MCP\painter_mcp_client.py`). Paths are canonicalised (absolute, resolved reparse points, `file:///` and relative forms normalised) and checked against the root of the operation; results never reference paths outside the roots. Roots are policy for structured tools; they do not sandbox `run_python` (Q12).
+`--roots project=<dir>;mesh=<dir>;bake_mesh=<dir>;resource=<dir>;export=<dir>` (the Assets3D client sets all five to `E:\UzmiGames\Assets3D` today — `A3D\Pipeline\mcp\painter_mcp_client.py`). Paths are canonicalised (absolute, resolved reparse points, `file:///` and relative forms normalised) and checked against the root of the operation; results never reference paths outside the roots. Roots are policy for structured tools; they do not sandbox `run_python` (Q12).
 
 ## 6. `run_python`
 

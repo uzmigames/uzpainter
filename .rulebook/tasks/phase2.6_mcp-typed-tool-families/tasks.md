@@ -7,7 +7,7 @@
 - [ ] 2.3 Stack family (`layer_*`, `effect_*`, `mask_set`, `source_set`, `fill_set`, `procedural_set`, `anchor_list`, `smart_material_insert`, `smart_mask_insert`, `smart_export`) with explicit `(texture_set, stack)` addressing
 - [ ] 2.4 Recipes group: `sync_stack` (`stack_json, masks_dir, state?, resource_prefix, resource_group, keep_visible, texture_set`), `apply_smart`, `batch {calls[], stop_on_error}`
 - [ ] 2.5 Export group (`export` plan or receipt, dry run, `export_presets_list`) and Mesh group (`mesh_reload`, `mesh_certificate`)
-- [ ] 2.6 Render group (`capture` with supervisor-built downscaled PNG block, `display_get/set`, `shader_get/set`, `camera_get/set`) and Diagnostics group (`snapshot_layer_tree`, `diff_snapshots`, `isolate_layer`, `material_views`, `region_stats`)
+- [ ] 2.6 Render group (`capture` with supervisor-built downscaled PNG block, `display_get/set`, `shader_get/set`, `camera_get/set`, their setters limited to the fixed render pipeline's values by decision 038 and rejecting any other value with an explicit error, decision 042) and Diagnostics group (`snapshot_layer_tree`, `diff_snapshots`, `isolate_layer`, `material_views`, `region_stats`)
 - [ ] 2.7 Baking group (`bake_inspect`, `bake_configure`, `bake_set_mesh_inputs`, `bake_start`, `bake_capture_preset`, `bake_apply_preset`) and Jobs/lease group (`job_*`, `lease_*`)
 - [ ] 2.8 Long-job behaviour (`{job_id, status}` or `wait=true`), `busy {job_id}`, `wait_idle {timeout}`
 - [ ] 2.9 MCP resources (`uzpainter://capabilities`, `project/manifest`, `project/recipe`, `project/layers`, `project/resources`, `assets/parity`, `jobs/<id>`, `ledger`) and the four UzmiGames-authored prompt templates

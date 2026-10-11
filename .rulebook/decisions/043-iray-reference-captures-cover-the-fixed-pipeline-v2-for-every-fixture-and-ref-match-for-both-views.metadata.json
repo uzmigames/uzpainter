@@ -1,0 +1,9 @@
+{
+  "id": 43,
+  "slug": "iray-reference-captures-cover-the-fixed-pipeline-v2-for-every-fixture-and-ref-match-for-both-views",
+  "title": "Iray reference captures cover the fixed pipeline: v2 for every fixture, ref_match for both views",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": ["phase0.7_render-reference-captures"],
+  "supersededBy": null
+}

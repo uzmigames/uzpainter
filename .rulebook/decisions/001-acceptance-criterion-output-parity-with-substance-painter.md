@@ -5,7 +5,7 @@
 
 ## Context
 
-Stated by the product owner (André) on 2026-10-10 while the docs foundation was being written. UzPainter must fully replace Substance in the Assets3D pipeline, whose painting recipes (Docs/Biblioteca) and the Painter × Blender render comparison standard were tuned against Painter's output.
+Stated by the product owner (André) on 2026-10-10 while the docs foundation was being written. UzPainter must fully replace Substance in the Assets3D pipeline, whose painting recipes (Docs/Library; `Docs/Biblioteca` when recorded, renamed by the Assets3D reorganization of 2026-10-11) and the Painter × Blender render comparison standard were tuned against Painter's output.
 
 ## Decision
 

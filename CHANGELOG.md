@@ -13,6 +13,27 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Iray capture procedure (task `phase0.6_render-reference-procedure`): qualified for the fixed render pipeline only (decision 038, the Assets3D render standard v2, `ref_match` v3 and the `base_color` diagnostic). Out-of-process UI Automation operator for Painter's panels (`tools/parity/recorder/painter_ui.py`, decision 039). Pixels come from Save Render as 16-bit display-referred PNG. Readiness is read from Iray's information section. The seed is `uncontrolled`; height is applied as bump; 12.1.5's default shader is open-pbr. Procedure and per-row answers are in `parity/reports/phase0/iray-capture-procedure.md`.
+- Future render tasks re-scoped to the fixed pipeline (decision 042):
+  - Display and render facade symbols stay; values outside the pipeline raise `UnsupportedInUzPainter`.
+  - The only display transform is OCIO `Default - sRGB`.
+  - The path tracer targets the open-pbr defaults.
+- Mask stacks and effects (task `phase1.11_compositor-mask-effects`, items 2.1–2.6; still open):
+  - mono-channel mask stacks with ordered effects, the fill and levels effects, subtraction, `Mesh` geometry masks, group masks, 16-bit mask precision, and the GPU's `exp2(g·log2 x)` pow reproduced from measured tables;
+  - `mask-precision`, `levels-clamp` and `effect-order` s6 are exact on CPU and GPU (`parity/semantics/masks-levels.json`);
+  - the `group-masks` s2–s3 residual waits on `phase1.10_compositor-float32-residual`.
+- Gate G0 record and checks (task `phase0.10_gate-g0`): written, but G0 is held open until every Phase 0 task closes.
+
+### Changed
+
+- UzPainter docs follow Assets3D's 2026-10-11 reorganization (`Docs/Pipeline/...` → `Pipeline/...`, `Docs/Lessons`). Changed sources are re-pinned as new revisions in `docs/approved-sources.md` (decision 040).
+
+### Fixed
+
+- Store inspect tests hung on a poisoned `.zig-cache` object: a header was saved during a running build, which gave a struct layout mismatch across translation units. Fixed by purging the poisoned entries, with no code change (decision 041). Parallel builders now use separate worktrees.
+
+### Added (earlier)
+
 - Blend kernels (task `phase1.10_compositor-blend-kernels`): 24 separable modes exact on every format against both recordings, CPU and DX12; Painter's GPU reciprocal/sqrt/rsqrt reproduced from tables measured on the RTX 4090 (`src/evaluator/hwmath`), explicit fma only where the goldens show fusion; Tint/Saturation/Color/Value, normal-map modes below opacity 1 and PassThrough moved to `phase1.11_compositor-blend-gaps` as release gaps.
 - Quantisation profile (task `phase1.9_compositor-quantisation-profile`): settled profile `painter-12.1-isolated-linear` — the root stack is an isolated group stored in the channel format and composited over the base once at read-out; matches `quantisation-thirds` and `blend-inputs` r1 exactly on 8/16-bit, sRGB8 and 16F maps; RGB32F residual 2^-25..2^-24 open; profile registry with per-project pinning; `parity/semantics/quantisation-profile.json`.
 - Compositor sources and UV projection (task `phase1.8_compositor-sources-projection`): uniform and bitmap fill sources, UV projection, Painter's hardware sRGB8 conversion tables, exact float32 bilinear rounding, Height stored as 2t−1 over base 0 in all templates; tile-cache key now includes the grid size (stale-tile bug fixed); two bilinear differences moved to `phase1.9_compositor-resample-gaps`.

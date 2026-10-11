@@ -15,6 +15,14 @@ that the public documentation leaves "not confirmed". Decision rules, all stated
   changes only the shading inside an unchanged outline.
 - Camera: the probe renders the sphere from a rotated camera; the Euler order whose projected
   silhouette has no mismatch with the render is the confirmed order.
+- Display transform (fixed pipeline, decision 038): the saved render's background, in 8-bit
+  codes, must equal the standard's 89,89,89 (clear colour linear 0.1 through Default - sRGB).
+- Pixel route: Save Render is usable when its frame is not unclear-stale, it is display-referred,
+  the unrotated silhouette matches and it has the override resolution; the live view is 1:1
+  only when the viewport is at least the render's size.
+- Presets: `ref_match` verifies when its background reads 141,142,148 and the panels read back
+  clear colour 8D8E94 and rotation 180; `base_color` when its sheet applied and a live view was
+  captured.
 """
 
 from __future__ import annotations
@@ -41,7 +49,6 @@ Pixels = Sequence[tuple[float, ...]]
 CODE_8BIT = 1.0 / 255.0
 EROSION = 3
 UNCORRELATED, CORRELATED = 0.3, 0.6
-MAGENTA_SHARE = 0.9
 
 
 def normalised(image: Image, bits: int) -> Pixels:
@@ -157,11 +164,6 @@ def residual_correlation(
     return sum(correlations) / 2.0, math.sqrt(variance)
 
 
-def magenta_share(pixels: Pixels) -> float:
-    hits = sum(1 for r, g, b in pixels if r > 0.95 and g < 0.05 and b > 0.95)
-    return hits / len(pixels)
-
-
 def silhouette_mismatches(image: Image, mask: list[bytes]) -> int:
     """Pixels whose coverage disagrees with the mask outside its don't-care band."""
     value = background_value(image)
@@ -196,8 +198,24 @@ def answer(status: str, text: str, evidence: list[str], **extra: Any) -> dict[st
     return {"status": status, "answer": text, "evidence": evidence, **extra}
 
 
+V2_BACKGROUND = (89, 89, 89)
+REF_MATCH_BACKGROUND = (141, 142, 148)
+REF_MATCH_CLEAR_COLOUR = "8D8E94"
+REF_MATCH_ROTATION = 180.0
+
+
+def entry_values(probe: dict[str, Any], label: str) -> dict[str, Any]:
+    return {f"{e['panel']}/{e['setting']}": e["value"] for e in probe["entries"].get(label, [])}
+
+
+def view_dimensions(path: Path) -> list[int]:
+    image = decode_png(path)
+    return [image.width, image.height]
+
+
 def analyse_probe(probe: dict[str, Any], directory: Path, mesh: Mesh) -> dict[str, Any]:
-    """Answers per row id from the probe's renders and operator entries."""
+    """Answers per row id from the probe's renders and operator entries (fixed pipeline,
+    decision 038), plus `presets`: whether `ref_match` and `base_color` apply and verify."""
     renders = probe["renders"]
 
     def image(name: str) -> Render:
@@ -207,6 +225,7 @@ def analyse_probe(probe: dict[str, Any], directory: Path, mesh: Mesh) -> dict[st
     a, pa = render_a.image, render_a.pixels
     repeat = difference(pa, render_b.pixels)
     region = object_region(a)
+    v2 = entry_values(probe, "v2")
     answers: dict[str, Any] = {}
 
     identical = (directory / renders["A"]["file"]).read_bytes() == (
@@ -224,67 +243,110 @@ def analyse_probe(probe: dict[str, Any], directory: Path, mesh: Mesh) -> dict[st
     )
 
     png = measure_storage_format(directory / renders["A"]["file"])
-    tone_baked = changed(difference(pa, image("C").pixels), repeat)
-    exr: dict[str, Any] | None = None
-    if "A_exr" in renders:
-        exr_a = directory / renders["A_exr"]["file"]
-        exr_format = measure_storage_format(exr_a)
-        exr_tone = exr_a.read_bytes() != (directory / renders["C_exr"]["file"]).read_bytes()
-        exr = {
-            "sample_type": exr_format.sample_type,
-            "bits_per_channel": exr_format.bits_per_channel,
-            "channels": exr_format.channels,
-            "tone_mapping_changes_file": exr_tone,
-            "conclusive": identical,
-        }
+    background = code8(background_value(a), png.bits_per_channel)
+    display_referred = background == V2_BACKGROUND
+    exr = renders.get("A_exr")
     answers["save_render"] = answer(
         "confirmed_by_probe",
-        f"Save Render offers {probe['save_render_types']!r}. PNG: {png.bits_per_channel}-bit, "
-        f"{png.channels} channels, colour chunk: {png.encoding or 'none'}; the tone mapping "
-        + ("is" if tone_baked else "is not")
-        + " baked in (Linear vs ACES renders "
-        + ("differ" if tone_baked else "are equal")
-        + ")."
-        + (f" OpenEXR: {exr}." if exr else " OpenEXR not offered."),
-        ["render/A", "render/C", *(["render/A_exr", "render/C_exr"] if exr else [])],
+        f"Save Render offers {probe['save_render_types']!r}; other dialog options: "
+        f"{probe['save_render_options']!r}. PNG: {png.bits_per_channel}-bit, {png.channels} "
+        f"channels, colour chunk: {png.encoding or 'none'}; its background in 8-bit codes "
+        f"{list(background)} "
+        + (
+            "equals the standard's display value 89,89,89 (linear 0.1 through Default - sRGB): "
+            "the display transform is baked in."
+            if display_referred
+            else "differs from the standard's display value 89,89,89."
+        )
+        + (
+            f" OpenEXR: {exr['sample_type']}, {exr['bits_per_channel']}-bit, "
+            f"{exr['channels']} channels."
+            if exr
+            else ""
+        ),
+        ["render/A", *(["render/A_exr"] if exr else [])],
         png={
             "bits_per_channel": png.bits_per_channel,
             "channels": png.channels,
             "colour_chunk": png.encoding,
-            "tone_mapping_baked": tone_baked,
+            "background": list(background),
+            "display_referred": display_referred,
         },
-        exr=exr,
+        exr=None
+        if exr is None
+        else {k: exr[k] for k in ("sample_type", "bits_per_channel", "channels")},
     )
 
-    d = image("D").pixels
-    lut_saved = magenta_share(d) >= MAGENTA_SHARE
-    lut_viewport = bool(probe["lut"]["viewport_magenta"])
+    colour = probe["render_state"]["colour_management"]
+    answers["display_view_transform"] = answer(
+        "confirmed_by_probe" if colour["mode"] == "ocio" and display_referred else "uncontrolled",
+        f"Colour management {colour['mode']!r} (OCIO = Painter's substance config). The "
+        "viewport's display-transform selector is drawn over the viewport, outside the UI "
+        "Automation tree and both APIs, so automation cannot set it: a fresh Painter session "
+        "shows Default - sRGB (panel image), and every capture verifies it through the "
+        f"background, which must read 89,89,89 (read {list(background)}).",
+        ["probe.json", "render/A", "panel/v2/viewport-display-transform"],
+        pinned="Default - sRGB",
+        background=list(background),
+    )
+
     answers["colour_lut"] = answer(
-        "confirmed_by_probe",
-        "With an all-magenta colour-profile LUT active, the Iray viewport "
-        + ("shows" if lut_viewport else "does not show")
-        + " the LUT and the saved render "
-        + ("contains" if lut_saved else "does not contain")
-        + f" it ({magenta_share(d):.3f} of pixels magenta).",
-        ["render/D", "probe.json"],
-        viewport=lut_viewport,
-        saved_render=lut_saved,
+        "not_required",
+        "Fixed pipeline (decision 038): no colour profile and no LUT. Activate Color Profile is "
+        f"applied off and read back ({v2.get('Display Settings/Activate Color Profile')!r}).",
+        ["probe.json", "panel/v2/display-settings"],
+        pinned={"Display Settings/Activate Color Profile": False, "color_lut_url": None},
+    )
+    answers["display_settings"] = answer(
+        "not_required",
+        "Fixed pipeline (decision 038): post effects, colour profile and display SSS off, "
+        "applied and read back; tone mapping does not apply to a colour-managed project "
+        "(set_tone_mapping raises).",
+        ["probe.json", "panel/v2/display-settings"],
+        pinned={
+            name: v2.get(name)
+            for name in (
+                "Display Settings/Activate Post Effects",
+                "Display Settings/Activate Color Profile",
+                "Display Settings/Activate Subsurface Scattering",
+            )
+        },
+    )
+    answers["default_mdl_parameters"] = answer(
+        "not_required",
+        "Fixed pipeline (decision 038): the material is the default shader instance of a new "
+        "project, left at Painter's defaults (panel image); its parameters are not a variable.",
+        ["panel/defaults/shader-settings", "panel/height/shader-settings"],
+        pinned="Painter's default shader instance",
     )
 
-    vignette = changed(difference(pa, image("E").pixels), repeat)
-    answers["display_settings"] = answer(
+    iray = {k: v for k, v in v2.items() if k.startswith("Iray Settings/")}
+    sized = (a.width, a.height) == (probe["sheet"]["width"], probe["sheet"]["height"])
+    answers["iray_settings"] = answer(
+        "confirmed_by_probe" if sized else "uncontrolled",
+        "No API reads or sets them; the UI operator applies each pinned value and reads it back "
+        f"from the widget ({iray}); the saved render is {a.width}x{a.height}. Persistence is not "
+        "relied on: every capture re-applies and re-reads the sheet. Caustic Sampler and the "
+        "resolution override beyond the pinned values are not required (decision 038).",
+        ["probe.json", "panel/v2/iray-settings", "render/A"],
+        pinned=iray,
+    )
+    converged = probe["convergence"]
+    answers["readiness"] = answer(
         "confirmed_by_probe",
-        "Tone mapping "
-        + ("changes" if tone_baked else "does not change")
-        + " the saved Iray image; the colour-profile LUT "
-        + ("changes" if lut_saved else "does not change")
-        + " it; the post effect Vignette "
-        + ("changes" if vignette else "does not change")
-        + " it. Fixtures keep Linear tone mapping, no colour profile and post effects off.",
-        ["render/A", "render/C", "render/D", "render/E"],
-        tone_mapping=tone_baked,
-        colour_lut=lut_saved,
-        post_effect_vignette=vignette,
+        "No API exposes it; the UI operator reads Status, Iterations and Rendering time from "
+        f"Iray's information section ({converged}), and the recorder gates the capture on Done, "
+        "Iterations = S and a time below Max Time.",
+        ["probe.json", "panel/v2/iray-settings"],
+        convergence=converged,
+    )
+    viewer = {k: v for k, v in v2.items() if k.startswith("Display Settings/")}
+    answers["viewer_mdl_settings"] = answer(
+        "confirmed_by_probe",
+        "Not in the APIs; the UI operator applies each pinned environment and dome value and "
+        f"reads it back ({viewer}). The MDL settings sweep is not required (decision 038).",
+        ["probe.json", "panel/v2/display-settings"],
+        pinned=viewer,
     )
 
     f, g = image("F").pixels, image("G").pixels
@@ -297,10 +359,10 @@ def analyse_probe(probe: dict[str, Any], directory: Path, mesh: Mesh) -> dict[st
         stale = "unclear"
     answers["stale_frame"] = answer(
         "confirmed_by_probe" if stale != "unclear" else "uncontrolled",
-        f"Save Render right after a settings change (Status {probe['stale']['status_at_save']!r}) "
+        f"Save Render right after a camera change (Status {probe['stale']['status_at_save']!r}) "
         + {
             "previous_frame": "saved the previous converged frame: stale frames are possible.",
-            "current_frame": "saved the current, unfinished frame of the new settings.",
+            "current_frame": "saved a frame of the new settings, not the previous frame.",
             "unclear": "saved a frame matching neither the previous nor the new settings.",
         }[stale],
         ["render/A", "render/F", "render/G", "probe.json"],
@@ -322,8 +384,8 @@ def analyse_probe(probe: dict[str, Any], directory: Path, mesh: Mesh) -> dict[st
         denoiser, status = "inconclusive residual correlation", "uncontrolled"
     answers["denoiser"] = answer(
         status,
-        f"{denoiser} (lag-1 correlation {rho:.3f}, residual sd {sigma:.4f}); the Iray Settings "
-        "panel has no denoiser control (panel image).",
+        f"{denoiser} (lag-1 correlation {rho:.3f}, residual sd {sigma:.4f}); the Renderer "
+        "Settings panel has no denoiser control (panel image).",
         ["render/A", "render/I", "panel/defaults/iray-settings"],
         correlation=rho,
         residual_sd=sigma,
@@ -340,8 +402,9 @@ def analyse_probe(probe: dict[str, Any], directory: Path, mesh: Mesh) -> dict[st
         height = "neither (a height stripe map changes nothing)"
     answers["height"] = answer(
         "confirmed_by_probe",
-        f"Iray applies height as {height}; outline pixels changed: {outline}.",
-        ["render/A", "render/J"],
+        "With the shader at Painter's defaults (panel image), Iray applies a painted height "
+        f"as {height}; outline pixels changed: {outline}.",
+        ["render/A", "render/J", "panel/height/shader-settings"],
         outline_changed=outline,
         interior_shading_changed=shading,
     )
@@ -367,96 +430,68 @@ def analyse_probe(probe: dict[str, Any], directory: Path, mesh: Mesh) -> dict[st
         background_uniform=background_uniform(a),
     )
 
-    answers.update(persistence_answers(probe))
-    usable = (
-        stale in ("current_frame", "previous_frame")
-        and (png.encoding is not None or tone_baked)
-        and centred == 0
-        and (a.width, a.height) == (probe["sheet"]["width"], probe["sheet"]["height"])
-    )
+    view = probe["files"].get("view/V")
+    view_size = view_dimensions(directory / view["file"]) if view else None
+    one_to_one = view_size is not None and view_size[0] >= a.width and view_size[1] >= a.height
+    usable = stale in ("current_frame", "previous_frame") and display_referred and centred == 0
+    usable = usable and sized
     answers["pixel_route"] = answer(
         "confirmed_by_probe",
-        "Save Render (PNG, display-referred)"
-        if usable
-        else "Save Render unusable: the external 1:1 observation fallback is needed",
-        ["render/A", "render/C", "render/F", "render/G"],
+        (
+            "Save Render (PNG, display-referred, at the override resolution)"
+            if usable
+            else "Save Render unusable: the external 1:1 observation fallback is needed"
+        )
+        + f". The live view of the viewport is {view_size} pixels for a {a.width}x{a.height} "
+        + (
+            "render: a 1:1 observation is possible."
+            if one_to_one
+            else "render: it is scaled, so an external observation is not 1:1 at this size."
+        ),
+        ["render/A", "render/F", "render/G", "view/V"],
         route="save_render" if usable else "external_observation_1to1",
+        live_view=view_size,
+        live_view_one_to_one=one_to_one,
     )
+    ref_bits = measure_storage_format(directory / renders["R"]["file"]).bits_per_channel
+    answers["presets"] = preset_answers(probe, directory, image("R").image, ref_bits)
     return answers
 
 
-PERSISTED_SETTINGS = (
-    ("Iray Settings", "Min Sample"),
-    ("Iray Settings", "Max Sample"),
-    ("Iray Settings", "Max Time"),
-    ("Iray Settings", "Caustic Sampler"),
-    ("Iray Settings", "Firefly Filter"),
-    ("Iray Settings", "Width"),
-    ("Iray Settings", "Height"),
-    ("Viewer and MDL Settings", "Environment Exposure"),
-    ("Viewer and MDL Settings", "Environment Rotation"),
-    ("Viewer and MDL Settings", "Emissive Intensity"),
-    ("Viewer and MDL Settings", "IOR"),
-)
+def code8(pixel: tuple[int, ...], bits: int) -> tuple[int, ...]:
+    """An RGB pixel of a `bits`-deep image in 8-bit code values (rounded)."""
+    top = (1 << bits) - 1
+    return tuple(round(v * 255 / top) for v in pixel[:3])
 
 
-def persistence_answers(probe: dict[str, Any]) -> dict[str, Any]:
-    entries = probe["entries"]
-
-    def values(name: str) -> dict[tuple[str, str], str]:
-        return {(e["panel"], e["setting"]): str(e["value"]) for e in entries[name]}
-
-    applied, reopened, fresh = values("persistence"), values("after_reopen"), values("new_project")
-    table = {
-        f"{panel}/{setting}": {
-            "applied": applied.get((panel, setting)),
-            "after_save_reopen": reopened.get((panel, setting)),
-            "new_project_same_session": fresh.get((panel, setting)),
-            "kept_by_project": reopened.get((panel, setting)) == applied.get((panel, setting)),
-            "kept_by_session": fresh.get((panel, setting)) == applied.get((panel, setting)),
-        }
-        for panel, setting in PERSISTED_SETTINGS
-    }
-    iray = {k: v for k, v in table.items() if k.startswith("Iray Settings/")}
-    viewer = {k: v for k, v in table.items() if not k.startswith("Iray Settings/")}
-    defaults = {f"{e['panel']}/{e['setting']}": e["value"] for e in entries["mdl_defaults"]}
-
-    def summary(rows: dict[str, Any]) -> str:
-        return "; ".join(
-            f"{name}: "
-            + ("saved with the project" if row["kept_by_project"] else "not saved with the project")
-            + (", carried into a new project" if row["kept_by_session"] else "")
-            for name, row in rows.items()
-        )
-
+def preset_answers(probe: dict[str, Any], directory: Path, ref: Image, bits: int) -> dict[str, Any]:
+    """Whether the ref_match preset and the base_color diagnostic apply and verify."""
+    background = code8(background_value(ref), bits)
+    shown = entry_values(probe, "ref_match")
+    try:
+        rotation = float(shown.get("Display Settings/Environment Rotation", "nan"))
+    except ValueError:
+        rotation = math.nan
+    ref_ok = (
+        background == REF_MATCH_BACKGROUND
+        and str(shown.get("Display Settings/Clear color value", "")).upper()
+        == REF_MATCH_CLEAR_COLOUR
+        and rotation == REF_MATCH_ROTATION
+    )
+    base = entry_values(probe, "base_color")
+    view = probe["files"].get("view/BC")
     return {
-        "iray_settings": answer(
-            "confirmed_by_probe",
-            "No Python or JavaScript API symbol reads or sets them (documentation scan); the "
-            "operator fixes and reads them in the panel. " + summary(iray) + ".",
-            [
-                "probe.json",
-                "panel/after-reopen/iray-settings",
-                "panel/after-reopen/viewer-and-mdl-settings",
-            ],
-            persistence=iray,
-        ),
-        "viewer_mdl_settings": answer(
-            "confirmed_by_probe",
-            "Not in the Python or JavaScript API; operator-recorded. " + summary(viewer) + ".",
-            [
-                "probe.json",
-                "panel/after-reopen/iray-settings",
-                "panel/after-reopen/viewer-and-mdl-settings",
-            ],
-            persistence=viewer,
-        ),
-        "default_mdl_parameters": answer(
-            "confirmed_by_probe",
-            "Defaults shown on a new project's material: "
-            + ", ".join(f"{k} = {v}" for k, v in sorted(defaults.items()))
-            + "; operator-recorded per material instance.",
-            ["probe.json", "panel/defaults/viewer-and-mdl-settings"],
-            defaults=defaults,
-        ),
+        "ref_match": {
+            "applied_and_verified": ref_ok,
+            "background": list(background),
+            "readback": shown,
+            "environment_url": probe["ref_match"]["environment_url"],
+            "evidence": ["render/R", "panel/ref_match/display-settings", "probe.json"],
+        },
+        "base_color": {
+            "applied_and_verified": bool(base) and view is not None,
+            "readback": base,
+            "live_view": None if view is None else view_dimensions(directory / view["file"]),
+            "evidence": ["view/BC", "panel/base_color/display-settings", "probe.json"],
+        },
     }

@@ -37,6 +37,13 @@ module = ["OpenEXR"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# Windows UI automation of Painter's panels (tools/parity/recorder/painter_ui.py, decision 029):
+# pywinauto, pywin32 and Pillow are dev-only dependencies on the owner's machine; hosted CI does
+# not install them, and pywinauto and pywin32 ship no type information.
+module = ["pywinauto", "pywinauto.*", "win32gui", "win32ui", "PIL", "PIL.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # PyYAML (tests reading the CI workflows) ships no type information; types-PyYAML is not installed.
 module = ["yaml"]
 ignore_missing_imports = true

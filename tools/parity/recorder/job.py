@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,13 @@ INPUT_ARGS = {ps.CREATE: "mesh", ps.SET_ENVIRONMENT: "environment", ps.IMPORT_RE
 # Optional step arguments naming an input by input_id; when given, the recorder passes the
 # staged file's `file:///` URL (a file baking parameter, e.g. the high-poly mesh).
 OPTIONAL_INPUT_ARGS = {ps.BAKING_SET: "input"}
+
+# `set_environment_resource` of a file imported as a session resource (the `ref_match` preset
+# of the fixed render pipeline, decision 038): the file is not a repository input; the step
+# names it by SHA-256 and file name, and the recorder is given the file at record time.
+SESSION_ENVIRONMENT = "session_environment"
+SESSION_FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.(exr|hdr)")
+SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 # Baking-configuration steps: they must come before the last `bake_async` of the job.
 BAKING_SETTINGS = frozenset({ps.BAKING_SET, ps.BAKING_SET_ENABLED_BAKERS})
@@ -212,6 +220,15 @@ def baking_readback(step: Step) -> dict[str, Any]:
     return {"call": ps.GET_PROPERTY_VALUE, "args": args | scope}
 
 
+def check_session_environment(step: Step) -> None:
+    if not SHA256_HEX.fullmatch(str(step.args[SESSION_ENVIRONMENT])):
+        raise RecorderError(f"step {step.step}: `{SESSION_ENVIRONMENT}` must be a SHA-256")
+    if not SESSION_FILE_NAME.fullmatch(str(step.args.get("file_name", ""))):
+        raise RecorderError(
+            f"step {step.step}: a session environment needs `file_name` (an .exr or .hdr name)"
+        )
+
+
 def check_baking_step(step: Step) -> None:
     """Refuse a malformed baking step before Painter is touched."""
     args = step.args
@@ -338,6 +355,11 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
         if step.call not in STATE_CALLS:
             raise RecorderError(f"step {step.step}: {step.call} is not in the recorder vocabulary")
         key = INPUT_ARGS.get(step.call)
+        if step.call == ps.SET_ENVIRONMENT and "resource_url" in step.args:
+            key = None  # a resource Painter ships or already has, named by its URL
+        if step.call == ps.SET_ENVIRONMENT and SESSION_ENVIRONMENT in step.args:
+            check_session_environment(step)
+            key = None  # a file outside the repository, named by its SHA-256
         if key is not None and step.args.get(key) not in inputs:
             raise RecorderError(f"step {step.step}: `{key}` must name an input with a path")
         key = OPTIONAL_INPUT_ARGS.get(step.call)

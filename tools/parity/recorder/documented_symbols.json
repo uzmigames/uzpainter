@@ -1035,6 +1035,10 @@
       "documented_as": "substance_painter.resource.import_project_resource",
       "page": "substance_painter/resource.html"
     },
+    "substance_painter.resource.import_session_resource": {
+      "documented_as": "substance_painter.resource.import_session_resource",
+      "page": "substance_painter/resource.html"
+    },
     "substance_painter.resource.search": {
       "documented_as": "substance_painter.resource.search",
       "page": "substance_painter/resource.html"
