@@ -338,6 +338,8 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
         if step.call not in STATE_CALLS:
             raise RecorderError(f"step {step.step}: {step.call} is not in the recorder vocabulary")
         key = INPUT_ARGS.get(step.call)
+        if step.call == ps.SET_ENVIRONMENT and "resource_url" in step.args:
+            key = None  # a resource Painter ships or already has, named by its URL
         if key is not None and step.args.get(key) not in inputs:
             raise RecorderError(f"step {step.step}: `{key}` must name an input with a path")
         key = OPTIONAL_INPUT_ARGS.get(step.call)

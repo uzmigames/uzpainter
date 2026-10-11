@@ -426,3 +426,53 @@ def test_texture_jobs_are_not_iray_jobs(
 ) -> None:
     with pytest.raises(RecorderError, match="Tier 3"):
         record(fake, make_session, sample_job, work, inbox, SEPARATE_SESSION)
+
+
+def fixed_pipeline_capture(background: str, bits: int) -> list[dict[str, Any]]:
+    return [
+        sheet_setting("capture.encoding", "display_referred"),
+        sheet_setting("capture.procedure", "iray-capture/1"),
+        sheet_setting("capture.route", "save_render"),
+        sheet_setting("capture.background_srgb8", background),
+        sheet_setting("capture.bits_per_channel", bits),
+        sheet_setting("capture.display_transform", "Default - sRGB"),
+    ]
+
+
+def test_fixed_pipeline_checks_pass_on_the_expected_background(
+    fake: types.ModuleType, make_session: MakeSession, tmp_path: Path, work: Path, inbox: Path
+) -> None:
+    """Decision 038/039: the background canary, the bit depth and the display-transform image."""
+    job = make_iray_job(tmp_path, capture=fixed_pipeline_capture("0,0,0", 8))
+    sheet = settings_sheet(job)
+    assert (sheet.background_srgb8, sheet.bits_per_channel) == ((0, 0, 0), 8)
+    assert record(fake, make_session, job, work, inbox, SEPARATE_SESSION) is None
+    (staged,) = (work / "iray-staging").glob("*/*/staged.json")
+    outputs = json.loads(staged.read_text(encoding="utf-8"))["recording"]["outputs"]
+    panels = sorted(o["panel"] for o in outputs if o["kind"] == "settings_panel_evidence")
+    assert panels == ["Iray Settings", "Viewer and MDL Settings", "Viewport display transform"]
+
+
+@pytest.mark.parametrize(
+    ("background", "bits", "message"),
+    [("89,89,89", 8, "background reads"), ("0,0,0", 16, "requires 16-bit")],
+)
+def test_fixed_pipeline_checks_refuse_a_wrong_capture(
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    tmp_path: Path,
+    work: Path,
+    inbox: Path,
+    background: str,
+    bits: int,
+    message: str,
+) -> None:
+    job = make_iray_job(tmp_path, capture=fixed_pipeline_capture(background, bits))
+    with pytest.raises(RecorderError, match=message):
+        record(fake, make_session, job, work, inbox, SEPARATE_SESSION)
+
+
+def test_background_canary_must_be_three_codes(tmp_path: Path) -> None:
+    job = make_iray_job(tmp_path, capture=fixed_pipeline_capture("89,89", 16))
+    with pytest.raises(RecorderError, match="three 8-bit codes"):
+        settings_sheet(job)

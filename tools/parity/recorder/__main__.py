@@ -9,7 +9,7 @@ r"""Command line of the Painter oracle recorder (operator guide: `parity/RECORDE
     python -m tools.parity.recorder list-templates
     python -m tools.parity.recorder record-templates <manifest.json>
     python -m tools.parity.recorder check [--python-doc <objects.inv>]
-    python -m tools.parity.recorder iray-probe
+    python -m tools.parity.recorder iray-probe --ref-match-hdri <exr> [--operator ui]
     python -m tools.parity.recorder iray-probe-analyse <probe directory>
     python -m tools.parity.recorder refresh [--launch]
     python -m tools.parity.recorder stability-study <manifest or dir>... [--launch] [--admit]
@@ -19,6 +19,9 @@ Every recording command reads the running Painter build first: a build that is n
 current nor the candidate envelope's starts the envelope refresh (decision 037; `refresh`, exit
 status 3 once it ends). The last three commands are the oracle envelope's (`parity/RECORDER.md`
 §10, `tools/parity/envelope/`).
+
+`--operator ui` (iray, iray-probe) lets `painter_ui.UiOperator` operate Painter's panels by
+Windows UI automation (decision 029) instead of a person at the console.
 
 Painter must already run with `--enable-remote-scripting` and no project open (or `--launch`).
 Records go to `UZP_ORACLE_INBOX` (default `%LOCALAPPDATA%\UzPainter\oracle-inbox`), working files to
@@ -43,6 +46,7 @@ from tools.parity.recorder.iray import (
     K_TIMES_SAMPLES,
     SEPARATE_SESSION,
     ConsoleOperator,
+    Operator,
     record_iray_reference,
 )
 from tools.parity.recorder.iray_probe import reanalyse, run_probe
@@ -72,11 +76,16 @@ def parse(argv: Sequence[str]) -> argparse.Namespace:
     iray = commands.choices["iray"]
     iray.add_argument("--condition", choices=[SEPARATE_SESSION, K_TIMES_SAMPLES], required=True)
     iray.add_argument("--k", type=int)
+    iray.add_argument("--operator", choices=["console", "ui"], default="console")
     check = commands.add_parser("check")
     check.add_argument("--python-doc", type=Path, help="python-doc objects.inv to check against")
     probe = commands.add_parser("iray-probe", help="operator-assisted Iray procedure probe")
     probe.add_argument("--host", default=REMOTE_HOST)
     probe.add_argument("--port", type=int, default=REMOTE_PORT)
+    probe.add_argument("--operator", choices=["console", "ui"], default="console")
+    probe.add_argument(
+        "--ref-match-hdri", type=Path, required=True, help="the ref_match preset's HDRI file"
+    )
     analyse = commands.add_parser("iray-probe-analyse", help="re-run a probe's analysis")
     analyse.add_argument("directory", type=Path)
     iray.add_argument("--operator-id", required=True, help="who applies the settings sheet")
@@ -107,6 +116,18 @@ def refresh_after_unseen_build(args: argparse.Namespace, error: UnseenBuild) -> 
     return 3
 
 
+def make_operator(kind: str) -> Operator:
+    """The person at the console, or the UI automation of Painter's panels (decision 029)."""
+    if kind == "console":
+        return ConsoleOperator()
+    from datetime import UTC, datetime
+
+    from tools.parity.recorder.painter_ui import PainterUi, UiOperator
+
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return UiOperator(PainterUi(), work_root() / "ui-operator" / stamp)
+
+
 def run_iray_probe(args: argparse.Namespace) -> int:
     try:
         if args.command == "iray-probe-analyse":
@@ -114,7 +135,9 @@ def run_iray_probe(args: argparse.Namespace) -> int:
             directory = args.directory
         else:
             session = PainterSession(HttpTransport(args.host, args.port))
-            directory = run_probe(session, ConsoleOperator(), work_root())
+            directory = run_probe(
+                session, make_operator(args.operator), work_root(), args.ref_match_hdri
+            )
             data = json.loads((directory / "probe.json").read_text(encoding="utf-8"))
             if "answers" not in data:
                 print(f"analysis failed: {data['analysis_error']}", file=sys.stderr)
@@ -125,6 +148,10 @@ def run_iray_probe(args: argparse.Namespace) -> int:
         print(f"refused: {error}", file=sys.stderr)
         return 2
     for row, value in answers.items():
+        if row == "presets":
+            for name, preset in value.items():
+                print(f"preset {name}: applied and verified = {preset['applied_and_verified']}")
+            continue
         print(f"{row}: [{value['status']}] {value['answer']}")
     print(f"probe evidence: {directory / 'probe.json'}")
     return 0
@@ -174,7 +201,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 session,
                 job,
                 args.condition,
-                ConsoleOperator(),
+                make_operator(args.operator),
                 work_root(),
                 inbox_root(),
                 args.k,

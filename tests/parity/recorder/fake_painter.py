@@ -837,6 +837,9 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         ResourceID=ResourceID,
         Shelves=Shelves,
         import_project_resource=lambda path, usage: Resource(ResourceID(Path(path).stem)),
+        import_session_resource=lambda path, usage: Resource(
+            ResourceID(Path(path).stem, "session")
+        ),
     )
     ui = module(
         "substance_painter.ui",

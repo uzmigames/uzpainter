@@ -6,8 +6,7 @@
   1.0 above 70 deg. A camera at elevation 0 with a field of view up to 40 deg sees only the
   constant part as background, so the background of a render is uniform; the patch makes the
   lighting change under an environment rotation.
-- Probe-only inputs written into the private work directory: a constant colour-profile LUT
-  (every entry magenta, so the result does not depend on the LUT layout) and a stripe height map.
+- Probe-only input written into the private work directory: a stripe height map.
 
 `python -m tools.parity.render_procedure fixtures` regenerates the committed files;
 `tests/parity/render_procedure/test_fixtures.py` checks they are byte-identical to the code.
@@ -29,8 +28,6 @@ ENV_WIDTH, ENV_HEIGHT = 128, 64
 BASE, PATCH, CAP = 0.05, 20.0, 1.0
 PATCH_ELEVATION = (45.0, 70.0)
 PATCH_AZIMUTH = (0.0, 90.0)
-LUT_WIDTH, LUT_HEIGHT = 2048, 128  # the documented standard colour-profile LUT size
-MAGENTA = (1.0, 0.0, 1.0)
 
 
 def sphere_obj() -> str:
@@ -116,10 +113,6 @@ def sky_patch_pixels() -> list[tuple[float, float, float]]:
                 value = BASE
             pixels.append((value, value, value))
     return pixels
-
-
-def magenta_lut() -> bytes:
-    return exr_half_rgb(LUT_WIDTH, LUT_HEIGHT, [MAGENTA] * (LUT_WIDTH * LUT_HEIGHT))
 
 
 def stripe_height_png(size: int = 256, period: int = 32) -> bytes:

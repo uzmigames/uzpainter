@@ -5,8 +5,9 @@ block between `<!-- answers:begin -->` and `<!-- answers:end -->` (the repositor
 other JSON data under `parity/`), with a summary table rendered from it between
 `<!-- answers-table:begin -->` and `<!-- answers-table:end -->`. Each row has a status
 (`documented`, `confirmed_by_probe`, `uncontrolled`, or `pending_probe` until the probe session
-has run), the answer in UzmiGames' words, and its evidence by SHA-256: public documentation as
-retrieved, or private probe files, never their content. `merge_probe` folds a probe's answers
+has run, or `not_required` for a setting the fixed render pipeline pins, decision 038), the
+answer in UzmiGames' words, and its evidence by SHA-256: public documentation as retrieved, or
+private probe files, never their content. `merge_probe` folds a probe's answers
 in; `pending` lists what is still open (acceptance needs it empty).
 """
 
@@ -22,7 +23,7 @@ from tools.parity.schemas import REPO_ROOT
 
 REPORT_PATH = REPO_ROOT / "parity" / "reports" / "phase0" / "iray-capture-procedure.md"
 SCHEMA = "uzpainter/parity/iray-capture-answers/1"
-STATUSES = ("documented", "confirmed_by_probe", "uncontrolled", "pending_probe")
+STATUSES = ("documented", "confirmed_by_probe", "uncontrolled", "not_required", "pending_probe")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 BLOCK = re.compile(r"(<!-- answers:begin -->\n```json\n)(.*?)(\n```\n<!-- answers:end -->)", re.S)
 TABLE = re.compile(r"(<!-- answers-table:begin -->\n)(.*?)(<!-- answers-table:end -->)", re.S)
@@ -105,6 +106,8 @@ def problems(data: dict[str, Any]) -> list[str]:
         evidence = entry.get("evidence", [])
         if entry.get("status") != "pending_probe" and not evidence:
             found.append(f"{row}: settled without evidence")
+        if entry.get("status") == "not_required" and "pinned" not in entry.get("details", {}):
+            found.append(f"{row}: not_required without its pinned value")
         for item in evidence:
             if not SHA256.match(str(item.get("sha256", ""))) or not item.get("source"):
                 found.append(f"{row}: evidence {item!r} needs a source and a SHA-256")
@@ -123,7 +126,9 @@ def merge_probe(data: dict[str, Any], probe_file: Path) -> dict[str, Any]:
     probe_sha = sha256_file(probe_file)
     files = probe["files"]
     merged: dict[str, Any] = json.loads(json.dumps(data))
-    for row, result in probe["answers"].items():
+    answers = dict(probe["answers"])
+    presets = answers.pop("presets", None)
+    for row, result in answers.items():
         if row not in ROWS:
             raise ValueError(f"probe answers an unknown row {row!r}")
         details = {k: v for k, v in result.items() if k not in ("status", "answer", "evidence")}
@@ -146,5 +151,19 @@ def merge_probe(data: dict[str, Any], probe_file: Path) -> dict[str, Any]:
         "session_id": probe["session_id"],
         "finished_at": probe["finished_at"],
     }
+    if presets is not None:
+        merged["presets"] = {
+            name: {
+                **{k: v for k, v in preset.items() if k != "evidence"},
+                "evidence": [
+                    {
+                        "source": f"probe:{item}",
+                        "sha256": probe_sha if item == "probe.json" else files[item]["sha256"],
+                    }
+                    for item in preset["evidence"]
+                ],
+            }
+            for name, preset in presets.items()
+        }
     merged["uncontrolled"] = uncontrolled(merged)
     return merged

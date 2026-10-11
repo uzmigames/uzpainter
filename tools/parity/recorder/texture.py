@@ -121,7 +121,7 @@ def replay(session: PainterSession, job: Job, staged: dict[str, Path]) -> dict[s
     for step in job.state_steps:
         resolved = {}
         key = INPUT_ARGS.get(step.call)
-        if key is not None:
+        if key is not None and key in step.args:
             resolved[key] = staged[step.args[key]].as_posix()
         key = OPTIONAL_INPUT_ARGS.get(step.call)
         if key is not None and key in step.args:
