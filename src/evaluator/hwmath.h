@@ -62,6 +62,15 @@
 // and asin = fma(-2, P(t'), float32(pi / 2)), P the same polynomial; c0..c4 = 1.666701424e-1,
 // 7.484657646e-2, 4.675685871e-2, 1.816697683e-2, 5.175137819e-2 (float32). Subnormal inputs
 // give +0, |x| > 1 and NaN the quiet NaN, and the sign of x carries to the result.
+//
+// The arccosine is the recording GPU's `acos` through Vulkan (GLSL.std.450 Acos; phase1.12: the
+// virtual normal maps turn a partly covered Normal channel toward (0, 0, 1) with it), built from
+// the arcsine's polynomial P (above) without the subtraction from pi / 2: for t = |x| > 0.57,
+// D = 2 P(sqrt(fma(-1/2, t, 1/2))) with the hardware square root; else D = float32(pi / 2) - P(t);
+// acos(x) = D for x >= 0 and float32(pi) - D for x < 0. Equal to the GPU's Vulkan `acos` on 65 536
+// inputs in [0, 1] and 65 536 in [-1, 0] (tools/parity/vk_sampler_probe, scratch kernel); the
+// OpenGL `acos` is a different, low-accuracy polynomial (compositor-blend-gaps.md §2). Subnormal
+// inputs count as zero, |x| > 1 and NaN give the quiet NaN.
 
 #include <cstdint>
 #include <span>
@@ -116,5 +125,7 @@ inline constexpr uint32_t kRootEntries = 1u << 24;
 [[nodiscard]] float Cos(float x);
 /// The recording GPU's GLSL asin (above).
 [[nodiscard]] float Asin(float x);
+/// The recording GPU's Vulkan acos (above).
+[[nodiscard]] float Acos(float x);
 
 }  // namespace uzp::evaluator::hw

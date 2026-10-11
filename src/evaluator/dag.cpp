@@ -100,15 +100,11 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             result.projection = *projection;
             result.signedRange = !mask && ctx.channel == ChannelType::Height;
             if (!mask && ctx.channel == ChannelType::Normal) {
-                // The Normal channel of an OpenGL project stores an imported normal map with its
-                // green codes inverted (blend-modes.json `blend-normal-channel-import`); a
-                // DirectX project's import is not recorded.
-                if (ctx.project.settings.normal_map_format != core::NormalMapFormat::OpenGL) {
-                    return EvalFail(EvalErrorKind::UnsupportedSource,
-                                    "a bitmap on the Normal channel of a DirectX project is not "
-                                    "recorded (phase1.12_compositor-height-normal recording request)",
-                                    uid);
-                }
+                // The Normal channel stores an imported normal map with its green codes inverted
+                // in OpenGL and DirectX projects alike (blend-modes.json
+                // `blend-normal-channel-import`; height-to-normal.json
+                // `height-normal-channel-import`: a DirectX project's export of the channel
+                // inverts the stored green again).
                 result.invertGreen = true;
             }
             // Bound by content hash (LAY-13): the alias and, under legacy colour management, the
@@ -515,6 +511,7 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     dag.format = channelIt->second.format;
     dag.tileFormat = TileFormatOf(dag.format);
     dag.base = *base;
+    dag.readoutBase = channel == ChannelType::Normal ? std::array<float, 3>{0.5f, 0.5f, 1.0f} : *base;
     dag.grid = TileGrid{static_cast<uint32_t>(set->resolution.width),
                         static_cast<uint32_t>(set->resolution.height)};
     dag.templateId = std::string(templateId);
@@ -535,6 +532,20 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     }
     render::Result<void> ok = AppendLayers(ctx, stackPtr->root_layers, dag.root);
     if (!ok) return render::Unexpected(ok.error());
+    if (channel == ChannelType::Normal && project.settings.normal_map_format != core::NormalMapFormat::OpenGL &&
+        !dag.root.layers.empty()) {
+        // A DirectX project's Normal channel is recorded as one bitmap fill in Normal mode at
+        // opacity 1, without mask or effects (decision 079); other stacks are not.
+        const DagLayer& only = dag.root.layers.front();
+        const bool recorded = dag.root.layers.size() == 1 && !only.group && only.mode == core::BlendingMode::Normal &&
+                              only.opacity == 1.0f && only.mask == 1.0f && !only.maskStack && only.effects.empty() &&
+                              only.source && only.source->kind == DagSource::Kind::Bitmap;
+        if (!recorded) {
+            return EvalFail(EvalErrorKind::UnsupportedSource,
+                            "a DirectX project's Normal channel is recorded as one bitmap fill in Normal mode at "
+                            "opacity 1 without mask or effects only (phase1.12_compositor-height-normal)");
+        }
+    }
     if (dag.root.isolated && !dag.root.layers.empty()) {
         HashWriter writer;
         writer.Sub(dag.root.layers.back().prefixHash).Str("readout");

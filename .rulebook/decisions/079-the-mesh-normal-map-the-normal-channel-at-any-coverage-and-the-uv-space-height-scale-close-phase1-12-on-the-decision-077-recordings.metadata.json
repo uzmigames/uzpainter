@@ -1,0 +1,11 @@
+{
+  "id": 79,
+  "slug": "the-mesh-normal-map-the-normal-channel-at-any-coverage-and-the-uv-space-height-scale-close-phase1-12-on-the-decision-077-recordings",
+  "title": "The mesh normal map, the Normal channel at any coverage and the UV-space height scale close phase1.12 on the decision 077 recordings",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.12_compositor-height-normal"
+  ],
+  "supersededBy": null
+}

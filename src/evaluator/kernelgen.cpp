@@ -147,15 +147,15 @@ std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(const BlendOp& op,
     return params;
 }
 
-render::KernelSource VirtualNormalKernelSource() {
+render::KernelSource VirtualNormalKernelSource(render::TexelEncoding normalEncoding) {
     render::KernelSource source;
-    source.name = "evaluator_virtual_normal";
+    source.name = "evaluator_virtual_normal_" + std::to_string(render::image_pass_detail::EncodingConstant(normalEncoding));
     source.hlsl = std::string(kBlendHlsl, sizeof(kBlendHlsl));
     source.entryPoint = "main";
     source.defines = {
         "UZP_VNORMAL=1",
         "UZP_MODE_Normal=1",
-        "UZP_ENC=" + std::to_string(render::image_pass_detail::EncodingConstant(render::TexelEncoding::Float32)),
+        "UZP_ENC=" + std::to_string(render::image_pass_detail::EncodingConstant(normalEncoding)),
         "UZP_CHANNELS=3",
         "UZP_SRGB=0",
         "UZP_ALPHA=0",
@@ -175,6 +175,8 @@ std::array<uint32_t, kBlendParamsStride> EncodeVirtualNormalParams(const Virtual
     if (op.normal.kind == Operand::Kind::Tile) flags |= 2u;
     if (op.method == core::HeightToNormalMethod::SmoothSobel) flags |= 4u;
     if (op.convention == core::NormalMapFormat::DirectX) flags |= 8u;
+    if (op.mesh.kind == Operand::Kind::Tile) flags |= 16u;
+    if (op.meshDirectX) flags |= 32u;
     params[2] = flags;
     params[3] = bindings.dstUav;
     params[4] = bindings.table16Srv;
@@ -182,6 +184,10 @@ std::array<uint32_t, kBlendParamsStride> EncodeVirtualNormalParams(const Virtual
     params[6] = bindings.normalSrv;
     for (size_t i = 0; i < 3; ++i) params[7 + i] = std::bit_cast<uint32_t>(op.normal.value[i]);
     for (size_t i = 0; i < 9; ++i) params[10 + i] = bindings.heightSrv[i];
+    params[19] = bindings.meshSrv;
+    params[20] = std::bit_cast<uint32_t>(op.z);
+    params[21] = bindings.powSrv;
+    params[22] = std::bit_cast<uint32_t>(op.normal.value[3]);
     return params;
 }
 

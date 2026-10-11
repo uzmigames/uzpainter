@@ -62,7 +62,7 @@ public:
         if (!dst) return render::Unexpected(dst.error());
         BlendOp op;
         op.dst = *dst;
-        op.acc = Operand::Constant(m_dag.base, 1.0f);
+        op.acc = Operand::Constant(m_dag.readoutBase, 1.0f);
         op.source = *stack;
         op.mode = core::BlendingMode::Replace;
         op.opacity = 1.0f;
@@ -109,6 +109,19 @@ public:
         ++m_stats.blends;
         Defer(*stack);
         return Keep(Operand::Of(*dst));
+    }
+
+    /// The isolated root list from a transparent start (EvaluateIsolatedRoot).
+    render::Result<Operand> RunIsolatedRoot() {
+        if (!m_dag.root.isolated) {
+            return EvalFail(EvalErrorKind::UnsupportedSource,
+                            "the root list before its read-out needs a profile whose root list is isolated");
+        }
+        if (m_dag.root.layers.empty()) return Operand::Constant({0.0f, 0.0f, 0.0f}, 0.0f);
+        render::Result<Operand> stack =
+            EvaluateList(m_dag.root, Operand::Constant({0.0f, 0.0f, 0.0f}, 0.0f), true);
+        if (!stack) return stack;
+        return Keep(*stack);
     }
 
 private:
@@ -472,6 +485,12 @@ render::Result<Operand> EvaluateFloat32Readout(const ChannelDag& dag, EvalEnviro
                                                EvaluationStats& stats) {
     TileEvaluation evaluation(dag, tx, ty, env, stats);
     return evaluation.RunFloat32Readout(base);
+}
+
+render::Result<Operand> EvaluateIsolatedRoot(const ChannelDag& dag, EvalEnvironment& env, uint32_t tx,
+                                             uint32_t ty, EvaluationStats& stats) {
+    TileEvaluation evaluation(dag, tx, ty, env, stats);
+    return evaluation.RunIsolatedRoot();
 }
 
 render::Result<ChannelResult> EvaluateChannel(const ChannelDag& dag, EvalEnvironment& env) {

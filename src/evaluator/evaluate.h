@@ -90,4 +90,12 @@ struct EvalEnvironment {
                                                              const std::array<float, 3>& base,
                                                              EvaluationStats& stats);
 
+/// The isolated root list of tile (`tx`, `ty`) composited from a transparent start, before its
+/// read-out (the Normal channel's input of the virtual normal maps, height_to_normal.h): a tile
+/// of the channel's tile format with its coverage plane, cached and left pinned in `env.cache`
+/// for the caller to unpin, or the transparent constant for an empty stack. Fails with
+/// `unsupported_source` under a profile whose root is not isolated.
+[[nodiscard]] render::Result<Operand> EvaluateIsolatedRoot(const ChannelDag& dag, EvalEnvironment& env,
+                                                           uint32_t tx, uint32_t ty, EvaluationStats& stats);
+
 }  // namespace uzp::evaluator

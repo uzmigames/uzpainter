@@ -46,6 +46,7 @@ constexpr unsigned char kCosTable[] = {
 constexpr uint32_t kExponentMask = 0x7F800000u;
 constexpr uint32_t kTurnsPerRadian = 0x3E22F983u;  // float32(1 / (2 pi))
 constexpr float kHalfPiF = 1.57079632679489661923f;
+constexpr float kPiF = 3.14159265358979323846f;
 constexpr float kAsinC0 = 1.666701424e-1f;
 constexpr float kAsinC1 = 7.484657646e-2f;
 constexpr float kAsinC2 = 4.675685871e-2f;
@@ -56,6 +57,19 @@ constexpr float kAsinC4 = 5.175137819e-2f;
 /// evaluator's Fma, arith.h; equal to the single rounding on every normal result it is used for).
 float FusedMulAdd(float x, float y, float z) {
     return static_cast<float>(static_cast<double>(x) * static_cast<double>(y) + static_cast<double>(z));
+}
+
+/// P(a) = fma(r, a, a), r = ((((c4 s + c3) s + c2) s + c1) s + c0) s, s = a a: the polynomial of
+/// the GPU's arcsine and arccosine (hwmath.h).
+float AsinPolynomial(float a) {
+    const float s = a * a;
+    float r = kAsinC4;
+    r = FusedMulAdd(r, s, kAsinC3);
+    r = FusedMulAdd(r, s, kAsinC2);
+    r = FusedMulAdd(r, s, kAsinC1);
+    r = FusedMulAdd(r, s, kAsinC0);
+    r = r * s;
+    return FusedMulAdd(r, a, a);
 }
 constexpr uint32_t kOne = 0x3F800000u;
 constexpr uint32_t kQuietNaN = 0x7FC00000u;
@@ -299,17 +313,19 @@ float Asin(float x) {
     if (magnitude < 0x00800000u) return 0.0f;                     // zeros and subnormals: +0
     const float t = std::bit_cast<float>(magnitude);
     const bool upper = t > 0.57f;
-    const float a = upper ? Sqrt(FusedMulAdd(-0.5f, t, 0.5f)) : t;
-    const float s = a * a;
-    float r = kAsinC4;
-    r = FusedMulAdd(r, s, kAsinC3);
-    r = FusedMulAdd(r, s, kAsinC2);
-    r = FusedMulAdd(r, s, kAsinC1);
-    r = FusedMulAdd(r, s, kAsinC0);
-    r = r * s;
-    const float p = FusedMulAdd(r, a, a);
+    const float p = AsinPolynomial(upper ? Sqrt(FusedMulAdd(-0.5f, t, 0.5f)) : t);
     const float result = upper ? FusedMulAdd(-2.0f, p, kHalfPiF) : p;
     return (bits & 0x80000000u) ? -result : result;
+}
+
+float Acos(float x) {
+    const uint32_t bits = std::bit_cast<uint32_t>(x);
+    const uint32_t magnitude = bits & 0x7FFFFFFFu;
+    if (magnitude > kOne) return std::bit_cast<float>(kQuietNaN);  // |x| > 1 and NaN
+    const float t = magnitude < 0x00800000u ? 0.0f : std::bit_cast<float>(magnitude);  // subnormals: 0
+    const float d = t > 0.57f ? 2.0f * AsinPolynomial(Sqrt(FusedMulAdd(-0.5f, t, 0.5f)))
+                              : kHalfPiF - AsinPolynomial(t);
+    return (bits & 0x80000000u) ? kPiF - d : d;
 }
 
 }  // namespace uzp::evaluator::hw

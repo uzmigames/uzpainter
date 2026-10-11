@@ -101,9 +101,17 @@ struct VirtualNormalOp {
     std::array<TileHandle, 9> height{kNoTile, kNoTile, kNoTile, kNoTile, kNoTile,
                                      kNoTile, kNoTile, kNoTile, kNoTile};
     float heightConstant = 0.0f;
-    /// The Normal channel's float32 read-out over the flat colour (a three-channel 32-bit float
-    /// tile) or a constant colour.
+    /// The z of the height vector (height_to_normal.h HeightZ).
+    float z = 0.390625f;
+    /// The Normal channel's root list composited from a transparent start, before the read-out:
+    /// a tile of the channel's tile format with its coverage plane, or a constant colour and
+    /// coverage (an empty or absent channel: the flat colour at coverage 1).
     Operand normal = Operand::Constant({0.5f, 0.5f, 1.0f}, 1.0f);
+    /// The bound Normal mesh map as UNORM operands (a three-channel 32-bit float tile), or the
+    /// flat colour when none is bound.
+    Operand mesh = Operand::Constant({0.5f, 0.5f, 1.0f}, 1.0f);
+    /// The mesh map is in the DirectX convention (its decoded y is negated).
+    bool meshDirectX = false;
     core::HeightToNormalMethod method = core::HeightToNormalMethod::Sharp;
     core::NormalMapFormat convention = core::NormalMapFormat::OpenGL;
 };

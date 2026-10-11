@@ -164,10 +164,15 @@ struct ChannelDag {
     /// The channel's base value (template), the backdrop of the bottom layer and the result of
     /// an empty stack.
     std::array<float, 3> base{0.0f, 0.0f, 0.0f};
+    /// What an isolated root with layers is composited over at read-out: `base`, except on the
+    /// Normal channel, whose layers composite over the flat normal (0.5, 0.5, 1) while its empty
+    /// stack exports the template base 127/255 (height-to-normal.json
+    /// height-normal-channel-coverage).
+    std::array<float, 3> readoutBase{0.0f, 0.0f, 0.0f};
     TileGrid grid;
     std::string templateId;
     /// The project's evaluator profile (profile.h): the root list is isolated under
-    /// `RootComposite::Isolated` and composited over `base` at read-out.
+    /// `RootComposite::Isolated` and composited over `readoutBase` at read-out.
     EvaluatorProfile profile;
     DagList root;
     /// Hash of the root list composited over the base (Isolated profiles; the read-out tile).

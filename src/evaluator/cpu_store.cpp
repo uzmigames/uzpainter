@@ -132,11 +132,10 @@ render::Result<void> CpuTileStore::Project(const ProjectOp& op) {
     for (uint32_t y = 0; y < tile.height; ++y) {
         for (uint32_t x = 0; x < tile.width; ++x) {
             const ProjectedTexel texel =
-                ProjectTexel(op.projection, image, op.x0 + x, op.y0 + y, op.setWidth, op.setHeight);
+                ProjectTexel(op.projection, image, op.x0 + x, op.y0 + y, op.setWidth, op.setHeight, op.signedRange);
             uint32_t* out = &tile.values[(size_t{y} * tile.width + x) * stored];
             for (uint32_t c = 0; c < tile.format.channels; ++c) {
-                out[c] = StoreValue(texel.covered ? RangeValue(texel.value[c], op.signedRange) : 0.0f,
-                                    tile.format, c);
+                out[c] = StoreValue(texel.covered ? texel.value[c] : 0.0f, tile.format, c);
             }
             if (stored == 4) {
                 for (uint32_t c = tile.format.channels; c < 3; ++c) out[c] = 0;
@@ -267,8 +266,15 @@ render::Result<void> CpuTileStore::VirtualNormal(const VirtualNormalOp& op) {
     const Tile* normal = op.normal.kind == Operand::Kind::Tile ? Find(op.normal.tile) : nullptr;
     if (op.normal.kind == Operand::Kind::Tile &&
         (normal == nullptr || normal->width != dst.width || normal->height != dst.height ||
-         normal->format.encoding != TexelEncoding::Float32 || normal->format.channels != 3)) {
-        return EvalFail(EvalErrorKind::Internal, "virtual normal channel tile: three-channel 32-bit float of the tile's size");
+         normal->format.channels != 3 || !normal->format.alpha || normal->format.srgb)) {
+        return EvalFail(EvalErrorKind::Internal,
+                        "virtual normal channel tile: a colour tile with coverage of the tile's size");
+    }
+    const Tile* mesh = op.mesh.kind == Operand::Kind::Tile ? Find(op.mesh.tile) : nullptr;
+    if (op.mesh.kind == Operand::Kind::Tile &&
+        (mesh == nullptr || mesh->width != dst.width || mesh->height != dst.height ||
+         mesh->format.encoding != TexelEncoding::Float32 || mesh->format.channels != 3)) {
+        return EvalFail(EvalErrorKind::Internal, "virtual normal mesh tile: three-channel 32-bit float of the tile's size");
     }
     const int width = static_cast<int>(dst.width);
     const int height = static_cast<int>(dst.height);
@@ -290,12 +296,22 @@ render::Result<void> CpuTileStore::VirtualNormal(const VirtualNormalOp& op) {
                 for (int dx = -1; dx <= 1; ++dx) h[static_cast<size_t>((dy + 1) * 3 + dx + 1)] = at(x + dx, y + dy);
             }
             const size_t texel = static_cast<size_t>(y) * dst.width + static_cast<size_t>(x);
-            std::array<float, 3> channel{op.normal.value[0], op.normal.value[1], op.normal.value[2]};
+            NormalInputs inputs;
+            inputs.channel = {op.normal.value[0], op.normal.value[1], op.normal.value[2]};
+            inputs.coverage = op.normal.value[3];
             if (normal != nullptr) {
                 const uint32_t* values = &normal->values[texel * normal->format.StoredChannels()];
-                for (uint32_t c = 0; c < 3; ++c) channel[c] = std::bit_cast<float>(values[c]);
+                for (uint32_t c = 0; c < 3; ++c) inputs.channel[c] = OperandOf(values[c], normal->format, c);
+                inputs.coverage = OperandOf(values[3], normal->format, 3);
             }
-            const std::array<float, 3> e = VirtualNormalTexel(HeightVector(op.method, h), channel, op.convention);
+            inputs.hasMesh = mesh != nullptr;
+            inputs.meshDirectX = op.meshDirectX;
+            if (mesh != nullptr) {
+                const uint32_t* values = &mesh->values[texel * mesh->format.StoredChannels()];
+                for (uint32_t c = 0; c < 3; ++c) inputs.mesh[c] = std::bit_cast<float>(values[c]);
+            }
+            const std::array<float, 3> e =
+                VirtualNormalTexel(HeightVector(op.method, h, op.z), inputs, op.convention);
             uint32_t* out = &dst.values[texel * stored];
             for (uint32_t c = 0; c < 3; ++c) out[c] = std::bit_cast<uint32_t>(arith::Float32Store(e[c]));
             out[3] = std::bit_cast<uint32_t>(1.0f);

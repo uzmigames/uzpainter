@@ -36,9 +36,11 @@
 // With UZP_VNORMAL the kernel is one tile of a virtual normal map instead (height_to_normal.cpp,
 // VirtualNormalOp of tile_store.h): parameter block width, height, flags (bit 0 the height is
 // tiles, bit 1 the Normal channel is a tile, bit 2 the Sobel method, bit 3 the DirectX
-// convention), destination UAV, operand tables SRV, the constant height, the Normal channel's
-// SRV or constant rgb, and the SRVs of the nine height tiles around the tile (index (dy + 1) 3 +
-// dx + 1).
+// convention, bit 4 the mesh map is a tile, bit 5 the mesh map is DirectX), destination UAV,
+// operand tables SRV, the constant height, the Normal channel's SRV (its root list from a
+// transparent start, encoding UZP_ENC with coverage) or constant rgb, the SRVs of the nine height
+// tiles around the tile (index (dy + 1) 3 + dx + 1), the mesh map's SRV, the z of the height
+// vector, the function tables SRV and the constant Normal coverage.
 
 #include "image_common.hlsli"
 #include "evaluator_tables.hlsli"
@@ -434,7 +436,7 @@ float3 DecodeNormal(float3 c) {
 }
 #endif
 
-#if defined(UZP_NORMALMAP)
+#if defined(UZP_NORMALMAP) || defined(UZP_VNORMAL)
 // The recording GPU's GLSL asin (hwmath.cpp Asin).
 float HwAsin(float x) {
     const uint bits = asuint(x);
@@ -896,11 +898,58 @@ void main(uint3 id : SV_DispatchThreadID) {
 #define V_NORMAL_SRV 6
 #define V_NORMAL_CONST 7
 #define V_HEIGHT_SRV 10
+#define V_MESH_SRV 19
+#define V_Z 20
+#define V_POW_SRV 21
+#define V_NORMAL_COVERAGE 22
 
 #define V_FLAG_HEIGHT_TILES 1u
 #define V_FLAG_NORMAL_TILE 2u
 #define V_FLAG_SOBEL 4u
 #define V_FLAG_DIRECTX 8u
+#define V_FLAG_MESH_TILE 16u
+#define V_FLAG_MESH_DIRECTX 32u
+
+// P of the GPU's arcsine and arccosine (hwmath.cpp AsinPolynomial).
+float AsinPolynomial(float a) {
+    const float s = a * a;
+    float r = 5.175137819e-2f;
+    r = Fma(r, s, 1.816697683e-2f);
+    r = Fma(r, s, 4.675685871e-2f);
+    r = Fma(r, s, 7.484657646e-2f);
+    r = Fma(r, s, 1.666701424e-1f);
+    r = r * s;
+    return Fma(r, a, a);
+}
+
+// The recording GPU's Vulkan acos for x in [0, 1] (hwmath.cpp Acos).
+float HwAcos(float x) {
+    const float t = asuint(x) < 0x00800000u ? 0.0f : x;
+    return t > 0.57f ? 2.0f * AsinPolynomial(HwSqrt(Fma(-0.5f, t, 0.5f)))
+                     : asfloat(kColourConstants[1]) - AsinPolynomial(t);
+}
+
+// The unit normal u turned toward (0, 0, 1) by the coverage a (height_to_normal.cpp
+// TowardFlatAcos).
+float3 TowardFlatAcos(float3 u, float a) {
+    if (!(a < 1.0f)) return u;
+    const float z = Clamp01(u.z);
+    const float w = Fma(-z, z, 1.0f);
+    if (!(w > 0.0f)) return u;
+    const float turned = a * HwAcos(z);
+    const uint k = TrigIndex(turned);
+    const float scale = asfloat(PowWord(UZP_POW_SIN + k)) * HwRsqrt(w);
+    return float3(u.x * scale, u.y * scale, asfloat(PowWord(UZP_POW_COS + k)));
+}
+
+// The channel normal of the Normal channel's colour x at coverage a (height_to_normal.cpp
+// ChannelNormal).
+float3 ChannelNormal(float3 x, float a) {
+    if (!(a > 0.0f)) return float3(0.0f, 0.0f, 1.0f);
+    if (!(a < 1.0f)) return DecodeNormal(x);
+    const float inverse = HwRcp(a);
+    return TowardFlatAcos(DecodeNormal(float3(x.x * inverse, x.y * inverse, x.z * inverse)), a);
+}
 
 // The height at (x, y) of the tile's frame, read from the neighbouring tile across an edge.
 float HeightAt(uint base, uint flags, int x, int y, int width, int height) {
@@ -938,20 +987,26 @@ void main(uint3 id : SV_DispatchThreadID) {
         const float right = Smooth(h[2], h[5], h[8]);
         const float top = Smooth(h[0], h[1], h[2]);
         const float bottom = Smooth(h[6], h[7], h[8]);
-        v = float3(left - right, bottom - top, 3.125f);
+        v = float3(left - right, bottom - top, asfloat(params[base + V_Z]));
     } else {
-        v = float3(h[3] - h[4], h[4] - h[1], 0.390625f);
+        v = float3(h[3] - h[4], h[4] - h[1], asfloat(params[base + V_Z]));
     }
-    float3 channel;
+    g_pow = params[base + V_POW_SRV];
+    float4 channel;
     if ((flags & V_FLAG_NORMAL_TILE) != 0u) {
-        channel = LoadTexel(params[base + V_NORMAL_SRV], int2(x, y)).xyz;
+        channel = LoadOperand(params[base + V_NORMAL_SRV], int2(x, y), true);
     } else {
-        channel = float3(asfloat(params[base + V_NORMAL_CONST]), asfloat(params[base + V_NORMAL_CONST + 1]),
-                         asfloat(params[base + V_NORMAL_CONST + 2]));
+        channel = float4(asfloat(params[base + V_NORMAL_CONST]), asfloat(params[base + V_NORMAL_CONST + 1]),
+                         asfloat(params[base + V_NORMAL_CONST + 2]), asfloat(params[base + V_NORMAL_COVERAGE]));
+    }
+    float3 mesh = float3(0.0f, 0.0f, 1.0f);
+    if ((flags & V_FLAG_MESH_TILE) != 0u) {
+        mesh = DecodeNormal(LoadTexel(params[base + V_MESH_SRV], int2(x, y)).xyz);
+        if ((flags & V_FLAG_MESH_DIRECTX) != 0u) mesh.y = -mesh.y;
     }
     const float3 heightNormal = Normalise(v);
-    const float3 combined = Normalise(Reoriented(float3(0.0f, 0.0f, 1.0f), heightNormal));
-    const float3 n = Normalise(Reoriented(combined, DecodeNormal(channel)));
+    const float3 combined = Normalise(Reoriented(mesh, heightNormal));
+    const float3 n = Normalise(Reoriented(combined, ChannelNormal(channel.xyz, channel.w)));
     const float ny = (flags & V_FLAG_DIRECTX) != 0u ? -n.y : n.y;
     float4 result = float4(Fma(n.x, 0.5f, 0.5f), Fma(ny, 0.5f, 0.5f), Fma(n.z, 0.5f, 0.5f), 1.0f);
     result.x = StoreChannel(result.x);
