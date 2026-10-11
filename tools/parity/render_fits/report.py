@@ -516,3 +516,196 @@ def write(results: dict[str, Any], probes: dict[str, Any] | None = None) -> str:
         text = replace_block(text, name, body)
     REPORT.write_text(text, encoding="utf-8", newline="\n")
     return str(REPORT)
+
+
+def short(label: str) -> str:
+    """`golden/recording` with the recording id only (the golden is in the row)."""
+    return label.split("/", 1)[1]
+
+
+def probe_captures_block(probe: dict[str, Any]) -> str:
+    rows = []
+    for name, golden in probe["goldens"].items():
+        key = golden.get("key_equals_parent")
+        for capture in golden["captures"]:
+            rows.append(
+                [
+                    f"`{name}`",
+                    capture["condition"],
+                    f"`{capture['recording_id']}`",
+                    capture["recorded_at"][:19] + "Z",
+                    f"`{capture['render_sha256']}`",
+                    f"`{capture['staged_sha256']}`",
+                    "-" if key is None else ("yes" if key else "no"),
+                ]
+            )
+    return table(
+        [
+            "Golden",
+            "Condition",
+            "Recording",
+            "Recorded (UTC)",
+            "Render SHA-256",
+            "Staged recording SHA-256",
+            "Key equals parent",
+        ],
+        rows,
+    )
+
+
+def probe_pair_row(entry: dict[str, Any]) -> list[str]:
+    return [
+        str(entry["pixels"]),
+        f"{entry['differing_fraction']:.4f}",
+        f"{entry['rms_codes']:.1f}",
+        str(entry["half_steps"]["max_steps"]),
+        f"{entry['half_steps']['one_step_fraction']:.2f}",
+        entry["class"],
+    ]
+
+
+def probe_faces_block(probe: dict[str, Any]) -> str:
+    rows = []
+    for name, golden in probe["goldens"].items():
+        result = golden["pair"]
+        for label, face in result["faces"].items():
+            rows.append([f"`{name}`", label, *probe_pair_row(face), result["class"]])
+    return table(
+        [
+            "Golden",
+            "Facet",
+            "Pixels",
+            "(a) differing fraction",
+            "(a) rms",
+            "Max steps",
+            "One-step fraction",
+            "Facet class",
+            "Pair class",
+        ],
+        rows,
+    )
+
+
+def probe_clusters_block(probe: dict[str, Any]) -> str:
+    parts = []
+    for name, found in probe["clusters"].items():
+        classes = "; ".join(
+            "{" + ", ".join(f"`{short(label)}`" for label in group) + "}"
+            for group in found["classes"]
+        )
+        parts.append(
+            f"`{name}`: {len(found['renders'])} S renders, one golden key: "
+            f"{'yes' if found['same_key'] else 'no'}; classes: {classes}; consistent with a "
+            f"binary choice: {'yes' if found['binary_consistent'] else 'no'}.\n"
+        )
+        rows = []
+        for item in found["pairs"]:
+            interior = item["regions"]["interior"]
+            faces = list(item["faces"].values()) or [interior]
+            worst = max(faces, key=lambda f: f["differing_fraction"])
+            rows.append(
+                [
+                    f"`{item['a']}`",
+                    f"`{short(item['b'])}`",
+                    "yes" if item["same_session"] else "no",
+                    "yes" if item["pixel_identical"] else "no",
+                    *probe_pair_row(worst)[1:-1],
+                    item["class"],
+                ]
+            )
+        parts.append(
+            table(
+                [
+                    "Render",
+                    "Render",
+                    "Same session",
+                    "Pixel identical",
+                    "(a) differing fraction (worst facet)",
+                    "(a) rms",
+                    "Max steps",
+                    "One-step fraction",
+                    "Class",
+                ],
+                rows,
+            )
+        )
+    return "\n".join(parts)
+
+
+def reproducibility_block(probe: dict[str, Any]) -> str:
+    rep = probe["reproducibility"]
+    head = (
+        f"Scene `{rep['scene']}`. k*S render `{rep['k_render']}` (`{rep['k_render_sha256']}`, "
+        f"high-pass sigma {rep['k_highpass_sigma_codes']:.1f} codes). Of {rep['pairs']} pairs of "
+        f"S renders, {rep['byte_identical_pairs']} are byte-identical and "
+        f"{rep['pixel_identical_pairs']} pixel-identical.\n\n"
+    )
+    rows = [
+        [
+            f"`{r['render']}`",
+            r["condition"],
+            r["recorded_at"][:19] + "Z",
+            f"`{r['render_sha256']}`",
+            f"{r['rendering_time_s']:g}",
+            f"{r['highpass_sigma_codes']:.1f}",
+            f"{r['b_rms_codes']:.1f}",
+            f"{r['b_mean_signed_codes']:+.2f}",
+        ]
+        for r in rep["renders"]
+    ]
+    return head + table(
+        [
+            "Render",
+            "Condition",
+            "Recorded (UTC)",
+            "Render SHA-256",
+            "Rendering time (s)",
+            "High-pass sigma",
+            "(b) rms vs k*S",
+            "(b) mean signed",
+        ],
+        rows,
+    )
+
+
+def observability_block(probe: dict[str, Any]) -> str:
+    rows = [
+        [
+            row["setting"],
+            str(row["value"]),
+            row["set_by"],
+            row["read_back"],
+            row["confirmed"],
+            f"`{row['row']}`",
+            f"`{row['status']}`",
+        ]
+        for row in probe["observability"]
+    ]
+    return table(
+        [
+            "Setting",
+            "Value",
+            "Set by",
+            "Read back on each capture",
+            "Captures confirming",
+            "Procedure row",
+            "Row status (phase0.6)",
+        ],
+        rows,
+    )
+
+
+def write_probe(probe: dict[str, Any]) -> str:
+    """The generated blocks of the capture request and the reproducibility probe (decision 062)."""
+    text = REPORT.read_text(encoding="utf-8")
+    blocks = {
+        "probe-captures": probe_captures_block(probe),
+        "probe-faces": probe_faces_block(probe),
+        "probe-clusters": probe_clusters_block(probe),
+        "reproducibility": reproducibility_block(probe),
+        "observability": observability_block(probe),
+    }
+    for name, body in blocks.items():
+        text = replace_block(text, name, body)
+    REPORT.write_text(text, encoding="utf-8", newline="\n")
+    return str(REPORT)

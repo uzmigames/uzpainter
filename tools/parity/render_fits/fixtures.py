@@ -50,6 +50,11 @@ MESH_PATHS = {
     "sphere": REPO_ROOT / refs.SPHERE_PATH,
     "plane": refs.FIXTURE_DIR / "plane.obj",
     "bevelled-cube": refs.FIXTURE_DIR / "bevelled-cube.obj",
+    **{
+        f"{mesh}-yaw-{label}": refs.FIXTURE_DIR / f"{mesh}-yaw-{label}.obj"
+        for mesh in ("plane", "bevelled-cube")
+        for _, label in refs.TURNS
+    },
 }
 
 
