@@ -1,5 +1,7 @@
 #include "evaluator/arith.h"
 
+#include "evaluator/hwmath.h"
+
 #include <bit>
 #include <cfenv>
 #include <cmath>
@@ -103,12 +105,12 @@ float HardLight(float a, float b) {
 
 float ColorBurn(float a, float b) {
     const float x = Sub(a, kOne);
-    return Clamp01(Fma(x, Rcp(b), kOne));
+    return Clamp01(Fma(x, hw::Rcp(b), kOne));
 }
 
 float ColorDodge(float a, float b) {
     const float t = Sub(kOne, b);
-    const float m = Mul(a, Rcp(t));
+    const float m = Mul(a, hw::Rcp(t));
     return Fmax(Fmin(kOne, m), 0.0f);
 }
 
@@ -121,7 +123,7 @@ float SoftLight(float a, float b) {
     const float low = Fma(twoA, b, Mul(aa, oneMinusTwoB));
     const float twoBMinusOne = Sub(twoB, kOne);
     const float oneMinusB = Sub(kOne, b);
-    const float high = Fma(Sqrt(a), twoBMinusOne, Mul(twoA, oneMinusB));
+    const float high = Fma(hw::Sqrt(a), twoBMinusOne, Mul(twoA, oneMinusB));
     return b <= kHalf ? low : high;
 }
 
@@ -148,8 +150,150 @@ float PinLight(float a, float b) {
 }
 
 float Divide(float a, float b) {
-    const float m = Mul(a, Rcp(b));
+    const float m = Mul(a, hw::Rcp(b));
     return Fmax(Fmin(m, kOne), 0.0f);
+}
+
+// ── Component modes (Tint, Saturation, Color, Value) ─────────────────────────
+
+constexpr float kSix = 6.0f;
+constexpr float kThree = 3.0f;
+
+struct Hsv {
+    float h = 0.0f;
+    float s = 0.0f;
+    float v = 0.0f;
+};
+
+float Less(float x, float y) { return x < y ? x : y; }
+
+/// RGB to HSV on the hexcone (Hocevar's branch-free form): the largest component is v, the hue
+/// fraction (q.w - q.y) / (6 d + e) is offset by the sector, s = d / (v + e); divisions through
+/// the hardware reciprocal.
+Hsv ToHsv(const std::array<float, 3>& c) {
+    const float r = c[0];
+    const float g = c[1];
+    const float b = c[2];
+    const bool gb = g >= b;
+    const float p[4] = {gb ? g : b, gb ? b : g, gb ? 0.0f : -kOne, gb ? -kThird : kTwoThirds};
+    const bool rp = r >= p[0];
+    const float q[4] = {rp ? r : p[0], p[1], rp ? p[2] : p[3], rp ? p[0] : r};
+    const float d = Sub(q[0], Less(q[3], q[1]));
+    const float span = Add(Mul(kSix, d), kHsvEpsilon);
+    Hsv out;
+    out.h = std::fabs(Add(q[2], Mul(Sub(q[3], q[1]), hw::Rcp(span))));
+    out.s = Mul(d, hw::Rcp(Add(q[0], kHsvEpsilon)));
+    out.v = q[0];
+    return out;
+}
+
+/// HSV to RGB: v (1 + (clamp(|6 fract(h + k) - 3| - 1, 0, 1) - 1) s), k = 1, 2/3, 1/3.
+std::array<float, 3> FromHsv(const Hsv& c) {
+    constexpr float k[3] = {1.0f, kTwoThirds, kThird};
+    std::array<float, 3> out{};
+    for (size_t i = 0; i < 3; ++i) {
+        const float x = Add(c.h, k[i]);
+        const float f = Sub(x, std::floor(x));
+        const float p = std::fabs(Sub(Mul(f, kSix), kThree));
+        const float t = Clamp01(Sub(p, kOne));
+        out[i] = Mul(c.v, Add(kOne, Mul(Sub(t, kOne), c.s)));
+    }
+    return out;
+}
+
+std::array<float, 3> ComponentBlend(core::BlendingMode mode, const std::array<float, 3>& a,
+                                    const std::array<float, 3>& b) {
+    using M = core::BlendingMode;
+    const Hsv lower = ToHsv(a);
+    const Hsv upper = ToHsv(b);
+    Hsv out = lower;
+    if (mode == M::Tint || mode == M::Color) out.h = upper.h;
+    if (mode == M::Saturation || mode == M::Color) out.s = upper.s;
+    if (mode == M::Value) out.v = upper.v;
+    out.v = Mul(kTwo, out.v);
+    return FromHsv(out);
+}
+
+// ── Normal-map modes ─────────────────────────────────────────────────────────
+
+using Vec3 = std::array<float, 3>;
+
+/// The dot product of the normalisation: fma(z, z', fma(x, x', y y')).
+float DotYxz(const Vec3& u, const Vec3& v) { return Fma(u[2], v[2], Fma(u[0], v[0], Mul(u[1], v[1]))); }
+/// The dot product of reoriented normal mapping: fma(z, z', fma(y, y', x x')).
+float DotXyz(const Vec3& u, const Vec3& v) { return Fma(u[2], v[2], Fma(u[1], v[1], Mul(u[0], v[0]))); }
+
+Vec3 Normalise(const Vec3& v) {
+    const float inv = hw::Rsqrt(DotYxz(v, v));
+    return {Mul(v[0], inv), Mul(v[1], inv), Mul(v[2], inv)};
+}
+
+/// A colour in [0, 1] to a unit normal: 2c - 1 with z clamped to >= 0, normalised.
+Vec3 DecodeNormal(const Vec3& c) {
+    Vec3 n{};
+    for (size_t i = 0; i < 3; ++i) n[i] = Sub(Mul(c[i], kTwo), kOne);
+    n[2] = Fmax(n[2], 0.0f);
+    return Normalise(n);
+}
+
+/// asin(t) for t in [0, 1/2]: the series kAsinSeries in t^2 (Horner), times t.
+float AsinSmall(float t) {
+    const float t2 = Mul(t, t);
+    float sum = kAsinSeries[kAsinSeries.size() - 1];
+    for (size_t i = kAsinSeries.size() - 1; i-- > 0;) sum = Add(Mul(sum, t2), kAsinSeries[i]);
+    return Mul(sum, t);
+}
+
+/// sin(x) for x in [0, pi/2]: the series kSinSeries in x^2 (Horner), times x.
+float SinSmall(float x) {
+    const float x2 = Mul(x, x);
+    float sum = kSinSeries[kSinSeries.size() - 1];
+    for (size_t i = kSinSeries.size() - 1; i-- > 0;) sum = Add(Mul(sum, x2), kSinSeries[i]);
+    return Mul(sum, x);
+}
+
+/// The unit normal n (z >= 0) rotated toward the flat normal (0, 0, 1) by the layer opacity:
+/// spherical interpolation slerp((0, 0, 1), n, alpha) = n sin(alpha t) / sin t + (0, 0,
+/// sin((1 - alpha) t) / sin t), t = acos(n.z), in float32 with fixed series (deterministic on
+/// every backend; Painter's float32 evaluation of the same rotation is not reproduced exactly).
+Vec3 TowardFlat(const Vec3& n, float alpha) {
+    if (!(alpha < kOne)) return n;
+    const float z = Clamp01(n[2]);
+    const float sine = Sqrt(Mul(Sub(kOne, z), Add(kOne, z)));
+    if (!(sine > 0.0f)) return n;
+    const float angle = z >= kHalf ? Mul(kTwo, AsinSmall(Sqrt(Mul(Sub(kOne, z), kHalf))))
+                                   : Sub(kHalfPi, AsinSmall(z));
+    const float inv = Rcp(sine);
+    const float wn = Mul(SinSmall(Mul(alpha, angle)), inv);
+    const float wf = Mul(SinSmall(Mul(Sub(kOne, alpha), angle)), inv);
+    return {Mul(n[0], wn), Mul(n[1], wn), Add(Mul(n[2], wn), wf)};
+}
+
+/// Reoriented normal mapping (approved source P-BARRE): t = base + (0, 0, 1), u = detail
+/// (-1, -1, 1), r = t dot(t, u) - u t.z, evaluated as fma(t, dot, -(u t.z)) for x and y and as
+/// t.z (dot - u.z) for z (the fitted operation order).
+Vec3 Reoriented(const Vec3& base, const Vec3& detail) {
+    const Vec3 t{base[0], base[1], Add(base[2], kOne)};
+    const Vec3 u{-detail[0], -detail[1], detail[2]};
+    const float d = DotXyz(t, u);
+    return {Fma(t[0], d, -Mul(u[0], t[2])), Fma(t[1], d, -Mul(u[1], t[2])), Mul(t[2], Sub(d, u[2]))};
+}
+
+std::array<float, 3> NormalMapBlend(core::BlendingMode mode, const Vec3& a, const Vec3& b,
+                                    float alpha) {
+    using M = core::BlendingMode;
+    const Vec3 lower = DecodeNormal(a);
+    const Vec3 upper = TowardFlat(DecodeNormal(b), alpha);
+    Vec3 r{};
+    if (mode == M::NormalMapCombine) {
+        r = {Add(lower[0], upper[0]), Add(lower[1], upper[1]), Mul(lower[2], upper[2])};
+    } else if (mode == M::NormalMapDetail) {
+        r = Reoriented(lower, upper);
+    } else {
+        r = Reoriented(upper, lower);
+    }
+    const Vec3 n = Normalise(r);
+    return {Fma(n[0], kHalf, kHalf), Fma(n[1], kHalf, kHalf), Fma(n[2], kHalf, kHalf)};
 }
 
 }  // namespace
@@ -239,6 +383,25 @@ float BlendKernel(core::BlendingMode mode, float a, float b) {
             break;
     }
     return std::numeric_limits<float>::quiet_NaN();
+}
+
+bool HasColourKernel(core::BlendingMode mode) {
+    using M = core::BlendingMode;
+    return mode == M::Tint || mode == M::Saturation || mode == M::Color || mode == M::Value ||
+           mode == M::NormalMapCombine || mode == M::NormalMapDetail ||
+           mode == M::NormalMapInverseDetail;
+}
+
+bool HasKernel(core::BlendingMode mode) { return HasSeparableKernel(mode) || HasColourKernel(mode); }
+
+std::array<float, 3> BlendColour(core::BlendingMode mode, const std::array<float, 3>& a,
+                                 const std::array<float, 3>& b, int channels, float alpha) {
+    using M = core::BlendingMode;
+    const bool normalMap =
+        mode == M::NormalMapCombine || mode == M::NormalMapDetail || mode == M::NormalMapInverseDetail;
+    if (channels == 1) return (mode == M::Value || normalMap) ? b : a;
+    if (normalMap) return NormalMapBlend(mode, a, b, alpha);
+    return ComponentBlend(mode, a, b);
 }
 
 // ── Storage ──────────────────────────────────────────────────────────────────
@@ -381,25 +544,47 @@ float Float32Readout(float v, float base) {
 // ── Compositing of one texel ─────────────────────────────────────────────────
 
 std::array<float, 4> Composite(const CompositeInput& in) {
+    using M = core::BlendingMode;
     std::array<float, 4> out{0.0f, 0.0f, 0.0f, 1.0f};
     const float opacityMask = Mul(in.opacity, in.mask);
     const float alphaS = Mul(opacityMask, in.src[3]);
     const float alphaB = in.acc[3];
-    const bool replace = in.mode == core::BlendingMode::Replace;
+    const bool colour = HasColourKernel(in.mode);
+    // The normal-map modes take the opacity as a rotation of the upper normal (BlendColour) and
+    // write their result as it is over an opaque backdrop.
+    const bool rotates = colour && in.channels == 3 &&
+                         (in.mode == M::NormalMapCombine || in.mode == M::NormalMapDetail ||
+                          in.mode == M::NormalMapInverseDetail);
+    std::array<float, 3> r{};
+    if (colour) {
+        const std::array<float, 3> a{in.acc[0], in.acc[1], in.acc[2]};
+        const std::array<float, 3> b{in.src[0], in.src[1], in.src[2]};
+        r = BlendColour(in.mode, a, b, in.channels, alphaB == 1.0f ? alphaS : kOne);
+    } else {
+        for (int i = 0; i < in.channels; ++i) {
+            r[static_cast<size_t>(i)] =
+                BlendKernel(in.mode, in.acc[static_cast<size_t>(i)], in.src[static_cast<size_t>(i)]);
+        }
+    }
     for (int i = 0; i < in.channels; ++i) {
         const float a = in.acc[static_cast<size_t>(i)];
         const float s = in.src[static_cast<size_t>(i)];
-        float r = BlendKernel(in.mode, a, s);
-        if (in.clampUnorm) r = Clamp01(r);
+        float ri = r[static_cast<size_t>(i)];
+        if (in.clampUnorm) ri = Clamp01(ri);
         float v = 0.0f;
         if (alphaB == 1.0f) {
-            if (replace) {
-                const float d = Sub(r, a);
+            if (rotates) {
+                v = ri;
+            } else if (in.mode == M::Replace) {
+                const float d = Sub(ri, a);
                 v = Add(a, Mul(d, alphaS));
+            } else if (in.mode == M::ColorBurn) {
+                // Painter's ColorBurn mixes with one rounding of a (1 - alpha) + r alpha.
+                v = Fma(a, Sub(kOne, alphaS), Mul(ri, alphaS));
             } else {
                 const float oneMinusAlpha = Sub(kOne, alphaS);
                 const float ta = Mul(a, oneMinusAlpha);
-                const float tr = Mul(r, alphaS);
+                const float tr = Mul(ri, alphaS);
                 v = Add(ta, tr);
             }
         } else if (alphaB == 0.0f) {
@@ -409,7 +594,7 @@ std::array<float, 4> Composite(const CompositeInput& in) {
             const float oneMinusAlphaS = Sub(kOne, alphaS);
             const float oneMinusAlphaB = Sub(kOne, alphaB);
             const float backdrop = Mul(Mul(oneMinusAlphaS, alphaB), a);
-            const float blended = Add(Mul(oneMinusAlphaB, s), Mul(alphaB, r));
+            const float blended = Add(Mul(oneMinusAlphaB, s), Mul(alphaB, ri));
             const float alphaO = Add(alphaS, Mul(alphaB, oneMinusAlphaS));
             v = Mul(Add(backdrop, Mul(alphaS, blended)), Rcp(alphaO));
         }

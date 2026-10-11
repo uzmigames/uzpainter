@@ -83,11 +83,11 @@ void GpuTileStore::DestroyRetired() {
 
 render::Result<void> GpuTileStore::EnsureTable16() {
     if (m_table16.IsValid()) return {};
-    const std::vector<float>& table = arith::Unorm16OperandTable();
-    const uint64_t bytes = table.size() * sizeof(float);
+    const std::vector<uint32_t>& table = OperandTableWords();
+    const uint64_t bytes = table.size() * sizeof(uint32_t);
     render::Result<uz::RHIBufferHandle> upload =
         CreateBuffer(bytes, uz::RHIBufferUsage::CopySrc, uz::RHIMemoryType::Upload, 0,
-                     "evaluator_unorm16_operands_upload");
+                     "evaluator_operand_tables_upload");
     if (!upload) return render::Unexpected(upload.error());
     auto* mapped = static_cast<std::byte*>(m_device.Rhi().MapBuffer(*upload));
     if (mapped == nullptr) {
@@ -99,7 +99,7 @@ render::Result<void> GpuTileStore::EnsureTable16() {
     m_device.Rhi().UnmapBuffer(*upload);
     render::Result<uz::RHIBufferHandle> gpu =
         CreateBuffer(bytes, uz::RHIBufferUsage::StructuredBuffer | uz::RHIBufferUsage::CopyDst,
-                     uz::RHIMemoryType::Default, sizeof(float), "evaluator_unorm16_operands");
+                     uz::RHIMemoryType::Default, sizeof(uint32_t), "evaluator_operand_tables");
     if (!gpu) {
         m_device.DestroyBuffer(*upload);
         return render::Unexpected(gpu.error());
@@ -282,10 +282,10 @@ render::Result<void> GpuTileStore::Blend(const BlendOp& op) {
             return EvalFail(EvalErrorKind::Internal, "blend operands differ in format");
         }
     }
-    if (!arith::HasSeparableKernel(op.mode)) {
+    if (!arith::HasKernel(op.mode)) {
         return EvalFail(EvalErrorKind::UnsupportedBlendMode,
                         std::string(core::ToString(op.mode)) +
-                            " has no kernel in this build (phase1.10_compositor-blend-kernels)");
+                            " has no blend kernel (a group placement)");
     }
     render::Result<void> table = EnsureTable16();
     if (!table) return table;
@@ -405,8 +405,7 @@ render::Result<void> GpuTileStore::Flush() {
         if (copyTable) {
             const uz::RHIBarrierDesc toCopy = Transition(m_table16, State::Common, State::CopyDst);
             cmd.ResourceBarrier(&toCopy, 1);
-            cmd.CopyBuffer(m_table16Upload, 0, m_table16, 0,
-                           arith::Unorm16OperandTable().size() * sizeof(float));
+            cmd.CopyBuffer(m_table16Upload, 0, m_table16, 0, OperandTableWords().size() * sizeof(uint32_t));
             const uz::RHIBarrierDesc toRead =
                 Transition(m_table16, State::CopyDst, State::ShaderResource);
             cmd.ResourceBarrier(&toRead, 1);

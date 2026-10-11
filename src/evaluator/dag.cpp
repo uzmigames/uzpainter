@@ -187,10 +187,10 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
             render::Result<std::optional<DagSource>> source = SourceOf(ctx, layer);
             if (!source) return render::Unexpected(source.error());
             if (!*source) return {};
-            if (!arith::HasSeparableKernel(node.mode)) {
+            if (!arith::HasKernel(node.mode)) {
                 return EvalFail(EvalErrorKind::UnsupportedBlendMode,
                                 std::string(core::ToString(node.mode)) +
-                                    " is a kernel of phase1.10_compositor-blend-kernels",
+                                    " has no blend kernel (a group placement)",
                                 layer.uid);
             }
             writer.Str("fill").Sub((**source).hash);
@@ -202,10 +202,10 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
                 // Children composite directly into the parent list.
                 return AppendLayers(ctx, layer.children, list, node.opacity, node.mask);
             }
-            if (!arith::HasSeparableKernel(node.mode)) {
+            if (!arith::HasKernel(node.mode)) {
                 return EvalFail(EvalErrorKind::UnsupportedBlendMode,
                                 std::string(core::ToString(node.mode)) +
-                                    " is a kernel of phase1.10_compositor-blend-kernels",
+                                    " has no blend kernel (a group placement)",
                                 layer.uid);
             }
             auto group = std::make_unique<DagList>();

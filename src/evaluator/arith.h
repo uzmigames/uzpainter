@@ -7,9 +7,10 @@
 // - operands from storage (parity/semantics/blend-modes.json, "Operands"): UNORM codes as
 //   float32(code / M) through lookup tables; sRGB8 codes as the IEC 61966-2-1 decode on 8
 //   significant bits; floats as stored;
-// - the separable blend kernels of blend-modes.json in float32 with the fused multiply-add,
-//   reciprocal and square root of the fit (one rounding each), and the opacity mix
-//   v = a (1 - alpha) + r alpha (Replace: a + (r - a) alpha);
+// - the blend kernels of parity/semantics/blend-kernels.json in float32 with the fused
+//   multiply-adds the goldens show (one rounding each), the recording GPU's reciprocal and
+//   square roots where Painter divides or takes roots (hwmath.h), and the opacity mix
+//   v = a (1 - alpha) + r alpha (Replace: a + (r - a) alpha; ColorBurn: fma(a, 1 - alpha, r alpha));
 // - the write rules ("Write"): UNORM n bits truncated to n + 4 fractional bits then the nearest
 //   code, ties down; sRGB8 round(255 encode(v)); 16-bit float toward zero; 32-bit float as it
 //   is, re-composited over the channel base (1 + (v - 1)) once at read-out;
@@ -41,13 +42,45 @@ namespace uzp::evaluator::arith {
 [[nodiscard]] float MaxNan(float x, float y);
 [[nodiscard]] float Clamp01(float x);
 
-/// The modes whose kernel this file defines: the separable modes of blend-modes.json (Normal,
-/// Replace, Disable, Multiply ... PinLight). The non-separable modes (Tint, Saturation, Color,
-/// Value) and the normal-map modes are the kernels of phase1.10_compositor-blend-kernels;
-/// PassThrough is a group placement, not a kernel.
+/// The separable modes (Normal, Replace, Disable, Multiply ... PinLight): one kernel per
+/// channel (`BlendKernel`).
 [[nodiscard]] bool HasSeparableKernel(core::BlendingMode mode);
-/// r of blend-modes.json for the lower value `a` and the upper value `b` (float32).
+/// The component modes (Tint, Saturation, Color, Value) and the normal-map modes
+/// (NormalMapCombine, NormalMapDetail, NormalMapInverseDetail): one kernel per texel over the
+/// three components (`BlendColour`).
+[[nodiscard]] bool HasColourKernel(core::BlendingMode mode);
+/// Every mode with a kernel: all 31 modes but PassThrough, which is a group placement.
+[[nodiscard]] bool HasKernel(core::BlendingMode mode);
+/// r of blend-kernels.json for the lower value `a` and the upper value `b` (float32) of a
+/// separable mode; Divide, ColorBurn, ColorDodge and VividLight divide through the hardware
+/// reciprocal and SoftLight takes the hardware square root (hwmath.h).
 [[nodiscard]] float BlendKernel(core::BlendingMode mode, float a, float b);
+/// r of a colour mode for the lower colour `a` and the upper colour `b` (`channels` 1 or 3).
+/// Three components: the component modes through HSV (hue, saturation or value of the upper
+/// colour, the value doubled), the normal-map modes on the decoded unit normals with the upper
+/// one first rotated toward (0, 0, 1) by `alpha` (whiteout for Combine, reoriented normal mapping
+/// for Detail and InverseDetail), encoded back as n / 2 + 1/2. One component (grey): Value and
+/// the normal-map modes give `b`, Tint, Saturation and Color give `a`.
+[[nodiscard]] std::array<float, 3> BlendColour(core::BlendingMode mode, const std::array<float, 3>& a,
+                                               const std::array<float, 3>& b, int channels, float alpha);
+
+/// float32 constants of the colour kernels, shared bit for bit with the generated kernels
+/// (kernelgen.cpp writes them into `evaluator_tables.hlsli`).
+/// The saturation and hue epsilon of the HSV conversion (fitted: 2^-12).
+inline constexpr float kHsvEpsilon = 0.000244140625f;
+inline constexpr float kThird = 1.0f / 3.0f;
+inline constexpr float kTwoThirds = 2.0f / 3.0f;
+inline constexpr float kHalfPi = 1.57079632679489661923f;
+/// asin(t) / t as a series in t^2: (2k)! / (4^k (k!)^2 (2k + 1)), k = 0..11.
+inline constexpr std::array<float, 12> kAsinSeries = {
+    1.0f, 1.0f / 6.0f, 3.0f / 40.0f, 15.0f / 336.0f, 105.0f / 3456.0f, 945.0f / 42240.0f,
+    10395.0f / 599040.0f, 135135.0f / 9676800.0f, 2027025.0f / 175472640.0f,
+    34459425.0f / 3530096640.0f, 654729075.0f / 78033715200.0f,
+    13749310575.0f / 1880240947200.0f};
+/// sin(x) / x as a series in x^2: (-1)^k / (2k + 1)!, k = 0..8.
+inline constexpr std::array<float, 9> kSinSeries = {
+    1.0f, -1.0f / 6.0f, 1.0f / 120.0f, -1.0f / 5040.0f, 1.0f / 362880.0f, -1.0f / 39916800.0f,
+    1.0f / 6227020800.0f, -1.0f / 1307674368000.0f, 1.0f / 355687428096000.0f};
 
 // ── Storage ──────────────────────────────────────────────────────────────────
 

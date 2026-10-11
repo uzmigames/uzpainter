@@ -271,6 +271,7 @@ const evaluator_sources = [_][]const u8{
     "evaluator/evaluator.cpp",
     "evaluator/gpu_store.cpp",
     "evaluator/hash.cpp",
+    "evaluator/hwmath.cpp",
     "evaluator/kernelgen.cpp",
     "evaluator/profile.cpp",
     "evaluator/projection_uv.cpp",
@@ -1096,6 +1097,8 @@ pub fn build(b: *std.Build) void {
     // The PNG decoder of bitmap sources (spng and zlib, compiled into `uzp_mesh`) and the mesh
     // importers of the UV-raster cases.
     evaluator_tests_mod.addIncludePath(b.path("thirdparty/spng/spng"));
+    // zlib also inflates the hardware arithmetic tables (`src/evaluator/hwmath.h`).
+    evaluator_tests_mod.addIncludePath(b.path("thirdparty/zlib"));
     evaluator_tests_mod.linkLibrary(mesh_lib);
     evaluator_tests_mod.linkLibrary(uzp_core_lib);
     for (system_libraries) |name| evaluator_tests_mod.linkSystemLibrary(name, .{});

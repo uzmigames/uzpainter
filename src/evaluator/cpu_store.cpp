@@ -160,10 +160,10 @@ render::Result<void> CpuTileStore::Blend(const BlendOp& op) {
         (op.mask.kind == Operand::Kind::Tile && mask == nullptr)) {
         return EvalFail(EvalErrorKind::Internal, "blend operand tile unknown");
     }
-    if (!arith::HasSeparableKernel(op.mode)) {
+    if (!arith::HasKernel(op.mode)) {
         return EvalFail(EvalErrorKind::UnsupportedBlendMode,
                         std::string(core::ToString(op.mode)) +
-                            " has no kernel in this build (phase1.10_compositor-blend-kernels)");
+                            " has no blend kernel (a group placement)");
     }
     const uint32_t stored = dst.format.StoredChannels();
     arith::CompositeInput in;

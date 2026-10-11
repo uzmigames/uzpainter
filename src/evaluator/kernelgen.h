@@ -34,8 +34,21 @@ struct BlendKernelVariant {
 [[nodiscard]] render::KernelSource BlendKernelSource(const BlendKernelVariant& variant);
 
 /// `evaluator_tables.hlsli`: the sRGB8 operand table, the sRGB8 store thresholds (doubles as
-/// uint pairs) and the 8-bit UNORM operand table, generated from arith.h.
+/// uint pairs), the 8-bit UNORM operand table and the float32 constants of the colour kernels,
+/// generated from arith.h, and the offsets of the operand tables buffer (`UZP_TABLE_*`).
 [[nodiscard]] render::KernelInclude TablesInclude();
+
+/// Offsets (in uints) of the operand tables buffer the blend kernels read: the 16-bit UNORM
+/// operands (`arith::Unorm16OperandTable`, float bits) and the packed delta words of the hardware
+/// reciprocal, square root and reciprocal square root (`hw::Words`).
+inline constexpr uint32_t kTableUnorm16 = 0;
+inline constexpr uint32_t kTableRcp = kTableUnorm16 + 65536;
+inline constexpr uint32_t kTableSqrt = kTableRcp + (1u << 23) / 16;
+inline constexpr uint32_t kTableRsqrt = kTableSqrt + (1u << 24) / 16;
+inline constexpr uint32_t kTableWords = kTableRsqrt + (1u << 24) / 16;
+
+/// The operand tables buffer: `kTableWords` uints at the offsets above (built once).
+[[nodiscard]] const std::vector<uint32_t>& OperandTableWords();
 
 /// Uints per parameter block.
 inline constexpr uint32_t kBlendParamsStride = 32;
@@ -62,7 +75,7 @@ enum BlendParam : uint32_t {
     kParamMaskConst = 14,
     kParamOpacity = 15,
     kParamDstUav = 16,
-    kParamTable16Srv = 17,
+    kParamTable16Srv = 17,  ///< The operand tables buffer (`OperandTableWords`).
     kParamMaskEncoding = 18,
 };
 

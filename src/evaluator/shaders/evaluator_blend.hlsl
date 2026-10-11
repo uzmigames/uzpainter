@@ -3,14 +3,17 @@
 // 3), UZP_SRGB (codes are sRGB8), UZP_ALPHA (the destination carries a coverage plane).
 // Mirrors src/evaluator/arith.cpp operation for operation: every float operation is one IEEE
 // operation (compiled IEEE-strict), Fma is the float32 rounding of the exact x y + z (exact
-// product and one addition in double), Rcp and Sqrt are correctly rounded (the hardware result
-// corrected with exact double residuals), min/max follow IEEE minNum/maxNum where numpy's fmin/
-// fmax do and propagate NaN where numpy's minimum/maximum do.
+// product and one addition in double), Rcp, Sqrt and RsqrtCorrect are correctly rounded (the
+// hardware result corrected with exact double residuals), HwRcp, HwSqrt and HwRsqrt are the
+// recording GPU's results rebuilt from the measured tables of hwmath.h (never this GPU's own
+// instructions), min/max follow IEEE minNum/maxNum where numpy's fmin/fmax do and propagate NaN
+// where numpy's minimum/maximum do.
 //
 // Parameters come from a block of 32 uints in the arena behind root constant 0, block index in
 // root constant 1 (kernelgen.h, BlendParam): width, height, flags, backdrop (SRV index or
 // constant rgba), source (SRV index or constant rgba), mask (SRV index of plane 0 or constant),
-// opacity, the destination UAV, the 16-bit UNORM operand table SRV and the mask tile's
+// opacity, the destination UAV, the operand tables SRV (the 16-bit UNORM operands and the
+// hardware arithmetic tables at the offsets of evaluator_tables.hlsli) and the mask tile's
 // encoding. 32-bit float results are stored raw (the channel base re-composition is a read-out
 // step of evaluate.cpp).
 
@@ -43,8 +46,20 @@ cbuffer Root : register(b0) {
 #define FLAG_SRC_ALPHA 16u
 
 static const float kNaN = asfloat(0x7FC00000u);
-/// The SRV of the 16-bit UNORM operand table, set from the parameter block.
-static uint g_table16;
+/// The SRV of the operand tables (kernelgen.h OperandTableWords), set from the parameter block.
+static uint g_tables;
+
+uint TableWord(uint index) {
+    StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_tables];
+    return tables[index];
+}
+
+#if defined(UZP_MODE_Tint) || defined(UZP_MODE_Saturation) || defined(UZP_MODE_Color) || defined(UZP_MODE_Value)
+#define UZP_COMPONENT 1
+#endif
+#if defined(UZP_MODE_NormalMapCombine) || defined(UZP_MODE_NormalMapDetail) || defined(UZP_MODE_NormalMapInverseDetail)
+#define UZP_NORMALMAP 1
+#endif
 
 // ── Arithmetic (arith.cpp) ───────────────────────────────────────────────────
 
@@ -102,6 +117,71 @@ float MinNan(float x, float y) { return (isnan(x) || isnan(y)) ? kNaN : (x < y ?
 float MaxNan(float x, float y) { return (isnan(x) || isnan(y)) ? kNaN : (x > y ? x : y); }
 float Clamp01(float x) { return Fmin(Fmax(x, 0.0f), 1.0f); }
 
+// ── Hardware arithmetic of the recording GPU (hwmath.cpp) ────────────────────
+
+static const uint kQuietNaN = 0x7FC00000u;
+
+int HwDelta(uint offset, uint index) {
+    const uint word = TableWord(offset + (index >> 4));
+    return int((word >> ((index & 15u) * 2u)) & 3u) - 2;
+}
+
+// The index in [1, 4) of the normal y = z 4^k.
+uint RootIndex(uint bits) {
+    const int e = int((bits >> 23) & 0xFFu) - 127;
+    const int k = e >= 0 ? e / 2 : -((1 - e) / 2);
+    const uint z = uint(int(bits) - (k << 24));
+    return z - 0x3F800000u;
+}
+
+// 1 / sqrt(y) correctly rounded for a positive normal y (m^2 is exact in double; fma rounds
+// m^2 y - 1 once, so its sign is exact).
+float RsqrtCorrect(float y) {
+    float c = rsqrt(y);
+    const double Y = (double)y;
+    [loop] for (int i = 0; i < 4; ++i) {
+        const float up = asfloat(asuint(c) + 1u);
+        const float down = asfloat(asuint(c) - 1u);
+        const double mUp = ((double)c + (double)up) * 0.5;
+        const double mDown = ((double)down + (double)c) * 0.5;
+        if (fma(mUp * mUp, Y, -1.0) < 0.0) c = up;
+        else if (fma(mDown * mDown, Y, -1.0) > 0.0) c = down;
+        else break;
+    }
+    return c;
+}
+
+float HwRcp(float x) {
+    const uint bits = asuint(x);
+    const uint sign = bits & 0x80000000u;
+    const uint magnitude = bits & 0x7FFFFFFFu;
+    if (magnitude > 0x7F800000u) return asfloat(kQuietNaN);
+    if (magnitude == 0x7F800000u) return asfloat(sign);
+    if (magnitude < 0x00800000u) return asfloat(sign | 0x7F800000u);
+    const float c = Rcp(asfloat(magnitude));
+    if (asuint(c) < 0x00800000u) return asfloat(sign);
+    const uint r = asuint(c) + uint(HwDelta(UZP_TABLE_RCP, magnitude & 0x7FFFFFu));
+    return asfloat(sign | r);
+}
+
+float HwSqrt(float y) {
+    const uint bits = asuint(y);
+    if ((bits & 0x7FFFFFFFu) > 0x7F800000u) return asfloat(kQuietNaN);
+    if ((bits & 0x7FFFFFFFu) < 0x00800000u) return asfloat(bits & 0x80000000u);
+    if ((bits & 0x80000000u) != 0u) return asfloat(kQuietNaN);
+    if (bits == 0x7F800000u) return y;
+    return asfloat(asuint(Sqrt(y)) + uint(HwDelta(UZP_TABLE_SQRT, RootIndex(bits))));
+}
+
+float HwRsqrt(float y) {
+    const uint bits = asuint(y);
+    if ((bits & 0x7FFFFFFFu) > 0x7F800000u) return asfloat(kQuietNaN);
+    if ((bits & 0x7FFFFFFFu) < 0x00800000u) return asfloat((bits & 0x80000000u) | 0x7F800000u);
+    if ((bits & 0x80000000u) != 0u) return asfloat(kQuietNaN);
+    if (bits == 0x7F800000u) return 0.0f;
+    return asfloat(asuint(RsqrtCorrect(y)) + uint(HwDelta(UZP_TABLE_RSQRT, RootIndex(bits))));
+}
+
 float HardLight(float a, float b) {
     const float twoA = 2.0f * a;
     const float low = twoA * b;
@@ -114,12 +194,12 @@ float HardLight(float a, float b) {
 
 float ColorBurn(float a, float b) {
     const float x = a - 1.0f;
-    return Clamp01(Fma(x, Rcp(b), 1.0f));
+    return Clamp01(Fma(x, HwRcp(b), 1.0f));
 }
 
 float ColorDodge(float a, float b) {
     const float t = 1.0f - b;
-    const float m = a * Rcp(t);
+    const float m = a * HwRcp(t);
     return Fmax(Fmin(1.0f, m), 0.0f);
 }
 
@@ -131,7 +211,7 @@ float SoftLight(float a, float b) {
     const float low = Fma(twoA, b, aa * oneMinusTwoB);
     const float twoBMinusOne = twoB - 1.0f;
     const float oneMinusB = 1.0f - b;
-    const float high = Fma(Sqrt(a), twoBMinusOne, twoA * oneMinusB);
+    const float high = Fma(HwSqrt(a), twoBMinusOne, twoA * oneMinusB);
     return b <= 0.5f ? low : high;
 }
 
@@ -158,10 +238,11 @@ float PinLight(float a, float b) {
 }
 
 float Divide(float a, float b) {
-    const float m = a * Rcp(b);
+    const float m = a * HwRcp(b);
     return Fmax(Fmin(m, 1.0f), 0.0f);
 }
 
+#if !defined(UZP_COMPONENT) && !defined(UZP_NORMALMAP)
 float BlendKernel(float a, float b) {
 #if defined(UZP_MODE_Normal) || defined(UZP_MODE_Replace)
     return b;
@@ -219,6 +300,132 @@ float BlendKernel(float a, float b) {
 #error "UZP_MODE_<Mode> selects the blend kernel"
 #endif
 }
+#endif
+
+// ── Colour kernels (arith.cpp BlendColour) ───────────────────────────────────
+
+#if defined(UZP_COMPONENT)
+float Less(float x, float y) { return x < y ? x : y; }
+
+// RGB to HSV (hue, saturation, value) on the hexcone, divisions through the hardware reciprocal.
+float3 ToHsv(float3 c) {
+    const float eps = asfloat(kColourConstants[0]);
+    const float third = asfloat(kColourConstants[1]);
+    const float twoThirds = asfloat(kColourConstants[2]);
+    const bool gb = c.y >= c.z;
+    const float4 p = float4(gb ? c.y : c.z, gb ? c.z : c.y, gb ? 0.0f : -1.0f, gb ? -third : twoThirds);
+    const bool rp = c.x >= p.x;
+    const float4 q = float4(rp ? c.x : p.x, p.y, rp ? p.z : p.w, rp ? p.x : c.x);
+    const float d = q.x - Less(q.w, q.y);
+    const float span = 6.0f * d + eps;
+    const float h = abs(q.z + (q.w - q.y) * HwRcp(span));
+    const float s = d * HwRcp(q.x + eps);
+    return float3(h, s, q.x);
+}
+
+float FromHsvComponent(float3 c, float k) {
+    const float x = c.x + k;
+    const float f = x - floor(x);
+    const float p = abs(f * 6.0f - 3.0f);
+    const float t = Clamp01(p - 1.0f);
+    return c.z * (1.0f + (t - 1.0f) * c.y);
+}
+
+float3 BlendColour(float3 a, float3 b, float alpha) {
+#if UZP_CHANNELS == 1
+#if defined(UZP_MODE_Value)
+    return b;
+#else
+    return a;
+#endif
+#else
+    const float3 lower = ToHsv(a);
+    const float3 upper = ToHsv(b);
+    float3 o = lower;
+#if defined(UZP_MODE_Tint) || defined(UZP_MODE_Color)
+    o.x = upper.x;
+#endif
+#if defined(UZP_MODE_Saturation) || defined(UZP_MODE_Color)
+    o.y = upper.y;
+#endif
+#if defined(UZP_MODE_Value)
+    o.z = upper.z;
+#endif
+    o.z = 2.0f * o.z;
+    const float third = asfloat(kColourConstants[1]);
+    const float twoThirds = asfloat(kColourConstants[2]);
+    return float3(FromHsvComponent(o, 1.0f), FromHsvComponent(o, twoThirds), FromHsvComponent(o, third));
+#endif
+}
+#endif
+
+#if defined(UZP_NORMALMAP)
+float DotYxz(float3 u, float3 v) { return Fma(u.z, v.z, Fma(u.x, v.x, u.y * v.y)); }
+float DotXyz(float3 u, float3 v) { return Fma(u.z, v.z, Fma(u.y, v.y, u.x * v.x)); }
+
+float3 Normalise(float3 v) {
+    const float inv = HwRsqrt(DotYxz(v, v));
+    return float3(v.x * inv, v.y * inv, v.z * inv);
+}
+
+float3 DecodeNormal(float3 c) {
+    float3 n = float3(c.x * 2.0f - 1.0f, c.y * 2.0f - 1.0f, c.z * 2.0f - 1.0f);
+    n.z = Fmax(n.z, 0.0f);
+    return Normalise(n);
+}
+
+float AsinSmall(float t) {
+    const float t2 = t * t;
+    float sum = asfloat(kAsinSeries[11]);
+    [unroll] for (int i = 10; i >= 0; --i) sum = sum * t2 + asfloat(kAsinSeries[i]);
+    return sum * t;
+}
+
+float SinSmall(float x) {
+    const float x2 = x * x;
+    float sum = asfloat(kSinSeries[8]);
+    [unroll] for (int i = 7; i >= 0; --i) sum = sum * x2 + asfloat(kSinSeries[i]);
+    return sum * x;
+}
+
+float3 TowardFlat(float3 n, float alpha) {
+    if (!(alpha < 1.0f)) return n;
+    const float z = Clamp01(n.z);
+    const float sine = Sqrt((1.0f - z) * (1.0f + z));
+    if (!(sine > 0.0f)) return n;
+    const float halfPi = asfloat(kColourConstants[3]);
+    const float angle = z >= 0.5f ? 2.0f * AsinSmall(Sqrt((1.0f - z) * 0.5f)) : halfPi - AsinSmall(z);
+    const float inv = Rcp(sine);
+    const float wn = SinSmall(alpha * angle) * inv;
+    const float wf = SinSmall((1.0f - alpha) * angle) * inv;
+    return float3(n.x * wn, n.y * wn, n.z * wn + wf);
+}
+
+float3 Reoriented(float3 base, float3 detail) {
+    const float3 t = float3(base.x, base.y, base.z + 1.0f);
+    const float3 u = float3(-detail.x, -detail.y, detail.z);
+    const float d = DotXyz(t, u);
+    return float3(Fma(t.x, d, -(u.x * t.z)), Fma(t.y, d, -(u.y * t.z)), t.z * (d - u.z));
+}
+
+float3 BlendColour(float3 a, float3 b, float alpha) {
+#if UZP_CHANNELS == 1
+    return b;
+#else
+    const float3 lower = DecodeNormal(a);
+    const float3 upper = TowardFlat(DecodeNormal(b), alpha);
+#if defined(UZP_MODE_NormalMapCombine)
+    const float3 r = float3(lower.x + upper.x, lower.y + upper.y, lower.z * upper.z);
+#elif defined(UZP_MODE_NormalMapDetail)
+    const float3 r = Reoriented(lower, upper);
+#else
+    const float3 r = Reoriented(upper, lower);
+#endif
+    const float3 n = Normalise(r);
+    return float3(Fma(n.x, 0.5f, 0.5f), Fma(n.y, 0.5f, 0.5f), Fma(n.z, 0.5f, 0.5f));
+#endif
+}
+#endif
 
 // ── Storage (arith.cpp, cpu_store.cpp) ───────────────────────────────────────
 
@@ -259,8 +466,7 @@ float UnormOperand(uint code) {
 #if UZP_ENC == 0
     return asfloat(kUnorm8Operand[code & 0xFFu]);
 #else
-    StructuredBuffer<float> table = ResourceDescriptorHeap[g_table16];
-    return table[code & 0xFFFFu];
+    return asfloat(TableWord(UZP_TABLE_UNORM16 + (code & 0xFFFFu)));
 #endif
 }
 
@@ -299,10 +505,7 @@ float4 LoadOperand(uint srv, int2 p, bool hasAlpha) {
 float LoadMask(uint srv, int2 p, uint enc) {
     const float4 raw = LoadTexel(srv, p);
     if (enc == ENC_UNORM8) return asfloat(kUnorm8Operand[Codes(raw, ENC_UNORM8).x & 0xFFu]);
-    if (enc == ENC_UNORM16) {
-        StructuredBuffer<float> table = ResourceDescriptorHeap[g_table16];
-        return table[Codes(raw, ENC_UNORM16).x & 0xFFFFu];
-    }
+    if (enc == ENC_UNORM16) return asfloat(TableWord(UZP_TABLE_UNORM16 + (Codes(raw, ENC_UNORM16).x & 0xFFFFu)));
     return raw.x;
 }
 
@@ -312,6 +515,9 @@ float Mix(float a, float r, float alphaS) {
 #if defined(UZP_MODE_Replace)
     const float d = r - a;
     return a + d * alphaS;
+#elif defined(UZP_MODE_ColorBurn)
+    // Painter's ColorBurn mixes with one rounding of a (1 - alpha) + r alpha.
+    return Fma(a, 1.0f - alphaS, r * alphaS);
 #else
     const float oneMinusAlpha = 1.0f - alphaS;
     const float ta = a * oneMinusAlpha;
@@ -320,12 +526,17 @@ float Mix(float a, float r, float alphaS) {
 #endif
 }
 
-float CompositeChannel(float a, float s, float alphaB, float alphaS) {
-    float r = BlendKernel(a, s);
+float CompositeChannel(float a, float s, float r, float alphaB, float alphaS) {
 #if UZP_ENC == 0 || UZP_ENC == 1
     r = Clamp01(r);
 #endif
-    if (alphaB == 1.0f) return Mix(a, r, alphaS);
+    if (alphaB == 1.0f) {
+#if defined(UZP_NORMALMAP) && UZP_CHANNELS == 3
+        return r;
+#else
+        return Mix(a, r, alphaS);
+#endif
+    }
     if (alphaB == 0.0f) return s;
     const float oneMinusAlphaS = 1.0f - alphaS;
     const float oneMinusAlphaB = 1.0f - alphaB;
@@ -368,7 +579,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     const uint height = params[base + P_HEIGHT];
     if (id.x >= width || id.y >= height) return;
     const uint flags = params[base + P_FLAGS];
-    g_table16 = params[base + P_TABLE16_SRV];
+    g_tables = params[base + P_TABLE16_SRV];
     const int2 p = int2(id.xy);
 
     float4 acc;
@@ -396,11 +607,21 @@ void main(uint3 id : SV_DispatchThreadID) {
     const float alphaS = opacityMask * src.w;
     const float alphaB = acc.w;
 
-    float4 result = float4(0.0f, 0.0f, 0.0f, 1.0f);
-    result.x = StoreChannel(CompositeChannel(acc.x, src.x, alphaB, alphaS));
+    float3 r = float3(0.0f, 0.0f, 0.0f);
+#if defined(UZP_COMPONENT) || defined(UZP_NORMALMAP)
+    r = BlendColour(acc.xyz, src.xyz, alphaB == 1.0f ? alphaS : 1.0f);
+#else
+    r.x = BlendKernel(acc.x, src.x);
 #if UZP_CHANNELS == 3
-    result.y = StoreChannel(CompositeChannel(acc.y, src.y, alphaB, alphaS));
-    result.z = StoreChannel(CompositeChannel(acc.z, src.z, alphaB, alphaS));
+    r.y = BlendKernel(acc.y, src.y);
+    r.z = BlendKernel(acc.z, src.z);
+#endif
+#endif
+    float4 result = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    result.x = StoreChannel(CompositeChannel(acc.x, src.x, r.x, alphaB, alphaS));
+#if UZP_CHANNELS == 3
+    result.y = StoreChannel(CompositeChannel(acc.y, src.y, r.y, alphaB, alphaS));
+    result.z = StoreChannel(CompositeChannel(acc.z, src.z, r.z, alphaB, alphaS));
 #endif
     float alphaO = 1.0f;
     if (alphaB == 0.0f) alphaO = alphaS;

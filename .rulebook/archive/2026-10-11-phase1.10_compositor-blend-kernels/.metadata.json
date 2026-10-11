@@ -1,0 +1,32 @@
+{
+  "status": "in-progress",
+  "createdAt": "2026-10-10T06:02:32.831Z",
+  "updatedAt": "2026-10-11T06:18:35.450Z",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Seven blend modes are implemented but not yet exact against the Tier 0 goldens. How should the task treat them?\n\n- Tint, Saturation, Color, Value: exact on grey channels only. On colour channels up to 53 100 of 196 608 RGB16 values differ.\n- NormalMapCombine, NormalMapDetail, NormalMapInverseDetail: exact at opacity 1 everywhere, including the Normal channel. Below opacity 1 they differ by 1 RGB16 code or up to 1.8e-7 in float32.\n\nThe other 24 modes are exact on every format, against both recordings.",
+      "status": "answered",
+      "askedAt": "2026-10-11T06:18:11.627Z",
+      "context": "Evidence is in parity/reports/phase1/compositor-blend-kernels.md and parity/semantics/blend-kernels.json.\n\nThe spec allows two outcomes for a mode that is not exact: it stays release-gap, or it passes through an owner-approved exception.\n\nItem 4.1 is satisfied by the release-gap listing. Item 3.1 says \"every mode exact\", so whether to archive with these gaps is the owner's call.\n\nWhat remains unidentified:\n- for the component modes, Painter's HSV hue arithmetic near grey;\n- for the normal-map modes, Painter's float32 slerp toward the flat normal.\n\nRecommended option: archive, with a follow-up task that fits the HSV hue and the normal-map slerp. Nothing is reported supported in the meantime.",
+      "options": [
+        {
+          "label": "Archive with the 7 modes as release-gap",
+          "description": "follow-up task fits HSV hue and normal-map slerp"
+        },
+        {
+          "label": "Approve an exception for the normal-map residual below opacity 1",
+          "description": "HSV modes stay release-gap"
+        },
+        {
+          "label": "Keep phase1.10 open until all 7 modes are exact",
+          "description": "blocks the compositor children"
+        }
+      ],
+      "recommended": "Archive with the 7 modes as release-gap",
+      "blocks": "3.1 Tier 0 blend goldens: every mode × value sweep × opacity sweep exact at 16 bit",
+      "answer": "Coordinator (2026-10-11), applying the owner's standing preference for residuals (separate task, not blocking, never counted as a pass): option 1. Archive with Tint, Saturation, Color, Value, the three normal-map modes below opacity 1, and PassThrough recorded as release gaps in the capability manifest; move them into a follow-up fit task that stays open until each matches exactly or the owner approves an exception-register entry. No exception is approved here.",
+      "answeredAt": "2026-10-11T06:18:35.450Z"
+    }
+  ]
+}

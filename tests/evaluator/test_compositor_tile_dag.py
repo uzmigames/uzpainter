@@ -128,7 +128,7 @@ def test_template_library(evaluator_tests: Path) -> None:
 def test_evaluation_order_on_the_cpu(evaluator_tests: Path) -> None:
     """2.4, 3.3 (unit half), 3.4 (unit half): bottom-up order with asymmetric blends on every
     tested format, visibility and Disable, groups from a transparent start, PassThrough,
-    instances, 1:1 bitmaps and explicit failures."""
+    instances, 1:1 bitmaps, a non-separable mode and explicit failures."""
     passed, _ = run_case(evaluator_tests, "order")
     for fmt in ("RGB16", "L16", "RGB32F"):
         assert (
@@ -148,7 +148,7 @@ def test_evaluation_order_on_the_cpu(evaluator_tests: Path) -> None:
         "an instance layer evaluates its source layer in its own position",
         "a 1:1 bitmap on RGB16 copies every code exactly",
         "a paint layer fails with unsupported_node",
-        "a non-separable blend mode fails with unsupported_blend_mode",
+        "a non-separable blend mode (Tint) evaluates",
         "a bitmap without bytes fails with missing_resource",
     } <= passed
 
@@ -194,10 +194,10 @@ def test_gpu_equals_cpu_on_random_stacks(evaluator_tests: Path, tmp_path: Path) 
 
 
 def test_kernel_sweep_gpu_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> None:
-    """2.5: every separable blend mode x channel format over dense value sweeps, with and without
-    the coverage plane: GPU kernels equal the CPU reference bit for bit."""
+    """2.5: every blend mode x channel format over dense value sweeps, with and without the
+    coverage plane: GPU kernels equal the CPU reference bit for bit."""
     passed, _ = run_case(evaluator_tests, "kernel-sweep", str(tmp_path))
-    assert any(p.startswith("every separable blend mode x channel format") for p in passed)
+    assert any(p.startswith("every blend mode x channel format") for p in passed)
 
 
 # ── Template files (structure, no oracle) ────────────────────────────────────

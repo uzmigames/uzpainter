@@ -25,9 +25,8 @@
 //                                        writes the channel rasters to <out> (golden driver)
 //   gpu-vs-cpu <assets> <work-dir>       random stacks over every channel format on both stores:
 //                                        byte-identical results
-//   kernel-sweep <assets> <work-dir>     every separable blend mode x channel format over dense
-//                                        value sweeps: GPU kernels equal the CPU reference bit
-//                                        for bit
+//   kernel-sweep <assets> <work-dir>     every blend mode x channel format over dense value
+//                                        sweeps: GPU kernels equal the CPU reference bit for bit
 //   sources <assets>                     fill sources and UV projections on the CPU store
 //                                        (phase1.8_compositor-sources-projection): 1:1 copies on
 //                                        every format, transforms, wrap modes, LAY-13 bindings,
@@ -38,6 +37,10 @@
 //   srgb8-hardware <assets> <work-dir>   measures the GPU's sRGB8 decode and encode and compares
 //                                        them with the tables of arith.h
 //   tables <assets> <work-dir>           writes the sRGB8 tables of arith.h (tables.json)
+//   fp-hardware <assets> <work-dir>      measures the GPU's float32 reciprocal, square root and
+//                                        reciprocal square root on every float32 of their reduced
+//                                        domains, writes the measured tables and compares them and
+//                                        hw::Rcp/Sqrt/Rsqrt with the GPU (hwmath.h)
 //   uv-coverage <assets> <work-dir> <mesh> <size>
 //                                        imports <mesh>, rasterises its UV tile and writes the
 //                                        texel-centre coverage (island-edge goldens)
@@ -56,6 +59,7 @@
 #include "evaluator/evaluate.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/gpu_store.h"
+#include "evaluator/hwmath.h"
 #include "evaluator/kernelgen.h"
 #include "evaluator/profile.h"
 #include "evaluator/projection_uv.h"
@@ -76,6 +80,7 @@
 #include "uzp_core/types/validation.h"
 
 #include "log.h"
+#include "zlib.h"
 
 #include <algorithm>
 #include <bit>
@@ -576,6 +581,16 @@ int RunArith() {
               !arith::HasSeparableKernel(BlendingMode::PassThrough) &&
               arith::HasSeparableKernel(BlendingMode::PinLight),
           "non-separable, normal-map and PassThrough modes have no separable kernel");
+    {
+        size_t kernels = 0;
+        for (size_t i = 0; i < core::EnumTable<BlendingMode>::names.size(); ++i) {
+            const BlendingMode mode = static_cast<BlendingMode>(i);
+            kernels += arith::HasKernel(mode) ? 1 : 0;
+            if (arith::HasKernel(mode) == (mode == BlendingMode::PassThrough)) kernels = 1000;
+        }
+        Check(kernels == 31, "every documented BlendingMode but PassThrough has a kernel (31 of 32)",
+              std::to_string(kernels));
+    }
 
     // Composite: opaque backdrop is the fitted mix; transparent backdrop passes the source.
     arith::CompositeInput in;
@@ -980,8 +995,7 @@ int RunOrder(const fs::path& assets) {
         tint.SetRoot({tint.Fill("tint", SameSource(channels, Uniform(0.5, 0.5, 0.5)), Same(channels, BlendingMode::Tint, 1.0))});
         if (!tint.Validate("tint")) return Finish();
         result = evaluate(tint, ChannelType::User0, cpu);
-        Check(!result && KindName(result.error()) == "unsupported_blend_mode",
-              "a non-separable blend mode fails with unsupported_blend_mode", Describe(result));
+        Check(result.has_value(), "a non-separable blend mode (Tint) evaluates", Describe(result));
 
         Builder plain(128, 128, formats);
         if (!plain.Validate("plain")) return Finish();
@@ -1800,11 +1814,12 @@ const std::vector<ChannelFormat> kAllFormats{ChannelFormat::sRGB8, ChannelFormat
                                              ChannelFormat::L16, ChannelFormat::RGB16, ChannelFormat::L16F,
                                              ChannelFormat::RGB16F, ChannelFormat::L32F, ChannelFormat::RGB32F};
 
-std::vector<BlendingMode> SeparableModes() {
+/// Every mode with a kernel but Disable (which writes nothing to compare).
+std::vector<BlendingMode> KernelModes() {
     std::vector<BlendingMode> modes;
     for (size_t i = 0; i < core::EnumTable<BlendingMode>::names.size(); ++i) {
         const BlendingMode mode = static_cast<BlendingMode>(i);
-        if (arith::HasSeparableKernel(mode) && mode != BlendingMode::Disable) modes.push_back(mode);
+        if (arith::HasKernel(mode) && mode != BlendingMode::Disable) modes.push_back(mode);
     }
     return modes;
 }
@@ -1824,7 +1839,7 @@ int RunGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     render::Engine engine(TestOptions(dir));
     if (NoAdapter(engine)) return kExitSkip;
     Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
-    const std::vector<BlendingMode> modes = SeparableModes();
+    const std::vector<BlendingMode> modes = KernelModes();
     std::mt19937 rng(2026);
     auto unit = [&] { return std::uniform_real_distribution<double>(0.0, 1.0)(rng); };
     size_t compared = 0;
@@ -2008,7 +2023,7 @@ int RunKernelSweep(const fs::path& assets, const fs::path& dir) {
     render::Engine engine(TestOptions(dir));
     if (NoAdapter(engine)) return kExitSkip;
     Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
-    const std::vector<BlendingMode> modes = SeparableModes();
+    const std::vector<BlendingMode> modes = KernelModes();
     constexpr uint32_t kSize = 256;
     auto token = std::make_shared<const int>(0);
     size_t compared = 0;
@@ -2065,7 +2080,7 @@ int RunKernelSweep(const fs::path& assets, const fs::path& dir) {
     }
     for (const std::string& failure : failures) Check(false, "kernel sweep", failure);
     Check(failures.empty(),
-          "every separable blend mode x channel format (with and without coverage) equals the CPU reference bit for bit (" +
+          "every blend mode x channel format (with and without coverage) equals the CPU reference bit for bit (" +
               std::to_string(compared) + " samples, " + std::to_string(combinations) + " combinations)");
     return Finish();
 }
@@ -2384,7 +2399,7 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
     std::mt19937 rng(1808);
     auto unit = [&] { return std::uniform_real_distribution<double>(0.0, 1.0)(rng); };
-    const std::vector<BlendingMode> modes = SeparableModes();
+    const std::vector<BlendingMode> modes = KernelModes();
     Evaluator gpu(engine, templates);
     size_t compared = 0;
     size_t stacks = 0;
@@ -2732,6 +2747,175 @@ int RunSrgb8Hardware(const fs::path& dir) {
     return Finish();
 }
 
+// ── fp-hardware ──────────────────────────────────────────────────────────────
+
+/// Domain kernel: texel i of a 4096 x 4096 target holds 1 / x for x = 1 + (i mod 2^23) 2^-23 in
+/// [1, 2), sqrt(y) and rsqrt(y) for the i-th float32 y in [1, 4). Sample kernel: texel i of a
+/// 1024 x 1024 target holds 1 / x, sqrt(x), rsqrt(x) and x for an edge value (i < 32) or a
+/// hashed bit pattern.
+constexpr char kFpHardwareHlsl[] = R"(
+cbuffer Root : register(b0) { uint g_dst; };
+static const uint kEdges[32] = {
+    0x00000000u, 0x80000000u, 0x00000001u, 0x007FFFFFu, 0x80000001u, 0x807FFFFFu, 0x00800000u,
+    0x00800001u, 0x7E7FFFFFu, 0x7E800000u, 0x7E800001u, 0x7EFFFFFFu, 0x7F000000u, 0x7F7FFFFFu,
+    0x7F800000u, 0xFF800000u, 0x7FC00000u, 0xFFC00000u, 0x7F800001u, 0xBF800000u, 0xC0000000u,
+    0xBF000000u, 0x3F800000u, 0x40800000u, 0x3E800000u, 0xFE800000u, 0x80800000u, 0xFF7FFFFFu,
+    0x34000000u, 0x0C000000u, 0x01000000u, 0x00FFFFFFu};
+[numthreads(8, 8, 1)]
+void Domain(uint3 id : SV_DispatchThreadID) {
+    RWTexture2D<float4> dst = ResourceDescriptorHeap[g_dst];
+    const uint i = id.y * 4096u + id.x;
+    const float x = asfloat(0x3F800000u | (i & 0x7FFFFFu));
+    const float y = asfloat(0x3F800000u + i);
+    dst[id.xy] = float4(1.0f / x, sqrt(y), rsqrt(y), 0.0f);
+}
+[numthreads(8, 8, 1)]
+void Samples(uint3 id : SV_DispatchThreadID) {
+    RWTexture2D<float4> dst = ResourceDescriptorHeap[g_dst];
+    const uint i = id.y * 1024u + id.x;
+    uint h = i * 0x9E3779B9u;
+    h ^= h >> 16;
+    h *= 0x85EBCA6Bu;
+    h ^= h >> 13;
+    const float x = asfloat(i < 32u ? kEdges[i] : h);
+    dst[id.xy] = float4(1.0f / x, sqrt(x), rsqrt(x), x);
+}
+)";
+
+render::Result<std::vector<float>> FpKernelTexels(render::Engine& engine, const char* entry, uint32_t size) {
+    auto token = std::make_shared<const int>(0);
+    std::future<render::Result<std::vector<float>>> future = engine.Submit(
+        token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<float>> {
+            render::IDevice& device = context.Device();
+            uz::RHITextureDesc ddesc;
+            ddesc.width = size;
+            ddesc.height = size;
+            ddesc.format = uz::RHIFormat::RGBA32Float;
+            ddesc.usage = uz::RHITextureUsage::UnorderedAccess | uz::RHITextureUsage::CopySrc;
+            render::Result<uz::RHITextureHandle> dst = device.CreateTexture(ddesc);
+            if (!dst) return render::Unexpected(dst.error());
+            render::KernelSource source;
+            source.name = std::string("fp_hardware_") + entry;
+            source.hlsl = kFpHardwareHlsl;
+            source.entryPoint = entry;
+            render::Result<render::ComputeKernel> kernel = context.Kernel(source);
+            if (!kernel) {
+                device.DestroyTexture(*dst);
+                return render::Unexpected(kernel.error());
+            }
+            using State = uz::RHIResourceState;
+            using render::image_pass_detail::Transition;
+            const uint32_t root[1] = {device.Rhi().GetTextureUAVIndex(*dst)};
+            render::Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+                const uz::RHIBarrierDesc before = Transition(*dst, State::Common, State::UnorderedAccess);
+                cmd.ResourceBarrier(&before, 1);
+                cmd.SetPipeline(kernel->pipeline);
+                cmd.SetRootConstants(render::kRootConstantsParam, root, 1);
+                cmd.Dispatch(size / 8, size / 8, 1);
+                const uz::RHIBarrierDesc after = Transition(*dst, State::UnorderedAccess, State::Common);
+                cmd.ResourceBarrier(&after, 1);
+            });
+            if (!done) {
+                device.DestroyTexture(*dst);
+                return render::Unexpected(done.error());
+            }
+            render::TextureReadback readback(context);
+            render::ReadbackDesc desc;
+            desc.texture = *dst;
+            render::Result<render::ReadbackId> id = readback.Request(desc);
+            render::Result<render::ReadbackImage> image =
+                id ? readback.Complete(*id) : render::Result<render::ReadbackImage>(render::Unexpected(id.error()));
+            device.DestroyTexture(*dst);
+            if (!image) return render::Unexpected(image.error());
+            std::vector<float> values(image->texels.size() / sizeof(float));
+            std::memcpy(values.data(), image->texels.data(), values.size() * sizeof(float));
+            return values;
+        });
+    return Get(future);
+}
+
+bool SameFloat(float a, float b) {
+    return (std::isnan(a) && std::isnan(b)) || std::bit_cast<uint32_t>(a) == std::bit_cast<uint32_t>(b);
+}
+
+/// A measured delta table in the stored form of hwmath.h (zlib of the packed words).
+std::vector<unsigned char> PackDeltas(const std::vector<int>& deltas) {
+    std::vector<uint32_t> words(deltas.size() / 16, 0u);
+    for (size_t i = 0; i < deltas.size(); ++i) {
+        words[i / 16] |= static_cast<uint32_t>(deltas[i] + 2) << ((i % 16) * 2);
+    }
+    uLongf size = compressBound(static_cast<uLong>(words.size() * sizeof(uint32_t)));
+    std::vector<unsigned char> out(size);
+    compress2(out.data(), &size, reinterpret_cast<const Bytef*>(words.data()),
+              static_cast<uLong>(words.size() * sizeof(uint32_t)), 9);
+    out.resize(size);
+    return out;
+}
+
+/// Measures the GPU's float32 reciprocal (`1 / x`), square root and reciprocal square root as
+/// the render layer compiles them (`-Gis`) on every float32 of the reduced domains of hwmath.h,
+/// writes the measured tables (`hw-rcp.zlib`, `hw-sqrt.zlib`, `hw-rsqrt.zlib`) to the work
+/// directory and compares them with the embedded ones, then compares hw::Rcp, hw::Sqrt and
+/// hw::Rsqrt with the GPU on edge values and 2^20 hashed bit patterns over every exponent.
+int RunFpHardware(const fs::path& dir) {
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
+    render::Result<std::vector<float>> domain = FpKernelTexels(engine, "Domain", 4096);
+    render::Result<std::vector<float>> samples = FpKernelTexels(engine, "Samples", 1024);
+    if (!domain || !samples) {
+        Check(false, "the GPU's reciprocal and square roots are measured",
+              (!domain ? domain : samples).error().Describe());
+        return Finish();
+    }
+    const std::vector<float>& v = *domain;
+    std::vector<int> rcp(hw::kRcpEntries), sqrt(hw::kRootEntries), rsqrt(hw::kRootEntries);
+    bool faithful = true;
+    for (uint32_t i = 0; i < hw::kRootEntries; ++i) {
+        const float y = std::bit_cast<float>(0x3F800000u + i);
+        if (i < hw::kRcpEntries) {
+            const float x = std::bit_cast<float>(0x3F800000u | i);
+            rcp[i] = std::bit_cast<int32_t>(v[size_t{i} * 4]) - std::bit_cast<int32_t>(1.0f / x);
+            faithful = faithful && rcp[i] >= -2 && rcp[i] <= 1;
+        }
+        sqrt[i] = std::bit_cast<int32_t>(v[size_t{i} * 4 + 1]) - std::bit_cast<int32_t>(std::sqrt(y));
+        rsqrt[i] = std::bit_cast<int32_t>(v[size_t{i} * 4 + 2]) - std::bit_cast<int32_t>(hw::RsqrtCorrect(y));
+        faithful = faithful && sqrt[i] >= -2 && sqrt[i] <= 1 && rsqrt[i] >= -2 && rsqrt[i] <= 1;
+    }
+    Check(faithful, "every measured result lies within -2 and +1 units in the last place of the correctly rounded one");
+    const hw::Op ops[3] = {hw::Op::Rcp, hw::Op::Sqrt, hw::Op::Rsqrt};
+    const std::vector<int>* measured[3] = {&rcp, &sqrt, &rsqrt};
+    const char* names[3] = {"rcp", "sqrt", "rsqrt"};
+    for (int t = 0; t < 3; ++t) {
+        const std::vector<unsigned char> packed = PackDeltas(*measured[t]);
+        std::ofstream(dir / (std::string("hw-") + names[t] + ".zlib"), std::ios::binary)
+            .write(reinterpret_cast<const char*>(packed.data()), static_cast<std::streamsize>(packed.size()));
+        size_t differing = 0;
+        for (uint32_t i = 0; i < measured[t]->size(); ++i) differing += hw::Delta(ops[t], i) != (*measured[t])[i];
+        Check(differing == 0, std::string("the embedded ") + names[t] + " table equals the GPU on every entry of its domain (" +
+                                  std::to_string(measured[t]->size()) + ")",
+              std::to_string(differing) + " entries differ");
+    }
+    size_t differing = 0;
+    std::string first;
+    const std::vector<float>& s = *samples;
+    for (size_t i = 0; i < s.size() / 4; ++i) {
+        const float x = s[i * 4 + 3];
+        const float ours[3] = {hw::Rcp(x), hw::Sqrt(x), hw::Rsqrt(x)};
+        for (int k = 0; k < 3; ++k) {
+            if (SameFloat(ours[k], s[i * 4 + k])) continue;
+            if (differing++ < 8) {
+                first += std::string(names[k]) + "(" + Hex32(std::bit_cast<uint32_t>(x)) + "): GPU " +
+                         Hex32(std::bit_cast<uint32_t>(s[i * 4 + k])) + ", hw " + Hex32(std::bit_cast<uint32_t>(ours[k])) + "; ";
+            }
+        }
+    }
+    Check(differing == 0, "hw::Rcp, hw::Sqrt and hw::Rsqrt equal the GPU on 32 edge values and " +
+                              std::to_string(s.size() / 4 - 32) + " hashed bit patterns",
+          std::to_string(differing) + " results differ: " + first);
+    return Finish();
+}
+
 // ── uv-coverage ──────────────────────────────────────────────────────────────
 
 /// The texturing mesh of an imported file as the UV raster's corner layout (one interleaved
@@ -2830,7 +3014,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources <assets-dir> | "
                      "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
-                     "projection-gpu-vs-cpu|srgb8-hardware|tables <assets-dir> <work-dir> | "
+                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
         return 2;
     }
@@ -2873,6 +3057,7 @@ int main(int argc, char** argv) {
         else if (mode == "projection-gpu-vs-cpu") code = RunProjectionGpuVsCpu(assets, dir);
         else if (mode == "srgb8-hardware") code = RunSrgb8Hardware(dir);
         else if (mode == "tables") code = RunTables(dir);
+        else if (mode == "fp-hardware") code = RunFpHardware(dir);
         else if (mode == "uv-coverage") {
             if (argc < 6) {
                 std::fprintf(stderr, "usage: uzp-evaluator-tests uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");

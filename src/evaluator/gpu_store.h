@@ -85,7 +85,9 @@ private:
 
     const Tile* Find(TileHandle tile) const;
     render::Result<void> RequireContext() const;
-    /// Creates the 16-bit UNORM operand table (upload and GPU buffers); copied by the next flush.
+    /// Creates the operand tables buffer (kernelgen.h `OperandTableWords`: the 16-bit UNORM
+    /// operands and the hardware arithmetic tables; upload and GPU buffers), copied by the next
+    /// flush.
     render::Result<void> EnsureTable16();
     render::Result<uz::RHIBufferHandle> CreateBuffer(uint64_t bytes, uz::RHIBufferUsage usage,
                                                      uz::RHIMemoryType memory, uint32_t stride,
