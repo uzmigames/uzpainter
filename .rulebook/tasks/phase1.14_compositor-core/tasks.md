@@ -15,6 +15,7 @@
 
 ## 3. Tests
 - [ ] 3.1 Run the union of the children's Tier 0 golden sets in one pass in a local DX12 run on the owner's machine (decision 028) and publish, in the local run report used as evidence, the comparison numbers (max |Δ|, mean |Δ|, p99, differing-texel count and percentage) next to oracle stability and UzPainter repeatability
+  - Harness: `python tests/evaluator/union_run.py --label final` (two passes in separate processes; `observe` at every child comparison site; verdicts by `tools/parity/verdict.py`). Interim run at `de66bfd` in `parity/reports/phase1/compositor-core.md`: 57 goldens, 1434 maps, 2834 comparisons, every one exact (1445 of 1445 against r1), 31 maps with an unstable oracle (r1 target, decision 032), 1456 of 1456 rasters byte-identical across the passes. Open: the final run once phase1.9_compositor-resample-gaps, phase1.12_compositor-height-normal and phase1.13_compositor-diagnostics close (18 current-envelope goldens are not yet compared by any child).
 - [x] 3.2 Repeatability lane: the same Tier 0 inputs evaluated twice in separate processes give byte-identical channel rasters
   - `tests/evaluator/test_compositor_core.py`: 17 channel specs and 2 virtual-normal specs from the public manifests, CPU and GPU (38 cases); the union run also compares every evaluated raster across its two passes.
 - [x] 3.3 Requesting an excluded feature (for example a triplanar projection or a compare mask) raises `NotYetSupported` before any mutation
@@ -28,4 +29,5 @@
   - `tools/capabilities/README.md`, `src/evaluator/EVALUATOR.md`, `src/uzp_core/TRANSACTIONS.md`, decisions 081, 082, `parity/reports/phase1/compositor-core.md`.
 - [x] 5.2 Write tests covering the new behavior
   - `tests/evaluator/test_compositor_core.py`, native case `not-yet-supported`, `tests/capabilities/test_capabilities.py` (compositor registrations), `tests/evaluator/union_run.py` (the union run).
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.3 Run tests and confirm they pass
+  - At `f74057a`: `tests/uzp_core`, `tests/capabilities`, `tests/parity/fit` 160 passed; `tests/evaluator` 364 passed (35 min, CPU and DX12); `zig build painter` and `evaluator-tests` with `-Werror`; ruff and mypy strict clean.
