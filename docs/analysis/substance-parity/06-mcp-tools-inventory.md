@@ -4,7 +4,7 @@ What the MCP bridge used by the Assets3D pipeline actually does: transport, safe
 
 ## Conventions
 
-- `MCP` = `E:\UzmiGames\Assets3D\Tools\SubstancePainterMCP`; `OPS` = `MCP\src\substance_painter_mcp\operations.py`; `SRV` = `MCP\src\substance_painter_mcp\server.py`; `PIPE` = `E:\UzmiGames\Assets3D\Docs\Pipeline\MCP`.
+- `MCP` = `E:\UzmiGames\Assets3D\Tools\SubstancePainterMCP`; `OPS` = `MCP\src\substance_painter_mcp\operations.py`; `SRV` = `MCP\src\substance_painter_mcp\server.py`; `PIPE` = `E:\UzmiGames\Assets3D\Pipeline\mcp`.
 - Labels: **Fact**, **Hypothesis**, **Recommendation**; "not confirmed" marks gaps.
 - Method (**Fact**): `SRV` was parsed with Python `ast` to list every `@mcp.tool()` function and the `operations.<method>` it calls; the tool list was cross-checked against `MCP\tool-schema.json` (79 = 79, identical names); for each tool, the Painter API references were extracted from the operation's source (including the embedded Painter-side Python strings and any `self.<helper>()` it calls) and filtered against the public symbol list of `01-python-api-inventory.md`. Object-method names (e.g. `set_source`) are listed without their class when the receiver is a variable. Nothing was executed against Painter.
 
@@ -144,7 +144,7 @@ Notes on the table: `methods:` lists Painter object methods/properties invoked o
 
 ## 5. Local patch
 
-File: `PIPE\substance-painter-mcp-local.patch` (a `git diff` of `src/substance_painter_mcp/operations.py`, index `d44e2d1..7160bc6`). All four hunks are present in the installed `OPS` (**Fact**, lines 1362, 1613, 2403, 2490 of `OPS` match the patched text; this shows the hunks are applied, not that the rest of `OPS` equals any particular upstream commit). The pipeline applies it after `git submodule update --init` with `git -C Tools/SubstancePainterMCP apply ../../Docs/Pipeline/MCP/substance-painter-mcp-local.patch` because the submodule points to the original commit (**Fact**, `E:\UzmiGames\Assets3D\Docs\README.md` → "Ferramentas").
+File: `PIPE\substance-painter-mcp-local.patch` (a `git diff` of `src/substance_painter_mcp/operations.py`, index `d44e2d1..7160bc6`). All four hunks are present in the installed `OPS` (**Fact**, lines 1362, 1613, 2403, 2490 of `OPS` match the patched text; this shows the hunks are applied, not that the rest of `OPS` equals any particular upstream commit). The pipeline applies it after `git submodule update --init` with `git -C Tools/SubstancePainterMCP apply ../../Pipeline/mcp/substance-painter-mcp-local.patch` because the submodule points to the original commit (**Fact**, `E:\UzmiGames\Assets3D\Docs\README.md` → "Ferramentas").
 
 | Hunk | Function (tools affected) | Before → after | Stated reason | Label / source |
 |---|---|---|---|---|

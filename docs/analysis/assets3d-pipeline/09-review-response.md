@@ -12,34 +12,34 @@ Verdicts: **accepted** = the source confirms it and the analysis was corrected (
 
 | ID / short title | Severity | Verdict | Evidence path | What changed and where |
 |---|---|---|---|---|
-| V-01 — 01 overview: accept as historical with qualifications | File verdict | accepted | A/AGENTS.override.md; A/Docs/Pipeline/Retopologia/chapeu-v6/deliver_v8.py | 01 conventions (snapshot date, Owner), §1 (observed route ≠ product boundary), §6, §8 (hat v8 row), §9 |
-| V-02 — 02 Painter usage: revise | File verdict | accepted | A/Docs/Pipeline/Pintura/painter_layer_stack.py; A/SM/10-Chapeu/report.json → v8 | 02 §5 (tangent, SpecularWeight), §6 (hat v8 row), §7 step 9, §8 (scope, cache, `op`, Height blend) |
-| V-03 — 03 bake: revise scope and QA | File verdict | accepted | A/Docs/Pipeline/Pintura/bake_normal_pair.py; A/SM/10-Chapeu/report.json → v8.ao | 03 §1, §2, §3, §4, §5, §7, §8 |
+| V-01 — 01 overview: accept as historical with qualifications | File verdict | accepted | A/AGENTS.override.md; A/Pipeline/retopology/hat-v6/deliver_v8.py | 01 conventions (snapshot date, Owner), §1 (observed route ≠ product boundary), §6, §8 (hat v8 row), §9 |
+| V-02 — 02 Painter usage: revise | File verdict | accepted | A/Pipeline/painting/painter_layer_stack.py; A/SM/10-Chapeu/report.json → v8 | 02 §5 (tangent, SpecularWeight), §6 (hat v8 row), §7 step 9, §8 (scope, cache, `op`, Height blend) |
+| V-03 — 03 bake: revise scope and QA | File verdict | accepted | A/Pipeline/painting/bake_normal_pair.py; A/SM/10-Chapeu/report.json → v8.ao | 03 §1, §2, §3, §4, §5, §7, §8 |
 | V-04 — 04 painting: revise migration/parity claims | File verdict | accepted | A/SM/18-Tunica/report.json → painting_v10.source_recovery; A/SM/22-Bracal-Direito/report.json → leather_family_recipe_r9 | 04 §1, §2, §5, §6, §7 |
-| V-05 — 05 export: revise current contract and adoption | File verdict | accepted | A/Docs/Pipeline/Retopologia/chapeu-v6/deliver_v8.py; A/SM/10-Chapeu/report.json → v8 | 05 §1, §2, §4, new §4.1, §5, §6 |
-| V-06 — 06 render: accept measured standard, reject identity inference | File verdict | accepted | A/Docs/Pipeline/Render/Render-Comparison-Standard.json → validation, presets.ref_match.painter | 06 §1, §3, §5, §6 |
-| V-07 — 07 lessons: tighten cause/status | File verdict | accepted | A/Docs/Pipeline/Licoes/bake-normais-tbn-por-canto.md; A/Docs/analysis/skeletal-mage-review/05-auditoria-spp-10-13-20261007.md | 07 §2 (new specular card), §3, §4, §5, §8 |
-| V-08 — 08 requirements: substantial revision | File verdict | accepted | P/README.md; A/Docs/Pipeline/Gates/pintura.md | 08 rewritten in place: priority rule, 25 re-classifications, 10 new requirements (§2 below) |
+| V-05 — 05 export: revise current contract and adoption | File verdict | accepted | A/Pipeline/retopology/hat-v6/deliver_v8.py; A/SM/10-Chapeu/report.json → v8 | 05 §1, §2, §4, new §4.1, §5, §6 |
+| V-06 — 06 render: accept measured standard, reject identity inference | File verdict | accepted | A/Pipeline/render/Render-Comparison-Standard.json → validation, presets.ref_match.painter | 06 §1, §3, §5, §6 |
+| V-07 — 07 lessons: tighten cause/status | File verdict | accepted | A/Docs/Lessons/bake-per-corner-normals-tbn.md; A/Docs/analysis/skeletal-mage-review/05-spp-audit-10-13-20261007.md | 07 §2 (new specular card), §3, §4, §5, §8 |
+| V-08 — 08 requirements: substantial revision | File verdict | accepted | P/README.md; A/Docs/Gates/painting.md | 08 rewritten in place: priority rule, 25 re-classifications, 10 new requirements (§2 below) |
 
 ### 1.2 Numbered findings
 
 | ID / short title | Severity | Verdict | Evidence path | What changed and where |
 |---|---|---|---|---|
-| F1 — Define and prove literal texture/render parity | Blocker | accepted | P/README.md; P/.rulebook/decisions/001-…md (status "proposed"; its `.metadata.json` says "accepted"); A/Docs/Pipeline/Render/Render-Comparison-Standard.json → validation.lighting_parity ("Approximate"), presets.ref_match.painter.status ("NOT live-verified") | 08 new G-04, VIS-06; 06 §1 new row, §6 note |
+| F1 — Define and prove literal texture/render parity | Blocker | accepted | P/README.md; P/.rulebook/decisions/001-…md (status "proposed"; its `.metadata.json` says "accepted"); A/Pipeline/render/Render-Comparison-Standard.json → validation.lighting_parity ("Approximate"), presets.ref_match.painter.status ("NOT live-verified") | 08 new G-04, VIS-06; 06 §1 new row, §6 note |
 | F2 — Native bake and requested export targets cannot be optional | Blocker | accepted | P/README.md → "Baking", "Output"; Owner | 08 BAK-03, BAK-05, EXP-08 → MUST; INT-02 condition removed; §5 boundary rows; §6 Q5; 01 §1; 03 §1 |
 | F3 — Starter-material substitutes do not satisfy equal output | Blocker | accepted | A/SM/22-Bracal-Direito/report.json → leather_family_recipe_r9 (`LOCKED`, `starter_assets/Leather Damaged`); A/SM/21-Bracal-Esquerdo/report.json → painting_p1.smart_materials; A/SM/10-Chapeu/report.json → painter_recipe.node_details | 08 MAT-02, MAT-03, MAT-04 → MUST; LAY-11 → MUST; 04 §1 sentence |
 | F4 — Tunic migration needs per-layer resource identity | Blocker | accepted | A/SM/18-Tunica/report.json → painting_v10.source_recovery.layer_specific_masks (C07 → `Source_v10_M_piping`; F03 → `Source_v9_M_piping`; override F03 → `M_piping_lining_v9`) | 04 §5 new paragraph; 08 LAY-07 reworded, new LAY-13, G-03, INT-23 |
-| F5 — Current SpecularWeight channel and consumer evidence | Major | accepted | A/SM/10-Chapeu/report.json → v8 (date 2026-10-10, seven files, `channels_added`, `specular`, `export_notes`, `artistic_approval: pending`); A/Docs/Pipeline/Retopologia/chapeu-v6/paint/stack-hat-v8.json (43 layers, 5 groups, counted); `deliver_v8.py` line 26 (Specular IOR link inside a comment). Added: `glb_add_specular.py` writes `KHR_materials_specular` into the GLB; `paintrender_v8.py` wires it for review; `painter_add_channel.py` adds an `L8` channel; delivered PNG is 8-bit RGBA (header read) | 01 §6, §8; 02 §5, §6, §7; 04 §2, §6, §7; 05 §1, §2 (new SpecularWeight row), §5; 07 §2; 08 PRJ-06, EXP-01, INT-11, NFR-03 |
-| F6 — Mandatory AO contract vs uneven adoption; reconcile counts | Major | accepted | A/AGENTS.override.md → "Definition independent of the lighting"; only `chapeu-v6/deliver_v8.py` wires AO among six deliver scripts (search); A/SM/10-Chapeu/report.json → v8.ao; A/_tmp/claude/chapeu-v6/paint/masks-v8*.log; arithmetic 171,408 − 94,890 = 76,518 ≠ 77,588 | 03 §1, §5 (note + **H**); 05 §2; 01 §6; 08 BAK-04 → MUST (miss evidence), new BAK-08 |
-| F7 — UV / corner-basis certification | Major | accepted | A/.claude/skills/uv-profissional/SKILL.md; A/Docs/Pipeline/Licoes/bake-normais-tbn-por-canto.md, bake-triangulacao-avaliada-salva.md; A/Docs/Pipeline/UV/validate_uv_mesh.py | 08 PRJ-09 expanded, new PRJ-10, QG-02 |
-| F8 — Preserve RAW and expose all bake stages | Major | accepted | A/Docs/Pipeline/Pintura/bake_normal_pair.py docstring, lines 688–742; A/Docs/Pipeline/Licoes/bake-raw-cobertura-estagios.md | 03 §4 (RAW, coverage, stages rows); 08 new BAK-07 |
+| F5 — Current SpecularWeight channel and consumer evidence | Major | accepted | A/SM/10-Chapeu/report.json → v8 (date 2026-10-10, seven files, `channels_added`, `specular`, `export_notes`, `artistic_approval: pending`); A/Pipeline/retopology/hat-v6/paint/stack-hat-v8.json (43 layers, 5 groups, counted); `deliver_v8.py` line 26 (Specular IOR link inside a comment). Added: `glb_add_specular.py` writes `KHR_materials_specular` into the GLB; `paintrender_v8.py` wires it for review; `painter_add_channel.py` adds an `L8` channel; delivered PNG is 8-bit RGBA (header read) | 01 §6, §8; 02 §5, §6, §7; 04 §2, §6, §7; 05 §1, §2 (new SpecularWeight row), §5; 07 §2; 08 PRJ-06, EXP-01, INT-11, NFR-03 |
+| F6 — Mandatory AO contract vs uneven adoption; reconcile counts | Major | accepted | A/AGENTS.override.md → "Definition independent of the lighting"; only `hat-v6/deliver_v8.py` wires AO among six deliver scripts (search); A/SM/10-Chapeu/report.json → v8.ao; A/_tmp/claude/chapeu-v6/paint/masks-v8*.log; arithmetic 171,408 − 94,890 = 76,518 ≠ 77,588 | 03 §1, §5 (note + **H**); 05 §2; 01 §6; 08 BAK-04 → MUST (miss evidence), new BAK-08 |
+| F7 — UV / corner-basis certification | Major | accepted | A/.claude/skills/professional-uv/SKILL.md; A/Docs/Lessons/bake-per-corner-normals-tbn.md, bake-evaluated-triangulation-saved.md; A/Pipeline/uv/validate_uv_mesh.py | 08 PRJ-09 expanded, new PRJ-10, QG-02 |
+| F8 — Preserve RAW and expose all bake stages | Major | accepted | A/Pipeline/painting/bake_normal_pair.py docstring, lines 688–742; A/Docs/Lessons/bake-raw-and-coverage-stages.md | 03 §4 (RAW, coverage, stages rows); 08 new BAK-07 |
 | F9 — Mesh-map normalisation is part of the recipe | Major | accepted | A/SM/00-Corpo/report.json → painting_v6.rebake_mesh_maps.curvatura_membros (bounds, linked settings restored to auto) | 03 §7, §8; 08 BAK-02, INT-13 → MUST |
-| F10 — Determinism without an unproved universal guarantee | Major | accepted | A/SM/00-Corpo/report.json → painting_v6.validacao.reproducao; A/Docs/Pipeline/Licoes/exportacao-spp-mapas-precisao-nativa.md | 05 §6; 07 §5; 08 EXP-05 split, NFR-02 |
-| F11 — Keep uncertainty about the historical hat cause | Major | accepted | A/Docs/analysis/skeletal-mage-review/05-auditoria-spp-10-13-20261007.md ("Hipótese (não comprovada)"; Astra addendum: resource-version change not established) | 07 §5 QA05 row, §8; 08 RES-04, NFR-08 |
-| F12 — Enforce prerequisite chain and baseline protection | Major | accepted | A/.claude/skills/pintura-pbr/SKILL.md → "Pré-requisitos obrigatórios"; A/Docs/Pipeline/Gates/pintura.md; A/Docs/Pipeline/Manifesto/manifesto-schema-v1.json → $defs.invalidacao | 08 QG-02 → MUST, new QG-05 |
+| F10 — Determinism without an unproved universal guarantee | Major | accepted | A/SM/00-Corpo/report.json → painting_v6.validacao.reproducao; A/Docs/Lessons/export-spp-maps-native-precision.md | 05 §6; 07 §5; 08 EXP-05 split, NFR-02 |
+| F11 — Keep uncertainty about the historical hat cause | Major | accepted | A/Docs/analysis/skeletal-mage-review/05-spp-audit-10-13-20261007.md ("Hipótese (não comprovada)"; Astra addendum: resource-version change not established) | 07 §5 QA05 row, §8; 08 RES-04, NFR-08 |
+| F12 — Enforce prerequisite chain and baseline protection | Major | accepted | A/.claude/skills/pbr-painting/SKILL.md → "Pré-requisitos obrigatórios"; A/Docs/Gates/painting.md; A/Pipeline/manifest/manifest-schema-v1.json → $defs.invalidacao | 08 QG-02 → MUST, new QG-05 |
 | F13 — Freeze the exact UzEngine import/cook route | Major | forwarded to architecture | U/runtime/shaders/runtime/gbuffer/gbuffer_ps.hlsl lines 217–242; U/runtime/engine/asset/importers/mesh_importer.cpp lines 523–558; fbx_importer.cpp lines 30–32, 1521–1539, 1575–1585 (default `r.Mesh.NormalImportMode = 1` recomputes normals — not named in the review) | Facts in 05 §4.1; +Y kept "not confirmed"; 08 PRJ-04, EXP-10. Route choice and calibration fixture: architect question 11 |
 | F14 — Override problematic cooked-map selection | Major | forwarded to architecture | U/runtime/tools/uzcook.cpp lines 162–287 (no height/thickness rule → BC7 sRGB), 276–282 (opacity → BC4); gbuffer_ps.hlsl lines 283–297 (`.a`); U/runtime/engine/asset/importers/texture_importer.h lines 55–75 (explicit format option) | Facts in 05 §4.1; 08 EXP-07, EXP-10. The preset table in `../uzengine-renderer/04-material-and-texture-standard.md` §8 is outside this write scope |
-| F15 — Trace completeness and normative wording | Minor | accepted | A/Docs/Pipeline/Manifesto/manifesto-schema-v1.json → $defs.exportacao.required (8 fields incl. `evidencias`, `pendencias`), comparacao; painter_layer_stack.py line 87; stack-staff.json | 08 INT-21 completed; EXP-03, INT-02, INT-10 traces now primary; G-01 |
+| F15 — Trace completeness and normative wording | Minor | accepted | A/Pipeline/manifest/manifest-schema-v1.json → $defs.exportacao.required (8 fields incl. `evidencias`, `pendencias`), comparacao; painter_layer_stack.py line 87; stack-staff.json | 08 INT-21 completed; EXP-03, INT-02, INT-10 traces now primary; G-01 |
 
 ### 1.3 Sample claims (67)
 
@@ -47,19 +47,19 @@ All 67 sample claims were accepted: the sources confirm the review's reading. "N
 
 | ID / short title | Severity (review) | Verdict | Evidence path | What changed and where |
 |---|---|---|---|---|
-| P01 — low OBJ triangulated | Confirmed | accepted | A/Docs/Pipeline/Retopologia/cajado-v10/export_low.py | No change (02 §5 cites per-recipe exporters) |
+| P01 — low OBJ triangulated | Confirmed | accepted | A/Pipeline/retopology/staff-v10/export_low.py | No change (02 §5 cites per-recipe exporters) |
 | P02 — `usemtl` names the set | Confirmed | accepted | A/SM/22-Bracal-Direito/report.json → painting.mesh | No change |
-| P03 — OpenGL normal format | Confirmed | accepted | cajado-v10/painter_create.py line 14 | 08 PRJ-04 (engine conversion per preset) |
+| P03 — OpenGL normal format | Confirmed | accepted | staff-v10/painter_create.py line 14 | 08 PRJ-04 (engine conversion per preset) |
 | P04 — PerFragment tangent | Confirmed + H | accepted | A/SM/22-Bracal-Direito/report.json → painting.tangent_space | 02 §5; 08 PRJ-04 |
 | P05 — 2048/4096 | Confirmed | accepted | painter_create.py variants | No change |
-| P06 — `import_cameras=False` | Confirmed | accepted | cajado-v10/painter_create.py | No change |
-| P07 — OCIO before create | Confirmed | accepted | A/.claude/skills/pintura-pbr/REFERENCE.md → "OCIO antes de criar o projeto" | No change |
-| P08 — Normal/AO as mesh maps | Confirmed | accepted | cajado-v10/painter_create.py lines 22–25 | 08 BAK-01 (provenance) |
-| P09 — Full save, refuse unsaved close | Confirmed | accepted | cajado-v10/painter_create.py | 08 INT-05 (explicit timeout failure) |
+| P06 — `import_cameras=False` | Confirmed | accepted | staff-v10/painter_create.py | No change |
+| P07 — OCIO before create | Confirmed | accepted | A/.claude/skills/pbr-painting/REFERENCE.md → "OCIO antes de criar o projeto" | No change |
+| P08 — Normal/AO as mesh maps | Confirmed | accepted | staff-v10/painter_create.py lines 22–25 | 08 BAK-01 (provenance) |
+| P09 — Full save, refuse unsaved close | Confirmed | accepted | staff-v10/painter_create.py | 08 INT-05 (explicit timeout failure) |
 | P10 — bracer map sources | Confirmed | accepted | A/SM/22-Bracal-Direito/report.json → painting.mesh_maps | No change |
 | P11 — sync scope and rollback | Confirmed | accepted | painter_layer_stack.py lines 81–127 | 02 §8 scope row |
 | P12 — SHA-1 resource cache | Confirmed | accepted | painter_layer_stack.py lines 68–75 | 02 §8 resources row |
-| P13 — channels before sources | Confirmed | accepted | painter_layer_stack.py line 96; pintura-fill-ordem-dos-canais.md | 08 LAY-01 (readback) |
+| P13 — channels before sources | Confirmed | accepted | painter_layer_stack.py line 96; painting-fill-channel-order.md | 08 LAY-01 (readback) |
 | P14 — sRGB/Raw inputs | Confirmed | accepted | painter_layer_stack.py lines 61–66 | 08 PRJ-05 |
 | P15 — `base_tex` sampler | Confirmed | accepted | painter_layer_stack.py lines 98–112 | No change (LAY-02) |
 | P16 — `op` = BaseColor opacity | Confirmed | accepted | painter_layer_stack.py lines 116, 163 | 02 §8; 04 §2 |
@@ -68,24 +68,24 @@ All 67 sample claims were accepted: the sources confirm the review's reading. "N
 | P19 — tunic process binding | Confirmed | accepted | A/AGENTS.override.md → "Paint standard" | 04 §1 sentence |
 | P20 — starter dependencies | Confirmed | accepted | leather_family_recipe_r9.base | 08 MAT-04 |
 | P21 — smart folders reused | Confirmed as recorded | accepted | A/SM/21-Bracal-Esquerdo/report.json → painting_p1.smart_materials | 08 LAY-11 |
-| P22 — 15/15/14 masks recovered | Confirmed as recorded | accepted | A/Docs/Pipeline/Licoes/operacao-recuperacao-antes-da-limpeza.md | 04 §5 sentence |
+| P22 — 15/15/14 masks recovered | Confirmed as recorded | accepted | A/Docs/Lessons/operation-recovery-before-cleanup.md | 04 §5 sentence |
 | P23 — tunic 22 fills | Confirmed | accepted | REFERENCE.md → "Pilha-base v9 preservada na v10" | No change |
 | P24 — staff iron values | Confirmed | accepted | stack-staff.json | No change |
 | P25 — Blender preset 7 maps, 5 delivered | Confirmed historically | accepted | A/SM/10-Chapeu/report.json → painter_recipe.export (padding "Export preset/tool default") | 05 §1 padding note and v8 row |
-| P26 — inline export parameters | Confirmed | accepted | cajado-v10/painter_export.py lines 15–21; chapeu-v6/painter_export_v8.py | 05 §1; 08 EXP-01 |
-| P27 — combined Normal, no Height again | Confirmed | accepted | Render-Comparison-Standard.json → texture_contract.height; pintura-normal-height-uma-vez.md | 08 new EXP-09 |
-| P28 — AO delivered pipeline-wide | Imprecise | accepted | deliver_v8.py lines 20–21, 29–34; cajado-v10/deliver.py lines 19–21; six deliver scripts searched | 01 §6; 03 §1; 05 §2 |
-| P29 — Blender delivery details | Confirmed for staff | accepted | cajado-v10/deliver.py | 05 §4 |
-| P30 — GLB metallic-roughness 8-bit | Confirmed as recorded | accepted | pintura-pbr/SKILL.md line 199 (bracer section) | 05 §4 "(as recorded …)" |
-| P31 — panel loads latest GLB | Confirmed | accepted | A/Docs/Pipeline/Painel/painel.py lines 75–76 (mtime) | 05 §4; 08 QG-05 |
+| P26 — inline export parameters | Confirmed | accepted | staff-v10/painter_export.py lines 15–21; hat-v6/painter_export_v8.py | 05 §1; 08 EXP-01 |
+| P27 — combined Normal, no Height again | Confirmed | accepted | Render-Comparison-Standard.json → texture_contract.height; painting-height-in-normal-only-once.md | 08 new EXP-09 |
+| P28 — AO delivered pipeline-wide | Imprecise | accepted | deliver_v8.py lines 20–21, 29–34; staff-v10/deliver.py lines 19–21; six deliver scripts searched | 01 §6; 03 §1; 05 §2 |
+| P29 — Blender delivery details | Confirmed for staff | accepted | staff-v10/deliver.py | 05 §4 |
+| P30 — GLB metallic-roughness 8-bit | Confirmed as recorded | accepted | pbr-painting/SKILL.md line 199 (bracer section) | 05 §4 "(as recorded …)" |
+| P31 — panel loads latest GLB | Confirmed | accepted | A/Pipeline/panel/panel.py lines 75–76 (mtime) | 05 §4; 08 QG-05 |
 | P32 — Unreal only future | Imprecise | accepted | A/SM/10-Chapeu/report.json → v8.export_notes | 01 §9; 05 §4 |
-| P33 — saved SPP ≠ delivered maps | Confirmed | accepted | exportacao-spp-mapas-precisao-nativa.md | 05 §6; 08 EXP-05 |
+| P33 — saved SPP ≠ delivered maps | Confirmed | accepted | export-spp-maps-native-precision.md | 05 §6; 08 EXP-05 |
 | B01 — Blender normal for every piece | Imprecise | accepted | bake_normal_pair.py; painter_create.py lines 22–25; tunic painting.bake | 01 §1; 03 §1 |
 | B02 — frozen, UV-validated low | Confirmed with qualification | accepted | bake_normal_pair.py lines 460–463, 841–842 | 03 §2 |
 | B03 — per-part highs | Confirmed | accepted | bake_normal_pair.py lines 8–18 | 08 BAK-07 (cage fill distinct) |
-| B04 — staff v10 parameters | Confirmed | accepted | cajado-v10/bake.sh, staff-parts.json | No change |
-| B05 — hat v6 parts | Confirmed | accepted | chapeu-v6/hat-parts.json | No change |
-| B06 — wand bake | Confirmed as recorded | accepted | varinha11-v1/bake/report.json | No change |
+| B04 — staff v10 parameters | Confirmed | accepted | staff-v10/bake.sh, staff-parts.json | No change |
+| B05 — hat v6 parts | Confirmed | accepted | hat-v6/hat-parts.json | No change |
+| B06 — wand bake | Confirmed as recorded | accepted | wand11-v1/bake/report.json | No change |
 | B07 — body v3 bake | Confirmed as recorded | accepted | A/SM/00-Corpo/report.json → normal_bake_v3 | No change |
 | B08 — tunic bake | Confirmed as recorded | accepted | A/SM/18-Tunica/report.json → painting.bake.normal | No change (03 §1C separates the Painter auxiliary job) |
 | B09 — geometry-only RGB16 contract | Confirmed | accepted | bake_normal_pair.py | 03 §3 sentence |
@@ -94,16 +94,16 @@ All 67 sample claims were accepted: the sources confirm the review's reading. "N
 | B12 — stage channels | Confirmed with qualification | accepted | bake_normal_pair.py lines 734–742 | 03 §4 stages row |
 | B13 — invalid mask layered | Confirmed | accepted | bake_normal_pair.py docstring | No change |
 | B14 — hidden evidence = identity | Confirmed | accepted | bake_normal_pair.py docstring | 08 BAK-07 |
-| B15 — hat used-surface counts | Confirmed as recorded | accepted | A/Docs/Pipeline/Retopologia/chapeu-v6/bake/report-hat.json (fields read this session) | 03 §4 example |
-| B16 — AO counts | Imprecise / unreconciled | accepted | pintura-ao-falhas-de-raio-definicao.md; v8.ao; masks-v8*.log; hat_masks_v8.py lines 106–113 | 03 §5 note; corrected count "not confirmed" |
-| B17 — AO zero = miss | Confirmed with qualification | accepted | hat_masks_v8.py (`< 0.02`); A/Docs/Pipeline/Gates/pintura.md | 03 §5; 08 BAK-04 |
-| B18 — 2,641 black texels / TBN | Confirmed with qualification | accepted | bake-normais-tbn-por-canto.md; QA05 audit | 03 §8; 07 §3 |
-| B19 — evaluated triangulation | Confirmed | accepted | bake-triangulacao-avaliada-salva.md | No change |
-| B20 — changes invalidate maps | Confirmed | accepted | bake-invalida-malha-uv-mudou.md; Manifesto README → "Invalidação" | 08 BAK-06 |
-| B21 — validate each set before join | Confirmed | accepted | uv-profissional/SKILL.md lines 219–227 | 08 new PRJ-10 |
-| B22 — xatlas mirrored charts | Confirmed as recorded | accepted | uv-profissional/SKILL.md lines 183–188 | 07 §4 |
-| B23 — pack margin vs measured texels | Confirmed as recorded | accepted | uv-margens-medidas-resolucao.md (17,137 / 9,177) | No change |
-| B24 — 144,983 belt texels | Confirmed as recorded | accepted | bake-raw-cobertura-estagios.md | 07 §3 |
+| B15 — hat used-surface counts | Confirmed as recorded | accepted | A/Pipeline/retopology/hat-v6/bake/report-hat.json (fields read this session) | 03 §4 example |
+| B16 — AO counts | Imprecise / unreconciled | accepted | painting-ao-ray-misses-and-definition.md; v8.ao; masks-v8*.log; hat_masks_v8.py lines 106–113 | 03 §5 note; corrected count "not confirmed" |
+| B17 — AO zero = miss | Confirmed with qualification | accepted | hat_masks_v8.py (`< 0.02`); A/Docs/Gates/painting.md | 03 §5; 08 BAK-04 |
+| B18 — 2,641 black texels / TBN | Confirmed with qualification | accepted | bake-per-corner-normals-tbn.md; QA05 audit | 03 §8; 07 §3 |
+| B19 — evaluated triangulation | Confirmed | accepted | bake-evaluated-triangulation-saved.md | No change |
+| B20 — changes invalidate maps | Confirmed | accepted | bake-invalid-when-mesh-or-uv-changes.md; Manifesto README → "Invalidação" | 08 BAK-06 |
+| B21 — validate each set before join | Confirmed | accepted | professional-uv/SKILL.md lines 219–227 | 08 new PRJ-10 |
+| B22 — xatlas mirrored charts | Confirmed as recorded | accepted | professional-uv/SKILL.md lines 183–188 | 07 §4 |
+| B23 — pack margin vs measured texels | Confirmed as recorded | accepted | uv-measured-margins-resolution.md (17,137 / 9,177) | No change |
+| B24 — 144,983 belt texels | Confirmed as recorded | accepted | bake-raw-and-coverage-stages.md | 07 §3 |
 | R01 — one common standard | Confirmed | accepted | Render-Comparison.md | No change |
 | R02 — `diag(1,1,−1)` mapping | Confirmed | accepted | Render-Comparison-Standard.json → coordinate_contract | 06 §3 |
 | R03 — texture contract | Confirmed | accepted | texture_contract | No change (06 §3 provenance row) |
@@ -112,8 +112,8 @@ All 67 sample claims were accepted: the sources confirm the review's reading. "N
 | R06 — OCIO transform test | Confirmed as recorded | accepted | Render-Comparison.md; Render-Standard-Validation.json | 06 §6 note |
 | R07 — sphere / grey-card residuals | Confirmed as recorded | accepted | validation.lighting_parity | 06 §1, §6 |
 | R08 — visible differences block | Confirmed | accepted | A/AGENTS.override.md → "At each gate" | No change |
-| R09 — preset labels do not restore state | Confirmed | accepted | render-snapshot-real-do-preset.md | 08 VIS-04 |
-| R10 — stale captures, Iray pause | Confirmed | accepted | Render-Comparison.md; pintura-pbr/SKILL.md line 354; Colaboracao.md | 08 new INT-07 |
+| R09 — preset labels do not restore state | Confirmed | accepted | render-actual-preset-snapshot.md | 08 VIS-04 |
+| R10 — stale captures, Iray pause | Confirmed | accepted | Render-Comparison.md; pbr-painting/SKILL.md line 354; Colaboracao.md | 08 new INT-07 |
 
 ### 1.4 Inconsistencies
 
@@ -122,31 +122,31 @@ All 67 sample claims were accepted: the sources confirm the review's reading. "N
 | C01 — snapshot misses hat v8 | Inconsistency | accepted | A/SM/10-Chapeu/report.json → v8 | 01, 02, 04, 05, 08 NFR-03 (see F5) |
 | C02 — 08 scope vs owner brief | Inconsistency | accepted | P/README.md; 08 (before) | 08 §0, BAK-03, EXP-08, VIS-06, §5 |
 | C03 — smart-material priorities vs INT-02 | Inconsistency | accepted | 08 MAT-01…04 vs INT-02; leather_family_recipe_r9 | 08 MAT-02…04 MUST |
-| C04 — native identity vs session cache | Inconsistency | accepted | operacao-sync-estado-por-sessao.md; operacao-recuperar-spp-recursos.md | 02 §8; 08 LAY-06 labelled corrective |
+| C04 — native identity vs session cache | Inconsistency | accepted | operation-sync-state-per-session.md; operation-recover-spp-resources.md | 02 §8; 08 LAY-06 labelled corrective |
 | C05 — repeat export vs historical delivery | Inconsistency | accepted | A/SM/00-Corpo/report.json → painting_v6.validacao.reproducao | 05 §6; 07 §5; 08 EXP-05, NFR-02 |
 | C06 — sRGB I/O vs storage | Inconsistency | accepted | A/SM/10-Chapeu/report.json → painter_recipe.color_management ("uniform colors stored in GenericColorSpace.Working"); U/runtime/engine/renderer/material/material_interface.h lines 200–209 | 08 PRJ-05 |
-| C07 — ORM order vs glTF handoff | Inconsistency | accepted | U/…/gbuffer_ps.hlsl lines 177–182, 204–206; cajado-v10/deliver.py | 05 §4 ORM row, §4.1; 08 EXP-08, EXP-10 |
+| C07 — ORM order vs glTF handoff | Inconsistency | accepted | U/…/gbuffer_ps.hlsl lines 177–182, 204–206; staff-v10/deliver.py | 05 §4 ORM row, §4.1; 08 EXP-08, EXP-10 |
 | C08 — OpenGL +Y universally compatible (H) | Inconsistency | accepted | gbuffer_ps.hlsl lines 217–242; mesh_importer.cpp; fbx_importer.cpp | 05 §4.1 (kept "not confirmed"); 08 PRJ-04, EXP-10 |
 | C09 — signed normals vs Z ≥ 0 | Inconsistency | accepted | bake_normal_pair.py (repair is "inspection heuristic"); gbuffer_ps.hlsl `sqrt(max(…,0))` | 05 §4.1; 08 EXP-10, BAK-07 |
 | C10 — Height/Thickness preset needs explicit options | Inconsistency | partially accepted | Confirmed: uzcook.cpp lines 162–287 (BC7 sRGB fallback); texture_importer.h lines 55–75 (explicit format/sRGB). Not found: a `uzcook` metadata (sidecar) override | 05 §4.1; 08 EXP-10; correction of `../uzengine-renderer/04…` §8 forwarded (outside write scope) |
 | C11 — separate-opacity contract | Inconsistency | forwarded to architecture | uzcook.cpp lines 276–282; gbuffer_ps.hlsl lines 283–297; uzengine-renderer/04 §2.1 | 05 §4.1; 08 EXP-07, EXP-10; route choice = architecture |
-| C12 — authoring vs cooked precision | Inconsistency | accepted | U/…/texture_importer.cpp lines 254–271 (RGBA8 decode); cajado-v10/painter_export.py | 05 §4.1; 08 EXP-10 |
+| C12 — authoring vs cooked precision | Inconsistency | accepted | U/…/texture_importer.cpp lines 254–271 (RGBA8 decode); staff-v10/painter_export.py | 05 §4.1; 08 EXP-10 |
 | C13 — packing agreement ≠ render identity | Inconsistency | accepted | Render-Comparison-Standard.json → validation | 06 §1, §6; 08 G-04, VIS-06 |
 | C14 — viewer capability vs optional opening | Inconsistency | accepted | P/README.md | 08 VIS-01, NFR-01 wording |
-| C15 — manifest trace completeness | Inconsistency | accepted | manifesto-schema-v1.json → $defs.exportacao, comparacao; A/SM/10-Chapeu/report.json → v8.artistic_approval | 08 INT-21, QG-04 |
+| C15 — manifest trace completeness | Inconsistency | accepted | manifest-schema-v1.json → $defs.exportacao, comparacao; A/SM/10-Chapeu/report.json → v8.artistic_approval | 08 INT-21, QG-04 |
 
 ### 1.5 Missing requirements
 
 | ID / short title | Severity | Verdict | Evidence path | What changed and where |
 |---|---|---|---|---|
 | ADD-01 — instruction replay / output-parity contract | Missing (MUST) | accepted | P/README.md; P/.rulebook/decisions/001-…md | 08 new G-04 |
-| ADD-02 — immutable approved state, scoped invalidation | Missing (MUST) | accepted | A/AGENTS.override.md → "Protect approved work"; manifesto-schema-v1.json → $defs.invalidacao | 08 new QG-05 |
-| ADD-03 — per-node resource bindings, recovery closure | Missing (MUST) | accepted | tunic painting_v10.source_recovery; operacao-recuperacao-antes-da-limpeza.md | 08 new LAY-13; SAV-04 |
-| ADD-04 — relief applied exactly once | Missing (MUST) | accepted | pintura-normal-height-uma-vez.md | 08 new EXP-09 |
-| ADD-05 — material isolation in every channel | Missing (MUST) | accepted | pintura-isolamento-materiais-todos-canais.md | 08 new LAY-14 |
-| ADD-06 — per-set UV certification | Missing (MUST) | accepted | uv-profissional/SKILL.md; uv-margens-medidas-resolucao.md | 08 new PRJ-10, PRJ-09 expanded |
-| ADD-07 — bake surface accounting and lineage | Missing (MUST) | accepted | bake_normal_pair.py; bake-raw-cobertura-estagios.md | 08 new BAK-07 |
-| ADD-08 — target identity, coherent async snapshots | Missing (MUST) | accepted | operacao-recarga-job-id.md; operacao-sync-estado-por-sessao.md; operacao-segundo-plano-caminhos-e-salvamento.md | 08 new INT-07 |
+| ADD-02 — immutable approved state, scoped invalidation | Missing (MUST) | accepted | A/AGENTS.override.md → "Protect approved work"; manifest-schema-v1.json → $defs.invalidacao | 08 new QG-05 |
+| ADD-03 — per-node resource bindings, recovery closure | Missing (MUST) | accepted | tunic painting_v10.source_recovery; operation-recovery-before-cleanup.md | 08 new LAY-13; SAV-04 |
+| ADD-04 — relief applied exactly once | Missing (MUST) | accepted | painting-height-in-normal-only-once.md | 08 new EXP-09 |
+| ADD-05 — material isolation in every channel | Missing (MUST) | accepted | painting-material-isolation-all-channels.md | 08 new LAY-14 |
+| ADD-06 — per-set UV certification | Missing (MUST) | accepted | professional-uv/SKILL.md; uv-measured-margins-resolution.md | 08 new PRJ-10, PRJ-09 expanded |
+| ADD-07 — bake surface accounting and lineage | Missing (MUST) | accepted | bake_normal_pair.py; bake-raw-and-coverage-stages.md | 08 new BAK-07 |
+| ADD-08 — target identity, coherent async snapshots | Missing (MUST) | accepted | operation-reload-job-id.md; operation-sync-state-per-session.md; operation-background-paths-and-saving.md | 08 new INT-07 |
 | ADD-09 — explicit engine format/binding metadata | Missing (MUST) | accepted | uzcook.cpp; gbuffer_ps.hlsl; material_interface.h | 08 new EXP-10 |
 | ADD-10 — SpecularWeight handoff validation | Missing (MUST) | partially accepted | deliver_v8.py line 26 confirms the `.blend` gap; but `glb_add_specular.py` already writes the GLB extension (report: "checked inside the GLB") and the FBX gap is recorded by the report itself | Folded into 08 PRJ-06, EXP-01, INT-11 (no separate ID); fixing the Blender consumer is Assets3D work |
 
@@ -158,15 +158,15 @@ All 67 sample claims were accepted: the sources confirm the review's reading. "N
 | PRJ-06 | MUST (five channels) / SHOULD (SpecularWeight, double-sided) | MUST (all) | SpecularWeight is in the current hat v8 delivery; double-sided is a Painter shader parameter on the approved tunic | Owner (rendering parity); A/SM/10-Chapeu/report.json → v8.specular; A/SM/18-Tunica/report.json |
 | BAK-03 | SHOULD (if UzPainter bakes) | MUST | Native high-poly bake is an owner requirement; the Blender route stays accepted | Owner; P/README.md → "Baking" |
 | BAK-04 | SHOULD | MUST (miss evidence) / SHOULD (second pass) | Binding directive requires checking AO misses; native AO bake is owner scope | A/AGENTS.override.md → "Definition independent of the lighting"; Owner |
-| BAK-05 | MUST (if BAK-03) | MUST | Condition removed with BAK-03 | Owner; operacao-recarga-job-id.md |
+| BAK-05 | MUST (if BAK-03) | MUST | Condition removed with BAK-03 | Owner; operation-reload-job-id.md |
 | LAY-11 | SHOULD | MUST | Smart materials are owner scope and exercised on the bracers | Owner; A/SM/21-Bracal-Esquerdo/report.json → painting_p1.smart_materials |
 | LAY-12 | COULD | MUST | Painter functionality includes paint layers; hat v5 has a Paint effect and a paint layer (parity corpus) | Owner; A/SM/10-Chapeu/report.json → layer_tree |
 | MAT-02 | SHOULD | MUST | Used generators must evaluate identically for output parity | Owner; A/SM/10-Chapeu/report.json → painter_recipe |
 | MAT-03 | SHOULD | MUST (used procedurals) / SHOULD (generic library) | Generic noise does not reproduce recorded instructions | Owner; A/SM/00-Corpo/report.json → painting_v3 |
 | MAT-04 | SHOULD | MUST | Locked and delivered recipes depend on Painter starter assets; art migration is not parity | Owner; leather_family_recipe_r9 (LOCKED) |
-| MAT-05 | SHOULD | MUST | Height units and Height → Normal conversion determine exported normals | Owner; pintura-pbr/SKILL.md → "Relevo medido" |
-| RES-03 | SHOULD | MUST | A missing HDRI broke a preset; equal render needs the same environment bytes | Owner; render-hdri-recurso-do-projeto.md |
-| EXP-04 | SHOULD | MUST | Gate QA uses mesh-map, isolated-layer and unlit outputs | A/Docs/Pipeline/Gates/pintura.md; painter_layer_isolate.py |
+| MAT-05 | SHOULD | MUST | Height units and Height → Normal conversion determine exported normals | Owner; pbr-painting/SKILL.md → "Relevo medido" |
+| RES-03 | SHOULD | MUST | A missing HDRI broke a preset; equal render needs the same environment bytes | Owner; render-hdri-as-project-resource.md |
+| EXP-04 | SHOULD | MUST | Gate QA uses mesh-map, isolated-layer and unlit outputs | A/Docs/Gates/painting.md; painter_layer_isolate.py |
 | EXP-05 | MUST (byte-identical across sessions/machines) | MUST (same build) / SHOULD (cross-session, cross-machine) | Sources show consecutive equality and cross-session drift; cross-machine identity is not demonstrated | A/SM/00-Corpo/report.json → painting_v6.validacao.reproducao |
 | EXP-07 | SHOULD | MUST (capability) / SHOULD (asset adoption) | Painter export functionality includes alpha; cloth adoption is a production gate | Owner; painter_recipe.export.preset_details (`_Alpha_Raw`) |
 | EXP-08 | COULD | MUST (Unreal ORM, UzEngine, Painter-equivalent PBR) / SHOULD (glTF metallic-roughness) | Owner names these targets; Blender GLB packing is a handoff, not grounds for COULD | Owner; P/README.md → "Output" |
@@ -174,18 +174,18 @@ All 67 sample claims were accepted: the sources confirm the review's reading. "N
 | VIS-05 | SHOULD | MUST | Recorded cameras must convert exactly for comparisons | Owner; Render-Comparison-Standard.json → coordinate_contract |
 | VIS-06 | COULD (path-traced preview comparable to Cycles) | MUST (render equal to Painter's) | Acceptance is equal render; the method is architecture | Owner; P/.rulebook/decisions/001-…md |
 | DIA-01 | SHOULD | MUST (evidence access) / SHOULD (native statistics) | Region tone/saturation evidence is a paint-gate requirement | A/AGENTS.override.md → "Stage quality gates" §4 |
-| DIA-02 | COULD | MUST | Measured relief is binding practice; access to geometry-only/combined normals is enough | pintura-pbr/SKILL.md line 41; v8.relief_painted_deg_p50_p90 |
+| DIA-02 | COULD | MUST | Measured relief is binding practice; access to geometry-only/combined normals is enough | pbr-painting/SKILL.md line 41; v8.relief_painted_deg_p50_p90 |
 | INT-13 | SHOULD | MUST | The LOCKED leather recipe consumes exported Painter Curvature with fixed bounds | leather_family_recipe_r9.masks |
-| INT-23 | SHOULD | MUST | Durable recipes are migration inputs; replay via adapters, tested | ferro-martelado-v9.json; tunic source_recovery |
-| QG-02 | SHOULD (warn, switchable) | MUST | Failed/pending upstream gates block painting | pintura-pbr/SKILL.md → "Pré-requisitos obrigatórios"; Gates/pintura.md |
+| INT-23 | SHOULD | MUST | Durable recipes are migration inputs; replay via adapters, tested | hammered-iron-v9.json; tunic source_recovery |
+| QG-02 | SHOULD (warn, switchable) | MUST | Failed/pending upstream gates block painting | pbr-painting/SKILL.md → "Pré-requisitos obrigatórios"; Gates/painting.md |
 | NFR-04 | SHOULD (no larger than Painter) | MUST (compact; target not confirmed) | Compact saving is an owner requirement; the numeric criterion is still open | Owner; P/README.md → "Compact project file" |
 | G-04 | — | MUST (new) | Output-parity protocol (ADD-01) | Owner; decision 001 |
-| PRJ-10 | — | MUST (new) | Per-set UV certificate (ADD-06) | uv-profissional/SKILL.md |
+| PRJ-10 | — | MUST (new) | Per-set UV certificate (ADD-06) | professional-uv/SKILL.md |
 | BAK-07 | — | MUST (new) | Bake accounting and lineage (ADD-07) | bake_normal_pair.py |
 | BAK-08 | — | MUST (new) | AO integration rule: one corrected AO for mesh map, delivery and albedo layers | AGENTS.override.md; v8.ao.uses; painter_set_ao.py |
 | LAY-13 | — | MUST (new) | Per-layer mask bindings for the tunic rebuild (ADD-03) | tunic source_recovery.layer_specific_masks |
-| LAY-14 | — | MUST (new) | Material isolation in all channels (ADD-05) | pintura-isolamento-materiais-todos-canais.md |
-| EXP-09 | — | MUST (new) | Relief applied once (ADD-04) | pintura-normal-height-uma-vez.md |
+| LAY-14 | — | MUST (new) | Material isolation in all channels (ADD-05) | painting-material-isolation-all-channels.md |
+| EXP-09 | — | MUST (new) | Relief applied once (ADD-04) | painting-height-in-normal-only-once.md |
 | EXP-10 | — | MUST (new) | Engine format/binding metadata (ADD-09) | uzcook.cpp; gbuffer_ps.hlsl |
 | INT-07 | — | MUST (new) | Target identity and coherent async snapshots (ADD-08) | operacao-* lessons |
 | QG-05 | — | MUST (new) | Approved-state protection (ADD-02) | AGENTS.override.md; $defs.invalidacao |

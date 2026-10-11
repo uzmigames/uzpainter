@@ -2,7 +2,7 @@
 
 Conventions as in [01](01-pipeline-overview.md): paths relative to `E:\UzmiGames\Assets3D\`, `SM/` = `Creatures/Undead/Skeletal Mage/Models3D/`, **F** Fact / **H** Hypothesis / **R** Recommendation.
 
-Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Aprendizados.md`). Each card carries a status: cause `confirmada|hipotese`, fix `validada|pendente` (`Docs/Pipeline/Aprendizados.md` → "Como registrar o próximo aprendizado"). The "Status" column copies those two fields. The last column is our reading of why the lesson constrains a Painter replacement (**R**).
+Lesson cards live in `Docs/Lessons/<id>.md` (index: `Docs/Lessons/README.md`). Each card carries a status: cause `confirmada|hipotese`, fix `validada|pendente` (`Docs/Lessons/README.md` → "Como registrar o próximo aprendizado"). The "Status" column copies those two fields. The last column is our reading of why the lesson constrains a Painter replacement (**R**).
 
 ## 1. Painter operation and persistence
 
@@ -16,9 +16,9 @@ Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Apren
 | `operacao-recuperar-spp-recursos` | After a crash, cached UIDs did not match saved bitmaps → verify resources in the reopened file; resync with a fresh state | confirmed / pending | Saved files must be self-describing; no hidden session caches |
 | `operacao-segundo-plano-caminhos-e-salvamento` | Relative paths wrote renders to `C:\`; masks synced into the wrong open project; Painter closed twice during export; empty GLB from a hidden same-name object → absolute paths, check the open project, save before export, check files | confirmed / validated | Absolute paths, explicit target project in every call, save-before-export atomicity |
 | `operacao-sync-estado-por-sessao` | Exported maps byte-identical to the previous round although stack/masks changed; resource URLs in the sync state died when the project was reopened; the filtered log hid "resource not found" → fresh state per session, unfiltered output, hash check | confirmed / validated | Resource identity must survive save/reopen; errors must fail loudly |
-| Skill: "Visualisation pausa a computação"; 2 agents crashed Painter | Use `collab.py lock` and save after each good sync | F — `.claude/skills/pintura-pbr/SKILL.md` → "Erros que já custaram tempo" | Same as above |
+| Skill: "Visualisation pausa a computação"; 2 agents crashed Painter | Use `collab.py lock` and save after each good sync | F — `.claude/skills/pbr-painting/SKILL.md` → "Erros que já custaram tempo" | Same as above |
 | Skill: Windows paths in Painter Python | A Git-Bash POSIX path `/e/...` resolved against the current drive and created stray folders | F — SKILL.md → "Carrying paint onto a changed mesh" | Path handling must be platform-correct |
-| Skill / REFERENCE: OCIO before create | Creating without `OCIO` produced a Legacy project; Colour API rejected both colour-space classes; not convertible afterwards | F — `.claude/skills/pintura-pbr/REFERENCE.md` → "Armadilhas" | Colour management must be fixed at project creation and recorded |
+| Skill / REFERENCE: OCIO before create | Creating without `OCIO` produced a Legacy project; Colour API rejected both colour-space classes; not convertible afterwards | F — `.claude/skills/pbr-painting/REFERENCE.md` → "Armadilhas" | Colour management must be fixed at project creation and recorded |
 | REFERENCE: batch exit code | MCP batch stops at first error but may exit 0 | F — REFERENCE.md → "Painter MCP" | Tool results must carry a reliable success flag |
 | Collaboration: `needs_saving` after reopen | Reopening an unchanged `.spp` reported `needs_saving == true` | F — `Docs/Colaboracao/Colaboracao.md` → "Janela emprestada" | Dirty state must be exact |
 | `painter_layer_stack.py` history | 0–255 colours reached Painter unscaled and became white; the sync now rescales | F — `painter_layer_stack.py` docstring; `git log` `aab929b` | Typed colour inputs with explicit range and colour space |
@@ -62,7 +62,7 @@ Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Apren
 | `low-linhas-comuns-por-painel` | Inverted normals (black) on tab interiors from row heights chosen per column → common rows; count Z < 0 per part | confirmed / validated | Per-part Z < 0 statistics are a useful bake QA output |
 | REFERENCE: AO bake with excluded collections | Selected-to-active AO did not see the high | F — REFERENCE.md | Explicit high-mesh inputs |
 | REFERENCE: stitch-dot mask bake | `margin=16` merged dots into bands → margin 0, dilation later | F — REFERENCE.md | Dilation must be controllable per map |
-| Patch: bake without UDIM | MCP rejected texture sets without UV tiles | F — `Docs/Pipeline/MCP/substance-painter-mcp-local.patch` | Non-UDIM single-tile sets are the norm |
+| Patch: bake without UDIM | MCP rejected texture sets without UV tiles | F — `Pipeline/mcp/substance-painter-mcp-local.patch` | Non-UDIM single-tile sets are the norm |
 
 ## 4. UV and texture sets
 
@@ -74,7 +74,7 @@ Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Apren
 | `uv-perfil-variavel-slim` | Analytic column UV sheared where the profile changes → ABF + SLIM | confirmed / validated | Out of scope (Blender), but distortion stats matter for painting |
 | `geometria-camadas-antes-da-uv` | UV passed while the low had lost layers → check construction before UV and low+normal after bake | confirmed / validated | Painting must not start on a failed construction (gate input) |
 | `low-caudas-franjas-voxel` | Thin tails/fringe did not converge through voxel UV → rebuild as clean cloth or cards | confirmed / pending | Fringe/fray may need alpha cards (alpha output pending) |
-| Skill UV: validate each texture set before join | Sets overlap in 0–1 after join | F — `.claude/skills/uv-profissional/SKILL.md` | Per-set 0–1 tiles; no UDIM |
+| Skill UV: validate each texture set before join | Sets overlap in 0–1 after join | F — `.claude/skills/professional-uv/SKILL.md` | Per-set 0–1 tiles; no UDIM |
 
 ## 5. Export and delivery
 
@@ -85,7 +85,7 @@ Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Apren
 | `exportacao-round-trip-normais-microfaces` | GLB import showed shading wedges; exporter dropped micro-faces | confirmed / pending | Boundary: mesh export stays in Blender, but UzPainter must not alter the mesh it was given |
 | `exportacao-escala-fisica-fonte` | Reimport kept Meshy normalisation (items ≈ 1.91 m) | confirmed / pending | Physical units must be preserved for physical-scale procedurals |
 | `exportacao-pivo-empunhadura` | Pivots were modelling-relative → grip/headband pivot convention; rigid move only (shape, UV, normals, textures unchanged) | confirmed / validated | Textures must survive a rigid pivot move unchanged (UV-space data only) |
-| QA05 SPP audit | Re-export of the hat changed procedural resource display names (`Mask Editor` → `mg_mask_editor` …) and produced black normal texels; grimoire Normal differed by quantisation. The audit labels resource re-evaluation as an unproven hypothesis ("Hipótese (não comprovada)"); later evidence in the same file traces the black texels to zero corner normals in the saved low and states that a resource-version change is not established as the explanation | F — `Docs/analysis/skeletal-mage-review/05-auditoria-spp-10-13-20261007.md` | Resource versions must be pinned inside the project as prevention, independent of the unproven cause |
+| QA05 SPP audit | Re-export of the hat changed procedural resource display names (`Mask Editor` → `mg_mask_editor` …) and produced black normal texels; grimoire Normal differed by quantisation. The audit labels resource re-evaluation as an unproven hypothesis ("Hipótese (não comprovada)"); later evidence in the same file traces the black texels to zero corner normals in the saved low and states that a resource-version change is not established as the explanation | F — `Docs/analysis/skeletal-mage-review/05-spp-audit-10-13-20261007.md` | Resource versions must be pinned inside the project as prevention, independent of the unproven cause |
 
 ## 6. Rendering and review
 
@@ -100,7 +100,7 @@ Lesson cards live in `Docs/Pipeline/Licoes/<id>.md` (index: `Docs/Pipeline/Apren
 
 ## 7. Gates that touch painting (generated checklists)
 
-**F** — `Docs/Pipeline/Gates/pintura.md`, `exportacao.md`, `bake.md`, `operacao.md`, `render.md`, `uv.md` list the checks extracted from these cards, ordered from cheap to expensive, with check IDs (`manifesto-peca-v1`, `render-ref-view-crops`, `render-board-ref-vs-render`, `visual`, `medida-manual`). Examples of cheap paint checks: the manifest must show `gates/visual geometria-encaixe = pass` before the Painter project is created; save the `.spp` before export and confirm all listed files were written; after each sync read the full output and compare exported map hashes with the previous round; re-read uniform sources and active channels after fill creation.
+**F** — `Docs/Gates/painting.md`, `export.md`, `bake.md`, `operation.md`, `render.md`, `uv.md` list the checks extracted from these cards, ordered from cheap to expensive, with check IDs (`manifesto-peca-v1`, `render-ref-view-crops`, `render-board-ref-vs-render`, `visual`, `medida-manual`). Examples of cheap paint checks: the manifest must show `gates/visual geometria-encaixe = pass` before the Painter project is created; save the `.spp` before export and confirm all listed files were written; after each sync read the full output and compare exported map hashes with the previous round; re-read uniform sources and active channels after fill creation.
 
 ## 8. Why these lessons mattered (synthesis)
 

@@ -40,7 +40,7 @@
 | OPS | MCP/src/substance_painter_mcp/operations.py |
 | SRV | MCP/src/substance_painter_mcp/server.py |
 | CLIENT | MCP/src/substance_painter_mcp/client.py |
-| PIPE | E:/UzmiGames/Assets3D/Docs/Pipeline/MCP |
+| PIPE | E:/UzmiGames/Assets3D/Pipeline/mcp |
 
 **Fact:** In tables, “confirmed” means that the stated local source supports the claim, not that a live operation succeeded. Test definitions establish expected behavior, not a successful run. A byte offset is decimal and zero-based. Short HTML fragments such as #Stack.from_name expand to #substance_painter.textureset.Stack.from_name in that row's module; the inventory appendix supplies complete fragments.
 

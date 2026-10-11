@@ -45,7 +45,7 @@ Schemas carry numeric bounds, enums and object references; the server validates 
 
 ## 5. Path roots
 
-`--roots project=<dir>;mesh=<dir>;bake_mesh=<dir>;resource=<dir>;export=<dir>` (the Assets3D client sets all five to `E:\UzmiGames\Assets3D` today — `A3D\Docs\Pipeline\MCP\painter_mcp_client.py`). Paths are canonicalised (absolute, resolved reparse points, `file:///` and relative forms normalised) and checked against the root of the operation; results never reference paths outside the roots. Roots are policy for structured tools; they do not sandbox `run_python` (Q12).
+`--roots project=<dir>;mesh=<dir>;bake_mesh=<dir>;resource=<dir>;export=<dir>` (the Assets3D client sets all five to `E:\UzmiGames\Assets3D` today — `A3D\Pipeline\mcp\painter_mcp_client.py`). Paths are canonicalised (absolute, resolved reparse points, `file:///` and relative forms normalised) and checked against the root of the operation; results never reference paths outside the roots. Roots are policy for structured tools; they do not sandbox `run_python` (Q12).
 
 ## 6. `run_python`
 
