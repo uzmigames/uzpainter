@@ -33,12 +33,15 @@
 //!   beside it
 //! - `zig build uzp-store`    the project store as a static library (`zig-out/lib/uzp_store.lib`,
 //!   `src/store/` with SQLite and zstd); `zig build uzp-store-tests` `uzp-store-tests.exe`, its
-//!   native tests with the test-only fault hooks (`tests/store/store_test.cpp`)
+//!   native tests with the test-only fault hooks (`tests/store/store_test.cpp`);
+//!   `zig build uzp-store-save-tests` `uzp-store-save-tests.exe`, the save, retention, compaction
+//!   and lock tests (`tests/store/save_test.cpp`)
 //! - `zig build mesh-tests`   `uzp-mesh-tests.exe`: the mesh importers (`src/mesh/` with ufbx,
 //!   fastgltf and simdjson, the static library `uzp_mesh`, with the MikkTSpace tangents and the
 //!   certificate) and their native tests (`tests/mesh/mesh_test.cpp`), plus
 //!   `uzp-normal-bake.exe`, the normal-convention bake over the production tangent frames
-//!   (`tests/mesh/normal_bake.cpp`)
+//!   (`tests/mesh/normal_bake.cpp`) and `uzp-mesh-reload-tests.exe`, the mesh reload
+//!   (`tests/mesh/reload_test.cpp`)
 //!
 //! Every include and library path is inside this repository. Windows system headers and import
 //! libraries come from the MinGW-w64 files bundled with the pinned Zig release; nothing refers
@@ -284,6 +287,7 @@ const mesh_sources = [_][]const u8{
     "mesh/mask_image.cpp",
     "mesh/tangents.cpp",
     "mesh/certificate.cpp",
+    "mesh/reload.cpp",
 };
 /// Third-party include directories of the mesh importers (`tools/vendoring/thirdparty.py`): ufbx,
 /// fastgltf and the simdjson it parses with, and the PNG decoder of the orientation contract.
@@ -319,6 +323,9 @@ const store_sources = [_][]const u8{
     "store/planes.cpp",
     "store/plane_integrity.cpp",
     "store/project_store.cpp",
+    "store/save.cpp",
+    "store/compact.cpp",
+    "store/lock.cpp",
 };
 /// Test-only fault hooks of the store (`src/store/fault.h`): compiled, with
 /// `-DUZP_STORE_FAULT_HOOKS=1` on every store source, into `uzp-store-tests.exe` only, never into
@@ -874,6 +881,28 @@ pub fn build(b: *std.Build) void {
     const mesh_tests_step = b.step("mesh-tests", "Build the mesh importers and their native tests");
     mesh_tests_step.dependOn(&b.addInstallArtifact(mesh_tests_exe, .{}).step);
 
+    // The mesh reload (phase1.6_mesh-reload): `uzp-mesh-reload-tests.exe`
+    // (`tests/mesh/reload_test.cpp`), CPU only.
+    const mesh_reload_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    mesh_reload_tests_mod.addIncludePath(b.path("src"));
+    mesh_reload_tests_mod.linkLibrary(mesh_lib);
+    mesh_reload_tests_mod.linkLibrary(uzp_core_lib);
+    mesh_reload_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/mesh"),
+        .files = &.{"reload_test.cpp"},
+        .flags = &uzp_core_flags,
+    });
+    const mesh_reload_tests_exe = b.addExecutable(.{
+        .name = "uzp-mesh-reload-tests",
+        .root_module = mesh_reload_tests_mod,
+    });
+    mesh_tests_step.dependOn(&b.addInstallArtifact(mesh_reload_tests_exe, .{}).step);
+
     // The normal-convention fixture re-run with the production tangent frames
     // (phase1.5_mesh-tangents-certificate): the Phase 0 prototype's bake over `src/mesh/`.
     const normal_bake_mod = b.createModule(.{
@@ -948,6 +977,34 @@ pub fn build(b: *std.Build) void {
     const store_tests_step = b.step("uzp-store-tests", "Build the native tests of the project store (with its fault hooks)");
     store_tests_step.dependOn(&b.addInstallArtifact(store_tests_exe, .{}).step);
     b.getInstallStep().dependOn(store_tests_step);
+
+    // Saving, retention, compaction, revert and the lock sidecar (phase1.6_store-save-retention):
+    // their own test executable, with the same hooked store sources.
+    const store_save_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addStoreSources(b, store_save_tests_mod, &store_hook_flags);
+    store_save_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{store_fault_source},
+        .flags = &store_hook_flags,
+    });
+    store_save_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/store"),
+        .files = &.{"save_test.cpp"},
+        .flags = &store_hook_flags,
+    });
+    store_save_tests_mod.linkLibrary(uzp_core_lib);
+    const store_save_tests_exe = b.addExecutable(.{
+        .name = "uzp-store-save-tests",
+        .root_module = store_save_tests_mod,
+    });
+    const store_save_tests_step = b.step("uzp-store-save-tests", "Build the native save, retention and lock tests of the project store");
+    store_save_tests_step.dependOn(&b.addInstallArtifact(store_save_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(store_save_tests_step);
 
     // ── The compositor (phase1.5_compositor-tile-dag) ─────────────────────────────────────────
     // `src/evaluator/` joins `UzPainter.exe` (over the render layer and the document model) and

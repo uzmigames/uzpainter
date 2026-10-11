@@ -37,6 +37,9 @@ public:
         missing_resource,    // a commit names resource bytes the store does not hold
         missing_dependency,  // a non-portable locator target is absent or changed
         conflict,            // the store and the document disagree (revision, project uuid)
+        locked,              // another live worker holds the project's lock sidecar
+        protected_checkpoint,  // a save or compaction would overwrite or collapse a protected checkpoint
+        not_retained,        // a revert names a revision or checkpoint outside the retained set
     };
 
     StoreError(Code code, const std::string& message);

@@ -18,6 +18,7 @@ namespace {
 
 std::atomic<Fault> g_armed{Fault::none};
 std::atomic<bool> g_in_commit{false};
+std::atomic<bool> g_in_vacuum{false};
 
 struct FaultFile {
     sqlite3_file base;
@@ -51,8 +52,12 @@ int Write(sqlite3_file* file, const void* buffer, int amount, sqlite3_int64 offs
         if (rc != SQLITE_OK) return rc;
         if (offset + amount > size) return SQLITE_FULL;
     }
+    // While `VACUUM INTO` runs, the only database file written is its output.
+    const bool vacuum_output = f->main_db && g_in_vacuum.load();
+    if (vacuum_output && armed == Fault::fail_during_vacuum) return SQLITE_IOERR_WRITE;
     const int rc = f->real->pMethods->xWrite(f->real, buffer, amount, offset);
     if (f->main_db && armed == Fault::kill_during_commit && g_in_commit.load()) Kill();
+    if (vacuum_output && armed == Fault::kill_during_vacuum) Kill();
     return rc;
 }
 int Truncate(sqlite3_file* file, sqlite3_int64 size) { return Inner(file)->pMethods->xTruncate(Inner(file), size); }
@@ -154,6 +159,15 @@ void AfterDurableCommit() {
 
 void AfterPlaneRows() {
     if (g_armed.load() == Fault::kill_before_revision_row) Kill();
+}
+
+void EnterVacuum() { g_in_vacuum = true; }
+void LeaveVacuum() { g_in_vacuum = false; }
+
+bool BeforeRename() {
+    const Fault armed = g_armed.load();
+    if (armed == Fault::kill_before_rename) Kill();
+    return armed == Fault::fail_rename;
 }
 
 }  // namespace uzp::store::fault

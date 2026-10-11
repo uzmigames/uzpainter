@@ -270,12 +270,8 @@ ImportResult ImportMeshFile(const std::filesystem::path& path, const ImportSetti
     return ImportMesh(bytes, path.filename().string(), settings, path.parent_path());
 }
 
-void CreateTextureSets(core::Edit& edit, const ImportResult& result, const MeshSource& source,
-                       const std::map<core::ChannelType, core::Channel>& channels) {
+void RecordMeshResource(core::Edit& edit, const ImportResult& result, const MeshSource& source) {
     core::Project& project = edit.project();
-    if (project.mesh || !project.texture_sets.empty()) {
-        throw core::ValueError("the project already has a mesh; replacing it is a mesh reload");
-    }
     std::vector<core::ResourceMeta>& entries = project.resources[result.sha256];
     const bool stored = std::any_of(entries.begin(), entries.end(),
                                     [&](const core::ResourceMeta& e) { return e.name == result.file_name; });
@@ -293,6 +289,15 @@ void CreateTextureSets(core::Edit& edit, const ImportResult& result, const MeshS
         entries.push_back(std::move(meta));
     }
     project.mesh = core::MeshReference{result.sha256, result.report, {}};
+}
+
+void CreateTextureSets(core::Edit& edit, const ImportResult& result, const MeshSource& source,
+                       const std::map<core::ChannelType, core::Channel>& channels) {
+    core::Project& project = edit.project();
+    if (project.mesh || !project.texture_sets.empty()) {
+        throw core::ValueError("the project already has a mesh; replacing it is a mesh reload");
+    }
+    RecordMeshResource(edit, result, source);
     for (const Material& material : result.mesh.materials) {
         core::TextureSet set;
         set.id = edit.AllocateId();

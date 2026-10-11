@@ -32,11 +32,16 @@ std::optional<std::string> ReadFile(const std::filesystem::path& path) {
 
 }  // namespace
 
-ProjectStore::ProjectStore(Container container, std::string project_uuid, bool portable, Value manifest)
-    : container_(std::move(container)),
+ProjectStore::ProjectStore(ProjectLock lock, Container container, std::string project_uuid, bool portable,
+                           Value manifest)
+    : lock_(std::move(lock)),
+      path_(container.path()),
+      container_(std::move(container)),
       project_uuid_(std::move(project_uuid)),
       portable_(portable),
       current_manifest_(std::move(manifest)) {}
+
+ProjectStore::~ProjectStore() { Close(); }
 
 std::unique_ptr<ProjectStore> ProjectStore::Create(const std::filesystem::path& path,
                                                    const core::DocumentState& initial, const CreateOptions& options) {
@@ -64,6 +69,7 @@ std::unique_ptr<ProjectStore> ProjectStore::Create(const std::filesystem::path& 
         pending.locators[*hash] = locator;
     }
 
+    ProjectLock lock = ProjectLock::Acquire(path);
     Container container = Container::Create(path);
     try {
         Container::WriteTransaction transaction(container);
@@ -85,11 +91,13 @@ std::unique_ptr<ProjectStore> ProjectStore::Create(const std::filesystem::path& 
         std::filesystem::remove(path, ec);
         throw;
     }
-    return std::unique_ptr<ProjectStore>(
-        new ProjectStore(std::move(container), initial.project_uuid, options.portable, core::ProjectToJson(initial.project)));
+    return std::unique_ptr<ProjectStore>(new ProjectStore(std::move(lock), std::move(container), initial.project_uuid,
+                                                          options.portable, core::ProjectToJson(initial.project)));
 }
 
 ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const OpenOptions& options) {
+    ProjectLock lock = ProjectLock::Acquire(path);
+    RemoveTemporaryFiles(path);  // left by a worker killed during compact
     Container container = Container::Open(path);
     if (!container.HasTable("meta")) {
         throw StoreError(StoreError::Code::not_a_project, Utf8(path) + " has no meta table: not a .uzp project");
@@ -122,6 +130,8 @@ ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const
     opened.state.project_uuid = *uuid;
     opened.state.revision = revision;
     opened.state.operation_horizon = ReadHorizon(container);
+    opened.state.named_checkpoint = ReadNamedRevision(container);
+    opened.state.previous_checkpoint = ReadPreviousRevision(container);
     std::vector<std::string> unreadable;  // reported by CheckIntegrity
     for (core::OperationRecord& record : ReadOperations(container, *uuid, unreadable)) {
         // Rows of collapsed revisions are expired (compaction removes them); the document keeps
@@ -129,7 +139,7 @@ ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const
         if (record.committed_revision > opened.state.operation_horizon) opened.state.operations.push_back(std::move(record));
     }
     opened.report = CheckIntegrity(container, manifest, options.verify);
-    opened.store.reset(new ProjectStore(std::move(container), *uuid, portable, std::move(manifest)));
+    opened.store.reset(new ProjectStore(std::move(lock), std::move(container), *uuid, portable, std::move(manifest)));
     return opened;
 }
 

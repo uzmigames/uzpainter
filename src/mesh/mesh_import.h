@@ -82,12 +82,17 @@ struct MeshSource {
 /// The MIME type stored with the mesh resource.
 std::string_view MimeOf(MeshFormat format);
 
+/// Records the mesh resource of `result` (an entry already present under the same name is noted as
+/// skipped) and sets `project.mesh` to it with the import report. Used by `CreateTextureSets` and
+/// by the mesh reload (`reload.h`).
+void RecordMeshResource(core::Edit& edit, const ImportResult& result, const MeshSource& source);
+
 /// Inside one transaction (`core::Execute`): records the mesh resource (the original bytes are
 /// stored under `result.sha256` by the project store; an entry already present is noted as
 /// skipped), sets `project.mesh` with the import report, and creates one texture set per material
 /// in file order, each named after its material, with the project's default resolution, UV tile
 /// 1001 and one ordinary stack with `channels`. Throws `core::ValueError` when the project
-/// already has a mesh or texture sets (reload is `phase1.6_mesh-reload`).
+/// already has a mesh or texture sets (a reload is `ReloadMesh`, `reload.h`).
 void CreateTextureSets(core::Edit& edit, const ImportResult& result, const MeshSource& source,
                        const std::map<core::ChannelType, core::Channel>& channels);
 

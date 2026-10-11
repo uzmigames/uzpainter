@@ -11,7 +11,10 @@
 // (commit.h). `Submit` decides a mutation request against the stored rows before executing it.
 // The raster planes of paint nodes are created and written from a transaction's call
 // (`CreatePlane`, `WritePlane`), committed with the revision, and read through the manifest
-// binding of a revision (planes.h).
+// binding of a revision (planes.h). `Save`, `Compact`, `SaveAs`, `SaveAsCopy` and `Revert` are the
+// saving vocabulary of 09 §4 (save.h, compact.h). An open store holds the project's lock sidecar
+// (lock.h); `Close` (or destroying the store) closes the file, leaving no `-wal`/`-shm`/`-journal`
+// companion, and removes the lock.
 //
 // The store must outlive every document attached to it. A store is used by one worker; its
 // methods are serialised by an internal mutex, which is not held while a transaction's call runs.
@@ -25,9 +28,12 @@
 #include <vector>
 
 #include "store/commit.h"
+#include "store/compact.h"
 #include "store/container.h"
 #include "store/integrity.h"
+#include "store/lock.h"
 #include "store/planes.h"
+#include "store/save.h"
 #include "store/versioning.h"
 #include "uzp_core/document/document.h"
 #include "uzp_core/transaction/transaction.h"
@@ -54,23 +60,71 @@ public:
     struct Opened;
 
     /// Creates `path` holding `initial` as its first revision (`kind = checkpoint`, named by
-    /// `checkpoint('current')`). Throws `StoreError` (`exists`, `missing_resource`, ...) and
-    /// `core::ValueError` (invalid project, operation records in a new project).
+    /// `checkpoint('current')`) and takes its lock. Throws `StoreError` (`exists`, `locked`,
+    /// `missing_resource`, ...) and `core::ValueError` (invalid project, operation records in a new
+    /// project).
     static std::unique_ptr<ProjectStore> Create(const std::filesystem::path& path, const core::DocumentState& initial,
                                                 const CreateOptions& options = {});
 
-    /// Opens `path`. Throws `StoreError(version)` for a `format_version` of another major (the
-    /// file is not changed), `StoreError(not_a_project)`, and `CorruptionError` when the current
-    /// manifest does not verify. Corrupt history, blobs (with `VerifyLevel::full`) and missing
-    /// dependencies are reported in `Opened::report`, not thrown.
+    /// Opens `path`: takes its lock (`StoreError(locked)` while a live worker holds it; a stale
+    /// lock is replaced) and removes the temporary files a killed `compact` left. Throws
+    /// `StoreError(version)` for a `format_version` of another major (the file is not changed),
+    /// `StoreError(not_a_project)`, and `CorruptionError` when the current manifest does not
+    /// verify. Corrupt history, blobs (with `VerifyLevel::full`) and missing dependencies are
+    /// reported in `Opened::report`, not thrown.
     static Opened Open(const std::filesystem::path& path, const OpenOptions& options = {});
 
     ProjectStore(const ProjectStore&) = delete;
     ProjectStore& operator=(const ProjectStore&) = delete;
+    ~ProjectStore();
 
     const std::string& project_uuid() const { return project_uuid_; }
     bool portable() const { return portable_; }
     Container& container() { return container_; }
+    /// The project file (the target after `SaveAs`).
+    const std::filesystem::path& path() const { return path_; }
+    /// The lock sidecar this store holds (empty after `Close`).
+    const std::filesystem::path& lock_path() const { return lock_.path(); }
+
+    /// Closes the file (`journal_mode = DELETE`, no companion file left) and removes the lock.
+    /// Every later call that reads or writes the file throws `StoreError(io)`. Idempotent.
+    void Close();
+
+    /// `save()`: writes the named checkpoint of the current revision and moves `previous`
+    /// (save.h), then marks the document; `SaveMode::full` compacts afterwards. Returns the
+    /// checkpoints. Throws `StoreError(protected_checkpoint)` for a protected name and
+    /// `StoreError(conflict)` when the document is not at the stored current revision.
+    core::Checkpoints Save(core::Document& document, const SaveOptions& options = {},
+                           SaveMode mode = SaveMode::incremental);
+    /// `needs_saving()` as the file holds it: the current revision is not the last named
+    /// checkpoint (equal to `Document::NeedsSaving` of the attached document).
+    bool NeedsSaving();
+    /// `{current, named, previous}` as the file holds them.
+    core::Checkpoints CheckpointState();
+
+    /// `compact` (compact.h): collapses what retention does not keep, collects unreachable rows,
+    /// `VACUUM INTO` a temporary file and renames it over the project; raises the document's
+    /// operation horizon. On failure the project file is unchanged and the error names the step.
+    CompactResult Compact(core::Document& document);
+
+    /// `save_as(path)`: `VACUUM INTO` a temporary file beside `target`, writes `save()`'s
+    /// checkpoint into it, renames it to `target` and relocates the open project and its lock
+    /// there; the original file is not changed. Throws `StoreError(exists)` when `target` exists
+    /// and `StoreError(locked)` when another worker holds its lock; on failure nothing is left at
+    /// `target` and the project stays where it was.
+    core::Checkpoints SaveAs(core::Document& document, const std::filesystem::path& target,
+                             const SaveOptions& options = {});
+    /// `save_as_copy(path)`: `VACUUM INTO` a temporary file beside `target` and renames it to
+    /// `target`; the project keeps its path, lock and dirty state. Throws `StoreError(exists)`
+    /// when `target` exists; on failure nothing is left at `target`.
+    void SaveAsCopy(const std::filesystem::path& target);
+
+    /// Revert: submits `request` as a mutation whose project copies the manifest of `revision`
+    /// (`RevertedProject`), plane bindings included. A revision outside the retained set fails
+    /// the call with `not_retained`; history is append-only.
+    core::RequestOutcome Revert(core::Document& document, core::MutationRequest request, std::int64_t revision);
+    /// Revert to the revision checkpoint `name` names (resolved inside the call).
+    core::RequestOutcome Revert(core::Document& document, core::MutationRequest request, const std::string& checkpoint);
 
     /// Stages resource bytes for the commit of the running `Submit` (call it from the
     /// transaction's call); returns their SHA-256. The commit stores them once if the committed
@@ -121,9 +175,17 @@ public:
                                 const std::function<void(core::Edit&)>& call);
 
 private:
-    ProjectStore(Container container, std::string project_uuid, bool portable, core::json::Value manifest);
+    ProjectStore(ProjectLock lock, Container container, std::string project_uuid, bool portable,
+                 core::json::Value manifest);
     void Commit(const core::Snapshot& snapshot, const core::OperationRecord& record);
+    /// `StoreError(conflict)` unless `document` is this project at the stored current revision.
+    void CheckDocument(const core::Document& document);
+    CompactResult CompactLocked(core::Document& document);
+    core::RequestOutcome SubmitRevert(core::Document& document, core::MutationRequest request,
+                                      const std::function<std::int64_t()>& target);
 
+    ProjectLock lock_;  // released after the connection closes
+    std::filesystem::path path_;
     Container container_;
     const std::string project_uuid_;
     const bool portable_;
@@ -136,8 +198,7 @@ private:
 
 struct ProjectStore::Opened {
     std::unique_ptr<ProjectStore> store;
-    /// What a `Document` is opened from. `named_checkpoint` and `previous_checkpoint` stay empty:
-    /// `save()` and its checkpoints belong to `phase1.6_store-save-retention`.
+    /// What a `Document` is opened from, with the last named checkpoint and `previous`.
     core::DocumentState state;
     IntegrityReport report;
     /// `meta.format_version` as found in the file, and whether the manifest was migrated in memory.

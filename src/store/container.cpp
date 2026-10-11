@@ -75,9 +75,9 @@ StoreError::StoreError(Code code, const std::string& message)
     : std::runtime_error(std::string(CodeName(code)) + ": " + message), code_(code) {}
 
 std::string_view CodeName(StoreError::Code code) {
-    static constexpr std::array<std::string_view, 9> names = {
-        "io", "disk_full", "corrupt", "version", "not_a_project", "exists", "missing_resource", "missing_dependency",
-        "conflict"};
+    static constexpr std::array<std::string_view, 12> names = {
+        "io",       "disk_full", "corrupt",  "version", "not_a_project",        "exists",      "missing_resource",
+        "missing_dependency", "conflict", "locked", "protected_checkpoint", "not_retained"};
     return names[static_cast<std::size_t>(code)];
 }
 
@@ -115,6 +115,9 @@ std::string Decompress(std::string_view frame, std::optional<std::uint64_t> expe
 // ── Statement ─────────────────────────────────────────────────────────────────────────────────
 
 Statement::Statement(Container& container, std::string_view sql) : container_(container) {
+    if (container.handle() == nullptr) {
+        throw StoreError(StoreError::Code::io, Utf8(container.path()) + ": the project is closed");
+    }
     const int rc = sqlite3_prepare_v2(container.handle(), sql.data(), static_cast<int>(sql.size()), &stmt_, nullptr);
     if (rc != SQLITE_OK) container.Fail(rc, "prepare");
 }
@@ -239,6 +242,7 @@ void Container::Fail(int rc, std::string_view what) const {
 }
 
 void Container::Exec(std::string_view sql) {
+    if (db_ == nullptr) throw StoreError(StoreError::Code::io, Utf8(path_) + ": the project is closed");
     const std::string text(sql);
     const int rc = sqlite3_exec(db_, text.c_str(), nullptr, nullptr, nullptr);
     if (rc != SQLITE_OK) Fail(rc, text);
