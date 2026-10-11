@@ -126,10 +126,18 @@ def capture_host_environment() -> dict[str, str]:
     return {"gpu_model": gpu, "driver_version": driver, "os_build": os_build()}
 
 
-@cache
+HOST_CACHE: list[dict[str, str]] = []
+
+
 def cached_host_environment() -> dict[str, str]:
-    """The host fields, read once per host process (the default of a recorder session)."""
-    return capture_host_environment()
+    """The host fields, read once per host process (the default of a recorder session). A read
+    with an `unknown` field is not kept, so a session re-reading it reads the host again."""
+    if not HOST_CACHE:
+        now = capture_host_environment()
+        if UNKNOWN in now.values():
+            return now
+        HOST_CACHE.append(now)
+    return dict(HOST_CACHE[0])
 
 
 def file_sha256(path: Path) -> str:

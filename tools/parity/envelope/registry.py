@@ -14,7 +14,14 @@ builds, envelope hashes, manifest roots and dates, never a recorded value. It na
 Promotion and every other change replace the file atomically (`os.replace`), so a reader sees
 the old registry or the new one, never a mixture. The 12.1.0 corpus keeps `parity/manifests` as
 its manifest root; a promoted candidate's manifests live under
-`parity/envelopes/<envelope id>/manifests/` with the same relative paths.
+`parity/envelopes/<envelope directory>/manifests/` with the same relative paths.
+
+Every filesystem path named after an envelope (work, inbox, quarantine, manifest root, drift
+report) uses `envelope_directory(envelope_id)`, never the raw id: each character outside letters,
+digits and `. _ ~ -` (the `+` of a Painter build string) becomes `_`, so a path under it passes
+the recorder's file-URL rule (`tools.parity.recorder.texture.URL_SAFE_PATH`, which bakes need).
+`envelope_id_for` never mints an id whose directory another registered id already has, so the
+mapping is one-to-one within a registry. The ids themselves are unchanged everywhere else.
 """
 
 from __future__ import annotations
@@ -22,6 +29,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
@@ -35,6 +43,7 @@ REGISTRY_RELATIVE = Path("parity") / "envelopes" / "registry.json"
 ENVELOPES_RELATIVE = Path("parity") / "envelopes"
 CURRENT, SUPERSEDED = "current", "superseded"
 TEXTURE_TIERS = frozenset({"0", "1", "2a", "2b"})
+_NOT_DIRECTORY_SAFE = re.compile(r"[^A-Za-z0-9._~-]")
 
 
 class RegistryError(Exception):
@@ -124,8 +133,15 @@ def manifest_root(entry: Mapping[str, Any], repo_root: Path = REPO_ROOT) -> Path
     return repo_root / Path(str(entry["manifest_root"]))
 
 
+def envelope_directory(envelope_id: str) -> str:
+    """The directory name of an envelope: its id with every character outside letters, digits
+    and `. _ ~ -` replaced by `_` (`painter-12.1.5+js-api.1.1.20` ->
+    `painter-12.1.5_js-api.1.1.20`), so paths under it need no percent-encoding in a file URL."""
+    return _NOT_DIRECTORY_SAFE.sub("_", envelope_id)
+
+
 def candidate_manifest_root(envelope_id: str) -> str:
-    return (ENVELOPES_RELATIVE / envelope_id / "manifests").as_posix()
+    return (ENVELOPES_RELATIVE / envelope_directory(envelope_id) / "manifests").as_posix()
 
 
 def corpus_manifests(
@@ -142,16 +158,18 @@ def corpus_manifests(
 
 def envelope_id_for(build: str, environment: Mapping[str, Any], document: Mapping[str, Any]) -> str:
     """`painter-<build>`, or `painter-<build>-env-<hash>` when that build already has an
-    envelope (a driver, GPU, OS or colour change under the same build)."""
+    envelope (a driver, GPU, OS or colour change under the same build). An id whose directory
+    (`envelope_directory`) another registered id already has counts as used."""
     plain = f"painter-{build}"
     used = {e["envelope_id"] for e in document["envelopes"]}
     used |= {q["envelope_id"] for q in document["quarantine"]}
+    used = {envelope_directory(i) for i in used}
     taken_builds = {e["painter_build"] for e in document["envelopes"]}
-    if build not in taken_builds and plain not in used:
+    if build not in taken_builds and envelope_directory(plain) not in used:
         return plain
     stem = f"{plain}-env-{envelope_sha256(environment)[:12]}"
     candidate, n = stem, 1
-    while candidate in used:
+    while envelope_directory(candidate) in used:
         n += 1
         candidate = f"{stem}-{n}"
     return candidate

@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from tools.parity.envelope.registry import RegistryError, load_registry
+from tools.parity.envelope.registry import RegistryError, envelope_directory, load_registry
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
 
 REPORT_DIR = Path("parity") / "reports" / "phase0"
@@ -69,7 +69,8 @@ def study_path(study_id: str, repo_root: Path = REPO_ROOT) -> Path:
 
 
 def drift_path(scope: str, envelope_id: str, repo_root: Path = REPO_ROOT) -> Path:
-    return repo_root / REPORT_DIR / f"{DRIFT_PREFIX}{scope}-{envelope_id}.json"
+    name = f"{DRIFT_PREFIX}{scope}-{envelope_directory(envelope_id)}.json"
+    return repo_root / REPORT_DIR / name
 
 
 def fmt(value: Any) -> str:

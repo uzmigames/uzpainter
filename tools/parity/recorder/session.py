@@ -5,7 +5,11 @@ the candidate envelope being recorded (`parity/envelopes/registry.json`,
 `tools.parity.envelope.registry`). An unseen build raises `UnseenBuild`, which starts the
 envelope refresh; there is no other way past the guard. A session can also verify, before
 every call that is not a readiness poll, that it still talks to the same Painter process and
-build (`verify_calls`), so that an update or restart in the middle of a run aborts it.
+build (`verify_calls`), so that an update or restart in the middle of a run aborts it. The host
+re-check re-reads a field that differs or cannot be read (`HOST_REREAD_DELAYS_S`): only a value
+that consistently differs is a change, and a field that never reads back is unverifiable; both
+abort, naming each field's expected and observed values. At session start a field reading
+`unknown` is re-read the same way, and one that never reads back refuses the session.
 
 Painter is started by the operator with `--enable-remote-scripting`. Its documented remote
 control (Painter Python API guide *Remote control / headless*, approved source A-PYDOC) accepts
@@ -28,6 +32,7 @@ from typing import Any, Protocol
 
 from tools.parity.recorder.environment import (
     HOST_FIELDS,
+    UNKNOWN,
     HostEnvironment,
     cached_host_environment,
     environment_record,
@@ -189,12 +194,24 @@ UNVERIFIED_OPERATIONS = frozenset({"hello", "state", "baking_state"})
 
 BuildPolicy = Callable[[], frozenset[str]]
 
+# Waits before each host re-read when a field differs or reads `unknown` (decision 037): the
+# operating-system queries behind the host fields can fail transiently while Painter loads the
+# GPU, so a field is concluded only after three reads over 30 s.
+HOST_REREAD_DELAYS_S = (10.0, 20.0)
+
 
 def envelope_builds() -> frozenset[str]:
     """Builds a recording may run on: the current and the candidate envelope's."""
     from tools.parity.envelope.registry import recordable_builds
 
     return recordable_builds()
+
+
+def observed(reads: list[str]) -> str:
+    """The reads of one host field, for a refusal message."""
+    if len(set(reads)) == 1:
+        return f"{reads[0]!r} after {len(reads)} reads"
+    return f"{', '.join(repr(v) for v in reads)} in {len(reads)} reads"
 
 
 def default_host_environment() -> dict[str, str]:
@@ -246,9 +263,44 @@ class PainterSession:
         environment = environment_record(
             painter_build=identity.build_id,
             colour_management=identity.colour_management,
-            host=(self.host_environment or default_host_environment)(),
+            host=self.read_host_environment(),
         )
         return replace(identity, environment=environment)
+
+    def read_host_environment(self) -> dict[str, str]:
+        """The host fields at session start, a field reading `unknown` read again (see
+        `HOST_REREAD_DELAYS_S`); refuse when one never reads back, since a run recorded under an
+        unknown environment belongs to no envelope."""
+        host = self.host_environment or default_host_environment
+        reads = self.read_host(host, lambda field, value: value != UNKNOWN)
+        unreadable = [
+            f"{field}: expected a readable value, observed {observed(reads[field])}"
+            for field in HOST_FIELDS
+            if reads[field][-1] == UNKNOWN
+        ]
+        if unreadable:
+            raise RecorderError(
+                "the host environment cannot be read at session start: " + "; ".join(unreadable)
+            )
+        return {field: reads[field][-1] for field in HOST_FIELDS}
+
+    def read_host(
+        self, host: HostEnvironment, settled: Callable[[str, str], bool]
+    ) -> dict[str, list[str]]:
+        """Every read of each host field: a field not yet `settled` is read again after each
+        delay of `HOST_REREAD_DELAYS_S`; its last read is the settled one, if any."""
+        reads: dict[str, list[str]] = {field: [] for field in HOST_FIELDS}
+        pending = list(HOST_FIELDS)
+        for delay in (None, *HOST_REREAD_DELAYS_S):
+            if delay is not None:
+                self.sleep(delay)
+            now = host()
+            for field in pending:
+                reads[field].append(str(now.get(field) or UNKNOWN))
+            pending = [f for f in pending if not settled(f, reads[f][-1])]
+            if not pending:
+                break
+        return reads
 
     def connect(self) -> PainterIdentity:
         """Load the painter-side code and check the build against the envelope registry."""
@@ -287,10 +339,32 @@ class PainterSession:
                 f"{current[2]}"
             )
         if host is not None and expected.environment is not None:
-            now = host()
-            changed = [f for f in HOST_FIELDS if now.get(f) != expected.environment.get(f)]
-            if changed:
-                raise IdentityChanged(f"the host environment changed during the run: {changed}")
+            self.verify_host(host, expected.environment)
+
+    def verify_host(self, host: HostEnvironment, expected: dict[str, Any]) -> None:
+        """Refuse when a host field differs from `expected` on every read (see
+        `HOST_REREAD_DELAYS_S`): changed when every read gives the same known value,
+        unverifiable otherwise. A field that reads its expected value once is verified."""
+        reads = self.read_host(host, lambda field, value: value == expected.get(field))
+        pending = [f for f in HOST_FIELDS if reads[f][-1] != expected.get(f)]
+        if not pending:
+            return
+        changed: list[str] = []
+        unverifiable: list[str] = []
+        for field in pending:
+            seen = reads[field]
+            text = f"{field}: expected {expected.get(field)!r}, observed {observed(seen)}"
+            consistent = len(set(seen)) == 1 and seen[0] != UNKNOWN
+            (changed if consistent else unverifiable).append(text)
+        problems = []
+        if changed:
+            problems.append("changed during the run: " + "; ".join(changed))
+        if unverifiable:
+            problems.append(
+                "cannot be verified (unreadable or inconsistent on every read): "
+                + "; ".join(unverifiable)
+            )
+        raise IdentityChanged("the host environment " + "; and ".join(problems))
 
     def call(self, operation: str, **args: Any) -> Any:
         if (

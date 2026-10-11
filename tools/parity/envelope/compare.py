@@ -4,11 +4,17 @@ Exported maps are compared by blob SHA-256 first; when the bytes differ they are
 native depth (`tools.parity.fit.decode`) and compared value for value with the statistics of
 `tools.parity.fit.stats.difference` (max, mean, nearest-rank p99, differing values, texels).
 Equal decoded values with different bytes count as equal and are flagged `bytes_differ`.
-Readbacks and captures are compared as JSON after two normalisations, both stated here and
-reported next to the raw result:
+Readbacks and captures are compared as JSON after three normalisations, each of an environment
+identity (a counter, a path or an installed file's version, never a value Painter computes),
+stated here and reported next to the raw result (`other_outputs_differing_raw`):
 
 - the resource-context counter Painter increments per opened project (`projectNN` in resource
-  URLs) becomes `project#` (as in `tools.parity.fit.stability`);
+  URLs, and as the value of a `context` field) becomes `project#` (as in
+  `tools.parity.fit.stability`);
+- the `?version=<sha1>` of a resource Painter ships (`resource://starter_assets...`) becomes
+  `<installed>`: it names the asset file the installed build carries (an update may ship a new
+  one); what the asset does is measured by the maps it produces. The version of a resource a
+  golden imports (`resource://projectNN/...`) is kept;
 - a path that runs through a recorder work directory (`<UTC stamp>-<session>` run directory)
   is cut to `<run>` plus what follows, because every run stages its throwaway project in a new
   directory.
@@ -35,6 +41,8 @@ from tools.parity.schemas import load_json
 from tools.parity.store.store import OracleStore, load_oracle
 
 RUN_DIRECTORY = re.compile(r"^.*?\d{8}T\d{12}Z-[a-z0-9._-]{1,12}")
+SESSION_CONTEXT = re.compile(r"^project\d+$")
+SHIPPED_VERSION = re.compile(r"(resource://starter_assets[^?]*\?version=)[0-9a-f]{40}")
 
 EQUAL, DIFFERS, UNAVAILABLE = "equal", "differs", "unavailable"
 
@@ -107,6 +115,7 @@ def store_source(
 
 def normalise_text(value: str) -> str:
     value = RESOURCE_CONTEXT.sub(r"\1project#", value)
+    value = SHIPPED_VERSION.sub(r"\1<installed>", value)
     return RUN_DIRECTORY.sub("<run>", value.replace("\\", "/"))
 
 
@@ -116,7 +125,14 @@ def normalised(value: Any) -> Any:
     if isinstance(value, list):
         return [normalised(v) for v in value]
     if isinstance(value, dict):
-        return {normalise_text(str(k)): normalised(v) for k, v in value.items()}
+        return {
+            normalise_text(str(k)): (
+                "project#"
+                if k == "context" and isinstance(v, str) and SESSION_CONTEXT.match(v)
+                else normalised(v)
+            )
+            for k, v in value.items()
+        }
     return value
 
 

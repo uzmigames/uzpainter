@@ -6,6 +6,12 @@ when every paired recording is equal and both records hold the same recording id
 `changed` (a divergence candidate: UzPainter's verdicts against the new envelope must be
 re-established), or `unavailable` when the previous record or a blob cannot be read.
 
+`unstable` (decision 032) is Painter's own save/reopen instability, not drift: the reference
+recording (the previous record's first, `r1`) is equal across envelopes, and every output that
+differs in a later recording already differed between the previous envelope's `r1` and that
+recording. The golden lists those recordings in `unstable_recordings` and carries the previous
+envelope's own `r1~rN` pair as evidence; it is not a divergence candidate.
+
 Consequences derived here, never decided here:
 
 - `fits_to_recheck`: every `parity/semantics/*.json` fit is re-checked against a new envelope
@@ -26,6 +32,7 @@ from tools.parity.envelope.compare import (
     DIFFERS,
     EQUAL,
     UNAVAILABLE,
+    PairComparison,
     RecordSource,
     SourceUnavailable,
     compare_recordings,
@@ -35,6 +42,7 @@ from tools.parity.schemas import REPO_ROOT, load_json
 DRIFT_SCHEMA = "uzpainter/parity/oracle-envelope-drift/1"
 SEMANTICS_GOLDENS = "tier0/semantics/"
 UNCHANGED, CHANGED, NEW, MISSING = "unchanged", "changed", "new", "missing"
+UNSTABLE = "unstable"
 
 
 @dataclass(frozen=True)
@@ -55,6 +63,7 @@ def golden_drift(item: DriftInput) -> dict[str, Any]:
         "tier": item.tier,
         "status": UNCHANGED,
         "changed_recordings": [],
+        "unstable_recordings": [],
         "pairs": [],
         "differing_outputs": [],
     }
@@ -68,6 +77,8 @@ def golden_drift(item: DriftInput) -> dict[str, Any]:
     result["previous_record_sha256"] = item.previous.record_sha256
     old_ids, new_ids = item.previous.recording_ids(), item.current.recording_ids()
     changed: list[str] = sorted(set(old_ids) ^ set(new_ids))
+    reference, reference_equal = (old_ids[0] if old_ids else ""), False
+    unstable: dict[str, dict[str, Any]] = {}
     unavailable = False
     for recording_id in [r for r in old_ids if r in new_ids]:
         try:
@@ -82,16 +93,52 @@ def golden_drift(item: DriftInput) -> dict[str, Any]:
         summary["left"], summary["right"] = f"previous.{recording_id}", f"new.{recording_id}"
         result["pairs"].append(summary)
         result["differing_outputs"] += [{"pair": label, **o} for o in pair.differing_outputs()]
+        if recording_id == reference:
+            reference_equal = pair.status == EQUAL and not pair.unpaired
+        elif pair.status == DIFFERS and not pair.unpaired:
+            within = previous_instability(item.previous, reference, recording_id)
+            drifted = {o.output_id for o in pair.outputs if o.status != EQUAL}
+            if within is not None and drifted <= differing_ids(within):
+                evidence = within.summary()
+                evidence["left"] = f"previous.{within.left}"
+                evidence["right"] = f"previous.{within.right}"
+                unstable[recording_id] = evidence
+                continue
         if pair.status == DIFFERS or pair.unpaired:
             changed.append(recording_id)
         elif pair.status == UNAVAILABLE:
             unavailable = True
+    if reference_equal:
+        result["pairs"] += [unstable[r] for r in sorted(unstable)]
+    else:  # instability is judged against an unchanged reference only
+        changed += list(unstable)
+        unstable = {}
     result["changed_recordings"] = sorted(set(changed))
+    result["unstable_recordings"] = sorted(unstable)
     if result["changed_recordings"]:
         result["status"] = CHANGED
     elif unavailable:
         result["status"] = UNAVAILABLE
+    elif unstable:
+        result["status"] = UNSTABLE
     return result
+
+
+def previous_instability(
+    previous: RecordSource, reference: str, recording_id: str
+) -> PairComparison | None:
+    """The previous envelope's own reference-against-recording pair, or None when unreadable."""
+    condition = previous.recording(recording_id).get("condition")
+    category = "save_reopen" if condition == "after_save_reopen" else "same_session"
+    try:
+        pair = compare_recordings(previous, reference, previous, recording_id, category)
+    except SourceUnavailable:
+        return None
+    return None if pair.status == UNAVAILABLE else pair
+
+
+def differing_ids(pair: PairComparison) -> set[str]:
+    return {o.output_id for o in pair.outputs if o.status == DIFFERS}
 
 
 def fits_to_recheck(changed: set[str], repo_root: Path = REPO_ROOT) -> list[dict[str, Any]]:
@@ -131,7 +178,7 @@ def drift_document(
     goldens = [golden_drift(item) for item in sorted(items, key=lambda i: i.golden_id)]
     changed = {g["golden_id"] for g in goldens if g["status"] == CHANGED}
     summary: dict[str, int] = {"goldens": len(goldens)}
-    for status in (UNCHANGED, CHANGED, UNAVAILABLE, NEW, MISSING):
+    for status in (UNCHANGED, CHANGED, UNSTABLE, UNAVAILABLE, NEW, MISSING):
         summary[status] = sum(g["status"] == status for g in goldens)
     summary["equal_pairs"] = sum(p["status"] == EQUAL for g in goldens for p in g["pairs"])
     return {

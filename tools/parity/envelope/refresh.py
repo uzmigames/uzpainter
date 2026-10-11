@@ -13,8 +13,8 @@ Detection (`detect`, `ensure_current`): read the running Painter build and envir
 Refresh = transaction:
 
 1. A candidate envelope is entered in the registry (its build becomes recordable; the current
-   envelope stays current). Its private ledger is `<work>/envelopes/<id>/candidate.json`; its runs
-   go to `<inbox>/envelopes/<id>/`.
+   envelope stays current). Its private ledger is `<work>/envelopes/<dir>/candidate.json`; its
+   runs go to `<inbox>/envelopes/<dir>/` (`<dir>`: `registry.envelope_directory(<id>)`).
 2. The canary goldens first, then every other Tier 0-2b golden of the current envelope, each
    recorded by its own recorder command under the candidate build, always in full (no aliasing,
    even when the canary shows no drift). The canary's drift is published as soon as it is
@@ -22,12 +22,12 @@ Refresh = transaction:
 3. The running build and session are verified before every call that is not a readiness poll,
    the host environment before every golden and at the end, and every run's record is checked
    for the candidate's build and envelope. Any change, or an identity that cannot be verified,
-   aborts the candidate: its partial outputs move to `<work>/quarantine/<id>/`, the registry
+   aborts the candidate: its partial outputs move to `<work>/quarantine/<dir>/`, the registry
    records why, and detection restarts against the new build.
 4. Promotion only when every golden is recorded and the runs are consistent and schema-valid,
    the corpus drift report (unchanged / changed per golden) is published, and the private store
    is available: the runs are admitted with the store's `record --run` into the candidate's
-   manifests (`parity/envelopes/<id>/manifests/`), then the registry is replaced in one atomic
+   manifests (`parity/envelopes/<dir>/manifests/`), then the registry is replaced in one atomic
    write (the commit point). Until then the previous envelope stays current; an interrupted
    candidate resumes from its ledger.
 """
@@ -55,6 +55,7 @@ from tools.parity.envelope.registry import (
     candidate_manifest_root,
     corpus_manifests,
     envelope,
+    envelope_directory,
     envelope_id_for,
     load_registry,
     manifest_root,
@@ -173,11 +174,12 @@ def quarantine(
     """Move a candidate's partial outputs to the private quarantine and drop it from the
     registry, recording why. Nothing is deleted."""
     envelope_id = str(candidate_entry["envelope_id"])
-    target = work_root / "quarantine" / envelope_id
+    directory = envelope_directory(envelope_id)
+    target = work_root / "quarantine" / directory
     target.mkdir(parents=True, exist_ok=True)
     for name, source in (
-        ("work", work_root / "envelopes" / envelope_id),
-        ("inbox", inbox_root / "envelopes" / envelope_id),
+        ("work", work_root / "envelopes" / directory),
+        ("inbox", inbox_root / "envelopes" / directory),
     ):
         if source.exists():
             destination = target / name
@@ -228,16 +230,16 @@ def open_candidate(
         existing = None
     current = envelope(registry, registry["current"])
     if existing is not None:
-        work = work_root / "envelopes" / existing["envelope_id"]
+        work = work_root / "envelopes" / envelope_directory(existing["envelope_id"])
         ledger_path = work / "candidate.json"
         if ledger_path.is_file():
             return Candidate(
                 existing,
                 load_json(ledger_path),
                 work,
-                inbox_root / "envelopes" / existing["envelope_id"],
+                inbox_root / "envelopes" / envelope_directory(existing["envelope_id"]),
             )
-        entry = existing
+        entry = existing  # no ledger in its directory: the candidate starts afresh there
     else:
         entry = {
             "envelope_id": envelope_id_for(identity.build_id, identity.environment, registry),
@@ -277,8 +279,8 @@ def open_candidate(
     candidate = Candidate(
         dict(entry),
         ledger,
-        work_root / "envelopes" / entry["envelope_id"],
-        inbox_root / "envelopes" / entry["envelope_id"],
+        work_root / "envelopes" / envelope_directory(entry["envelope_id"]),
+        inbox_root / "envelopes" / envelope_directory(entry["envelope_id"]),
     )
     candidate.save()
     return candidate

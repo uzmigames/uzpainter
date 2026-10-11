@@ -165,10 +165,15 @@
       "properties": {
         "golden_id": { "$ref": "#/$defs/id" },
         "tier": { "enum": ["0", "1", "2a", "2b"] },
-        "status": { "enum": ["unchanged", "changed", "unavailable", "new", "missing"] },
+        "status": { "enum": ["unchanged", "changed", "unstable", "unavailable", "new", "missing"] },
         "previous_record_sha256": { "$ref": "#/$defs/sha256" },
         "record_sha256": { "$ref": "#/$defs/sha256" },
         "changed_recordings": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "unstable_recordings": {
+          "description": "Recordings whose drift is Painter's save/reopen instability (decision 032): the reference recording is equal across envelopes and every differing output already differed between the previous envelope's reference and this recording.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" }
+        },
         "pairs": { "type": "array", "items": { "$ref": "#/$defs/pair" } },
         "differing_outputs": { "type": "array", "items": { "$ref": "#/$defs/output_difference" } }
       }

@@ -26,7 +26,9 @@ import pytest
 from tools.parity.envelope import canary as canary_module
 from tools.parity.envelope.backfill import backfill
 from tools.parity.envelope.canary import CANARY
+from tools.parity.envelope.compare import RecordSource, normalise_text, normalised
 from tools.parity.envelope.corpus import recorder_kind
+from tools.parity.envelope.drift import DriftInput, golden_drift
 from tools.parity.envelope.refresh import (
     CURRENT_OUTCOME,
     EQUIVALENT,
@@ -36,6 +38,9 @@ from tools.parity.envelope.refresh import (
     ensure_current,
 )
 from tools.parity.envelope.registry import (
+    candidate_manifest_root,
+    envelope_directory,
+    envelope_id_for,
     initial_registry,
     load_registry,
     recordable_builds,
@@ -50,6 +55,7 @@ from tools.parity.recorder.environment import (
     UNKNOWN,
     colour_configuration_sha256,
     envelope_match,
+    envelope_sha256,
     environment_record,
     environment_sha256,
     recorder_version,
@@ -64,7 +70,7 @@ from tools.parity.recorder.session import (
     RecorderError,
     UnseenBuild,
 )
-from tools.parity.recorder.texture import record_texture_golden
+from tools.parity.recorder.texture import file_url, record_texture_golden
 from tools.parity.schemas import (
     REPO_ROOT,
     Schema,
@@ -490,9 +496,8 @@ def test_complete_refresh_promotes_atomically_and_keeps_history(
     assert drift["divergence_candidates"] == [] and not drift["new_evaluator_profile_needed"]
     assert recordable_builds(repo.root) == frozenset({"12.1.5+js-api.1.1.21"})
     # A candidate's run can never be admitted under the previous envelope's build.
-    run = next(
-        (repo.inbox / "envelopes" / new_id / "tier0__recorder-sample__plane-0").rglob(RECORD_FILE)
-    ).parent
+    inbox = repo.inbox / "envelopes" / envelope_directory(new_id)
+    run = next((inbox / "tier0__recorder-sample__plane-0").rglob(RECORD_FILE)).parent
     with pytest.raises(StoreError, match="build differs"):
         record_run(repo.store, repo.manifests[0], run)
     assert "painter-12.1.5+js-api.1.1.21" in render(repo.root)
@@ -522,9 +527,9 @@ def test_build_change_mid_refresh_aborts_quarantines_and_restarts(
     (quarantined,) = registry["quarantine"]
     assert quarantined["envelope_id"] == "painter-12.1.5+js-api.1.1.21"
     assert "changed" in quarantined["reason"]
-    kept = repo.work / "quarantine" / "painter-12.1.5+js-api.1.1.21"
+    kept = repo.work / "quarantine" / "painter-12.1.5_js-api.1.1.21"
     assert (kept / "work" / "candidate.json").is_file() and (kept / "work" / "runs").is_dir()
-    assert not (repo.root / "parity" / "envelopes" / "painter-12.1.5+js-api.1.1.21").exists()
+    assert not (repo.root / "parity" / "envelopes" / "painter-12.1.5_js-api.1.1.21").exists()
 
 
 def test_abort_without_restart_leaves_the_previous_envelope_current(
@@ -561,15 +566,78 @@ def test_partial_refresh_keeps_the_previous_envelope_and_resumes(
     registry = load_registry(repo.root)
     assert registry["current"] == f"painter-{OLD_BUILD}"
     assert registry["candidate"]["envelope_id"] == "painter-12.1.5+js-api.1.1.21"
-    ledger = load_json(repo.work / "envelopes" / "painter-12.1.5+js-api.1.1.21" / "candidate.json")
+    ledger = load_json(repo.work / "envelopes" / "painter-12.1.5_js-api.1.1.21" / "candidate.json")
     first = ledger["goldens"]["tier0/recorder-sample/plane-0"]["run"]
     w.export_hook = None
     assert repo.ensure(transport).outcome == PROMOTED
-    ledger = load_json(repo.work / "envelopes" / "painter-12.1.5+js-api.1.1.21" / "candidate.json")
+    ledger = load_json(repo.work / "envelopes" / "painter-12.1.5_js-api.1.1.21" / "candidate.json")
     assert (
         ledger["goldens"]["tier0/recorder-sample/plane-0"]["run"] == first
     )  # resumed, not re-recorded
     assert load_registry(repo.root)["current"] == "painter-12.1.5+js-api.1.1.21"
+
+
+def test_envelope_directories_pass_the_file_url_rule(tmp_path: Path) -> None:
+    """A Painter build string holds `+`; paths named after its envelope must still give a bake's
+    staged mesh a file URL without percent-encoding (the recorder refuses one that needs it)."""
+    envelope_id = "painter-12.1.5+js-api.1.1.20"
+    directory = envelope_directory(envelope_id)
+    assert directory == "painter-12.1.5_js-api.1.1.20"
+    assert candidate_manifest_root(envelope_id) == f"parity/envelopes/{directory}/manifests"
+    staged = Path(
+        "runs", "phase0__normal-convention__hemisphere-0", "inputs", "hemisphere-high.obj"
+    )
+    for root in (tmp_path / "work", tmp_path / "inbox"):
+        file_url(root / "envelopes" / directory / staged)
+        file_url(root / "quarantine" / directory / staged)
+    file_url(REPO_ROOT / candidate_manifest_root(envelope_id) / "tier0" / "x.json")
+    with pytest.raises(RecorderError, match="percent-encoding"):
+        file_url(tmp_path / "work" / "envelopes" / envelope_id / staged)
+    # No two envelopes of one registry share a directory.
+    registry = initial_registry(OLD_BUILD, "12.1.0", "parity/manifests", "2026-10-10")
+    registry["quarantine"].append(
+        {
+            "envelope_id": "painter-12.1.5_js-api.1.1.20",
+            "painter_build": "12.1.5_js-api.1.1.20",
+            "reason": "x",
+            "quarantined_on": "2026-10-11",
+        }
+    )
+    minted = envelope_id_for("12.1.5+js-api.1.1.20", dict(HOST_A), registry)
+    assert minted.startswith(f"{envelope_id}-env-") and envelope_directory(minted) != directory
+
+
+def test_open_candidate_without_a_ledger_in_its_directory_starts_there(
+    repo: Repo, fake: types.ModuleType
+) -> None:
+    """A candidate entered before ids were mapped to directories (its ledger under the raw id)
+    is recorded afresh in its directory; the raw-id directory is left as it is."""
+    candidate_id = "painter-12.1.5+js-api.1.1.21"
+    w = world(fake, "12.1.5", "1.1.21")
+    found = detect(repo.session(w), repo.root)
+    assert found.identity.environment is not None
+    registry = load_registry(repo.root)
+    registry["candidate"] = {
+        "envelope_id": candidate_id,
+        "painter_build": "12.1.5+js-api.1.1.21",
+        "painter_version": "12.1.5",
+        "record_prefix": "",
+        "envelope_sha256": envelope_sha256(found.identity.environment),
+        "previous": registry["current"],
+        "started_on": "2026-10-11",
+    }
+    save_registry(registry, repo.root)
+    raw = repo.work / "envelopes" / candidate_id
+    raw.mkdir(parents=True)
+    old_ledger = {"envelope_id": candidate_id, "goldens": {}}
+    (raw / "candidate.json").write_text(json.dumps(old_ledger), encoding="utf-8")
+    assert repo.ensure(fake.LocalTransport(w)).outcome == PROMOTED
+    assert load_registry(repo.root)["current"] == candidate_id
+    ledger = load_json(
+        repo.work / "envelopes" / envelope_directory(candidate_id) / "candidate.json"
+    )
+    assert ledger["envelope_id"] == candidate_id and len(ledger["goldens"]) == 2
+    assert load_json(raw / "candidate.json") == old_ledger
 
 
 def test_same_build_other_environment_runs_the_canary(
@@ -766,7 +834,10 @@ def test_launcher_starts_with_remote_scripting_and_closes_the_project_first(
     launcher.start()
     assert painter.process.alive
     session = PainterSession(
-        painter, sleep=lambda s: None, allowed_builds=lambda: frozenset({OLD_BUILD})
+        painter,
+        sleep=lambda s: None,
+        allowed_builds=lambda: frozenset({OLD_BUILD}),
+        host_environment=lambda: dict(HOST_A),
     )
     session.connect()
     painter.world.project_open = True
@@ -819,3 +890,67 @@ def test_every_texture_golden_has_a_recorder_command() -> None:
             kinds[manifest["golden_id"]] = recorder_kind(manifest)
     assert set(kinds.values()) == {"texture", "probe", "defaults", "templates"}
     assert kinds["tier0/api-probes/mask-stack"] == "probe"
+
+
+# --- drift: environment-identity normalisation and save/reopen instability --------------------
+
+
+def test_drift_normaliser_strips_environment_identity_only() -> None:
+    shipped = "resource://starter_assets/mg_position/mg_position?version={}.sbsar"
+    imported = "resource://project3/field-a?version={}.image"
+    old = {"resource": {"context": "project42", "url": shipped.format("1" * 40)}}
+    new = {"resource": {"context": "project16", "url": shipped.format("2" * 40)}}
+    # The per-session resource context and an installed asset's version are identities.
+    assert normalised(old) == normalised(new)
+    # What Painter computes, and the content version of a resource the golden imports, are not.
+    assert normalised({"label": "Skew base normal"}) != normalised({"label": "Skew correction"})
+    assert normalised({"value": 0.5}) != normalised({"value": 0.25})
+    assert normalised({"context": "Untitled"}) == {"context": "Untitled"}
+    assert normalise_text(imported.format("1" * 40)) != normalise_text(imported.format("2" * 40))
+
+
+def drift_source(label: str, recordings: dict[str, dict[str, Any]]) -> RecordSource:
+    record = {
+        "recordings": [
+            {
+                "recording_id": rid,
+                "condition": "same_session" if rid == "r1" else "after_save_reopen",
+                "outputs": [
+                    {"output_id": oid, "kind": "api_readback", "value": value}
+                    for oid, value in outputs.items()
+                ],
+            }
+            for rid, outputs in recordings.items()
+        ]
+    }
+    return RecordSource(record, label * 64, lambda _sha, _size: None, label)
+
+
+def test_drift_classifies_save_reopen_instability_apart_from_drift() -> None:
+    previous = drift_source("a", {"r1": {"x": 1, "y": 1}, "r2": {"x": 2, "y": 1}})
+    # r1 equal across builds; r2 differs only where the previous build's r1~r2 already differed.
+    unstable = golden_drift(
+        DriftInput(
+            "g", "0", previous, drift_source("b", {"r1": {"x": 1, "y": 1}, "r2": {"x": 3, "y": 1}})
+        )
+    )
+    assert unstable["status"] == "unstable" and unstable["unstable_recordings"] == ["r2"]
+    assert unstable["changed_recordings"] == []
+    assert ("previous.r1", "previous.r2", "differs") in {
+        (p["left"], p["right"], p["status"]) for p in unstable["pairs"]
+    }
+    # r2 differs in an output the previous build reproduced: drift.
+    drifted = golden_drift(
+        DriftInput(
+            "g", "0", previous, drift_source("b", {"r1": {"x": 1, "y": 1}, "r2": {"x": 2, "y": 5}})
+        )
+    )
+    assert drifted["status"] == "changed" and drifted["changed_recordings"] == ["r2"]
+    # The reference itself changed: every differing recording is drift.
+    moved = golden_drift(
+        DriftInput(
+            "g", "0", previous, drift_source("b", {"r1": {"x": 1, "y": 7}, "r2": {"x": 3, "y": 1}})
+        )
+    )
+    assert moved["status"] == "changed" and moved["changed_recordings"] == ["r1", "r2"]
+    assert moved["unstable_recordings"] == []

@@ -13,6 +13,8 @@ Offline commands, and the build check of the local parity gate:
                                                      4 superseded build, 2 Painter unreachable
     python -m tools.parity.envelope status
     python -m tools.parity.envelope report
+    python -m tools.parity.envelope drift [--envelope <id>]   rebuild an envelope's corpus drift
+                                                     report from the private store
     python -m tools.parity.envelope study-analyse <study dir>
     python -m tools.parity.envelope backfill <manifest or dir>... [--known field=value] [--dry-run]
 """
@@ -27,11 +29,15 @@ from pathlib import Path
 
 from tools.parity.envelope import refresh as refreshing
 from tools.parity.envelope.backfill import BackfillError, backfill
-from tools.parity.envelope.canary import drift_free, run_canary
+from tools.parity.envelope.canary import drift_free, previous_source, run_canary
+from tools.parity.envelope.compare import SourceUnavailable, store_source
 from tools.parity.envelope.corpus import manifests_under
+from tools.parity.envelope.drift import DriftInput, drift_document, tier3_goldens
 from tools.parity.envelope.registry import (
     RegistryError,
+    corpus_manifests,
     current_envelope,
+    envelope,
     load_registry,
     manifest_root,
     recordable_builds,
@@ -231,6 +237,43 @@ def status() -> int:
     return 0
 
 
+def recompute_drift(store: OracleStore, envelope_id: str | None) -> Path:
+    """Rebuild a promoted envelope's corpus drift report offline: both envelopes' goldens are
+    read from the private store by their manifests (nothing is re-recorded). The report keeps
+    its path, so the registry's `drift_report` pointer stays valid."""
+    registry = load_registry()
+    new = envelope(registry, envelope_id or registry["current"])
+    if new["previous"] is None:
+        raise RegistryError(f"{new['envelope_id']} has no previous envelope to drift against")
+    previous = envelope(registry, new["previous"])
+    old_root, new_root = manifest_root(previous), manifest_root(new)
+    items: list[DriftInput] = []
+    for path in corpus_manifests(previous):
+        manifest = load_json(path)
+        relative = path.relative_to(old_root)
+        old, error = previous_source(store, path, previous["record_prefix"])
+        try:
+            current = store_source(
+                store, new_root / relative, f"{new['record_prefix']}golden-record"
+            )
+        except (SourceUnavailable, OSError):
+            current = None
+        items.append(DriftInput(str(manifest["golden_id"]), manifest["tier"], old, current, error))
+    document = drift_document(
+        "corpus",
+        new,
+        previous,
+        items,
+        tier3_goldens(corpus_manifests(previous, tiers=frozenset({"3"}))),
+        datetime.now(UTC).date(),
+    )
+    path = drift_path("corpus", new["envelope_id"])
+    write_json(path, document)
+    write_report()
+    print("drift: " + ", ".join(f"{k} {v}" for k, v in document["summary"].items()))
+    return path
+
+
 def parse_known(values: Sequence[str]) -> dict[str, str]:
     known: dict[str, str] = {}
     for value in values:
@@ -249,6 +292,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     commands.add_parser("status", help="print the envelope registry")
     commands.add_parser("report", help="regenerate parity/reports/phase0/oracle-envelope.md")
+    drift = commands.add_parser(
+        "drift", help="rebuild an envelope's corpus drift report from the private store"
+    )
+    drift.add_argument("--envelope", default=None, help="envelope id (default: the current one)")
     analyse = commands.add_parser("study-analyse", help="re-analyse a study from its ledger")
     analyse.add_argument("directory", type=Path)
     fill = commands.add_parser("backfill", help="back-fill environment records")
@@ -272,6 +319,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if store is None:
             print("refused: no private store on this machine", file=sys.stderr)
             return 1
+        if args.command == "drift":
+            print(f"drift report: {recompute_drift(store, args.envelope)}")
+            return 0
         done = backfill(
             store, manifests_under(list(args.paths)), parse_known(args.known), dry_run=args.dry_run
         )
