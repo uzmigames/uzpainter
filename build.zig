@@ -37,7 +37,9 @@
 //!   `zig build uzp-store-save-tests` `uzp-store-save-tests.exe`, the save, retention, compaction
 //!   and lock tests (`tests/store/save_test.cpp`); `zig build uzp-store-inspect-tests`
 //!   `uzp-store-inspect-tests.exe`, the inspect, export-bundle and census tests
-//!   (`tests/store/inspect_test.cpp`); `UzPainter.exe` links the store for its `inspect`,
+//!   (`tests/store/inspect_test.cpp`); `zig build uzp-store-settle-tests`
+//!   `uzp-store-settle-tests.exe`, the settling evidence of 09 §7 end to end
+//!   (`tests/store/settle_test.cpp`); `UzPainter.exe` links the store for its `inspect`,
 //!   `export-bundle` and `store-census` commands
 //! - `zig build mesh-tests`   `uzp-mesh-tests.exe`: the mesh importers (`src/mesh/` with ufbx,
 //!   fastgltf and simdjson, the static library `uzp_mesh`, with the MikkTSpace tangents and the
@@ -1047,6 +1049,34 @@ pub fn build(b: *std.Build) void {
     const store_inspect_tests_step = b.step("uzp-store-inspect-tests", "Build the native inspect, bundle and census tests of the project store");
     store_inspect_tests_step.dependOn(&b.addInstallArtifact(store_inspect_tests_exe, .{}).step);
     b.getInstallStep().dependOn(store_inspect_tests_step);
+
+    // The settling evidence of 09 §7 end to end (phase1.8_project-store): its own test executable
+    // with the same hooked store sources.
+    const store_settle_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addStoreSources(b, store_settle_tests_mod, &store_hook_flags);
+    store_settle_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{store_fault_source},
+        .flags = &store_hook_flags,
+    });
+    store_settle_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/store"),
+        .files = &.{"settle_test.cpp"},
+        .flags = &store_hook_flags,
+    });
+    store_settle_tests_mod.linkLibrary(uzp_core_lib);
+    const store_settle_tests_exe = b.addExecutable(.{
+        .name = "uzp-store-settle-tests",
+        .root_module = store_settle_tests_mod,
+    });
+    const store_settle_tests_step = b.step("uzp-store-settle-tests", "Build the native settling-evidence tests of the project store (09 §7)");
+    store_settle_tests_step.dependOn(&b.addInstallArtifact(store_settle_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(store_settle_tests_step);
     app_mod.linkLibrary(store_lib);
 
     // ── The compositor (phase1.5_compositor-tile-dag) ─────────────────────────────────────────
