@@ -2,7 +2,7 @@
 
 `phase1.11_compositor-blend-gaps` follows up the modes that `phase1.10_compositor-blend-kernels` left inexact. It is part of P1-COMPOSITOR (`docs/architecture/04-layer-stack-and-compositing.md` §3).
 
-Under decision 028, the Tier 0 comparisons against the private oracle store and the GPU checks run locally on the owner's machine, and this report is their evidence. It gives numbers and hashes only; every recorded Painter output stays in the private store. Decisions 046 and 047 record the choices below and the model panel's verdicts.
+Under decision 028, the Tier 0 comparisons against the private oracle store and the GPU checks run locally on the owner's machine, and this report is their evidence. It gives numbers and hashes only; every recorded Painter output stays in the private store. Decisions 053 and 054 record the choices below and the model panel's verdicts.
 
 **Result:**
 
@@ -13,7 +13,7 @@ Under decision 028, the Tier 0 comparisons against the private oracle store and 
   - The grey (L16) and sRGB8 channels are exact.
   - The float32 operation order of Painter's hue is not identified, so the four modes stay release gaps.
   - §3.3 specifies a recording that would pin it down.
-- **PassThrough stays a release gap (decision 047).** Its golden is reachable only through Painter's UI. `phase0.7_tier0-semantics-ui-cases` item 2.4 records it to the specification in §4.
+- **PassThrough stays a release gap (decision 054).** Its golden is reachable only through Painter's UI. `phase0.7_tier0-semantics-ui-cases` item 2.4 records it to the specification in §4.
 - The GPU equals the CPU bit for bit for every mode.
 
 ## 1. Run record
@@ -200,11 +200,11 @@ The recording follows the Tier 0 rules of every blend sweep: `uzpainter parity r
 
 **Then:** fit the hue on s0 User0 (the weights read directly), validate on s1-s4 and on `blend-component`, and implement on the CPU and the GPU (items 2.1, 2.4, 3.1).
 
-## 4. PassThrough (item 2.3, decision 047)
+## 4. PassThrough (item 2.3, decision 054)
 
 Painter 12.1.0's runtime has no `BlendingMode.PassThrough` member, so the documented API cannot set the mode and no golden exists. The mode is reachable through the UI.
 
-**Decision 047:**
+**Decision 054:**
 
 - PassThrough is not `not_migratable`. It stays `release-gap`, and the hypothesis implementation stays: children composite into the enclosing list, with opacities scaled by the group's.
 - The golden is recorded by `phase0.7_tier0-semantics-ui-cases` item 2.4 through UI automation (decision 029). That item was already scoped there.

@@ -1,4 +1,4 @@
-# 46. The normal-map opacity rotation uses the recording GPU's GLSL arcsine and measured sine and cosine tables
+# 53. The normal-map opacity rotation uses the recording GPU's GLSL arcsine and measured sine and cosine tables
 
 **Status**: accepted
 **Date**: 2026-10-11

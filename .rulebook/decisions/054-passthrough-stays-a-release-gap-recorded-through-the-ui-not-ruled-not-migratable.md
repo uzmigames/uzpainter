@@ -1,4 +1,4 @@
-# 47. PassThrough stays a release gap recorded through the UI, not ruled not_migratable
+# 54. PassThrough stays a release gap recorded through the UI, not ruled not_migratable
 
 **Status**: accepted
 **Date**: 2026-10-11
