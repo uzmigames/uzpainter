@@ -212,19 +212,19 @@ def test_identical_references_report_zero_run_to_run_difference() -> None:
     assert rows[2].startswith("| `x` | interior |")
 
 
-def test_noise_sigma_estimates_agree_on_white_noise() -> None:
+def test_noise_sigma_covers_nested_and_independent_k_renders() -> None:
     rng = np.random.default_rng(7)
-    truth = np.full((256, 256, 3), 0.5)
     sigma, k = 0.01, 4
-    images = {
-        "s-a": truth + rng.normal(0, sigma, truth.shape),
-        "s-b": truth + rng.normal(0, sigma, truth.shape),
-        "k-c": truth + rng.normal(0, sigma / math.sqrt(k), truth.shape),
-    }
+    first = rng.normal(0, sigma, (256, 256, 3))
+    rest = rng.normal(0, sigma / math.sqrt(k - 1), first.shape)
+    nested = (first + (k - 1) * rest) / k  # the k*S render continues the S sequence
+    independent = rng.normal(0, sigma / math.sqrt(k), first.shape)
     conditions = {"s-a": SEPARATE_SESSION, "s-b": SEPARATE_SESSION, "k-c": K_TIMES_SAMPLES}
-    estimate = noise_terms(images, conditions, masks_of(256), k)["s_render_sigma"]["background"]
-    assert estimate["from_run_to_run"] == pytest.approx(sigma, rel=0.02)
-    assert estimate["from_mc_error"] == pytest.approx(sigma, rel=0.02)
+    for k_render, case in ((nested, "nested"), (independent, "independent")):
+        images = {"s-a": 0.5 + first, "s-b": 0.5 + first, "k-c": 0.5 + k_render}
+        terms = noise_terms(images, conditions, masks_of(256), k)
+        assert terms["s_render_sigma"]["background"][case] == pytest.approx(sigma, rel=0.02)
+        assert terms["bit_identical_run_to_run"] is True
 
 
 def test_report_blocks_are_replaced_in_place() -> None:
