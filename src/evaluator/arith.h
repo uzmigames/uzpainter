@@ -58,10 +58,11 @@ namespace uzp::evaluator::arith {
 /// reciprocal and SoftLight takes the hardware square root (hwmath.h).
 [[nodiscard]] float BlendKernel(core::BlendingMode mode, float a, float b);
 /// r of a colour mode for the lower colour `a` and the upper colour `b` (`channels` 1 or 3).
-/// Three components: the component modes through HSV (hue, saturation or value of the upper
-/// colour, the value doubled), the normal-map modes on the decoded unit normals with the upper
-/// one first rotated toward (0, 0, 1) by `alpha` (whiteout for Combine, reoriented normal mapping
-/// for Detail and InverseDetail), encoded back as n / 2 + 1/2. One component (grey): Value and
+/// Three components: the component modes through the fitted HSV (hue, saturation or value of the
+/// upper colour, the value doubled; arith.cpp ComponentBlend), the normal-map modes on the decoded
+/// unit normals with the upper one first rotated toward (0, 0, 1) by `alpha` (arith.cpp
+/// TowardFlat; whiteout for Combine, reoriented normal mapping for Detail and InverseDetail),
+/// encoded back as n / 2 + 1/2. One component (grey): Value and
 /// the normal-map modes give `b`, Tint, Saturation and Color give `a`.
 [[nodiscard]] std::array<float, 3> BlendColour(core::BlendingMode mode, const std::array<float, 3>& a,
                                                const std::array<float, 3>& b, int channels, float alpha);
@@ -70,19 +71,8 @@ namespace uzp::evaluator::arith {
 /// (kernelgen.cpp writes them into `evaluator_tables.hlsli`).
 /// The saturation and hue epsilon of the HSV conversion (fitted: 2^-12).
 inline constexpr float kHsvEpsilon = 0.000244140625f;
-inline constexpr float kThird = 1.0f / 3.0f;
-inline constexpr float kTwoThirds = 2.0f / 3.0f;
+/// float32(pi / 2), the right angle of the normal-map rotation (t = pi/2 - asin z).
 inline constexpr float kHalfPi = 1.57079632679489661923f;
-/// asin(t) / t as a series in t^2: (2k)! / (4^k (k!)^2 (2k + 1)), k = 0..11.
-inline constexpr std::array<float, 12> kAsinSeries = {
-    1.0f, 1.0f / 6.0f, 3.0f / 40.0f, 15.0f / 336.0f, 105.0f / 3456.0f, 945.0f / 42240.0f,
-    10395.0f / 599040.0f, 135135.0f / 9676800.0f, 2027025.0f / 175472640.0f,
-    34459425.0f / 3530096640.0f, 654729075.0f / 78033715200.0f,
-    13749310575.0f / 1880240947200.0f};
-/// sin(x) / x as a series in x^2: (-1)^k / (2k + 1)!, k = 0..8.
-inline constexpr std::array<float, 9> kSinSeries = {
-    1.0f, -1.0f / 6.0f, 1.0f / 120.0f, -1.0f / 5040.0f, 1.0f / 362880.0f, -1.0f / 39916800.0f,
-    1.0f / 6227020800.0f, -1.0f / 1307674368000.0f, 1.0f / 355687428096000.0f};
 
 // ── Storage ──────────────────────────────────────────────────────────────────
 
@@ -195,6 +185,15 @@ struct LevelsComponent {
 /// coverage-weighted order (CompositeInput); otherwise, with a transparent backdrop, the source
 /// as it is (W3C §5.1: no blending against nothing), and the general formula of W3C §5.1 with
 /// straight colours.
+///
+/// `PassThrough` (the composite of a pass-through group, phase1.11): `src` is the group's result,
+/// its children composited onto a copy of this backdrop, and t = opacity x mask moves the
+/// backdrop toward it: over an opaque backdrop v = fma(s - a, t, a) (one rounding, `group-
+/// passthrough-masks`); over a transparent one the source with alpha t x src alpha; otherwise
+/// the premultiplied lerp, alpha fma(alpha_s - alpha_b, t, alpha_b) (not recorded). The profile's
+/// `coverageWeights` does not apply to this mix.
 [[nodiscard]] std::array<float, 4> Composite(const CompositeInput& in);
+/// The modes a BlendOp may carry: every mode with a kernel, and PassThrough (a group composite).
+[[nodiscard]] bool HasComposite(core::BlendingMode mode);
 
 }  // namespace uzp::evaluator::arith

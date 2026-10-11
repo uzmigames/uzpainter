@@ -71,12 +71,19 @@ def references(store: OracleStore | None) -> dict[str, References]:
 
 
 def display_part(refs: dict[str, References]) -> dict[str, Any]:
+    """Lattice statistics of the interior codes: all renders together, and per golden and
+    S recording (`r1`, `r2`)."""
     images: list[F64] = []
-    for ref in refs.values():
+    per_golden: dict[str, Any] = {}
+    for name, ref in refs.items():
         mask = ref.regions["interior"]
         for image in (*ref.s, ref.k):
             images.append(image[mask].astype(np.float64))
-    return {"interior": display.lattice_statistics(images)}
+        per_golden[name] = {
+            label: display.lattice_statistics([s[mask].astype(np.float64)])
+            for label, s in zip(("r1", "r2"), ref.s, strict=True)
+        }
+    return {"interior": display.lattice_statistics(images), "per_golden": per_golden}
 
 
 def stability_part(refs: dict[str, References]) -> dict[str, Any]:

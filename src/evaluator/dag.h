@@ -12,10 +12,11 @@
 // channel is active on it; a group composites its visible children from a transparent start
 // into an isolated intermediate and that intermediate is blended with the group's mode and
 // opacity (Painter's default group mode behaves so, Tier 0 `group-masks`: the default-mode group
-// equals the `Normal` group texel for texel); a `PassThrough` group composites its children
-// directly into the accumulator (the children's opacities scaled by the group's; a documented
-// mode that Painter 12.1.0's API cannot set, so a hypothesis until phase0.7_tier0-semantics-ui-
-// cases records it); an instance layer evaluates its source layer in its own position.
+// equals the `Normal` group texel for texel); a `PassThrough` group composites its children onto
+// a copy of the accumulator below it, each child stored in the channel format, and moves the
+// accumulator toward that result by the group's opacity and mask, fma(g - a, t, a) (phase1.11,
+// Tier 0 `semantics-ui/group-passthrough-masks`: set through Painter's UI, the runtime member is
+// `Passthrough`); an instance layer evaluates its source layer in its own position.
 //
 // Fill sources (phase1.8_compositor-sources-projection, sources.h): uniform colours and bitmaps
 // under the `Fill` and `UV` projections (projection_uv.h), in `Split` source mode; a channel
@@ -34,7 +35,7 @@
 // Outside this profile (explicit `evaluator:unsupported_*` failures, the capability manifest's
 // release gaps): paint layers and effects, generator and filter effects (P3-PROC), compare-mask,
 // colour-selection and anchor effects (P4-NODES), `UVTile` geometry masks, content effects on a
-// group, a `PassThrough` group with a mask raster, `Material` source mode, procedural, vector,
+// group, `Material` source mode, procedural, vector,
 // font and reference sources, the 3D projections, symmetry, physical-size UV scale modes,
 // bilinear minification, OCIO colour management.
 
@@ -143,6 +144,9 @@ struct DagList {
     core::Id owner = core::kNoId;
     /// Composited from a transparent start (a group) or from the channel base (the root).
     bool isolated = false;
+    /// A PassThrough group's children: composited onto a copy of the enclosing accumulator below
+    /// the group (its tile format and coverage), not from a transparent start.
+    bool fromBackdrop = false;
     std::vector<DagLayer> layers;
     /// Hash of the start of the chain.
     Digest startHash{};

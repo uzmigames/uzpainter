@@ -163,7 +163,7 @@ render::Result<void> CpuTileStore::Blend(const BlendOp& op) {
         (op.mask.kind == Operand::Kind::Tile && mask == nullptr)) {
         return EvalFail(EvalErrorKind::Internal, "blend operand tile unknown");
     }
-    if (!arith::HasKernel(op.mode)) {
+    if (!arith::HasComposite(op.mode)) {
         return EvalFail(EvalErrorKind::UnsupportedBlendMode,
                         std::string(core::ToString(op.mode)) +
                             " has no blend kernel (a group placement)");

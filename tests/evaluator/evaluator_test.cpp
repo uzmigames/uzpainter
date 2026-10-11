@@ -54,6 +54,9 @@
 //   pow-hardware <assets> <work-dir>     measures the GPU's log2 and exp2 over the table domains of
 //                                        hwmath.h, writes the measured tables and compares them
 //                                        and hw::Log2/Exp2/Pow with the GPU
+//   trig-hardware <assets> <work-dir>    measures the GPU's sin and cos over the table domain of
+//                                        hwmath.h, writes the measured tables and compares them
+//                                        and hw::Sin/Cos with the GPU
 //   uv-coverage <assets> <work-dir> <mesh> <size>
 //                                        imports <mesh>, rasterises its UV tile and writes the
 //                                        texel-centre coverage (island-edge goldens)
@@ -156,6 +159,8 @@ std::string Hex32(uint32_t value) {
     std::snprintf(buffer, sizeof(buffer), "0x%08X", value);
     return buffer;
 }
+
+bool SameFloat(float a, float b);
 
 std::string KindName(const render::Error& error) {
     const std::optional<EvalErrorKind> kind = EvalErrorKindOf(error);
@@ -440,20 +445,22 @@ struct ModelValue {
 };
 
 /// `coverageWeights` and `fusedReadout`: the composite rules of a profile (arith.h
-/// CompositeInput); the first layer of an isolated list composites over its empty start.
+/// CompositeInput); the first layer of an isolated list composites over its empty start, or over
+/// `start` when given (a PassThrough group's children and composite: the accumulator below it).
 ModelValue ModelComposite(const std::vector<ModelLayer>& layers, const TileFormat& format,
                           std::array<float, 3> base, bool isolated, bool coverageWeights = false,
-                          bool fusedReadout = false) {
+                          bool fusedReadout = false, const std::optional<std::array<float, 4>>& start = std::nullopt) {
     TileFormat tileFormat = format;
     tileFormat.alpha = isolated;
-    std::array<float, 4> acc = isolated ? std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}
-                                        : std::array<float, 4>{base[0], base[1], base[2], 1.0f};
+    std::array<float, 4> acc = start ? *start
+                               : isolated ? std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}
+                                          : std::array<float, 4>{base[0], base[1], base[2], 1.0f};
     std::array<uint32_t, 3> stored{0, 0, 0};
     for (size_t i = 0; i < layers.size(); ++i) {
         const ModelLayer& layer = layers[i];
         arith::CompositeInput in;
         in.coverageWeights = coverageWeights;
-        in.emptyBackdrop = i == 0;
+        in.emptyBackdrop = i == 0 && !start;
         in.fusedReadout = fusedReadout;
         in.acc = acc;
         in.src = {layer.source[0], layer.source[1], layer.source[2], layer.sourceAlpha};
@@ -762,6 +769,36 @@ int RunArith() {
     Check(arith::Float32Readout(0.3f, 1.0f) == static_cast<float>(static_cast<float>(0.3f - 1.0f) + 1.0f) &&
               arith::Float32Store(0.3f) == 0.3f,
           "the 32-bit float store re-composites over the base");
+    // The recording GPU's GLSL asin (hwmath.h): input and result bits measured through an OpenGL
+    // 4.3 compute shader on the RTX 4090 (edges, the 0.57 branch point, then values uniform in
+    // [0, 1]); the polynomial was checked against every float32 of [0, 1] there.
+    constexpr uint32_t kGlslAsin[48][2] = {
+    {0x00000000u, 0x00000000u}, {0x80000000u, 0x00000000u}, {0x00000001u, 0x00000000u}, {0x80400000u, 0x00000000u},
+    {0x00800000u, 0x00800000u}, {0x3F11EB85u, 0x3F1B43F7u}, {0x3F11EB86u, 0x3F1B43FAu}, {0x3F000000u, 0x3F060A92u},
+    {0x3F800000u, 0x3FC90FDBu}, {0xBF800000u, 0xBFC90FDBu}, {0x3F7FFFFFu, 0x3FC9048Bu}, {0x3F800001u, 0x7FFFFFFFu},
+    {0xBE99999Au, 0xBE9C00ADu}, {0x3E800000u, 0x3E815F4Eu}, {0x3DCCCCCDu, 0x3DCD2494u}, {0x3F4CCCCDu, 0x3F6D6339u},
+    {0x3F666666u, 0x3F8F549Cu}, {0x3F7FF000u, 0x3FC63BC3u}, {0x33800000u, 0x33800000u}, {0x3A83126Fu, 0x3A831270u},
+    {0x3ED9AD16u, 0x3EE0D524u}, {0x3CBD80B4u, 0x3CBD8508u}, {0x3EA42578u, 0x3EA718CEu}, {0x3F39CCA5u, 0x3F4FEA1Du},
+    {0x3EE22069u, 0x3EEA35B0u}, {0x3E013260u, 0x3E018AC2u}, {0x3F6FF785u, 0x3F9B853Cu}, {0x3F515D8Bu, 0x3F7527A7u},
+    {0x3F2EA050u, 0x3F402C59u}, {0x3F24FFE2u, 0x3F334DECu}, {0x3D68C062u, 0x3D68E07Fu}, {0x3F2BA29Cu, 0x3F3C1CD8u},
+    {0x3F60D134u, 0x3F893992u}, {0x3F458D53u, 0x3F61A95Du}, {0x3EDE4CEDu, 0x3EE5F42Du}, {0x3F387FCAu, 0x3F4E0820u},
+    {0x3F28026Fu, 0x3F374464u}, {0x3F494C00u, 0x3F67A27Eu}, {0x3E87A1A2u, 0x3E89451Du}, {0x3E5263FEu, 0x3E53E650u},
+    {0x3F3711D2u, 0x3F4BFA67u}, {0x3F2CEA8Au, 0x3F3DD82Fu}, {0x3E101E01u, 0x3E1098E6u}, {0x3F6CC828u, 0x3F972611u},
+    {0x3DF09F0Eu, 0x3DF12DAAu}, {0x3EF715DCu, 0x3F00EC72u}, {0x3EE3C155u, 0x3EEC06CBu}, {0x3F754913u, 0x3FA3E5F5u},
+    };
+    std::string asinMiss;
+    for (const auto& [in, out] : kGlslAsin) {
+        const float ours = hw::Asin(std::bit_cast<float>(in));
+        if (!SameFloat(ours, std::bit_cast<float>(out)) && asinMiss.empty()) {
+            asinMiss = Hex32(in) + ": GLSL " + Hex32(out) + ", hw " + Hex32(std::bit_cast<uint32_t>(ours));
+        }
+    }
+    Check(asinMiss.empty(), "hw::Asin equals the recording GPU's GLSL asin on 48 measured inputs", asinMiss);
+    // The GPU's sine and cosine read the turn x float32(1 / (2 pi)), truncated, as a 2^-25
+    // fixed-point index.
+    Check(hw::TrigIndex(0.0f) == 0 && hw::TrigIndex(1.57079632679489661923f) == (1u << 23) - 1u &&
+              hw::Sin(0.0f) == 0.0f && hw::Cos(0.0f) == 1.0f,
+          "the sine and cosine tables cover [0, float32(pi / 2)] with 2^23 entries");
     return Finish();
 }
 
@@ -1002,7 +1039,8 @@ int RunOrder(const fs::path& assets) {
             Check(result && AllEqual(Samples(*result), 3, model.stored, detail),
                   "a group with default blending behaves as Normal at opacity 1", result ? detail : Describe(result));
         }
-        // PassThrough: the children composite directly into the stack, scaled by the group opacity.
+        // PassThrough: the children composite onto a copy of the stack below the group, and the
+        // group's opacity moves the stack toward that result (fma(g - a, t, a)).
         core::Layer passThrough = builder.Group("pass-through", {mul, screen},
                                                 Same(channels, BlendingMode::PassThrough, 0.75));
         passThrough.children[0].uid = builder.project.AllocateId();
@@ -1013,14 +1051,18 @@ int RunOrder(const fs::path& assets) {
             CpuEvaluator cpu(templates, kWideLimits);
             render::Result<ChannelResult> result = evaluate(builder, ChannelType::User0, cpu);
             const TileFormat rgb16 = TileFormatOf(ChannelFormat::RGB16);
+            const ModelValue inside = ModelComposite(
+                {ModelLayer{BlendingMode::Normal, 1.0f, operand(colourA, ChannelFormat::RGB16, base)},
+                 ModelLayer{BlendingMode::Multiply, 1.0f, operand(colourB, ChannelFormat::RGB16, base)},
+                 ModelLayer{BlendingMode::Screen, 0.5f, operand(colourC, ChannelFormat::RGB16, base)}},
+                rgb16, base, false);
             const ModelValue model = ModelComposite(
                 {ModelLayer{BlendingMode::Normal, 1.0f, operand(colourA, ChannelFormat::RGB16, base)},
-                 ModelLayer{BlendingMode::Multiply, 0.75f, operand(colourB, ChannelFormat::RGB16, base)},
-                 ModelLayer{BlendingMode::Screen, 0.5f * 0.75f, operand(colourC, ChannelFormat::RGB16, base)}},
+                 ModelLayer{BlendingMode::PassThrough, 0.75f, {inside.value[0], inside.value[1], inside.value[2]}}},
                 rgb16, base, false);
             std::string detail;
             Check(result && AllEqual(Samples(*result), 3, model.stored, detail),
-                  "a PassThrough group composites its children directly into the stack (opacities scaled by the group's)",
+                  "a PassThrough group composites its children onto the stack below it and mixes by its opacity",
                   result ? detail : Describe(result));
         }
         // Instance: A, then B, then an instance of A on top equals A, B, A.
@@ -1478,6 +1520,62 @@ int RunProfile(const fs::path& assets) {
                   modelOf(ChannelFormat::sRGB8, *weights, lowColours, lowOpacities),
           "painter-12.1-isolated-half-alpha and painter-12.1-isolated-coverage-weights differ on the three 1/3 fills "
           "in 32-bit float and on the sRGB8 coverage tie below 1/2");
+
+    // A PassThrough group over a backdrop that is not opaque (a layer at 0.4, a layer at 0): its
+    // children composite onto a copy of the accumulator below it, which is not the empty start of
+    // the list, so its first child takes the coverage weights (decision 066); the group then mixes
+    // by its opacity.
+    bool differs = false;
+    for (const double underOpacity : {0.4, 0.0}) {
+        const std::array<double, 3> under{0.2, 0.7, 0.123};
+        const std::array<double, 3> inside{0.9, 0.05, 0.5};
+        Builder passBuilder(128, 128, formats);
+        core::Layer bottom = passBuilder.Fill("under", SameSource(channels, Uniform(under[0], under[1], under[2])),
+                                              Same(channels, BlendingMode::Normal, underOpacity));
+        core::Layer child = passBuilder.Fill("inside", SameSource(channels, Uniform(inside[0], inside[1], inside[2])),
+                                             Same(channels, BlendingMode::Normal, 0.3));
+        core::Layer pass = passBuilder.Group("pass", {child}, Same(channels, BlendingMode::PassThrough, 0.6));
+        passBuilder.SetRoot({bottom, pass});
+        if (!passBuilder.Validate("pass-through over a backdrop that is not opaque")) return Finish();
+        for (const auto& [channel, format] : formats) {
+            TileFormat tileFormat = TileFormatOf(format);
+            tileFormat.halfCoverage = weights->srgb8HalfCoverage && tileFormat.srgb;
+            tileFormat.halfCoverageFromHalf = weights->srgb8HalfCoverageFromHalf && tileFormat.halfCoverage;
+            auto operand = [&](const std::array<double, 3>& c) {
+                return UniformOperand(c, tileFormat, base, weights->float32UniformPlain, weights->uniformGreyUnrounded);
+            };
+            const ModelValue below = ModelComposite(
+                {ModelLayer{BlendingMode::Normal, static_cast<float>(underOpacity), operand(under)}}, tileFormat, base,
+                true, true);
+            auto expected = [&](bool childOnEmptyStart) {
+                const ModelValue group =
+                    childOnEmptyStart
+                        ? ModelComposite({ModelLayer{BlendingMode::Normal, 1.0f, {below.value[0], below.value[1], below.value[2]}, below.value[3]},
+                                          ModelLayer{BlendingMode::Normal, 0.3f, operand(inside)}},
+                                         tileFormat, base, true, false)
+                        : ModelComposite({ModelLayer{BlendingMode::Normal, 0.3f, operand(inside)}}, tileFormat, base, true,
+                                         true, false, below.value);
+                const ModelValue mixed = ModelComposite(
+                    {ModelLayer{BlendingMode::PassThrough, 0.6f, {group.value[0], group.value[1], group.value[2]}, group.value[3]}},
+                    tileFormat, base, true, true, false, below.value);
+                return IsolatedRootModel(
+                    {ModelLayer{BlendingMode::Normal, 1.0f, {mixed.value[0], mixed.value[1], mixed.value[2]}, mixed.value[3]}},
+                    tileFormat, base, *weights);
+            };
+            const std::array<uint32_t, 3> weighted = expected(false);
+            differs = differs || weighted != expected(true);
+            CpuEvaluator passCpu(templates, kWideLimits);
+            render::Result<ChannelResult> result = evaluate(passBuilder, channel, passCpu);
+            std::string detail;
+            Check(result && AllEqual(Samples(*result), TileFormatOf(format).channels, weighted, detail),
+                  std::string(core::ToString(format)) + ", backdrop layer at " + std::to_string(underOpacity) +
+                      ": under painter-12.1-isolated-coverage-weights a PassThrough group's first child over a "
+                      "backdrop that is not opaque takes the coverage weights (the backdrop is not the empty start)",
+                  result ? detail : Describe(result));
+        }
+    }
+    Check(differs, "the coverage weights and the empty-start rule give different codes for that child "
+                   "(the rule is observable)");
 
     // 3. Pinning: a synthetic profile B registered after the projects exist changes nothing for them.
     render::Result<void> registered = RegisterProfile({"painter-12.1-synthetic-b", RootComposite::Isolated});
@@ -3142,7 +3240,8 @@ void Samples(uint3 id : SV_DispatchThreadID) {
 
 render::Result<std::vector<float>> FpKernelTexels(render::Engine& engine, const char* entry, uint32_t size,
                                                   const char* hlsl = kFpHardwareHlsl,
-                                                  std::vector<uint32_t> constants = {}) {
+                                                  std::vector<uint32_t> constants = {},
+                                                  const char* family = nullptr) {
     auto token = std::make_shared<const int>(0);
     std::future<render::Result<std::vector<float>>> future = engine.Submit(
         token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<float>> {
@@ -3155,7 +3254,9 @@ render::Result<std::vector<float>> FpKernelTexels(render::Engine& engine, const 
             render::Result<uz::RHITextureHandle> dst = device.CreateTexture(ddesc);
             if (!dst) return render::Unexpected(dst.error());
             render::KernelSource source;
-            source.name = std::string(hlsl == kFpHardwareHlsl ? "fp_hardware_" : "pow_hardware_") + entry;
+            source.name = std::string(family != nullptr ? family
+                                                        : (hlsl == kFpHardwareHlsl ? "fp_hardware_" : "pow_hardware_")) +
+                          entry;
             source.hlsl = hlsl;
             source.entryPoint = entry;
             render::Result<render::ComputeKernel> kernel = context.Kernel(source);
@@ -3992,8 +4093,7 @@ int RunMasks(const fs::path& assets) {
         pass.mask = MaskWith(core::MaskBackground::Black, {MaskFillEffect(builder, Bitmap(rig.greySha), BlendingMode::Normal, 1.0)});
         builder.SetRoot({pass});
         render::Result<ChannelResult> result = rig.Evaluate(builder, ChannelType::User0);
-        Check(!result && KindName(result.error()) == "unsupported_node",
-              "a PassThrough group with a mask raster fails with unsupported_node", Describe(result));
+        Check(static_cast<bool>(result), "a PassThrough group with a mask raster evaluates", Describe(result));
     }
 
     // The cache shape: effect chains are graph nodes keyed by chained hashes.
@@ -4141,6 +4241,12 @@ int RunMasksGpuVsCpu(const fs::path& assets, const fs::path& dir) {
             core::Layer group = builder.Group("group", {child}, Same(channels, BlendingMode::Normal, 0.4 + 0.6 * unit()));
             if (variant == 1) group.mask = mask();
             layers.push_back(group);
+            core::Layer passChild = builder.Fill("pass child", SameSource(channels, Bitmap(colour)),
+                                                 Same(channels, modes[rng() % modes.size()], unit()));
+            passChild.mask = mask();
+            core::Layer pass = builder.Group("pass", {passChild}, Same(channels, BlendingMode::PassThrough, 0.4 + 0.6 * unit()));
+            if (variant == 1) pass.mask = mask();
+            layers.push_back(pass);
             builder.SetRoot(layers);
             if (!builder.Validate(std::string(core::ToString(format)))) return Finish();
             EvaluateRequest request;
@@ -4170,7 +4276,7 @@ int RunMasksGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     }
     gpu.Shutdown();
     Check(allEqual, "every masked stack evaluates to the same bytes on the GPU and on the CPU (" + std::to_string(compared) +
-                        " samples over 9 formats: mask and content fill effects, levels with gamma, group masks)");
+                        " samples over 9 formats: mask and content fill effects, levels with gamma, group masks, masked PassThrough groups)");
     return Finish();
 }
 
@@ -4306,6 +4412,116 @@ int RunPowHardware(const fs::path& dir) {
     return Finish();
 }
 
+// ── trig-hardware ────────────────────────────────────────────────────────────
+
+/// Domain kernel: texel k (k < 2^23) of a 4096 x 4096 target holds sin(x), cos(x) and x for the
+/// smallest float32 x >= 0 whose product with c = float32(1 / (2 pi)) is at least k 2^-25 (the
+/// table index of hwmath.h; the product is exact in double). Sample kernel: texel i of a 1024 x
+/// 1024 target holds sin(x), cos(x) and x for an edge value (i < 8) or a hashed float32 of
+/// [0, float32(pi / 2)].
+constexpr char kTrigHardwareHlsl[] = R"(
+cbuffer Root : register(b0) { uint g_dst; };
+static const uint kEdges[8] = {0x00000000u, 0x00000001u, 0x00800000u, 0x3F800000u, 0x3FC90FDBu,
+                               0x3FC90FDAu, 0x3F490FDBu, 0x34000000u};
+uint Hash(uint i) {
+    uint h = i * 0x9E3779B9u;
+    h ^= h >> 16;
+    h *= 0x85EBCA6Bu;
+    h ^= h >> 13;
+    h *= 0xC2B2AE35u;
+    h ^= h >> 16;
+    return h;
+}
+[numthreads(8, 8, 1)]
+void Domain(uint3 id : SV_DispatchThreadID) {
+    RWTexture2D<float4> dst = ResourceDescriptorHeap[g_dst];
+    const uint k = id.y * 4096u + id.x;
+    if (k >= 8388608u) {
+        dst[id.xy] = float4(0.0f, 0.0f, 0.0f, 0.0f);
+        return;
+    }
+    const double c = (double)asfloat(0x3E22F983u);
+    const double t = (double)k * (1.0 / 33554432.0);
+    float x = (float)(t / c);
+    for (int i = 0; i < 4; ++i) {
+        if ((double)x * c < t) x = asfloat(asuint(x) + 1u);
+    }
+    for (int j = 0; j < 4; ++j) {
+        const float down = asfloat(asuint(x) - 1u);
+        if (x > 0.0f && (double)down * c >= t) x = down;
+    }
+    dst[id.xy] = float4(sin(x), cos(x), x, 0.0f);
+}
+[numthreads(8, 8, 1)]
+void Samples(uint3 id : SV_DispatchThreadID) {
+    RWTexture2D<float4> dst = ResourceDescriptorHeap[g_dst];
+    const uint i = id.y * 1024u + id.x;
+    const float x = asfloat(i < 8u ? kEdges[i] : Hash(i) % 0x3FC90FDCu);
+    dst[id.xy] = float4(sin(x), cos(x), x, 0.0f);
+}
+)";
+
+/// Measures the GPU's sine and cosine (as the render layer compiles them) over the table domain of
+/// hwmath.h, writes the measured tables (`hw-sin.zlib`, `hw-cos.zlib`) to the work directory and
+/// compares them with the embedded ones, checks that every measured input lies at its own table
+/// index, then compares hw::Sin and hw::Cos with the GPU on 8 edge values and 2^20 - 8 hashed
+/// inputs of [0, float32(pi / 2)].
+int RunTrigHardware(const fs::path& dir) {
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
+    render::Result<std::vector<float>> domain =
+        FpKernelTexels(engine, "Domain", 4096, kTrigHardwareHlsl, {}, "trig_hardware_");
+    render::Result<std::vector<float>> samples =
+        FpKernelTexels(engine, "Samples", 1024, kTrigHardwareHlsl, {}, "trig_hardware_");
+    if (!domain || !samples) {
+        Check(false, "the GPU's sin and cos are measured", (!domain ? domain : samples).error().Describe());
+        return Finish();
+    }
+    const std::vector<float>& v = *domain;
+    const uint32_t n = hw::kTableEntries;
+    size_t misplaced = 0;
+    for (uint32_t k = 0; k < n; ++k) misplaced += hw::TrigIndex(v[size_t{k} * 4 + 2]) != k;
+    Check(misplaced == 0, "every measured input lies at its table index (" + std::to_string(n) + ")",
+          std::to_string(misplaced) + " misplaced");
+    const hw::Table tables[2] = {hw::Table::Sin, hw::Table::Cos};
+    const char* names[2] = {"sin", "cos"};
+    for (int t = 0; t < 2; ++t) {
+        std::vector<uint32_t> measured(n);
+        for (uint32_t k = 0; k < n; ++k) measured[k] = std::bit_cast<uint32_t>(v[size_t{k} * 4 + size_t(t)]);
+        const std::vector<unsigned char> packed = hw::CompressValues(measured);
+        std::ofstream(dir / (std::string("hw-") + names[t] + ".zlib"), std::ios::binary)
+            .write(reinterpret_cast<const char*>(packed.data()), static_cast<std::streamsize>(packed.size()));
+        const std::vector<uint32_t>& embedded = hw::Values(tables[t]);
+        size_t differing = 0;
+        for (uint32_t k = 0; k < n; ++k) differing += embedded[k] != measured[k];
+        Check(differing == 0,
+              std::string("the embedded ") + names[t] + " table equals the GPU on every entry of its domain (" +
+                  std::to_string(n) + ")",
+              std::to_string(differing) + " entries differ");
+    }
+    size_t differing = 0;
+    std::string first;
+    const std::vector<float>& s = *samples;
+    for (size_t i = 0; i < s.size() / 4; ++i) {
+        const float x = s[i * 4 + 2];
+        const float ours[2] = {hw::Sin(x), hw::Cos(x)};
+        for (int k = 0; k < 2; ++k) {
+            if (SameFloat(ours[k], s[i * 4 + size_t(k)])) continue;
+            if (differing++ < 8) {
+                first += std::string(k == 0 ? "sin(" : "cos(") + Hex32(std::bit_cast<uint32_t>(x)) + "): GPU " +
+                         Hex32(std::bit_cast<uint32_t>(s[i * 4 + size_t(k)])) + ", hw " +
+                         Hex32(std::bit_cast<uint32_t>(ours[k])) + "; ";
+            }
+        }
+    }
+    Check(differing == 0,
+          "hw::Sin and hw::Cos equal the GPU on 8 edge values and " + std::to_string(s.size() / 4 - 8) +
+              " hashed inputs of [0, float32(pi / 2)]",
+          std::to_string(differing) + " results differ: " + first);
+    return Finish();
+}
+
 // ── uv-coverage ──────────────────────────────────────────────────────────────
 
 /// The texturing mesh of an imported file as the UV raster's corner layout (one interleaved
@@ -4404,7 +4620,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks <assets-dir> | "
                      "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
-                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|bilinear-hardware|masks-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
+                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|masks-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
         return 2;
     }
@@ -4451,6 +4667,7 @@ int main(int argc, char** argv) {
         else if (mode == "fp-hardware") code = RunFpHardware(dir);
         else if (mode == "bilinear-hardware") code = RunBilinearHardware(dir);
         else if (mode == "pow-hardware") code = RunPowHardware(dir);
+        else if (mode == "trig-hardware") code = RunTrigHardware(dir);
         else if (mode == "masks-gpu-vs-cpu") code = RunMasksGpuVsCpu(assets, dir);
         else if (mode == "uv-coverage") {
             if (argc < 6) {

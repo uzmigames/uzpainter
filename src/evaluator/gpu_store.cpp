@@ -129,10 +129,12 @@ render::Result<void> GpuTileStore::EnsurePowTables() {
         return render::Fail(render::ErrorCode::ResourceCreationFailed, m_device.GetBackend(),
                             "evaluator: pow table upload buffer not mapped");
     }
-    const std::pair<hw::Table, uint32_t> tables[4] = {{hw::Table::Log2Hi, kPowLog2Hi},
+    const std::pair<hw::Table, uint32_t> tables[6] = {{hw::Table::Log2Hi, kPowLog2Hi},
                                                       {hw::Table::Log2Lo, kPowLog2Lo},
                                                       {hw::Table::Exp2Pos, kPowExp2Pos},
-                                                      {hw::Table::Exp2Neg, kPowExp2Neg}};
+                                                      {hw::Table::Exp2Neg, kPowExp2Neg},
+                                                      {hw::Table::Sin, kPowSin},
+                                                      {hw::Table::Cos, kPowCos}};
     for (const auto& [table, offset] : tables) {
         const std::vector<uint32_t>& values = hw::Values(table);
         std::memcpy(mapped + uint64_t{offset} * sizeof(uint32_t), values.data(), values.size() * sizeof(uint32_t));
@@ -323,13 +325,20 @@ render::Result<void> GpuTileStore::Blend(const BlendOp& op) {
             return EvalFail(EvalErrorKind::Internal, "blend operands differ in format");
         }
     }
-    if (!arith::HasKernel(op.mode)) {
+    if (!arith::HasComposite(op.mode)) {
         return EvalFail(EvalErrorKind::UnsupportedBlendMode,
                         std::string(core::ToString(op.mode)) +
                             " has no blend kernel (a group placement)");
     }
     render::Result<void> table = EnsureTable16();
     if (!table) return table;
+    using M = core::BlendingMode;
+    const bool rotates = op.mode == M::NormalMapCombine || op.mode == M::NormalMapDetail ||
+                         op.mode == M::NormalMapInverseDetail;
+    if (rotates) {
+        render::Result<void> pow = EnsurePowTables();
+        if (!pow) return pow;
+    }
     render::Result<render::ComputeKernel> kernel =
         m_context->Kernel(BlendKernelSource(BlendKernelVariant{op.mode, dst->format}));
     if (!kernel) return render::Unexpected(kernel.error());
@@ -351,6 +360,7 @@ render::Result<void> GpuTileStore::Blend(const BlendOp& op) {
     }
     bindings.dstUav = m_device.Rhi().GetTextureUAVIndex(dst->texture);
     bindings.table16Srv = m_device.Rhi().GetBufferSRVIndex(m_table16);
+    if (rotates) bindings.powSrv = m_device.Rhi().GetBufferSRVIndex(m_pow);
 
     PendingDispatch pending;
     pending.kernel = *kernel;

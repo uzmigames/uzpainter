@@ -15,8 +15,9 @@
 // root constant 1 (kernelgen.h, BlendParam): width, height, flags, backdrop (SRV index or
 // constant rgba), source (SRV index or constant rgba), mask (SRV index of plane 0 or constant),
 // opacity, the destination UAV, the operand tables SRV (the 16-bit UNORM operands and the
-// hardware arithmetic tables at the offsets of evaluator_tables.hlsli) and the mask tile's
-// encoding. 32-bit float results are stored raw (the channel base re-composition is a read-out
+// hardware arithmetic tables at the offsets of evaluator_tables.hlsli), the mask tile's
+// encoding and, for the normal-map modes, the function tables SRV (the GPU's sine and cosine,
+// hwmath.h, at the offsets UZP_POW_SIN and UZP_POW_COS). 32-bit float results are stored raw (the channel base re-composition is a read-out
 // step of evaluate.cpp). The flag FLAG_EFFECT_MIX selects the mix of an effect (a mask or content
 // effect: a + (r - a) alpha for every mode); FLAG_COVERAGE_WEIGHTS the coverage-weighted
 // source-over onto a backdrop that is not opaque, FLAG_EMPTY_BACKDROP marks the empty start of an
@@ -49,6 +50,7 @@ cbuffer Root : register(b0) {
 #define P_DST_UAV 16
 #define P_TABLE16_SRV 17
 #define P_MASK_ENC 18
+#define P_POW_SRV 19
 
 #define FLAG_ACC_TILE 1u
 #define FLAG_SRC_TILE 2u
@@ -73,6 +75,22 @@ static bool g_fusedReadout;
 uint TableWord(uint index) {
     StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_tables];
     return tables[index];
+}
+
+/// The SRV of the function tables (hwmath.h Values: log2, exp2, sin, cos at the offsets
+/// UZP_POW_*), set from the parameter block of the Levels and the normal-map kernels.
+static uint g_pow;
+
+uint PowWord(uint index) {
+    StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_pow];
+    return tables[index];
+}
+
+// v (exact in double) rounded toward zero to float32.
+float TowardZero(double v) {
+    float r = (float)v;
+    if (abs((double)r) > abs(v)) r = asfloat(asuint(r) - 1u);
+    return r;
 }
 
 #if defined(UZP_MODE_Tint) || defined(UZP_MODE_Saturation) || defined(UZP_MODE_Color) || defined(UZP_MODE_Value)
@@ -265,7 +283,7 @@ float Divide(float a, float b) {
 
 #if !defined(UZP_COMPONENT) && !defined(UZP_NORMALMAP)
 float BlendKernel(float a, float b) {
-#if defined(UZP_MODE_Normal) || defined(UZP_MODE_Replace)
+#if defined(UZP_MODE_Normal) || defined(UZP_MODE_Replace) || defined(UZP_MODE_PassThrough)
     return b;
 #elif defined(UZP_MODE_Disable)
     return a;
@@ -326,30 +344,27 @@ float BlendKernel(float a, float b) {
 // ── Colour kernels (arith.cpp BlendColour) ───────────────────────────────────
 
 #if defined(UZP_COMPONENT)
-float Less(float x, float y) { return x < y ? x : y; }
+float Max3(float3 c) { return Fmax(Fmax(c.x, c.y), c.z); }
+float Min3(float3 c) { return Fmin(Fmin(c.x, c.y), c.z); }
 
-// RGB to HSV (hue, saturation, value) on the hexcone, divisions through the hardware reciprocal.
-float3 ToHsv(float3 c) {
+// The fitted hue in turns (arith.cpp Hue).
+float Hue(float3 c) {
     const float eps = asfloat(kColourConstants[0]);
-    const float third = asfloat(kColourConstants[1]);
-    const float twoThirds = asfloat(kColourConstants[2]);
-    const bool gb = c.y >= c.z;
-    const float4 p = float4(gb ? c.y : c.z, gb ? c.z : c.y, gb ? 0.0f : -1.0f, gb ? -third : twoThirds);
-    const bool rp = c.x >= p.x;
-    const float4 q = float4(rp ? c.x : p.x, p.y, rp ? p.z : p.w, rp ? p.x : c.x);
-    const float d = q.x - Less(q.w, q.y);
-    const float span = 6.0f * d + eps;
-    const float h = abs(q.z + (q.w - q.y) * HwRcp(span));
-    const float s = d * HwRcp(q.x + eps);
-    return float3(h, s, q.x);
+    const float d = Max3(c) - Min3(c);
+    const bool minR = c.x <= c.y && c.x <= c.z;
+    const bool minB = !minR && c.z < c.y;
+    const float centre = minB ? 1.0f : (minR ? 3.0f : 5.0f);
+    const float x = minB ? c.y - c.x : (minR ? c.z - c.y : c.x - c.z);
+    const float h6 = Fma(x - 3.0f * eps, HwRcp(d + eps), centre);
+    const float h = h6 * (1.0f / 6.0f);
+    return h < 0.0f ? h + 1.0f : h;
 }
 
-float FromHsvComponent(float3 c, float k) {
-    const float x = c.x + k;
-    const float f = x - floor(x);
-    const float p = abs(f * 6.0f - 3.0f);
-    const float t = Clamp01(p - 1.0f);
-    return c.z * (1.0f + (t - 1.0f) * c.y);
+// The hexcone weights of a hue (arith.cpp HueWeights).
+float3 HueWeights(float h) {
+    const float f = h - floor(h);
+    return float3(Clamp01(abs(Fma(f, 6.0f, -3.0f)) - 1.0f), Clamp01(2.0f - abs(Fma(f, 6.0f, -2.0f))),
+                  Clamp01(2.0f - abs(Fma(f, 6.0f, -4.0f))));
 }
 
 float3 BlendColour(float3 a, float3 b, float alpha) {
@@ -360,22 +375,34 @@ float3 BlendColour(float3 a, float3 b, float alpha) {
     return a;
 #endif
 #else
-    const float3 lower = ToHsv(a);
-    const float3 upper = ToHsv(b);
-    float3 o = lower;
 #if defined(UZP_MODE_Tint) || defined(UZP_MODE_Color)
-    o.x = upper.x;
+    const float3 hueSource = b;
+#else
+    const float3 hueSource = a;
 #endif
 #if defined(UZP_MODE_Saturation) || defined(UZP_MODE_Color)
-    o.y = upper.y;
+    const float3 satSource = b;
+#else
+    const float3 satSource = a;
 #endif
 #if defined(UZP_MODE_Value)
-    o.z = upper.z;
+    const float3 valueSource = b;
+#else
+    const float3 valueSource = a;
 #endif
-    o.z = 2.0f * o.z;
-    const float third = asfloat(kColourConstants[1]);
-    const float twoThirds = asfloat(kColourConstants[2]);
-    return float3(FromHsvComponent(o, 1.0f), FromHsvComponent(o, twoThirds), FromHsvComponent(o, third));
+    const float3 w = HueWeights(Hue(hueSource));
+    const float v = 2.0f * Max3(valueSource);
+    const float smax = Max3(satSource);
+    const float d = smax - Min3(satSource);
+    const float inv = HwRcp(smax + asfloat(kColourConstants[0]));
+#if defined(UZP_MODE_Saturation)
+    const float keep = 1.0f - d * inv;
+#else
+    const float keep = Fma(-d, inv, 1.0f);
+#endif
+    const float lo = v * keep;
+    const float span = v - lo;
+    return float3(Fma(span, w.x, lo), Fma(span, w.y, lo), Fma(span, w.z, lo));
 #endif
 }
 #endif
@@ -395,31 +422,46 @@ float3 DecodeNormal(float3 c) {
     return Normalise(n);
 }
 
-float AsinSmall(float t) {
-    const float t2 = t * t;
-    float sum = asfloat(kAsinSeries[11]);
-    [unroll] for (int i = 10; i >= 0; --i) sum = sum * t2 + asfloat(kAsinSeries[i]);
-    return sum * t;
+// The recording GPU's GLSL asin (hwmath.cpp Asin).
+float HwAsin(float x) {
+    const uint bits = asuint(x);
+    const uint magnitude = bits & 0x7FFFFFFFu;
+    if (magnitude > 0x3F800000u) return asfloat(kQuietNaN);
+    if (magnitude < 0x00800000u) return 0.0f;
+    const float t = asfloat(magnitude);
+    const bool upper = t > 0.57f;
+    const float a = upper ? HwSqrt(Fma(-0.5f, t, 0.5f)) : t;
+    const float s = a * a;
+    float r = 5.175137819e-2f;
+    r = Fma(r, s, 1.816697683e-2f);
+    r = Fma(r, s, 4.675685871e-2f);
+    r = Fma(r, s, 7.484657646e-2f);
+    r = Fma(r, s, 1.666701424e-1f);
+    r = r * s;
+    const float p = Fma(r, a, a);
+    const float result = upper ? Fma(-2.0f, p, asfloat(kColourConstants[1])) : p;
+    return (bits & 0x80000000u) != 0u ? -result : result;
 }
 
-float SinSmall(float x) {
-    const float x2 = x * x;
-    float sum = asfloat(kSinSeries[8]);
-    [unroll] for (int i = 7; i >= 0; --i) sum = sum * x2 + asfloat(kSinSeries[i]);
-    return sum * x;
+// The table index of the GPU's sine and cosine for x in [0, float32(pi / 2)] (hwmath.cpp
+// TrigIndex): the turn x float32(1 / (2 pi)) toward zero, times 2^25 (exact), truncated.
+uint TrigIndex(float x) {
+    const float u = TowardZero((double)x * (double)asfloat(0x3E22F983u));
+    return (uint)(u * 33554432.0f);
 }
 
+// The unit normal rotated toward (0, 0, 1) by alpha (arith.cpp TowardFlat).
 float3 TowardFlat(float3 n, float alpha) {
     if (!(alpha < 1.0f)) return n;
     const float z = Clamp01(n.z);
-    const float sine = Sqrt((1.0f - z) * (1.0f + z));
-    if (!(sine > 0.0f)) return n;
-    const float halfPi = asfloat(kColourConstants[3]);
-    const float angle = z >= 0.5f ? 2.0f * AsinSmall(Sqrt((1.0f - z) * 0.5f)) : halfPi - AsinSmall(z);
-    const float inv = Rcp(sine);
-    const float wn = SinSmall(alpha * angle) * inv;
-    const float wf = SinSmall((1.0f - alpha) * angle) * inv;
-    return float3(n.x * wn, n.y * wn, n.z * wn + wf);
+    const float w = Fma(-z, z, 1.0f);
+    if (!(w > 0.0f)) return n;
+    const float turned = alpha * (asfloat(kColourConstants[1]) - HwAsin(z));
+    const uint k = TrigIndex(turned);
+    const float sine = asfloat(PowWord(UZP_POW_SIN + k));
+    const float cosine = asfloat(PowWord(UZP_POW_COS + k));
+    const float scale = sine * HwRsqrt(w);
+    return float3(n.x * scale, n.y * scale, cosine);
 }
 
 float3 Reoriented(float3 base, float3 detail) {
@@ -581,6 +623,17 @@ float CompositeChannel(float a, float s, float r, float alphaB, float alphaS) {
     return (backdrop + alphaS * blended) * Rcp(alphaO);
 }
 
+// A pass-through group's composite (arith.cpp Composite, PassThrough): the backdrop a moved
+// toward the group's result s by t = opacity x mask.
+float PassThroughChannel(float a, float s, float alphaB, float alphaG, float t) {
+    if (alphaB == 1.0f) return Fma(s - a, t, a);
+    if (alphaB == 0.0f) return s;
+    const float pa = a * alphaB;
+    const float ps = s * alphaG;
+    const float alphaO = Fma(alphaG - alphaB, t, alphaB);
+    return Fma(ps - pa, t, pa) * Rcp(alphaO);
+}
+
 float StoreChannel(float v) {
 #if UZP_ENC == 0 || UZP_ENC == 1
 #if UZP_SRGB
@@ -645,6 +698,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (id.x >= width || id.y >= height) return;
     const uint flags = params[base + P_FLAGS];
     g_tables = params[base + P_TABLE16_SRV];
+    g_pow = params[base + P_POW_SRV];
     g_effectMix = (flags & FLAG_EFFECT_MIX) != 0u;
     g_coverageWeights = (flags & FLAG_COVERAGE_WEIGHTS) != 0u && (flags & FLAG_EMPTY_BACKDROP) == 0u;
     g_fusedReadout = (flags & FLAG_FUSED_READOUT) != 0u;
@@ -686,6 +740,16 @@ void main(uint3 id : SV_DispatchThreadID) {
 #endif
 #endif
     float4 result = float4(0.0f, 0.0f, 0.0f, 1.0f);
+#if defined(UZP_MODE_PassThrough)
+    result.x = StoreChannel(PassThroughChannel(acc.x, src.x, alphaB, src.w, opacityMask));
+#if UZP_CHANNELS == 3
+    result.y = StoreChannel(PassThroughChannel(acc.y, src.y, alphaB, src.w, opacityMask));
+    result.z = StoreChannel(PassThroughChannel(acc.z, src.z, alphaB, src.w, opacityMask));
+#endif
+    float alphaO = 1.0f;
+    if (alphaB == 0.0f) alphaO = alphaS;
+    else if (alphaB != 1.0f) alphaO = Fma(src.w - alphaB, opacityMask, alphaB);
+#else
     result.x = StoreChannel(CompositeChannel(acc.x, src.x, r.x, alphaB, alphaS));
 #if UZP_CHANNELS == 3
     result.y = StoreChannel(CompositeChannel(acc.y, src.y, r.y, alphaB, alphaS));
@@ -694,6 +758,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     float alphaO = 1.0f;
     if (alphaB == 0.0f) alphaO = alphaS;
     else if (alphaB != 1.0f) alphaO = alphaS + alphaB * (1.0f - alphaS);
+#endif
 #if UZP_ALPHA
     result.w = StoreCoverage(alphaO);
 #else
@@ -714,21 +779,6 @@ void main(uint3 id : SV_DispatchThreadID) {
 #define L_POW_SRV 5
 #define L_SRC_ALPHA 6
 #define L_COMPONENTS 8
-
-/// The SRV of the log2 / exp2 tables (hwmath.h Values, at the offsets UZP_POW_*).
-static uint g_pow;
-
-uint PowWord(uint index) {
-    StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_pow];
-    return tables[index];
-}
-
-// v (exact in double) rounded toward zero to float32.
-float TowardZero(double v) {
-    float r = (float)v;
-    if (abs((double)r) > abs(v)) r = asfloat(asuint(r) - 1u);
-    return r;
-}
 
 float HwLog2(float x) {
     const uint bits = asuint(x);

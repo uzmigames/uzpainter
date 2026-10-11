@@ -1,0 +1,12 @@
+{
+  "id": 66,
+  "slug": "a-passthrough-group-s-first-child-is-over-the-empty-start-only-where-the-group-is-and-otherwise-takes-the-coverage-weights",
+  "title": "A PassThrough group's first child is over the empty start only where the group is, and otherwise takes the coverage weights",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.10_compositor-float32-residual",
+    "phase1.11_compositor-blend-gaps"
+  ],
+  "supersededBy": null
+}

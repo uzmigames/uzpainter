@@ -1,4 +1,5 @@
-"""The published fit of phase1.10_compositor-blend-kernels: `parity/semantics/blend-kernels.json`.
+"""The published fit of phase1.10_compositor-blend-kernels and phase1.11_compositor-blend-gaps:
+`parity/semantics/blend-kernels.json`.
 
 Every documented `BlendingMode` as the evaluator implements it (`src/evaluator/arith.cpp`,
 `shaders/evaluator_blend.hlsl`, `hwmath.h`), evaluated by the CPU store on the Tier 0 blend sweeps
@@ -20,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 import types
 from pathlib import Path
@@ -36,8 +38,9 @@ if __name__ == "__main__":
     _tests.__path__ = [str(_root / "tests")]
     sys.modules["tests"] = _tests
 
+from tests.evaluator import masks_fits
 from tests.evaluator.quantisation_fits import exported, unit
-from tests.evaluator.sources_fits import channel_formats, pooled, srgb8_decode
+from tests.evaluator.sources_fits import channel_formats, export16, pooled, srgb8_decode
 from tests.evaluator.test_compositor_tile_dag import (
     FIXTURES,
     MANIFESTS,
@@ -137,6 +140,12 @@ HW = (
     "mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every "
     "GPU alike."
 )
+TRIG = (
+    "The GPU's sine and cosine come from tables measured on every index of [0, float32(pi/2)] "
+    "(src/evaluator/tables/hw-{sin,cos}.zlib; uzp-evaluator-tests trig-hardware); the GLSL "
+    "arcsine is a float32 polynomial with fused multiply-adds (hwmath.h Asin) checked against "
+    "the GPU's GLSL asin on every float32 of [0, 1]."
+)
 MIX = (
     "Opacity alpha (times the mask): over an opaque backdrop v = a (1 - alpha) + r alpha, the "
     "products rounded and summed in float32; over a transparent backdrop the source; else W3C "
@@ -187,23 +196,32 @@ NORMAL_TEXT = {
 
 def hsv_formula(mode: str) -> str:
     return (
-        f"{mode}: f = HSV({HSV_TEXT[mode]}) with the value doubled, in float32: RGB -> HSV by "
-        "the hexcone (largest component v; d = v - min; hue = |k + (q.w - q.y) rcp(6d + e)| "
-        "with the sector offset k in {0, -1/3, 2/3, -1}; s = d rcp(v + e); e = 2^-12); HSV -> RGB "
-        "v (1 + (clamp(|6 fract(h + k) - 3| - 1, 0, 1) - 1) s), k = 1, 2/3, 1/3. A grey channel "
-        f"keeps A (Value: B). {MIX} {HW}"
+        f"{mode}: f = HSV({HSV_TEXT[mode]}) with the value doubled, in float32 (fitted, "
+        "phase1.11): hue in turns from the smallest component (red first, then green before "
+        "blue on ties), centre C = 1 (blue), 3 (red), 5 (green) and X the difference of the "
+        "other two (g - r, b - g, r - b): h6 = fma(X - 3e, rcp(d + e), C), d = max - min, "
+        "e = 2^-12, h = h6 float32(1/6), plus 1 if negative; hue weights with f = h - floor(h): "
+        "red |fma(f, 6, -3)| - 1, green 2 - |fma(f, 6, -2)|, blue 2 - |fma(f, 6, -4)|, clamped "
+        "to [0, 1]; v = 2 max, lo = v fma(-d', rcp(max' + e), 1) of the saturation source (d', "
+        "max'; Saturation: 1 - d' rcp(max' + e) with two roundings), each component "
+        f"fma(v - lo, w, lo). A grey channel keeps A (Value: B). {MIX} {HW}"
     )
 
 
 def normal_formula(mode: str) -> str:
     return (
         f"{mode}: a, b = normalise(2c - 1) with z clamped to >= 0, normalise(v) = v rsqrt(fma(z, "
-        "z, fma(x, x, y y))); b is first rotated toward (0, 0, 1) by the opacity (spherical "
-        f"interpolation, series in float32); {NORMAL_TEXT[mode]}: t = base + (0, 0, 1), u = "
+        "z, fma(x, x, y y))); below opacity 1, b is first rotated toward (0, 0, 1) by the "
+        "opacity alpha (fitted, phase1.11): t = float32(pi/2) - asin(z), z clamped to [0, 1], "
+        "with the recording GPU's GLSL arcsine (Vulkan and OpenGL; D3D12 differs); "
+        "b' = (b.x k, b.y k, cos(alpha t)), "
+        "k = sin(alpha t) rsqrt(fma(-z, z, 1)), sine and cosine the GPU's (table index "
+        "floor(2^25 trunc(x float32(1/(2 pi))))); "
+        f"{NORMAL_TEXT[mode]}: t = base + (0, 0, 1), u = "
         "detail (-1, -1, 1), d = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r.xy = fma(t.xy, d, "
         "-(u.xy t.z)), r.z = t.z (d - u.z); result fma(normalise(r), 1/2, 1/2), written as it is "
         f"over an opaque backdrop (the opacity enters only through the rotation). A grey channel "
-        f"takes B. {HW}"
+        f"takes B. {HW} {TRIG}"
     )
 
 
@@ -321,14 +339,16 @@ def mode_entry(runs: Runs, decode: np.ndarray, mode: str) -> dict[str, Any]:
             [
                 parameter("value_gain", 2.0, "fitted"),
                 parameter("hsv_epsilon", 2.0**-12, "fitted"),
+                parameter("hue_offset", 3 * 2.0**-12, "fitted"),
                 *HW_PARAMS,
             ],
             residuals(runs, decode, mode),
             notes=(
-                "Release gap: the HSV conversion of blend-modes.json in float32 reproduces the "
-                "grey (L16) channel exactly but not the colour channels; the hue of nearly grey "
-                "colours is off (blend-modes.json, open item). Not admitted as exact; no "
-                "exception proposed."
+                "Release gap: the fitted hue (phase1.11) reproduces the hue law of every texel "
+                "to within one code (the earlier hexcone fit left up to 53 100 RGB16 values off); "
+                "the float32 operation order of Painter's hue arithmetic is not identified, so "
+                "one-code residuals remain on 16-bit and float channels. The grey (L16) and "
+                "sRGB8 channels are exact. Not admitted as exact; no exception proposed."
             ),
         )
     if mode in NORMAL_MODES:
@@ -337,14 +357,12 @@ def mode_entry(runs: Runs, decode: np.ndarray, mode: str) -> dict[str, Any]:
             f"BlendingMode.{mode} in the evaluator (user channels and the Normal channel)",
             normal_formula(mode),
             [BARRE, PYDOC, D3D],
-            [parameter("flat_normal", [0.0, 0.0, 1.0], "public_documentation"), *HW_PARAMS],
+            [
+                parameter("flat_normal", [0.0, 0.0, 1.0], "public_documentation"),
+                *HW_PARAMS,
+                parameter("trig_tables", "src/evaluator/tables/hw-{sin,cos}.zlib", "fitted"),
+            ],
             residuals(runs, decode, mode),
-            notes=(
-                "Exact at opacity 1 on every format and on the Normal channel (against both "
-                "recordings). Release gap at opacity below 1: Painter's float32 evaluation of "
-                "the rotation toward the flat normal is not identified (RGB16 at 0.5 and "
-                "RGB32F at 0.25 differ by one code or a few ulp)."
-            ),
         )
     hardware = mode in (
         "Divide",
@@ -364,18 +382,76 @@ def mode_entry(runs: Runs, decode: np.ndarray, mode: str) -> dict[str, Any]:
     )
 
 
-def passthrough_entry() -> dict[str, Any]:
+PASSTHROUGH = "semantics-ui/group-passthrough-masks"
+PASSTHROUGH_SETS = ("s0", "s1", "s2", "s3")
+# An operator settings-sheet entry that set a node's mode through Painter's UI.
+UI_MODE = re.compile(r"Layers/Blending mode \(step (\d+), (\w+)\)")
+
+
+def passthrough_spec(
+    manifest: dict[str, Any], texture_set: str, workdir: Path, channels: list[str]
+) -> dict[str, Any]:
+    """The spec of a `semantics-ui/group-passthrough-masks` texture set: its instruction sequence
+    (masks_fits.spec_from_steps) with the group modes the operator set through the UI (the
+    runtime member `Passthrough`, the documented `PassThrough`)."""
+    spec = masks_fits.spec_from_steps(manifest, texture_set, workdir, channels)
+    nodes: dict[int, dict[str, Any]] = {}
+    pending = list(spec["layers"])
+    while pending:
+        node = pending.pop()
+        nodes[node["uid"]] = node
+        pending.extend(node.get("children", []))
+    for setting in manifest["applied_settings"]:
+        match = UI_MODE.fullmatch(setting["name"])
+        if match is None:
+            continue
+        node = nodes.get(int(match.group(1)) + masks_fits.UID_OFFSET)
+        if node is not None:
+            assert setting["value"] == "Passthrough", setting
+            node.setdefault("blending", {}).setdefault(match.group(2), {})["mode"] = "PassThrough"
+    return spec
+
+
+def passthrough_residuals(runs: Runs, decode: np.ndarray) -> list[dict[str, Any]]:
+    manifest = masks_fits.envelope_manifest(PASSTHROUGH)
+    golden = masks_fits.envelope_golden(PASSTHROUGH)
+    formats = channel_formats(manifest)
+    out = []
+    for texture_set in PASSTHROUGH_SETS:
+        workdir = runs.work / PASSTHROUGH.replace("/", "-") / texture_set
+        spec = passthrough_spec(manifest, texture_set, workdir, sorted(formats))
+        result = evaluate(runs.exe, spec, workdir, "cpu")
+        for channel in sorted(formats):
+            fmt = formats[channel]
+            ours = raster(result, channel)
+            value = ours if fmt.endswith("F") else export16(ours, fmt, decode)
+            map_name = f"{texture_set}/{channel.lower()}"
+            for recording in ("r1", "r2"):
+                theirs = golden.map(recording, map_name).values.reshape(value.shape)
+                diff = pooled([(value.astype(np.float64), theirs.astype(np.float64))])
+                out.append(residual(f"tier0/{PASSTHROUGH}", map_name, recording, unit(fmt), diff))
+    return out
+
+
+def passthrough_entry(runs: Runs, decode: np.ndarray) -> dict[str, Any]:
     return entry(
         "kernel-passthrough",
-        "BlendingMode.PassThrough (group layers only)",
-        "No kernel: a PassThrough group composites its visible children directly into the "
-        "enclosing list with their opacities scaled by the group's (EVALUATOR.md). Not settable "
-        "through Painter 12.1.0's API, so no Tier 0 golden records it.",
+        "BlendingMode.PassThrough (group layers only; the runtime member is Passthrough)",
+        "A PassThrough group composites its visible children onto a copy of the accumulator "
+        "below it, each child stored in the channel format with its own mode, opacity and mask, "
+        "and then moves the accumulator toward that result by the group's opacity t times its "
+        "mask: v = fma(g - a, t, a) over an opaque backdrop (one rounding); over a transparent "
+        "backdrop the result with coverage t times its coverage; between, the premultiplied lerp "
+        "(not recorded). Set through Painter's UI (decision 029); the documented BlendingMode."
+        "PassThrough does not exist at runtime.",
         [PYDOC, GUIDE],
         [],
-        [],
-        notes="Release gap until a golden records it.",
-        gap=True,
+        passthrough_residuals(runs, decode),
+        notes=(
+            "Fitted on tier0/semantics-ui/group-passthrough-masks s0-s3 (no mask, a group mask, "
+            "a child mask, both; RGB16, sRGB8 and RGB32F); its Normal-mode controls s4-s7 are "
+            "the group-masks stack. The scaled-children hypothesis of phase1.4 is refuted."
+        ),
     )
 
 
@@ -386,17 +462,18 @@ def build(exe: Path, work: Path) -> dict[str, Any]:
     runs = Runs(exe, work)
     decode = srgb8_decode(exe, work)
     entries = [mode_entry(runs, decode, mode) for mode in MODES]
-    entries.append(passthrough_entry())
+    entries.append(passthrough_entry(runs, decode))
     corpus = sorted(
         {f"tier0/semantics/{stem}" for stem, _ in SWEEPS.values()}
-        | {f"tier0/semantics/{NORMAL_CHANNEL}"}
+        | {f"tier0/semantics/{NORMAL_CHANNEL}", f"tier0/{PASSTHROUGH}"}
     )
     return document(
         "blend-kernels",
-        "The blend kernels of the evaluator (04 section 3, task "
-        "phase1.10_compositor-blend-kernels) for every documented BlendingMode, evaluated by the "
-        "CPU store under the current profile on the Tier 0 blend sweeps and on the Normal "
-        "channel. Residuals are |delta| in export units "
+        "The blend kernels of the evaluator (04 section 3, tasks "
+        "phase1.10_compositor-blend-kernels and phase1.11_compositor-blend-gaps) for every "
+        "documented BlendingMode, evaluated by the "
+        "CPU store under the current profile on the Tier 0 blend sweeps, on the Normal "
+        "channel and on the UI-set Passthrough groups. Residuals are |delta| in export units "
         "(16-bit PNG codes, OpenEXR float32 values) per texture set and channel, against both "
         "recordings (r1 same session, r2 after save and reopen). Supersedes blend-modes.json for "
         "the evaluator; blend-modes.json keeps the phase0.7 candidate fits.",

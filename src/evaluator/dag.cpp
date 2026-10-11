@@ -320,11 +320,10 @@ render::Result<std::optional<DagMask>> MaskOf(const Context& ctx, const Layer& l
 }
 
 render::Result<void> AppendLayers(Context& ctx, const std::vector<Layer>& layersTopFirst,
-                                  DagList& list, float opacityScale, float maskScale);
+                                  DagList& list);
 
 /// Appends `layer` (visible, contributing) to `list`.
-render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list,
-                                 float opacityScale, float maskScale) {
+render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list) {
     if (!layer.visible) return {};
     if (!layer.content_effects.empty() && layer.kind == LayerKind::group) {
         return EvalFail(EvalErrorKind::UnsupportedNode, "a group has no content stack", layer.uid);
@@ -347,7 +346,7 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
                             layer.uid);
         }
         ++ctx.depth;
-        render::Result<void> ok = AppendLayer(ctx, *source, list, opacityScale, maskScale);
+        render::Result<void> ok = AppendLayer(ctx, *source, list);
         --ctx.depth;
         return ok;
     }
@@ -355,14 +354,8 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
     DagLayer node;
     node.uid = layer.uid;
     node.mode = blending.mode;
-    node.opacity = static_cast<float>(blending.opacity) * opacityScale;
-    node.mask = constantMask * maskScale;
-    if (*mask && maskScale != 1.0f) {
-        return EvalFail(EvalErrorKind::UnsupportedNode,
-                        "a masked layer inside a masked PassThrough group is a release gap "
-                        "(phase0.7_tier0-semantics-ui-cases)",
-                        layer.uid);
-    }
+    node.opacity = static_cast<float>(blending.opacity);
+    node.mask = constantMask;
     node.maskStack = std::move(*mask);
     HashWriter writer;
     writer.U64(layer.uid).U32(static_cast<uint32_t>(node.mode)).F32(node.opacity).F32(node.mask);
@@ -390,17 +383,8 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
             break;
         }
         case LayerKind::group: {
-            if (node.mode == BlendingMode::PassThrough) {
-                if (node.maskStack) {
-                    return EvalFail(EvalErrorKind::UnsupportedNode,
-                                    "a PassThrough group with mask effects or a geometry mask is a "
-                                    "release gap (phase0.7_tier0-semantics-ui-cases)",
-                                    layer.uid);
-                }
-                // Children composite directly into the parent list.
-                return AppendLayers(ctx, layer.children, list, node.opacity, node.mask);
-            }
-            if (!arith::HasKernel(node.mode)) {
+            const bool passThrough = node.mode == BlendingMode::PassThrough;
+            if (!passThrough && !arith::HasKernel(node.mode)) {
                 return EvalFail(EvalErrorKind::UnsupportedBlendMode,
                                 std::string(core::ToString(node.mode)) +
                                     " has no blend kernel (a group placement)",
@@ -408,9 +392,19 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
             }
             auto group = std::make_unique<DagList>();
             group->owner = layer.uid;
-            group->isolated = true;
-            group->startHash = ContentStartHash(ctx, "group");
-            render::Result<void> ok = AppendLayers(ctx, layer.children, *group, 1.0f, 1.0f);
+            if (passThrough) {
+                // The children composite onto a copy of the accumulator below the group: their
+                // chain starts from its prefix, in its format.
+                group->isolated = list.isolated;
+                group->fromBackdrop = true;
+                HashWriter start;
+                start.Str("passthrough").Sub(list.layers.empty() ? list.startHash : list.layers.back().prefixHash);
+                group->startHash = start.Finish();
+            } else {
+                group->isolated = true;
+                group->startHash = ContentStartHash(ctx, "group");
+            }
+            render::Result<void> ok = AppendLayers(ctx, layer.children, *group);
             if (!ok) return ok;
             if (group->layers.empty()) return {};  // nothing visible: a transparent group
             writer.Str("group").Sub(group->layers.back().prefixHash);
@@ -433,9 +427,9 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
 }
 
 render::Result<void> AppendLayers(Context& ctx, const std::vector<Layer>& layersTopFirst,
-                                  DagList& list, float opacityScale, float maskScale) {
+                                  DagList& list) {
     for (auto it = layersTopFirst.rbegin(); it != layersTopFirst.rend(); ++it) {
-        render::Result<void> ok = AppendLayer(ctx, *it, list, opacityScale, maskScale);
+        render::Result<void> ok = AppendLayer(ctx, *it, list);
         if (!ok) return ok;
     }
     return {};
@@ -527,7 +521,7 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
         for (const float component : dag.base) writer.F32(component);
         dag.root.startHash = writer.Finish();
     }
-    render::Result<void> ok = AppendLayers(ctx, stackPtr->root_layers, dag.root, 1.0f, 1.0f);
+    render::Result<void> ok = AppendLayers(ctx, stackPtr->root_layers, dag.root);
     if (!ok) return render::Unexpected(ok.error());
     if (dag.root.isolated && !dag.root.layers.empty()) {
         HashWriter writer;

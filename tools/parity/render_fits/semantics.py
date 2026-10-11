@@ -2,8 +2,9 @@
 
 Every entry names its approved public sources and its fitted constants, and lists residuals of
 the prototype against the admitted Iray references as numbers only (16-bit display codes, on
-the held-out pixels of decision 050). Status `calibrated` throughout: a non-zero residual is a
-candidate exception, never a pass (07 §4).
+the held-out pixels of decision 050) against the two session-separated S references, `r1`
+and `r2` (the k*S comparison is in the report). Status `calibrated` throughout: a non-zero
+residual is a candidate exception, never a pass (07 §4).
 """
 
 from __future__ import annotations
@@ -36,19 +37,47 @@ def difference(stats: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def lattice_residuals(display_results: dict[str, Any]) -> list[dict[str, Any]]:
+    """Each S recording's interior codes against the display-encoding lattice: an off-lattice
+    sample is at most `max_distance_codes` away, counted at that distance."""
+    out = []
+    for name, recordings in display_results["per_golden"].items():
+        for label in ("r1", "r2"):
+            stats = recordings[label]
+            total = int(stats["samples"])
+            off = total - int(stats["samples_on_lattice"])
+            distance = int(stats["max_distance_codes"])
+            out.append(
+                {
+                    "golden_id": GOLDEN_PREFIX + name,
+                    "map": "interior, every RGB sample",
+                    "compared_against": label,
+                    "unit": UNIT,
+                    "difference": {
+                        "max": distance,
+                        "mean": off * distance / total,
+                        "p99": distance if off > 0.01 * total else 0,
+                        "differing": off,
+                        "total": total,
+                        "affected_texels": off,
+                        "texels": total,
+                    },
+                }
+            )
+    return out
+
+
 def residuals(results: dict[str, Any], names: tuple[str, ...]) -> list[dict[str, Any]]:
     out = []
     for name in names:
         held = results["held_out"][name]
         part = "interior held-out half" if held["held_out"] == "chessboard half" else "interior"
-        for against in ("k", "s1", "s2"):
+        for against, label in (("s1", "r1"), ("s2", "r2")):
             out.append(
                 {
                     "golden_id": GOLDEN_PREFIX + name,
                     "map": f"{part}, every {fit.STEP}th px",
-                    "compared_against": {"k": "k*S", "s1": "S (session 1)", "s2": "S (session 2)"}[
-                        against
-                    ],
+                    "compared_against": label,
                     "unit": UNIT,
                     "difference": difference(held[against]),
                 }
@@ -90,7 +119,7 @@ def entries(results: dict[str, Any]) -> list[dict[str, Any]]:
                 src("S-EXR", "binary16 (half) pixel type"),
             ],
             "parameters": [{"name": "intermediate", "value": "binary16", "origin": "fitted"}],
-            "residuals": [],
+            "residuals": lattice_residuals(results["display"]),
             "notes": (
                 f"{lattice['samples_on_lattice']} of {lattice['samples']} interior RGB samples "
                 f"of the 66 fixture renders ({lattice['fraction_on_lattice']:.4f}) lie on the "
@@ -149,7 +178,9 @@ def entries(results: dict[str, Any]) -> list[dict[str, Any]]:
                 src("A-PYDOC", "display.Camera"),
             ],
             "parameters": [{"name": "filter", "value": filt["chosen"], "origin": "fitted"}],
-            "residuals": [],
+            "residuals": residuals(
+                results, ("neutral-grey-diffuse", "plane-mid-grey", "cube-mid-grey")
+            ),
             "notes": "Edge band mean |delta| per golden: "
             + "; ".join(f"{r['golden']} {r['edge_mean_abs']:.0f}" for r in edge_rows)
             + " (16-bit codes, 256 samples).",
@@ -168,7 +199,7 @@ def entries(results: dict[str, Any]) -> list[dict[str, Any]]:
                 src("X-D3D12", "FLOAT to UNORM conversion"),
             ],
             "parameters": [{"name": "srgb8_ties", "value": "up", "origin": "fitted"}],
-            "residuals": [],
+            "residuals": residuals(results, ("neutral-reflective", "metal1-rough010")),
             "notes": (
                 "The tie rule of sRGB 0.5 and 0.9 was chosen on the mirror sphere (code 230 "
                 "fits better than 229); the L8 rule is Tier 0's (quantisation-profile.json)."
@@ -330,7 +361,7 @@ def entries(results: dict[str, Any]) -> list[dict[str, Any]]:
                 {"name": "max_depth", "value": 8, "origin": "authored"},
                 {"name": "rr_depth", "value": 3, "origin": "authored"},
             ],
-            "residuals": [],
+            "residuals": residuals(results, ("neutral-grey-diffuse",)),
             "notes": (
                 "Spectral transport, caustic paths and the maximum path depth are not "
                 "identified by these goldens; see iray-noise-floor.md §5."
