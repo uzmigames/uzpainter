@@ -60,7 +60,7 @@ Overall: GPT "revise before approval", Grok "reject as-is on coverage holes", Ki
 7. **Noise terms.** They are computed in the reference's encoding per region: interior, the 2-pixel edge band, background.
    - (a) is s versus s; (b) is s versus k·S.
    - Statistics: max, mean, p99 and rms of |Δ|, the differing-pixel count, and the mean signed Δ with a standard error over 16x16 blocks. Each is also given after 2x, 4x and 8x box averaging.
-   - The S-render σ is estimated two ways, rms(a)/√2 and rms(b)/√(1+1/k).
+   - The S-render σ is estimated from (b) only, as a range: rms(b)/√(1+1/k) if the k·S render is independent of the S render, and rms(b)/√(1−1/k) if it continues the same sample sequence. The first admitted goldens showed (a) orders of magnitude below (b): about 2% of object pixels differ between sessions. So Iray's sequence repeats across sessions, and (a) is not an independent-seed repeat. It is reported as the oracle-stability result, and no σ is derived from it.
    - These are noisy estimates from three renders, not tolerances.
 8. **Ratification.** Only the fixture content (meshes, material values, camera, which fixtures get `ref_match`) is proposed to the owner. The render settings were fixed by the owner in decision 038.
 
