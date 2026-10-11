@@ -202,6 +202,32 @@ The texture unit is a fixed-point datapath for which no closed form was found: a
   The tables are pinned to driver 617.14.
 - Rotated minification stays refused. A Painter recording is needed only to validate such a replica beyond these captures: anisotropic HQ, LOD at or above 1, and rotations (decision 056).
 
+## 7. The tabulated replica stops at the accumulation gate (decision 071)
+
+`python -m tools.parity.vk_sampler_probe.replica_gates <work-dir>` measures decision 061's gates on synthetic textures (RTX 4090, driver 617.14, Vulkan).
+
+| Gate | Measured | Result |
+|---|---|---|
+| 1. Arithmetic around the probes | t = min(256, floor(7 f / 4)) on the upper level; rule F splits a probe of weight w: x1 = rhu(w fx / 256), x0 = w - x1, w11 = rhu(x1 fy / 256), w01 = rhd(x0 fy / 256) | 4 325 376 tap weights, 0 differing |
+| 2. Table keys | bits below the 9-bit gradient mantissas; ddx and ddy swapped (rotation 90) | 0 of 1 800 kernels differ, at both biases |
+| | sign of the major-axis gradient | 82 and 56 of 1 800 differ: a table dimension |
+| | geometry (probe pairs) as a function of (rho, f) with rho = lambda_major - lambda | 0 of 200 cells differ between two keys; 0 of 200 between bias 0 and bias -1.5; the sign changes 116 of 200 |
+| 3. Accumulation | each probe: E of its largest weighed texel, operands floor(t 2^(28 - E)), exact integer sum | one probe per level: 400 000 of 400 000 equal; two probes, representable sums: 126 817 of 126 817 |
+| | several probes summed exactly, rounded ties-up | rounded two-probe sums: 3 of 193 183 one ulp low; uniform 16-bit codes 0 of 150 000; dark 8-bit codes 2 of 150 000; dark 16-bit codes 51 of 150 000 |
+
+The misses lie 0 to 1/16 ulp above a rounding midpoint and are rounded down. A dial experiment steps one operand unit across a float32 tie:
+
+- the hardware sum equals the exact sum in 559 cases;
+- it is lower by one or more units of the larger-exponent probe's last bit in 54 cases, all with that probe's sum odd;
+- 210 odd cases show no deficit.
+
+No truncation, rounding or alignment rule that was tried fits every dataset (decision 071). Gate 3 therefore fails:
+
+- the replica is not built and the refusal stays;
+- items 2.2-2.4, 3.1, 3.2 and 4.1 stay open;
+- the next step is a focused measurement of the multi-probe accumulator;
+- the validation goldens of decision 078 stay unused until a replica exists.
+
 ## Reproduce
 
 ```
@@ -210,4 +236,5 @@ python -m pytest tests/evaluator/test_compositor_sources_projection.py
 python tests/evaluator/sources_fits.py zig-out/bin/uzp-evaluator-tests.exe <work-dir>
 python -m tools.parity.vk_sampler_probe.measure <work-dir>
 python -m tools.parity.vk_sampler_probe.texture_unit <work-dir>
+python -m tools.parity.vk_sampler_probe.replica_gates <work-dir>
 ```

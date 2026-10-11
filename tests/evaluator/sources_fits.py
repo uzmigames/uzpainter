@@ -556,8 +556,10 @@ def uv_sampling(ev: Evaluations, exe: Path) -> dict[str, Any]:
             "level-0 bilinear sample C1 as fma(C1, 1 - alpha, acc alpha), "
             "alpha = clamp(min(|ddx|, |ddy|) w - 1, 0, 1). The texture unit itself has no "
             "closed-form software replica (decision 061: its probe offsets are a non-separable "
-            "function of the 9-bit gradient mantissas), so the evaluator refuses a bilinear "
-            "projection whose footprint exceeds one texel with evaluator:unsupported_source.",
+            "function of the 9-bit gradient mantissas), and its tabulated replica stops at the "
+            "accumulation gate (decision 071: several probes are summed with an unresolved "
+            "sub-ulp truncation), so the evaluator refuses a bilinear projection whose "
+            "footprint exceeds one texel with evaluator:unsupported_source.",
             [PYDOC_UV, D3D_FILTER],
             [],
             [],
