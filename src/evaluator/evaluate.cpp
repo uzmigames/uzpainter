@@ -111,6 +111,9 @@ public:
         return Keep(Operand::Of(*dst));
     }
 
+    /// The mask `layer` blends with on this tile (pinned until the end of the tile).
+    render::Result<Operand> RunMask(const DagLayer& layer) { return MaskOf(layer); }
+
 private:
     /// Takes `operand`'s pin out of this evaluation's hands: the caller unpins it.
     Operand Keep(const Operand& operand) {
@@ -472,6 +475,41 @@ render::Result<Operand> EvaluateFloat32Readout(const ChannelDag& dag, EvalEnviro
                                                EvaluationStats& stats) {
     TileEvaluation evaluation(dag, tx, ty, env, stats);
     return evaluation.RunFloat32Readout(base);
+}
+
+render::Result<ChannelResult> EvaluateLayerMask(const ChannelDag& frame, const DagLayer& layer,
+                                                EvalEnvironment& env) {
+    ChannelResult result;
+    result.channel = frame.channel;
+    result.format = kMaskFormat;
+    result.tileFormat = TileFormatOf(kMaskFormat);
+    result.width = frame.grid.width;
+    result.height = frame.grid.height;
+    for (uint32_t ty = 0; ty < frame.grid.TilesY(); ++ty) {
+        for (uint32_t tx = 0; tx < frame.grid.TilesX(); ++tx) {
+            TileResult tile;
+            tile.x0 = tx * kTileSize;
+            tile.y0 = ty * kTileSize;
+            tile.width = frame.grid.TileWidth(tx);
+            tile.height = frame.grid.TileHeight(ty);
+            ++result.stats.tiles;
+            {
+                TileEvaluation evaluation(frame, tx, ty, env, result.stats);
+                render::Result<Operand> mask = evaluation.RunMask(layer);
+                if (!mask) return render::Unexpected(mask.error());
+                if (mask->kind == Operand::Kind::Constant) {
+                    tile.constant = std::array<float, 3>{mask->value[0], mask->value[1], mask->value[2]};
+                    ++result.stats.constantTiles;
+                } else {
+                    render::Result<TileImage> image = env.store.Read(mask->tile);
+                    if (!image) return render::Unexpected(image.error());
+                    tile.texels = std::move(image->texels);
+                }
+            }
+            result.tiles.push_back(std::move(tile));
+        }
+    }
+    return result;
 }
 
 render::Result<ChannelResult> EvaluateChannel(const ChannelDag& dag, EvalEnvironment& env) {

@@ -7,6 +7,7 @@
 
 #include "evaluator/admission.h"
 #include "evaluator/cpu_store.h"
+#include "evaluator/diagnostics.h"
 #include "evaluator/evaluate.h"
 #include "evaluator/height_to_normal.h"
 #include "evaluator/resources.h"
@@ -67,6 +68,17 @@ public:
     [[nodiscard]] std::future<render::Result<VirtualNormalResult>> EvaluateNormal(
         core::Snapshot snapshot, VirtualNormalRequest request);
 
+    /// Evaluates the named diagnostic of `snapshot` on the engine thread (diagnostics.h): every
+    /// evaluation it needs reads that one revision.
+    [[nodiscard]] std::future<render::Result<DiagnosticOutput>> Diagnose(core::Snapshot snapshot,
+                                                                         DiagnosticSource source,
+                                                                         DiagnosticRequest request);
+
+    /// The material views of layer `material` of `snapshot` on the engine thread (diagnostics.h).
+    [[nodiscard]] std::future<render::Result<MaterialViews>> EvaluateMaterialViews(core::Snapshot snapshot,
+                                                                                   core::Id material,
+                                                                                   DiagnosticRequest request);
+
     /// The cache statistics as of the requests run so far.
     [[nodiscard]] std::future<render::Result<CacheStats>> Stats();
 
@@ -97,6 +109,15 @@ public:
     [[nodiscard]] render::Result<VirtualNormalResult> EvaluateNormal(const core::Project& project,
                                                                      std::int64_t revision,
                                                                      const VirtualNormalRequest& request);
+
+    /// The named diagnostic of revision `revision` (diagnostics.h).
+    [[nodiscard]] render::Result<DiagnosticOutput> Diagnose(const core::Project& project, std::int64_t revision,
+                                                            const DiagnosticSource& source,
+                                                            const DiagnosticRequest& request);
+    /// The material views of layer `material` of revision `revision` (diagnostics.h).
+    [[nodiscard]] render::Result<MaterialViews> EvaluateMaterialViews(const core::Project& project,
+                                                                      std::int64_t revision, core::Id material,
+                                                                      const DiagnosticRequest& request);
 
     [[nodiscard]] CpuTileStore& store() { return m_store; }
     [[nodiscard]] TileCache& cache() { return m_cache; }

@@ -543,4 +543,39 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     return dag;
 }
 
+render::Result<DagLayer> BuildLayerMask(const core::Project& project, const ChannelDag& frame, core::Id uid) {
+    const core::TextureSet* set = nullptr;
+    for (const core::TextureSet& candidate : project.texture_sets) {
+        if (candidate.id == frame.textureSet) set = &candidate;
+    }
+    const core::Stack* stack = core::FindStack(project, frame.textureSet, frame.stack);
+    if (set == nullptr || stack == nullptr) {
+        return EvalFail(EvalErrorKind::NotFound, "stack " + std::to_string(frame.stack) +
+                                                     " is not in texture set " +
+                                                     std::to_string(frame.textureSet));
+    }
+    const Layer* layer = core::FindLayer(*stack, uid);
+    if (layer == nullptr) {
+        return EvalFail(EvalErrorKind::NotFound,
+                        "layer " + std::to_string(uid) + " is not in stack " + std::to_string(frame.stack));
+    }
+    for (int depth = 0; layer->kind == LayerKind::instance; ++depth) {
+        const Layer* source = depth < kMaxInstanceDepth ? core::FindLayer(*stack, layer->instance_source) : nullptr;
+        if (source == nullptr) {
+            return EvalFail(EvalErrorKind::NotFound,
+                            "instance source " + std::to_string(layer->instance_source) + " is not in the stack",
+                            layer->uid);
+        }
+        layer = source;
+    }
+    Context ctx{project,          frame.profile.id, *set,       *stack,    frame.channel,
+                frame.tileFormat, frame.format,     frame.base, frame.grid};
+    DagLayer node;
+    node.uid = layer->uid;
+    render::Result<std::optional<DagMask>> mask = MaskOf(ctx, *layer, node.mask);
+    if (!mask) return render::Unexpected(mask.error());
+    node.maskStack = std::move(*mask);
+    return node;
+}
+
 }  // namespace uzp::evaluator

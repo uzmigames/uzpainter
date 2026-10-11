@@ -1,0 +1,12 @@
+{
+  "id": 76,
+  "slug": "every-diagnostic-is-an-export-plan-source-of-srcmaptype-diagnosticmap-named-kind-map-uid",
+  "title": "Every diagnostic is an export-plan source of srcMapType diagnosticMap, named <kind>/<map>/<uid>",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.13_compositor-diagnostics",
+    "phase1.15_export-plan-compiler"
+  ],
+  "supersededBy": null
+}
