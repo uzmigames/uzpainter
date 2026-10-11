@@ -1,0 +1,9 @@
+{
+  "id": 56,
+  "slug": "painter-minifies-through-the-gpu-s-vulkan-anisotropic-sampler-the-uv-offset-precedes-the-scale-and-minification-stays-refused",
+  "title": "Painter minifies through the GPU's Vulkan anisotropic sampler; the UV offset precedes the scale; minification stays refused",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": ["phase1.9_compositor-resample-gaps"],
+  "supersededBy": null
+}

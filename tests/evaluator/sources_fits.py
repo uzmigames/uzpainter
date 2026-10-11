@@ -414,8 +414,9 @@ def colour_transfer(ev: Evaluations, decode: np.ndarray) -> dict[str, Any]:
 
 TRANSFORM = (
     "Output texel (i, j) of the W x H set at u = (i + 0.5)/W, v = 1 - (j + 0.5)/H; "
-    "(a, b) = ((u - 0.5) s_u, (v - 0.5) s_v); u' = (cos r a + sin r b + 0.5) - o_u, "
-    "v' = (-sin r a + cos r b + 0.5) - o_v, in double; bitmap texel coordinates "
+    "(a, b) = ((u - 0.5 - o_u) s_u, (v - 0.5 - o_v) s_v) (the offset precedes the scale and the "
+    "rotation, decision 056); u' = (cos r a + sin r b) + 0.5, v' = (-sin r a + cos r b) + 0.5, "
+    "in double; bitmap texel coordinates "
     "x = u' w - 0.5, y = (1 - v') h - 0.5 (row 0 on top, centres at integers). "
 )
 
@@ -540,9 +541,17 @@ def uv_sampling(ev: Evaluations, exe: Path) -> dict[str, Any]:
         entry(
             "uv-bilinear-minification",
             "BilinearHQ and BilinearSharp under minification",
-            "Not reproduced: Painter prefilters when one output texel spans more than one bitmap "
-            "texel (resampling.json, user 6 at scale 3.3); the evaluator refuses a bilinear "
-            "projection whose footprint exceeds one texel with evaluator:unsupported_source.",
+            "Not reproduced. Painter samples a minified bitmap with the recording GPU's "
+            "texture unit through Vulkan: a float32 texture with a box mip chain and an "
+            "anisotropic sampler whose trilinear band is that of maxAnisotropy 4 to 7 "
+            "(t = 1.75 f); BilinearSharp is one sample at LOD bias -1.5, BilinearHQ a 3 x 3 "
+            "supersample at 1/3 output-texel steps with the gradients divided by 3, tent weights "
+            "(the (+1/3, +1/3) sample replaced by the centre) blended in by "
+            "min(footprint - 1, 1). Measured on that GPU this reproduces resample-uv-minify, "
+            "resample-uv-impulse and the held-out resample-uv user 6 to one code, not exactly "
+            "(the hardware's float coordinates, anisotropic probes and blend arithmetic are not "
+            "modelled bit for bit; decision 056). The evaluator refuses a bilinear projection "
+            "whose footprint exceeds one texel with evaluator:unsupported_source.",
             [PYDOC_UV, D3D_FILTER],
             [],
             [],
@@ -565,6 +574,8 @@ def uv_sampling(ev: Evaluations, exe: Path) -> dict[str, Any]:
     ]
     corpus = [
         "tier0/semantics/resample-uv",
+        "tier0/semantics/resample-uv-minify",
+        "tier0/semantics/resample-uv-impulse",
         "tier0/semantics/height-normal-sphere",
         "tier0/semantics/height-normal-bevelled-cube",
     ]

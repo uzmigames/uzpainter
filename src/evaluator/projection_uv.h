@@ -8,11 +8,12 @@
 // (gpu_store.h), which mirrors it operation for operation.
 //
 // Output texel (i, j) of a W x H texture set (row 0 on top, i and j counted over the whole set)
-// samples at u = (i + 1/2) / W, v = 1 - (j + 1/2) / H. About the UV centre,
-// (a, b) = ((u - 1/2) s_u, (v - 1/2) s_v), u' = (cos r a + sin r b + 1/2) - o_u and
-// v' = (-sin r a + cos r b + 1/2) - o_v (r the rotation in degrees, o the offset), all in double
-// precision in this order. Bitmap texel coordinates (row 0 on top, centres at integers):
-// x = u' w - 1/2, y = (1 - v') h - 1/2 for a w x h bitmap.
+// samples at u = (i + 1/2) / W, v = 1 - (j + 1/2) / H. The offset moves the point before the
+// scale and the rotation about the UV centre: (a, b) = ((u - 1/2 - o_u) s_u, (v - 1/2 - o_v) s_v),
+// u' = (cos r a + sin r b) + 1/2 and v' = (-sin r a + cos r b) + 1/2 (r the rotation in degrees),
+// all in double precision in this order (decision 056: `resample-uv-minify` user 7 and
+// `resample-uv-impulse` users 6-7 combine an offset with a scale). Bitmap texel coordinates
+// (row 0 on top, centres at integers): x = u' w - 1/2, y = (1 - v') h - 1/2 for a w x h bitmap.
 //
 // - Nearest: the texel (floor(x + 1/2), floor(y + 1/2)); its code is the sample (exact at every
 //   scale, resampling.json `resample-nearest`).
@@ -80,7 +81,8 @@ struct UvProjection {
 
 /// Fails with `evaluator:unsupported_source` when the set resolution is not a power of two on
 /// each axis (the texel centres are computed by exact power-of-two scaling) or when a bilinear
-/// filter minifies (a footprint above one texel: resampling.json, gap of user 6).
+/// filter minifies (a footprint above one texel: Painter samples it with the GPU's anisotropic
+/// texture unit, not modelled bit for bit, decision 056).
 [[nodiscard]] render::Result<void> CheckSampling(const UvProjection& projection,
                                                  uint32_t setWidth, uint32_t setHeight,
                                                  const DecodedImage& image, core::Id node);
