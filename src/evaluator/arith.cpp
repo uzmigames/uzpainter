@@ -158,8 +158,9 @@ float Divide(float a, float b) {
 
 constexpr float kSix = 6.0f;
 constexpr float kThree = 3.0f;
-constexpr float kFour = 4.0f;
 constexpr float kSixth = 1.0f / 6.0f;
+constexpr float kThird = 1.0f / 3.0f;
+constexpr float kTwoThirds = 2.0f / 3.0f;
 /// 3 2^-12, the hue offset of the fitted hue (exact).
 constexpr float kHueOffset = 3.0f * kHsvEpsilon;
 
@@ -170,9 +171,9 @@ float Min3(const Rgb& c) { return Fmin(Fmin(c[0], c[1]), c[2]); }
 
 /// The hue in turns, [0, 1] (fitted, phase1.11_compositor-blend-gaps): the smallest component
 /// (red first, then green before blue on ties) selects the centre C (blue 1, red 3, green 5) and
-/// the difference X of the other two (g - r, b - g, r - b); with d = max - min and e = 2^-12,
-/// h6 = fma(X - 3e, rcp(d + e), C) with the hardware reciprocal, h = h6 / 6 (times float32(1/6)),
-/// a negative h moved up by one turn.
+/// the other two p, q (g and r, b and g, r and b); with d = max - min and e = 2^-12,
+/// h6 = fma(p - (q + 3e), rcp(d + e), C) with the hardware reciprocal, h = h6 / 6 (times
+/// float32(1/6)), a negative h moved up by one turn.
 float Hue(const Rgb& c) {
     const float r = c[0];
     const float g = c[1];
@@ -181,19 +182,21 @@ float Hue(const Rgb& c) {
     const bool minR = r <= g && r <= b;
     const bool minB = !minR && b < g;
     const float centre = minB ? kOne : (minR ? kThree : 5.0f);
-    const float x = minB ? Sub(g, r) : (minR ? Sub(b, g) : Sub(r, b));
-    const float h6 = Fma(Sub(x, kHueOffset), hw::Rcp(Add(d, kHsvEpsilon)), centre);
+    const float p = minB ? g : (minR ? b : r);
+    const float q = minB ? r : (minR ? g : b);
+    const float h6 = Fma(Sub(p, Add(q, kHueOffset)), hw::Rcp(Add(d, kHsvEpsilon)), centre);
     const float h = Mul(h6, kSixth);
     return h < 0.0f ? Add(h, kOne) : h;
 }
 
-/// The hexcone weights of a hue, per component: with f = h - floor(h), red |6f - 3| - 1, green
-/// 2 - |6f - 2|, blue 2 - |6f - 4| (each 6f - k one fused multiply-add), clamped to [0, 1].
+/// The hexcone weights of a hue h in [0, 1] (1 itself when a small negative hue moved up by one
+/// turn rounds to it; no further reduction), per component, centred on each primary: red
+/// 6 |h - 1/2| - 1, green 2 - 6 |h - 1/3|, blue 2 - 6 |h - 2/3| (1/3 and 2/3 as float32, each a
+/// fused multiply-add of the rounded distance), clamped to [0, 1].
 Rgb HueWeights(float h) {
-    const float f = Sub(h, std::floor(h));
-    return {Clamp01(Sub(std::fabs(Fma(f, kSix, -kThree)), kOne)),
-            Clamp01(Sub(kTwo, std::fabs(Fma(f, kSix, -kTwo)))),
-            Clamp01(Sub(kTwo, std::fabs(Fma(f, kSix, -kFour))))};
+    return {Clamp01(Fma(kSix, std::fabs(Sub(h, kHalf)), -kOne)),
+            Clamp01(Fma(-kSix, std::fabs(Sub(h, kThird)), kTwo)),
+            Clamp01(Fma(-kSix, std::fabs(Sub(h, kTwoThirds)), kTwo))};
 }
 
 /// HSV with the hue of `hueSource`, the saturation of `satSource` and the value of `valueSource`,
