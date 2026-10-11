@@ -16,6 +16,10 @@
       "type": "string"
     },
     "key": { "$ref": "#/$defs/golden_key" },
+    "environment": {
+      "description": "Oracle environment record of the session(s) that made the recordings (decision 034 (a)). Optional: goldens recorded before phase0.9_oracle-envelope carry a back-filled record in the store instead (kind oracle_environment_record).",
+      "$ref": "#/$defs/oracle_environment"
+    },
     "recordings": {
       "description": "Two-recording rule: at least two recordings of the same key.",
       "type": "array",
@@ -66,6 +70,46 @@
   ],
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "known_or_unknown": {
+      "description": "A recorded value, or the string `unknown` when it cannot be known (never a guess).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "oracle_environment": {
+      "description": "Environment record (decision 034 (a); tools/parity/recorder/environment.py). Host fields come from the operating system, Painter fields from the documented API. Private: the public manifest holds only its SHA-256.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "basis",
+        "painter_build",
+        "gpu_model",
+        "driver_version",
+        "os_build",
+        "colour_configuration_sha256",
+        "recorder_version"
+      ],
+      "properties": {
+        "schema": { "const": "uzpainter/parity/oracle-environment/1" },
+        "basis": {
+          "description": "recorded: captured by the recorder at session start; backfilled: written later for a golden recorded before the record existed (unknown fields are `unknown`).",
+          "enum": ["recorded", "backfilled"]
+        },
+        "painter_build": { "$ref": "#/$defs/known_or_unknown" },
+        "gpu_model": { "$ref": "#/$defs/known_or_unknown" },
+        "driver_version": { "$ref": "#/$defs/known_or_unknown" },
+        "os_build": { "$ref": "#/$defs/known_or_unknown" },
+        "colour_configuration_sha256": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "const": "unknown" }]
+        },
+        "recorder_version": { "$ref": "#/$defs/known_or_unknown" },
+        "operator_id": {
+          "description": "Iray references (Tier 3) only: the operator who applied the settings sheet.",
+          "$ref": "#/$defs/known_or_unknown"
+        }
+      }
+    },
     "golden_id": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$"
@@ -108,7 +152,11 @@
           "required": ["product", "version", "build_id"],
           "properties": {
             "product": { "const": "Adobe Substance 3D Painter" },
-            "version": { "const": "12.1.0" },
+            "version": {
+              "description": "Painter version of the envelope the golden was recorded under (decision 037: the acceptance oracle is the current envelope; the version is no longer pinned).",
+              "type": "string",
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+            },
             "build_id": { "type": "string", "minLength": 1 }
           }
         },

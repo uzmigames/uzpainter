@@ -158,7 +158,10 @@ def test_defaults_capture_holds_every_key_of_common_and_every_baker(
         assert outputs["baking/get_enabled_bakers"]["values"]["texture_sets"] == {
             world.texture_set: ["AO", "Normal"]
         }
-    assert [r["record_id"] for r in manifest["private_records"]] == ["golden-record"]
+    assert [r["record_id"] for r in manifest["private_records"]] == [
+        "golden-record",
+        "oracle-environment",
+    ]
 
 
 def test_enumeration_records_labels_with_their_enum_value(
@@ -434,8 +437,9 @@ def test_store_admits_the_run_and_verify_passes(
     assert store_main(["--store", str(store.root), "record", str(target), "--run", str(run)]) == 0
     assert store_main(["--store", str(store.root), "verify", str(target)]) == 0
     manifest = load_json(target)
-    (ref,) = manifest["private_records"]
+    (ref, environment) = manifest["private_records"]
     assert ref["kind"] == "private_oracle_record"
+    assert environment["kind"] == "oracle_environment_record"
     assert ref["sha256"] in store.index()
 
 

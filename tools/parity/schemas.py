@@ -29,6 +29,8 @@ class Schema(StrEnum):
     EXCEPTIONS = "exceptions.json"
     COMPARISON_REPORT = "comparison-report.json"
     SEMANTICS = "semantics.json"
+    ENVELOPE_REGISTRY = "envelope-registry.json"
+    ORACLE_ENVELOPE = "oracle-envelope.json"
 
 
 def load_json(path: Path) -> Any:
@@ -55,6 +57,24 @@ def validation_errors(document: Any, schema: Schema) -> list[str]:
 
 def is_valid(document: Any, schema: Schema) -> bool:
     return not validation_errors(document, schema)
+
+
+@cache
+def _environment_validator() -> Draft202012Validator:
+    private = load_schema(Schema.GOLDEN_PRIVATE)
+    document = {
+        "$schema": private["$schema"],
+        "$defs": private["$defs"],
+        "$ref": "#/$defs/oracle_environment",
+    }
+    return Draft202012Validator(document, format_checker=FormatChecker())
+
+
+def environment_problems(environment: Any) -> list[str]:
+    """Violations of the environment record (`golden-private.json` `$defs/oracle_environment`),
+    for a record stored on its own (a back-filled `oracle_environment_record`)."""
+    errors = sorted(_environment_validator().iter_errors(environment), key=lambda e: list(e.path))
+    return [f"{'/'.join(str(p) for p in e.absolute_path) or '<root>'}: {e.message}" for e in errors]
 
 
 def register_problems(
@@ -98,10 +118,21 @@ def record_problems(record: Mapping[str, Any]) -> list[str]:
       rendering time stayed below Max Time; its operator settings name an output of the record.
     - Tier 3: the two `separate_session` recordings come from different sessions, and the
       `k_times_samples` recording used k*S samples (k > 1) where S is the sessions' sample count.
+    - Environment record (decision 034 (a)): its Painter build, when known, is the key's build;
+      it names an operator id for an Iray reference (Tier 3) and for nothing else.
     """
     problems = validation_errors(record, Schema.GOLDEN_PRIVATE)
     if problems:
         return problems
+    environment = record.get("environment")
+    if environment is not None:
+        build = environment["painter_build"]
+        if build != "unknown" and build != record["key"]["painter_build"]["build_id"]:
+            problems.append(f"environment: Painter build {build} is not the key's build")
+        if record["tier"] == "3" and "operator_id" not in environment:
+            problems.append("environment: an Iray reference names its operator_id")
+        if record["tier"] != "3" and "operator_id" in environment:
+            problems.append("environment: operator_id belongs to Iray references only")
     output_ids = {o["output_id"] for rec in record["recordings"] for o in rec["outputs"]}
     session_samples: set[int] = set()
     k_samples: set[int] = set()

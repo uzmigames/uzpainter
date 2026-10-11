@@ -42,6 +42,7 @@ from tools.parity.recorder.capture import (
     verify_current_outputs,
     write_fence,
 )
+from tools.parity.recorder.environment import DIFFERS, UNKNOWN, envelope_match
 from tools.parity.recorder.job import Job, canonical_json, sha256_bytes, sha256_file
 from tools.parity.recorder.output import ensure_outside_repository, run_name, slug, write_run
 from tools.parity.recorder.session import PainterSession, RecorderError
@@ -325,17 +326,23 @@ class StagedRecording:
     key: dict[str, Any]
     recording: dict[str, Any]
     blobs: list[Path]
+    environment: dict[str, Any] | None = None
 
 
 def stage(
-    directory: Path, key: dict[str, Any], recording: dict[str, Any], blobs: list[Path]
+    directory: Path,
+    key: dict[str, Any],
+    recording: dict[str, Any],
+    blobs: list[Path],
+    environment: dict[str, Any] | None = None,
 ) -> None:
     blob_dir = directory / "blobs"
     blob_dir.mkdir(parents=True)
     for blob in blobs:
         shutil.copyfile(blob, blob_dir / sha256_file(blob))
     (directory / "staged.json").write_text(
-        json.dumps({"key": key, "recording": recording}, indent=2), encoding="utf-8"
+        json.dumps({"key": key, "recording": recording, "environment": environment}, indent=2),
+        encoding="utf-8",
     )
 
 
@@ -345,7 +352,10 @@ def load_staged(golden_dir: Path) -> list[StagedRecording]:
         data = json.loads(item.read_text(encoding="utf-8"))
         staged.append(
             StagedRecording(
-                data["key"], data["recording"], sorted((item.parent / "blobs").iterdir())
+                data["key"],
+                data["recording"],
+                sorted((item.parent / "blobs").iterdir()),
+                data.get("environment"),
             )
         )
     return staged
@@ -368,8 +378,13 @@ def record_iray_reference(
     inbox: Path,
     k: int | None = None,
     now: Now = utc_now,
+    *,
+    operator_id: str = UNKNOWN,
 ) -> Path | None:
-    """Record one Iray reference; returns the inbox run once the golden is complete, else None."""
+    """Record one Iray reference; returns the inbox run once the golden is complete, else None.
+
+    Every reference stages its session's environment record with `operator_id`; the references
+    of one golden must share one envelope (decision 034 (a)), else assembly is refused."""
     if job.tier != "3":
         raise RecorderError("Iray references are Tier 3 goldens")
     if job.exports:
@@ -450,7 +465,12 @@ def record_iray_reference(
             *evidence,
         ],
     }
-    stage(golden_dir / recording_id, key, recording, [render_file, *images])
+    environment = (
+        None
+        if identity.environment is None
+        else {**identity.environment, "operator_id": operator_id}
+    )
+    stage(golden_dir / recording_id, key, recording, [render_file, *images], environment)
     staged = load_staged(golden_dir)
     if not complete(staged):
         return None
@@ -468,12 +488,19 @@ def record_iray_reference(
         "key": staged[0].key,
         "recordings": [s.recording for s in staged],
     }
+    environments = [s.environment for s in staged]
+    if any(envelope_match(environments[0], other) == DIFFERS for other in environments[1:]):
+        raise RecorderError(
+            "staged references were recorded under different envelopes (build, GPU, driver, OS "
+            "or colour configuration differ): not assembled"
+        )
     run = write_run(
         inbox,
         record,
         [b for s in staged for b in s.blobs],
         job.manifest,
         identity.session_id,
+        environment=environments[0],
     )
     shutil.rmtree(golden_dir)
     return run

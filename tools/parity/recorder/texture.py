@@ -369,6 +369,8 @@ def record_texture_golden(
     work: Path,
     inbox: Path,
     now: Now = utc_now,
+    *,
+    record_prefix: str = "",
 ) -> Path:
     """Record one Tier 0-2b golden twice and write it to the inbox; returns the run directory."""
     if job.tier == "3":
@@ -413,4 +415,12 @@ def record_texture_golden(
         },
         "recordings": [first, second],
     }
-    return write_run(inbox, record, first_blobs + second_blobs, job.manifest, identity.session_id)
+    return write_run(
+        inbox,
+        record,
+        first_blobs + second_blobs,
+        job.manifest,
+        identity.session_id,
+        environment=identity.environment,
+        record_prefix=record_prefix,
+    )

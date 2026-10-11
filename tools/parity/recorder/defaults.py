@@ -193,7 +193,13 @@ def work_directory(job: Job, work: Path, identity: PainterIdentity, now: Now) ->
 
 
 def record_baking_defaults(
-    session: PainterSession, job: Job, work: Path, inbox: Path, now: Now = utc_now
+    session: PainterSession,
+    job: Job,
+    work: Path,
+    inbox: Path,
+    now: Now = utc_now,
+    *,
+    record_prefix: str = "",
 ) -> Path:
     """Record the baking defaults three times and write the golden to the inbox."""
     check_baking_job(job)
@@ -228,7 +234,15 @@ def record_baking_defaults(
         "r1: fresh project; r2: the same project after save and reopen; "
         "r3: a second fresh project in the same session.",
     )
-    return write_run(inbox, record, [], job.manifest, identity.session_id)
+    return write_run(
+        inbox,
+        record,
+        [],
+        job.manifest,
+        identity.session_id,
+        environment=identity.environment,
+        record_prefix=record_prefix,
+    )
 
 
 def list_shipped_templates(session: PainterSession) -> list[str]:
@@ -318,7 +332,13 @@ def template_pair(
 
 
 def record_project_templates(
-    session: PainterSession, job: Job, work: Path, inbox: Path, now: Now = utc_now
+    session: PainterSession,
+    job: Job,
+    work: Path,
+    inbox: Path,
+    now: Now = utc_now,
+    *,
+    record_prefix: str = "",
 ) -> Path:
     """Record the channel sets and formats of every shipped template twice."""
     named = check_template_job(job)
@@ -374,4 +394,12 @@ def record_project_templates(
         "One project per shipped template, no project setting given (template values apply); "
         "r1 as created, r2 after save and reopen.",
     )
-    return write_run(inbox, record, [], job.manifest, identity.session_id)
+    return write_run(
+        inbox,
+        record,
+        [],
+        job.manifest,
+        identity.session_id,
+        environment=identity.environment,
+        record_prefix=record_prefix,
+    )

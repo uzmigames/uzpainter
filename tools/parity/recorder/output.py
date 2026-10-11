@@ -11,6 +11,12 @@ directory per recorded golden into the oracle inbox, outside the repository:
 `uzpainter parity record` (`phase0.3_oracle-store-cli`) admits a READY run into the private store
 and merges its `private_records` into the repository manifest. Only SHA-256 values and sizes
 reach the public manifest.
+
+Environment record (decision 034 (a)): the record holds the session's `environment` in full, and
+`blobs/<sha256>` holds its canonical JSON, named in the manifest as `oracle-environment` (kind
+`oracle_environment_record`): the public manifest carries only that hash. A `record_prefix`
+(stability study, canary, a second envelope under one build) is put in front of every record id
+so that no store entry is ever recorded twice under one id.
 """
 
 from __future__ import annotations
@@ -23,6 +29,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from tools.parity.recorder.environment import (
+    ENVIRONMENT_KIND,
+    ENVIRONMENT_RECORD_ID,
+    environment_bytes,
+)
 from tools.parity.recorder.job import canonical_json, sha256_bytes, sha256_file
 from tools.parity.recorder.session import RecorderError
 from tools.parity.schemas import REPO_ROOT, Schema, record_problems, validation_errors
@@ -78,11 +89,11 @@ def run_name(session_id: str, now: datetime | None = None) -> str:
 
 
 def private_record_refs(
-    record_bytes: bytes, record: dict[str, Any], blob_sizes: dict[str, int]
+    record_bytes: bytes, record: dict[str, Any], blob_sizes: dict[str, int], prefix: str = ""
 ) -> list[dict[str, Any]]:
     refs: list[dict[str, Any]] = [
         {
-            "record_id": GOLDEN_RECORD_ID,
+            "record_id": prefix + GOLDEN_RECORD_ID,
             "kind": "private_oracle_record",
             "sha256": sha256_bytes(record_bytes),
             "size_bytes": len(record_bytes),
@@ -95,7 +106,9 @@ def private_record_refs(
                 continue
             refs.append(
                 {
-                    "record_id": f"{slug(recording['recording_id'])}-{slug(output['output_id'])}",
+                    "record_id": (
+                        f"{prefix}{slug(recording['recording_id'])}-{slug(output['output_id'])}"
+                    ),
                     "kind": output["kind"],
                     "sha256": blob["sha256"],
                     "size_bytes": blob["size_bytes"],
@@ -133,9 +146,16 @@ def write_run(
     manifest_template: dict[str, Any],
     session_id: str,
     repo_root: Path = REPO_ROOT,
+    *,
+    environment: dict[str, Any] | None = None,
+    record_prefix: str = "",
 ) -> Path:
     """Validate and write one run directory; returns it. Refuses before writing anything."""
     inbox = ensure_outside_repository(inbox, repo_root)
+    if record_prefix and not re.fullmatch(r"[a-z0-9][a-z0-9._-]*-", record_prefix):
+        raise RecorderError(f"record prefix {record_prefix!r} is not `[a-z0-9][a-z0-9._-]*-`")
+    if environment is not None:
+        record = {**record, "environment": environment}
     problems = record_problems(record)
     if problems:
         raise RecorderError(f"private record invalid: {problems}")
@@ -144,10 +164,20 @@ def write_run(
     hashes = {sha256_file(b): b for b in blobs}
     sizes = {h: p.stat().st_size for h, p in hashes.items()}
     record_bytes = canonical_json(record)
-    refs = private_record_refs(record_bytes, record, sizes)
+    refs = private_record_refs(record_bytes, record, sizes, record_prefix)
     named = {r["sha256"] for r in refs[1:]}
     if named != set(hashes):
         raise RecorderError("blobs given do not match the blobs the record names")
+    environment_data = environment_bytes(environment) if environment is not None else None
+    if environment_data is not None:
+        refs.append(
+            {
+                "record_id": record_prefix + ENVIRONMENT_RECORD_ID,
+                "kind": ENVIRONMENT_KIND,
+                "sha256": sha256_bytes(environment_data),
+                "size_bytes": len(environment_data),
+            }
+        )
     manifest = public_manifest(manifest_template, record["key"]["painter_build"], refs)
     run: Path = inbox / str(record["golden_id"]).replace("/", "__") / run_name(session_id)
     if run.exists():
@@ -157,6 +187,8 @@ def write_run(
         shutil.copyfile(path, run / "blobs" / digest)
         if sha256_file(run / "blobs" / digest) != digest:
             raise RecorderError(f"copy of {path} does not hash to {digest}")
+    if environment_data is not None:
+        (run / "blobs" / sha256_bytes(environment_data)).write_bytes(environment_data)
     (run / RECORD_FILE).write_bytes(record_bytes)
     (run / MANIFEST_FILE).write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"

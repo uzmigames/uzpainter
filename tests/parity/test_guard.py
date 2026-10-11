@@ -423,3 +423,56 @@ def test_ci_guard_fails_the_job_on_a_commit_with_a_blocked_file(repo: Path, outs
     failed = _guard_process(repo)
     assert failed.returncode == 1, failed.stdout + failed.stderr
     assert "BLOCKED parity/manifests/tier0/probe.json: [public-schema]" in failed.stdout
+
+
+# --- oracle envelopes (phase0.9_oracle-envelope, decision 037) ------------------------------
+
+
+ENVELOPE_DIR = "parity/envelopes/painter-12.1.5+js-api.1.1.21/manifests"
+
+
+def test_envelope_registry_and_candidate_manifests_pass(repo: Path) -> None:
+    put(
+        repo,
+        "parity/envelopes/registry.json",
+        (REPO_ROOT / "parity/envelopes/registry.json").read_bytes(),
+    )
+    put(repo, f"{ENVELOPE_DIR}/guard/srgb8-checker-decode.json", AUTHORED_EXPECTATION.read_bytes())
+    drafts = {
+        "schema": "uzpainter/parity/oracle-envelope-register-drafts/1",
+        "study_id": "20261011t120000z",
+        "envelope_id": "painter-12.1.0+js-api.1.1.20",
+        "status": "prepared_unapproved",
+        "owner_fields": ["approved_by", "approved_on"],
+        "drafts": [],
+    }
+    put(
+        repo,
+        "parity/reports/phase0/oracle-envelope-register-drafts.json",
+        json.dumps(drafts).encode(),
+    )
+    assert blocked(repo, None) == {}
+    approved = {**drafts, "drafts": [{"exception_id": "EXC-009", "approved_by": "owner"}]}
+    put(
+        repo,
+        "parity/reports/phase0/oracle-envelope-register-drafts.json",
+        json.dumps(approved).encode(),
+    )
+    broken = {"schema": "uzpainter/parity/envelope-registry/1", "current": "painter-x"}
+    put(repo, "parity/envelopes/registry.json", json.dumps(broken).encode())
+    assert blocked(repo, None) == {
+        "parity/reports/phase0/oracle-envelope-register-drafts.json": {"public-schema"},
+        "parity/envelopes/registry.json": {"public-schema"},
+    }
+
+
+def test_private_record_or_store_blob_under_envelopes_is_blocked(
+    repo: Path, outside: Path, store: OracleStore
+) -> None:
+    record = f"{ENVELOPE_DIR}/tier0/probe.json"
+    blob = "parity/envelopes/painter-12.1.5+js-api.1.1.21/basecolor.png"
+    put(repo, record, (outside / "readback.json").read_bytes())
+    put(repo, blob, (outside / "basecolor.png").read_bytes())
+    found = blocked(repo, index_of(store))
+    assert {"store-hash", "private-record", "public-schema"} <= found[record]
+    assert "store-hash" in found[blob]

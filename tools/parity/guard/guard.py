@@ -10,8 +10,10 @@ Checks the content of files, never only their names or signatures:
   samples under `parity/schema/samples/private/` are exempt, and they have their own rule.
 - `public-schema`: every JSON data file under `parity/` (by `.json` name or by content) must
   validate against the public schema its path assigns (`PATH_RULES`); a JSON file under
-  `parity/` that no rule covers is rejected. The store's size census
-  (`parity/reports/<phase>/store-census.json`) is checked by a rule of its own: numbers, with
+  `parity/` that no rule covers is rejected. The envelope registry and every envelope's
+  manifests (`parity/envelopes/`) and the oracle-envelope results
+  (`parity/reports/<phase>/oracle-envelope*.json`) have rules of their own. The store's size
+  census (`parity/reports/<phase>/store-census.json`) is checked by a rule of its own: numbers, with
   text only in its identifier fields.
 """
 
@@ -311,6 +313,18 @@ def _store_census(path: str, document: Any, data: bytes, ctx: _Context) -> list[
     return problems + list(_census_text(document, "", ""))
 
 
+def _envelope_registry(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.envelope.registry import registry_problems
+
+    return registry_problems(document)
+
+
+def _oracle_envelope_result(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.envelope.report import result_problems
+
+    return result_problems(document)
+
+
 _Rule = Callable[[str, Any, bytes, _Context], list[str]]
 
 # First match wins: (path pattern, schema it assigns, check).
@@ -334,6 +348,21 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
     ),
     (re.compile(r"^parity/exceptions\.json$"), "exceptions.json", _register),
     (re.compile(r"^parity/manifests/.+$"), "golden-public.json", _public_manifest),
+    (
+        re.compile(r"^parity/envelopes/registry\.json$"),
+        "envelope-registry.json",
+        _envelope_registry,
+    ),
+    (
+        re.compile(r"^parity/envelopes/[^/]+/manifests/.+$"),
+        "golden-public.json (an envelope's manifests)",
+        _public_manifest,
+    ),
+    (
+        re.compile(r"^parity/reports/[^/]+/oracle-envelope[^/]*\.json$"),
+        "oracle-envelope.json (study, drift, prepared register entries)",
+        _oracle_envelope_result,
+    ),
     (re.compile(r"^parity/semantics/[^/]+$"), "semantics.json", _semantics),
     (re.compile(r"^parity/fixtures/.+$"), "authored input of a manifest", _fixture),
     (

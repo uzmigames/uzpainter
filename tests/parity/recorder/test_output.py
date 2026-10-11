@@ -36,6 +36,12 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def exported_blobs(run: Path) -> list[Path]:
+    """The run's blobs that hold exports (the environment record's blob is JSON)."""
+    blobs = sorted((run / "blobs").iterdir())
+    return [b for b in blobs if b.read_bytes().startswith(b"\x89PNG")]
+
+
 @pytest.fixture
 def run(
     fake: types.ModuleType, make_session: MakeSession, sample_job: Job, work: Path, inbox: Path
@@ -64,7 +70,8 @@ def test_manifest_lists_every_private_hash(run: Path) -> None:
         for o in rec["outputs"]
         if o["kind"] == "exported_map"
     ]
-    assert [(r["record_id"].split("-", 1)[0], r["sha256"]) for r in refs[1:]] == exported
+    assert refs[-1]["kind"] == "oracle_environment_record"
+    assert [(r["record_id"].split("-", 1)[0], r["sha256"]) for r in refs[1:-1]] == exported
     for ref in refs[1:]:
         blob = run / "blobs" / ref["sha256"]
         assert sha256(blob) == ref["sha256"] and blob.stat().st_size == ref["size_bytes"]
@@ -74,8 +81,7 @@ def test_recorded_export_stays_private(run: Path, work: Path) -> None:
     """Spec scenario: the 16-bit PNG exists only in the private directories; the public manifest
     holds its SHA-256 and nothing else of it."""
     manifest_text = (run / MANIFEST_FILE).read_text(encoding="utf-8")
-    for blob in (run / "blobs").iterdir():
-        assert blob.read_bytes().startswith(b"\x89PNG")
+    for blob in exported_blobs(run):
         assert blob.name in manifest_text
         assert not blob.resolve().is_relative_to(REPO_ROOT)
     assert not run.resolve().is_relative_to(REPO_ROOT)
@@ -118,7 +124,7 @@ def test_private_directories_come_from_the_environment(
 
 def test_invalid_record_is_not_written(run: Path, sample_job: Job, tmp_path: Path) -> None:
     record = json.loads((run / RECORD_FILE).read_text(encoding="utf-8"))
-    blobs = sorted((run / "blobs").iterdir())
+    blobs = exported_blobs(run)
     single = copy.deepcopy(record)
     single["recordings"] = single["recordings"][:1]
     target = tmp_path / "second-inbox"
@@ -139,7 +145,7 @@ def test_manifest_of_another_painter_build_is_refused(
     manifest["software"]["painter"]["build_id"] = "12.1.0+js-api.0.0.1"
     target = tmp_path / "second-inbox"
     with pytest.raises(RecorderError, match="immutable per Painter build"):
-        write_run(target, record, sorted((run / "blobs").iterdir()), manifest, "s")
+        write_run(target, record, exported_blobs(run), manifest, "s")
     assert not target.exists()
 
 

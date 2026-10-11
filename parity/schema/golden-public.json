@@ -200,7 +200,11 @@
           "required": ["product", "version", "build_id"],
           "properties": {
             "product": { "const": "Adobe Substance 3D Painter" },
-            "version": { "const": "12.1.0" },
+            "version": {
+              "description": "Painter version of the envelope the golden was recorded under (decision 037: the acceptance oracle is the current envelope; the version is no longer pinned).",
+              "type": "string",
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+            },
             "build_id": { "type": "string", "minLength": 1, "maxLength": 128 }
           }
         },
@@ -225,8 +229,10 @@
             "template_capture",
             "iray_reference",
             "operator_recorded_settings",
-            "settings_panel_evidence"
-          ]
+            "settings_panel_evidence",
+            "oracle_environment_record"
+          ],
+          "description": "oracle_environment_record: the environment record a golden was recorded under (decision 034 (a)); its SHA-256 is the public hash of the record, whose fields stay private."
         },
         "sha256": { "$ref": "#/$defs/sha256" },
         "size_bytes": { "type": "integer", "minimum": 0 }

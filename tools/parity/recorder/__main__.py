@@ -1,17 +1,27 @@
 r"""Command line of the Painter oracle recorder (operator guide: `parity/RECORDER.md`).
 
     python -m tools.parity.recorder record <manifest.json>
-    python -m tools.parity.recorder iray <manifest.json> --condition separate_session
-    python -m tools.parity.recorder iray <manifest.json> --condition k_times_samples --k 4
+    python -m tools.parity.recorder iray <manifest.json> --condition separate_session \
+        --operator-id ID
+    python -m tools.parity.recorder iray <manifest.json> --condition k_times_samples --k 4 \
+        --operator-id ID
     python -m tools.parity.recorder record-defaults <manifest.json>
     python -m tools.parity.recorder list-templates
     python -m tools.parity.recorder record-templates <manifest.json>
     python -m tools.parity.recorder check [--python-doc <objects.inv>]
     python -m tools.parity.recorder iray-probe
     python -m tools.parity.recorder iray-probe-analyse <probe directory>
+    python -m tools.parity.recorder refresh [--launch]
+    python -m tools.parity.recorder stability-study <manifest or dir>... [--launch] [--admit]
+    python -m tools.parity.recorder canary [--launch]
 
-Painter must already run with `--enable-remote-scripting` and no project open. Records go to
-`UZP_ORACLE_INBOX` (default `%LOCALAPPDATA%\UzPainter\oracle-inbox`), working files to
+Every recording command reads the running Painter build first: a build that is neither the
+current nor the candidate envelope's starts the envelope refresh (decision 037; `refresh`, exit
+status 3 once it ends). The last three commands are the oracle envelope's (`parity/RECORDER.md`
+§10, `tools/parity/envelope/`).
+
+Painter must already run with `--enable-remote-scripting` and no project open (or `--launch`).
+Records go to `UZP_ORACLE_INBOX` (default `%LOCALAPPDATA%\UzPainter\oracle-inbox`), working files to
 `UZP_ORACLE_WORK` (default `%LOCALAPPDATA%\UzPainter\oracle-work`); both must lie outside
 the repository.
 """
@@ -45,6 +55,7 @@ from tools.parity.recorder.session import (
     HttpTransport,
     PainterSession,
     RecorderError,
+    UnseenBuild,
 )
 from tools.parity.recorder.texture import record_texture_golden
 
@@ -68,7 +79,32 @@ def parse(argv: Sequence[str]) -> argparse.Namespace:
     probe.add_argument("--port", type=int, default=REMOTE_PORT)
     analyse = commands.add_parser("iray-probe-analyse", help="re-run a probe's analysis")
     analyse.add_argument("directory", type=Path)
+    iray.add_argument("--operator-id", required=True, help="who applies the settings sheet")
+    from tools.parity.envelope.cli import add_painter_options
+
+    refresh = commands.add_parser("refresh", help="detect the build; refresh the envelope")
+    add_painter_options(refresh)
+    study = commands.add_parser("stability-study", help="record the stability study (034 (b))")
+    study.add_argument("manifests", type=Path, nargs="*")
+    study.add_argument("--resume", type=Path, help="continue the study of this directory")
+    study.add_argument("--admit", action="store_true", help="admit the runs to the private store")
+    add_painter_options(study)
+    canary = commands.add_parser("canary", help="re-record and diff the canary (034 (d))")
+    add_painter_options(canary)
     return parser.parse_args(argv)
+
+
+def refresh_after_unseen_build(args: argparse.Namespace, error: UnseenBuild) -> int:
+    """An unseen build starts the refresh with no human step (decision 037)."""
+    from tools.parity.envelope.cli import run_refresh
+
+    print(f"refused: {error}", file=sys.stderr)
+    print("starting the envelope refresh", file=sys.stderr)
+    try:
+        run_refresh(args)
+    except RecorderError as failure:
+        print(f"refresh refused: {failure}", file=sys.stderr)
+    return 3
 
 
 def run_iray_probe(args: argparse.Namespace) -> int:
@@ -104,6 +140,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1 if problems else 0
     if args.command in ("iray-probe", "iray-probe-analyse"):
         return run_iray_probe(args)
+    if args.command in ("refresh", "stability-study", "canary"):
+        from tools.parity.envelope import cli
+
+        try:
+            if args.command == "refresh":
+                return cli.run_refresh(args)
+            if args.command == "stability-study":
+                return cli.run_stability_study(args)
+            return cli.run_canary_command(args)
+        except UnseenBuild as error:
+            return refresh_after_unseen_build(args, error)
+        except RecorderError as error:
+            print(f"refused: {error}", file=sys.stderr)
+            return 2
     run: Path | None
     try:
         session = PainterSession(HttpTransport(args.host, args.port))
@@ -121,8 +171,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             run = record_project_templates(session, job, work_root(), inbox_root())
         else:
             run = record_iray_reference(
-                session, job, args.condition, ConsoleOperator(), work_root(), inbox_root(), args.k
+                session,
+                job,
+                args.condition,
+                ConsoleOperator(),
+                work_root(),
+                inbox_root(),
+                args.k,
+                operator_id=args.operator_id,
             )
+    except UnseenBuild as error:
+        return refresh_after_unseen_build(args, error)
     except RecorderError as error:
         print(f"refused: {error}", file=sys.stderr)
         return 2

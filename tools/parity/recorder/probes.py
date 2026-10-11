@@ -66,6 +66,7 @@ from tools.parity.recorder.session import (
     PainterSession,
     ProjectState,
     RecorderError,
+    UnseenBuild,
 )
 from tools.parity.recorder.texture import (
     Now,
@@ -447,7 +448,7 @@ def run_directory(job: ProbeJob, identity: PainterIdentity, work: Path, now: Now
 
 
 def record_api_probe(
-    session: PainterSession, job: ProbeJob, work: Path, inbox: Path, now: Now
+    session: PainterSession, job: ProbeJob, work: Path, inbox: Path, now: Now, record_prefix: str
 ) -> Path:
     identity = session.connect()
     directory = run_directory(job, identity, work, now)
@@ -472,7 +473,15 @@ def record_api_probe(
         close_quietly(session)
     key = golden_key(job, identity, defaults, defaults["colour_management"])
     record = private_record(job, key, [first, second])
-    return write_run(inbox, record, first_blobs + second_blobs, job.manifest, identity.session_id)
+    return write_run(
+        inbox,
+        record,
+        first_blobs + second_blobs,
+        job.manifest,
+        identity.session_id,
+        environment=identity.environment,
+        record_prefix=record_prefix,
+    )
 
 
 def state_entry(state: ProjectState) -> dict[str, bool]:
@@ -570,7 +579,7 @@ def lifecycle_recordings(
 
 
 def record_lifecycle(
-    session: PainterSession, job: ProbeJob, work: Path, inbox: Path, now: Now
+    session: PainterSession, job: ProbeJob, work: Path, inbox: Path, now: Now, record_prefix: str
 ) -> Path:
     identity = session.connect()
     directory = run_directory(job, identity, work, now)
@@ -591,18 +600,32 @@ def record_lifecycle(
     defaults = {"events_connected": list(job.events)}
     key = golden_key(job, identity, defaults, identity.colour_management)
     record = private_record(job, key, recordings)
-    return write_run(inbox, record, [], job.manifest, identity.session_id)
+    return write_run(
+        inbox,
+        record,
+        [],
+        job.manifest,
+        identity.session_id,
+        environment=identity.environment,
+        record_prefix=record_prefix,
+    )
 
 
 def record_probe_golden(
-    session: PainterSession, job: ProbeJob, work: Path, inbox: Path, now: Now = utc_now
+    session: PainterSession,
+    job: ProbeJob,
+    work: Path,
+    inbox: Path,
+    now: Now = utc_now,
+    *,
+    record_prefix: str = "",
 ) -> Path:
     """Record one API-probe golden and write it to the inbox; returns the run directory."""
     if job.tier != "0":
         raise RecorderError("API probes are Tier 0 goldens")
     if job.lifecycle:
-        return record_lifecycle(session, job, work, inbox, now)
-    return record_api_probe(session, job, work, inbox, now)
+        return record_lifecycle(session, job, work, inbox, now, record_prefix)
+    return record_api_probe(session, job, work, inbox, now, record_prefix)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -617,6 +640,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         job = load_probe_job(args.manifest)
         session = ProbeSession(HttpTransport(args.host, args.port))
         run = record_probe_golden(session, job, work_root(), inbox_root())
+    except UnseenBuild as error:
+        from tools.parity.recorder.__main__ import refresh_after_unseen_build
+
+        return refresh_after_unseen_build(args, error)
     except RecorderError as error:
         print(f"refused: {error}", file=sys.stderr)
         return 2

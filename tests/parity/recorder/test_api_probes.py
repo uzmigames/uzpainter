@@ -169,7 +169,8 @@ def test_every_probe_is_recorded_twice(
     assert not state_ids & set(outputs_by_id(second))
     refs = run_manifest["private_records"]
     assert refs[0]["record_id"] == "golden-record"
-    assert len(refs) == 1 + sum(len(e.maps) for e in job.exports) * 2
+    assert refs[-1]["kind"] == "oracle_environment_record"
+    assert len(refs) == 2 + sum(len(e.maps) for e in job.exports) * 2
 
 
 def test_reopened_nodes_are_found_again_and_uid_changes_are_recorded(

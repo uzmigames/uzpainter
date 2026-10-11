@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from tools.parity.recorder import session as session_module
 from tools.parity.recorder.job import Job, load_job
 from tools.parity.recorder.session import PainterSession
 from tools.parity.schemas import REPO_ROOT
@@ -23,6 +24,8 @@ SAMPLE_JOB = (
     REPO_ROOT / "parity" / "manifests" / "tier0" / "recorder-sample" / "blend-multiply-plane.json"
 )
 FAKE_NAME = "uzp_recorder_fake_painter"
+FAKE_BUILD = "12.1.0+js-api.1.1.20"
+FAKE_HOST = {"gpu_model": "Fake GPU", "driver_version": "1.0", "os_build": "10.0.0.0"}
 
 
 def load_fake() -> types.ModuleType:
@@ -36,6 +39,14 @@ def load_fake() -> types.ModuleType:
     sys.modules[FAKE_NAME] = module
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.fixture(autouse=True)
+def fixed_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fake Painter's build is recordable and the host fields are fixed, whatever the
+    repository's envelope registry says (decision 037 moves the current envelope)."""
+    monkeypatch.setattr(session_module, "envelope_builds", lambda: frozenset({FAKE_BUILD}))
+    monkeypatch.setattr(session_module, "default_host_environment", lambda: dict(FAKE_HOST))
 
 
 @pytest.fixture

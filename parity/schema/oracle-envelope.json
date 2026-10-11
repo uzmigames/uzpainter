@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:uzpainter:parity:schema:oracle-envelope:1",
+  "title": "UzPainter oracle envelope reports",
+  "description": "Published results of the oracle envelope work (decisions 034 and 037; tools/parity/envelope/): the stability study, the drift of a canary or a refreshed corpus against the previous envelope, and prepared (unapproved) exception-register drafts. Files parity/reports/<phase>/oracle-envelope-*.json. Numbers, identifiers and hashes only: no recorded value, no environment field (those stay private; only their hashes appear).",
+  "oneOf": [
+    { "$ref": "#/$defs/study" },
+    { "$ref": "#/$defs/drift" },
+    { "$ref": "#/$defs/register_drafts" }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/#<>~=-]*$", "maxLength": 256 },
+    "envelope_id": { "type": "string", "pattern": "^painter-[A-Za-z0-9][A-Za-z0-9._+-]*$", "maxLength": 160 },
+    "build": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$", "maxLength": 128 },
+    "date": { "type": "string", "format": "date" },
+    "count": { "type": "integer", "minimum": 0 },
+    "statistic": { "oneOf": [{ "type": "number", "minimum": 0 }, { "type": "null" }] },
+    "difference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max", "mean", "p99", "differing", "total", "affected_texels", "texels"],
+      "properties": {
+        "max": { "$ref": "#/$defs/statistic" },
+        "mean": { "$ref": "#/$defs/statistic" },
+        "p99": { "$ref": "#/$defs/statistic" },
+        "differing": { "$ref": "#/$defs/count" },
+        "total": { "$ref": "#/$defs/count" },
+        "affected_texels": { "$ref": "#/$defs/count" },
+        "texels": { "$ref": "#/$defs/count" }
+      }
+    },
+    "output_difference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pair", "output_id", "kind", "status"],
+      "properties": {
+        "pair": { "$ref": "#/$defs/id" },
+        "output_id": { "$ref": "#/$defs/id" },
+        "kind": { "$ref": "#/$defs/id" },
+        "status": { "enum": ["differs", "unavailable"] },
+        "storage": { "$ref": "#/$defs/id" },
+        "sha256": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/sha256" } },
+        "bytes_differ": { "type": "boolean" },
+        "equal_raw": { "type": "boolean" },
+        "difference": { "$ref": "#/$defs/difference" }
+      }
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "left",
+        "right",
+        "category",
+        "status",
+        "maps_compared",
+        "maps_differing",
+        "values_differing",
+        "values_compared_in_differing_maps",
+        "other_outputs_compared",
+        "other_outputs_differing",
+        "other_outputs_differing_raw",
+        "unpaired_outputs"
+      ],
+      "properties": {
+        "left": { "$ref": "#/$defs/id" },
+        "right": { "$ref": "#/$defs/id" },
+        "category": { "enum": ["same_session", "save_reopen", "fresh_process", "envelope_drift"] },
+        "status": { "enum": ["equal", "differs", "unavailable"] },
+        "maps_compared": { "$ref": "#/$defs/count" },
+        "maps_differing": { "$ref": "#/$defs/count" },
+        "values_differing": { "$ref": "#/$defs/count" },
+        "values_compared_in_differing_maps": { "$ref": "#/$defs/count" },
+        "other_outputs_compared": { "$ref": "#/$defs/count" },
+        "other_outputs_differing": { "$ref": "#/$defs/count" },
+        "other_outputs_differing_raw": { "$ref": "#/$defs/count" },
+        "unpaired_outputs": { "$ref": "#/$defs/count" },
+        "worst_map": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["output_id", "storage", "max", "mean", "p99", "differing", "total", "affected_texels", "texels"],
+          "properties": {
+            "output_id": { "$ref": "#/$defs/id" },
+            "storage": { "$ref": "#/$defs/id" },
+            "max": { "$ref": "#/$defs/statistic" },
+            "mean": { "$ref": "#/$defs/statistic" },
+            "p99": { "$ref": "#/$defs/statistic" },
+            "differing": { "$ref": "#/$defs/count" },
+            "total": { "$ref": "#/$defs/count" },
+            "affected_texels": { "$ref": "#/$defs/count" },
+            "texels": { "$ref": "#/$defs/count" }
+          }
+        }
+      }
+    },
+    "study_run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "session", "status"],
+      "properties": {
+        "role": { "enum": ["a", "b", "c"] },
+        "session": { "type": "string", "pattern": "^session-[0-9]+$" },
+        "status": { "enum": ["recorded", "refused", "unavailable"] },
+        "record_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_sha256": { "$ref": "#/$defs/sha256" },
+        "recordings": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "study_golden": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["golden_id", "tier", "classification", "runs", "pairs", "differing_outputs"],
+      "properties": {
+        "golden_id": { "$ref": "#/$defs/id" },
+        "tier": { "enum": ["0", "1", "2a", "2b"] },
+        "classification": {
+          "enum": [
+            "stable",
+            "save-reopen-unstable",
+            "fresh-process-unstable",
+            "save-reopen-and-fresh-process-unstable",
+            "same-session-unstable",
+            "incomplete",
+            "unavailable"
+          ]
+        },
+        "runs": { "type": "array", "items": { "$ref": "#/$defs/study_run" } },
+        "pairs": { "type": "array", "items": { "$ref": "#/$defs/pair" } },
+        "differing_outputs": { "type": "array", "items": { "$ref": "#/$defs/output_difference" } }
+      }
+    },
+    "study": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "study_id",
+        "envelope_id",
+        "painter_build",
+        "environment_sha256",
+        "generated_on",
+        "goldens",
+        "summary"
+      ],
+      "properties": {
+        "schema": { "const": "uzpainter/parity/oracle-envelope-study/1" },
+        "study_id": { "type": "string", "pattern": "^[0-9]{8}t[0-9]{6}z$" },
+        "envelope_id": { "$ref": "#/$defs/envelope_id" },
+        "painter_build": { "$ref": "#/$defs/build" },
+        "environment_sha256": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+        "generated_on": { "$ref": "#/$defs/date" },
+        "goldens": { "type": "array", "items": { "$ref": "#/$defs/study_golden" } },
+        "summary": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/count" },
+          "propertyNames": { "$ref": "#/$defs/id" }
+        }
+      }
+    },
+    "drift_golden": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["golden_id", "tier", "status", "changed_recordings", "pairs", "differing_outputs"],
+      "properties": {
+        "golden_id": { "$ref": "#/$defs/id" },
+        "tier": { "enum": ["0", "1", "2a", "2b"] },
+        "status": { "enum": ["unchanged", "changed", "unavailable", "new", "missing"] },
+        "previous_record_sha256": { "$ref": "#/$defs/sha256" },
+        "record_sha256": { "$ref": "#/$defs/sha256" },
+        "changed_recordings": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "pairs": { "type": "array", "items": { "$ref": "#/$defs/pair" } },
+        "differing_outputs": { "type": "array", "items": { "$ref": "#/$defs/output_difference" } }
+      }
+    },
+    "drift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "scope",
+        "envelope_id",
+        "painter_build",
+        "envelope_sha256",
+        "previous_envelope_id",
+        "previous_painter_build",
+        "generated_on",
+        "goldens",
+        "divergence_candidates",
+        "fits_to_recheck",
+        "new_evaluator_profile_needed",
+        "stale_tier3",
+        "summary"
+      ],
+      "properties": {
+        "schema": { "const": "uzpainter/parity/oracle-envelope-drift/1" },
+        "scope": { "enum": ["canary", "corpus"] },
+        "envelope_id": { "$ref": "#/$defs/envelope_id" },
+        "painter_build": { "$ref": "#/$defs/build" },
+        "envelope_sha256": { "$ref": "#/$defs/sha256" },
+        "previous_envelope_id": { "$ref": "#/$defs/envelope_id" },
+        "previous_painter_build": { "$ref": "#/$defs/build" },
+        "generated_on": { "$ref": "#/$defs/date" },
+        "goldens": { "type": "array", "items": { "$ref": "#/$defs/drift_golden" } },
+        "divergence_candidates": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "fits_to_recheck": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["semantics", "reason", "changed_goldens"],
+            "properties": {
+              "semantics": { "type": "string", "pattern": "^parity/semantics/[a-z0-9._-]+\\.json$" },
+              "reason": { "enum": ["corpus_changed", "new_envelope"] },
+              "changed_goldens": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+            }
+          }
+        },
+        "new_evaluator_profile_needed": { "type": "boolean" },
+        "stale_tier3": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "summary": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/count" },
+          "propertyNames": { "$ref": "#/$defs/id" }
+        }
+      }
+    },
+    "register_drafts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "study_id", "envelope_id", "status", "owner_fields", "drafts"],
+      "properties": {
+        "schema": { "const": "uzpainter/parity/oracle-envelope-register-drafts/1" },
+        "study_id": { "type": "string", "pattern": "^[0-9]{8}t[0-9]{6}z$" },
+        "envelope_id": { "$ref": "#/$defs/envelope_id" },
+        "status": {
+          "description": "Prepared from the study's evidence; not in force until the owner approves each entry and it is moved into parity/exceptions.json (decision 017).",
+          "const": "prepared_unapproved"
+        },
+        "owner_fields": {
+          "const": ["approved_by", "approved_on"]
+        },
+        "drafts": {
+          "description": "exceptions.json entries without the owner's approval fields (checked by tools.parity.envelope.study.draft_problems).",
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    }
+  }
+}

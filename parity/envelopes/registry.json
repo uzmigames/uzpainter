@@ -1,0 +1,23 @@
+{
+  "schema": "uzpainter/parity/envelope-registry/1",
+  "current": "painter-12.1.0+js-api.1.1.20",
+  "candidate": null,
+  "envelopes": [
+    {
+      "envelope_id": "painter-12.1.0+js-api.1.1.20",
+      "status": "current",
+      "painter_build": "12.1.0+js-api.1.1.20",
+      "painter_version": "12.1.0",
+      "manifest_root": "parity/manifests",
+      "record_prefix": "",
+      "envelope_sha256": "0f0c8d5fec0381271fa5df51b448311b6a2e322cc96372fb97b999cb15fd119c",
+      "environment_known": false,
+      "equivalent_envelopes": [],
+      "previous": null,
+      "promoted_on": "2026-10-10",
+      "superseded_on": null,
+      "drift_report": null
+    }
+  ],
+  "quarantine": []
+}

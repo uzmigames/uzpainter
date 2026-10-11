@@ -1,4 +1,11 @@
-"""Recorder session: connect to Painter 12.1.0 and record its software identity (task item 2.1).
+"""Recorder session: connect to Painter and record its software identity (task item 2.1).
+
+Build guard (decision 037): the running build must be the build of the current envelope or of
+the candidate envelope being recorded (`parity/envelopes/registry.json`,
+`tools.parity.envelope.registry`). An unseen build raises `UnseenBuild`, which starts the
+envelope refresh; there is no other way past the guard. A session can also verify, before
+every call that is not a readiness poll, that it still talks to the same Painter process and
+build (`verify_calls`), so that an update or restart in the middle of a run aborts it.
 
 Painter is started by the operator with `--enable-remote-scripting`. Its documented remote
 control (Painter Python API guide *Remote control / headless*, approved source A-PYDOC) accepts
@@ -15,12 +22,18 @@ import http.client
 import json
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Protocol
 
+from tools.parity.recorder.environment import (
+    HOST_FIELDS,
+    HostEnvironment,
+    cached_host_environment,
+    environment_record,
+)
+
 PAINTER_PRODUCT = "Adobe Substance 3D Painter"
-PAINTER_VERSION = "12.1.0"
 REMOTE_HOST = "localhost"
 REMOTE_PORT = 60041
 REMOTE_ROUTE = "/run.json"
@@ -43,6 +56,25 @@ class PainterCallError(RecorderError):
         self.operation = operation
         self.kind = kind
         self.message = message
+
+
+class UnseenBuild(RecorderError):
+    """The running Painter build belongs to no current or candidate envelope (decision 037)."""
+
+    def __init__(self, identity: PainterIdentity, allowed: frozenset[str]) -> None:
+        names = ", ".join(sorted(allowed)) or "no envelope"
+        self.args = (
+            f"oracle must be {PAINTER_PRODUCT} {names} (current or candidate envelope), found "
+            f"{identity.build_id}: an unseen build starts the envelope refresh "
+            "(`python -m tools.parity.recorder refresh`)",
+        )
+        self.identity = identity
+        self.allowed = allowed
+
+
+class IdentityChanged(RecorderError):
+    """The Painter process, build or host environment changed (or could not be verified)
+    during a run; the run is aborted."""
 
 
 class Transport(Protocol):
@@ -123,6 +155,7 @@ class PainterIdentity:
     js_api_version: str
     session_id: str
     colour_management: dict[str, Any]
+    environment: dict[str, Any] | None = None
 
     @property
     def build_id(self) -> str:
@@ -151,6 +184,24 @@ class ProjectState:
         return self.is_open and self.in_edition and not self.busy
 
 
+# Readiness polls: never preceded by an identity check (they run in tight loops).
+UNVERIFIED_OPERATIONS = frozenset({"hello", "state", "baking_state"})
+
+BuildPolicy = Callable[[], frozenset[str]]
+
+
+def envelope_builds() -> frozenset[str]:
+    """Builds a recording may run on: the current and the candidate envelope's."""
+    from tools.parity.envelope.registry import recordable_builds
+
+    return recordable_builds()
+
+
+def default_host_environment() -> dict[str, str]:
+    """The host fields of the environment record, read once per host process."""
+    return cached_host_environment()
+
+
 class PainterSession:
     """One connection to one running Painter process."""
 
@@ -160,38 +211,94 @@ class PainterSession:
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
         poll_interval_s: float = 0.5,
+        allowed_builds: BuildPolicy | None = None,
+        host_environment: HostEnvironment | None = None,
+        verify_calls: bool = False,
     ) -> None:
         self.transport = transport
         self.sleep = sleep
         self.monotonic = monotonic
         self.poll_interval_s = poll_interval_s
+        self.allowed_builds = allowed_builds
+        self.host_environment = host_environment
+        self.verify_calls = verify_calls
         self.identity: PainterIdentity | None = None
 
-    def connect(self) -> PainterIdentity:
-        """Load the painter-side code and check that this is Painter 12.1.0."""
+    def read_identity(self) -> PainterIdentity:
+        """Load the painter-side code and read the running build and environment, without the
+        build guard (detection only: no recording runs on an identity read this way)."""
+        self.identity = None
         self.transport.run(bootstrap_code(PAINTER_SIDE.read_text(encoding="utf-8")))
         hello = self.call("hello")
-        version_info = tuple(int(v) for v in hello["version_info"])
-        if hello["version"] != PAINTER_VERSION or version_info != (12, 1, 0):
+        info = [int(v) for v in hello["version_info"]]
+        if len(info) != 3 or ".".join(str(v) for v in info) != hello["version"]:
             raise RecorderError(
-                f"oracle must be {PAINTER_PRODUCT} {PAINTER_VERSION}, found {hello['version']} "
-                f"{list(version_info)}"
+                f"Painter reports version {hello['version']!r} and version_info {info}, which "
+                "disagree: the build cannot be identified"
             )
-        self.identity = PainterIdentity(
-            version=hello["version"],
-            version_info=(12, 1, 0),
+        identity = PainterIdentity(
+            version=str(hello["version"]),
+            version_info=(info[0], info[1], info[2]),
             js_api_version=str(hello["js_api_version"]),
             session_id=str(hello["session_id"]),
             colour_management=dict(hello["colour_management"]),
         )
-        if hello["project_open"]:
+        environment = environment_record(
+            painter_build=identity.build_id,
+            colour_management=identity.colour_management,
+            host=(self.host_environment or default_host_environment)(),
+        )
+        return replace(identity, environment=environment)
+
+    def connect(self) -> PainterIdentity:
+        """Load the painter-side code and check the build against the envelope registry."""
+        identity = self.read_identity()
+        allowed = (self.allowed_builds or envelope_builds)()
+        if identity.build_id not in allowed:
+            raise UnseenBuild(identity, allowed)
+        if self.call("hello")["project_open"]:
             raise RecorderError(
                 "a project is already open in Painter; the recorder works only on throwaway "
                 "projects it creates itself"
             )
-        return self.identity
+        self.identity = identity
+        return identity
+
+    def verify_identity(self, host: HostEnvironment | None = None) -> None:
+        """Refuse when the Painter process or build changed or cannot be read; with `host`,
+        also re-read the host fields of the environment and refuse when they changed."""
+        expected = self.identity
+        if expected is None:
+            raise IdentityChanged("no identity to verify: the session is not connected")
+        try:
+            hello = self.call("hello")
+            current = (
+                str(hello["version"]),
+                str(hello["js_api_version"]),
+                str(hello["session_id"]),
+            )
+        except (RecorderError, OSError, KeyError, TypeError) as error:
+            raise IdentityChanged(f"the Painter identity cannot be verified: {error}") from error
+        wanted = (expected.version, expected.js_api_version, expected.session_id)
+        if current != wanted:
+            raise IdentityChanged(
+                f"Painter changed during the run: expected build {expected.build_id} in session "
+                f"{expected.session_id}, found {current[0]}+js-api.{current[1]} in session "
+                f"{current[2]}"
+            )
+        if host is not None and expected.environment is not None:
+            now = host()
+            changed = [f for f in HOST_FIELDS if now.get(f) != expected.environment.get(f)]
+            if changed:
+                raise IdentityChanged(f"the host environment changed during the run: {changed}")
 
     def call(self, operation: str, **args: Any) -> Any:
+        if (
+            self.verify_calls
+            and self.identity is not None
+            and operation not in UNVERIFIED_OPERATIONS
+        ):
+            self.verify_identity()
         reply = self.transport.run(dispatch_code(operation, args))
         if not isinstance(reply, str):
             raise RemoteError(f"{operation}: unexpected reply {reply!r}")

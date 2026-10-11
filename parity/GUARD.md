@@ -27,6 +27,9 @@ First match wins; any other JSON under `parity/` is blocked until a rule for its
 | `parity/schema/samples/reports/*.json` | Valid `comparison-report.json` |
 | `parity/exceptions.json` | The register: valid `exceptions.json` and `register_problems` (decisions recorded under `.rulebook/decisions/`) |
 | `parity/manifests/**` | Valid `golden-public.json` |
+| `parity/envelopes/registry.json` | The oracle envelope registry: valid `envelope-registry.json` and its cross-field rules (`tools.parity.envelope.registry.registry_problems`: one current envelope, a candidate that refreshes it; decision 037) |
+| `parity/envelopes/<envelope id>/manifests/**` | Valid `golden-public.json` (a promoted envelope's manifests) |
+| `parity/reports/<phase>/oracle-envelope*.json` | Valid `oracle-envelope.json` (stability study, drift, prepared register entries); a prepared entry must be a valid `exceptions.json` entry once the owner's approval fields are added, and must not carry them |
 | `parity/semantics/*.json` | Valid `semantics.json` (fitted formulas: public sources, constants, residuals as numbers) |
 | `parity/fixtures/**` | An authored input (fixture description, authored recipe) that a valid manifest under `parity/manifests/` declares by this path and SHA-256 |
 | `parity/reports/<phase>/store-census.json` | The project store's size census (`src/store/census.h`, `phase1.7_store-inspect-census`): `schema` `uzpainter/store-census/1`, a non-empty `projects` list of objects with an `id`, numbers everywhere else; text only in `schema`, `task`, `date`, `id`, `format`, `raster_plane_format` and the `not_measured` lists, each an identifier (no paths) |

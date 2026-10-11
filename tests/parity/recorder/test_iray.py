@@ -262,7 +262,12 @@ def test_reference_golden_is_assembled_from_three_sessions(
     assert render_state["tone_mapping"] == "Linear"
     assert render_state["scene_bounding_box"]["dimensions"] == [20.0, 20.0, 20.0]
     kinds = {r["kind"] for r in manifest["private_records"]}
-    assert kinds == {"private_oracle_record", "iray_reference", "settings_panel_evidence"}
+    assert kinds == {
+        "private_oracle_record",
+        "iray_reference",
+        "settings_panel_evidence",
+        "oracle_environment_record",
+    }
     assert not (work / "iray-staging" / "tests__tier3__sphere-constant").exists()
     route = {s["name"]: s["value"] for s in manifest["applied_settings"]}
     assert (route["capture.procedure"], route["capture.route"]) == ("iray-capture/1", "save_render")

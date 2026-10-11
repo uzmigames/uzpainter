@@ -400,6 +400,7 @@ class FakeWorld:
         self.event_handlers: dict[type, list[Callable[[Any], None]]] = {}
         self.version = "12.1.0"
         self.version_info = (12, 1, 0)
+        self.js_api = "1.1.20"
         self.modules = build_modules(self)
 
     def require_open(self) -> None:
@@ -909,7 +910,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
 
     def evaluate(code: str) -> str:
         if code == "alg.version.api":
-            return "1.1.20"
+            return world.js_api
         raise RuntimeError(f"unsupported javascript {code!r}")
 
     modules = {
