@@ -19,10 +19,12 @@
 // - BilinearHQ and BilinearSharp: X = floor(256 x + 1/2), x0 = X >> 8, fx = X & 255 (same for y);
 //   integer weights w11 = (fx fy + 127) >> 8, w10 = fx - w11, w01 = fy - w11,
 //   w00 = 256 - fx - fy + w11 over the taps (x0, y0), (x0 + 1, y0), (x0, y0 + 1), (x0 + 1, y0 + 1).
-//   The sampled value is the float32 nearest to the exact sum of (w / 256) t over the taps, t the
-//   texel's float32 value float32(c / M) (M = 255 or 65535): a dot product rounded once, as a
-//   texture unit filters float texels with 8-bit weights. Both filters are single-level
-//   bilinear: magnification and 1:1 only (minification is a release gap, `CheckSampling`).
+//   The sampled value is `BilinearFilter` of the weights and the texels' float32 values
+//   float32(c / M) (M = 255 or 65535): the GPU's linear filter of a float32 texture (measured,
+//   `uzp-evaluator-tests bilinear-hardware`), with the bitmap stored bottom-up, which turns the
+//   GPU's w11 rounding (ties up) into ties down here (uv-sampling.json `uv-bilinear-repeat`).
+//   Both filters are single-level bilinear: magnification and 1:1 only (minification is a
+//   release gap, `CheckSampling`).
 // - Nearest samples float32(c / M) of the texel.
 //
 // The channel stores the sampled value with its own write rule (cpu_store.h `StoreValue`): at
@@ -88,6 +90,17 @@ struct ProjectedTexel {
     bool covered = true;
     std::array<float, 3> value{0.0f, 0.0f, 0.0f};
 };
+
+/// Bits the bilinear filter keeps of each texel below the largest weighed texel's exponent.
+inline constexpr int kFilterOperandBits = 28;
+
+/// The GPU's linear filter of float32 texels in [0, 1] with 8-bit weights (summing to 256): with
+/// E the binary exponent of the largest texel of non-zero weight (t_max in [2^(E-1), 2^E)), each
+/// texel t enters as the integer floor(t 2^(28 - E)); the weighted sum of these integers, times
+/// 2^(E - 36), is rounded to the nearest float32, ties up. A texel weighed 256 comes back
+/// unchanged.
+[[nodiscard]] float BilinearFilter(const std::array<uint32_t, 4>& weights,
+                                   const std::array<float, 4>& texels);
 
 /// The texel (i, j) of the set (whole-set indices) projected from `image`; a grey bitmap feeds
 /// all three channels, a colour bitmap its first three.

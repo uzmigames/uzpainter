@@ -105,6 +105,30 @@ render::Result<void> CheckSampling(const UvProjection& projection, uint32_t setW
     return {};
 }
 
+float BilinearFilter(const std::array<uint32_t, 4>& weights, const std::array<float, 4>& texels) {
+    float largest = 0.0f;
+    for (size_t k = 0; k < 4; ++k) {
+        if (weights[k] != 0) largest = std::fmax(largest, texels[k]);
+    }
+    if (largest == 0.0f) return 0.0f;
+    int exponent = 0;
+    (void)std::frexp(largest, &exponent);
+    // Each operand is below 2^28 + 1 and exact in double before the truncating conversion; the
+    // sum is below 2^37.
+    uint64_t sum = 0;
+    for (size_t k = 0; k < 4; ++k) {
+        const double scaled = std::ldexp(static_cast<double>(texels[k]), kFilterOperandBits - exponent);
+        sum += weights[k] * static_cast<uint64_t>(scaled);
+    }
+    // Round the sum to 24 significant bits, ties up, and scale it by 2^(E - 36).
+    int shift = 0;
+    while ((sum >> shift) >= (uint64_t{1} << 24)) ++shift;
+    uint64_t significand = sum >> shift;
+    if (shift > 0 && ((sum >> (shift - 1)) & 1) != 0) ++significand;
+    return static_cast<float>(
+        std::ldexp(static_cast<double>(significand), shift + exponent - kFilterOperandBits - 8));
+}
+
 ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, uint32_t i,
                             uint32_t j, uint32_t setWidth, uint32_t setHeight) {
     // Power-of-two resolutions: multiplying by the inverse is the exact division.
@@ -152,14 +176,11 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
     const int64_t yb = Address(y0 + 1, image.height, repeatY);
     const std::array<std::array<int64_t, 2>, 4> taps{{{xa, ya}, {xb, ya}, {xa, yb}, {xb, yb}}};
     for (uint32_t c = 0; c < 3; ++c) {
-        // Every product of a 9-bit weight and a float32 texel is exact in double, and so is the
-        // sum (its terms span fewer than 53 bits): one rounding, at the conversion to float.
-        double sum = 0.0;
+        std::array<float, 4> texels{};
         for (size_t k = 0; k < 4; ++k) {
-            const float texel = arith::UnormOperand(Code(image, taps[k][0], taps[k][1], c), bits);
-            sum += static_cast<double>(weights[k]) * static_cast<double>(texel);
+            texels[k] = arith::UnormOperand(Code(image, taps[k][0], taps[k][1], c), bits);
         }
-        result.value[c] = static_cast<float>(sum * (1.0 / 256.0));
+        result.value[c] = BilinearFilter(weights, texels);
     }
     return result;
 }

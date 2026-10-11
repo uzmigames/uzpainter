@@ -35,10 +35,6 @@ from tools.parity.schemas import load_json
 RAMP_SETS = 24
 RESAMPLE_SETS = {"s0": "BilinearHQ", "s1": "BilinearSharp", "s2": "Nearest", "s3": "BilinearHQ"}
 MINIFYING_USER = 6  # field A at scale 3.3: bilinear minification, a release gap
-# The one value the fitted bilinear model does not reproduce (r1 and r2 alike): s0 and s1, user2,
-# texel (175, 18), green. Its exact dot product lies 2^-34.7 above the midpoint between two float32
-# values, and Painter rounded it down; an exception candidate (parity/semantics/uv-sampling.json).
-BILINEAR_NEAR_TIE = {("s0", 2): (18, 175, 1), ("s1", 2): (18, 175, 1)}
 
 
 # ── Native cases ─────────────────────────────────────────────────────────────
@@ -59,8 +55,10 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "Nearest: a whole-texel offset with Repeat moves the bitmap towards +u and +v, wrapping",
         "BilinearHQ: a whole-texel offset with Repeat moves the bitmap towards +u and +v, wrapping",
         "Nearest at scale 0.5 magnifies the centre of the bitmap by two",
-        "BilinearHQ half a texel off weighs both float texels 128/256, rounds the sum once and "
-        "stores it with the write rule",
+        "BilinearHQ half a texel off weighs both texels 128/256 through the GPU's linear filter "
+        "and stores it with the write rule",
+        "the bilinear filter aligns the weighed texels to the largest one's exponent with 28 bits "
+        "(the resample-uv near-tie rounds down; a 256/256 texel is unchanged)",
         "RepeatNone leaves the texels outside the UV square to the value below the fill",
         "RepeatHorizontally wraps along u and leaves the texels outside [0, 1) in v uncovered",
         "Nearest with a 90 degree rotation turns the bitmap a quarter turn about the UV centre",
@@ -94,6 +92,23 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
     assert any(p.startswith("every random projection stack") for p in passed)
     assert (
         "GPU: after a resolution change the same evaluator re-evaluates at the new size" in passed
+    )
+
+
+def test_bilinear_filter_equals_the_gpu(evaluator_tests: Path, tmp_path: Path) -> None:
+    """2.1: `BilinearFilter` (projection_uv.h) is the GPU's linear filter of float32 texels,
+    measured at every 8-bit weight pair on 64 taps and four channels (16 777 216 samples, operands
+    beside 1.0 and 0 included), and the GPU rounds the `resample-uv` near-tie down as Painter
+    does."""
+    passed, output = run_case(evaluator_tests, "bilinear-hardware", str(tmp_path), needs_gpu=True)
+    if "RTX 4090" not in output:
+        pytest.skip("the bilinear filter was measured on the recording GPU (RTX 4090)")
+    assert any(
+        p.startswith("the GPU's linear filter of float32 texels equals BilinearFilter")
+        for p in passed
+    )
+    assert (
+        "the GPU's linear filter of float32 texels rounds the resample-uv near-tie down" in passed
     )
 
 
@@ -233,8 +248,9 @@ def test_uv_projection_equals_the_golden(
     """2.4, 3.3: `resample-uv`: the 64 x 64 pattern and the 256 x 256 field A UV-projected at
     scales 1, 0.73, 1.37 x 2.11, rotation 30, offsets (0.123, 0.456) and half a texel, with
     `BilinearHQ`/`Repeat` (s0), `BilinearSharp` (s1), `Nearest` (s2) and `BilinearHQ`/
-    `RepeatNone` (s3), on RGB16. Equal value for value, except the one near-tie of
-    BILINEAR_NEAR_TIE (|delta| 1, both recordings). User6 (scale 3.3) minifies: exact under
+    `RepeatNone` (s3), on RGB16. Equal value for value, the near-tie of s0 and s1 user2 (texel
+    (175, 18), green: the GPU's linear filter keeps 28 bits below the largest texel's exponent,
+    which puts it below the float32 midpoint) included. User6 (scale 3.3) minifies: exact under
     `Nearest`; refused under the bilinear filters (a release gap, the `sources` case)."""
     ctx = needs_store()
     golden = ctx.golden("semantics/resample-uv")
@@ -248,15 +264,9 @@ def test_uv_projection_equals_the_golden(
         for recording in ("r1", "r2"):
             theirs = golden.map(recording, f"{texture_set}/user{user}").values.astype(np.int64)
             differing = np.argwhere(ours != theirs)
-            allowed = BILINEAR_NEAR_TIE.get((texture_set, user))
-            if allowed is not None:
-                assert [tuple(int(v) for v in d) for d in differing] == [allowed], differing
-                j, i, c = allowed
-                assert abs(int(ours[j, i, c]) - int(theirs[j, i, c])) == 1
-            else:
-                assert len(differing) == 0, (
-                    f"{texture_set}/user{user} {recording}: {len(differing)} differing values"
-                )
+            assert len(differing) == 0, (
+                f"{texture_set}/user{user} {recording}: {len(differing)} differing values"
+            )
 
 
 @pytest.mark.parametrize("backend", backends())

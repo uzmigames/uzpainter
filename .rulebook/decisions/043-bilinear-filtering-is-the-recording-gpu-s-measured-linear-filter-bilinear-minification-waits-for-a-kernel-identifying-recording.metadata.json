@@ -1,0 +1,11 @@
+{
+  "id": 43,
+  "slug": "bilinear-filtering-is-the-recording-gpu-s-measured-linear-filter-bilinear-minification-waits-for-a-kernel-identifying-recording",
+  "title": "Bilinear filtering is the recording GPU's measured linear filter; bilinear minification waits for a kernel-identifying recording",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.9_compositor-resample-gaps"
+  ],
+  "supersededBy": null
+}

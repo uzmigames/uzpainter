@@ -1,11 +1,15 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisite accepted: phase1.8_compositor-sources-projection
+- [x] 1.1 Prerequisite accepted: phase1.8_compositor-sources-projection
 
 ## 2. Implementation
-- [ ] 2.1 Fit the bilinear rounding of the `resample-uv` near-tie (s0/s1 User2) without moving any other value, or prepare an exception proposal with its evidence
+- [x] 2.1 Fit the bilinear rounding of the `resample-uv` near-tie (s0/s1 User2) without moving any other value, or prepare an exception proposal with its evidence
+  - Root cause: Painter's bilinear is the recording GPU's linear filter of a float32 texture (measured, `bilinear-hardware`; decision 043); `BilinearFilter` on CPU and GPU; `resample-uv` magnification exact, every other golden unchanged.
 - [ ] 2.2 Fit Painter's minification prefilter for `BilinearHQ` and `BilinearSharp` (User6, scale 3.3); record further Tier 0 goldens if the existing one does not determine it
+  - Blocked on a Painter recording: the existing golden (a ramp field) does not determine the filters (decision 043); the request is `parity/reports/phase1/compositor-resample-gaps.md` §3.
 - [ ] 2.3 Implement both in the CPU reference and the projection kernel; lift the `evaluator:unsupported_source` refusal for bilinear minification
+  - The near-tie half is implemented (CPU and GPU, bit for bit); the minification half waits for 2.2, so the refusal stays.
 - [ ] 2.4 Re-derive and publish `parity/semantics/uv-sampling.json`
+  - Re-derived and published for 2.1 (`uv-bilinear-repeat` exact); to be re-derived again with the minification fit.
 
 ## 3. Tests
 - [ ] 3.1 `resample-uv` s0, s1, s3 every user channel exact against both recordings on CPU and GPU
