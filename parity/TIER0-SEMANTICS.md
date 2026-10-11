@@ -71,5 +71,8 @@ The recorder vocabulary this corpus uses (groups, content and mask effects, leve
 | `tier0/semantics-ui/group-passthrough-masks` | The group-masks stack on a 4x2 grid. s0-s3: the group in `Passthrough`, set through the UI, with no mask, a group mask, a child mask and both. s4-s7: the same four with the group in `Normal` |
 | `tier0/semantics/resample-uv-minify`, `-impulse` | Bilinear minification for phase1.9 (`parity/reports/phase1/compositor-resample-gaps.md` §3; new fixture `bitmaps/impulse64.png`, decision 048) |
 | `tier0/semantics/group-coverage-order` | The float32 order diagnostic for phase1.10 (`parity/reports/phase1/compositor-float32-residual.md`; L channels take the grey fixtures, decision 048) |
+| `tier0/semantics/blend-component-hue` | Tint, Color, Saturation and Value on the authored hue grid for phase1.11 (`compositor-blend-gaps.md` §3.3; new fixtures `bitmaps/hue-grid*.png`, decision 067) |
+| `tier0/semantics/blend-normal-opacity` | The normal-map modes at opacities 0.1, 1/3, 0.7 and 0.99 and on an exactly flat normal (`compositor-blend-gaps.md` §5, decision 067) |
+| `tier0/semantics/coverage-srgb8-ties` | sRGB8 group coverage on the 8-bit ties of [0.25, 0.5) at 64 opacities, for phase1.10 (decision 067) |
 
 The UI values are named in each manifest's settings sheet and applied by the recorder's operator step (`RECORDER.md` §3, `record --operator ui`).

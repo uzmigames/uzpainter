@@ -16,7 +16,11 @@ manifests exist only under the current envelope's manifest root:
 - `tier0/semantics/` (documented API only): recordings requested by Phase 1 analyses (decision
   048): `resample-uv-minify` and `resample-uv-impulse` (`parity/reports/phase1/
   compositor-resample-gaps.md` section 3) and `group-coverage-order`
-  (`parity/reports/phase1/compositor-float32-residual.md`).
+  (`parity/reports/phase1/compositor-float32-residual.md`); and, recorded in the Painter session
+  of task `phase0.9_render-reference-capture` (decision 067), `blend-component-hue` and
+  `blend-normal-opacity` (`parity/reports/phase1/compositor-blend-gaps.md` sections 3.3 and 5)
+  and `coverage-srgb8-ties` (the sRGB8 coverage rule below 1/2,
+  `compositor-float32-residual.md`).
 """
 
 from __future__ import annotations
@@ -330,6 +334,189 @@ def group_coverage_order() -> Golden:
     )
 
 
+# compositor-blend-gaps.md section 3.3: per channel (name, format, upper opacity).
+HUE_CHANNELS = (
+    ("User0", "RGB32F", 1.0),
+    ("User1", "RGB16F", 1.0),
+    ("User2", "RGB16", 1.0),
+    ("User3", "sRGB8", 1.0),
+    ("User4", "RGB32F", 0.5),
+    ("User5", "RGB16", 0.5),
+    ("User6", "L16", 1.0),
+    ("User7", "RGB32F", 0.25),
+)
+HUE_RED = (0.5, 0.0, 0.0)
+HUE_GREY = (0.25, 0.25, 0.25)
+# Per texture set: (mode, lower source, upper source); a tuple is a uniform colour.
+HUE_SETS: tuple[tuple[str, Any, Any], ...] = (
+    ("Tint", HUE_RED, "hue-grid"),
+    ("Color", HUE_RED, "hue-grid"),
+    ("Saturation", "hue-grid", HUE_RED),
+    ("Value", "hue-grid", HUE_GREY),
+    ("Tint", "hue-grid", "hue-grid-transposed"),
+)
+
+
+def set_source(s: Sequence, node: int, channel: str, value: Any, res: dict[str, int]) -> None:
+    """A uniform colour (a tuple) or an imported bitmap."""
+    if isinstance(value, tuple):
+        s.colour(node, channel, list(value))
+    else:
+        s.bitmap(node, channel, res[value])
+
+
+def hue_source(fmt: str, value: Any) -> Any:
+    """An L channel takes the grey fixture (decision 048) and a uniform grey of the colour's
+    largest component (decision 067)."""
+    if not fmt.startswith("L"):
+        return value
+    return (max(value),) * 3 if isinstance(value, tuple) else f"{value}-grey"
+
+
+def blend_component_hue() -> Golden:
+    s = start("grid4x2")
+    plan = tuple((c, f) for c, f, _ in HUE_CHANNELS)
+    s.channels(plan)
+    inputs = ["hue-grid", "hue-grid-transposed", "hue-grid-grey", "hue-grid-transposed-grey"]
+    res = s.imports(*inputs)
+    channels = [c for c, _ in plan]
+    for texture_set, (mode, lower_source, upper_source) in zip(
+        MESH_SETS["grid4x2"], HUE_SETS, strict=False
+    ):
+        lower = s.fill(channels, position="top", texture_set=texture_set)
+        for channel, fmt, _ in HUE_CHANNELS:
+            set_source(s, lower, channel, hue_source(fmt, lower_source), res)
+        upper = s.fill(channels, above_step=lower)
+        for channel, fmt, opacity in HUE_CHANNELS:
+            set_source(s, upper, channel, hue_source(fmt, upper_source), res)
+            s.blend(upper, channel, mode, opacity)
+    s.export_channels(plan)
+    return Golden(
+        "blend-component-hue",
+        "tier0/blend/modes",
+        "Hue arithmetic of the component modes (compositor-blend-gaps.md section 3.3, decision "
+        "067): per texture set a lower and an upper fill, the upper in the set's mode: s0 Tint "
+        "and s1 Color of the authored hue-grid over a uniform (0.5, 0, 0), s2 Saturation of a "
+        "uniform (0.5, 0, 0) over the hue-grid, s3 Value of a uniform grey 0.25 over the "
+        "hue-grid, s4 Tint of the transposed hue-grid over the hue-grid; s5-s7 the empty stack. "
+        "Upper opacities per channel: RGB32F 1, RGB16F 1, RGB16 1, sRGB8 1, RGB32F 0.5, RGB16 "
+        "0.5, L16 1, RGB32F 0.25. The L16 channel takes the hue-grid's red component and "
+        "uniform greys of the colours' largest component.",
+        "grid4x2",
+        ["grid4x2", *inputs],
+        s,
+    )
+
+
+# compositor-blend-gaps.md section 5: four channels per format, one opacity each.
+NORMAL_MODES = ("NormalMapCombine", "NormalMapDetail", "NormalMapInverseDetail")
+NORMAL_OPACITIES = (0.1, 1.0 / 3.0, 0.7, 0.99)
+NORMAL_CHANNELS = tuple((USER[i], "RGB32F" if i < 4 else "RGB16") for i in range(8))
+FLAT_NORMAL = (0.5, 0.5, 1.0)
+# The channels of s3-s5, per format: (lower, upper, opacity).
+FLAT_CASES = (
+    (FLAT_NORMAL, "field-b", 0.5),
+    ("field-a", FLAT_NORMAL, 0.5),
+    (FLAT_NORMAL, FLAT_NORMAL, 0.5),
+    (FLAT_NORMAL, FLAT_NORMAL, 1.0),
+)
+
+
+def blend_normal_opacity() -> Golden:
+    s = start("grid4x2")
+    s.channels(NORMAL_CHANNELS)
+    res = s.imports("field-a", "field-b")
+    channels = [c for c, _ in NORMAL_CHANNELS]
+    sets = MESH_SETS["grid4x2"]
+    for index, mode in enumerate(NORMAL_MODES):
+        lower = s.fill(channels, position="top", texture_set=sets[index])
+        for channel in channels:
+            s.bitmap(lower, channel, res["field-a"])
+        upper = s.fill(channels, above_step=lower)
+        for i, channel in enumerate(channels):
+            s.bitmap(upper, channel, res["field-b"])
+            s.blend(upper, channel, mode, NORMAL_OPACITIES[i % 4])
+    for index, mode in enumerate(NORMAL_MODES):
+        lower = s.fill(channels, position="top", texture_set=sets[index + 3])
+        for i, channel in enumerate(channels):
+            set_source(s, lower, channel, FLAT_CASES[i % 4][0], res)
+        upper = s.fill(channels, above_step=lower)
+        for i, channel in enumerate(channels):
+            _, upper_value, opacity = FLAT_CASES[i % 4]
+            set_source(s, upper, channel, upper_value, res)
+            s.blend(upper, channel, mode, opacity)
+    s.export_channels(NORMAL_CHANNELS)
+    return Golden(
+        "blend-normal-opacity",
+        "tier0/blend/modes",
+        "Normal-map modes off the recorded opacities and on an exactly flat normal "
+        "(compositor-blend-gaps.md section 5, decision 067): s0-s2 NormalMapCombine, "
+        "NormalMapDetail and NormalMapInverseDetail of fields B over fields A at upper opacity "
+        "0.1, 1/3, 0.7 and 0.99 (User0-User3 RGB32F, User4-User7 RGB16); s3-s5 the same modes "
+        "with the uniform normal (0.5, 0.5, 1.0): flat under fields B, fields A under flat and "
+        "flat under flat at 0.5, flat under flat at 1, on each format; s6-s7 the empty stack.",
+        "grid4x2",
+        ["grid4x2", "field-a", "field-b"],
+        s,
+    )
+
+
+# compositor-float32-residual.md open item (decision 067): per texture set i and channel j of
+# User0-User7 the opacity (2k + 1)/510, k = 64 + 8i + j, whose row 0 coverage lies on the 8-bit
+# tie (k + 1/2)/255 (k = 127 is 1/2 itself); User8 (sRGB8) and User9 (RGB32F control) take per
+# set an opacity whose 1 - a has a small denominator, so several rows tie.
+TIE_CHANNELS = (*((f"User{j}", "sRGB8") for j in range(9)), ("User9", "RGB32F"))
+TIE_MULTI = (0.3, 0.1, 1.0 / 6.0, 9.0 / 34.0, 7.0 / 34.0, 11.0 / 34.0, 7.0 / 30.0, 11.0 / 30.0)
+
+
+def tie_opacity(texture_set: int, channel: int) -> float:
+    if channel >= 8:
+        return TIE_MULTI[texture_set]
+    return (2 * (64 + 8 * texture_set + channel) + 1) / 510.0
+
+
+def coverage_srgb8_ties() -> Golden:
+    s = start("grid4x2")
+    s.channels(TIE_CHANNELS)
+    res = s.imports("field-a", "field-b", "grey-b")
+    channels = [c for c, _ in TIE_CHANNELS]
+    for i, texture_set in enumerate(MESH_SETS["grid4x2"]):
+        root = s.fill(channels, position="top", texture_set=texture_set)
+        for channel in channels:
+            s.colour(root, channel, [0.0, 0.0, 0.0])
+            s.blend(root, channel, "Normal", 1.0)
+        group = s.add(ps.INSERT_GROUP, above_step=root)
+        for channel in channels:
+            s.blend(group, channel, "Normal", 1.0)
+        child = s.fill(channels, inside_step=group, stack="Substack")
+        for channel in channels:
+            s.bitmap(child, channel, res["field-b"])
+            s.blend(child, channel, "Normal", 1.0)
+        s.add(ps.ADD_MASK, node_step=child, background="Black")
+        effect = s.add(ps.INSERT_FILL, inside_step=child, stack="Mask")
+        s.bitmap(effect, None, res["grey-b"], effect=True)
+        top = s.fill(channels, above_step=child)
+        for j, channel in enumerate(channels):
+            s.bitmap(top, channel, res["field-a"])
+            s.blend(top, channel, "Normal", tie_opacity(i, j))
+    s.export_channels(TIE_CHANNELS)
+    return Golden(
+        "coverage-srgb8-ties",
+        "tier0/group/masks",
+        "sRGB8 group coverage on 8-bit ties below 1/2 (compositor-float32-residual.md open "
+        "item, decision 067), on the stack of group-coverage-order s1: per texture set a root "
+        "fill of uniform 0 at opacity 1, a group (Normal, 1, no mask) holding a child fill of "
+        "fields B under a mask (Black background, mask fill of grey B: m = y/255) and a top fill "
+        "of fields A in Normal. Top opacity per set i and channel j of User0-User7 (sRGB8): "
+        "(2k + 1)/510 with k = 64 + 8i + j, so row 0 puts the coverage on the tie (k + 1/2)/255 "
+        "for k = 64..127; User8 (sRGB8) and User9 (RGB32F control) per set: 0.3, 0.1, 1/6, "
+        "9/34, 7/34, 11/34, 7/30, 11/30.",
+        "grid4x2",
+        ["grid4x2", "field-a", "field-b", "grey-b"],
+        s,
+    )
+
+
 def ui_goldens() -> list[Golden]:
     corpus = [
         height_normal_mesh(mesh, method)
@@ -342,7 +529,14 @@ def ui_goldens() -> list[Golden]:
 
 
 def api_goldens() -> list[Golden]:
-    return [resample_uv_minify(), resample_uv_impulse(), group_coverage_order()]
+    return [
+        resample_uv_minify(),
+        resample_uv_impulse(),
+        group_coverage_order(),
+        blend_component_hue(),
+        blend_normal_opacity(),
+        coverage_srgb8_ties(),
+    ]
 
 
 def current_manifest(
