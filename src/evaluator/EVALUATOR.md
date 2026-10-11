@@ -25,7 +25,8 @@ Tasks `phase1.5_compositor-tile-dag`, `phase1.8_compositor-sources-projection`, 
 | `height_to_normal.{h,cpp}` | The virtual normal maps `Normal_OpenGL`/`Normal_DirectX` and the geometry-only pass-through (§2, Height and normals): the stencils, the combination of one texel (shared with the `UZP_VNORMAL` kernel of `shaders/evaluator_blend.hlsl`), the orchestration over the Height and Normal read-outs (`EvaluateVirtualNormalOn`) and the EXP-09 `NormalTag`. |
 | `diagnostics.{h,cpp}` | The diagnostics (§2, Diagnostics): `IsolateOn`, `ContributionOn`, `MaterialViewsOn`, `ComputeRegionStats`, the export plan's `diagnosticMap` sources (`SourceName`, `ParseSourceName`, `EvaluateDiagnosticOn`). |
 | `evaluator.{h,cpp}` | `Evaluator` (engine thread, GPU) and `CpuEvaluator`; `EvaluateOn`, `EvaluateVirtualNormalOn` and `EvaluateDiagnosticOn` are their shared bodies (`Evaluate`, `EvaluateNormal`, `Diagnose`, `EvaluateMaterialViews`). |
-| `error.{h,cpp}` | Evaluator failures as `render::Error` with the reason `evaluator:<kind>[ node=<uid>]: <detail>`. |
+| `error.{h,cpp}` | Evaluator failures as `render::Error` with the reason `evaluator:<kind>[ node=<uid>]: <detail>`; `ErrorClassName`, the API class of each kind (decision 082): `unsupported_*` are `NotYetSupported`, `invalid_argument` (a malformed diagnostic argument) and `not_found` `ValueError`. |
+| `support.{h,cpp}` | The Phase 1 support boundary as a check before mutation (`phase1.14_compositor-core`, decisions 081, 082): `RequireSupported(before, after)` throws `core::NotYetSupported` naming the node, the feature and its owner task for the first release gap a request adds or changes (the `release-gap` entries of `tools/capabilities/compositor-capabilities.json`). |
 
 Everything runs on revision snapshots (`core::Snapshot`); the GPU path submits one engine request per channel evaluation and keeps the cache across requests.
 
@@ -69,6 +70,8 @@ One JSON per shipped Painter 12.1.0 template (26), `default.json` for the projec
 Authored by UzmiGames; never generated from a capture (the goldens are compared with the files in the local run, `test_template_channel_sets_equal_the_capture`, `test_base_values_equal_the_empty_project_exports`). `TemplateLibrary::DefaultDirectory()` is `assets/templates` beside the executable (installed by `zig build painter` and `evaluator-tests`).
 
 ## 4. Out of this profile (explicit failures, capability gaps)
+
+The capability manifest lists every case below under the context `compositor` (decision 081, `tools/capabilities/compositor-capabilities.json`), `supported` with its goldens or `release-gap` with its owner task. A request that adds or changes a node using one fails with `NotYetSupported` before any mutation (`support.h`, decision 082): the evaluator's own `unsupported_*` refusals have that API class too, and stay as the second line for documents opened from disk and for the refusals that need decoded inputs (bilinear minification, the height-to-normal cases). Parent run: `python tests/evaluator/union_run.py` runs every child's Tier 0 golden set on DX12 twice and writes `parity/reports/phase1/compositor-core.md`.
 
 Phase1.12 additions: the virtual normal maps at set resolutions other than 256, with a bound Normal mesh map, or with a non-empty Normal channel in a DirectX project, and Normal-channel bitmaps in DirectX projects fail with `unsupported_source`; SignedAddition on Height and 8-bit Normal-channel imports are implemented by analogy and unobserved (`height-to-normal.json` gaps).
 

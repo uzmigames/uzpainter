@@ -35,6 +35,7 @@ from tests.evaluator.test_compositor_tile_dag import (
     raster,
     run_case,
 )
+from tests.evaluator.union_run import observe
 from tools.parity.fit.common import publishable_problems
 from tools.parity.fit.oracle import Golden
 from tools.parity.schemas import load_json
@@ -136,9 +137,11 @@ def compare_channel(
         if fmt.endswith("F"):
             expected = ours.reshape(theirs.shape)
             equal = (expected == theirs) | (np.isnan(expected) & np.isnan(theirs))
+            observe(golden, map_name, recording, "float32 value", expected, theirs)
         else:
             expected = export16(ours, fmt, decode).reshape(theirs.shape)
             equal = expected == theirs.astype(np.int64)
+            observe(golden, map_name, recording, "16-bit code value", expected, theirs)
         differing[recording] = int(np.count_nonzero(~equal))
     return differing
 

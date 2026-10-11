@@ -34,6 +34,15 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
   - the display encoding is sRGB of a half-float value;
   - the run-to-run spikes sit on faces with n_x = 0, a hypothesis under test;
   - report in `parity/reports/phase0/iray-noise-floor.md`.
+- Compositor core (task `phase1.14_compositor-core`, decisions 081, 082):
+  - Every Phase 1 node kind, source, projection and blend mode is registered as `supported` with current-envelope evidence, or as `release-gap` with its owner task (`tools/capabilities/compositor-capabilities.json`).
+  - Excluded features raise `NotYetSupported` before any mutation, and only for the nodes a request touches.
+  - The union run (`tests/evaluator/union_run.py`) gives an interim result of 2834 of 2834 comparisons exact, with rasters byte-identical across processes.
+- Compositor diagnostics (task `phase1.13_compositor-diagnostics`, decisions 075, 076): `isolate`, `contribution`, material views with leak detection, and region statistics, CPU = GPU. Export-plan sources are named `diagnosticMap`.
+- Blend gaps closed (task `phase1.11_compositor-blend-gaps`, decision 073): Tint, Saturation, Color and Value are exact on every channel. Hue weights are centred on the primaries, and the numerator is `p − (q + 3e)`. No blend mode is a release gap any more.
+- Texture-unit replica for minification (task `phase1.9_compositor-resample-gaps`, decision 071):
+  - Measured: fixed-point LOD, exact probe tap weights, and table keys sufficient.
+  - Open: the multi-probe sum sometimes lands one ulp low, about 3 in 10 000 dark-bitmap samples. Minification stays refused.
 - Height to normal (task `phase1.12_compositor-height-normal`, decisions 064, 065; still open on recordings):
   - The Sharp and Smooth (Sobel) methods match Painter exactly on Normal_OpenGL, Normal_DirectX and Height, CPU = GPU.
   - The stencils read Height before its write.

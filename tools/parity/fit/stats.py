@@ -42,8 +42,10 @@ class Difference:
         return result
 
 
-def difference(a: Array, b: Array, domain: Array | None = None) -> Difference:
-    """Statistics of |a - b| over every channel of the texels in `domain` (all when None).
+def abs_differences(a: Array, b: Array, domain: Array | None = None) -> Array:
+    """|a - b| per texel of `domain` (all when None) and channel, shape (texels, channels), as
+    float64: integer maps by code, float maps as numbers (NaN against NaN and equal infinities
+    0, NaN against a number inf).
 
     `a` and `b` have shape (h, w, c) or (h, w); `domain` is a boolean (h, w) mask.
     """
@@ -57,16 +59,25 @@ def difference(a: Array, b: Array, domain: Array | None = None) -> Difference:
     if left.size == 0:
         raise ValueError("empty comparison domain")
     if np.issubdtype(left.dtype, np.integer) and np.issubdtype(right.dtype, np.integer):
-        delta = np.abs(left.astype(np.int64) - right.astype(np.int64)).astype(np.float64)
-    else:
-        lf, rf = left.astype(np.float64), right.astype(np.float64)
-        both_nan = np.isnan(lf) & np.isnan(rf)
-        with np.errstate(invalid="ignore"):
-            delta = np.abs(lf - rf)
-        delta[both_nan] = 0.0
-        delta[np.isnan(delta)] = math.inf
-        same_inf = np.isinf(lf) & (lf == rf)
-        delta[same_inf] = 0.0
+        delta: Array = np.abs(left.astype(np.int64) - right.astype(np.int64)).astype(np.float64)
+        return delta
+    lf, rf = left.astype(np.float64), right.astype(np.float64)
+    both_nan = np.isnan(lf) & np.isnan(rf)
+    with np.errstate(invalid="ignore"):
+        delta = np.abs(lf - rf)
+    delta[both_nan] = 0.0
+    delta[np.isnan(delta)] = math.inf
+    same_inf = np.isinf(lf) & (lf == rf)
+    delta[same_inf] = 0.0
+    return delta
+
+
+def difference(a: Array, b: Array, domain: Array | None = None) -> Difference:
+    """Statistics of |a - b| over every channel of the texels in `domain` (all when None).
+
+    `a` and `b` have shape (h, w, c) or (h, w); `domain` is a boolean (h, w) mask.
+    """
+    delta = abs_differences(a, b, domain)
     flat = delta.ravel()
     ordered = np.sort(flat)
     rank = math.ceil(0.99 * ordered.size)

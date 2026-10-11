@@ -33,6 +33,7 @@ from tests.evaluator.test_compositor_tile_dag import (
     run_case,
     spec_from_manifest,
 )
+from tests.evaluator.union_run import observe
 from tools.parity.fit.common import residual
 from tools.parity.schemas import load_json
 
@@ -116,7 +117,8 @@ def test_blend_sweep_equals_the_golden(
         ours = [residual(g, m, r, u, pooled([(a, b)])) for g, m, r, u, a, b in compared]
         assert ours == item["residuals"], f"{mode}: residuals moved from the published fit"
         return
-    for golden_id, map_name, recording, _, a, b in compared:
+    for golden_id, map_name, recording, unit, a, b in compared:
+        observe(runs.ctx.golden(golden_id.removeprefix("tier0/")), map_name, recording, unit, a, b)
         equal = (a == b) | (np.isnan(a) & np.isnan(b))
         differing = int(np.count_nonzero(~equal))
         assert differing == 0, (
@@ -162,6 +164,15 @@ def test_per_channel_modes_of_one_layer_equal_their_goldens(
                 recording, f"{texture_set}/{channel.lower()}"
             )
             values = theirs.values.reshape(ours.shape).astype(ours.dtype)
+            unit = "float32 value" if formats[channel].endswith("F") else "16-bit code value"
+            observe(
+                ctx.golden(f"semantics/{stem}"),
+                f"{texture_set}/{channel.lower()}",
+                recording,
+                unit,
+                ours,
+                values,
+            )
             differing = int(np.count_nonzero(ours != values))
             assert differing == 0, f"{channel} {mode} {recording}: {differing} values differ"
 

@@ -347,3 +347,107 @@ def test_inventory_matches_the_python_doc_inventory() -> None:
             page, _, fragment = anchor.removeprefix("python-doc/").partition("#")
             name = fragment.removeprefix("module-") if fragment else page.removesuffix(".html")
             assert documented.get(name) == page, (entry["symbol"], anchor)
+
+
+# ── Compositor registrations (phase1.14_compositor-core item 2.8, decision 081) ────────────
+
+COMPOSITOR_PATH = REPO_ROOT / "tools" / "capabilities" / "compositor-capabilities.json"
+RULEBOOK = REPO_ROOT / ".rulebook"
+# Every Phase 1 node kind, source, projection, sampling mode and blend mode the compositor
+# registers (the documented members of these enums and classes).
+COMPOSITOR_FAMILIES = {
+    "BlendingMode": ("substance_painter.layerstack.BlendingMode.", 32),
+    "ProjectionMode": ("substance_painter.layerstack.ProjectionMode.", 8),
+    "FilteringMode": ("substance_painter.layerstack.FilteringMode.", 3),
+    "UVWrapMode": ("substance_painter.layerstack.UVWrapMode.", 4),
+    "ScaleMode": ("substance_painter.layerstack.ScaleMode.", 3),
+}
+COMPOSITOR_NODES = {
+    "substance_painter.layerstack.FillLayerNode",
+    "substance_painter.layerstack.GroupLayerNode",
+    "substance_painter.layerstack.InstanceLayerNode",
+    "substance_painter.layerstack.PaintLayerNode",
+    "substance_painter.layerstack.FillEffectNode",
+    "substance_painter.layerstack.LevelsEffectNode",
+    "substance_painter.layerstack.FilterEffectNode",
+    "substance_painter.layerstack.GeneratorEffectNode",
+    "substance_painter.layerstack.PaintEffectNode",
+    "substance_painter.layerstack.CompareMaskEffectNode",
+    "substance_painter.layerstack.ColorSelectionEffectNode",
+    "substance_painter.layerstack.AnchorPointEffectNode",
+    "substance_painter.layerstack.GeometryMaskMeshParams",
+    "substance_painter.layerstack.GeometryMaskUVTilesParams",
+    "substance_painter.source.SourceUniformColor",
+    "substance_painter.source.SourceBitmap",
+    "substance_painter.source.SourceSubstance",
+    "substance_painter.source.SourceVectorial",
+    "substance_painter.source.SourceFont",
+    "substance_painter.source.SourceReference",
+}
+
+
+def compositor_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    return [e for e in manifest["entries"] if e["context"].split(":")[0] == "compositor"]
+
+
+def test_compositor_registers_every_phase1_kind(manifest: dict[str, Any]) -> None:
+    """2.8: every node kind, source, projection, sampling mode and blend mode has a compositor
+    entry (supported with Tier 0 evidence, or a release gap), and the API context stays a gap."""
+    entries = compositor_entries(manifest)
+    symbols = {e["symbol"] for e in entries}
+    assert symbols >= COMPOSITOR_NODES
+    inventory = {e["symbol"] for e in load(INVENTORY_PATH)["entries"] if e["context"] == "any"}
+    for prefix, count in COMPOSITOR_FAMILIES.values():
+        members = {
+            s for s in inventory if s.startswith(prefix) and s.count(".") == prefix.count(".")
+        }
+        assert len(members) == count, prefix
+        assert members <= symbols, sorted(members - symbols)
+    status = {(e["symbol"], e["context"]): e["status"] for e in manifest["entries"]}
+    for symbol in symbols:
+        assert status.get((symbol, "any")) != "supported", symbol
+
+
+def test_compositor_entries_state_evidence_or_owner(manifest: dict[str, Any]) -> None:
+    """2.8: a supported compositor entry names current-envelope goldens and `since`; a release
+    gap names an owner task that exists in the rulebook (open or archived)."""
+    archived = {p.name.split("-", 3)[-1] for p in (RULEBOOK / "archive").iterdir()}
+    open_tasks = {p.name for p in (RULEBOOK / "tasks").iterdir() if p.is_dir()}
+    owner = re.compile(r"\bphase[0-9]+\.[0-9]+_[a-z0-9-]+\b")
+    for entry in compositor_entries(manifest):
+        assert entry["notes"], entry["symbol"]
+        if entry["status"] == "supported":
+            assert entry["tier_evidence"] and entry["since"], entry["symbol"]
+            continue
+        assert entry["status"] == "release-gap", entry["symbol"]
+        tasks = owner.findall(entry["notes"])
+        assert tasks, entry["symbol"]
+        assert all(t in open_tasks or t in archived for t in tasks), (entry["symbol"], tasks)
+
+
+def test_tier_evidence_resolves_through_the_current_envelope(tmp_path: Path) -> None:
+    """Decision 037: goldens recorded only under the current envelope are valid evidence."""
+    golden = "tier0/semantics/group-coverage-order"
+    assert not (
+        REPO_ROOT / "parity" / "manifests" / "tier0" / "semantics" / "group-coverage-order.json"
+    ).exists()
+    inventory = load(INVENTORY_PATH)
+    entry = inventory_entry(inventory, "substance_painter.layerstack.Node.set_opacity")
+    entry.update(status="supported", since="0.1.0", tier_evidence=[golden])
+    result = generate(inventory_path=write(tmp_path / "inventory.json", inventory))
+    assert any(e["tier_evidence"] == [golden] for e in result["entries"])
+
+
+def test_compositor_gap_without_owner_fails(tmp_path: Path) -> None:
+    compositor = load(COMPOSITOR_PATH)
+    gap = next(e for e in compositor["entries"] if e["status"] == "release-gap")
+    gap["notes"] = "Outside the Phase 1 subset."
+    with pytest.raises(GenerationError, match="owner task"):
+        generate(compositor_path=write(tmp_path / "compositor.json", compositor))
+
+
+def test_compositor_entry_outside_its_context_fails(tmp_path: Path) -> None:
+    compositor = load(COMPOSITOR_PATH)
+    compositor["entries"][0]["context"] = "mask-stack"
+    with pytest.raises(GenerationError, match="compositor:<case>"):
+        generate(compositor_path=write(tmp_path / "compositor.json", compositor))

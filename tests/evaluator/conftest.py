@@ -10,6 +10,12 @@ from pathlib import Path
 
 import pytest
 
+# The union run's hooks (phase1.14_compositor-core item 3.1); they do nothing outside a run.
+from tests.evaluator.union_run import (  # noqa: F401
+    pytest_collection_modifyitems,
+    pytest_runtest_logreport,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_DIR = REPO_ROOT / "assets" / "templates"
 

@@ -35,6 +35,7 @@ from tests.evaluator.test_compositor_tile_dag import (
     run_case,
     spec_from_manifest,
 )
+from tests.evaluator.union_run import observe
 from tools.parity.schemas import load_json
 
 THIRDS = "quantisation-thirds"
@@ -146,6 +147,8 @@ def test_three_third_opacity_fills_equal_the_same_session_recording(
         ours = exported(result, channel, fmt, srgb8_decode)
         theirs = golden.map("r1", f"{texture_set}/{channel.lower()}").values
         theirs = theirs.reshape(ours.shape).astype(ours.dtype)
+        unit = "float32 value" if fmt.endswith("F") else "16-bit code value"
+        observe(golden, f"{texture_set}/{channel.lower()}", "r1", unit, ours, theirs)
         for component in range(ours.shape[-1]):
             a, b = ours[..., component], theirs[..., component]
             differing = int(np.count_nonzero(a != b))
@@ -171,6 +174,8 @@ def test_half_opacity_layer_over_the_base_equals_the_same_session_recording(
         ours = exported(result, channel, fmt, srgb8_decode)
         theirs = golden.map("r1", f"s2/{channel.lower()}").values
         theirs = theirs.reshape(ours.shape).astype(ours.dtype)
+        unit = "float32 value" if fmt.endswith("F") else "16-bit code value"
+        observe(golden, f"s2/{channel.lower()}", "r1", unit, ours, theirs)
         differing = int(np.count_nonzero(ours != theirs))
         assert differing == 0, f"s2/{channel} ({fmt}): {differing} values differ from r1"
 

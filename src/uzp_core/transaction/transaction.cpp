@@ -309,6 +309,9 @@ void Transaction::Apply(const std::function<void(Edit&)>& call) {
     } catch (const ValueError& error) {
         failure_ = Failed("ValueError", error.what(), would_change());
         throw;
+    } catch (const NotYetSupported& error) {
+        failure_ = Failed("NotYetSupported", error.what(), would_change());
+        throw;
     } catch (const std::exception& error) {
         failure_ = Failed("RuntimeError", error.what(), would_change());
         throw;

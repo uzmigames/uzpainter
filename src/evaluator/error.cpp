@@ -6,9 +6,9 @@ namespace uzp::evaluator {
 
 namespace {
 
-constexpr std::array<std::string_view, 12> kKindNames = {
+constexpr std::array<std::string_view, 13> kKindNames = {
     "not_found",          "unknown_template",      "missing_base_value",   "unsupported_node",
-    "unsupported_blend_mode", "unsupported_source", "missing_resource",
+    "unsupported_blend_mode", "unsupported_source", "invalid_argument", "missing_resource",
     "texture_set_over_budget", "tile_budget_exceeded", "unknown_profile", "invalid_profile",
     "internal",
 };
@@ -19,6 +19,25 @@ constexpr std::string_view kPrefix = "evaluator:";
 
 std::string_view EvalErrorKindName(EvalErrorKind kind) {
     return kKindNames[static_cast<size_t>(kind)];
+}
+
+std::string_view ErrorClassName(EvalErrorKind kind) {
+    switch (kind) {
+        case EvalErrorKind::UnsupportedNode:
+        case EvalErrorKind::UnsupportedBlendMode:
+        case EvalErrorKind::UnsupportedSource: return "NotYetSupported";
+        case EvalErrorKind::NotFound:
+        case EvalErrorKind::UnknownTemplate:
+        case EvalErrorKind::InvalidArgument: return "ValueError";
+        case EvalErrorKind::MissingResource: return "ResourceNotFoundError";
+        case EvalErrorKind::MissingBaseValue:
+        case EvalErrorKind::TextureSetOverBudget:
+        case EvalErrorKind::TileBudgetExceeded:
+        case EvalErrorKind::UnknownProfile:
+        case EvalErrorKind::InvalidProfile:
+        case EvalErrorKind::Internal: return "RuntimeError";
+    }
+    return "RuntimeError";
 }
 
 render::Unexpected EvalFail(EvalErrorKind kind, std::string detail, core::Id node) {

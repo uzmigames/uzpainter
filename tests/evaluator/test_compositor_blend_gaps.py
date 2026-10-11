@@ -30,6 +30,7 @@ from tests.evaluator.test_compositor_tile_dag import (
     raster,
     run_case,
 )
+from tests.evaluator.union_run import observe
 
 
 def test_glsl_arcsine_and_trig_index(evaluator_tests: Path) -> None:
@@ -85,5 +86,7 @@ def test_passthrough_groups_equal_the_golden(
             for recording in ("r1", "r2"):
                 map_name = f"{texture_set}/{channel.lower()}"
                 theirs = golden.map(recording, map_name).values.reshape(value.shape)
+                unit = "float32 value" if fmt.endswith("F") else "16-bit code value"
+                observe(golden, map_name, recording, unit, value, theirs)
                 differing = int(np.count_nonzero(value.astype(np.float64) != theirs))
                 assert differing == 0, f"{map_name} {recording}: {differing} values differ"

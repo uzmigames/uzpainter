@@ -1,0 +1,9 @@
+{
+  "id": 71,
+  "slug": "the-tabulated-texture-unit-replica-stops-at-the-accumulation-gate-minification-stays-refused",
+  "title": "The tabulated texture-unit replica stops at the accumulation gate; minification stays refused",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": ["phase1.9_compositor-resample-gaps"],
+  "supersededBy": null
+}
