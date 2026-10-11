@@ -2,7 +2,7 @@
 
 Child of `phase1.14_compositor-core` (P1-COMPOSITOR; `docs/architecture/04-layer-stack-and-compositing.md` §4, §5). Decision 028: the Tier 0 comparisons against the private oracle store and the GPU checks run locally on the owner's machine, and this report is their evidence. Numbers and hashes only; every recorded Painter output stays in the private store. Decision 043 records the choices below and the model panel's verdicts.
 
-**Result: the bilinear near-tie is fixed at its root and `resample-uv` magnification and 1:1 are exact on both backends under every filter and wrap mode (s0, s1, s3 User0-5, 7; s2 User0-7). Bilinear minification (User6 of s0, s1, s3) is not determined by the existing golden: the evaluator keeps refusing it with `evaluator:unsupported_source`, and the task stays open until the recording of §3 is made and fitted.**
+**Result: the bilinear near-tie is fixed at its root and `resample-uv` magnification and 1:1 are exact on both backends under every filter and wrap mode (s0, s1, s3 User0-5, 7; s2 User0-7). Bilinear minification is now identified (§5, decision 056). Painter samples a minified bitmap with the recording GPU's anisotropic texture unit through Vulkan; a probe of that unit reproduces the new goldens and the held-out map to one code, but not bit for bit. The evaluator keeps refusing minification with `evaluator:unsupported_source`, and the minification items stay open. The UV offset is now applied before the scale and the rotation (§5.3), on both backends.**
 
 ## 1. Run record
 
@@ -37,7 +37,7 @@ A bitmap stored bottom-up (rows flipped, fy' = 256 − fy) turns the GPU's ties-
 
 Evaluator: `src/evaluator/projection_uv.{h,cpp}` `BilinearFilter` (integers, the reference) and `src/evaluator/shaders/evaluator_project.hlsl` (the same integers from the floats' bits, the sum in `uint64_t`, the rounding by shifts, the scale an exact power of two); manual filtering, so the evaluator does not depend on any GPU's sampler. Every golden through the projection was re-compared on both backends (`colour-ramps-*`, `blend-inputs`, `blend-basic` and the other blend sweeps, `blend-order`, `group-masks`, the mask goldens, `height-normal-*`, island edges and `resample-uv` s0-s3): exact. `parity/semantics/uv-sampling.json` is re-derived by `tests/evaluator/sources_fits.py` (`uv-bilinear-repeat` now `exact`, parameter `operand_bits` 28); `colour-transfer.json` is unchanged. `Nearest` keeps the float32 texel.
 
-## 3. Bilinear minification (item 2.2) and the recording it needs
+## 3. Bilinear minification (item 2.2) and the recording it needed
 
 `resample-uv` User6 projects field A (256 × 256; R = 257 x, G = 257 y, B = 256 x + y) at scale 3.3. Every channel is a linear ramp, so in the interior any normalised filter returns 257 × its centroid: the golden measures the kernel's first moment, ±1-code arithmetic noise, and the step response at the wrap seams, which the sample positions x = -293.25 + 3.3 i cross at only four sub-texel offsets per axis. Measured (both recordings, all rows identical in R and all columns in G):
 
@@ -74,10 +74,84 @@ Then: fit the kernels (`tests/evaluator/sources_fits.py` and the fits module of 
 | `projection-gpu-vs-cpu` | 36 random projection stacks over the nine formats: 43 581 440 samples, GPU = CPU bit for bit |
 | `gpu-vs-cpu`, `masks-gpu-vs-cpu`, `order` | unchanged, bit for bit and green |
 
+## 5. The minification recordings and what they determine (decision 056)
+
+The recordings of §3 exist (decision 048: `resample-uv-minify`, `resample-uv-impulse`, current envelope; r1 = r2 on every map). Painter 12.1.5 renders through Vulkan (its log and `substance_vk_sal.dll`), so the measurements below use `tools/parity/vk_sampler_probe`: a standalone Vulkan compute probe, needed because the render layer is DX12-only until Phase 3. The probe samples the bitmap as a float32 texture stored bottom-up, with a float32 box mip chain, by `SampleGrad` at Painter's UV. `python -m tools.parity.vk_sampler_probe.measure <work-dir>` reruns everything below on the recording GPU (RTX 4090, driver 617.14).
+
+### 5.1 The texture unit
+
+The trilinear blend factor of the anisotropic path (t, in 1/256, at LOD fraction f = n/16) depends on maxAnisotropy:
+
+| maxAnisotropy | t |
+|---|---|
+| 1 | f |
+| 2, 3 | 1.5 f |
+| 4 to 7 | 1.75 f |
+| 8 to 16 | 2 f |
+
+The same GPU through D3D12 uses another band ([0.25, 0.75] at 16, slope 2), and no bias reproduces Painter's users 4 and 5 there. An isotropic gradient of 1.2825 texels takes two probes (weights summing to 510 or 511 / 512), while 1.0, 1.5, 2 and 3 texels take one; Painter's user 0 shows the same two probes.
+
+### 5.2 The filters
+
+**BilinearSharp** is one sample with maxAnisotropy 4 at LOD bias -1.5. **BilinearHQ** combines nine samples, each taken at +-1/3 output texel with the gradients divided by 3:
+
+- the tent [1 2 1]^2 / 16 weighs them, with the (+1/3, +1/3) sample replaced by the centre;
+- the result is blended with the centre sample by alpha = min(footprint - 1, 1).
+
+HQ's least-squares class weights (centre, edge, corner, x 256) are those of the rule: 206.28, 9.04, 4.52 at footprint 1.2825; 164.92, 16.56, 8.28 at 1.5175; 90.12, 30.16, 15.08 at 1.9425; 80, 32, 16 at 2.575 and above.
+
+Exact fraction of the values (max |delta| in codes), first recording. RepeatNone compares only the covered texels.
+
+| Golden | Sharp Repeat (s1) | Sharp RepeatNone (s3) | HQ Repeat (s0) | HQ RepeatNone (s2) |
+|---|---|---|---|---|
+| `-minify` users 0-3 | 1 (0) | 1 (0) | 0.964-0.999 (1, user 1: 28) | 0.969-0.999 (1) |
+| `-minify` users 4, 5 | 0.99996, 0.99990 (1) | 1 (0) | 0.9986-0.9987 (1) | 0.9983-0.9987 (1) |
+| `-minify` user 6 (13.2 x 5.13) | 1 (0) | 1 (0) | 0.409 (1 879) | 0.407 (1 500) |
+| `-minify` user 7 (rotation 30, offset) | 0.9927 (244) | 0.9957 (170) | 0.941 (86) | 0.941 (60) |
+| `-impulse` users 0-7 | 1 (0) | 1 (0) | 0.999-1 (1) | 0.994-1 (1) |
+| held out: `resample-uv` user 6 | 0.99985 (1) | | 0.99841 (1) | |
+
+### 5.3 The UV offset order
+
+The offset precedes the scale and the rotation:
+
+- (a, b) = ((u - 1/2 - o_u) s_u, (v - 1/2 - o_v) s_v)
+- u' = (cos r a + sin r b) + 1/2
+- v' = (-sin r a + cos r b) + 1/2
+
+On `-minify` user 7 (Sharp, Repeat), the order the evaluator used, with the offset applied last, misses by 14 551 codes on average; the new order is 99.27 % exact. `-impulse` users 6 and 7 (offsets at scales 13.2 and 7.77) are exact. Every earlier golden has its offset at scale 1 without rotation, where both orders agree, so no published residual changes.
+
+`ProjectTexel` (`src/evaluator/projection_uv.cpp`) and `evaluator_project.hlsl` now apply the offset first. The `sources` case checks that an offset of 4/W at scale 0.5 moves the bitmap by two texels, and `projection-gpu-vs-cpu` checks GPU = CPU on random offsets, scales and rotations.
+
+### 5.4 What stays open and why
+
+The residual is one code wherever the probe's model applies. The larger misses come from three sources:
+
+- a subsample or sample coordinate within 0.006 / 256 texel of a fixed-point rounding boundary (users 1 and 7), which points to Painter's float32 UV;
+- HQ under an anisotropic footprint (user 6), where the rule is unknown;
+- the float32 combination of HQ's nine samples.
+
+The evaluator filters manually, CPU = GPU bit for bit, and must not depend on one GPU's sampler (decision 043). Lifting the refusal therefore needs a bit-exact integer model of:
+
+- the anisotropic unit's probe count, positions and weights against the gradient bits;
+- its fixed-point LOD;
+- the per-level weight, trilinear and supersample arithmetic;
+- Painter's float32 UV.
+
+These are measurement tasks on the recording GPU through Vulkan, not recordings. If no bit-exact model emerges, an exception-register proposal (decision 017) takes its place.
+
+A further Painter recording is needed for two things only, both filters, with rotations and offsets (which would also validate the UV model):
+
+- HQ's anisotropic rule: a sweep of anisotropic footprints, e.g. s_u in {2, ..., 16} x s_v in {1.1, ..., 4} on `pattern64`;
+- LOD at or above 1: footprints from 4 to 16 texels at irregular steps.
+
+The constants were measured on driver 617.14; the probe re-measures them after a driver or Painter update.
+
 ## Reproduce
 
 ```
 zig build evaluator-tests
 python -m pytest tests/evaluator/test_compositor_sources_projection.py
 python tests/evaluator/sources_fits.py zig-out/bin/uzp-evaluator-tests.exe <work-dir>
+python -m tools.parity.vk_sampler_probe.measure <work-dir>
 ```

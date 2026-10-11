@@ -208,14 +208,14 @@ void main(uint3 id : SV_DispatchThreadID) {
 
     precise const double u = ((double)i + 0.5) * ParamDouble(P_INV_WIDTH);
     precise const double v = 1.0 - ((double)j + 0.5) * ParamDouble(P_INV_HEIGHT);
-    precise const double a = (u - 0.5) * ParamDouble(P_SCALE_U);
-    precise const double b = (v - 0.5) * ParamDouble(P_SCALE_V);
+    precise const double a = ((u - 0.5) - ParamDouble(P_OFFSET_U)) * ParamDouble(P_SCALE_U);
+    precise const double b = ((v - 0.5) - ParamDouble(P_OFFSET_V)) * ParamDouble(P_SCALE_V);
     precise const double ca = cosR * a;
     precise const double sb = sinR * b;
-    precise const double u2 = ((ca + sb) + 0.5) - ParamDouble(P_OFFSET_U);
+    precise const double u2 = (ca + sb) + 0.5;
     precise const double sa = (-sinR) * a;
     precise const double cb = cosR * b;
-    precise const double v2 = ((sa + cb) + 0.5) - ParamDouble(P_OFFSET_V);
+    precise const double v2 = (sa + cb) + 0.5;
     precise const double x = u2 * (double)imageWidth - 0.5;
     precise const double y = (1.0 - v2) * (double)imageHeight - 0.5;
 
