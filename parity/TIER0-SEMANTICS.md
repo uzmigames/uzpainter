@@ -74,5 +74,11 @@ The recorder vocabulary this corpus uses (groups, content and mask effects, leve
 | `tier0/semantics/blend-component-hue` | Tint, Color, Saturation and Value on the authored hue grid for phase1.11 (`compositor-blend-gaps.md` §3.3; new fixtures `bitmaps/hue-grid*.png`, decision 067) |
 | `tier0/semantics/blend-normal-opacity` | The normal-map modes at opacities 0.1, 1/3, 0.7 and 0.99 and on an exactly flat normal (`compositor-blend-gaps.md` §5, decision 067) |
 | `tier0/semantics/coverage-srgb8-ties` | sRGB8 group coverage on the 8-bit ties of [0.25, 0.5) at 64 opacities, for phase1.10 (decision 067) |
+| `tier0/semantics/height-normal-mesh-map`, `-mesh-map-directx` | A Normal mesh map (`normal-b`) alone, with the height ramps, with `normal-a` on Normal and with both; Sobel on s4-s7 through the UI; a DirectX project (phase1.12, decision 077) |
+| `tier0/semantics/height-signed-addition` | SignedAddition on Height over the ramps (grey A at 1 and 0.5, uniform 0.25) and onto the empty Height (decision 077) |
+| `tier0/semantics/height-normal-channel-coverage` | The Normal channel at opacity 0.5, 0.25, under a mask-codes mask, and a uniform normal at 0.5, over the height ramps (decision 077) |
+| `tier0/semantics/normal-channel-import`, `-import-directx` | `normal-a` and its 8-bit copy (new fixture `bitmaps/normal-a-8bit.png`) on Normal over the ramps, OpenGL and DirectX projects (decision 077) |
+| `tier0/semantics/height-normal-resolution-{512,1024,2048}`, `-1024-sobel` | `height-normal-plane-amplitudes` at 512, 1024 and 2048 px; at 1024 with s0 in Sobel through the UI (decision 077) |
+| `tier0/semantics/resample-uv-{anisotropic,anisotropic-impulse,lod,lod-boundaries,rotation}` | Validation data for phase1.9's tabulated texture-unit replica: anisotropic footprints, LOD 0.5-2.5 with integer-LOD boundaries, rotations with axis-aligned controls, both filters, irregular and zero offsets (decisions 061, 078) |
 
 The UI values are named in each manifest's settings sheet and applied by the recorder's operator step (`RECORDER.md` §3, `record --operator ui`).

@@ -66,7 +66,31 @@ Recorded on 2026-10-11 by task `phase0.9_render-reference-capture`'s Painter ses
 
 The layouts are decision 067's. These recordings are evidence for the open Phase 1 tasks; this report does not fit them. `parity/reports/phase0/tier0-stability.md` was regenerated from the stored recordings with no fit re-run and no `parity/semantics/` change: 72 goldens, 62 stable (the three above among them) and 10 unstable.
 
-## 5. Reproduce
+## 5. Height-to-normal requests and texture-unit validation (decisions 077, 078)
+
+Recorded on 2026-10-11 in two Painter `12.1.5+js-api.1.1.20` sessions started and stopped by the recorder (the current envelope, under the Assets3D Painter lock, Legacy colour management; the documented API, plus the UI operator for the Sobel sets), each twice in one run (`r1` same session, `r2` after save and reopen), admitted with `uzpainter parity record`; `store verify` ok. Manifests: `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/tier0/semantics/`. Every UI-set method was shown by its widget and read again after the reopen.
+
+| Golden | For | Private record (SHA-256) | Maps per recording | r1 = r2 (maps) |
+|---|---|---|---|---|
+| `tier0/semantics/height-normal-mesh-map` | phase1.12, `compositor-height-normal.md` §5 (i); s4-s7 Sobel (UI) | `245069a4495272c2fb68ca910182a6255a1df088c5ef47b8d2f909877f1c9642` | 40 | 40/40 |
+| `tier0/semantics/height-normal-mesh-map-directx` | §5 (i), DirectX project | `0571d1d45aba0b765c551f5b2e0ef571570fc7104efe9bc4897f4c3a2c94127c` | 20 | 20/20 |
+| `tier0/semantics/height-signed-addition` | §5 (ii) | `731b1e97ca020aaa21284d300e321a91ff71d564d1729d2d294391eafd327560` | 24 | 24/24 |
+| `tier0/semantics/height-normal-channel-coverage` | §5 (iii) | `58fa28f33cdfefdb939ea05b34d0abe0ea05644f6328e21087428c79edba3ba3` | 32 | 29/32 (s2: Normal max 2^-10, 114 266 values; virtual maps max 61 codes) |
+| `tier0/semantics/normal-channel-import` | §5 (iv), OpenGL (new fixture `normal-a-8bit`) | `eebb4246d50ec6d5d0d94cf4945bbefe9e2ef39dff343983def7ab7bc197a031` | 16 | 16/16 |
+| `tier0/semantics/normal-channel-import-directx` | §5 (iv), DirectX | `835b59789f3325456ec740b130d64e2b636bb1829915585db8c753d779293e46` | 16 | 16/16 |
+| `tier0/semantics/height-normal-resolution-512` | §5 (v) | `e52b103f64176ebffec6a6a5972d27fe89c4a073640ea039a0bcb38166030162` | 16 | 16/16 |
+| `tier0/semantics/height-normal-resolution-1024` | §5 (v) | `5a63f7eca7893785e00aafd0f7ddf08950ed239910b6da053bb1ca9f1eab9592` | 16 | 16/16 |
+| `tier0/semantics/height-normal-resolution-2048` | §5 (v) | `0f02c91260dac1035dc0805eaada5a38c177261b1629939844023eb66d33fea2` | 16 | 14/16 (s2 virtual maps: 4 and 5 values, 1 code) |
+| `tier0/semantics/height-normal-resolution-1024-sobel` | §5 (v), s0 Sobel (UI) | `6e51f5eccb47721bc14153c971559c61f42aef095345166afcb1a8397a9b9c26` | 16 | 16/16 |
+| `tier0/semantics/resample-uv-anisotropic` | phase1.9 replica validation (decision 061) | `f9421359740f97012e0b5d03fd9962d771f846c96b4e5668b94ac8c911bb5a7c` | 40 | 40/40 |
+| `tier0/semantics/resample-uv-anisotropic-impulse` | same, kernel reads | `bc5a5096db6869391029498a61fa468ee43b4a427e9770ba1794ed878d6d0f37` | 40 | 40/40 |
+| `tier0/semantics/resample-uv-lod` | same | `80bf855316ed90594aeed2931b239d51844bce3c52b99c83b9341ef09a8cced0` | 32 | 32/32 |
+| `tier0/semantics/resample-uv-lod-boundaries` | same | `cbc19cbd976327597bf3b7fc17b796c652607aab4cdca316fa9e617ee7f68fa6` | 40 | 40/40 |
+| `tier0/semantics/resample-uv-rotation` | same | `8a7ee1e00f74e07473e0cb4b2b1124719c6f7fb4d073fd3ca1e3baf2b29a08f7` | 40 | 40/40 |
+
+Both differing goldens were recorded again in a freshly started Painter process: its `r1` equals the first `r1` and its `r2` the first `r2` on every map, so the divergence is a deterministic save-and-reopen effect (decision 032: `r1` is the exact target), not run-to-run noise. The layouts are decisions 077 and 078. This report does not fit the recordings. `parity/reports/phase0/tier0-stability.md` was regenerated with no fit re-run and no `parity/semantics/` change: 87 goldens, 75 stable and 12 unstable (the two above added).
+
+## 6. Reproduce
 
 ```
 python -m tools.parity.tier0_semantics check

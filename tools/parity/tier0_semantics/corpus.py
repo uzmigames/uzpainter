@@ -103,6 +103,11 @@ FIXTURES: dict[str, tuple[str, str, Callable[[], bytes] | None]] = {
         f"{FIXTURE_DIR}/bitmaps/normal-b.png",
         lambda: fixtures.normal_field("b"),
     ),
+    "normal-a-8bit": (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/normal-a-8bit.png",
+        lambda: fixtures.normal_field("a", bits=8),
+    ),
 }
 
 MESH_SETS = {
@@ -305,12 +310,17 @@ class Golden:
     template: str | None = None
 
 
-def start(mesh: str, template: str | None = None) -> Sequence:
+def start(
+    mesh: str,
+    template: str | None = None,
+    normal_map_format: str = "OpenGL",
+    resolution: int = RESOLUTION,
+) -> Sequence:
     sequence = Sequence()
     args: dict[str, Any] = {
         "mesh": mesh,
-        "normal_map_format": "OpenGL",
-        "default_texture_resolution": RESOLUTION,
+        "normal_map_format": normal_map_format,
+        "default_texture_resolution": resolution,
     }
     if template is not None:
         args["template"] = template
@@ -827,8 +837,8 @@ def resample_uv() -> Golden:
     )
 
 
-def height_normal(mesh: str) -> Golden:
-    s = start(mesh)
+def height_normal(mesh: str, resolution: int = RESOLUTION) -> Golden:
+    s = start(mesh, resolution=resolution)
     res = s.imports("height-ramps")
     sets = MESH_SETS[mesh]
     variants: tuple[tuple[float, bool], ...] = (
@@ -913,11 +923,16 @@ def sha256(data: bytes) -> str:
 
 
 def applied_settings(golden: Golden) -> list[dict[str, Any]]:
+    create = golden.sequence.steps[0]["args"]
     settings: list[dict[str, Any]] = [
-        {"name": "project.normal_map_format", "value": "OpenGL", "applied_by": "recorder_api"},
+        {
+            "name": "project.normal_map_format",
+            "value": create["normal_map_format"],
+            "applied_by": "recorder_api",
+        },
         {
             "name": "texture_set.resolution",
-            "value": RESOLUTION,
+            "value": create["default_texture_resolution"],
             "unit": "px",
             "applied_by": "recorder_api",
         },

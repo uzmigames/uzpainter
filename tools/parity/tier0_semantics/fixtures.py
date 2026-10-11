@@ -1,4 +1,5 @@
-"""UzmiGames-authored Tier 0 fixtures: synthetic meshes (OBJ) and 16-bit bitmaps (PNG).
+"""UzmiGames-authored Tier 0 fixtures: synthetic meshes (OBJ) and 16-bit (one 8-bit) bitmaps
+(PNG).
 
 Every byte is computed here from closed-form definitions, so the fixtures are reproducible and
 carry no third-party data. Conventions: OBJ in centimetres, +Y up, counter-clockwise faces;
@@ -17,9 +18,13 @@ HEADER = "# UzPainter Tier 0 semantics fixture, authored by UzmiGames (Apache-2.
 Pixel = tuple[int, ...]
 
 
-def png16(width: int, height: int, channels: int, texel: Callable[[int, int], Pixel]) -> bytes:
-    """A 16-bit grey (1 channel) or RGB (3 channels) PNG, no ancillary chunks, filter 0."""
+def png16(
+    width: int, height: int, channels: int, texel: Callable[[int, int], Pixel], bits: int = 16
+) -> bytes:
+    """A 16-bit (or, with `bits=8`, 8-bit) grey (1 channel) or RGB (3 channels) PNG, no
+    ancillary chunks, filter 0."""
     color_type = {1: 0, 3: 2}[channels]
+    pack, top = {16: (">H", 0xFFFF), 8: (">B", 0xFF)}[bits]
     raw = bytearray()
     for y in range(height):
         raw.append(0)
@@ -28,15 +33,15 @@ def png16(width: int, height: int, channels: int, texel: Callable[[int, int], Pi
             if len(values) != channels:
                 raise ValueError(f"texel ({x}, {y}) has {len(values)} values, not {channels}")
             for value in values:
-                if not 0 <= value <= 0xFFFF:
-                    raise ValueError(f"texel ({x}, {y}) value {value} is not a 16-bit code")
-                raw += struct.pack(">H", value)
+                if not 0 <= value <= top:
+                    raise ValueError(f"texel ({x}, {y}) value {value} is not a {bits}-bit code")
+                raw += struct.pack(pack, value)
 
     def chunk(kind: bytes, body: bytes) -> bytes:
         crc = zlib.crc32(kind + body) & 0xFFFFFFFF
         return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", crc)
 
-    header = struct.pack(">IIBBBBB", width, height, 16, color_type, 0, 0, 0)
+    header = struct.pack(">IIBBBBB", width, height, bits, color_type, 0, 0, 0)
     return (
         b"\x89PNG\r\n\x1a\n"
         + chunk(b"IHDR", header)
@@ -200,8 +205,10 @@ def height_ramps() -> bytes:
     return png16(256, 256, 1, texel)
 
 
-def normal_field(kind: str) -> bytes:
-    """RGB tangent-space normals encoded as n * 0.5 + 0.5: bumps (`a`) or a tilted wave (`b`)."""
+def normal_field(kind: str, bits: int = 16) -> bytes:
+    """RGB tangent-space normals encoded as n * 0.5 + 0.5: bumps (`a`) or a tilted wave (`b`).
+    The 8-bit copy (`bits=8`, decision 077) holds the 8-bit code nearest each 16-bit code c,
+    round(c / 257) (never a tie: 257 is odd)."""
 
     def texel(x: int, y: int) -> Pixel:
         u, v = (x + 0.5) / 256.0, (y + 0.5) / 256.0
@@ -213,9 +220,10 @@ def normal_field(kind: str) -> bytes:
             dv = 0.3
         length = math.sqrt(du * du + dv * dv + 1.0)
         n = (-du / length, -dv / length, 1.0 / length)
-        return tuple(code(c * 0.5 + 0.5) for c in n)
+        codes = tuple(code(c * 0.5 + 0.5) for c in n)
+        return codes if bits == 16 else tuple(round(c / 257) for c in codes)
 
-    return png16(256, 256, 3, texel)
+    return png16(256, 256, 3, texel, bits)
 
 
 # --- Meshes -----------------------------------------------------------------------------------
