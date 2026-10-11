@@ -25,7 +25,7 @@ UzPainter's own implementations, written from public literature (procedural nois
 | Family | Painter assets to reproduce (names used as compatibility aliases) | Inputs |
 |---|---|---|
 | Mesh-map generators | Mask Builder (Legacy), Mask Editor, Metal Edge Wear, Dirt, Curvature, Position, World Space Normals, Ambient Occlusion generators | AO, curvature, position, WSN, thickness mesh maps; parameters |
-| Filters | Sharpen (hat v8), grayscale conversion, Levels (native effect) | layer content |
+| Filters | Sharpen (hat v8), grayscale conversion, Levels (native effect), Blur (the Tier 0 `effect-order` golden; decision 069) | layer content |
 | Grunges and noises | the grunge, dirt, spots, scratches, rust, humidity and cracks procedurals the body and hat recipes reference; `fabric_linen` | tiling, seed, parameters |
 | Materials | felt, leather grain, burlap, leather pattern | parameters, physical size |
 | Smart masks | Dirt Cavities, Edge Dirty Cracks, Edges Uber, Ground Dirt, Dust Dirty, Occlusion Strong | expand to generator/levels/fill effect lists; the observed structures stay private (publication rule below) |

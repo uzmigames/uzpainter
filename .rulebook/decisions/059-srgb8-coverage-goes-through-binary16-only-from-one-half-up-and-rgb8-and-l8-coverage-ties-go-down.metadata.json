@@ -1,0 +1,11 @@
+{
+  "id": 59,
+  "slug": "srgb8-coverage-goes-through-binary16-only-from-one-half-up-and-rgb8-and-l8-coverage-ties-go-down",
+  "title": "sRGB8 coverage goes through binary16 only from 1/2 up, and RGB8 and L8 coverage ties go down",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.10_compositor-float32-residual"
+  ],
+  "supersededBy": null
+}

@@ -52,6 +52,7 @@ INPUTS = "blend-inputs"
 SETS = ("s0", "s1", "s2", "s3")
 PROFILE_ISOLATED = "painter-12.1-isolated-linear"
 PROFILE_HALF_ALPHA = "painter-12.1-isolated-half-alpha"
+PROFILE_WEIGHTS = "painter-12.1-isolated-coverage-weights"
 PROFILE_LAYERQ = "painter-12.1-layerq-linear"
 # Painter's API names the L32F channel of the experiment `Scattering`; the document model's
 # channel type is its alias SubsurfaceRadiusScale (assets/templates/channel-defaults.json).
@@ -192,20 +193,41 @@ LAYERQ_FORMULA = (
     "with the same write rules; 32-bit float channels re-composited over the base once at "
     "read-out (1 + (v - 1)). The provisional profile of evaluator-profile.json."
 )
+WEIGHTS_FORMULA = (
+    "The isolated root of painter-12.1-isolated-half-alpha (entry "
+    "quantisation-isolated-half-alpha) with four rules changed. A layer over a backdrop that is "
+    "not opaque (coverage ab < 1, also 0, but not the empty start of the list, whose first layer "
+    "is copied) is composited with the coverage weights: wb = fl(ab fl(1 - as)), "
+    "ao = fl(as + wb), ws = fl(ao - ab), C = fl(fma(ws, Cs, fma(ab, fl(as B), fl(wb Cb))) x "
+    "Rcp(ao)) with the recording GPU's reciprocal (masks-levels.json, entry "
+    "group-coverage-order). The read-out over the base is one fused operation, "
+    "v = fma(C - base, a, base). A uniform colour on a grey channel is the float32 of the mean "
+    "of its components as given (double). The sRGB8 coverage plane goes through binary16 only "
+    "from 1/2 up."
+)
+WEIGHTS_NOTES = (
+    "Selected: profile painter-12.1-isolated-coverage-weights (src/evaluator/profile.h, decision "
+    "058), stamped into new projects; painter-12.1-isolated-half-alpha, "
+    "painter-12.1-isolated-linear and painter-12.1-layerq-linear stay registered for projects "
+    "stamped with them. Every map of the experiment and of blend-inputs s2 equals r1, the 32-bit "
+    "float maps included: the coverage weights make the second and third 1/3 fills exact, the "
+    "fused read-out the three RGB32F values the two-rounding read-out left 2^-25 or 2^-24 off, "
+    "and the unrounded grey mean the L32F value of s2. The order is identified on the Tier 0 "
+    "golden group-coverage-order (masks-levels.json) and also makes group-masks s2-s3 exact. r2 "
+    "is covered by EXC-001 and EXC-002 as for the earlier profiles."
+)
 HALF_ALPHA_NOTES = (
-    "Selected: profile painter-12.1-isolated-half-alpha (src/evaluator/profile.h, decision 044), "
-    "stamped into new projects; painter-12.1-isolated-linear and painter-12.1-layerq-linear stay "
-    "registered for projects stamped with them. The binary16 coverage rule is measured on "
-    "group-masks s2-s3 (masks-levels.json): a group coverage half-way between two 8-bit codes "
-    "is stored up or down as its binary16 value lies, and only that rule makes their sRGB8 maps "
-    "exact. The partial coverages of this experiment (1/3, 5/9, 19/27, 1/2) store the same codes "
-    "under both rules, so every UNORM, sRGB8 and 16-bit float map here is exact against r1 as "
-    "before. The plain 32-bit float operand is measured on group-masks row 0 and makes one more "
-    "value of this experiment exact (s0 RGB32F G). The 32-bit float maps are still not exact: 3 "
-    "of the 12 RGB32F values and 2 of the 4 L32F values lie 2^-25 or 2^-24 from r1; the float32 "
-    "operation order of Painter's source-over onto a partly covered backdrop is not identified "
-    "(parity/reports/phase1/compositor-float32-residual.md; a divergence, never counted as a "
-    "pass, decision 032). r2 is covered by EXC-001 and EXC-002 as for the earlier profile."
+    "Superseded by painter-12.1-isolated-coverage-weights (entry "
+    "quantisation-isolated-coverage-weights, decision 058); still registered and evaluated as it "
+    "was. The binary16 coverage rule is measured on group-masks s2-s3 (masks-levels.json): a "
+    "group coverage half-way between two 8-bit codes is stored up or down as its binary16 value "
+    "lies, and only that rule makes their sRGB8 maps exact. The partial coverages of this "
+    "experiment (1/3, 5/9, 19/27, 1/2) store the same codes under both rules, so every UNORM, "
+    "sRGB8 and 16-bit float map here is exact against r1 as before. The plain 32-bit float operand "
+    "is measured on group-masks row 0 and makes one more value of this experiment exact (s0 "
+    "RGB32F G). 3 of the 12 RGB32F values and 2 of the 4 L32F values lie 2^-25 or 2^-24 from r1 "
+    "under this profile (the W3C straight-colour order, the two-rounding read-out and the grey of "
+    "rounded components). r2 is covered by EXC-001 and EXC-002 as for the earlier profile."
 )
 ISOLATED_NOTES = (
     "Superseded by painter-12.1-isolated-half-alpha (entry quantisation-isolated-half-alpha); "
@@ -239,6 +261,21 @@ def build(exe: Path, work: Path) -> dict[str, Any]:
         parameter("opacity_blend_inputs_s2", 0.5, "authored"),
     ]
     entries = [
+        entry(
+            "quantisation-isolated-coverage-weights",
+            "Evaluator profile painter-12.1-isolated-coverage-weights: the isolated root with the "
+            "coverage-weighted source-over, a fused read-out, the grey of unrounded components "
+            "and the sRGB8 coverage through binary16 from 1/2 up",
+            WEIGHTS_FORMULA,
+            [W3C, SRGB, D3D, D3D_HALF, PYDOC],
+            [
+                *params,
+                parameter("evaluator_profile", PROFILE_WEIGHTS, "fitted"),
+                parameter("hardware_rcp", "src/evaluator/tables/hw-rcp.zlib", "fitted"),
+            ],
+            residuals(runs, decode, PROFILE_WEIGHTS),
+            WEIGHTS_NOTES,
+        ),
         entry(
             "quantisation-isolated-half-alpha",
             "Evaluator profile painter-12.1-isolated-half-alpha: the isolated root with the sRGB8 "

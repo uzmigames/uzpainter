@@ -25,7 +25,7 @@ from tools.parity.render_procedure.noise import (
     region_masks,
     rgb,
 )
-from tools.parity.render_procedure.references import MANIFEST_DIR
+from tools.parity.render_procedure.references import MANIFEST_DIR, QUALIFICATION_MANIFEST
 from tools.parity.store.store import OracleStore, load_oracle
 
 F64 = npt.NDArray[np.float64]
@@ -45,6 +45,8 @@ class References:
 
 
 def manifest_path(name: str) -> Path:
+    if name == QUALIFICATION_MANIFEST.stem:
+        return QUALIFICATION_MANIFEST
     return MANIFEST_DIR / f"{name}.json"
 
 

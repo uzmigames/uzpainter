@@ -12,15 +12,15 @@
 ## 3. Tests
 - [x] 3.1 Tier 0 mask goldens: black and white backgrounds, bitmap fill effect, levels, subtraction exact
 - [x] 3.2 Tier 0 levels-clamp goldens exact
-- [ ] 3.3 Tier 0 content-effect order goldens exact
-- [ ] 3.4 Tier 0 group goldens with masks: `Normal` and `PassThrough` groups with a mask exact
+- [x] 3.3 Tier 0 content-effect order goldens exact (scope split, decision 069: `effect-order` s6 exact on CPU and DX12 against both recordings; the fill/levels list order is a native unit case, not golden-verified; s0–s5 and s7 hold the Blur filter, a P3-PROC release gap, and are covered by `phase3.2_proc-filter-families` item 3.4; the fit keeps `content-effect-order` as a gap)
+- [x] 3.4 Tier 0 group goldens with masks: `Normal` and `PassThrough` groups with a mask exact (`group-masks` s2–s3 under `painter-12.1-isolated-coverage-weights`, decisions 058, 059; `semantics-ui/group-passthrough-masks` s0–s3, decisions 054, 066; both recordings, CPU and DX12)
 - [x] 3.5 Tier 0 mask-precision goldens (8 vs 16 bit) exact
 - [x] 3.6 Tier 0 base-value goldens under complementary masks exact (no default bleed, LAY-10)
 
 ## 4. Acceptance
-- [ ] 4.1 Tier 0 sets of this child exact in a local DX12 run on the owner's machine (decision 028; the local run report is the evidence); unit tests green
+- [x] 4.1 Tier 0 sets of this child exact in a local DX12 run on the owner's machine (decision 028; the local run report is the evidence); unit tests green (`parity/reports/phase1/compositor-mask-effects.md`, re-run on main `4949d28`)
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
 - [x] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.3 Run tests and confirm they pass (`tests/evaluator/test_compositor_mask_effects.py` and the PassThrough golden test: 39 passed on CPU and DX12; ruff, mypy strict clean)

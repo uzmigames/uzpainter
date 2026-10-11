@@ -15,7 +15,9 @@
 //   code, ties down; sRGB8 round(255 encode(v)); 16-bit float toward zero; 32-bit float as it
 //   is, re-composited over the channel base (1 + (v - 1)) once at read-out;
 // - the isolated-group composite (W3C Compositing and Blending Level 1 §5.1, §6; approved source
-//   S-W3C-BLEND) that the Tier 0 `group-masks` golden confirms for groups without masks.
+//   S-W3C-BLEND) that the Tier 0 `group-masks` golden confirms for groups without masks, and the
+//   coverage-weighted float32 order of the source-over onto a backdrop that is not opaque
+//   (CompositeInput::coverageWeights; Tier 0 `group-coverage-order`).
 //
 // Every float32 operation is a single IEEE operation (the sources are compiled with contraction
 // off); "Fma" is the float32 rounding of the exact x y + z (the product of two floats is exact
@@ -156,6 +158,18 @@ struct CompositeInput {
     /// The mix of an effect (a mask or content effect, parity/semantics/masks-levels.json): over
     /// an opaque backdrop v = a + (r - a) alpha for every mode, instead of the layer mix.
     bool effectMix = false;
+    /// The source-over onto a backdrop that is not opaque weights its terms with the coverage it
+    /// computes (profile.h `EvaluatorProfile::coverageWeights`): wb = (1 - as) ab, ao = as + wb,
+    /// ws = ao - ab and v = fma(ws, Cs, fma(ab, as B, wb Cb)) x Rcp(ao) with the recording GPU's
+    /// reciprocal, also over a backdrop of zero coverage.
+    bool coverageWeights = false;
+    /// The backdrop is the empty start of an isolated list (its first layer): the source is
+    /// copied, with coverage as.
+    bool emptyBackdrop = false;
+    /// The read-out of an isolated root over the opaque base (profile.h
+    /// `EvaluatorProfile::fusedReadout`): v = fma(C - base, alpha, base), one rounding of the
+    /// product and the sum, in place of the Replace mix.
+    bool fusedReadout = false;
     int channels = 3;
 };
 
@@ -177,14 +191,17 @@ struct LevelsComponent {
 
 /// The composite before the write rule: straight colour (components past `channels` are 0) and
 /// the resulting alpha. alpha_s = opacity x mask x src alpha; with an opaque backdrop the fitted
-/// opacity mix; with a transparent backdrop the source as it is (W3C §5.1: no blending against
-/// nothing); otherwise the general formula of W3C §5.1 with straight colours.
+/// opacity mix; with `coverageWeights`, over any other backdrop but the empty start, the
+/// coverage-weighted order (CompositeInput); otherwise, with a transparent backdrop, the source
+/// as it is (W3C §5.1: no blending against nothing), and the general formula of W3C §5.1 with
+/// straight colours.
 ///
 /// `PassThrough` (the composite of a pass-through group, phase1.11): `src` is the group's result,
 /// its children composited onto a copy of this backdrop, and t = opacity x mask moves the
 /// backdrop toward it: over an opaque backdrop v = fma(s - a, t, a) (one rounding, `group-
 /// passthrough-masks`); over a transparent one the source with alpha t x src alpha; otherwise
-/// the premultiplied lerp, alpha fma(alpha_s - alpha_b, t, alpha_b) (not recorded).
+/// the premultiplied lerp, alpha fma(alpha_s - alpha_b, t, alpha_b) (not recorded). The profile's
+/// `coverageWeights` does not apply to this mix.
 [[nodiscard]] std::array<float, 4> Composite(const CompositeInput& in);
 /// The modes a BlendOp may carry: every mode with a kernel, and PassThrough (a group composite).
 [[nodiscard]] bool HasComposite(core::BlendingMode mode);

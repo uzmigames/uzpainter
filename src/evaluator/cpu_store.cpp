@@ -31,7 +31,7 @@ float OperandOf(uint32_t stored, const TileFormat& format, uint32_t plane) {
 }
 
 uint32_t StoreValue(float value, const TileFormat& format, uint32_t plane) {
-    if (format.halfCoverage && IsCoverage(format, plane)) {
+    if (format.halfCoverage && IsCoverage(format, plane) && (!format.halfCoverageFromHalf || value >= 0.5f)) {
         value = arith::HalfToFloat(arith::HalfNearestEven(value));
     }
     switch (format.encoding) {
@@ -181,6 +181,9 @@ render::Result<void> CpuTileStore::Blend(const BlendOp& op) {
     // A raw blend clamps as the source's format would (the channel's own read-out does).
     in.clampUnorm = op.rawOutput && src != nullptr ? src->format.IsUnorm() : dst.format.IsUnorm();
     in.effectMix = op.effectMix;
+    in.coverageWeights = op.coverageWeights;
+    in.emptyBackdrop = op.emptyBackdrop;
+    in.fusedReadout = op.fusedReadout;
     in.channels = dst.format.channels;
     auto load = [](const Tile& tile, size_t texel, std::array<float, 4>& out) {
         const uint32_t planes = tile.format.StoredChannels();

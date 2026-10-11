@@ -22,7 +22,12 @@ import numpy as np
 import numpy.typing as npt
 
 from tools.parity.render_fits import bsdf, display, fit, spectral, stability
-from tools.parity.render_fits.fixtures import by_name, scene_fixture
+from tools.parity.render_fits.fixtures import (
+    QUALIFICATION,
+    by_name,
+    qualification_base,
+    scene_fixture,
+)
 from tools.parity.render_fits.oracle import References, load
 from tools.parity.render_fits.render import PixelFilter
 from tools.parity.render_procedure.noise import (
@@ -52,6 +57,11 @@ FILTERS = (
     PixelFilter("gaussian", 0.5, 2.0),
     PixelFilter("gaussian", 0.8, 2.0),
 )
+# The qualification sphere (decision 068): term (c) only; its BaseColor is the read-back linear
+# value, which is not on the sRGB8 lattice.
+SCENE_OVERRIDES: dict[str, dict[str, Any]] = {
+    QUALIFICATION.name: {"base_override": qualification_base()}
+}
 FILTER_GOLDENS = ("neutral-grey-diffuse", "plane-mid-grey", "cube-mid-grey")
 DEFECT_GOLDENS = {
     "missing_channel": "normal-ridges",
@@ -386,19 +396,21 @@ def noise_c_part(
     bump: float,
     work: Path,
     flip: bool,
+    goldens: tuple[str, ...] = ALL_GOLDENS,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {}
     common = {"variant": variant, "environment_scale": scale, "bump_strength": bump}
     requests: list[tuple[str, npt.NDArray[np.int64], dict[str, Any]]] = []
-    for name in ALL_GOLDENS:
+    for name in goldens:
         pixels, _ = crop_pixels(refs[name])
+        scene = {**common, **SCENE_OVERRIDES.get(name, {})}
         for seed in PROTOTYPE_SEEDS:
-            requests.append((name, pixels, {**common, "spp": S_SAMPLES, "seed": seed}))
+            requests.append((name, pixels, {**scene, "spp": S_SAMPLES, "seed": seed}))
         requests.append(
-            (name, pixels, {**common, "spp": S_SAMPLES * K_FACTOR, "seed": PROTOTYPE_SEEDS[0]})
+            (name, pixels, {**scene, "spp": S_SAMPLES * K_FACTOR, "seed": PROTOTYPE_SEEDS[0]})
         )
     images = render_crops(requests, work)
-    for index, name in enumerate(ALL_GOLDENS):
+    for index, name in enumerate(goldens):
         ref = refs[name]
         _, origin = crop_pixels(ref)
         renders = images[3 * index : 3 * index + 3]
@@ -536,6 +548,24 @@ def repeatability_part(variant: bsdf.Variant, scale: float, work: Path) -> dict[
         "sha256": digests,
         "identical": digests[0] == digests[1],
     }
+
+
+def qualification_part(
+    store: OracleStore | None, results: dict[str, Any], work: Path, flip: bool = True
+) -> dict[str, Any]:
+    """Terms (a), (b) and the prototype's (c) of the qualification sphere (task
+    `phase0.9_render-reference-capture` item 3.2, decision 068), with the variant, environment
+    scale and bump strength the fits of `results` chose; merged into `noise_ab` and `noise_c`."""
+    name = QUALIFICATION.name
+    refs = {name: load(store, name)}
+    variant = bsdf.Variant(**results["fits"]["variant"])
+    scale = float(results["fits"]["environment_scale"])
+    strength = float(results["bump"]["strength"])
+    results["noise_ab"][name] = noise_ab(refs)[name]
+    results["noise_c"][name] = noise_c_part(
+        refs, variant, scale, strength, work, flip, goldens=(name,)
+    )[name]
+    return results
 
 
 def run(store: OracleStore | None, work: Path, flip: bool = True) -> dict[str, Any]:

@@ -3,7 +3,9 @@
 The UI cases (`tier0/semantics-ui/`): the height-to-normal method of each texture set and the
 group `Passthrough` mode, set through Painter's UI and named in each manifest's settings sheet
 (decisions 029, 047); and the documented-API recordings Phase 1 analyses requested
-(`tier0/semantics/resample-uv-minify`, `-impulse`, `group-coverage-order`; decision 048). Store
+(`tier0/semantics/resample-uv-minify`, `-impulse`, `group-coverage-order`; decision 048) and,
+recorded with task `phase0.9_render-reference-capture`'s Painter session, `blend-component-hue`,
+`blend-normal-opacity` and `coverage-srgb8-ties` (decision 067). Store
 and guard checks that need the owner's private store skip, saying so, without one (decision 028).
 """
 
@@ -19,6 +21,7 @@ import pytest
 
 from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.guard.guard import Snapshot, load_index, run_guard, worktree_snapshot
+from tools.parity.recorder.capture import decode_png
 from tools.parity.recorder.job import load_job
 from tools.parity.recorder.texture_sheet import texture_sheet
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
@@ -28,10 +31,15 @@ from tools.parity.tier0_semantics import fixtures
 from tools.parity.tier0_semantics.corpus import FIXTURE_DIR, MESH_SETS
 from tools.parity.tier0_semantics.current import (
     AMPLITUDES,
+    FLAT_CASES,
     GROUP_MASKS,
     HEIGHT_METHODS,
+    NORMAL_CHANNELS,
+    NORMAL_OPACITIES,
     PASSTHROUGH,
     SEMANTICS_DIR,
+    TIE_CHANNELS,
+    TIE_MULTI,
     UI_DIR,
     api_goldens,
     ui_goldens,
@@ -199,3 +207,92 @@ def test_impulse_fixture_matches_the_request() -> None:
         for x, (r, g, b) in enumerate(row):
             hit = (x, y) in fixtures.IMPULSE_TEXELS
             assert (r, g, b) == (65535 if hit else 0, 49152 if hit else 16384, 65535 * (x < 32))
+
+
+def bitmap(name: str) -> list[list[tuple[int, ...]]]:
+    image = decode_png(REPO_ROOT / FIXTURE_DIR / "bitmaps" / f"{name}.png")
+    texels = [tuple(texel) for texel in image.pixels]
+    return [texels[y * image.width : (y + 1) * image.width] for y in range(image.height)]
+
+
+def test_hue_grid_follows_the_recorded_layout() -> None:
+    """Decision 067: per row group r the centre 3855 (r + 1); sectors x chromas x middle
+    positions, then the six tie types at every chroma, then grey; the transposed and grey
+    fixtures are exact transforms of it."""
+    grid = bitmap("hue-grid")
+    transposed, grey = bitmap("hue-grid-transposed"), bitmap("hue-grid-grey")
+    flipped_grey = bitmap("hue-grid-transposed-grey")
+    for y in range(256):
+        for x in range(256):
+            assert transposed[x][y] == grid[y][x]
+            assert grey[y][x] == grid[y][x][:1] and flipped_grey[x][y] == grid[y][x][:1]
+    for r in range(16):
+        centre = 3855 * (r + 1)
+
+        def case(t: int, r: int = r) -> tuple[int, ...]:
+            return grid[16 * r + t // 256][t % 256]
+
+        t = 0
+        for top, middle in fixtures.HUE_SECTORS:
+            for d in fixtures.HUE_CHROMAS:
+                for u in (0, 1, d // 4, d // 2, 3 * d // 4, d - 1, d):
+                    texel = case(t)
+                    low = centre - d // 2
+                    assert (texel[top], texel[middle], min(texel)) == (low + d, low + u, low)
+                    t += 1
+        for (a, b), pair_is_max in fixtures.HUE_TIES:
+            for d in fixtures.HUE_CHROMAS:
+                texel = case(t)
+                assert texel[a] == texel[b] and max(texel) - min(texel) == d
+                assert (texel[a] == max(texel)) == pair_is_max
+                t += 1
+        assert t == fixtures.HUE_GREY and case(t) == (centre,) * 3
+        for t in range(fixtures.HUE_GREY + 1, 4096):
+            assert 0 < max(case(t)) - min(case(t)) <= fixtures.HUE_MAX_CHROMA
+
+
+def opacities(name: str) -> dict[tuple[str, str], float]:
+    """(texture set, channel) -> the opacity of the last fill that sets one there."""
+    steps = load_json(ENVELOPE_ROOT / SEMANTICS_DIR / f"{name}.json")["instruction_sequence"]
+    by_step = {s["step"]: s for s in steps["steps"]}
+    found: dict[tuple[str, str], float] = {}
+    for step in steps["steps"]:
+        if not step["call"].endswith("set_opacity"):
+            continue
+        node = step["args"]["node_step"]
+        while "texture_set" not in by_step[node]["args"]:
+            args = by_step[node]["args"]
+            node = args.get("above_step") or args.get("inside_step")
+        found[(by_step[node]["args"]["texture_set"], step["args"]["channel"])] = step["args"][
+            "opacity"
+        ]
+    return found
+
+
+def test_coverage_ties_put_row_zero_on_every_8_bit_tie() -> None:
+    """Decision 067: User0-User7 opacities (2k + 1)/510 for k = 64..127, the row 0 coverage
+    on the tie (k + 1/2)/255; User8 and User9 the opacities with several tied rows."""
+    found = opacities("coverage-srgb8-ties")
+    ks = []
+    for i, texture_set in enumerate(MESH_SETS["grid4x2"]):
+        for j in range(8):
+            value = found[(texture_set, f"User{j}")]
+            k = round(value * 255.0 - 0.5)
+            assert abs(value * 255.0 - (k + 0.5)) < 1e-9
+            ks.append(k)
+        assert found[(texture_set, "User8")] == found[(texture_set, "User9")] == TIE_MULTI[i]
+    assert ks == list(range(64, 128))
+    assert dict(TIE_CHANNELS)["User9"] == "RGB32F"
+    assert {f for c, f in TIE_CHANNELS if c != "User9"} == {"sRGB8"}
+
+
+def test_normal_opacity_sets_follow_the_request() -> None:
+    """compositor-blend-gaps.md section 5: s0-s2 at 0.1, 1/3, 0.7, 0.99 per format; s3-s5 the
+    flat-normal cases at 0.5 (and flat under flat at 1)."""
+    found = opacities("blend-normal-opacity")
+    sets = MESH_SETS["grid4x2"]
+    for index in range(3):
+        for i, (channel, _) in enumerate(NORMAL_CHANNELS):
+            assert found[(sets[index], channel)] == NORMAL_OPACITIES[i % 4]
+            assert found[(sets[index + 3], channel)] == FLAT_CASES[i % 4][2]
+    assert not any(key[0] in sets[6:] for key in found)

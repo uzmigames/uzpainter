@@ -1,0 +1,13 @@
+{
+  "id": 62,
+  "slug": "decision-052-s-capture-request-runs-as-a-stability-probe-the-zero-component-class-is-redrawn-per-render-and-the-plane-scene-is-the-reproducibility-probe",
+  "title": "Decision 052's capture request runs as a stability probe; the zero-component class is redrawn per render; the plane scene is the reproducibility probe",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase0.9_render-reference-capture",
+    "phase0.8_render-reference-fits",
+    "phase3.6_path-tracer-tier3-report"
+  ],
+  "supersededBy": null
+}

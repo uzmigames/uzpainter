@@ -610,15 +610,26 @@ std::array<float, 4> Composite(const CompositeInput& in) {
                 BlendKernel(in.mode, in.acc[static_cast<size_t>(i)], in.src[static_cast<size_t>(i)]);
         }
     }
+    // The coverage weights (CompositeInput::coverageWeights): the weight of the source alone is
+    // re-derived from the rounded coverage, ws = ao - ab.
+    const bool weighted = in.coverageWeights && !in.emptyBackdrop && alphaB != 1.0f;
+    const float wb = Mul(alphaB, Sub(kOne, alphaS));
+    const float weightedAlpha = Add(alphaS, wb);
+    const float ws = Sub(weightedAlpha, alphaB);
     for (int i = 0; i < in.channels; ++i) {
         const float a = in.acc[static_cast<size_t>(i)];
         const float s = in.src[static_cast<size_t>(i)];
         float ri = r[static_cast<size_t>(i)];
         if (in.clampUnorm) ri = Clamp01(ri);
         float v = 0.0f;
-        if (alphaB == 1.0f) {
+        if (weighted && weightedAlpha != 0.0f) {
+            const float num = Fma(ws, s, Fma(alphaB, Mul(alphaS, ri), Mul(wb, a)));
+            v = Mul(num, hw::Rcp(weightedAlpha));
+        } else if (alphaB == 1.0f) {
             if (rotates) {
                 v = ri;
+            } else if (in.fusedReadout) {
+                v = Fma(Sub(ri, a), alphaS, a);
             } else if (in.mode == M::Replace || in.effectMix) {
                 const float d = Sub(ri, a);
                 v = Add(a, Mul(d, alphaS));

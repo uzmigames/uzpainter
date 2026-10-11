@@ -77,6 +77,22 @@ FIXTURES: dict[str, tuple[str, str, Callable[[], bytes] | None]] = {
     "pattern64": ("image", f"{FIXTURE_DIR}/bitmaps/pattern64.png", fixtures.pattern64),
     "impulse64": ("image", f"{FIXTURE_DIR}/bitmaps/impulse64.png", fixtures.impulse64),
     "height-ramps": ("image", f"{FIXTURE_DIR}/bitmaps/height-ramps.png", fixtures.height_ramps),
+    "hue-grid": ("image", f"{FIXTURE_DIR}/bitmaps/hue-grid.png", fixtures.hue_grid),
+    "hue-grid-transposed": (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/hue-grid-transposed.png",
+        lambda: fixtures.hue_grid(transposed=True),
+    ),
+    "hue-grid-grey": (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/hue-grid-grey.png",
+        lambda: fixtures.hue_grid(grey=True),
+    ),
+    "hue-grid-transposed-grey": (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/hue-grid-transposed-grey.png",
+        lambda: fixtures.hue_grid(transposed=True, grey=True),
+    ),
     "normal-a": (
         "image",
         f"{FIXTURE_DIR}/bitmaps/normal-a.png",

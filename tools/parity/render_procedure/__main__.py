@@ -10,7 +10,8 @@
 `parity/reports/phase0/iray-capture-procedure.md` (exit 1 on a structural problem) and lists the
 rows still pending the probe; with `--merge` it first folds a finished probe's answers in and
 rewrites the block and its summary table. `references` regenerates the Iray reference fixtures
-and their manifests (`references.py`), keeping the private records the store merged in.
+and their manifests (`references.py`), and the manifest of the qualification sphere's
+template-default material (decision 063), keeping the private records the store merged in.
 `noise` checks the admission of every reference golden and writes the Iray noise terms into
 `parity/reports/phase0/iray-references.md` (`noise.py`; exit 1 when one is not admitted).
 `stability-admit` puts the staged captures of decision 052's capture request into the private
@@ -37,6 +38,7 @@ from tools.parity.render_procedure.references import (
     STABILITY_FIXTURES,
     write_fixtures,
     write_manifests,
+    write_template_default_manifest,
 )
 from tools.parity.render_procedure.report import write_noise_report
 from tools.parity.render_procedure.stability import StabilityError, admit
@@ -62,7 +64,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "stability-admit":
         return admit_stability()
     if args.command == "references":
-        for path in [*write_fixtures(), *write_manifests()]:
+        for path in [*write_fixtures(), *write_manifests(), write_template_default_manifest()]:
             print(path)
         return 0
     data = load_answers()

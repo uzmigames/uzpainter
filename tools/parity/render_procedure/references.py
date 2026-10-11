@@ -65,7 +65,7 @@ from tools.parity.recorder.iray_probe import (
     STUDIO_WHITE_SOFT,
     V2_SHEET,
 )
-from tools.parity.recorder.job import sha256_bytes
+from tools.parity.recorder.job import EXPORT, sha256_bytes
 from tools.parity.render_procedure import fixtures
 from tools.parity.schemas import REPO_ROOT
 
@@ -78,6 +78,24 @@ STABILITY_DIR = ENVELOPE_MANIFESTS / "phase0" / STABILITY
 QUALIFICATION_MANIFEST = (
     ENVELOPE_MANIFESTS / "tier3" / "render-procedure" / "qualification-sphere.json"
 )
+TEMPLATE_DEFAULT_MANIFEST = (
+    ENVELOPE_MANIFESTS / "phase0" / "template-default-material" / "ocio-sphere.json"
+)
+# The template's channels (decision 046), every map the default material is made of: the 8-bit
+# channels at PNG 16, the 16-bit float Normal and Height at OpenEXR 32f.
+TEMPLATE_DEFAULT_MAPS = (
+    (
+        "png",
+        16,
+        (
+            "documentMap/basecolor:RGB",
+            "documentMap/basemetalness:L",
+            "documentMap/specularroughness:L",
+        ),
+    ),
+    ("exr", "32f", ("documentMap/normal:RGB", "documentMap/height:L")),
+)
+OCIO_CONFIG = "resources/ocio/substance/config.ocio"
 SPHERE_PATH = "parity/fixtures/render-procedure/sphere.obj"
 PAINTER = {
     "product": "Adobe Substance 3D Painter",
@@ -706,6 +724,74 @@ def write_manifests(
         path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8", newline="\n")
         written.append(path)
     return written
+
+
+def template_default_manifest() -> dict[str, Any]:
+    """The qualification sphere's material read back (decision 063): the project the sphere's
+    instruction sequence creates (mesh only, OCIO), its empty stack exported map by map."""
+    exports = [
+        {
+            "maps": list(maps),
+            "file_format": file_format,
+            "bit_depth": depth,
+            "padding": "infinite",
+            "dithering": False,
+        }
+        for file_format, depth, maps in TEMPLATE_DEFAULT_MAPS
+    ]
+    calls: list[tuple[str, dict[str, Any]]] = [(ps.CREATE, {"mesh": "sphere"})]
+    calls += [(EXPORT, args) for args in exports]
+    settings = [setting("OCIO", OCIO_CONFIG, "environment_variable")]
+    settings += [
+        setting(f"export.{file_format}.bit_depth", depth, "recorder_api")
+        for file_format, depth in (("png", 16), ("exr", "32f"))
+    ]
+    settings += [
+        setting("export.padding", "infinite", "recorder_api"),
+        setting("export.dithering", False, "recorder_api"),
+    ]
+    return {
+        "schema": "uzpainter/parity/golden-public/1",
+        "record_class": "public_manifest",
+        "golden_id": "phase0/template-default-material/ocio-sphere",
+        "tier": "0",
+        "domain": "phase0/template-default-material",
+        "description": (
+            "Template-default material of the qualification sphere (task "
+            "phase0.9_render-reference-capture item 3.2, decision 063): the authored sphere "
+            "created as the qualification job creates it (mesh only, every project setting "
+            "Painter's default) in an OCIO session (Painter's substance config), no layer in the "
+            "stack; the template's channels BaseColor, BaseMetalness, SpecularRoughness, Normal "
+            "and Height exported (the 8-bit channels at PNG 16, the 16-bit float ones at OpenEXR "
+            "32f), padding infinite, no dithering. "
+            "Recorded twice (same session; after save and reopen)."
+        ),
+        "inputs": [mesh_input(Fixture("qualification", "sphere", MID, 0.0, 0.0))],
+        "instruction_sequence": {
+            "author": "UzmiGames",
+            "interface": "substance_painter_documented_python_api",
+            "steps": [
+                {"step": n, "call": call, "args": args}
+                for n, (call, args) in enumerate(calls, start=1)
+            ],
+        },
+        "applied_settings": settings,
+        "expectations": [],
+        "software": {"painter": dict(PAINTER), "uzpainter_build_hash": None},
+        "private_records": [],
+    }
+
+
+def write_template_default_manifest(path: Path = TEMPLATE_DEFAULT_MANIFEST) -> Path:
+    """Write the read-back manifest, keeping the private records the store merged in."""
+    document = template_default_manifest()
+    if path.is_file():
+        document["private_records"] = json.loads(path.read_text(encoding="utf-8"))[
+            "private_records"
+        ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return path
 
 
 def reference_manifests() -> list[Path]:

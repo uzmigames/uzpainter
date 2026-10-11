@@ -342,6 +342,22 @@ def export_outputs(
     return outputs, blobs
 
 
+def require_colour_management(job: Job, identity: PainterIdentity) -> None:
+    """A manifest that names `OCIO` (applied by environment variable) is recorded only in a
+    session started with that configuration: a Legacy session would record another project."""
+    for setting in job.manifest["applied_settings"]:
+        if setting["applied_by"] != "environment_variable" or setting["name"] != "OCIO":
+            continue
+        found = str(identity.colour_management.get("OCIO") or "").replace("\\", "/")
+        if identity.colour_management.get("mode") != "ocio" or not found.endswith(
+            str(setting["value"])
+        ):
+            raise RecorderError(
+                f"{job.golden_id}: start Painter with OCIO naming its {setting['value']} "
+                f"(found {identity.colour_management!r})"
+            )
+
+
 def record_once(
     session: PainterSession,
     job: Job,
@@ -431,6 +447,7 @@ def record_texture_golden(
             "record it with an operator (--operator ui or console)"
         )
     identity = session.connect()
+    require_colour_management(job, identity)
     directory = ensure_outside_repository(work) / job.golden_id.replace("/", "__")
     directory = directory / run_name(identity.session_id, now())
     staged = stage_inputs(job, directory / "inputs")

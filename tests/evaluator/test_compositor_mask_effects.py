@@ -192,53 +192,34 @@ def test_mask_precision_equals_the_golden(
     assert_golden(evaluator_tests, tmp_path, srgb8_decode, "mask-precision", texture_set, backend)
 
 
-def published_residuals(golden_id: str) -> dict[tuple[str, str], dict[str, Any]]:
-    """The published residuals of `golden_id`, by (map, recording)."""
-    document = load_json(PUBLISHED)
-    return {
-        (r["map"], r["compared_against"]): r["difference"]
-        for e in document["entries"]
-        for r in e["residuals"]
-        if r["golden_id"] == golden_id
-    }
-
-
 @pytest.mark.parametrize("backend", backends())
 @pytest.mark.parametrize("texture_set", ["s2", "s3"])
-def test_group_masks_differ_only_where_the_child_is_partly_covered(
+def test_group_masks_equal_the_golden(
     evaluator_tests: Path, srgb8_decode: np.ndarray, tmp_path: Path, texture_set: str, backend: str
 ) -> None:
     """3.4: `group-masks` with masks: a mask (grey A) on the group in its default mode (s2) and in
     `Normal` (s3), and a mask (grey B, a ramp along y) on its Multiply child, on RGB16, sRGB8 and
-    RGB32F. The group masks are exact: every texel where the child's mask is 1 or 0 equals both
-    recordings (where it is 0 the uniform fill's plain float32 operand enters the result
-    directly, profile painter-12.1-isolated-half-alpha), and so does every sRGB8 texel (the
-    coverage written through binary16). Where the child's mask lies strictly between 0 and 1 the
-    uniform fill above it composites over a partly covered backdrop, the source-over whose
-    float32 operation order phase1.10_compositor-float32-residual did not identify: those RGB16
-    and RGB32F texels keep the published residual of `masks-levels.json` (entry `group-masks`, a
-    divergence), which this test pins."""
-    needs_store()
-    golden = envelope_golden("semantics/group-masks")
-    document = envelope_manifest("semantics/group-masks")
-    formats = channel_formats(document)
-    channels = sorted(formats)
-    spec = spec_from_steps(document, texture_set, tmp_path, channels)
-    result = evaluate(evaluator_tests, spec, tmp_path, backend)
-    published = published_residuals("tier0/semantics/group-masks")
-    for channel in channels:
-        fmt = formats[channel]
-        map_name = f"{texture_set}/{channel.lower()}"
-        ours = raster(result, channel)
-        exported = ours if fmt.endswith("F") else export16(ours, fmt, srgb8_decode)
-        for recording in ("r1", "r2"):
-            theirs = golden.map(recording, map_name).values.reshape(exported.shape)
-            differs = (exported != theirs).any(axis=-1)
-            rows = set(np.flatnonzero(differs.any(axis=1)).tolist())
-            allowed = set(range(1, 255))
-            assert rows <= allowed, (map_name, recording, sorted(rows - allowed))
-            expected = published[(map_name, recording)]["differing"]
-            assert int(np.count_nonzero(exported != theirs)) == expected, (map_name, recording)
+    RGB32F, equal both recordings under the current profile: where the child's mask is 0 the
+    uniform fill's plain float32 operand enters the result directly, the sRGB8 coverage goes
+    through binary16, and where the child's mask lies strictly between 0 and 1 the uniform fill
+    above it composites over the partly covered backdrop with the coverage weights
+    (phase1.10_compositor-float32-residual)."""
+    assert_golden(evaluator_tests, tmp_path, srgb8_decode, "group-masks", texture_set, backend)
+
+
+@pytest.mark.parametrize("backend", backends())
+@pytest.mark.parametrize("texture_set", ["s0", "s1", "s2", "s3"])
+def test_group_coverage_order_equals_the_golden(
+    evaluator_tests: Path, srgb8_decode: np.ndarray, tmp_path: Path, texture_set: str, backend: str
+) -> None:
+    """phase1.10 3.1: `group-coverage-order` (an isolated group over an opaque black root: a fill
+    under a row-ramp mask, a fill of fields A above it, Normal at 0.5, Screen at 0.5, Normal at
+    0.3) on RGB32F, L32F, RGB16, sRGB8, RGB8 and L8 equals both recordings: the coverage-weighted
+    source-over, also over the zero-coverage row, the copied first layer, the plain 8-bit coverage
+    ties of RGB8 and L8 and the sRGB8 coverage through binary16 from 1/2 up."""
+    assert_golden(
+        evaluator_tests, tmp_path, srgb8_decode, "group-coverage-order", texture_set, backend
+    )
 
 
 @pytest.mark.parametrize("backend", backends())
@@ -301,6 +282,7 @@ def test_fit_is_published_and_valid() -> None:
         "levels-clamp",
         "content-effect-order",
         "group-masks",
+        "group-coverage-order",
         "mask-stack-probe",
         "geometry-mask-mesh",
     } <= ids

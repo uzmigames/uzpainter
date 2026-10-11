@@ -31,6 +31,8 @@ struct Context {
     int depth = 0;
     /// The profile's `float32UniformPlain` (UniformOperand).
     bool float32UniformPlain = false;
+    /// The profile's `uniformGreyUnrounded` (UniformOperand).
+    bool uniformGreyUnrounded = false;
 };
 
 constexpr int kMaxInstanceDepth = 64;
@@ -80,7 +82,8 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             const auto& uniform = std::get<core::UniformColorSource>(source.value);
             result.kind = DagSource::Kind::Uniform;
             result.uniform = mask ? UniformOperand(uniform.rgb, TileFormatOf(kMaskFormat), {0.0f, 0.0f, 0.0f})
-                                  : UniformOperand(uniform.rgb, ctx.tileFormat, ctx.base, ctx.float32UniformPlain);
+                                  : UniformOperand(uniform.rgb, ctx.tileFormat, ctx.base, ctx.float32UniformPlain,
+                                                   ctx.uniformGreyUnrounded);
             writer.Str("uniform");
             for (const float component : result.uniform) writer.F32(component);
             break;
@@ -452,13 +455,14 @@ core::Blending EffectiveBlending(const core::Layer& layer, core::ChannelType cha
 }
 
 std::array<float, 3> UniformOperand(const std::array<double, 3>& colour, const TileFormat& format,
-                                    const std::array<float, 3>& base, bool float32Plain) {
+                                    const std::array<float, 3>& base, bool float32Plain,
+                                    bool greyUnrounded) {
     std::array<float, 3> result{0.0f, 0.0f, 0.0f};
     std::array<double, 3> components;
     if (format.channels == 1) {
-        const double r = static_cast<float>(colour[0]);
-        const double g = static_cast<float>(colour[1]);
-        const double b = static_cast<float>(colour[2]);
+        const double r = greyUnrounded ? colour[0] : static_cast<float>(colour[0]);
+        const double g = greyUnrounded ? colour[1] : static_cast<float>(colour[1]);
+        const double b = greyUnrounded ? colour[2] : static_cast<float>(colour[2]);
         components = {(r + g + b) / 3.0, 0.0, 0.0};
     } else {
         components = colour;
@@ -516,11 +520,13 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     dag.templateId = std::string(templateId);
     dag.profile = std::move(*profile);
     dag.tileFormat.halfCoverage = dag.profile.srgb8HalfCoverage && dag.tileFormat.srgb;
+    dag.tileFormat.halfCoverageFromHalf = dag.profile.srgb8HalfCoverageFromHalf && dag.tileFormat.halfCoverage;
     dag.root.owner = stack;
     dag.root.isolated = dag.profile.root == RootComposite::Isolated;
     Context ctx{project,        dag.profile.id, *set,     *stackPtr, channel,
                 dag.tileFormat, dag.format,     dag.base, dag.grid};
     ctx.float32UniformPlain = dag.profile.float32UniformPlain;
+    ctx.uniformGreyUnrounded = dag.profile.uniformGreyUnrounded;
     {
         HashWriter writer;
         writer.Sub(ContentStartHash(ctx, "root"));

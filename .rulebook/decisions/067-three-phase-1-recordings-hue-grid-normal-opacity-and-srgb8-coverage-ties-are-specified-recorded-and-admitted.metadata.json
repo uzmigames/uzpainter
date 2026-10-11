@@ -1,0 +1,13 @@
+{
+  "id": 67,
+  "slug": "three-phase-1-recordings-hue-grid-normal-opacity-and-srgb8-coverage-ties-are-specified-recorded-and-admitted",
+  "title": "Three Phase 1 recordings (hue grid, normal-map opacities, sRGB8 coverage ties) are specified, recorded and admitted",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.11_compositor-blend-gaps",
+    "phase1.10_compositor-float32-residual",
+    "phase0.9_render-reference-capture"
+  ],
+  "supersededBy": null
+}

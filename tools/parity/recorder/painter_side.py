@@ -209,6 +209,8 @@ CHANNEL_TYPES = {
     "User5": lambda: substance_painter.textureset.ChannelType.User5,
     "User6": lambda: substance_painter.textureset.ChannelType.User6,
     "User7": lambda: substance_painter.textureset.ChannelType.User7,
+    "User8": lambda: substance_painter.textureset.ChannelType.User8,
+    "User9": lambda: substance_painter.textureset.ChannelType.User9,
     "Scattering": lambda: substance_painter.textureset.ChannelType.Scattering,
     "Anisotropylevel": lambda: substance_painter.textureset.ChannelType.Anisotropylevel,
 }

@@ -8,7 +8,8 @@
 // filter 0 nearest / 1 linear / 2 anisotropic, maxAnisotropy, flags: 1 clamp, 2 UNORM16,
 // 4 nearest mip), 3 float32 (LOD bias, min LOD, max LOD), then each level's texels with rows
 // padded to 256 bytes and levels to 512 bytes; probe.hlsl = the kernel (t0 texture `src`, s1
-// sampler `s`, u2 output `dst`, entry `main`, cs_6_6). Output: out.bin.
+// sampler `s`, u2 output `dst`, t3 `StructuredBuffer<float4> params`, entry `main`, cs_6_6);
+// optional params.bin = the contents of `params` (designed per-sample inputs). Output: out.bin.
 //
 // Build: zig c++ -std=c++20 -O2 -fms-extensions -I thirdparty/volk
 //        -I thirdparty/vulkan-headers/include -I thirdparty/dxc/inc
@@ -86,6 +87,8 @@ int main(int argc, char** argv) {
     const size_t dataOffset = sizeof h + sizeof f;
     const size_t dataSize = blob.size() - dataOffset;
     const std::vector<uint32_t> spirv = CompileSpirv(argv[1], hlsl);
+    std::vector<char> params = ReadAll(dir + "/params.bin");
+    if (params.empty()) params.assign(16, 0);
 
     CHECK(volkInitialize());
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
@@ -180,10 +183,16 @@ int main(int argc, char** argv) {
     VkDeviceMemory stagingMem, readbackMem;
     makeBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, stagingMem);
     makeBuffer(VkDeviceSize{outW} * outH * 16, VK_BUFFER_USAGE_TRANSFER_DST_BIT, readback, readbackMem);
+    VkBuffer paramBuffer;
+    VkDeviceMemory paramMem;
+    makeBuffer(params.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, paramBuffer, paramMem);
     void* mapped;
     vkMapMemory(device, stagingMem, 0, dataSize, 0, &mapped);
     std::memcpy(mapped, blob.data() + dataOffset, dataSize);
     vkUnmapMemory(device, stagingMem);
+    vkMapMemory(device, paramMem, 0, params.size(), 0, &mapped);
+    std::memcpy(mapped, params.data(), params.size());
+    vkUnmapMemory(device, paramMem);
 
     VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     vci.image = src;
@@ -211,12 +220,13 @@ int main(int argc, char** argv) {
     VkSampler sampler;
     CHECK(vkCreateSampler(device, &sci, nullptr, &sampler));
 
-    VkDescriptorSetLayoutBinding bindings[3] = {
+    VkDescriptorSetLayoutBinding bindings[4] = {
         {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+        {2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
     VkDescriptorSetLayoutCreateInfo dslci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    dslci.bindingCount = 3;
+    dslci.bindingCount = 4;
     dslci.pBindings = bindings;
     VkDescriptorSetLayout setLayout;
     CHECK(vkCreateDescriptorSetLayout(device, &dslci, nullptr, &setLayout));
@@ -235,10 +245,11 @@ int main(int argc, char** argv) {
     cpci.layout = pipelineLayout;
     VkPipeline pipeline;
     CHECK(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, nullptr, &pipeline));
-    VkDescriptorPoolSize sizes[3] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1}, {VK_DESCRIPTOR_TYPE_SAMPLER, 1}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}};
+    VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1}, {VK_DESCRIPTOR_TYPE_SAMPLER, 1},
+                                     {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
     VkDescriptorPoolCreateInfo dpci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     dpci.maxSets = 1;
-    dpci.poolSizeCount = 3;
+    dpci.poolSizeCount = 4;
     dpci.pPoolSizes = sizes;
     VkDescriptorPool pool;
     CHECK(vkCreateDescriptorPool(device, &dpci, nullptr, &pool));
@@ -251,8 +262,9 @@ int main(int argc, char** argv) {
     VkDescriptorImageInfo srcInfo{VK_NULL_HANDLE, srcView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     VkDescriptorImageInfo sampInfo{sampler, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED};
     VkDescriptorImageInfo dstInfo{VK_NULL_HANDLE, dstView, VK_IMAGE_LAYOUT_GENERAL};
-    VkWriteDescriptorSet writes[3] = {};
-    for (int i = 0; i < 3; ++i) {
+    VkDescriptorBufferInfo paramInfo{paramBuffer, 0, VK_WHOLE_SIZE};
+    VkWriteDescriptorSet writes[4] = {};
+    for (int i = 0; i < 4; ++i) {
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[i].dstSet = set;
         writes[i].dstBinding = static_cast<uint32_t>(i);
@@ -262,7 +274,8 @@ int main(int argc, char** argv) {
     writes[0].pImageInfo = &srcInfo;
     writes[1].pImageInfo = &sampInfo;
     writes[2].pImageInfo = &dstInfo;
-    vkUpdateDescriptorSets(device, 3, writes, 0, nullptr);
+    writes[3].pBufferInfo = &paramInfo;
+    vkUpdateDescriptorSets(device, 4, writes, 0, nullptr);
 
     VkCommandPoolCreateInfo cpi{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     cpi.queueFamilyIndex = family;

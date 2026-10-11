@@ -104,6 +104,83 @@ def impulse64() -> bytes:
     return png16(64, 64, 3, texel)
 
 
+# hue-grid (`compositor-blend-gaps.md` section 3.3, decision 067): chromas in 16-bit codes, the
+# six sectors as (max, mid) channel indices (rising, then falling), the six tie types as (the
+# equal pair, whether the pair is the maximum), and the generator of the widening cases.
+HUE_CHROMAS = (1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 1024, 4096)
+HUE_SECTORS = ((0, 1), (1, 2), (2, 0), (0, 2), (1, 0), (2, 1))
+HUE_TIES = (
+    ((0, 1), True),
+    ((0, 1), False),
+    ((1, 2), True),
+    ((1, 2), False),
+    ((0, 2), True),
+    ((0, 2), False),
+)
+HUE_STRUCTURED = len(HUE_SECTORS) * len(HUE_CHROMAS) * 7  # 504
+HUE_GREY = HUE_STRUCTURED + len(HUE_TIES) * len(HUE_CHROMAS)  # 576
+HUE_SEED, HUE_LCG_A, HUE_LCG_C = 20261011, 1664525, 1013904223
+HUE_MAX_CHROMA = 8192
+
+
+def hue_texel(centre: int, sector: tuple[int, int], d: int, u: int) -> Pixel:
+    """Min = centre - d//2, max = min + d, mid = min + u, placed by the sector."""
+    low = centre - d // 2
+    texel = [low, low, low]
+    texel[sector[0]] = low + d
+    texel[sector[1]] = low + u
+    return tuple(texel)
+
+
+def hue_cases() -> list[list[Pixel]]:
+    """Per row group r (level (r + 1)/17, centre code 3855 (r + 1)) the 4 096 cases in the
+    order of the in-group texel index t = (y mod 16) * 256 + x."""
+    state = HUE_SEED
+
+    def draw() -> int:
+        nonlocal state
+        state = (state * HUE_LCG_A + HUE_LCG_C) % (1 << 32)
+        return state >> 8
+
+    groups: list[list[Pixel]] = []
+    for r in range(16):
+        centre = 3855 * (r + 1)
+        cases: list[Pixel] = []
+        for sector in HUE_SECTORS:
+            for d in HUE_CHROMAS:
+                for u in (0, 1, d // 4, d // 2, 3 * d // 4, d - 1, d):
+                    cases.append(hue_texel(centre, sector, d, u))
+        for (a, b), pair_is_max in HUE_TIES:
+            (other,) = {0, 1, 2} - {a, b}
+            for d in HUE_CHROMAS:
+                low = centre - d // 2
+                texel = [low + d if pair_is_max else low] * 3
+                texel[other] = low if pair_is_max else low + d
+                cases.append(tuple(texel))
+        cases.append((centre, centre, centre))
+        limit = min(HUE_MAX_CHROMA, 2 * min(centre, 0xFFFF - centre))
+        while len(cases) < 4096:
+            sector = HUE_SECTORS[draw() % 6]
+            d = 1 + draw() % limit
+            cases.append(hue_texel(centre, sector, d, draw() % (d + 1)))
+        groups.append(cases)
+    return groups
+
+
+def hue_grid(transposed: bool = False, grey: bool = False) -> bytes:
+    """RGB 256 x 256 hue cases (row group y // 16); `transposed` swaps x and y, `grey` keeps the
+    red component as a grey image (the L channel's source, decision 048)."""
+    groups = hue_cases()
+
+    def texel(x: int, y: int) -> Pixel:
+        if transposed:
+            x, y = y, x
+        value = groups[y // 16][(y % 16) * 256 + x]
+        return value[:1] if grey else value
+
+    return png16(256, 256, 1 if grey else 3, texel)
+
+
 def height_ramps() -> bytes:
     """Grey height field in four quadrants: a linear ramp in x, a cone, steps, a sine ridge."""
 

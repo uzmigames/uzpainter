@@ -3,6 +3,7 @@
     python -m tools.parity.render_fits measure --work <dir> [--no-flip]
     python -m tools.parity.render_fits write --work <dir> [--selftest-report <json>]
     python -m tools.parity.render_fits probe --work <dir>
+    python -m tools.parity.render_fits qualification --work <dir> [--no-flip]
 
 `measure` reads the admitted Iray references from the private store, renders the prototype
 (renders cached in `<dir>/renders`, outside the repository) and writes every number to
@@ -11,7 +12,10 @@ generated blocks of `parity/reports/phase0/iray-noise-floor.md`; with `--selftes
 also records the ray-tracing probes of a `UzPainter.exe selftest` run (task item 2.8). `probe`
 measures decision 052's capture request and decision 033's reproducibility probe (`probe.py`,
 task `phase0.9_render-reference-capture`) from the private store and the staged captures in
-`UZP_ORACLE_WORK` into `<dir>/probe-results.json` and writes their blocks.
+`UZP_ORACLE_WORK` into `<dir>/probe-results.json` and writes their blocks. `qualification`
+adds terms (a), (b) and the prototype's (c) of the qualification sphere (its template-default
+material read back, decision 068) to `<dir>/results.json` with the fits that file holds; `write`
+then puts its rows into the noise-floor tables.
 """
 
 from __future__ import annotations
@@ -38,6 +42,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     write.add_argument("--selftest-report", type=Path)
     probe_parser = commands.add_parser("probe")
     probe_parser.add_argument("--work", type=Path, required=True)
+    qualification = commands.add_parser("qualification")
+    qualification.add_argument("--work", type=Path, required=True)
+    qualification.add_argument("--no-flip", action="store_true")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     if args.command == "probe":
         found = probe.run(locate(), work_root())
@@ -55,6 +62,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"results written to {results_path}")
         return 0
     results = json.loads(results_path.read_text(encoding="utf-8"))
+    if args.command == "qualification":
+        results = pipeline.qualification_part(locate(), results, args.work, flip=not args.no_flip)
+        results_path.write_text(json.dumps(results, indent=1, sort_keys=True), encoding="utf-8")
+        print(f"qualification sphere added to {results_path}")
+        return 0
     probes = None
     if args.selftest_report is not None:
         probes = json.loads(args.selftest_report.read_text(encoding="utf-8"))

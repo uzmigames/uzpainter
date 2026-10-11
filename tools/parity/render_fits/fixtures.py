@@ -13,6 +13,12 @@ Each golden of `tools/parity/render_procedure/references.FIXTURES` becomes a `re
   rounded half up, the tie rule fitted on the mirror sphere), BaseMetalness and
   SpecularRoughness are L8 channels written with the UNORM rule (truncate to 12 fractional
   bits, nearest, ties down). The decoded values feed the BSDF.
+- The qualification sphere (`QUALIFICATION`, decision 068): the template-default material read
+  back in an OCIO project (`phase0/template-default-material/ocio-sphere`). Its BaseColor is not
+  on the sRGB8 lattice (the empty stack exports 59396 of 65535 at 16 bits, the sRGB encoding of
+  linear 0.8), so the scene takes the export's linear value (`QUALIFICATION_BASE`); metalness
+  is L8 code 0 and roughness L8 code 76. Normal (127/255, 127/255, 1) and Height 0 are the same
+  empty channels every other fixture has: the interpolated normal is kept, as for them.
 - Perturbations: the Normal bitmap is decoded as a tangent-space normal (2c/255 - 1); the
   Height bitmap is stored as 2t - 1 (`bitmap-height-signed`) and applied as bump with a fitted
   strength. Emission and opacity are ignored, as the default shader does (emission luminance 0,
@@ -78,6 +84,25 @@ def unorm8(value: float) -> float:
     j = math.floor(float(np.float32(value)) * 4096.0)
     code = (j * 255 + 2047) // 4096
     return code / 255.0
+
+
+# Template-default material of an OCIO project, read back (decision 068): BaseColor 59396 of
+# 65535 at PNG 16 (sRGB-encoded), BaseMetalness L8 code 0, SpecularRoughness L8 code 76.
+QUALIFICATION_EXPORT_CODE = 59396
+QUALIFICATION = refs.Fixture(
+    "qualification-sphere",
+    "sphere",
+    (QUALIFICATION_EXPORT_CODE / 65535.0,) * 3,
+    0.0,
+    76 / 255.0,
+    role="template default material (qualification job)",
+)
+
+
+def qualification_base() -> tuple[float, float, float]:
+    """The read-back BaseColor as a linear colour (not on the sRGB8 lattice)."""
+    value = srgb_to_linear(QUALIFICATION_EXPORT_CODE / 65535.0)
+    return value, value, value
 
 
 def environment_path(preset: str) -> tuple[Path, str]:
@@ -148,7 +173,7 @@ def scene_fixture(fixture: refs.Fixture, bump_strength: float = 0.0) -> Fixture:
 
 
 def by_name(name: str) -> refs.Fixture:
-    for fixture in refs.FIXTURES:
+    for fixture in (*refs.FIXTURES, QUALIFICATION):
         if fixture.name == name:
             return fixture
     raise KeyError(name)

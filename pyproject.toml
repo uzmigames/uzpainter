@@ -50,6 +50,13 @@ module = ["pywinauto", "pywinauto.*", "win32gui", "win32ui", "PIL", "PIL.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# SciPy (BSD-3-Clause): the linear-programming feasibility tests of
+# tools/parity/vk_sampler_probe/texture_unit.py on the owner's machine only; scipy-stubs is not
+# installed.
+module = ["scipy", "scipy.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # PyYAML (tests reading the CI workflows) ships no type information; types-PyYAML is not installed.
 module = ["yaml"]
 ignore_missing_imports = true

@@ -1,0 +1,9 @@
+{
+  "id": 61,
+  "slug": "the-texture-unit-has-no-closed-form-replica-minification-stays-refused-and-a-tabulated-axis-aligned-replica-is-the-next-step",
+  "title": "The texture unit has no closed-form replica; minification stays refused, and a tabulated axis-aligned replica is the next step",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": ["phase1.9_compositor-resample-gaps"],
+  "supersededBy": null
+}
