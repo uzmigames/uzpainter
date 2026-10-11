@@ -1,5 +1,29 @@
 {
-  "status": "pending",
+  "status": "in-progress",
   "createdAt": "2026-10-11T05:10:55.275Z",
-  "updatedAt": "2026-10-11T05:10:55.275Z"
+  "updatedAt": "2026-10-11T12:00:00.000Z",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The float32 order of Painter's source-over onto a partly covered backdrop was not identified (quantisation-thirds: 5 of 16 RGB32F/L32F values off by 2^-25..2^-24 against r1; group-masks s2-s3: 20 631 RGB32F and 57 RGB16 values off by one export step). Do you accept a register entry for this residual, or keep it a divergence until the diagnostic recording of the report is made?",
+      "status": "answered",
+      "askedAt": "2026-10-11T11:37:21.812Z",
+      "context": "Decision 044 and parity/reports/phase1/compositor-float32-residual.md: the sRGB8 part (binary16 coverage) and the plain 32-bit float uniform operand were found and ship as profile painter-12.1-isolated-half-alpha; the remaining float32/RGB16 residual survived thousands of tested float32 orderings, including Vulkan and D3D12 division measured on the recording GPU. No shipped template uses RGB32F/L32F; RGB16 masked groups are affected (57 of 196 608 values). Under decision 032 an r1 mismatch is never a pass without an owner-approved register entry.",
+      "options": [
+        {
+          "label": "Keep as divergence, record the diagnostic golden",
+          "description": "exactness stays the goal; blocks any gate that uses masked RGB16/RGB32F partial coverage until resolved"
+        },
+        {
+          "label": "Register an exception bounded by the published residuals",
+          "description": "unblocks later gates now; accepts a known one-step difference on RGB16 and RGB32F partial coverage"
+        }
+      ],
+      "recommended": "Keep as divergence, record the diagnostic golden",
+      "blocks": "4.1",
+      "answer": "Keep as divergence, record the diagnostic golden",
+      "answeredBy": "coordinator (owner delegated decisions to Claude + model panel, 2026-10-11); an exception register entry would need the owner signature anyway (decision 032), and exactness is the acceptance rule",
+      "answeredAt": "2026-10-11T12:00:00.000Z"
+    }
+  ]
 }
