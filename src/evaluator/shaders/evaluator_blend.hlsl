@@ -272,7 +272,7 @@ float Divide(float a, float b) {
 
 #if !defined(UZP_COMPONENT) && !defined(UZP_NORMALMAP)
 float BlendKernel(float a, float b) {
-#if defined(UZP_MODE_Normal) || defined(UZP_MODE_Replace)
+#if defined(UZP_MODE_Normal) || defined(UZP_MODE_Replace) || defined(UZP_MODE_PassThrough)
     return b;
 #elif defined(UZP_MODE_Disable)
     return a;
@@ -602,6 +602,17 @@ float CompositeChannel(float a, float s, float r, float alphaB, float alphaS) {
     return (backdrop + alphaS * blended) * Rcp(alphaO);
 }
 
+// A pass-through group's composite (arith.cpp Composite, PassThrough): the backdrop a moved
+// toward the group's result s by t = opacity x mask.
+float PassThroughChannel(float a, float s, float alphaB, float alphaG, float t) {
+    if (alphaB == 1.0f) return Fma(s - a, t, a);
+    if (alphaB == 0.0f) return s;
+    const float pa = a * alphaB;
+    const float ps = s * alphaG;
+    const float alphaO = Fma(alphaG - alphaB, t, alphaB);
+    return Fma(ps - pa, t, pa) * Rcp(alphaO);
+}
+
 float StoreChannel(float v) {
 #if UZP_ENC == 0 || UZP_ENC == 1
 #if UZP_SRGB
@@ -704,6 +715,16 @@ void main(uint3 id : SV_DispatchThreadID) {
 #endif
 #endif
     float4 result = float4(0.0f, 0.0f, 0.0f, 1.0f);
+#if defined(UZP_MODE_PassThrough)
+    result.x = StoreChannel(PassThroughChannel(acc.x, src.x, alphaB, src.w, opacityMask));
+#if UZP_CHANNELS == 3
+    result.y = StoreChannel(PassThroughChannel(acc.y, src.y, alphaB, src.w, opacityMask));
+    result.z = StoreChannel(PassThroughChannel(acc.z, src.z, alphaB, src.w, opacityMask));
+#endif
+    float alphaO = 1.0f;
+    if (alphaB == 0.0f) alphaO = alphaS;
+    else if (alphaB != 1.0f) alphaO = Fma(src.w - alphaB, opacityMask, alphaB);
+#else
     result.x = StoreChannel(CompositeChannel(acc.x, src.x, r.x, alphaB, alphaS));
 #if UZP_CHANNELS == 3
     result.y = StoreChannel(CompositeChannel(acc.y, src.y, r.y, alphaB, alphaS));
@@ -712,6 +733,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     float alphaO = 1.0f;
     if (alphaB == 0.0f) alphaO = alphaS;
     else if (alphaB != 1.0f) alphaO = alphaS + alphaB * (1.0f - alphaS);
+#endif
 #if UZP_ALPHA
     result.w = StoreCoverage(alphaO);
 #else

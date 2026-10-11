@@ -143,8 +143,8 @@ def test_evaluation_order_on_the_cpu(evaluator_tests: Path) -> None:
         "Disable applies to one channel only: the L16 channel still receives B",
         "an empty stack evaluates to the base constant without a tile",
         "a group with default blending behaves as Normal at opacity 1",
-        "a PassThrough group composites its children directly into the stack (opacities scaled "
-        "by the group's)",
+        "a PassThrough group composites its children onto the stack below it and mixes by its "
+        "opacity",
         "an instance layer evaluates its source layer in its own position",
         "a 1:1 bitmap on RGB16 copies every code exactly",
         "a paint layer fails with unsupported_node",

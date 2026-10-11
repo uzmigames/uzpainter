@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 import types
 from pathlib import Path
@@ -37,8 +38,9 @@ if __name__ == "__main__":
     _tests.__path__ = [str(_root / "tests")]
     sys.modules["tests"] = _tests
 
+from tests.evaluator import masks_fits
 from tests.evaluator.quantisation_fits import exported, unit
-from tests.evaluator.sources_fits import channel_formats, pooled, srgb8_decode
+from tests.evaluator.sources_fits import channel_formats, export16, pooled, srgb8_decode
 from tests.evaluator.test_compositor_tile_dag import (
     FIXTURES,
     MANIFESTS,
@@ -379,22 +381,76 @@ def mode_entry(runs: Runs, decode: np.ndarray, mode: str) -> dict[str, Any]:
     )
 
 
-def passthrough_entry() -> dict[str, Any]:
+PASSTHROUGH = "semantics-ui/group-passthrough-masks"
+PASSTHROUGH_SETS = ("s0", "s1", "s2", "s3")
+# An operator settings-sheet entry that set a node's mode through Painter's UI.
+UI_MODE = re.compile(r"Layers/Blending mode \(step (\d+), (\w+)\)")
+
+
+def passthrough_spec(
+    manifest: dict[str, Any], texture_set: str, workdir: Path, channels: list[str]
+) -> dict[str, Any]:
+    """The spec of a `semantics-ui/group-passthrough-masks` texture set: its instruction sequence
+    (masks_fits.spec_from_steps) with the group modes the operator set through the UI (the
+    runtime member `Passthrough`, the documented `PassThrough`)."""
+    spec = masks_fits.spec_from_steps(manifest, texture_set, workdir, channels)
+    nodes: dict[int, dict[str, Any]] = {}
+    pending = list(spec["layers"])
+    while pending:
+        node = pending.pop()
+        nodes[node["uid"]] = node
+        pending.extend(node.get("children", []))
+    for setting in manifest["applied_settings"]:
+        match = UI_MODE.fullmatch(setting["name"])
+        if match is None:
+            continue
+        node = nodes.get(int(match.group(1)) + masks_fits.UID_OFFSET)
+        if node is not None:
+            assert setting["value"] == "Passthrough", setting
+            node.setdefault("blending", {}).setdefault(match.group(2), {})["mode"] = "PassThrough"
+    return spec
+
+
+def passthrough_residuals(runs: Runs, decode: np.ndarray) -> list[dict[str, Any]]:
+    manifest = masks_fits.envelope_manifest(PASSTHROUGH)
+    golden = masks_fits.envelope_golden(PASSTHROUGH)
+    formats = channel_formats(manifest)
+    out = []
+    for texture_set in PASSTHROUGH_SETS:
+        workdir = runs.work / PASSTHROUGH.replace("/", "-") / texture_set
+        spec = passthrough_spec(manifest, texture_set, workdir, sorted(formats))
+        result = evaluate(runs.exe, spec, workdir, "cpu")
+        for channel in sorted(formats):
+            fmt = formats[channel]
+            ours = raster(result, channel)
+            value = ours if fmt.endswith("F") else export16(ours, fmt, decode)
+            map_name = f"{texture_set}/{channel.lower()}"
+            for recording in ("r1", "r2"):
+                theirs = golden.map(recording, map_name).values.reshape(value.shape)
+                diff = pooled([(value.astype(np.float64), theirs.astype(np.float64))])
+                out.append(residual(f"tier0/{PASSTHROUGH}", map_name, recording, unit(fmt), diff))
+    return out
+
+
+def passthrough_entry(runs: Runs, decode: np.ndarray) -> dict[str, Any]:
     return entry(
         "kernel-passthrough",
-        "BlendingMode.PassThrough (group layers only)",
-        "No kernel: a PassThrough group composites its visible children directly into the "
-        "enclosing list with their opacities scaled by the group's (EVALUATOR.md). Not settable "
-        "through Painter 12.1.0's API, so no Tier 0 golden records it.",
+        "BlendingMode.PassThrough (group layers only; the runtime member is Passthrough)",
+        "A PassThrough group composites its visible children onto a copy of the accumulator "
+        "below it, each child stored in the channel format with its own mode, opacity and mask, "
+        "and then moves the accumulator toward that result by the group's opacity t times its "
+        "mask: v = fma(g - a, t, a) over an opaque backdrop (one rounding); over a transparent "
+        "backdrop the result with coverage t times its coverage; between, the premultiplied lerp "
+        "(not recorded). Set through Painter's UI (decision 029); the documented BlendingMode."
+        "PassThrough does not exist at runtime.",
         [PYDOC, GUIDE],
         [],
-        [],
+        passthrough_residuals(runs, decode),
         notes=(
-            "Release gap until a golden records it: reachable only in Painter's UI, recorded by "
-            "phase0.7_tier0-semantics-ui-cases item 2.4 (decision 029) to the specification of "
-            "parity/reports/phase1/compositor-blend-gaps.md; not ruled not_migratable."
+            "Fitted on tier0/semantics-ui/group-passthrough-masks s0-s3 (no mask, a group mask, "
+            "a child mask, both; RGB16, sRGB8 and RGB32F); its Normal-mode controls s4-s7 are "
+            "the group-masks stack. The scaled-children hypothesis of phase1.4 is refuted."
         ),
-        gap=True,
     )
 
 
@@ -405,18 +461,18 @@ def build(exe: Path, work: Path) -> dict[str, Any]:
     runs = Runs(exe, work)
     decode = srgb8_decode(exe, work)
     entries = [mode_entry(runs, decode, mode) for mode in MODES]
-    entries.append(passthrough_entry())
+    entries.append(passthrough_entry(runs, decode))
     corpus = sorted(
         {f"tier0/semantics/{stem}" for stem, _ in SWEEPS.values()}
-        | {f"tier0/semantics/{NORMAL_CHANNEL}"}
+        | {f"tier0/semantics/{NORMAL_CHANNEL}", f"tier0/{PASSTHROUGH}"}
     )
     return document(
         "blend-kernels",
         "The blend kernels of the evaluator (04 section 3, tasks "
         "phase1.10_compositor-blend-kernels and phase1.11_compositor-blend-gaps) for every "
         "documented BlendingMode, evaluated by the "
-        "CPU store under the current profile on the Tier 0 blend sweeps and on the Normal "
-        "channel. Residuals are |delta| in export units "
+        "CPU store under the current profile on the Tier 0 blend sweeps, on the Normal "
+        "channel and on the UI-set Passthrough groups. Residuals are |delta| in export units "
         "(16-bit PNG codes, OpenEXR float32 values) per texture set and channel, against both "
         "recordings (r1 same session, r2 after save and reopen). Supersedes blend-modes.json for "
         "the evaluator; blend-modes.json keeps the phase0.7 candidate fits.",

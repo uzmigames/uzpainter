@@ -4,7 +4,7 @@
 ## 2. Implementation
 - [ ] 2.1 Fit the HSV hue/saturation arithmetic of Tint, Saturation, Color and Value on colour channels (near-grey hue sources); record a finer Tier 0 sweep if the existing golden does not determine it
 - [x] 2.2 Fit the opacity rotation of NormalMapCombine, NormalMapDetail and NormalMapInverseDetail below opacity 1; record an opacity sweep if needed
-- [ ] 2.3 Record PassThrough through Painter's documented API and fit it, or record it `not_migratable` with the reason and ask the owner
+- [x] 2.3 Record PassThrough through Painter's documented API and fit it, or record it `not_migratable` with the reason and ask the owner
 - [x] 2.4 Implement the fits in the CPU reference and the blend kernel (GPU = CPU bit for bit)
 - [x] 2.5 Re-derive and publish `parity/semantics/blend-kernels.json`; lift a capability release gap only with its Tier 0 evidence
 

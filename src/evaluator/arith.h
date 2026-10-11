@@ -169,6 +169,14 @@ struct LevelsComponent {
 /// the resulting alpha. alpha_s = opacity x mask x src alpha; with an opaque backdrop the fitted
 /// opacity mix; with a transparent backdrop the source as it is (W3C §5.1: no blending against
 /// nothing); otherwise the general formula of W3C §5.1 with straight colours.
+///
+/// `PassThrough` (the composite of a pass-through group, phase1.11): `src` is the group's result,
+/// its children composited onto a copy of this backdrop, and t = opacity x mask moves the
+/// backdrop toward it: over an opaque backdrop v = fma(s - a, t, a) (one rounding, `group-
+/// passthrough-masks`); over a transparent one the source with alpha t x src alpha; otherwise
+/// the premultiplied lerp, alpha fma(alpha_s - alpha_b, t, alpha_b) (not recorded).
 [[nodiscard]] std::array<float, 4> Composite(const CompositeInput& in);
+/// The modes a BlendOp may carry: every mode with a kernel, and PassThrough (a group composite).
+[[nodiscard]] bool HasComposite(core::BlendingMode mode);
 
 }  // namespace uzp::evaluator::arith

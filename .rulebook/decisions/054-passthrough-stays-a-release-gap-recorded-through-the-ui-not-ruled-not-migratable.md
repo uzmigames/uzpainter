@@ -29,7 +29,7 @@ The owner delegated decisions. The model panel was consulted (cx/gpt-6-astra, ki
    - The golden is recorded through the UI by `phase0.7_tier0-semantics-ui-cases` item 2.4 (decision 029), not through the documented API.
    - That item was already scoped in phase0.7, so nothing moves into a lower-numbered task.
    - The fit and its exact acceptance stay in phase1.11 item 2.3, which stays unchecked until the golden exists.
-3. The recording spec is in §3 of `parity/reports/phase1/compositor-blend-gaps.md`. It covers:
+3. A recording spec was proposed in this task's report. phase0.7 recorded the `group-masks` stack instead, which covers the same questions (see the Outcome). The proposal covered:
    - multiple children, including a Multiply child over a non-trivial backdrop;
    - group opacity 0.5 and a Normal-group control;
    - each mask placement;
@@ -40,3 +40,23 @@ The owner delegated decisions. The model panel was consulted (cx/gpt-6-astra, ki
 
 - phase1.11 cannot be archived until the UI golden is recorded and fitted, or until the owner rules otherwise.
 - phase0.7 ui-cases item 2.4 records to the spec in the phase1.11 report.
+
+## Outcome (same day)
+
+phase0.7 ui-cases recorded `tier0/semantics-ui/group-passthrough-masks` (decision 047), with r1 = r2 on 24 of 24 maps. Its stack is the `group-masks` stack: fields A, then a group at 0.75 holding fields B in Multiply under a uniform fill in Screen at 0.5. It has four mask placements, three channels (RGB16, sRGB8, RGB32F) and Normal-mode controls. At runtime Painter 12.1.5's member is `Passthrough`, not the documented `PassThrough`.
+
+**The golden refutes the hypothesis.** The scaled-children model was off on almost every value, by up to 5 530 RGB16 codes.
+
+**The fitted model** composites the children onto a copy of the accumulator below the group. Each child is stored in the channel format with its own mode, opacity and mask. The accumulator then moves toward that result by the group's opacity t times its mask: v = fma(g - a, t, a), one rounding.
+
+Three variants were rejected on RGB32F:
+
+| Variant | RGB32F values off |
+|---|---|
+| unquantised children | 0 (RGB32F only; 57 250 RGB16 values off) |
+| plain lerp `a + (g - a) t` | 4 716 |
+| layer mix `a (1 - t) + g t` | 25 097 |
+
+The fitted model is exact on s0-s3 against both recordings, on every channel, on the CPU and on the GPU.
+
+PassThrough is no longer a group placement without a golden, and item 2.3 is met. A gate that uses PassThrough groups now needs only what every other exact mode needs.

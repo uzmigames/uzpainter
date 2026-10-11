@@ -561,12 +561,38 @@ float Levels(float v, const LevelsComponent& levels) {
     return Fma(t, Sub(levels.outMax, levels.outMin), levels.outMin);
 }
 
+bool HasComposite(core::BlendingMode mode) {
+    return HasKernel(mode) || mode == core::BlendingMode::PassThrough;
+}
+
 std::array<float, 4> Composite(const CompositeInput& in) {
     using M = core::BlendingMode;
     std::array<float, 4> out{0.0f, 0.0f, 0.0f, 1.0f};
     const float opacityMask = Mul(in.opacity, in.mask);
     const float alphaS = Mul(opacityMask, in.src[3]);
     const float alphaB = in.acc[3];
+    if (in.mode == M::PassThrough) {
+        // The backdrop moved toward the group's result by opacity x mask.
+        const float alphaG = in.src[3];
+        for (int i = 0; i < in.channels; ++i) {
+            const float a = in.acc[static_cast<size_t>(i)];
+            const float s = in.src[static_cast<size_t>(i)];
+            float v = s;
+            if (alphaB == 1.0f) {
+                v = Fma(Sub(s, a), opacityMask, a);
+            } else if (alphaB != 0.0f) {
+                const float pa = Mul(a, alphaB);
+                const float ps = Mul(s, alphaG);
+                const float alphaO = Fma(Sub(alphaG, alphaB), opacityMask, alphaB);
+                v = Mul(Fma(Sub(ps, pa), opacityMask, pa), Rcp(alphaO));
+            }
+            out[static_cast<size_t>(i)] = v;
+        }
+        if (alphaB == 1.0f) out[3] = 1.0f;
+        else if (alphaB == 0.0f) out[3] = alphaS;
+        else out[3] = Fma(Sub(alphaG, alphaB), opacityMask, alphaB);
+        return out;
+    }
     const bool colour = HasColourKernel(in.mode);
     // The normal-map modes take the opacity as a rotation of the upper normal (BlendColour) and
     // write their result as it is over an opaque backdrop.

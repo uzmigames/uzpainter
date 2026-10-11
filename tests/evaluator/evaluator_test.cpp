@@ -987,7 +987,8 @@ int RunOrder(const fs::path& assets) {
             Check(result && AllEqual(Samples(*result), 3, model.stored, detail),
                   "a group with default blending behaves as Normal at opacity 1", result ? detail : Describe(result));
         }
-        // PassThrough: the children composite directly into the stack, scaled by the group opacity.
+        // PassThrough: the children composite onto a copy of the stack below the group, and the
+        // group's opacity moves the stack toward that result (fma(g - a, t, a)).
         core::Layer passThrough = builder.Group("pass-through", {mul, screen},
                                                 Same(channels, BlendingMode::PassThrough, 0.75));
         passThrough.children[0].uid = builder.project.AllocateId();
@@ -998,14 +999,18 @@ int RunOrder(const fs::path& assets) {
             CpuEvaluator cpu(templates, kWideLimits);
             render::Result<ChannelResult> result = evaluate(builder, ChannelType::User0, cpu);
             const TileFormat rgb16 = TileFormatOf(ChannelFormat::RGB16);
+            const ModelValue inside = ModelComposite(
+                {ModelLayer{BlendingMode::Normal, 1.0f, operand(colourA, ChannelFormat::RGB16, base)},
+                 ModelLayer{BlendingMode::Multiply, 1.0f, operand(colourB, ChannelFormat::RGB16, base)},
+                 ModelLayer{BlendingMode::Screen, 0.5f, operand(colourC, ChannelFormat::RGB16, base)}},
+                rgb16, base, false);
             const ModelValue model = ModelComposite(
                 {ModelLayer{BlendingMode::Normal, 1.0f, operand(colourA, ChannelFormat::RGB16, base)},
-                 ModelLayer{BlendingMode::Multiply, 0.75f, operand(colourB, ChannelFormat::RGB16, base)},
-                 ModelLayer{BlendingMode::Screen, 0.5f * 0.75f, operand(colourC, ChannelFormat::RGB16, base)}},
+                 ModelLayer{BlendingMode::PassThrough, 0.75f, {inside.value[0], inside.value[1], inside.value[2]}}},
                 rgb16, base, false);
             std::string detail;
             Check(result && AllEqual(Samples(*result), 3, model.stored, detail),
-                  "a PassThrough group composites its children directly into the stack (opacities scaled by the group's)",
+                  "a PassThrough group composites its children onto the stack below it and mixes by its opacity",
                   result ? detail : Describe(result));
         }
         // Instance: A, then B, then an instance of A on top equals A, B, A.
@@ -3915,8 +3920,7 @@ int RunMasks(const fs::path& assets) {
         pass.mask = MaskWith(core::MaskBackground::Black, {MaskFillEffect(builder, Bitmap(rig.greySha), BlendingMode::Normal, 1.0)});
         builder.SetRoot({pass});
         render::Result<ChannelResult> result = rig.Evaluate(builder, ChannelType::User0);
-        Check(!result && KindName(result.error()) == "unsupported_node",
-              "a PassThrough group with a mask raster fails with unsupported_node", Describe(result));
+        Check(static_cast<bool>(result), "a PassThrough group with a mask raster evaluates", Describe(result));
     }
 
     // The cache shape: effect chains are graph nodes keyed by chained hashes.
@@ -4064,6 +4068,12 @@ int RunMasksGpuVsCpu(const fs::path& assets, const fs::path& dir) {
             core::Layer group = builder.Group("group", {child}, Same(channels, BlendingMode::Normal, 0.4 + 0.6 * unit()));
             if (variant == 1) group.mask = mask();
             layers.push_back(group);
+            core::Layer passChild = builder.Fill("pass child", SameSource(channels, Bitmap(colour)),
+                                                 Same(channels, modes[rng() % modes.size()], unit()));
+            passChild.mask = mask();
+            core::Layer pass = builder.Group("pass", {passChild}, Same(channels, BlendingMode::PassThrough, 0.4 + 0.6 * unit()));
+            if (variant == 1) pass.mask = mask();
+            layers.push_back(pass);
             builder.SetRoot(layers);
             if (!builder.Validate(std::string(core::ToString(format)))) return Finish();
             EvaluateRequest request;
@@ -4093,7 +4103,7 @@ int RunMasksGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     }
     gpu.Shutdown();
     Check(allEqual, "every masked stack evaluates to the same bytes on the GPU and on the CPU (" + std::to_string(compared) +
-                        " samples over 9 formats: mask and content fill effects, levels with gamma, group masks)");
+                        " samples over 9 formats: mask and content fill effects, levels with gamma, group masks, masked PassThrough groups)");
     return Finish();
 }
 

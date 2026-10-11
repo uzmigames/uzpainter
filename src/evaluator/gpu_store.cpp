@@ -325,7 +325,7 @@ render::Result<void> GpuTileStore::Blend(const BlendOp& op) {
             return EvalFail(EvalErrorKind::Internal, "blend operands differ in format");
         }
     }
-    if (!arith::HasKernel(op.mode)) {
+    if (!arith::HasComposite(op.mode)) {
         return EvalFail(EvalErrorKind::UnsupportedBlendMode,
                         std::string(core::ToString(op.mode)) +
                             " has no blend kernel (a group placement)");

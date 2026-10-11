@@ -13,7 +13,7 @@ Under decision 028, the Tier 0 comparisons against the private oracle store and 
   - The grey (L16) and sRGB8 channels are exact.
   - The float32 operation order of Painter's hue is not identified, so the four modes stay release gaps.
   - §3.3 specifies a recording that would pin it down.
-- **PassThrough stays a release gap (decision 054).** Its golden is reachable only through Painter's UI. `phase0.7_tier0-semantics-ui-cases` item 2.4 records it to the specification in §4.
+- **PassThrough is exact (§4, decision 054).** It is fitted on the UI-set golden `semantics-ui/group-passthrough-masks`. The children composite onto a copy of the stack below the group, and the group then mixes by its opacity and mask, fma(g - a, t, a).
 - The GPU equals the CPU bit for bit for every mode.
 
 ## 1. Run record
@@ -202,35 +202,47 @@ The recording follows the Tier 0 rules of every blend sweep: `uzpainter parity r
 
 ## 4. PassThrough (item 2.3, decision 054)
 
-Painter 12.1.0's runtime has no `BlendingMode.PassThrough` member, so the documented API cannot set the mode and no golden exists. The mode is reachable through the UI.
+Painter 12.1.0's documented API cannot set the mode: the runtime member is `Passthrough`, not the documented `PassThrough`.
 
-**Decision 054:**
+- Decision 054 kept it `release-gap`, not `not_migratable`, and handed the recording to `phase0.7_tier0-semantics-ui-cases`.
+- That task recorded `tier0/semantics-ui/group-passthrough-masks` through the UI (decision 047; envelope `painter-12.1.5_js-api.1.1.20`). r1 equals r2 on all 24 maps.
 
-- PassThrough is not `not_migratable`. It stays `release-gap`, and the hypothesis implementation stays: children composite into the enclosing list, with opacities scaled by the group's.
-- The golden is recorded by `phase0.7_tier0-semantics-ui-cases` item 2.4 through UI automation (decision 029). That item was already scoped there.
-- The fit stays in this task: item 2.3 is open until then.
-- Any gate whose content uses a PassThrough group lists item 2.3 as a prerequisite.
-- Assets checked: no stack in Assets3D `Pipeline/` uses a PassThrough group or a `blend` key (Wand v1, Belt v5 `waist-v5/stack-belt.json` and `stack-sash.json`, hat, staff). Tunic v10 has no stack file there yet.
+The golden uses the `group-masks` stack:
 
-**Recording specification for phase0.7 ui-cases item 2.4.**
+- fields A at the root;
+- a group at opacity 0.75 holding fields B in Multiply at 1 under a uniform (0.2, 0.9, 0.5) fill in Screen at 0.5;
+- four mask placements (s0 none, s1 group, s2 child, s3 both);
+- the same four in Normal mode (s4-s7);
+- channels RGB16, sRGB8 and RGB32F.
 
-- Mesh `grid4x2`, resolution 256.
-- Channels: BaseColor sRGB8, Roughness L8, User0 RGB16, User1 RGB32F.
-- Fixtures: field A and field B, as `blend-basic`.
-- Two recordings, with the group mode set through the UI and recorded in the settings sheet with panel evidence.
+**The phase1.4 hypothesis is refuted.** It composited the children directly into the stack with their opacities scaled by the group's, and it was off on 195 704 of 196 608 RGB16 values (up to 5 530 codes).
 
-| Set | Stack (bottom → top) | Purpose |
+**The fit** composites the children onto a copy of the accumulator below the group. Each child is stored in the channel format with its own mode, opacity and mask. The accumulator then moves toward that result by the group's opacity times its mask: v = fma(g - a, t, a), one rounding.
+
+| Variant (s0) | RGB32F values off | RGB16 values off |
 |---|---|---|
-| s0 | fill A (backdrop); group G in **Normal**, opacity 0.5, containing fill B in Multiply at opacity 1 | control: the isolated group |
-| s1 | the same with G in **PassThrough** | pass-through against isolation: Multiply sees the backdrop only when the group passes through |
-| s2 | the same with G in PassThrough at opacity 1 | the group's opacity alone |
-| s3 | G in PassThrough at opacity 0.5 with two children: fill B in Multiply at 0.7, then fill A transposed in Screen at 0.6 | per-child opacity scaling against one group-level mix |
-| s4 | s1 with a group mask (`mask-codes` bitmap) | mask on the group |
-| s5 | s1 with a mask on the child | mask on the child |
-| s6 | s1 with both masks | mask composition |
-| s7 | G in PassThrough inside a Normal group at 0.8 | nesting |
+| **the fit** | **0** | **0** |
+| the same without the per-child storage in RGB16 | 0 | 57 250 |
+| final mix `a + (g - a) t` (two roundings) | 4 716 | — |
+| final mix `fma(g, t, a (1 - t))` | 3 988 | — |
+| final mix `a (1 - t) + g t` (the layer mix) | 25 097 | 14 362 |
+| uniform colour unquantised on RGB16 (the colour is stored like a channel value) | — | 14 036 |
 
-The `group-masks` golden's stack stays the reference for the mask rules.
+**Result.** s0-s3 equal both recordings on every channel, on the CPU and on the GPU (`test_compositor_blend_gaps.py::test_passthrough_groups_equal_the_golden`).
+
+- The group mask and the child mask need no rule of their own: the group mask scales t, and the child mask acts inside the copy.
+- The Normal-mode controls s4 and s5 are exact. s6 and s7 keep the float32 partial-coverage divergence of decision 044 (`group-masks`: 129 and 57 RGB16 values, 1 sRGB8 value, and 38 927 and 20 631 RGB32F values off by one step).
+- Over a backdrop that is neither opaque nor transparent, the evaluator uses the premultiplied lerp (no golden). Over a transparent one, the group's result at coverage t × its coverage, as a Normal group.
+
+**Implementation.**
+
+- `dag.cpp`: a PassThrough group's list starts from the enclosing prefix (`DagList::fromBackdrop`).
+- `evaluate.cpp`: the children start from the accumulator, which stays pinned.
+- `arith::Composite`, PassThrough branch, and the HLSL `PassThroughChannel`.
+- The two refusals for masked PassThrough groups are removed.
+- `blend-kernels.json` `kernel-passthrough` is `exact`, and the capability inventory note records the UI-only setting.
+
+Assets3D: no stack in `Pipeline/` uses a PassThrough group or a `blend` key (Wand v1, Belt v5 `waist-v5/stack-belt.json` and `stack-sash.json`, hat, staff). Tunic v10 has no stack file there yet.
 
 ## 5. Normal-map recordings that would widen the evidence (optional)
 
@@ -248,13 +260,15 @@ The fit holds at the recorded opacities 0.5 and 0.25. The panel asked for off-gr
 | `kernel-sweep` (DX12) | every mode × 9 channel formats × coverage on and off × opacity 1 and 0.7: GPU = CPU on 149 422 080 samples (1 080 combinations) |
 | `gpu-vs-cpu` (DX12) | random stacks over every mode and format: identical bytes (2 490 368 samples) |
 | `blend-component`, `blend-normal-channel` against r1 and r2 | as in §2 and §3, identical on the CPU and the GPU |
+| `semantics-ui/group-passthrough-masks` s0-s3 against r1 and r2 | 0 values differ on RGB16, sRGB8 and RGB32F, CPU and GPU |
+| `order`, `masks`, `masks-gpu-vs-cpu` | the PassThrough model (an RGB16 three-layer case); a masked PassThrough group evaluates; random masked stacks with masked PassThrough groups: GPU = CPU on 2 490 368 samples |
 
 ## 7. Open items and owner actions
 
 - **Item 2.1 (component modes):** one-code residuals remain; the recording of §3.3 is needed. Release gap; no exception proposed.
-- **Item 2.3 (PassThrough):** waits for `phase0.7_tier0-semantics-ui-cases` item 2.4 (UI recording, decision 029). Release gap.
-- **Items 3.1 and 4.1:** stay open with them. Item 3.2 (normal maps) and item 3.3 (GPU = CPU) are met.
-- **Owner:** push, and record or delegate the two recordings (§3.3; §4 through phase0.7). §5 is optional.
+- **Item 2.3 (PassThrough):** met (§4).
+- **Items 3.1 and 4.1:** stay open with item 2.1. Item 3.2 (normal maps) and item 3.3 (GPU = CPU) are met.
+- **Owner:** push, and record or delegate the recording of §3.3. §5 is optional.
 
 ## Reproduce
 
