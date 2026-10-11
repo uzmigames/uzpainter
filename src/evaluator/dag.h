@@ -186,10 +186,13 @@ struct ChannelDag {
 /// The operand of a uniform colour on a channel of `format` with base `base` (blend-modes.json
 /// `uniform_operand`): each component (the mean of the three on a grey channel) stored with the
 /// channel's write rule and read back; on a 32-bit float channel the float32 value when
-/// `float32Plain` (EvaluatorProfile::float32UniformPlain), else `1 + (v - 1)` over `base`.
+/// `float32Plain` (EvaluatorProfile::float32UniformPlain), else `1 + (v - 1)` over `base`. The
+/// grey mean is taken of the components as given when `greyUnrounded`
+/// (EvaluatorProfile::uniformGreyUnrounded), else of their float32 values.
 [[nodiscard]] std::array<float, 3> UniformOperand(const std::array<double, 3>& colour,
                                                   const TileFormat& format,
                                                   const std::array<float, 3>& base,
-                                                  bool float32Plain = false);
+                                                  bool float32Plain = false,
+                                                  bool greyUnrounded = false);
 
 }  // namespace uzp::evaluator

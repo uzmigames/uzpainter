@@ -103,12 +103,13 @@ const std::vector<uint32_t>& OperandTableWords() {
 
 render::KernelSource BlendKernelSource(const BlendKernelVariant& variant) {
     const bool halfCoverage = variant.format.alpha && variant.format.halfCoverage;
+    const bool fromHalf = halfCoverage && variant.format.halfCoverageFromHalf;
     render::KernelSource source;
     source.name = "evaluator_blend_" + std::string(core::ToString(variant.mode)) + "_" +
                   std::to_string(variant.format.BytesPerChannel() * 8) +
                   (variant.format.IsUnorm() ? (variant.format.srgb ? "srgb" : "unorm") : "float") +
                   "_c" + std::to_string(variant.format.channels) + (variant.format.alpha ? "a" : "") +
-                  (halfCoverage ? "h" : "");
+                  (halfCoverage ? (fromHalf ? "h2" : "h") : "");
     source.hlsl = std::string(kBlendHlsl, sizeof(kBlendHlsl));
     source.entryPoint = "main";
     source.defines = {
@@ -117,7 +118,7 @@ render::KernelSource BlendKernelSource(const BlendKernelVariant& variant) {
         "UZP_CHANNELS=" + std::to_string(variant.format.channels),
         std::string("UZP_SRGB=") + (variant.format.srgb ? "1" : "0"),
         std::string("UZP_ALPHA=") + (variant.format.alpha ? "1" : "0"),
-        std::string("UZP_HALF_COVERAGE=") + (halfCoverage ? "1" : "0"),
+        std::string("UZP_HALF_COVERAGE=") + (halfCoverage ? (fromHalf ? "2" : "1") : "0"),
     };
     source.includes = {render::image_pass_detail::CommonInclude(), TablesInclude()};
     return source;
@@ -135,6 +136,9 @@ std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(const BlendOp& op,
     if (bindings.accAlpha) flags |= kFlagAccAlpha;
     if (bindings.srcAlpha) flags |= kFlagSrcAlpha;
     if (op.effectMix) flags |= kFlagEffectMix;
+    if (op.coverageWeights) flags |= kFlagCoverageWeights;
+    if (op.emptyBackdrop) flags |= kFlagEmptyBackdrop;
+    if (op.fusedReadout) flags |= kFlagFusedReadout;
     params[kParamFlags] = flags;
     params[kParamAccIndex] = bindings.accSrv;
     for (size_t i = 0; i < 4; ++i) params[kParamAccConst + i] = std::bit_cast<uint32_t>(op.acc.value[i]);

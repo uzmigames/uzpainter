@@ -30,7 +30,8 @@ struct BlendKernelVariant {
 
 /// The HLSL of the variant: `evaluator_blend.hlsl` with the defines `UZP_MODE_<Mode>`,
 /// `UZP_ENC`, `UZP_CHANNELS`, `UZP_SRGB`, `UZP_ALPHA` and `UZP_HALF_COVERAGE` (the coverage plane
-/// written through binary16, `TileFormat::halfCoverage`), including the render layer's
+/// written through binary16, `TileFormat::halfCoverage`: 1 always, 2 from 1/2 up,
+/// `TileFormat::halfCoverageFromHalf`), including the render layer's
 /// `image_common.hlsli` and the generated `evaluator_tables.hlsli`.
 [[nodiscard]] render::KernelSource BlendKernelSource(const BlendKernelVariant& variant);
 
@@ -70,6 +71,9 @@ enum BlendFlags : uint32_t {
     kFlagAccAlpha = 8,
     kFlagSrcAlpha = 16,
     kFlagEffectMix = 32,  ///< The effect mix (BlendOp::effectMix).
+    kFlagCoverageWeights = 64,  ///< The coverage-weighted source-over (BlendOp::coverageWeights).
+    kFlagEmptyBackdrop = 128,   ///< The backdrop is an isolated list's empty start.
+    kFlagFusedReadout = 256,    ///< The fused read-out over the base (BlendOp::fusedReadout).
 };
 
 /// Offsets inside a parameter block.

@@ -66,6 +66,13 @@ struct BlendOp {
     float opacity = 1.0f;
     /// An effect's mix (a mask or content effect, arith.h `CompositeInput::effectMix`).
     bool effectMix = false;
+    /// The coverage-weighted source-over (arith.h `CompositeInput::coverageWeights`).
+    bool coverageWeights = false;
+    /// The backdrop is the empty start of an isolated list (arith.h
+    /// `CompositeInput::emptyBackdrop`).
+    bool emptyBackdrop = false;
+    /// The fused read-out over the base (arith.h `CompositeInput::fusedReadout`).
+    bool fusedReadout = false;
 };
 
 /// A Levels effect (arith::Levels) of `src` into `dst` (same size and format): component c of

@@ -31,8 +31,8 @@ enum class RootComposite : uint8_t {
     /// group: colour and coverage stored in the channel format after every layer. That
     /// intermediate is composited over the base once at read-out, `v = base + (C - base) a` (the
     /// `Replace` mix of arith::Composite at opacity 1), and stored with the channel's write rule.
-    /// Profiles painter-12.1-isolated-linear and painter-12.1-isolated-half-alpha
-    /// (quantisation-profile.json).
+    /// Profiles painter-12.1-isolated-linear, painter-12.1-isolated-half-alpha and
+    /// painter-12.1-isolated-coverage-weights (quantisation-profile.json).
     Isolated,
 };
 
@@ -49,6 +49,27 @@ struct EvaluatorProfile {
     /// value is read back re-composited over the channel base, `1 + (v - 1)`, the rule of the
     /// earlier profiles (`group-masks` row 0 shows the plain value).
     bool float32UniformPlain = false;
+    /// A layer composited onto a partly covered backdrop, or onto a backdrop layer of zero
+    /// coverage, weights its terms with the coverage it has just computed (arith.h
+    /// `CompositeInput::coverageWeights`, Tier 0 `group-coverage-order`): only the first layer of
+    /// an isolated list, over the empty start, is copied. Without it the W3C §5.1 straight-colour
+    /// form of the earlier profiles applies and every layer over zero coverage is copied.
+    /// Profile painter-12.1-isolated-coverage-weights (quantisation-profile.json).
+    bool coverageWeights = false;
+    /// The read-out of an isolated root over the base is one fused operation,
+    /// v = fma(C - base, a, base) (arith.h `CompositeInput::fusedReadout`; Tier 0
+    /// `quantisation-thirds` RGB32F and L32F). Without it v = base + (C - base) a, the Replace
+    /// mix. Profile painter-12.1-isolated-coverage-weights.
+    bool fusedReadout = false;
+    /// A uniform colour on a grey channel is the float32 of the mean of its components as given
+    /// (double), not the mean of their float32 values (dag.h `UniformOperand`; Tier 0
+    /// `quantisation-thirds` L32F s2). Profile painter-12.1-isolated-coverage-weights.
+    bool uniformGreyUnrounded = false;
+    /// With `srgb8HalfCoverage`, only a coverage of at least 1/2 passes through binary16; a lower
+    /// one is written with the plain 8-bit rule (Tier 0 `group-coverage-order` s3: eight coverages
+    /// below 1/2 on an 8-bit tie all go down, binary16 sends five of them up; the mechanism is not
+    /// identified). Profile painter-12.1-isolated-coverage-weights.
+    bool srgb8HalfCoverageFromHalf = false;
 };
 
 /// The first, provisional profile (evaluator-profile.json): stamped into projects before the
@@ -58,10 +79,14 @@ inline constexpr std::string_view kProfileLayerqLinear = "painter-12.1-layerq-li
 /// painter-12.1-isolated-half-alpha, still registered and evaluated as it was.
 inline constexpr std::string_view kProfileIsolatedLinear = "painter-12.1-isolated-linear";
 /// The isolated root with the sRGB8 coverage written through binary16 and plain 32-bit float
-/// uniform colours (phase1.10_compositor-float32-residual, quantisation-profile.json).
+/// uniform colours (phase1.10_compositor-float32-residual, quantisation-profile.json); superseded
+/// by painter-12.1-isolated-coverage-weights, still registered and evaluated as it was.
 inline constexpr std::string_view kProfileIsolatedHalfAlpha = "painter-12.1-isolated-half-alpha";
+/// painter-12.1-isolated-half-alpha with the source-over onto partly covered backdrops weighted by
+/// the computed coverage (`EvaluatorProfile::coverageWeights`, phase1.10_compositor-float32-residual).
+inline constexpr std::string_view kProfileIsolatedCoverageWeights = "painter-12.1-isolated-coverage-weights";
 /// The profile new projects are stamped with.
-inline constexpr std::string_view kCurrentProfile = kProfileIsolatedHalfAlpha;
+inline constexpr std::string_view kCurrentProfile = kProfileIsolatedCoverageWeights;
 
 /// The registered profile `id`; `evaluator:unknown_profile` when the build has none of that id
 /// (a project from a newer build, a typo, an empty field).

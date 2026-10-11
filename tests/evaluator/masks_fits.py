@@ -3,7 +3,8 @@
 Masks, mask and content effects and Levels as the evaluator implements them (`src/evaluator/
 dag.cpp`, `evaluate.cpp`, `arith.cpp` Levels and the effect mix, `hwmath.h` log2/exp2), evaluated
 by the CPU store on the Tier 0 goldens that record them (`mask-precision`, `group-masks` s2-s3,
-`levels-clamp`, `effect-order` s6, `api-probes/mask-stack`), against both recordings, as |delta|
+`group-coverage-order`, `levels-clamp`, `effect-order` s6, `api-probes/mask-stack`), against both
+recordings, as |delta|
 statistics in export units only (CONTRACT §6.4; nothing recorded is published). Also the converter
 from a Tier 0 instruction sequence with masks and effects to an evaluator spec (`spec_from_steps`).
 Run on the owner's machine:
@@ -324,6 +325,7 @@ def spec_from_steps(
 MASK_PRECISION = ("semantics/mask-precision", ["s0", "s1", "s2"], None)
 MASK_MIX = ("semantics/mask-precision", ["s3"], None)
 GROUP_MASKS = ("semantics/group-masks", ["s2", "s3"], None)
+GROUP_COVERAGE = ("semantics/group-coverage-order", ["s0", "s1", "s2", "s3"], None)
 LEVELS = ("semantics/effect-order", ["s6"], None)
 LEVELS_CLAMP = ("semantics/levels-clamp", ["s0", "s1", "s2", "s3"], None)
 PROBE = ("api-probes/mask-stack", ["uzp_plane"], ["BaseColor"])
@@ -414,21 +416,49 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
             [],
             runs.residuals(GROUP_MASKS),
             notes=(
-                "Evaluated under profile painter-12.1-isolated-half-alpha (decision 044). The "
-                "masks are exact: every texel where the child's mask (a ramp along y) is 1 or 0 "
-                "equals both recordings, and the sRGB8 maps are exact: the group coverage "
+                "Evaluated under profile painter-12.1-isolated-coverage-weights (decision 058). "
+                "Every map equals both recordings. The sRGB8 maps: the group coverage "
                 "(255 + y)/510 lies half-way between two 8-bit codes on even rows, and Painter "
                 "stores the code of its binary16 value (up on rows y mod 64 >= 32, down "
-                "elsewhere), the profile's sRGB8 coverage rule; the float32 value stored all "
-                "ties down (3 709 values off). On the RGB32F row where the child's mask is 0 the "
-                "uniform's float32 value reproduces the recordings (the profile's plain 32-bit "
-                "float operand; 1 + (v - 1) leaves 8 values off). The RGB32F and RGB16 residual "
-                "lies where the child's mask is strictly between 0 and 1: the uniform Screen "
-                "fill above it composites over a partly covered backdrop inside the group, the "
-                "source-over whose float32 operation order is not identified "
-                "(phase1.10_compositor-float32-residual, "
-                "parity/reports/phase1/compositor-float32-residual.md); a divergence, no "
-                "exception proposed (the owner's decision)."
+                "elsewhere; decision 044); the float32 value stored all ties down (3 709 values "
+                "off). On the RGB32F row where the child's mask is 0 the uniform's float32 value "
+                "reproduces the recordings (1 + (v - 1) leaves 8 values off). Where the child's "
+                "mask is strictly between 0 and 1 the uniform Screen fill above it composites "
+                "over a partly covered backdrop with the coverage weights of entry "
+                "group-coverage-order (the W3C straight-colour order of the earlier profiles "
+                "left 20 631 RGB32F and 57 RGB16 values one step off)."
+            ),
+        ),
+        entry(
+            "group-coverage-order",
+            "The float32 source-over onto a partly covered backdrop inside an isolated group",
+            "A layer composited onto a backdrop that is not opaque (coverage ab < 1, including a "
+            "backdrop layer of coverage 0), with alpha as = opacity x mask x source alpha and "
+            "blend result B = kernel(mode, Cb, Cs): wb = fl(ab fl(1 - as)), ao = fl(as + wb), "
+            "ws = fl(ao - ab) (the weight of the source alone re-derived from the rounded "
+            "coverage), C = fl(fma(ws, Cs, fma(ab, fl(as B), fl(wb Cb))) x Rcp(ao)) with the "
+            "recording GPU's reciprocal; the coverage is ao. Over an opaque backdrop it reduces "
+            "to the fitted opacity mix fl(fl(Cb (1 - as)) + fl(B as)); the first layer of an "
+            "isolated list is copied over the empty start. The sRGB8 coverage plane goes "
+            "through binary16 only from 1/2 up (decision 059); the RGB8 and L8 coverage planes "
+            "take the plain 8-bit write rule, ties down.",
+            [PYDOC, W3C, D3D],
+            [parameter("hardware_rcp", "src/evaluator/tables/hw-rcp.zlib", "fitted")],
+            runs.residuals(GROUP_COVERAGE),
+            notes=(
+                "Diagnostic golden of phase1.10_compositor-float32-residual (decision 048): over "
+                "an opaque black root the export is g x ag, lossless where it lies in [1/2, 1). "
+                "The order is identified on it and confirmed on group-masks s2-s3 and "
+                "quantisation-thirds (quantisation-profile.json). Rows whose coverage sum "
+                "0.5 + 0.5 m is exact in float32 already matched the W3C straight-colour order; "
+                "the others differ through ws = ao - ab. Opacity 0.3 over a mask of 0 gives "
+                "fl(fl(Cs as) x Rcp(as)), not Cs, while the mask's own layer (the first of the "
+                "group) is copied. Even rows of the 0.5 sets put the group coverage on an 8-bit "
+                "tie: RGB8 and L8 store all of them down (the plain rule, no binary16). With "
+                "opacity 0.3, eight coverages in [0.3, 0.5) lie on 8-bit ties: the sRGB8 plane "
+                "stores all of them down while binary16 sends five up, so the binary16 step "
+                "applies from 1/2 up only (its mechanism is not identified; the evidence below "
+                "1/2 is these eight rows)."
             ),
         ),
         entry(
@@ -504,7 +534,15 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
     ]
     corpus = sorted(
         f"tier0/{case[0]}"
-        for case in (MASK_PRECISION, MASK_MIX, GROUP_MASKS, LEVELS, LEVELS_CLAMP, PROBE)
+        for case in (
+            MASK_PRECISION,
+            MASK_MIX,
+            GROUP_MASKS,
+            GROUP_COVERAGE,
+            LEVELS,
+            LEVELS_CLAMP,
+            PROBE,
+        )
     )
     published = document(
         "masks-levels",

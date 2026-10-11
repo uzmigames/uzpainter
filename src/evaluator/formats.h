@@ -32,6 +32,9 @@ struct TileFormat {
     /// the plane's write rule: the sRGB8 intermediates of profiles with
     /// `EvaluatorProfile::srgb8HalfCoverage` (profile.h). No effect without `alpha`.
     bool halfCoverage = false;
+    /// With `halfCoverage`, only coverages of at least 1/2 pass through binary16 (profiles with
+    /// `EvaluatorProfile::srgb8HalfCoverageFromHalf`).
+    bool halfCoverageFromHalf = false;
 
     /// Planes the texture stores: 1, or 4 for colour and for intermediates with coverage.
     [[nodiscard]] uint32_t StoredChannels() const { return channels == 1 && !alpha ? 1u : 4u; }

@@ -312,7 +312,7 @@ Value CensusProject(const CensusProjectInput& input, const CensusOptions& option
     p.versions.app_version = "0.0.0";
     // New projects carry the evaluator's current profile (`evaluator::kCurrentProfile`,
     // src/evaluator/profile.h), spelled out because the store does not depend on the evaluator.
-    p.versions.evaluator_profile = "painter-12.1-isolated-half-alpha";
+    p.versions.evaluator_profile = "painter-12.1-isolated-coverage-weights";
     CreateOptions create;
     std::set<std::string, std::less<>> embedded;
     std::int64_t dependency_files = 0, dependency_bytes = 0;

@@ -49,6 +49,7 @@ public:
         op.source = *stack;
         op.mode = core::BlendingMode::Replace;
         op.opacity = 1.0f;
+        op.fusedReadout = m_dag.profile.fusedReadout;
         render::Result<void> queued = m_env.store.Blend(op);
         if (!queued) return render::Unexpected(queued.error());
         ++m_stats.blends;
@@ -336,6 +337,8 @@ private:
             op.mask = *mask;
             op.mode = layer.mode;
             op.opacity = layer.opacity;
+            op.coverageWeights = m_dag.profile.coverageWeights;
+            op.emptyBackdrop = i == 0;
             render::Result<void> queued = m_env.store.Blend(op);
             if (!queued) return render::Unexpected(queued.error());
             ++m_stats.blends;

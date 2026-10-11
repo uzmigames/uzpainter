@@ -28,7 +28,7 @@ bool Valid(uz::RHITextureHandle handle) { return handle.IsValid(); }
 
 /// The stored bits of a plane value (plane 3 is the coverage, linear).
 uint32_t StoreValueBits(float value, const TileFormat& format, uint32_t plane) {
-    if (format.halfCoverage && format.alpha && plane == 3) {
+    if (format.halfCoverage && format.alpha && plane == 3 && (!format.halfCoverageFromHalf || value >= 0.5f)) {
         value = arith::HalfToFloat(arith::HalfNearestEven(value));
     }
     switch (format.encoding) {

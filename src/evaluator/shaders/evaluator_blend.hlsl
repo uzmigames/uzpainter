@@ -1,7 +1,8 @@
 // Blend kernel of the compositor (src/evaluator/kernelgen.h), one specialisation per blend mode
 // and tile format: UZP_MODE_<Mode>, UZP_ENC (ENC_* of image_common.hlsli), UZP_CHANNELS (1 or
 // 3), UZP_SRGB (codes are sRGB8), UZP_ALPHA (the destination carries a coverage plane),
-// UZP_HALF_COVERAGE (that plane is written through binary16, TileFormat::halfCoverage).
+// UZP_HALF_COVERAGE (that plane is written through binary16, TileFormat::halfCoverage: 1 always,
+// 2 from 1/2 up, TileFormat::halfCoverageFromHalf).
 // Mirrors src/evaluator/arith.cpp operation for operation: every float operation is one IEEE
 // operation (compiled IEEE-strict), Fma is the float32 rounding of the exact x y + z (exact
 // product and one addition in double), Rcp, Sqrt and RsqrtCorrect are correctly rounded (the
@@ -17,7 +18,10 @@
 // hardware arithmetic tables at the offsets of evaluator_tables.hlsli) and the mask tile's
 // encoding. 32-bit float results are stored raw (the channel base re-composition is a read-out
 // step of evaluate.cpp). The flag FLAG_EFFECT_MIX selects the mix of an effect (a mask or content
-// effect: a + (r - a) alpha for every mode).
+// effect: a + (r - a) alpha for every mode); FLAG_COVERAGE_WEIGHTS the coverage-weighted
+// source-over onto a backdrop that is not opaque, FLAG_EMPTY_BACKDROP marks the empty start of an
+// isolated list and FLAG_FUSED_READOUT the fused read-out over the base (arith.h
+// CompositeInput::coverageWeights, emptyBackdrop, fusedReadout).
 //
 // With UZP_LEVELS the kernel is the Levels effect instead (arith.cpp Levels, LevelsOp of
 // tile_store.h): parameter block width, height, source SRV, destination UAV, operand tables SRV,
@@ -52,12 +56,19 @@ cbuffer Root : register(b0) {
 #define FLAG_ACC_ALPHA 8u
 #define FLAG_SRC_ALPHA 16u
 #define FLAG_EFFECT_MIX 32u
+#define FLAG_COVERAGE_WEIGHTS 64u
+#define FLAG_EMPTY_BACKDROP 128u
+#define FLAG_FUSED_READOUT 256u
 
 static const float kNaN = asfloat(0x7FC00000u);
 /// The SRV of the operand tables (kernelgen.h OperandTableWords), set from the parameter block.
 static uint g_tables;
 /// The blend is an effect's (FLAG_EFFECT_MIX).
 static bool g_effectMix;
+/// The coverage-weighted source-over applies (FLAG_COVERAGE_WEIGHTS without FLAG_EMPTY_BACKDROP).
+static bool g_coverageWeights;
+/// The blend is the fused read-out over the base (FLAG_FUSED_READOUT).
+static bool g_fusedReadout;
 
 uint TableWord(uint index) {
     StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_tables];
@@ -522,6 +533,7 @@ float LoadMask(uint srv, int2 p, uint enc) {
 // ── Compositing of one texel (arith.cpp Composite) ───────────────────────────
 
 float Mix(float a, float r, float alphaS) {
+    if (g_fusedReadout) return Fma(r - a, alphaS, a);
     if (g_effectMix) {
         const float e = r - a;
         return a + e * alphaS;
@@ -544,6 +556,15 @@ float CompositeChannel(float a, float s, float r, float alphaB, float alphaS) {
 #if UZP_ENC == 0 || UZP_ENC == 1
     r = Clamp01(r);
 #endif
+    if (g_coverageWeights && alphaB != 1.0f) {
+        // The weight of the source alone is re-derived from the rounded coverage, ws = ao - ab.
+        const float wb = alphaB * (1.0f - alphaS);
+        const float alphaO = alphaS + wb;
+        if (alphaO != 0.0f) {
+            const float ws = alphaO - alphaB;
+            return Fma(ws, s, Fma(alphaB, alphaS * r, wb * a)) * HwRcp(alphaO);
+        }
+    }
     if (alphaB == 1.0f) {
 #if defined(UZP_NORMALMAP) && UZP_CHANNELS == 3
         return r;
@@ -600,8 +621,10 @@ float HalfNearestEven(float v) {
 }
 
 float StoreCoverage(float alpha) {
-#if UZP_HALF_COVERAGE
+#if UZP_HALF_COVERAGE == 1
     alpha = HalfNearestEven(alpha);
+#elif UZP_HALF_COVERAGE == 2
+    if (alpha >= 0.5f) alpha = HalfNearestEven(alpha);
 #endif
 #if UZP_ENC == 0 || UZP_ENC == 1
     return CodeValue(WriteValue(alpha, UZP_ENC), UZP_ENC);
@@ -623,6 +646,8 @@ void main(uint3 id : SV_DispatchThreadID) {
     const uint flags = params[base + P_FLAGS];
     g_tables = params[base + P_TABLE16_SRV];
     g_effectMix = (flags & FLAG_EFFECT_MIX) != 0u;
+    g_coverageWeights = (flags & FLAG_COVERAGE_WEIGHTS) != 0u && (flags & FLAG_EMPTY_BACKDROP) == 0u;
+    g_fusedReadout = (flags & FLAG_FUSED_READOUT) != 0u;
     const int2 p = int2(id.xy);
 
     float4 acc;

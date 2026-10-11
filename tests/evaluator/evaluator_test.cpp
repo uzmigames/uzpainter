@@ -439,15 +439,22 @@ struct ModelValue {
     std::array<uint32_t, 3> stored;
 };
 
+/// `coverageWeights` and `fusedReadout`: the composite rules of a profile (arith.h
+/// CompositeInput); the first layer of an isolated list composites over its empty start.
 ModelValue ModelComposite(const std::vector<ModelLayer>& layers, const TileFormat& format,
-                          std::array<float, 3> base, bool isolated) {
+                          std::array<float, 3> base, bool isolated, bool coverageWeights = false,
+                          bool fusedReadout = false) {
     TileFormat tileFormat = format;
     tileFormat.alpha = isolated;
     std::array<float, 4> acc = isolated ? std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}
                                         : std::array<float, 4>{base[0], base[1], base[2], 1.0f};
     std::array<uint32_t, 3> stored{0, 0, 0};
-    for (const ModelLayer& layer : layers) {
+    for (size_t i = 0; i < layers.size(); ++i) {
+        const ModelLayer& layer = layers[i];
         arith::CompositeInput in;
+        in.coverageWeights = coverageWeights;
+        in.emptyBackdrop = i == 0;
+        in.fusedReadout = fusedReadout;
         in.acc = acc;
         in.src = {layer.source[0], layer.source[1], layer.source[2], layer.sourceAlpha};
         in.mask = layer.mask;
@@ -707,6 +714,49 @@ int RunArith() {
     in.src = {1.0f, 1.0f, 1.0f, 1.0f};
     out = arith::Composite(in);
     Check(out[0] == 0.75f, "Replace mixes as a + (r - a) alpha", std::to_string(out[0]));
+
+    // The coverage weights (painter-12.1-isolated-coverage-weights): over a partly covered
+    // backdrop, wb = (1 - as) ab, ao = as + wb, ws = ao - ab and
+    // v = fma(ws, Cs, fma(ab, as B, wb Cb)) x Rcp_hw(ao); over a backdrop layer of zero coverage
+    // the same formula; over the empty start of a list the source is copied.
+    {
+        arith::CompositeInput w;
+        w.coverageWeights = true;
+        w.mode = BlendingMode::Normal;
+        w.opacity = 0.3f;
+        w.acc = {0.25f, 0.5f, 0.75f, 0.4f};
+        w.src = {0.6f, 0.1f, 0.9f, 1.0f};
+        const float as = 0.3f;
+        const float ab = 0.4f;
+        const float wb = ab * (1.0f - as);
+        const float ao = as + wb;
+        const float ws = ao - ab;
+        out = arith::Composite(w);
+        bool same = out[3] == ao;
+        for (size_t c = 0; c < 3; ++c) {
+            const float num = arith::Fma(ws, w.src[c], arith::Fma(ab, as * w.src[c], wb * w.acc[c]));
+            same = same && out[c] == num * hw::Rcp(ao);
+        }
+        Check(same, "with coverage weights, Normal over a partly covered backdrop is fma(ws, Cs, fma(ab, as Cs, wb "
+                    "Cb)) Rcp_hw(ao), ws = ao - ab");
+        w.acc = {0.25f, 0.5f, 0.75f, 0.0f};
+        out = arith::Composite(w);
+        const float zero = (0.9f * as) * hw::Rcp(as);
+        Check(out[2] == zero && out[3] == as && zero != 0.9f,
+              "with coverage weights, a layer over a backdrop of zero coverage is (Cs as) Rcp_hw(as), not Cs",
+              std::to_string(out[2]));
+        w.emptyBackdrop = true;
+        out = arith::Composite(w);
+        Check(out[2] == 0.9f && out[3] == as, "the first layer over the empty start of a list is copied");
+        arith::CompositeInput r;
+        r.fusedReadout = true;
+        r.mode = BlendingMode::Replace;
+        r.acc = {1.0f, 1.0f, 1.0f, 1.0f};
+        r.src = {0.3f, 0.3f, 0.3f, 0.7f};
+        out = arith::Composite(r);
+        Check(out[0] == arith::Fma(0.3f - 1.0f, 0.7f, 1.0f), "the fused read-out is fma(C - base, a, base)",
+              std::to_string(out[0]));
+    }
 
     // Float32 store over the white base (blend-modes.json): 1 + (v - 1).
     Check(arith::Float32Readout(0.3f, 1.0f) == static_cast<float>(static_cast<float>(0.3f - 1.0f) + 1.0f) &&
@@ -1242,11 +1292,11 @@ int RunCache(const fs::path& assets) {
 /// `base` with the Replace mix at opacity 1, stored with the write rule (32-bit floats as they
 /// are: the read-out composite is the re-composition over the base).
 std::array<uint32_t, 3> IsolatedRootModel(const std::vector<ModelLayer>& layers, const TileFormat& format,
-                                          const std::array<float, 3>& base) {
-    const ModelValue stack = ModelComposite(layers, format, base, true);
+                                          const std::array<float, 3>& base, const EvaluatorProfile& profile) {
+    const ModelValue stack = ModelComposite(layers, format, base, true, profile.coverageWeights);
     const ModelValue out = ModelComposite(
         {ModelLayer{BlendingMode::Replace, 1.0f, {stack.value[0], stack.value[1], stack.value[2]}, stack.value[3]}},
-        format, base, false);
+        format, base, false, false, profile.fusedReadout);
     std::array<uint32_t, 3> bits = out.stored;
     for (uint32_t c = 0; c < format.channels; ++c) {
         if (format.encoding == render::TexelEncoding::Float16) {
@@ -1274,22 +1324,35 @@ int RunProfile(const fs::path& assets) {
     // two 8-bit codes, and its binary16 value rounds up (Tier 0 `group-masks` row 32).
     const Colours tieColours{{0.2, 0.7, 0.123}, {0.9, 0.05, 0.5}};
     const Opacities tieOpacities{static_cast<double>(32.0f / 255.0f), 0.5};
+    // A 0.3 fill over a fill at opacity 0: the coverage 0.3 lies on an 8-bit tie below 1/2, stored
+    // down, while its binary16 value rounds up (Tier 0 `group-coverage-order` s3 row 0); the 0.3
+    // fill composites over a backdrop layer of zero coverage.
+    const Colours lowColours{{0.2, 0.7, 0.123}, {0.9, 0.05, 0.5}};
+    const Opacities lowOpacities{0.0, 0.3};
 
     // 1. The registry.
     render::Result<EvaluatorProfile> legacy = FindProfile(kProfileLayerqLinear);
     render::Result<EvaluatorProfile> linear = FindProfile(kProfileIsolatedLinear);
     render::Result<EvaluatorProfile> halfAlpha = FindProfile(kProfileIsolatedHalfAlpha);
+    render::Result<EvaluatorProfile> weights = FindProfile(kProfileIsolatedCoverageWeights);
+    auto none = [](const EvaluatorProfile& p) {
+        return !p.coverageWeights && !p.fusedReadout && !p.uniformGreyUnrounded && !p.srgb8HalfCoverageFromHalf;
+    };
     Check(legacy && legacy->root == RootComposite::OverBase && !legacy->srgb8HalfCoverage &&
-              !legacy->float32UniformPlain && linear && linear->root == RootComposite::Isolated &&
-              !linear->srgb8HalfCoverage && !linear->float32UniformPlain && halfAlpha &&
+              !legacy->float32UniformPlain && none(*legacy) && linear && linear->root == RootComposite::Isolated &&
+              !linear->srgb8HalfCoverage && !linear->float32UniformPlain && none(*linear) && halfAlpha &&
               halfAlpha->root == RootComposite::Isolated && halfAlpha->srgb8HalfCoverage &&
-              halfAlpha->float32UniformPlain && kCurrentProfile == kProfileIsolatedHalfAlpha,
+              halfAlpha->float32UniformPlain && none(*halfAlpha) && weights &&
+              weights->root == RootComposite::Isolated && weights->srgb8HalfCoverage && weights->float32UniformPlain &&
+              weights->coverageWeights && weights->fusedReadout && weights->uniformGreyUnrounded &&
+              weights->srgb8HalfCoverageFromHalf && kCurrentProfile == kProfileIsolatedCoverageWeights,
           "the build registers painter-12.1-layerq-linear (over the base), painter-12.1-isolated-linear (isolated "
-          "root) and painter-12.1-isolated-half-alpha (isolated root, binary16 sRGB8 coverage, plain 32-bit float "
-          "uniform colours), the current profile");
+          "root), painter-12.1-isolated-half-alpha (isolated root, binary16 sRGB8 coverage, plain 32-bit float "
+          "uniform colours) and painter-12.1-isolated-coverage-weights (coverage weights, fused read-out, grey of "
+          "the unrounded components, binary16 sRGB8 coverage from 1/2 up), the current profile");
     const std::vector<std::string> ids = RegisteredProfiles();
-    Check(ids.size() >= 3 && ids[0] == kProfileLayerqLinear && ids[1] == kProfileIsolatedLinear &&
-              ids[2] == kProfileIsolatedHalfAlpha,
+    Check(ids.size() >= 4 && ids[0] == kProfileLayerqLinear && ids[1] == kProfileIsolatedLinear &&
+              ids[2] == kProfileIsolatedHalfAlpha && ids[3] == kProfileIsolatedCoverageWeights,
           "the built-in profiles are listed first, in registration order");
     render::Result<EvaluatorProfile> unknown = FindProfile("painter-12.1-no-such-profile");
     Check(!unknown && EvalErrorKindOf(unknown.error()) == EvalErrorKind::UnknownProfile,
@@ -1299,7 +1362,7 @@ int RunProfile(const fs::path& assets) {
     Check(!malformed && EvalErrorKindOf(malformed.error()) == EvalErrorKind::InvalidProfile && !taken &&
               EvalErrorKindOf(taken.error()) == EvalErrorKind::InvalidProfile,
           "a registration with a malformed or taken id fails with invalid_profile (an id never changes meaning)");
-    if (!legacy || !linear || !halfAlpha) return Finish();
+    if (!legacy || !linear || !halfAlpha || !weights) return Finish();
 
     auto stackOf = [&](std::string_view profile, const Colours& stackColours, const Opacities& opacities) {
         Builder builder(128, 128, formats);
@@ -1326,13 +1389,15 @@ int RunProfile(const fs::path& assets) {
                        const Opacities& opacities) {
         TileFormat tileFormat = TileFormatOf(format);
         tileFormat.halfCoverage = profile.srgb8HalfCoverage && tileFormat.srgb;
+        tileFormat.halfCoverageFromHalf = profile.srgb8HalfCoverageFromHalf && tileFormat.halfCoverage;
         std::vector<ModelLayer> layers;
         for (size_t i = 0; i < stackColours.size(); ++i) {
             layers.push_back(ModelLayer{BlendingMode::Normal, static_cast<float>(opacities[i]),
-                                        UniformOperand(stackColours[i], tileFormat, base, profile.float32UniformPlain)});
+                                        UniformOperand(stackColours[i], tileFormat, base, profile.float32UniformPlain,
+                                                       profile.uniformGreyUnrounded)});
         }
         return profile.root == RootComposite::Isolated
-                   ? IsolatedRootModel(layers, tileFormat, base)
+                   ? IsolatedRootModel(layers, tileFormat, base, profile)
                    : Output(ModelComposite(layers, tileFormat, base, false).stored, tileFormat, base);
     };
     auto model = [&](ChannelFormat format, const EvaluatorProfile& profile) {
@@ -1342,25 +1407,36 @@ int RunProfile(const fs::path& assets) {
     // 2. Each profile evaluates as its own model, and they differ on these stacks.
     Builder projectA = project(kProfileLayerqLinear);
     Builder projectLinear = project(kProfileIsolatedLinear);
+    Builder projectHalf = project(kProfileIsolatedHalfAlpha);
     Builder projectCurrent = project(kCurrentProfile);
     Builder tieLinear = stackOf(kProfileIsolatedLinear, tieColours, tieOpacities);
+    Builder tieHalf = stackOf(kProfileIsolatedHalfAlpha, tieColours, tieOpacities);
     Builder tieCurrent = stackOf(kCurrentProfile, tieColours, tieOpacities);
+    Builder lowHalf = stackOf(kProfileIsolatedHalfAlpha, lowColours, lowOpacities);
+    Builder lowCurrent = stackOf(kCurrentProfile, lowColours, lowOpacities);
     if (!projectA.Validate("profile A") || !projectLinear.Validate("isolated-linear") ||
-        !projectCurrent.Validate("current profile") || !tieLinear.Validate("tie, isolated-linear") ||
-        !tieCurrent.Validate("tie, current profile")) {
+        !projectHalf.Validate("isolated-half-alpha") || !projectCurrent.Validate("current profile") ||
+        !tieLinear.Validate("tie, isolated-linear") || !tieHalf.Validate("tie, isolated-half-alpha") ||
+        !tieCurrent.Validate("tie, current profile") || !lowHalf.Validate("low tie, isolated-half-alpha") ||
+        !lowCurrent.Validate("low tie, current profile")) {
         return Finish();
     }
     CpuEvaluator cpu(templates, kWideLimits);
     std::map<ChannelType, std::vector<uint32_t>> resultA;
     std::map<ChannelType, std::vector<uint32_t>> resultLinear;
+    std::map<ChannelType, std::vector<uint32_t>> resultHalf;
     for (const auto& [channel, format] : formats) {
         const std::string label = std::string(core::ToString(format));
         const uint32_t n = TileFormatOf(format).channels;
         render::Result<ChannelResult> a = evaluate(projectA, channel, cpu);
         render::Result<ChannelResult> isolated = evaluate(projectLinear, channel, cpu);
+        render::Result<ChannelResult> half = evaluate(projectHalf, channel, cpu);
         render::Result<ChannelResult> current = evaluate(projectCurrent, channel, cpu);
         render::Result<ChannelResult> tieOld = evaluate(tieLinear, channel, cpu);
+        render::Result<ChannelResult> tieHalfResult = evaluate(tieHalf, channel, cpu);
         render::Result<ChannelResult> tieNew = evaluate(tieCurrent, channel, cpu);
+        render::Result<ChannelResult> lowHalfResult = evaluate(lowHalf, channel, cpu);
+        render::Result<ChannelResult> lowNew = evaluate(lowCurrent, channel, cpu);
         std::string detail;
         Check(a && AllEqual(Samples(*a), n, model(format, *legacy), detail),
               label + ": a project stamped painter-12.1-layerq-linear evaluates over the base, quantised per layer",
@@ -1370,13 +1446,24 @@ int RunProfile(const fs::path& assets) {
               label + ": a project stamped painter-12.1-isolated-linear evaluates its root isolated, composited "
                       "over the base at read-out",
               !isolated ? Describe(isolated) : !tieOld ? Describe(tieOld) : detail);
-        Check(current && tieNew && AllEqual(Samples(*current), n, model(format, *halfAlpha), detail) &&
-                  AllEqual(Samples(*tieNew), n, modelOf(format, *halfAlpha, tieColours, tieOpacities), detail),
+        Check(half && tieHalfResult && lowHalfResult && AllEqual(Samples(*half), n, model(format, *halfAlpha), detail) &&
+                  AllEqual(Samples(*tieHalfResult), n, modelOf(format, *halfAlpha, tieColours, tieOpacities), detail) &&
+                  AllEqual(Samples(*lowHalfResult), n, modelOf(format, *halfAlpha, lowColours, lowOpacities), detail),
               label + ": a project stamped painter-12.1-isolated-half-alpha evaluates its root isolated, the sRGB8 "
                       "coverage written through binary16 and 32-bit float uniform colours plain",
-              !current ? Describe(current) : !tieNew ? Describe(tieNew) : detail);
+              !half            ? Describe(half)
+              : !tieHalfResult ? Describe(tieHalfResult)
+              : !lowHalfResult ? Describe(lowHalfResult)
+                               : detail);
+        Check(current && tieNew && lowNew && AllEqual(Samples(*current), n, model(format, *weights), detail) &&
+                  AllEqual(Samples(*tieNew), n, modelOf(format, *weights, tieColours, tieOpacities), detail) &&
+                  AllEqual(Samples(*lowNew), n, modelOf(format, *weights, lowColours, lowOpacities), detail),
+              label + ": a project stamped painter-12.1-isolated-coverage-weights evaluates its layers with the "
+                      "coverage weights, its read-out fused and the sRGB8 coverage through binary16 from 1/2 up",
+              !current ? Describe(current) : !tieNew ? Describe(tieNew) : !lowNew ? Describe(lowNew) : detail);
         if (a) resultA[channel] = Samples(*a);
         if (isolated) resultLinear[channel] = Samples(*isolated);
+        if (half) resultHalf[channel] = Samples(*half);
     }
     Check(model(ChannelFormat::RGB8, *legacy) != model(ChannelFormat::RGB8, *linear),
           "painter-12.1-layerq-linear and painter-12.1-isolated-linear give different RGB8 codes for the three 1/3 "
@@ -1386,6 +1473,11 @@ int RunProfile(const fs::path& assets) {
               model(ChannelFormat::RGB32F, *linear) != model(ChannelFormat::RGB32F, *halfAlpha),
           "painter-12.1-isolated-linear and painter-12.1-isolated-half-alpha differ on the sRGB8 coverage tie and on "
           "the 32-bit float uniform colours");
+    Check(model(ChannelFormat::RGB32F, *halfAlpha) != model(ChannelFormat::RGB32F, *weights) &&
+              modelOf(ChannelFormat::sRGB8, *halfAlpha, lowColours, lowOpacities) !=
+                  modelOf(ChannelFormat::sRGB8, *weights, lowColours, lowOpacities),
+          "painter-12.1-isolated-half-alpha and painter-12.1-isolated-coverage-weights differ on the three 1/3 fills "
+          "in 32-bit float and on the sRGB8 coverage tie below 1/2");
 
     // 3. Pinning: a synthetic profile B registered after the projects exist changes nothing for them.
     render::Result<void> registered = RegisterProfile({"painter-12.1-synthetic-b", RootComposite::Isolated});
@@ -1394,8 +1486,8 @@ int RunProfile(const fs::path& assets) {
     bool pinned = true;
     bool cached = true;
     for (const auto& [channel, format] : formats) {
-        const std::array<std::pair<Builder*, const std::vector<uint32_t>*>, 2> stamped{
-            {{&projectA, &resultA[channel]}, {&projectLinear, &resultLinear[channel]}}};
+        const std::array<std::pair<Builder*, const std::vector<uint32_t>*>, 3> stamped{
+            {{&projectA, &resultA[channel]}, {&projectLinear, &resultLinear[channel]}, {&projectHalf, &resultHalf[channel]}}};
         for (const auto& [builder, expected] : stamped) {
             render::Result<ChannelResult> again = evaluate(*builder, channel, cpu);
             render::Result<ChannelResult> anew = evaluate(*builder, channel, fresh);
@@ -1403,9 +1495,9 @@ int RunProfile(const fs::path& assets) {
             cached = cached && again && again->stats.blends == 0;
         }
     }
-    Check(pinned, "after profile B is registered, the projects stamped painter-12.1-layerq-linear and "
-                  "painter-12.1-isolated-linear evaluate with their own profiles: their results are unchanged bit "
-                  "for bit (same evaluator and a fresh one)");
+    Check(pinned, "after profile B is registered, the projects stamped painter-12.1-layerq-linear, "
+                  "painter-12.1-isolated-linear and painter-12.1-isolated-half-alpha evaluate with their own profiles: "
+                  "their results are unchanged bit for bit (same evaluator and a fresh one)");
     Check(cached, "those projects are still served by their own cached tiles");
     Builder projectB = project("painter-12.1-synthetic-b");
     if (!projectB.Validate("profile B")) return Finish();
@@ -3805,6 +3897,10 @@ int RunMasks(const fs::path& assets) {
         const render::Result<std::array<float, 3>> base = rig.templates->BaseValue(kDefaultTemplateId, ChannelType::BaseColor);
         const TileFormat tile = TileFormatOf(ChannelFormat::RGB16);
         const TileFormat inter = TileFormatOf(ChannelFormat::RGB16, true);
+        // The composite rules of the profile the rig stamps (the current one).
+        const render::Result<EvaluatorProfile> current = FindProfile(kCurrentProfile);
+        const bool weights = current && current->coverageWeights;
+        const bool fused = current && current->fusedReadout;
         auto model = [&](const std::array<float, 3>& under) {
             std::vector<uint32_t> out;
             const std::array<float, 3> ca = UniformOperand({0.2, 0.4, 0.6}, tile, under);
@@ -3815,6 +3911,8 @@ int RunMasks(const fs::path& assets) {
                 const float m2 = Mask16(1.0f + (arith::Clamp01(1.0f - g) - 1.0f) * 1.0f);
                 arith::CompositeInput first;
                 first.clampUnorm = true;
+                first.coverageWeights = weights;
+                first.emptyBackdrop = true;
                 first.acc = {0.0f, 0.0f, 0.0f, 0.0f};
                 first.src = {ca[0], ca[1], ca[2], 1.0f};
                 first.mask = m1;
@@ -3822,6 +3920,7 @@ int RunMasks(const fs::path& assets) {
                 for (uint32_t c = 0; c < 4; ++c) acc[c] = OperandOf(StoreValue(acc[c], inter, c), inter, c);
                 arith::CompositeInput second;
                 second.clampUnorm = true;
+                second.coverageWeights = weights;
                 second.acc = acc;
                 second.src = {cb[0], cb[1], cb[2], 1.0f};
                 second.mask = m2;
@@ -3829,6 +3928,7 @@ int RunMasks(const fs::path& assets) {
                 for (uint32_t c = 0; c < 4; ++c) top[c] = OperandOf(StoreValue(top[c], inter, c), inter, c);
                 arith::CompositeInput readout;
                 readout.clampUnorm = true;
+                readout.fusedReadout = fused;
                 readout.mode = BlendingMode::Replace;
                 readout.acc = {under[0], under[1], under[2], 1.0f};
                 readout.src = top;
@@ -3837,7 +3937,7 @@ int RunMasks(const fs::path& assets) {
             }
             return out;
         };
-        Check(base && ours == model(*base) && ours != model({0.0f, 0.0f, 0.0f}),
+        Check(current && base && ours == model(*base) && ours != model({0.0f, 0.0f, 0.0f}),
               "two fills under complementary masks leave exactly the template base uncovered (no default bleed)");
     }
 
