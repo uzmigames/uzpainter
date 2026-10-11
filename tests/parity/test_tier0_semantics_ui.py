@@ -5,7 +5,9 @@ group `Passthrough` mode, set through Painter's UI and named in each manifest's 
 (decisions 029, 047); and the documented-API recordings Phase 1 analyses requested
 (`tier0/semantics/resample-uv-minify`, `-impulse`, `group-coverage-order`; decision 048) and,
 recorded with task `phase0.9_render-reference-capture`'s Painter session, `blend-component-hue`,
-`blend-normal-opacity` and `coverage-srgb8-ties` (decision 067). Store
+`blend-normal-opacity` and `coverage-srgb8-ties` (decision 067); phase1.12's height-to-normal
+requests (decision 077, two with UI-set Sobel sets) and phase1.9's texture-unit validation
+recordings (decision 078). Store
 and guard checks that need the owner's private store skip, saying so, without one (decision 028).
 """
 
@@ -31,18 +33,26 @@ from tools.parity.tier0_semantics import fixtures
 from tools.parity.tier0_semantics.corpus import FIXTURE_DIR, MESH_SETS
 from tools.parity.tier0_semantics.current import (
     AMPLITUDES,
+    ANISOTROPIC_CHANNELS,
     FLAT_CASES,
     GROUP_MASKS,
     HEIGHT_METHODS,
+    HEIGHT_RESOLUTIONS,
+    LOD_BOUNDARY_CHANNELS,
+    LOD_CHANNELS,
     NORMAL_CHANNELS,
     NORMAL_OPACITIES,
     PASSTHROUGH,
+    ROTATION_CHANNELS,
     SEMANTICS_DIR,
+    SOBEL_RESOLUTION,
     TIE_CHANNELS,
     TIE_MULTI,
     UI_DIR,
     api_goldens,
+    request_goldens,
     ui_goldens,
+    validation_goldens,
 )
 
 ENVELOPE_ROOT = manifest_root(current_envelope())
@@ -81,7 +91,7 @@ def test_manifest_validates_and_lists_two_recordings(path: Path) -> None:
     assert r1 and r1 == r2, "both recordings carry the same outputs"
     kinds = {r["kind"] for r in records}
     assert "exported_map" in kinds
-    if path.parent.name == Path(UI_DIR).name:
+    if texture_sheet(load_job(path)):
         assert "settings_panel_evidence" in kinds, "each UI value has private panel evidence"
 
 
@@ -123,7 +133,12 @@ def stored_record(store: Any, manifest: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
-@pytest.mark.parametrize("path", ui_paths(), ids=lambda p: p.stem)
+def sheet_paths() -> list[Path]:
+    """Every manifest of this module whose settings sheet names UI-set values."""
+    return [p for p in [*ui_paths(), *api_paths()] if texture_sheet(load_job(p))]
+
+
+@pytest.mark.parametrize("path", sheet_paths(), ids=lambda p: p.stem)
 def test_stored_records_hold_the_verified_sheet_in_both_recordings(path: Path) -> None:
     """Item 4.1: every UI-set value was verified when applied (r1) and after the reopen (r2);
     a layer's mode also through the documented `Node.get_blending_mode`."""
@@ -296,3 +311,88 @@ def test_normal_opacity_sets_follow_the_request() -> None:
             assert found[(sets[index], channel)] == NORMAL_OPACITIES[i % 4]
             assert found[(sets[index + 3], channel)] == FLAT_CASES[i % 4][2]
     assert not any(key[0] in sets[6:] for key in found)
+
+
+def test_the_8_bit_normal_copy_holds_the_nearest_8_bit_codes() -> None:
+    """Decision 077: normal-a-8bit is round(c / 257) of each 16-bit code of normal-a."""
+    wide = decode_png(REPO_ROOT / FIXTURE_DIR / "bitmaps" / "normal-a.png")
+    narrow = decode_png(REPO_ROOT / FIXTURE_DIR / "bitmaps" / "normal-a-8bit.png")
+    assert (narrow.width, narrow.height) == (wide.width, wide.height) == (256, 256)
+    for low, high in zip(narrow.pixels, wide.pixels, strict=True):
+        assert tuple(low) == tuple(round(c / 257) for c in high)
+
+
+def manifest_of(name: str) -> dict[str, Any]:
+    data: dict[str, Any] = load_json(ENVELOPE_ROOT / SEMANTICS_DIR / f"{name}.json")
+    return data
+
+
+def test_the_resolution_goldens_change_only_the_resolution() -> None:
+    """Decision 077: plane-amplitudes' sequence at 512, 1024, 2048 px; Sobel on s0 at 1024."""
+    base = load_json(
+        REPO_ROOT / "parity/manifests/tier0/semantics/height-normal-plane-amplitudes.json"
+    )
+    steps = base["instruction_sequence"]["steps"]
+    for name, resolution in (
+        *((f"height-normal-resolution-{r}", r) for r in HEIGHT_RESOLUTIONS),
+        (f"height-normal-resolution-{SOBEL_RESOLUTION}-sobel", SOBEL_RESOLUTION),
+    ):
+        manifest = manifest_of(name)
+        recorded = manifest["instruction_sequence"]["steps"]
+        assert recorded[0]["args"]["default_texture_resolution"] == resolution
+        assert recorded[1:] == steps[1:]
+        assert {
+            k: v for k, v in recorded[0]["args"].items() if k != "default_texture_resolution"
+        } == {k: v for k, v in steps[0]["args"].items() if k != "default_texture_resolution"}
+        sheet = texture_sheet(load_job(ENVELOPE_ROOT / SEMANTICS_DIR / f"{name}.json"))
+        expected = {("s0", HEIGHT_METHODS["sobel"])} if name.endswith("-sobel") else set()
+        assert {(str(e.texture_set), e.value) for e in sheet} == expected
+
+
+def test_the_height_normal_requests_follow_decision_077() -> None:
+    """Formats, the mesh map binding and the Sobel sets of the requested goldens; their domains
+    stay outside EXC-003's `tier0/height-normal/method`."""
+    for golden in request_goldens():
+        manifest = manifest_of(golden.name)
+        assert manifest["domain"] != "tier0/height-normal/method"
+        create = manifest["instruction_sequence"]["steps"][0]["args"]
+        directx = golden.name.endswith("-directx")
+        assert create["normal_map_format"] == ("DirectX" if directx else "OpenGL")
+        settings = {s["name"]: s["value"] for s in manifest["applied_settings"]}
+        assert settings["project.normal_map_format"] == create["normal_map_format"]
+        assert settings["texture_set.resolution"] == create["default_texture_resolution"]
+    for name, sobel in (
+        ("height-normal-mesh-map", ["s4", "s5", "s6", "s7"]),
+        ("height-normal-mesh-map-directx", []),
+    ):
+        steps = manifest_of(name)["instruction_sequence"]["steps"]
+        (bind,) = [s for s in steps if s["call"].endswith("set_mesh_map_resource")]
+        imported = {
+            s["step"]: s["args"]["input"]
+            for s in steps
+            if s["call"].endswith("import_project_resource")
+        }
+        assert bind["args"] == {
+            "usage": "Normal",
+            "resource_step": next(k for k, v in imported.items() if v == "normal-b"),
+        }
+        sheet = texture_sheet(load_job(ENVELOPE_ROOT / SEMANTICS_DIR / f"{name}.json"))
+        assert sorted(str(e.texture_set) for e in sheet) == sobel
+
+
+def test_the_lod_boundary_scales_sit_on_integer_lods() -> None:
+    """Decision 078: BilinearSharp reaches LOD k at 4 * 2^(k + 1.5), BilinearHQ at 12 * 2^k
+    (footprint scale / 4 texels of pattern64 at 256 px)."""
+    scales = [scale[0] for scale, _, _ in LOD_BOUNDARY_CHANNELS]
+    for k in (0, 1, 2):
+        assert 4.0 * 2.0 ** (k + 1.5) in scales and 12.0 * 2.0**k in scales
+    assert len(LOD_BOUNDARY_CHANNELS) == 10
+    for plan in (ANISOTROPIC_CHANNELS, LOD_CHANNELS, LOD_BOUNDARY_CHANNELS):
+        assert [0.0, 0.0] in [offset for _, _, offset in plan], "a zero-offset twin"
+    axis_aligned = [r for _, r, _ in ROTATION_CHANNELS if r % 90.0 == 0.0 and r]
+    assert axis_aligned == [90.0, 180.0, 270.0]
+    for golden in validation_goldens():
+        steps = manifest_of(golden.name)["instruction_sequence"]["steps"]
+        assert sum(s["call"].endswith("set_projection_parameters") for s in steps) == 4 * len(
+            [s for s in steps if s["call"].endswith("add_channel")]
+        )
