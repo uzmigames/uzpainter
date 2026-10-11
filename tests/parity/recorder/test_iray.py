@@ -439,6 +439,16 @@ def fixed_pipeline_capture(background: str, bits: int) -> list[dict[str, Any]]:
     ]
 
 
+OCIO_CONFIG = "C:/Painter/resources/ocio/substance/config.ocio"
+
+
+@pytest.fixture
+def ocio(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Painter started with OCIO naming its substance config (the fixed pipeline)."""
+    monkeypatch.setenv("OCIO", OCIO_CONFIG)
+
+
+@pytest.mark.usefixtures("ocio")
 def test_fixed_pipeline_checks_pass_on_the_expected_background(
     fake: types.ModuleType, make_session: MakeSession, tmp_path: Path, work: Path, inbox: Path
 ) -> None:
@@ -457,6 +467,7 @@ def test_fixed_pipeline_checks_pass_on_the_expected_background(
     ("background", "bits", "message"),
     [("89,89,89", 8, "background reads"), ("0,0,0", 16, "requires 16-bit")],
 )
+@pytest.mark.usefixtures("ocio")
 def test_fixed_pipeline_checks_refuse_a_wrong_capture(
     fake: types.ModuleType,
     make_session: MakeSession,
@@ -476,3 +487,20 @@ def test_background_canary_must_be_three_codes(tmp_path: Path) -> None:
     job = make_iray_job(tmp_path, capture=fixed_pipeline_capture("89,89", 16))
     with pytest.raises(RecorderError, match="three 8-bit codes"):
         settings_sheet(job)
+
+
+def test_fixed_pipeline_sheet_needs_an_ocio_painter(
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    tmp_path: Path,
+    work: Path,
+    inbox: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Legacy project would show the same 89,89,89 background, so the canary cannot catch a
+    Painter started without OCIO; the recorder refuses before anything is staged."""
+    monkeypatch.delenv("OCIO", raising=False)
+    job = make_iray_job(tmp_path, capture=fixed_pipeline_capture("0,0,0", 8))
+    with pytest.raises(RecorderError, match="OCIO colour managed"):
+        record(fake, make_session, job, work, inbox, SEPARATE_SESSION)
+    assert not (work / "iray-staging").exists()

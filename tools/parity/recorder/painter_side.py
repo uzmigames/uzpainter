@@ -930,6 +930,10 @@ def apply_step(args: dict[str, Any]) -> dict[str, Any]:
     elif call == SET_ENVIRONMENT:
         if "resource_url" in params:  # a resource Painter already has (e.g. a shelf asset)
             identifier = substance_painter.resource.ResourceID.from_url(params["resource_url"])
+        elif "session_environment" in params:  # the ref_match preset's session resource
+            identifier = substance_painter.resource.import_session_resource(
+                resolved["environment"], substance_painter.resource.Usage.ENVIRONMENT
+            ).identifier()
         else:
             identifier = substance_painter.resource.import_project_resource(
                 resolved["environment"], substance_painter.resource.Usage.ENVIRONMENT

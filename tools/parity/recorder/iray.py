@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -46,7 +47,14 @@ from tools.parity.recorder.environment import DIFFERS, UNKNOWN, envelope_match
 from tools.parity.recorder.job import Job, canonical_json, sha256_bytes, sha256_file
 from tools.parity.recorder.output import ensure_outside_repository, run_name, slug, write_run
 from tools.parity.recorder.session import PainterSession, RecorderError
-from tools.parity.recorder.texture import Now, close_quietly, replay, stage_inputs, utc_now
+from tools.parity.recorder.texture import (
+    Now,
+    close_quietly,
+    replay,
+    stage_inputs,
+    stage_session_files,
+    utc_now,
+)
 from tools.parity.render_procedure.projection import (
     DEFAULT_ORDER,
     ROTATION_ORDERS,
@@ -406,6 +414,27 @@ def complete(staged: list[StagedRecording]) -> bool:
     return len(sessions) >= 2 and has_k
 
 
+def staging_dir(work: Path, job: Job) -> Path:
+    return ensure_outside_repository(work) / "iray-staging" / job.golden_id.replace("/", "__")
+
+
+def reference_needed(job: Job, condition: str, work: Path) -> bool:
+    """Whether a series run still has to record `condition` for this golden: not once the
+    golden is admitted (its manifest names private records), nor once its staging holds two
+    separate sessions (`separate_session`) or a k*S reference (`k_times_samples`)."""
+    if job.manifest.get("private_records"):
+        return False
+    staged = load_staged(staging_dir(work, job))
+    if condition == SEPARATE_SESSION:
+        sessions = {
+            s.recording["session_id"]
+            for s in staged
+            if s.recording["condition"] == SEPARATE_SESSION
+        }
+        return len(sessions) < 2
+    return not any(s.recording["condition"] == K_TIMES_SAMPLES for s in staged)
+
+
 def record_iray_reference(
     session: PainterSession,
     job: Job,
@@ -417,11 +446,18 @@ def record_iray_reference(
     now: Now = utc_now,
     *,
     operator_id: str = UNKNOWN,
+    session_files: Sequence[Path] = (),
 ) -> Path | None:
     """Record one Iray reference; returns the inbox run once the golden is complete, else None.
 
     Every reference stages its session's environment record with `operator_id`; the references
-    of one golden must share one envelope (decision 034 (a)), else assembly is refused."""
+    of one golden must share one envelope (decision 034 (a)), else assembly is refused.
+    `session_files` are the files that session-environment steps name by SHA-256 (the
+    `ref_match` HDRI, which stays outside the repository).
+
+    A sheet that names a display transform belongs to the fixed pipeline, which is OCIO colour
+    managed (decision 038): a Painter started without `OCIO` would render a Legacy project whose
+    background reads the same 89,89,89, so the mode is checked before anything is recorded."""
     if job.tier != "3":
         raise RecorderError("Iray references are Tier 3 goldens")
     if job.exports:
@@ -437,7 +473,14 @@ def record_iray_reference(
     else:
         raise RecorderError(f"condition must be {SEPARATE_SESSION} or {K_TIMES_SAMPLES}")
     identity = session.connect()
-    golden_dir = ensure_outside_repository(work) / "iray-staging" / job.golden_id.replace("/", "__")
+    if sheet.display_transform is not None and identity.colour_management.get("mode") != "ocio":
+        close_quietly(session)
+        raise RecorderError(
+            f"the sheet names the display transform {sheet.display_transform!r} of the fixed "
+            "pipeline, which is OCIO colour managed: start Painter with OCIO naming its "
+            f"resources/ocio/substance/config.ocio (found {identity.colour_management!r})"
+        )
+    golden_dir = staging_dir(work, job)
     for prior in load_staged(golden_dir):
         if prior.recording["session_id"] == identity.session_id:
             raise RecorderError(
@@ -447,6 +490,7 @@ def record_iray_reference(
     directory = ensure_outside_repository(work) / "iray" / job.golden_id.replace("/", "__")
     directory = directory / run_name(identity.session_id, now())
     staged_inputs = stage_inputs(job, directory / "inputs")
+    staged_inputs |= stage_session_files(job, list(session_files), directory / "session-files")
     try:
         defaults = replay(session, job, staged_inputs)
         render_state = session.call("render_state")
@@ -473,7 +517,7 @@ def record_iray_reference(
         },
         "resource_hashes": [
             {"resource": input_id, "sha256": sha256_file(path)}
-            for input_id, path in sorted(job.inputs.items())
+            for input_id, path in sorted(staged_inputs.items())
         ],
         "bake_backend": None,
         "render_state": render_state,

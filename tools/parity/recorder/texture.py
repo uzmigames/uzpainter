@@ -32,6 +32,7 @@ from tools.parity.recorder.capture import (
 from tools.parity.recorder.job import (
     INPUT_ARGS,
     OPTIONAL_INPUT_ARGS,
+    SESSION_ENVIRONMENT,
     ExportStep,
     Job,
     OutputMap,
@@ -85,6 +86,32 @@ def stage_inputs(job: Job, directory: Path) -> dict[str, Path]:
     return staged
 
 
+def session_file_key(sha256: str) -> str:
+    """The staged-input key of a session file named by its SHA-256 (never an input id)."""
+    return f"session:{sha256}"
+
+
+def stage_session_files(job: Job, files: list[Path], directory: Path) -> dict[str, Path]:
+    """Stage the files the job's session-environment steps name by SHA-256, under the step's
+    file name (the session resource takes its name from the file)."""
+    by_hash = {sha256_file(path): path for path in files}
+    staged: dict[str, Path] = {}
+    for step in job.state_steps:
+        if step.call != ps.SET_ENVIRONMENT or SESSION_ENVIRONMENT not in step.args:
+            continue
+        digest = step.args[SESSION_ENVIRONMENT]
+        if digest not in by_hash:
+            raise RecorderError(
+                f"step {step.step}: no --session-file has SHA-256 {digest} "
+                f"({step.args['file_name']})"
+            )
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / step.args["file_name"]
+        shutil.copyfile(by_hash[digest], target)
+        staged[session_file_key(digest)] = target
+    return staged
+
+
 def file_url(path: PurePath) -> str:
     """The `file:///` URL of a staged file, as the documented baking example builds it
     (`QUrl.fromLocalFile(path).toString()`); refuses a path that would need percent-encoding."""
@@ -123,6 +150,14 @@ def replay(session: PainterSession, job: Job, staged: dict[str, Path]) -> dict[s
         key = INPUT_ARGS.get(step.call)
         if key is not None and key in step.args:
             resolved[key] = staged[step.args[key]].as_posix()
+        if step.call == ps.SET_ENVIRONMENT and SESSION_ENVIRONMENT in step.args:
+            name = session_file_key(step.args[SESSION_ENVIRONMENT])
+            if name not in staged:
+                raise RecorderError(
+                    f"step {step.step}: the session environment "
+                    f"{step.args[SESSION_ENVIRONMENT]} was not given (--session-file)"
+                )
+            resolved["environment"] = staged[name].as_posix()
         key = OPTIONAL_INPUT_ARGS.get(step.call)
         if key is not None and key in step.args:
             resolved[key] = file_url(staged[step.args[key]])

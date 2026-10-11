@@ -5,6 +5,8 @@ r"""Command line of the Painter oracle recorder (operator guide: `parity/RECORDE
         --operator-id ID
     python -m tools.parity.recorder iray <manifest.json> --condition k_times_samples --k 4 \
         --operator-id ID
+    python -m tools.parity.recorder iray <manifest or dir>... --condition C --launch \
+        --operator ui --operator-id ID [--session-file <exr>]
     python -m tools.parity.recorder record-defaults <manifest.json>
     python -m tools.parity.recorder list-templates
     python -m tools.parity.recorder record-templates <manifest.json>
@@ -23,6 +25,12 @@ status 3 once it ends). The last three commands are the oracle envelope's (`pari
 `--operator ui` (iray, iray-probe) lets `painter_ui.UiOperator` operate Painter's panels by
 Windows UI automation (decision 029) instead of a person at the console.
 
+`iray --launch` runs a series: for each manifest (a directory stands for its `*.json`) that still
+needs the condition (`iray.reference_needed`), it starts a fresh Painter process, records one
+reference and stops Painter, so every reference has its own session (procedure `iray-capture/1`
+step 6). A refused reference is reported and the series goes on; the exit status is 2 when any
+was refused. `--session-file` gives the files that session-environment steps name by SHA-256.
+
 Painter must already run with `--enable-remote-scripting` and no project open (or `--launch`).
 Records go to `UZP_ORACLE_INBOX` (default `%LOCALAPPDATA%\UzPainter\oracle-inbox`), working files to
 `UZP_ORACLE_WORK` (default `%LOCALAPPDATA%\UzPainter\oracle-work`); both must lie outside
@@ -36,6 +44,7 @@ import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Protocol
 
 from tools.parity.recorder.defaults import (
     list_shipped_templates,
@@ -48,9 +57,11 @@ from tools.parity.recorder.iray import (
     ConsoleOperator,
     Operator,
     record_iray_reference,
+    reference_needed,
 )
 from tools.parity.recorder.iray_probe import reanalyse, run_probe
 from tools.parity.recorder.job import load_job
+from tools.parity.recorder.launcher import PainterLauncher, default_painter_exe
 from tools.parity.recorder.output import inbox_root, work_root
 from tools.parity.recorder.provenance import check_files, inventory_problems, recorder_sources
 from tools.parity.recorder.session import (
@@ -67,13 +78,19 @@ from tools.parity.recorder.texture import record_texture_golden
 def parse(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m tools.parity.recorder")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("record", "iray", "record-defaults", "record-templates", "list-templates"):
+    for name in ("record", "record-defaults", "record-templates", "list-templates"):
         command = commands.add_parser(name)
         if name != "list-templates":
             command.add_argument("manifest", type=Path)
         command.add_argument("--host", default=REMOTE_HOST)
         command.add_argument("--port", type=int, default=REMOTE_PORT)
-    iray = commands.choices["iray"]
+    iray = commands.add_parser("iray")
+    iray.add_argument("manifests", type=Path, nargs="+", help="manifests or directories")
+    iray.add_argument("--host", default=REMOTE_HOST)
+    iray.add_argument("--port", type=int, default=REMOTE_PORT)
+    iray.add_argument("--launch", action="store_true", help="a fresh Painter per reference")
+    iray.add_argument("--painter-exe", type=Path, default=None, help="Painter executable")
+    iray.add_argument("--session-file", type=Path, action="append", default=[])
     iray.add_argument("--condition", choices=[SEPARATE_SESSION, K_TIMES_SAMPLES], required=True)
     iray.add_argument("--k", type=int)
     iray.add_argument("--operator", choices=["console", "ui"], default="console")
@@ -157,6 +174,67 @@ def run_iray_probe(args: argparse.Namespace) -> int:
     return 0
 
 
+def iray_manifests(paths: Sequence[Path]) -> list[Path]:
+    found: list[Path] = []
+    for path in paths:
+        found += sorted(path.glob("*.json")) if path.is_dir() else [path]
+    return found
+
+
+class Launcher(Protocol):
+    """Starts and stops one Painter process (`launcher.PainterLauncher`)."""
+
+    def start(self) -> None: ...
+
+    def stop(self, session: PainterSession | None = None) -> None: ...
+
+
+def run_iray(args: argparse.Namespace, launcher: Launcher | None = None) -> int:
+    """One reference in the running Painter; with `--launch`, a series with one fresh Painter
+    process per reference."""
+    manifests = iray_manifests(args.manifests)
+    if len(manifests) != 1 and not args.launch:
+        print("refused: several references need --launch (one Painter each)", file=sys.stderr)
+        return 2
+    if args.launch and launcher is None:
+        launcher = PainterLauncher(
+            args.painter_exe or default_painter_exe(), host=args.host, port=args.port
+        )
+    refused = 0
+    for path in manifests:
+        try:
+            job = load_job(path)
+            if args.launch and not reference_needed(job, args.condition, work_root()):
+                print(f"{path}: {args.condition} already staged or admitted; skipped")
+                continue
+            session = PainterSession(HttpTransport(args.host, args.port))
+            if launcher is not None:
+                launcher.start()
+            try:
+                run = record_iray_reference(
+                    session,
+                    job,
+                    args.condition,
+                    make_operator(args.operator),
+                    work_root(),
+                    inbox_root(),
+                    args.k,
+                    operator_id=args.operator_id,
+                    session_files=args.session_file,
+                )
+            finally:
+                if launcher is not None:
+                    launcher.stop(session)
+        except UnseenBuild as error:
+            return refresh_after_unseen_build(args, error)
+        except RecorderError as error:
+            print(f"{path}: refused: {error}", file=sys.stderr)
+            refused += 1
+            continue
+        print(f"{path}: " + (f"recorded: {run}" if run else "reference staged"))
+    return 2 if refused else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse(sys.argv[1:] if argv is None else argv)
     if args.command == "check":
@@ -181,6 +259,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         except RecorderError as error:
             print(f"refused: {error}", file=sys.stderr)
             return 2
+    if args.command == "iray":
+        return run_iray(args)
     run: Path | None
     try:
         session = PainterSession(HttpTransport(args.host, args.port))
@@ -194,19 +274,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             run = record_texture_golden(session, job, work_root(), inbox_root())
         elif args.command == "record-defaults":
             run = record_baking_defaults(session, job, work_root(), inbox_root())
-        elif args.command == "record-templates":
-            run = record_project_templates(session, job, work_root(), inbox_root())
         else:
-            run = record_iray_reference(
-                session,
-                job,
-                args.condition,
-                make_operator(args.operator),
-                work_root(),
-                inbox_root(),
-                args.k,
-                operator_id=args.operator_id,
-            )
+            run = record_project_templates(session, job, work_root(), inbox_root())
     except UnseenBuild as error:
         return refresh_after_unseen_build(args, error)
     except RecorderError as error:
