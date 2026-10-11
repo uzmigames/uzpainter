@@ -4,22 +4,349 @@ Decisions 034 (envelope, stability study, canary) and 037 (rolling oracle: the a
 
 ## 1. Envelopes
 
-Current envelope (the acceptance oracle, decision 037): `painter-12.1.0+js-api.1.1.20`.
+Current envelope (the acceptance oracle, decision 037): `painter-12.1.5+js-api.1.1.20`.
 
 No candidate envelope is being recorded.
 
 | Envelope | Status | Painter build | Manifest root | Envelope SHA-256 | Environment known | Promoted | Superseded | Drift report |
 |---|---|---|---|---|---|---|---|---|
-| `painter-12.1.0+js-api.1.1.20` | current | `12.1.0+js-api.1.1.20` | `parity/manifests` | `0f0c8d5fec038127` | no | 2026-10-10 | — | — |
+| `painter-12.1.0+js-api.1.1.20` | superseded | `12.1.0+js-api.1.1.20` | `parity/manifests` | `0f0c8d5fec038127` | no | 2026-10-10 | 2026-10-11 | — |
+| `painter-12.1.5+js-api.1.1.20` | current | `12.1.5+js-api.1.1.20` | `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests` | `1497f6497fd984ca` | yes | 2026-10-11 | — | `parity/reports/phase0/oracle-envelope-drift-corpus-painter-12.1.5_js-api.1.1.20.json` |
 
 ## 2. Stability study (decision 034 (b))
 
-Not yet run. `python -m tools.parity.recorder stability-study parity/manifests/tier0 --launch` records every Tier 0 golden five times (two runs in one Painter session: r1/r2 each, then one run in a freshly started process) and publishes the result here.
+Study `20261011t073506z` on envelope `painter-12.1.5+js-api.1.1.20` (Painter build `12.1.5+js-api.1.1.20`), generated 2026-10-11. Environment SHA-256 of the sessions: `d025242b6c36f166`.
+
+Recordings per golden: run `a` and run `b` in one Painter process (`r1` same session, `r2` after save and reopen each), run `c` in a freshly started process. Pairs: each run's `r2` against its `r1` (save_reopen), `b.r1` against `a.r1` (same_session) and `c.r1` against `a.r1` (fresh_process). Exact equality only; under decision 032 and 034 (c) `r1` stays the exact target and nothing is averaged.
+
+| Classification | Goldens |
+|---|---|
+| goldens | 59 |
+| stable | 53 |
+| save-reopen-unstable | 6 |
+| fresh-process-unstable | 0 |
+| save-reopen-and-fresh-process-unstable | 0 |
+| same-session-unstable | 0 |
+| incomplete | 0 |
+| unavailable | 0 |
+
+| Golden | Classification | Run record SHA-256 (a, b, c) | Pairs |
+|---|---|---|---|
+| `tier0/api-probes/active-channel-order-control` | stable | a: `433b3334292b76fd`, b: `0e6b37fee0e50355`, c: `e125a7958fde6ea4` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/api-probes/active-channel-reset` | stable | a: `a5871cc37cfe3b82`, b: `e15ac2ef5f1739ac`, c: `305cc6c2aff5cb46` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/api-probes/active-channel-reset-superset` | stable | a: `efc15c3e7323242d`, b: `491f7d4d106e80e0`, c: `464c4075d88c81cd` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/api-probes/fill-layer-readback` | stable | a: `b51f067c47de2c2b`, b: `a22be890c8401481`, c: `ebd8d16fcca84439` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/api-probes/insert-positions` | save-reopen-unstable | a: `245677ff1ef08b1b`, b: `2e5d4536ca1d211d`, c: `54b890e5b6a95dc3` | a.r1~a.r2: differs, 0 map(s), 0 value(s), 2 readback(s); b.r1~b.r2: differs, 0 map(s), 0 value(s), 2 readback(s); c.r1~c.r2: differs, 0 map(s), 0 value(s), 2 readback(s); a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/api-probes/lifecycle-events` | stable | a: `c76bbf2b16e8bc57`, b: `bff41e7bf89c7877`, c: `61d9800bf9d08898` | a.r1~a.r2: equal; a.r1~a.r3: equal; a.r1~a.r4: equal; b.r1~b.r2: equal; b.r1~b.r3: equal; b.r1~b.r4: equal; c.r1~c.r2: equal; c.r1~c.r3: equal; c.r1~c.r4: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/api-probes/mask-stack` | save-reopen-unstable | a: `f33d4f828c3cecef`, b: `5ad89b2b0d7f3d1c`, c: `663f7002ab16d239` | a.r1~a.r2: differs, 1 map(s), 4608 value(s), max 252 (png/uint16/3ch/srgb); b.r1~b.r2: differs, 1 map(s), 4608 value(s), max 252 (png/uint16/3ch/srgb); c.r1~c.r2: differs, 1 map(s), 4608 value(s), max 252 (png/uint16/3ch/srgb); a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/api-probes/set-source-none-multichannel` | stable | a: `27aabf2d3e5344c1`, b: `5620eea50e143317`, c: `1e7e13660a15880d` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/api-probes/textureset-project-readback` | save-reopen-unstable | a: `145163571d79f236`, b: `32f7f26f0d91c2b4`, c: `a45c2cd73d9e5ac1` | a.r1~a.r2: differs, 0 map(s), 0 value(s), 2 readback(s); b.r1~b.r2: differs, 0 map(s), 0 value(s), 2 readback(s); c.r1~c.r2: differs, 0 map(s), 0 value(s), 2 readback(s); a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/defaults-templates/baking-defaults` | stable | a: `100c6cd20e4225f0`, b: `97be50065c913ce3`, c: `2da0eeb2df76d808` | a.r1~a.r2: equal; a.r1~a.r3: equal; b.r1~b.r2: equal; b.r1~b.r3: equal; c.r1~c.r2: equal; c.r1~c.r3: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/defaults-templates/project-templates` | stable | a: `d75d88faade03be7`, b: `a8d3799f9bfd41ff`, c: `62f1a1c8871c753b` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/recorder-sample/blend-multiply-plane` | stable | a: `56a5da8d023187ae`, b: `383f71844c28453f`, c: `1426ee0a1a1e82e1` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/ao-mixed` | save-reopen-unstable | a: `41b1cf66537624c2`, b: `c18f98eb3f650fab`, c: `ae182605b3452bae` | a.r1~a.r2: differs, 1 map(s), 27 value(s), max 257 (png/uint16/1ch/linear); b.r1~b.r2: differs, 1 map(s), 27 value(s), max 257 (png/uint16/1ch/linear); c.r1~c.r2: differs, 1 map(s), 27 value(s), max 257 (png/uint16/1ch/linear); a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness` | stable | a: `edd7c4086a854cc4`, b: `399f48584a82fd65`, c: `f6f87ff5c124e791` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-anisotropy-angle` | stable | a: `0ab3c49007803b56`, b: `7bb7161444213cab`, c: `42b599483168acf7` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-coated` | stable | a: `a95d9ffd2bce3074`, b: `a304f288598b790e`, c: `00811eddc7ca6102` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-sheen` | stable | a: `44df84360c9d8a0b`, b: `f51658206defbcae`, c: `e8bc8f5a4839a568` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-sss` | stable | a: `d7a59fb5bb7e6b9d`, b: `ee9334fe02df01e4`, c: `baf2cd740956b25b` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-blender` | stable | a: `f24847dbd74dc5ea`, b: `edbe99754a00fe34`, c: `4564b7d08a2c2363` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-default` | stable | a: `735a0fc4656b0daf`, b: `5018d0d8cd71912c`, c: `2be02b802e5c08fc` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-dota-2` | stable | a: `b5a8731b96df2307`, b: `255acfbc5054f53a`, c: `2650e8b4488f7951` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-keyshot` | stable | a: `77a40bc6d1b3b973`, b: `17f958c6bf3c9fa4`, c: `4801dab3af9a4f8c` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-lens-studio` | stable | a: `ef66ed49731324de`, b: `07c53df051a31539`, c: `5441a19d38f3d1a0` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-maxwell-metallic-roughness` | stable | a: `1fd2269e07ab3cf0`, b: `a39eec21107ab343`, c: `15340681cd03e5ec` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-maxwell-specular-glossiness` | stable | a: `f83b9d4da8e597b0`, b: `c3190191fa0ae161`, c: `1f9f2b584b473223` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-non-pbr-specular-glossiness` | stable | a: `7279aebdb883ff4b`, b: `f34f5d6653a3d12f`, c: `531855bf12396563` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-openpbr-anisotropy` | stable | a: `5a6d858e1d73c1b6`, b: `ce658206f78dfa16`, c: `6d1873dfc3659b3e` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-openpbr-coat` | stable | a: `025b3c6c77df5f43`, b: `fce1f334a17c6957`, c: `bc097b7801999073` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-openpbr-fuzz` | stable | a: `559ade6366b32492`, b: `9bda37cfa42b5093`, c: `fc55b7016bd9b631` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-openpbr-subsurface-scattering` | stable | a: `8d648709aa6f312e`, b: `0de1b88d0962e592`, c: `c1cad88e87545757` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend` | stable | a: `d7561f87ec3a4cdf`, b: `e68ddef5e0ffb964`, c: `4177bc36c4b7971d` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-pbr-metallic-roughness-alpha-test` | stable | a: `9b1b7b16a846129c`, b: `51baefca67033225`, c: `8d899c8dedcc3498` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-pbr-specular-glossiness` | stable | a: `c3ad08ebb31bc0f6`, b: `92dbaece75d308db`, c: `5c534c773b656f80` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-roblox-materialvariant` | stable | a: `a07634347a9e8417`, b: `78452106dc9babc0`, c: `3a71e0455e90ab66` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-roblox-surfaceappearance` | stable | a: `e759fa9a945fa176`, b: `b7046178da610e8e`, c: `8f9de489eb61de23` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-spark-ar-studio` | stable | a: `fd79083aa6c12e66`, b: `c9a05c1d1f4df5c1`, c: `024498527cdfecb6` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-unity-hd-render-pipeline-metallic-standard` | stable | a: `7ae367eefe9b0d87`, b: `117b155fc194131f`, c: `2ebbd5b30e9dc35d` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-unreal-engine` | stable | a: `8b81dfb52dd804b3`, b: `dcc774bc2e0905fc`, c: `5630263ee3e35c59` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-vraymtl-metallic-roughness` | stable | a: `5ce60181a1fcd648`, b: `ffde07f4366e2f33`, c: `536744f36431ae64` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/base-values-vraymtl-specular-glossiness` | stable | a: `e6b0de6b10dd753f`, b: `713176e7d95c820a`, c: `921469b9a1e11e5b` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/blend-additive` | stable | a: `6f949f7972cd3e3d`, b: `0ea3db6a5a128a74`, c: `940a4a482e5ca960` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/blend-basic` | stable | a: `43de8cf6a29aeca2`, b: `cda26f0f75001d16`, c: `b72d1da92825f463` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/blend-component` | stable | a: `7ee2b9210499212a`, b: `45bd95d3390478af`, c: `10cb845c976abb24` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/blend-contrast` | stable | a: `49a93218b6be104f`, b: `b7c1e9c55b33b6a2`, c: `a7ba8e76237322ff` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/blend-inputs` | save-reopen-unstable | a: `bf17efb1443c375e`, b: `f9b87813d0b4ba29`, c: `3d4bf96abd1556e0` | a.r1~a.r2: differs, 3 map(s), 57344 value(s), max 768 (png/uint16/3ch/srgb); b.r1~b.r2: differs, 3 map(s), 57344 value(s), max 768 (png/uint16/3ch/srgb); c.r1~c.r2: differs, 3 map(s), 57344 value(s), max 768 (png/uint16/3ch/srgb); a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/blend-normal-channel` | stable | a: `0ab10b65c6c03de6`, b: `ee0682fd9c9fe851`, c: `c90936da664c5098` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/blend-order` | stable | a: `7c8349f40d8b85e5`, b: `3d545603bd9a92b6`, c: `c214feffd0251e17` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/colour-ramps-raw` | stable | a: `733e6b82508fe3c3`, b: `95c7e0879c68a681`, c: `1396e566d0dee140` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/colour-ramps-srgb` | stable | a: `1e704f4ff8896fc4`, b: `ba5766701115a156`, c: `c9e9022f7031af35` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/colour-ramps-working` | stable | a: `d75a8dd05a48c271`, b: `71a662688e5a0f76`, c: `fad2e189a4c01d39` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/effect-order` | stable | a: `1bde1d52dcdfe3cf`, b: `1be1d3406e8f0b6b`, c: `f9c869bbf4dba1ce` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/group-masks` | stable | a: `f2ae88bfdfc3ac31`, b: `75d6913ba6de586f`, c: `4bd4bbfc6756b943` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/height-normal-bevelled-cube` | stable | a: `154243668d0c8666`, b: `faca896d42b1904d`, c: `115ac2100f8f0f3c` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/height-normal-plane-amplitudes` | stable | a: `96f5174054b2f165`, b: `d98e4f1f598d2d9b`, c: `af82fa362f735c58` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/height-normal-sphere` | stable | a: `5671c77bcc6a0731`, b: `5de0740fcb001046`, c: `526264775f872385` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/levels-clamp` | stable | a: `bdefb7001e53c93b`, b: `4a25b8e294311264`, c: `04e7b3da60cebaae` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/mask-precision` | stable | a: `db66eb8b2f549635`, b: `fd5b45f63b746811`, c: `f3d6830e1df7df0b` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/quantisation-thirds` | save-reopen-unstable | a: `631797b6dd20def0`, b: `70c9ac7e62b1b082`, c: `6e0bbf4a03a54ca8` | a.r1~a.r2: differs, 16 map(s), 1572864 value(s), max 512 (png/uint16/3ch/srgb); b.r1~b.r2: differs, 16 map(s), 1572864 value(s), max 512 (png/uint16/3ch/srgb); c.r1~c.r2: differs, 16 map(s), 1572864 value(s), max 512 (png/uint16/3ch/srgb); a.r1~b.r1: equal; a.r1~c.r1: equal |
+| `tier0/semantics/resample-uv` | stable | a: `63e2ce42470700aa`, b: `23be4178cf840543`, c: `1c27d59b9c7666f2` | a.r1~a.r2: equal; b.r1~b.r2: equal; c.r1~c.r2: equal; a.r1~b.r1: equal; a.r1~c.r1: equal |
+
+Differing outputs:
+
+| Golden | Pair | Output | Storage | Blob SHA-256 (left, right) | max \|Δ\| | mean \|Δ\| | p99 \|Δ\| | Differing values / compared | Differing texels / texels |
+|---|---|---|---|---|---|---|---|---|---|
+| `tier0/api-probes/insert-positions` | a.r1~a.r2 | `identity/s12` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/insert-positions` | a.r1~a.r2 | `s24/get_root_layer_nodes` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/insert-positions` | b.r1~b.r2 | `identity/s12` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/insert-positions` | b.r1~b.r2 | `s24/get_root_layer_nodes` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/insert-positions` | c.r1~c.r2 | `identity/s12` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/insert-positions` | c.r1~c.r2 | `s24/get_root_layer_nodes` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/mask-stack` | a.r1~a.r2 | `uzp_plane/basecolor` | png/uint16/3ch/srgb | `a0b5be91fbbf2798`, `c3e896d1a63a9208` | 252 | 5.82031 | 249 | 4608 / 196608 | 1536 / 65536 |
+| `tier0/api-probes/mask-stack` | b.r1~b.r2 | `uzp_plane/basecolor` | png/uint16/3ch/srgb | `a0b5be91fbbf2798`, `c3e896d1a63a9208` | 252 | 5.82031 | 249 | 4608 / 196608 | 1536 / 65536 |
+| `tier0/api-probes/mask-stack` | c.r1~c.r2 | `uzp_plane/basecolor` | png/uint16/3ch/srgb | `a0b5be91fbbf2798`, `c3e896d1a63a9208` | 252 | 5.82031 | 249 | 4608 / 196608 | 1536 / 65536 |
+| `tier0/api-probes/textureset-project-readback` | a.r1~a.r2 | `s13/file_path` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/textureset-project-readback` | a.r1~a.r2 | `s14/name` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/textureset-project-readback` | b.r1~b.r2 | `s13/file_path` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/textureset-project-readback` | b.r1~b.r2 | `s14/name` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/textureset-project-readback` | c.r1~c.r2 | `s13/file_path` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/textureset-project-readback` | c.r1~c.r2 | `s14/name` | api_readback | — | — | — | — | differs | — |
+| `tier0/semantics/ao-mixed` | a.r1~a.r2 | `s1/AO_Mixed` | png/uint16/1ch/linear | `27dc11e60817726d`, `0d3c3e02c4e0048e` | 257 | 0.105881 | 0 | 27 / 65536 | 27 / 65536 |
+| `tier0/semantics/ao-mixed` | b.r1~b.r2 | `s1/AO_Mixed` | png/uint16/1ch/linear | `27dc11e60817726d`, `0d3c3e02c4e0048e` | 257 | 0.105881 | 0 | 27 / 65536 | 27 / 65536 |
+| `tier0/semantics/ao-mixed` | c.r1~c.r2 | `s1/AO_Mixed` | png/uint16/1ch/linear | `27dc11e60817726d`, `0d3c3e02c4e0048e` | 257 | 0.105881 | 0 | 27 / 65536 | 27 / 65536 |
+| `tier0/semantics/blend-inputs` | a.r1~a.r2 | `s2/user2` | png/uint16/3ch/srgb | `44a0cff5fa0ec0db`, `b794fc706328dc04` | 768 | 58.7917 | 512 | 22912 / 196608 | 16020 / 65536 |
+| `tier0/semantics/blend-inputs` | a.r1~a.r2 | `s2/user3` | png/uint16/3ch/srgb | `44a0cff5fa0ec0db`, `b794fc706328dc04` | 768 | 58.7917 | 512 | 22912 / 196608 | 16020 / 65536 |
+| `tier0/semantics/blend-inputs` | a.r1~a.r2 | `s2/user4` | png/uint16/3ch/linear | `7563897e16bf2ea2`, `673e44c2044ace36` | 257 | 15.0586 | 257 | 11520 / 196608 | 9263 / 65536 |
+| `tier0/semantics/blend-inputs` | b.r1~b.r2 | `s2/user2` | png/uint16/3ch/srgb | `44a0cff5fa0ec0db`, `b794fc706328dc04` | 768 | 58.7917 | 512 | 22912 / 196608 | 16020 / 65536 |
+| `tier0/semantics/blend-inputs` | b.r1~b.r2 | `s2/user3` | png/uint16/3ch/srgb | `44a0cff5fa0ec0db`, `b794fc706328dc04` | 768 | 58.7917 | 512 | 22912 / 196608 | 16020 / 65536 |
+| `tier0/semantics/blend-inputs` | b.r1~b.r2 | `s2/user4` | png/uint16/3ch/linear | `7563897e16bf2ea2`, `673e44c2044ace36` | 257 | 15.0586 | 257 | 11520 / 196608 | 9263 / 65536 |
+| `tier0/semantics/blend-inputs` | c.r1~c.r2 | `s2/user2` | png/uint16/3ch/srgb | `44a0cff5fa0ec0db`, `b794fc706328dc04` | 768 | 58.7917 | 512 | 22912 / 196608 | 16020 / 65536 |
+| `tier0/semantics/blend-inputs` | c.r1~c.r2 | `s2/user3` | png/uint16/3ch/srgb | `44a0cff5fa0ec0db`, `b794fc706328dc04` | 768 | 58.7917 | 512 | 22912 / 196608 | 16020 / 65536 |
+| `tier0/semantics/blend-inputs` | c.r1~c.r2 | `s2/user4` | png/uint16/3ch/linear | `7563897e16bf2ea2`, `673e44c2044ace36` | 257 | 15.0586 | 257 | 11520 / 196608 | 9263 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s0/user3` | exr/float32/3ch/linear | `816bac1ea58dbace`, `ae2b3fb24f227ae0` | 0.000488281 | 0.00016276 | 0.000488281 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s0/user4` | exr/float32/3ch/linear | `2108a22a227f121d`, `3cb31cbb33fa4a9f` | 5.96046e-08 | 1.98682e-08 | 5.96046e-08 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s0/user5` | png/uint16/1ch/linear | `46dbc6d0fdbf0ddb`, `9b6feef47d682376` | 257 | 257 | 257 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s1/user1` | png/uint16/3ch/linear | `09c416a65c5bb0e5`, `9004e13e83d3c0af` | 257 | 85.6667 | 257 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s1/user3` | exr/float32/3ch/linear | `f4f0c839c1eed043`, `8e01c208f0a64893` | 0.000488281 | 0.000488281 | 0.000488281 | 196608 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s1/user4` | exr/float32/3ch/linear | `9dd4f01e7f019b08`, `8a699ce307e96b80` | 5.96046e-08 | 3.97364e-08 | 5.96046e-08 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s1/user7` | exr/float32/1ch/linear | `2ba2cd8811c8c036`, `d41989b1b7770417` | 0.000488281 | 0.000488281 | 0.000488281 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s2/scattering` | exr/float32/1ch/linear | `fd8941408048fc1a`, `effdb46afe3f6a1c` | 5.96046e-08 | 5.96046e-08 | 5.96046e-08 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s2/user0` | png/uint16/3ch/srgb | `7341aa911bc246e6`, `0b334cf50c1a2571` | 512 | 170.667 | 512 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s2/user3` | exr/float32/3ch/linear | `9278ee227db1b71c`, `b19fec4fdd84a16d` | 0.000488281 | 0.000325521 | 0.000488281 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s2/user4` | exr/float32/3ch/linear | `d2f0fdd4f209a1cb`, `c2f99ed0ca840548` | 5.96046e-08 | 3.97364e-08 | 5.96046e-08 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s2/user7` | exr/float32/1ch/linear | `ae1fd9387e891452`, `6695fba47f5780cc` | 0.000488281 | 0.000488281 | 0.000488281 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s3/scattering` | exr/float32/1ch/linear | `21e5b9ac469bc5d2`, `3efc985dc1696362` | 5.96046e-08 | 5.96046e-08 | 5.96046e-08 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s3/user2` | png/uint16/3ch/linear | `9617b60b52aec734`, `f2ada76266c973b6` | 1 | 0.333333 | 1 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s3/user3` | exr/float32/3ch/linear | `3df5c8a31ff805f4`, `a6f6b0b24d8666d4` | 0.000488281 | 0.000406901 | 0.000488281 | 196608 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | a.r1~a.r2 | `s3/user4` | exr/float32/3ch/linear | `1f53fa546ed177d0`, `48c8a472512cf68e` | 5.96046e-08 | 3.97364e-08 | 5.96046e-08 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s0/user3` | exr/float32/3ch/linear | `816bac1ea58dbace`, `ae2b3fb24f227ae0` | 0.000488281 | 0.00016276 | 0.000488281 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s0/user4` | exr/float32/3ch/linear | `2108a22a227f121d`, `3cb31cbb33fa4a9f` | 5.96046e-08 | 1.98682e-08 | 5.96046e-08 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s0/user5` | png/uint16/1ch/linear | `46dbc6d0fdbf0ddb`, `9b6feef47d682376` | 257 | 257 | 257 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s1/user1` | png/uint16/3ch/linear | `09c416a65c5bb0e5`, `9004e13e83d3c0af` | 257 | 85.6667 | 257 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s1/user3` | exr/float32/3ch/linear | `f4f0c839c1eed043`, `8e01c208f0a64893` | 0.000488281 | 0.000488281 | 0.000488281 | 196608 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s1/user4` | exr/float32/3ch/linear | `9dd4f01e7f019b08`, `8a699ce307e96b80` | 5.96046e-08 | 3.97364e-08 | 5.96046e-08 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s1/user7` | exr/float32/1ch/linear | `2ba2cd8811c8c036`, `d41989b1b7770417` | 0.000488281 | 0.000488281 | 0.000488281 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s2/scattering` | exr/float32/1ch/linear | `fd8941408048fc1a`, `effdb46afe3f6a1c` | 5.96046e-08 | 5.96046e-08 | 5.96046e-08 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s2/user0` | png/uint16/3ch/srgb | `7341aa911bc246e6`, `0b334cf50c1a2571` | 512 | 170.667 | 512 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s2/user3` | exr/float32/3ch/linear | `9278ee227db1b71c`, `b19fec4fdd84a16d` | 0.000488281 | 0.000325521 | 0.000488281 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s2/user4` | exr/float32/3ch/linear | `d2f0fdd4f209a1cb`, `c2f99ed0ca840548` | 5.96046e-08 | 3.97364e-08 | 5.96046e-08 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s2/user7` | exr/float32/1ch/linear | `ae1fd9387e891452`, `6695fba47f5780cc` | 0.000488281 | 0.000488281 | 0.000488281 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s3/scattering` | exr/float32/1ch/linear | `21e5b9ac469bc5d2`, `3efc985dc1696362` | 5.96046e-08 | 5.96046e-08 | 5.96046e-08 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s3/user2` | png/uint16/3ch/linear | `9617b60b52aec734`, `f2ada76266c973b6` | 1 | 0.333333 | 1 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s3/user3` | exr/float32/3ch/linear | `3df5c8a31ff805f4`, `a6f6b0b24d8666d4` | 0.000488281 | 0.000406901 | 0.000488281 | 196608 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | b.r1~b.r2 | `s3/user4` | exr/float32/3ch/linear | `1f53fa546ed177d0`, `48c8a472512cf68e` | 5.96046e-08 | 3.97364e-08 | 5.96046e-08 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s0/user3` | exr/float32/3ch/linear | `816bac1ea58dbace`, `ae2b3fb24f227ae0` | 0.000488281 | 0.00016276 | 0.000488281 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s0/user4` | exr/float32/3ch/linear | `2108a22a227f121d`, `3cb31cbb33fa4a9f` | 5.96046e-08 | 1.98682e-08 | 5.96046e-08 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s0/user5` | png/uint16/1ch/linear | `46dbc6d0fdbf0ddb`, `9b6feef47d682376` | 257 | 257 | 257 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s1/user1` | png/uint16/3ch/linear | `09c416a65c5bb0e5`, `9004e13e83d3c0af` | 257 | 85.6667 | 257 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s1/user3` | exr/float32/3ch/linear | `f4f0c839c1eed043`, `8e01c208f0a64893` | 0.000488281 | 0.000488281 | 0.000488281 | 196608 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s1/user4` | exr/float32/3ch/linear | `9dd4f01e7f019b08`, `8a699ce307e96b80` | 5.96046e-08 | 3.97364e-08 | 5.96046e-08 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s1/user7` | exr/float32/1ch/linear | `2ba2cd8811c8c036`, `d41989b1b7770417` | 0.000488281 | 0.000488281 | 0.000488281 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s2/scattering` | exr/float32/1ch/linear | `fd8941408048fc1a`, `effdb46afe3f6a1c` | 5.96046e-08 | 5.96046e-08 | 5.96046e-08 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s2/user0` | png/uint16/3ch/srgb | `7341aa911bc246e6`, `0b334cf50c1a2571` | 512 | 170.667 | 512 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s2/user3` | exr/float32/3ch/linear | `9278ee227db1b71c`, `b19fec4fdd84a16d` | 0.000488281 | 0.000325521 | 0.000488281 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s2/user4` | exr/float32/3ch/linear | `d2f0fdd4f209a1cb`, `c2f99ed0ca840548` | 5.96046e-08 | 3.97364e-08 | 5.96046e-08 | 131072 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s2/user7` | exr/float32/1ch/linear | `ae1fd9387e891452`, `6695fba47f5780cc` | 0.000488281 | 0.000488281 | 0.000488281 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s3/scattering` | exr/float32/1ch/linear | `21e5b9ac469bc5d2`, `3efc985dc1696362` | 5.96046e-08 | 5.96046e-08 | 5.96046e-08 | 65536 / 65536 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s3/user2` | png/uint16/3ch/linear | `9617b60b52aec734`, `f2ada76266c973b6` | 1 | 0.333333 | 1 | 65536 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s3/user3` | exr/float32/3ch/linear | `3df5c8a31ff805f4`, `a6f6b0b24d8666d4` | 0.000488281 | 0.000406901 | 0.000488281 | 196608 / 196608 | 65536 / 65536 |
+| `tier0/semantics/quantisation-thirds` | c.r1~c.r2 | `s3/user4` | exr/float32/3ch/linear | `1f53fa546ed177d0`, `48c8a472512cf68e` | 5.96046e-08 | 3.97364e-08 | 5.96046e-08 | 131072 / 196608 | 65536 / 65536 |
 
 ## 3. Canary and envelope drift (decisions 034 (d), 037)
 
-Not yet run. The canary (`python -m tools.parity.recorder canary`) and every envelope refresh publish their drift against the previous envelope here.
+### canary: `painter-12.1.5+js-api.1.1.20` against `painter-12.1.0+js-api.1.1.20`
+
+`parity/reports/phase0/oracle-envelope-drift-canary-painter-12.1.5_js-api.1.1.20.json`, generated 2026-10-11; Painter build `12.1.5+js-api.1.1.20` against `12.1.0+js-api.1.1.20`; envelope SHA-256 `1497f6497fd984ca`. Goldens: goldens 10, unchanged 7, changed 3, unavailable 0, new 0, missing 0, equal_pairs 14.
+
+- Divergence candidates (UzPainter verdicts to re-establish): `tier0/api-probes/fill-layer-readback`, `tier0/defaults-templates/baking-defaults`, `tier0/semantics/height-normal-sphere`
+- New evaluator profile needed (a Tier 0 semantics golden changed): yes
+- Stale Tier 3 references (never pass until re-recorded): `tier3/render-procedure/qualification-sphere`
+- Fits to re-check: `parity/semantics/ao-mixed.json` (new_envelope), `parity/semantics/blend-kernels.json` (new_envelope), `parity/semantics/blend-modes.json` (new_envelope), `parity/semantics/colour-transfer.json` (new_envelope), `parity/semantics/evaluator-profile.json` (new_envelope), `parity/semantics/height-to-normal.json` (corpus_changed), `parity/semantics/polygon-triangulation.json` (new_envelope), `parity/semantics/procedural-feasibility.json` (new_envelope), `parity/semantics/quantisation-profile.json` (new_envelope), `parity/semantics/resampling.json` (new_envelope), `parity/semantics/srgb-transfer.json` (new_envelope), `parity/semantics/tangent-frame.json` (new_envelope), `parity/semantics/uv-sampling.json` (corpus_changed)
+
+| Golden | Status | Previous record | New record | Changed recordings |
+|---|---|---|---|---|
+| `phase0/normal-convention/hemisphere/per-fragment` | unchanged | `fa33448a2e8f1415` | `9c9fe905933982b5` | — |
+| `tier0/api-probes/fill-layer-readback` | changed | `b20ba913d825f9b3` | `1830d45e63c10b60` | r1, r2 |
+| `tier0/defaults-templates/baking-defaults` | changed | `aa823e7adbd5bb5c` | `53d9cfc9d9d60554` | r1, r2, r3 |
+| `tier0/semantics/blend-basic` | unchanged | `aa29f0fc3dfdc576` | `a08e98a8a46fad5e` | — |
+| `tier0/semantics/blend-component` | unchanged | `d1126d12c9704a35` | `ca5f1cd5ecaa46f2` | — |
+| `tier0/semantics/colour-ramps-srgb` | unchanged | `36cc7a56ae64452f` | `ac241b7c0623e7c4` | — |
+| `tier0/semantics/height-normal-sphere` | changed | `dc678a400a252a22` | `1a05c72b79b77abe` | r1, r2 |
+| `tier0/semantics/levels-clamp` | unchanged | `3f59c332680c9baf` | `385ff8dd604e5fb0` | — |
+| `tier0/semantics/quantisation-thirds` | unchanged | `238ccd015d2d5edf` | `7cf9c35b8d633e61` | — |
+| `tier0/semantics/resample-uv` | unchanged | `5ccae31597a65be9` | `367d491d7c52a165` | — |
+
+| Golden | Pair | Output | Storage | Blob SHA-256 (left, right) | max \|Δ\| | mean \|Δ\| | p99 \|Δ\| | Differing values / compared | Differing texels / texels |
+|---|---|---|---|---|---|---|---|---|---|
+| `tier0/api-probes/fill-layer-readback` | previous.r1~new.r1 | `s16/import_project_resource` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/fill-layer-readback` | previous.r1~new.r1 | `s18/set_source` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/fill-layer-readback` | previous.r1~new.r1 | `s41/get_source` | api_readback | — | — | — | — | differs | — |
+| `tier0/api-probes/fill-layer-readback` | previous.r2~new.r2 | `s41/get_source` | api_readback | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r1~new.r1 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r2~new.r2 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r3~new.r3 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-sphere` | previous.r1~new.r1 | `uzp_sphere/Normal_DirectX` | png/uint16/3ch/linear | `85da1488180adaee`, `3393174f453fed96` | 21106 | 12.3139 | 12 | 2554 / 196608 | 1007 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r1~new.r1 | `uzp_sphere/Normal_OpenGL` | png/uint16/3ch/linear | `c9681bf694f7b618`, `86f31f854a74c8fe` | 21106 | 12.3135 | 12 | 2520 / 196608 | 1007 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r1~new.r1 | `uzp_sphere/height` | exr/float32/1ch/linear | `4185adcd17508243`, `e2f71c3f3e133b7e` | 0.878784 | 0.000398306 | 0 | 604 / 65536 | 604 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/Normal_DirectX` | png/uint16/3ch/linear | `85da1488180adaee`, `3393174f453fed96` | 21106 | 12.3139 | 12 | 2554 / 196608 | 1007 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/Normal_OpenGL` | png/uint16/3ch/linear | `c9681bf694f7b618`, `86f31f854a74c8fe` | 21106 | 12.3135 | 12 | 2520 / 196608 | 1007 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/height` | exr/float32/1ch/linear | `4185adcd17508243`, `e2f71c3f3e133b7e` | 0.878784 | 0.000398306 | 0 | 604 / 65536 | 604 / 65536 |
+
+### corpus: `painter-12.1.5+js-api.1.1.20` against `painter-12.1.0+js-api.1.1.20`
+
+`parity/reports/phase0/oracle-envelope-drift-corpus-painter-12.1.5_js-api.1.1.20.json`, generated 2026-10-11; Painter build `12.1.5+js-api.1.1.20` against `12.1.0+js-api.1.1.20`; envelope SHA-256 `1497f6497fd984ca`. Goldens: goldens 81, unchanged 64, changed 5, unstable 12, unavailable 0, new 0, missing 0, equal_pairs 142.
+
+- Divergence candidates (UzPainter verdicts to re-establish): `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults`, `phase0/procedural-feasibility/leather-damaged/sphere/defaults`, `tier0/defaults-templates/baking-defaults`, `tier0/semantics/height-normal-bevelled-cube`, `tier0/semantics/height-normal-sphere`
+- New evaluator profile needed (a Tier 0 semantics golden changed): yes
+- Stale Tier 3 references (never pass until re-recorded): `tier3/render-procedure/qualification-sphere`
+- Fits to re-check: `parity/semantics/ao-mixed.json` (new_envelope), `parity/semantics/blend-kernels.json` (new_envelope), `parity/semantics/blend-modes.json` (new_envelope), `parity/semantics/colour-transfer.json` (new_envelope), `parity/semantics/evaluator-profile.json` (new_envelope), `parity/semantics/height-to-normal.json` (corpus_changed), `parity/semantics/polygon-triangulation.json` (new_envelope), `parity/semantics/procedural-feasibility.json` (corpus_changed), `parity/semantics/quantisation-profile.json` (new_envelope), `parity/semantics/resampling.json` (new_envelope), `parity/semantics/srgb-transfer.json` (new_envelope), `parity/semantics/tangent-frame.json` (new_envelope), `parity/semantics/uv-sampling.json` (corpus_changed)
+
+| Golden | Status | Previous record | New record | Changed recordings |
+|---|---|---|---|---|
+| `phase0/normal-convention/hemisphere/per-fragment` | unchanged | `fa33448a2e8f1415` | `9c9fe905933982b5` | — |
+| `phase0/normal-convention/hemisphere/per-vertex` | unchanged | `c936076d6f2aeb12` | `77215a4cb48e7144` | — |
+| `phase0/normal-convention/hemisphere/project-default` | unchanged | `5ac27f2c690338fb` | `1146b8296f8f1e38` | — |
+| `phase0/normal-convention/plane-dome/directx` | unchanged | `aff3bd875b9f976f` | `72548817765d2e84` | — |
+| `phase0/normal-convention/plane-dome/opengl` | unchanged | `08e5c1fc5d3f5dee` | `d370404f47eeb77a` | — |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | changed | `20b9eb97acac1554` | `05f013f0da2e2ad2` | r1, r2 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | changed | `5a26ad6cf8a9aa37` | `c15c502f42a35a7c` | r1, r2 |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-a` | unchanged | `fda42a20b153d50e` | `ebf2a0300dde1e1c` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-b` | unstable | `d758a87ba5b15746` | `c08ff2a925ef1679` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/defaults` | unstable | `eb5330833d47bc6b` | `6980a59f475e702c` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/seed-1` | unstable | `3bae4af68c800f0a` | `a4685051768af0b2` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-a` | unchanged | `1f6c33a69d79c9fb` | `12e03958168a4d4b` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-b` | unstable | `fb1acfac2f8f7cca` | `617e05eb2025aa15` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/defaults` | unstable | `c2144eac59c3d2fb` | `eaf9e487b96abe3a` | — |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/seed-1` | unstable | `22c6a6474b582a13` | `d8ab7129009ffa8a` | — |
+| `phase0/procedural-feasibility/position/rounded-cube/boundary-a` | unstable | `a9eb5da3ed94f31b` | `bc976ef5f894a669` | — |
+| `phase0/procedural-feasibility/position/rounded-cube/boundary-b` | unstable | `3b96c31e9ef8d57a` | `e049bd5d95129c3c` | — |
+| `phase0/procedural-feasibility/position/rounded-cube/defaults` | unstable | `9e47ac1fd05b1f17` | `e1dcf57c89b8c276` | — |
+| `phase0/procedural-feasibility/position/sphere/boundary-a` | unstable | `554782b2e44dba64` | `cac1fd0d2a469fda` | — |
+| `phase0/procedural-feasibility/position/sphere/boundary-b` | unstable | `a1d118cd93540448` | `685d543f33b8bc5a` | — |
+| `phase0/procedural-feasibility/position/sphere/defaults` | unstable | `99501fbe78277ab0` | `19fa2581a8f45413` | — |
+| `phase1/mesh-import/polygon-triangulation` | unchanged | `3091f238cd70dc6d` | `df9a5a91a311d505` | — |
+| `tier0/api-probes/active-channel-order-control` | unchanged | `a06d6d0343cb58ca` | `4a2b40b8df7212a0` | — |
+| `tier0/api-probes/active-channel-reset` | unchanged | `e20185abd8d051c7` | `f5d650579f980486` | — |
+| `tier0/api-probes/active-channel-reset-superset` | unchanged | `5e70543a5b48ccc2` | `1785d10be52f21fd` | — |
+| `tier0/api-probes/fill-layer-readback` | unchanged | `b20ba913d825f9b3` | `1830d45e63c10b60` | — |
+| `tier0/api-probes/insert-positions` | unchanged | `49d53eb3b94acf44` | `a7a937af4990aeb4` | — |
+| `tier0/api-probes/lifecycle-events` | unchanged | `37cd0024ff8655a8` | `a4a6c54892405410` | — |
+| `tier0/api-probes/mask-stack` | unchanged | `e928005cf24adaf9` | `c4bda3f5c086e56a` | — |
+| `tier0/api-probes/set-source-none-multichannel` | unchanged | `dbc12fa5c9ef50cf` | `99954ec714f988af` | — |
+| `tier0/api-probes/textureset-project-readback` | unchanged | `65bace27d7e9e7b5` | `c0c41d3c6ded5b92` | — |
+| `tier0/defaults-templates/baking-defaults` | changed | `aa823e7adbd5bb5c` | `53d9cfc9d9d60554` | r1, r2, r3 |
+| `tier0/defaults-templates/project-templates` | unchanged | `d546c51c1697bc16` | `a2b3a5b2044ed8de` | — |
+| `tier0/recorder-sample/blend-multiply-plane` | unchanged | `2943c58675c14bd3` | `caaf469bcbbce4d6` | — |
+| `tier0/semantics/ao-mixed` | unchanged | `bccf7cea410b5ac5` | `2a4f77805d0ce442` | — |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness` | unchanged | `efc23373f1f1194b` | `2318d74099fde442` | — |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-anisotropy-angle` | unchanged | `05e73e0709160f59` | `2b6e023353227a7d` | — |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-coated` | unchanged | `61ab788f0523725c` | `1a04028bb03f2bc4` | — |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-sheen` | unchanged | `ff39ba958b3dae14` | `40d55228770df7de` | — |
+| `tier0/semantics/base-values-asm-pbr-metallic-roughness-sss` | unchanged | `05f66b71ef64a9bd` | `f9a3bc2892e36dae` | — |
+| `tier0/semantics/base-values-blender` | unchanged | `b267f7db07ebf0d7` | `78018e8e03832132` | — |
+| `tier0/semantics/base-values-default` | unchanged | `47ee4729e3d0a8a3` | `bfcde7de54ebe75e` | — |
+| `tier0/semantics/base-values-dota-2` | unchanged | `2023ed8366f0d835` | `303f5750c28ccce7` | — |
+| `tier0/semantics/base-values-keyshot` | unchanged | `41dbab96520aa0d7` | `9fd1efab554f5ad2` | — |
+| `tier0/semantics/base-values-lens-studio` | unchanged | `d5e19fb9646bb694` | `41549fce73b5bd07` | — |
+| `tier0/semantics/base-values-maxwell-metallic-roughness` | unchanged | `8bc0e9d672d571c8` | `c440cf2c35d93a36` | — |
+| `tier0/semantics/base-values-maxwell-specular-glossiness` | unchanged | `56d95b639625c285` | `c0f0019032037418` | — |
+| `tier0/semantics/base-values-non-pbr-specular-glossiness` | unchanged | `5e352cfd0b20d45e` | `7ccec9147feab217` | — |
+| `tier0/semantics/base-values-openpbr-anisotropy` | unchanged | `56521f6a89f0ada9` | `56c538f9dcbd9748` | — |
+| `tier0/semantics/base-values-openpbr-coat` | unchanged | `fb076738e6c97010` | `634c0322ad250d65` | — |
+| `tier0/semantics/base-values-openpbr-fuzz` | unchanged | `b03de56059b4a326` | `8d3da793be7de41f` | — |
+| `tier0/semantics/base-values-openpbr-subsurface-scattering` | unchanged | `6b1a2ae39915f1b7` | `db13ca9af0ae8621` | — |
+| `tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend` | unchanged | `c56ddb58e99ac5f4` | `9b6cd76737b6b5e5` | — |
+| `tier0/semantics/base-values-pbr-metallic-roughness-alpha-test` | unchanged | `fff8d940ae6838c1` | `70868f67a43e0a91` | — |
+| `tier0/semantics/base-values-pbr-specular-glossiness` | unchanged | `95c799726477ca4d` | `6428a61f3cf28adf` | — |
+| `tier0/semantics/base-values-roblox-materialvariant` | unchanged | `7e6d4a29b348ad2f` | `019957ea83cd771c` | — |
+| `tier0/semantics/base-values-roblox-surfaceappearance` | unchanged | `99551db9c120df6c` | `0b4bb07a0e6959d1` | — |
+| `tier0/semantics/base-values-spark-ar-studio` | unchanged | `fa5760c8d2094660` | `3bc482e84fdd1311` | — |
+| `tier0/semantics/base-values-unity-hd-render-pipeline-metallic-standard` | unchanged | `79d9783c8a539f08` | `279971d2a0280422` | — |
+| `tier0/semantics/base-values-unreal-engine` | unchanged | `d8354f913116b0f6` | `a324372db9032e83` | — |
+| `tier0/semantics/base-values-vraymtl-metallic-roughness` | unchanged | `b73c6c5682c5e64e` | `5df3fcbef6d5a75d` | — |
+| `tier0/semantics/base-values-vraymtl-specular-glossiness` | unchanged | `c472395bf03c9310` | `1dc2b2acea6f88c3` | — |
+| `tier0/semantics/blend-additive` | unchanged | `b32fd950c38c0027` | `a46965d398323fe8` | — |
+| `tier0/semantics/blend-basic` | unchanged | `aa29f0fc3dfdc576` | `a08e98a8a46fad5e` | — |
+| `tier0/semantics/blend-component` | unchanged | `d1126d12c9704a35` | `ca5f1cd5ecaa46f2` | — |
+| `tier0/semantics/blend-contrast` | unchanged | `8a3805e0d379ab3e` | `eb5592917501a662` | — |
+| `tier0/semantics/blend-inputs` | unchanged | `08bccde04a00ed88` | `e8f9ccdad8c44531` | — |
+| `tier0/semantics/blend-normal-channel` | unchanged | `475cd300b20ae07c` | `f73f5a5e8cdc6932` | — |
+| `tier0/semantics/blend-order` | unchanged | `b2bd145b0d4f8b19` | `14c64f1684445f4b` | — |
+| `tier0/semantics/colour-ramps-raw` | unchanged | `a08b193ad75daf81` | `7a429426a14da3fe` | — |
+| `tier0/semantics/colour-ramps-srgb` | unchanged | `36cc7a56ae64452f` | `ac241b7c0623e7c4` | — |
+| `tier0/semantics/colour-ramps-working` | unchanged | `b4e3750b0cbc63d0` | `5aef5c6646ca45d7` | — |
+| `tier0/semantics/effect-order` | unchanged | `c0ece1db3b25f1bf` | `b9627242fdadc932` | — |
+| `tier0/semantics/group-masks` | unchanged | `59827dfe7977e519` | `0c709211d33a0b2b` | — |
+| `tier0/semantics/height-normal-bevelled-cube` | changed | `f31a7fcc24015baa` | `74fe1bb68527800c` | r1, r2 |
+| `tier0/semantics/height-normal-plane-amplitudes` | unchanged | `47818e921f2ae186` | `ffbdd78546998ce3` | — |
+| `tier0/semantics/height-normal-sphere` | changed | `dc678a400a252a22` | `1a05c72b79b77abe` | r1, r2 |
+| `tier0/semantics/levels-clamp` | unchanged | `3f59c332680c9baf` | `385ff8dd604e5fb0` | — |
+| `tier0/semantics/mask-precision` | unchanged | `0f09db8c86ef4c0f` | `e2d703c9d2872784` | — |
+| `tier0/semantics/quantisation-thirds` | unchanged | `238ccd015d2d5edf` | `7cf9c35b8d633e61` | — |
+| `tier0/semantics/resample-uv` | unchanged | `5ccae31597a65be9` | `367d491d7c52a165` | — |
+
+| Golden | Pair | Output | Storage | Blob SHA-256 (left, right) | max \|Δ\| | mean \|Δ\| | p99 \|Δ\| | Differing values / compared | Differing texels / texels |
+|---|---|---|---|---|---|---|---|---|---|
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r1~new.r1 | `uzp_rounded_cube/basecolor` | png/uint16/3ch/srgb | `ed39eaf57cf91bdf`, `922118fe1388c18e` | 271 | 0.0010608 | 0 | 13 / 3145728 | 13 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r1~new.r1 | `uzp_rounded_cube/height` | png/uint16/1ch/linear | `9851d19b1b2b8581`, `d0c06cfd9c0c72f9` | 8 | 0.00021553 | 0 | 136 / 1048576 | 136 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r1~new.r1 | `uzp_rounded_cube/specularroughness` | png/uint16/1ch/linear | `4ee27aa1b0ee0069`, `48f7405b7c90d51c` | 257 | 0.00539207 | 0 | 22 / 1048576 | 22 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r2~new.r2 | `uzp_rounded_cube/basecolor` | png/uint16/3ch/srgb | `cad7b8cd29f05f56`, `46de53fc7badad75` | 1778 | 31.4813 | 533 | 263632 / 3145728 | 118097 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r2~new.r2 | `uzp_rounded_cube/height` | png/uint16/1ch/linear | `8c3b71cf68c923a1`, `41de32f981c806b3` | 418 | 11.1002 | 195 | 155239 / 1048576 | 155239 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults` | previous.r2~new.r2 | `uzp_rounded_cube/specularroughness` | png/uint16/1ch/linear | `850119fc804018ee`, `9c5ae7f9075bce29` | 1799 | 44.6535 | 1028 | 97862 / 1048576 | 97862 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r1~new.r1 | `uzp_sphere/basecolor` | png/uint16/3ch/srgb | `303593958062498a`, `d69e3371ded7f8e9` | 277 | 0.00147978 | 0 | 18 / 3145728 | 18 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r1~new.r1 | `uzp_sphere/height` | png/uint16/1ch/linear | `3dc44933aaddb082`, `c1b556f5b1836de0` | 5 | 0.000386238 | 0 | 295 / 1048576 | 295 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r1~new.r1 | `uzp_sphere/specularroughness` | png/uint16/1ch/linear | `a94317b400e92138`, `5cbda64b5a19d28d` | 257 | 0.00882339 | 0 | 36 / 1048576 | 36 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r2~new.r2 | `uzp_sphere/basecolor` | png/uint16/3ch/srgb | `de87b1e0431f7af1`, `c29d2961cbb03f90` | 4384 | 1.11932 | 0 | 5218 / 3145728 | 2602 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r2~new.r2 | `uzp_sphere/height` | png/uint16/1ch/linear | `6ae93fe5dff46cc0`, `562b377759dc95a5` | 1540 | 0.463739 | 0 | 7592 / 1048576 | 7592 / 1048576 |
+| `phase0/procedural-feasibility/leather-damaged/sphere/defaults` | previous.r2~new.r2 | `uzp_sphere/specularroughness` | png/uint16/1ch/linear | `3c709c9e4c16f5fd`, `5e579d16fb2f6f59` | 5397 | 1.69507 | 0 | 2489 / 1048576 | 2489 / 1048576 |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-b` | previous.r2~new.r2 | `uzp_rounded_cube/specularroughness` | png/uint16/1ch/linear | `7d71221b2a40e506`, `0880ef480755d5f5` | 21091 | 123.171 | 4387 | 91441 / 1048576 | 91441 / 1048576 |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/defaults` | previous.r2~new.r2 | `uzp_rounded_cube/specularroughness` | png/uint16/1ch/linear | `7d766622d20a38a0`, `9e3ae3528dbb235b` | 5573 | 5.6793 | 0 | 7742 / 1048576 | 7742 / 1048576 |
+| `phase0/procedural-feasibility/metal-edge-wear/rounded-cube/seed-1` | previous.r2~new.r2 | `uzp_rounded_cube/specularroughness` | png/uint16/1ch/linear | `27e2aeeeab89e12f`, `bffe38761fffae8d` | 3273 | 4.22759 | 0 | 7218 / 1048576 | 7218 / 1048576 |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-b` | previous.r2~new.r2 | `uzp_sphere/specularroughness` | png/uint16/1ch/linear | `2f702f6d8ef5b2ff`, `3afa0656aeb88b64` | 31422 | 6.21598 | 0 | 3516 / 1048576 | 3516 / 1048576 |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/defaults` | previous.r2~new.r2 | `uzp_sphere/specularroughness` | png/uint16/1ch/linear | `b4fefa923c7478ed`, `70e30594c75f1cd7` | 14768 | 2.85332 | 0 | 4152 / 1048576 | 4152 / 1048576 |
+| `phase0/procedural-feasibility/metal-edge-wear/sphere/seed-1` | previous.r2~new.r2 | `uzp_sphere/specularroughness` | png/uint16/1ch/linear | `b9b1d9064dbc0c4e`, `1d64062d625d845b` | 34330 | 5.67715 | 0 | 5152 / 1048576 | 5152 / 1048576 |
+| `phase0/procedural-feasibility/position/rounded-cube/boundary-a` | previous.r2~new.r2 | `uzp_rounded_cube/specularroughness` | png/uint16/1ch/linear | `37f97149f1aaaa1e`, `d5b1bd01965031a8` | 65 | 3.49427 | 33 | 152896 / 1048576 | 152896 / 1048576 |
+| `phase0/procedural-feasibility/position/rounded-cube/boundary-b` | previous.r2~new.r2 | `uzp_rounded_cube/specularroughness` | png/uint16/1ch/linear | `27ae163928c767ae`, `d45237e3a34937cd` | 8362 | 0.116415 | 0 | 20 / 1048576 | 20 / 1048576 |
+| `phase0/procedural-feasibility/position/rounded-cube/defaults` | previous.r2~new.r2 | `uzp_rounded_cube/specularroughness` | png/uint16/1ch/linear | `c558ab37c0620d54`, `3fe806e81fbcbf62` | 85 | 1.66956 | 26 | 149367 / 1048576 | 149367 / 1048576 |
+| `phase0/procedural-feasibility/position/sphere/boundary-a` | previous.r2~new.r2 | `uzp_sphere/specularroughness` | png/uint16/1ch/linear | `f8e6a819de024c1d`, `ed13a104abfe4a49` | 803 | 0.113873 | 0 | 6804 / 1048576 | 6804 / 1048576 |
+| `phase0/procedural-feasibility/position/sphere/boundary-b` | previous.r2~new.r2 | `uzp_sphere/specularroughness` | png/uint16/1ch/linear | `56df1b67eb69a198`, `20a19a250bacd4e9` | 30221 | 5.11222 | 0 | 593 / 1048576 | 593 / 1048576 |
+| `phase0/procedural-feasibility/position/sphere/defaults` | previous.r2~new.r2 | `uzp_sphere/specularroughness` | png/uint16/1ch/linear | `4a1d42d62f05ab54`, `35f745246cdde591` | 30221 | 5.11237 | 0 | 723 / 1048576 | 723 / 1048576 |
+| `tier0/defaults-templates/baking-defaults` | previous.r1~new.r1 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r2~new.r2 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/defaults-templates/baking-defaults` | previous.r3~new.r3 | `baking/common` | effective_default_capture | — | — | — | — | differs | — |
+| `tier0/semantics/height-normal-bevelled-cube` | previous.r1~new.r1 | `uzp_bevelled_cube/Normal_DirectX` | png/uint16/3ch/linear | `99bc3213b529d6a6`, `ce794044b9ccbc0f` | 4418 | 3.30087 | 0 | 1248 / 196608 | 546 / 65536 |
+| `tier0/semantics/height-normal-bevelled-cube` | previous.r1~new.r1 | `uzp_bevelled_cube/Normal_OpenGL` | png/uint16/3ch/linear | `f3f0a890b0f221af`, `4aa96df9880e2540` | 4418 | 3.3009 | 0 | 1248 / 196608 | 546 / 65536 |
+| `tier0/semantics/height-normal-bevelled-cube` | previous.r1~new.r1 | `uzp_bevelled_cube/height` | exr/float32/1ch/linear | `0d53b9e0191850de`, `f442fb6bf27707f9` | 0.89325 | 0.00178081 | 0.00634766 | 915 / 65536 | 915 / 65536 |
+| `tier0/semantics/height-normal-bevelled-cube` | previous.r2~new.r2 | `uzp_bevelled_cube/Normal_DirectX` | png/uint16/3ch/linear | `99bc3213b529d6a6`, `ce794044b9ccbc0f` | 4418 | 3.30087 | 0 | 1248 / 196608 | 546 / 65536 |
+| `tier0/semantics/height-normal-bevelled-cube` | previous.r2~new.r2 | `uzp_bevelled_cube/Normal_OpenGL` | png/uint16/3ch/linear | `f3f0a890b0f221af`, `4aa96df9880e2540` | 4418 | 3.3009 | 0 | 1248 / 196608 | 546 / 65536 |
+| `tier0/semantics/height-normal-bevelled-cube` | previous.r2~new.r2 | `uzp_bevelled_cube/height` | exr/float32/1ch/linear | `0d53b9e0191850de`, `f442fb6bf27707f9` | 0.89325 | 0.00178081 | 0.00634766 | 915 / 65536 | 915 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r1~new.r1 | `uzp_sphere/Normal_DirectX` | png/uint16/3ch/linear | `85da1488180adaee`, `3393174f453fed96` | 21106 | 12.3139 | 12 | 2554 / 196608 | 1007 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r1~new.r1 | `uzp_sphere/Normal_OpenGL` | png/uint16/3ch/linear | `c9681bf694f7b618`, `86f31f854a74c8fe` | 21106 | 12.3135 | 12 | 2520 / 196608 | 1007 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r1~new.r1 | `uzp_sphere/height` | exr/float32/1ch/linear | `4185adcd17508243`, `e2f71c3f3e133b7e` | 0.878784 | 0.000398306 | 0 | 604 / 65536 | 604 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/Normal_DirectX` | png/uint16/3ch/linear | `85da1488180adaee`, `3393174f453fed96` | 21106 | 12.3139 | 12 | 2554 / 196608 | 1007 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/Normal_OpenGL` | png/uint16/3ch/linear | `c9681bf694f7b618`, `86f31f854a74c8fe` | 21106 | 12.3135 | 12 | 2520 / 196608 | 1007 / 65536 |
+| `tier0/semantics/height-normal-sphere` | previous.r2~new.r2 | `uzp_sphere/height` | exr/float32/1ch/linear | `4185adcd17508243`, `e2f71c3f3e133b7e` | 0.878784 | 0.000398306 | 0 | 604 / 65536 | 604 / 65536 |
 
 ## 4. Prepared register entries (decisions 017, 034 (c))
 
-None prepared: the stability study has not run.
+None prepared: the stability study found no fresh-process-unstable golden.

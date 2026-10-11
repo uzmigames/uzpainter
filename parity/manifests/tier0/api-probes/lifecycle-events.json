@@ -103,6 +103,12 @@
       "kind": "private_oracle_record",
       "sha256": "37cd0024ff8655a899219a5ae7c12c0bb4f9c5f9e27d57bb8ed6e8215f1de9b0",
       "size_bytes": 9357
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "4526ca47f8626a45e829034a9701ccad6d6f368bc07d367436cd8f52c81e5ecf",
+      "size_bytes": 306
     }
   ]
 }

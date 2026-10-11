@@ -1,0 +1,360 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase0/procedural-feasibility/position/rounded-cube/defaults",
+  "tier": "2a",
+  "domain": "procedural_asset/position",
+  "description": "Procedural feasibility (P0-FEAS-PROC): Painter's Position (mesh-map generators) on the authored rounded-cube with its six authored mesh maps, texture set 1024 px, parameters: defaults. Exported at 16 bits; recorded twice (same session; after save and reopen).",
+  "inputs": [
+    {
+      "input_id": "rounded-cube",
+      "kind": "mesh",
+      "path": "parity/fixtures/feasibility/rounded-cube.obj",
+      "sha256": "1d645ef88912e18e12eb598e0f08f61287e274a7c2c2760d041d7a7a1a4ece8c",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "rounded-cube-position",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/rounded-cube-position.png",
+      "sha256": "f1be2b1d401a7f05affe3182ee749f04df6ffb3c65f735d3a6a48cd9ca4a88ab",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "rounded-cube-world-space-normal",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/rounded-cube-world-space-normal.png",
+      "sha256": "942db56dcb92af3cce6c35b8810f831d87c2df035849000ecb15ca78e5488b40",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "rounded-cube-normal",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/rounded-cube-normal.png",
+      "sha256": "0af39e4f40ef86f25f5969288dcf19055cc4f05adb8aeceffa3f8168a8eb9221",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "rounded-cube-ambient-occlusion",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/rounded-cube-ambient-occlusion.png",
+      "sha256": "ca29df4f8ae64012e03d8af45f3e1540b6d4a98995b3176ac5c9923bc6d9f059",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "rounded-cube-curvature",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/rounded-cube-curvature.png",
+      "sha256": "b625902d09f160710485d38022d407847ae4e9f96b02ba8ac8acab2fae21e60f",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "rounded-cube-thickness",
+      "kind": "image",
+      "path": "parity/fixtures/feasibility/rounded-cube-thickness.png",
+      "sha256": "7f6ed0bfef85a8b61caa53b1eb78877ee8981a4783e069a0abbda533aea4acd2",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "rounded-cube",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 1024
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "rounded-cube-position",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "rounded-cube-world-space-normal",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "rounded-cube-normal",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "rounded-cube-ambient-occlusion",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "rounded-cube-curvature",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {
+          "input": "rounded-cube-thickness",
+          "usage": "TEXTURE"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "Position",
+          "resource_step": 2
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "WorldSpaceNormal",
+          "resource_step": 3
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "Normal",
+          "resource_step": 4
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "AO",
+          "resource_step": 5
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "Curvature",
+          "resource_step": 6
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+        "args": {
+          "usage": "Thickness",
+          "resource_step": 7
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.textureset.Stack.edit_channel",
+        "args": {
+          "channel": "SpecularRoughness",
+          "format": "L16"
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 15,
+          "channels": [
+            "SpecularRoughness"
+          ]
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 15,
+          "channel": "SpecularRoughness",
+          "color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "above_step": 15
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 18,
+          "channels": [
+            "SpecularRoughness"
+          ]
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 18,
+          "channel": "SpecularRoughness",
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 18,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.insert_generator_effect",
+        "args": {
+          "inside_step": 18,
+          "stack": "Mask",
+          "resource_name": "Position",
+          "resource_usage": "GENERATOR"
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/specularroughness:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 1024,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "e1dcf57c89b8c2765817766a4bc0d64c18f738d7d8433bb866b2debf103d50a0",
+      "size_bytes": 36953
+    },
+    {
+      "record_id": "r1-uzp_rounded_cube-specularroughness",
+      "kind": "exported_map",
+      "sha256": "1c5cf2d74fd6b449617961a46efb0e242538ae489a779587971104566fc77f54",
+      "size_bytes": 34030
+    },
+    {
+      "record_id": "r2-uzp_rounded_cube-specularroughness",
+      "kind": "exported_map",
+      "sha256": "3fe806e81fbcbf62d61f65f4617951c21fe34bd93992cf93ce457b41b5b993b4",
+      "size_bytes": 38578
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "56fab3aca35fb9c522325bc980e42dea92472cc2a2712e60869592dae13d7bac",
+      "size_bytes": 402
+    }
+  ]
+}

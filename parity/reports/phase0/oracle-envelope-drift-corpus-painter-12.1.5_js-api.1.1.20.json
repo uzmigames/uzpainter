@@ -1,0 +1,4745 @@
+{
+  "schema": "uzpainter/parity/oracle-envelope-drift/1",
+  "scope": "corpus",
+  "envelope_id": "painter-12.1.5+js-api.1.1.20",
+  "painter_build": "12.1.5+js-api.1.1.20",
+  "envelope_sha256": "1497f6497fd984cadeb5a136ce73fc41c7c601b7a6652c76fa6670be7bc4e406",
+  "previous_envelope_id": "painter-12.1.0+js-api.1.1.20",
+  "previous_painter_build": "12.1.0+js-api.1.1.20",
+  "generated_on": "2026-10-11",
+  "goldens": [
+    {
+      "golden_id": "phase0/normal-convention/hemisphere/per-fragment",
+      "tier": "2b",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 2,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 2,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "9c9fe905933982b534c2edb8d5fc11a5fd643e3f8d6b12f38b01cbf3271a252e",
+      "previous_record_sha256": "fa33448a2e8f1415ccaf429e2ccfe869db0bbaa157c4bf980bb835fbafe76ad0"
+    },
+    {
+      "golden_id": "phase0/normal-convention/hemisphere/per-vertex",
+      "tier": "2b",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 2,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 2,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "77215a4cb48e71441cc6a2d7121242f4df5429061b99e44f597a6fe455d9e78a",
+      "previous_record_sha256": "c936076d6f2aeb121590475e7d3a1733a309080e34624036edf3fe9302b17f20"
+    },
+    {
+      "golden_id": "phase0/normal-convention/hemisphere/project-default",
+      "tier": "2b",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 2,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 2,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "1146b8296f8f1e3878badedef5f82abe62aa315446e6b4710c64fd310bf29810",
+      "previous_record_sha256": "5ac27f2c690338fbb39d70be980165d1d127612d2d94f9910f372011d4ccfb5c"
+    },
+    {
+      "golden_id": "phase0/normal-convention/plane-dome/directx",
+      "tier": "2b",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 2,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 2,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "72548817765d2e84cd5b1799ba0d4ee7c3d535e262551928ebcc3e453d313530",
+      "previous_record_sha256": "aff3bd875b9f976fa5fec5ad574675c9680e402de8c4fad83fe6e8f861b20888"
+    },
+    {
+      "golden_id": "phase0/normal-convention/plane-dome/opengl",
+      "tier": "2b",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 2,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 2,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "d370404f47eeb77ac7e43320e7a550d9038063ff4e73abf3c8f86682dffe6f92",
+      "previous_record_sha256": "08e5c1fc5d3f5deef70b3d46fbe33313b899a30b4876120abb419946ad304855"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+      "tier": "2a",
+      "status": "changed",
+      "changed_recordings": [
+        "r1",
+        "r2"
+      ],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 5,
+          "maps_differing": 3,
+          "values_differing": 171,
+          "values_compared_in_differing_maps": 5242880,
+          "other_outputs_compared": 10,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/basecolor",
+            "storage": "png/uint16/3ch/srgb",
+            "max": 271,
+            "mean": 0.001060803731282552,
+            "p99": 0,
+            "differing": 13,
+            "total": 3145728,
+            "affected_texels": 13,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 5,
+          "maps_differing": 3,
+          "values_differing": 516733,
+          "values_compared_in_differing_maps": 5242880,
+          "other_outputs_compared": 10,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 1799,
+            "mean": 44.65348529815674,
+            "p99": 1028,
+            "differing": 97862,
+            "total": 1048576,
+            "affected_texels": 97862,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_rounded_cube/basecolor",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/srgb",
+          "sha256": [
+            "ed39eaf57cf91bdf4e6db6e3310220cef12e0c71f5778986d244f0a0ff216ef7",
+            "922118fe1388c18e084f877a6b0401ce95d21f6f92304e4f9e4230db48470436"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 271,
+            "mean": 0.001060803731282552,
+            "p99": 0,
+            "differing": 13,
+            "total": 3145728,
+            "affected_texels": 13,
+            "texels": 1048576
+          }
+        },
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_rounded_cube/height",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "9851d19b1b2b858153c0652b0f0bb091d982cf2d7e39279f9f1aef4111e65462",
+            "d0c06cfd9c0c72f963778ed8bb2469a76f634fe04af394f61d40a5566d011d51"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 8,
+            "mean": 0.0002155303955078125,
+            "p99": 0,
+            "differing": 136,
+            "total": 1048576,
+            "affected_texels": 136,
+            "texels": 1048576
+          }
+        },
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_rounded_cube/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "4ee27aa1b0ee0069267837149eee038e32376615fcb70ce8067e2a4f019fcf6c",
+            "48f7405b7c90d51cdd7cd25d875b4991d78bbe337183841b77cd0e821535b589"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 257,
+            "mean": 0.0053920745849609375,
+            "p99": 0,
+            "differing": 22,
+            "total": 1048576,
+            "affected_texels": 22,
+            "texels": 1048576
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_rounded_cube/basecolor",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/srgb",
+          "sha256": [
+            "cad7b8cd29f05f5683ccd5576b50de857268d4b4c923aa93dcbaa5b570ae0730",
+            "46de53fc7badad753738d9bcf16ac0706210effc252390faf924e830ef7540f2"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 1778,
+            "mean": 31.481333414713543,
+            "p99": 533,
+            "differing": 263632,
+            "total": 3145728,
+            "affected_texels": 118097,
+            "texels": 1048576
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_rounded_cube/height",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "8c3b71cf68c923a1338e01828db6a0691d9182d11e29e8a13c63771674e98f6d",
+            "41de32f981c806b324c29888b781cbdd3fd9969cb2f8bfb102ccdaa5fa22a41b"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 418,
+            "mean": 11.100180625915527,
+            "p99": 195,
+            "differing": 155239,
+            "total": 1048576,
+            "affected_texels": 155239,
+            "texels": 1048576
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_rounded_cube/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "850119fc804018eef408e36356eb49e1c71f33f0e9d309f101139e557507c484",
+            "9c5ae7f9075bce2951ecab5472a512d18ec79b08b3e9fa47b8582ffef26a0e78"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 1799,
+            "mean": 44.65348529815674,
+            "p99": 1028,
+            "differing": 97862,
+            "total": 1048576,
+            "affected_texels": 97862,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "05f013f0da2e2ad2533d94fec18206913ee76788e86deae2befd12af42001496",
+      "previous_record_sha256": "20b9eb97acac15549b6d829f83ce1eb813fe56302e9337177a21bc87616bf3e5"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+      "tier": "2a",
+      "status": "changed",
+      "changed_recordings": [
+        "r1",
+        "r2"
+      ],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 5,
+          "maps_differing": 3,
+          "values_differing": 349,
+          "values_compared_in_differing_maps": 5242880,
+          "other_outputs_compared": 10,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/basecolor",
+            "storage": "png/uint16/3ch/srgb",
+            "max": 277,
+            "mean": 0.001479784647623698,
+            "p99": 0,
+            "differing": 18,
+            "total": 3145728,
+            "affected_texels": 18,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 5,
+          "maps_differing": 3,
+          "values_differing": 15299,
+          "values_compared_in_differing_maps": 5242880,
+          "other_outputs_compared": 10,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 5397,
+            "mean": 1.6950721740722656,
+            "p99": 0,
+            "differing": 2489,
+            "total": 1048576,
+            "affected_texels": 2489,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_sphere/basecolor",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/srgb",
+          "sha256": [
+            "303593958062498af21f9cc11772626e6aadfc5ded235869fbd3b51fbaa27461",
+            "d69e3371ded7f8e94e5db25cbf9c59a78625ba6ed84e18c0e94f033d2b4acdad"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 277,
+            "mean": 0.001479784647623698,
+            "p99": 0,
+            "differing": 18,
+            "total": 3145728,
+            "affected_texels": 18,
+            "texels": 1048576
+          }
+        },
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_sphere/height",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "3dc44933aaddb082dccf7b2bec8f33e7fc7479c078b8c15ee1d64e8f80ad35bd",
+            "c1b556f5b1836de0ae26425275fd0759cae4ad721ad4647808e7b47e8a9f1158"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 5,
+            "mean": 0.00038623809814453125,
+            "p99": 0,
+            "differing": 295,
+            "total": 1048576,
+            "affected_texels": 295,
+            "texels": 1048576
+          }
+        },
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_sphere/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "a94317b400e9213802865c38f330ef49919b2dec3efae2c573e1e2b48a95e718",
+            "5cbda64b5a19d28d85c7f169e575ca82d49984df85452a883e4ecee681fd1102"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 257,
+            "mean": 0.008823394775390625,
+            "p99": 0,
+            "differing": 36,
+            "total": 1048576,
+            "affected_texels": 36,
+            "texels": 1048576
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/basecolor",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/srgb",
+          "sha256": [
+            "de87b1e0431f7af1cc9e945b7d9c0c10c8bad02073f8b8d1fc407e3a60f3149d",
+            "c29d2961cbb03f90d149c4963a8d2d3fd862af93ae9622f6802be51b51bab08d"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 4384,
+            "mean": 1.119320551554362,
+            "p99": 0,
+            "differing": 5218,
+            "total": 3145728,
+            "affected_texels": 2602,
+            "texels": 1048576
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/height",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "6ae93fe5dff46cc00453461a0f68a4cac856ce859c7bbdd14a97076a2883aa2d",
+            "562b377759dc95a58516cc77002938415fafb3e4735687a21c1864ccfe6c6326"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 1540,
+            "mean": 0.46373939514160156,
+            "p99": 0,
+            "differing": 7592,
+            "total": 1048576,
+            "affected_texels": 7592,
+            "texels": 1048576
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "3c709c9e4c16f5fdaaf78bb907f59dc1e0e93152cb65a0eb3ffb7882a160b9d8",
+            "5e579d16fb2f6f599c7ae16106a4524e3040e6a59f5768c2d8a52f1ba349a380"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 5397,
+            "mean": 1.6950721740722656,
+            "p99": 0,
+            "differing": 2489,
+            "total": 1048576,
+            "affected_texels": 2489,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "c15c502f42a35a7cb27d7b810ad7e9a4216d56c2552349e3b3dceb712cb2d766",
+      "previous_record_sha256": "5a26ad6cf8a9aa377d74684bc2de7add61b5540dec10734e56d8c4213f271907"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-a",
+      "tier": "2a",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "ebf2a0300dde1e1c7c0e0d5fbd24a61b2f353fc975d63a2f14fdd3d36f6d934f",
+      "previous_record_sha256": "fda42a20b153d50ebdc1a9a6bf587b83155fdb9031e36ad490362b178342a852"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/boundary-b",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 91441,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 21091,
+            "mean": 123.17132472991943,
+            "p99": 4387,
+            "differing": 91441,
+            "total": 1048576,
+            "affected_texels": 91441,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 281398,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 65535,
+            "mean": 4660.237051010132,
+            "p99": 59700,
+            "differing": 281398,
+            "total": 1048576,
+            "affected_texels": 281398,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_rounded_cube/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "7d71221b2a40e5069e84375f838a754b88149dfa5fcaea558ce7a9d67631974b",
+            "0880ef480755d5f58f1d5ebd38b5aff9d7d1f895c9bc3d3c58b3f96b019f2943"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 21091,
+            "mean": 123.17132472991943,
+            "p99": 4387,
+            "differing": 91441,
+            "total": 1048576,
+            "affected_texels": 91441,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "c08ff2a925ef1679d5be7ce89ddd6f58b940de3948a772d43b36dc0d5acb3c78",
+      "previous_record_sha256": "d758a87ba5b157466d98b98fd1b5b1bb468c2493d2648e47fd9b617c94fcc92c"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/defaults",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 7742,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 5573,
+            "mean": 5.679298400878906,
+            "p99": 0,
+            "differing": 7742,
+            "total": 1048576,
+            "affected_texels": 7742,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 28045,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 35327,
+            "mean": 95.92755317687988,
+            "p99": 2769,
+            "differing": 28045,
+            "total": 1048576,
+            "affected_texels": 28045,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_rounded_cube/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "7d766622d20a38a0bfc11bfe531fa9c49849c6e23af1661b476d1b6e568635c4",
+            "9e3ae3528dbb235b981c405961b28fdb5a0c5457a155a9f9e2a0c08840d35494"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 5573,
+            "mean": 5.679298400878906,
+            "p99": 0,
+            "differing": 7742,
+            "total": 1048576,
+            "affected_texels": 7742,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "6980a59f475e702c3d4ad27afb5e56d104e3e8818ba54621d9b2e53e30cb82a2",
+      "previous_record_sha256": "eb5330833d47bc6ba0492913d0739ecc64f4c3ef43fc7d74d0de95b9ab342be0"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/metal-edge-wear/rounded-cube/seed-1",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 7218,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 3273,
+            "mean": 4.22758674621582,
+            "p99": 0,
+            "differing": 7218,
+            "total": 1048576,
+            "affected_texels": 7218,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 24787,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 38267,
+            "mean": 75.49190998077393,
+            "p99": 1988,
+            "differing": 24787,
+            "total": 1048576,
+            "affected_texels": 24787,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_rounded_cube/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "27e2aeeeab89e12ff48964275a6597931c444f268492c5784acd44da2216fbf8",
+            "bffe38761fffae8d30afa99ce26a0f45ae84c8821cd499916c8fa3519e51bc22"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 3273,
+            "mean": 4.22758674621582,
+            "p99": 0,
+            "differing": 7218,
+            "total": 1048576,
+            "affected_texels": 7218,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "a4685051768af0b2a684d6b9437b61bdfa1a6b626c060a36357c28c2c3d84a5c",
+      "previous_record_sha256": "3bae4af68c800f0a538d9ad2fe4f816509e0b2adb555b1938b00feb1cf54e1b7"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-a",
+      "tier": "2a",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "12e03958168a4d4bd94c4700c194ac85636c101579fcc5e1208cf25fab7f4163",
+      "previous_record_sha256": "1f6c33a69d79c9fb249efdabd06486185fe7758aecc3789cc5507d1c62e22ec4"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/boundary-b",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 3516,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 31422,
+            "mean": 6.215980529785156,
+            "p99": 0,
+            "differing": 3516,
+            "total": 1048576,
+            "affected_texels": 3516,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 9830,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 65535,
+            "mean": 144.51959419250488,
+            "p99": 0,
+            "differing": 9830,
+            "total": 1048576,
+            "affected_texels": 9830,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "2f702f6d8ef5b2ff119328f0051b573af09993469a36537a56f0317c9547d8ba",
+            "3afa0656aeb88b64828af927f947c76fbc389dfe7d634c2e6376faa1ba251801"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 31422,
+            "mean": 6.215980529785156,
+            "p99": 0,
+            "differing": 3516,
+            "total": 1048576,
+            "affected_texels": 3516,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "617e05eb2025aa159aa33aea7ba5803be4aaff5c8519d9ba3d69f76658c8e7a7",
+      "previous_record_sha256": "fb1acfac2f8f7ccad8b6377f36120f0b7718b84fce0d5886840dab6f9e99186f"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/defaults",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 4152,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 14768,
+            "mean": 2.8533153533935547,
+            "p99": 0,
+            "differing": 4152,
+            "total": 1048576,
+            "affected_texels": 4152,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 11691,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 45538,
+            "mean": 64.28171920776367,
+            "p99": 206,
+            "differing": 11691,
+            "total": 1048576,
+            "affected_texels": 11691,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "b4fefa923c7478ed74972d032a6ea5b0fa581dfac8225ba8f4430ea1c96879de",
+            "70e30594c75f1cd7da70cee22dcdd87f36c09b5f5853d227a0742b9ed849fade"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 14768,
+            "mean": 2.8533153533935547,
+            "p99": 0,
+            "differing": 4152,
+            "total": 1048576,
+            "affected_texels": 4152,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "eaf9e487b96abe3a9379ba59e2cba0ffb14eaee736d2ad8358cdddcc1baa0b99",
+      "previous_record_sha256": "c2144eac59c3d2fbb77864e6823b6b8525a7bc4c0fa38401ee60cbfe68041504"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/metal-edge-wear/sphere/seed-1",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 5152,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 34330,
+            "mean": 5.677154541015625,
+            "p99": 0,
+            "differing": 5152,
+            "total": 1048576,
+            "affected_texels": 5152,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 13022,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 42896,
+            "mean": 73.76864814758301,
+            "p99": 481,
+            "differing": 13022,
+            "total": 1048576,
+            "affected_texels": 13022,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "b9b1d9064dbc0c4ea39cd43cda4857387d2f638ebd4ca585988629189495c546",
+            "1d64062d625d845b79a9dccac6bdedec72acc0f09c9b791a9bd3cd23eedc96a8"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 34330,
+            "mean": 5.677154541015625,
+            "p99": 0,
+            "differing": 5152,
+            "total": 1048576,
+            "affected_texels": 5152,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "d8ab7129009ffa8a2ccaf845605f14e9627afdb1518065210eaa20d14e055af8",
+      "previous_record_sha256": "22c6a6474b582a1329a85e892f1e5670a7b0798b1819e31f583c8c06fc799913"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/position/rounded-cube/boundary-a",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 152896,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 65,
+            "mean": 3.4942712783813477,
+            "p99": 33,
+            "differing": 152896,
+            "total": 1048576,
+            "affected_texels": 152896,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 426127,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 60032,
+            "mean": 6.323046684265137,
+            "p99": 60,
+            "differing": 426127,
+            "total": 1048576,
+            "affected_texels": 426127,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_rounded_cube/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "37f97149f1aaaa1eac27089ce87178a0bc685238e0231da155d9551c3bec9aca",
+            "d5b1bd01965031a8ccb7be2dc35069369c871c5845a4b73031d33c9efaba45cb"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 65,
+            "mean": 3.4942712783813477,
+            "p99": 33,
+            "differing": 152896,
+            "total": 1048576,
+            "affected_texels": 152896,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "bc976ef5f894a669d1ca5959a55ba109649d558a85a0ab4fd9841f2fc8dcb2bd",
+      "previous_record_sha256": "a9eb5da3ed94f31bbb81569bc0bfa6175d79e43b551dd8540deb25813dcb2d7b"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/position/rounded-cube/boundary-b",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 20,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 8362,
+            "mean": 0.11641502380371094,
+            "p99": 0,
+            "differing": 20,
+            "total": 1048576,
+            "affected_texels": 20,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 421,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 65535,
+            "mean": 20.32901668548584,
+            "p99": 0,
+            "differing": 421,
+            "total": 1048576,
+            "affected_texels": 421,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_rounded_cube/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "27ae163928c767aebcf2ef6ac3a6c8b90db37ee3b3083b9fca139bdd5fe43134",
+            "d45237e3a34937cde79b5d16d5bde2f6209d5709b19395aa15b502ec392b4c0c"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 8362,
+            "mean": 0.11641502380371094,
+            "p99": 0,
+            "differing": 20,
+            "total": 1048576,
+            "affected_texels": 20,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "e049bd5d95129c3c064038e0ffc66ccfcbe9ca02fddcd14349efd6161c3afec2",
+      "previous_record_sha256": "3b96c31e9ef8d57aca2b29b77d3628468b89ae30e7227f3b889b28ef197a9dfc"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/position/rounded-cube/defaults",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 149367,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 85,
+            "mean": 1.6695623397827148,
+            "p99": 26,
+            "differing": 149367,
+            "total": 1048576,
+            "affected_texels": 149367,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 420391,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_rounded_cube/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 59975,
+            "mean": 17.157470703125,
+            "p99": 48,
+            "differing": 420391,
+            "total": 1048576,
+            "affected_texels": 420391,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_rounded_cube/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "c558ab37c0620d545175a76a43b6e28a320c2f80d3f1d66862b82b9938c9456c",
+            "3fe806e81fbcbf62d61f65f4617951c21fe34bd93992cf93ce457b41b5b993b4"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 85,
+            "mean": 1.6695623397827148,
+            "p99": 26,
+            "differing": 149367,
+            "total": 1048576,
+            "affected_texels": 149367,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "e1dcf57c89b8c2765817766a4bc0d64c18f738d7d8433bb866b2debf103d50a0",
+      "previous_record_sha256": "9e47ac1fd05b1f1719db3367196897b99b370b19c6c12a16ec013b84e53c52f2"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/position/sphere/boundary-a",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 6804,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 803,
+            "mean": 0.11387348175048828,
+            "p99": 0,
+            "differing": 6804,
+            "total": 1048576,
+            "affected_texels": 6804,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 21228,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 803,
+            "mean": 0.5991411209106445,
+            "p99": 15,
+            "differing": 21228,
+            "total": 1048576,
+            "affected_texels": 21228,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "f8e6a819de024c1decb9c38b9290f94c6478bb1769d12cdb22923f47e3b18906",
+            "ed13a104abfe4a49b7d7e812c4f2184aa554458984b22def8779cdd620c9ac7d"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 803,
+            "mean": 0.11387348175048828,
+            "p99": 0,
+            "differing": 6804,
+            "total": 1048576,
+            "affected_texels": 6804,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "cac1fd0d2a469fdacb20b5fa4d955fca8b2c3ff46236707a3250e1bf1b74095b",
+      "previous_record_sha256": "554782b2e44dba6464f4b79713cb5e58b62dd2d4ee98d82eb01e0dfa058ec7ef"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/position/sphere/boundary-b",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 593,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 30221,
+            "mean": 5.112215995788574,
+            "p99": 0,
+            "differing": 593,
+            "total": 1048576,
+            "affected_texels": 593,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 928,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 65535,
+            "mean": 23.29866313934326,
+            "p99": 0,
+            "differing": 928,
+            "total": 1048576,
+            "affected_texels": 928,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "56df1b67eb69a198580d5b6026253442249dc94f9e14c758b6fd4bbacaaad105",
+            "20a19a250bacd4e92edf03d2f3af91e3f10e13ef215c7e94d828446476c04bb8"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 30221,
+            "mean": 5.112215995788574,
+            "p99": 0,
+            "differing": 593,
+            "total": 1048576,
+            "affected_texels": 593,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "685d543f33b8bc5a7d3fd0562643e0d427ea9cc525a1a559bac0cebfef7d3315",
+      "previous_record_sha256": "a1d118cd93540448c8f4395c2ee9fd1d38180474e23425e46e0e78c8f1d6533e"
+    },
+    {
+      "golden_id": "phase0/procedural-feasibility/position/sphere/defaults",
+      "tier": "2a",
+      "status": "unstable",
+      "changed_recordings": [],
+      "unstable_recordings": [
+        "r2"
+      ],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 723,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 7,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 30221,
+            "mean": 5.112373352050781,
+            "p99": 0,
+            "differing": 723,
+            "total": 1048576,
+            "affected_texels": 723,
+            "texels": 1048576
+          }
+        },
+        {
+          "left": "previous.r1",
+          "right": "previous.r2",
+          "category": "save_reopen",
+          "status": "differs",
+          "maps_compared": 1,
+          "maps_differing": 1,
+          "values_differing": 3784,
+          "values_compared_in_differing_maps": 1048576,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 6,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/specularroughness",
+            "storage": "png/uint16/1ch/linear",
+            "max": 65535,
+            "mean": 23.3049259185791,
+            "p99": 0,
+            "differing": 3784,
+            "total": 1048576,
+            "affected_texels": 3784,
+            "texels": 1048576
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/specularroughness",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/1ch/linear",
+          "sha256": [
+            "4a1d42d62f05ab54c48b5d151097958007cd791269cfe9430954145d41f45cd6",
+            "35f745246cdde59177421db1647d70ed7f31266457768a645934eca1b0301c1d"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 30221,
+            "mean": 5.112373352050781,
+            "p99": 0,
+            "differing": 723,
+            "total": 1048576,
+            "affected_texels": 723,
+            "texels": 1048576
+          }
+        }
+      ],
+      "record_sha256": "19fa2581a8f45413275351788addc143f1ff1c967d3351736411ad9c67cabe0a",
+      "previous_record_sha256": "99501fbe78277ab095d69d786c9bb5fd0d4ef5227d3b40a3fc22b9a5d6382db5"
+    },
+    {
+      "golden_id": "phase1/mesh-import/polygon-triangulation",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "df9a5a91a311d50582a6449d6026a9fc6caeb7ea26f8eaff77f2a7a417050fe3",
+      "previous_record_sha256": "3091f238cd70dc6d80a19774cefb6b0c82608d4206c0028adf302635d3a7205d"
+    },
+    {
+      "golden_id": "tier0/api-probes/active-channel-order-control",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 2,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 9,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 2,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "4a2b40b8df7212a03632d2bbf37af60238139625790f9672e72628aaf683c1a2",
+      "previous_record_sha256": "a06d6d0343cb58caad00e1fa869fba185ac81924e3a4439b08b1b7ae6fde1d9e"
+    },
+    {
+      "golden_id": "tier0/api-probes/active-channel-reset",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 2,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 10,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 2,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "f5d650579f9804861963f8dd6ed9260d45243e0c4b9410643a16e58d69fecc3b",
+      "previous_record_sha256": "e20185abd8d051c7961228b153036f431401c24754ced357a02d289234a67767"
+    },
+    {
+      "golden_id": "tier0/api-probes/active-channel-reset-superset",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 2,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 9,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 2,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "1785d10be52f21fd8269f25830f17bdf7d1f3cb273ea8c736ad93ac11d786fce",
+      "previous_record_sha256": "5e70543a5b48ccc219a261c0b786cb8f607999724c0543ec9f89cfe78f619830"
+    },
+    {
+      "golden_id": "tier0/api-probes/fill-layer-readback",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 2,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 49,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 3,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 2,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 30,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "1830d45e63c10b60fbb15d3fbc69dd40db22528af30a36e9f08e79a1e265088e",
+      "previous_record_sha256": "b20ba913d825f9b3cbf4fa865b81c855bacd6a736c634ed86d54dc10da0d3d6e"
+    },
+    {
+      "golden_id": "tier0/api-probes/insert-positions",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 38,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 28,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "a7a937af4990aeb43b31e2507322c5b662a04a9ccc61ee622b3fbefd5c768552",
+      "previous_record_sha256": "49d53eb3b94acf44ca67f385201d5e57c36651d3b40746a3cad0c67545a5156f"
+    },
+    {
+      "golden_id": "tier0/api-probes/lifecycle-events",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r3",
+          "right": "new.r3",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r4",
+          "right": "new.r4",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 6,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "a4a6c5489240541080a897c488fc6f5f6645219497b68ef8b9df4d4bb04f4af3",
+      "previous_record_sha256": "37cd0024ff8655a899219a5ae7c12c0bb4f9c5f9e27d57bb8ed6e8215f1de9b0"
+    },
+    {
+      "golden_id": "tier0/api-probes/mask-stack",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 44,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 3,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 32,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "c4bda3f5c086e56aaeffb03a68f2b4c460c90feab4f0e726c6cf0c1fd45d5fe4",
+      "previous_record_sha256": "e928005cf24adaf9da3c5563f543b04b6b39fbbd5dfae7ad33ded61c19cf6718"
+    },
+    {
+      "golden_id": "tier0/api-probes/set-source-none-multichannel",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 21,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 16,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "99954ec714f988afd9d8e58f2f9c153d208627a0e9d14269f265d8180bd8a1dc",
+      "previous_record_sha256": "dbc12fa5c9ef50cf02fb2d4a13ec8a4098f27ef8e0c6f8fb5bf83072d24f1159"
+    },
+    {
+      "golden_id": "tier0/api-probes/textureset-project-readback",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 14,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 5,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 10,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 3,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "c0c41d3c6ded5b9277f17d4dce7be61c2e12852cfca268c4644f0ab083b60bde",
+      "previous_record_sha256": "65bace27d7e9e7b5e2fc50088849910550e6bd2e313852deff4f14a327ceac74"
+    },
+    {
+      "golden_id": "tier0/defaults-templates/baking-defaults",
+      "tier": "0",
+      "status": "changed",
+      "changed_recordings": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 14,
+          "other_outputs_differing": 1,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 14,
+          "other_outputs_differing": 1,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r3",
+          "right": "new.r3",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 14,
+          "other_outputs_differing": 1,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "baking/common",
+          "kind": "effective_default_capture",
+          "status": "differs",
+          "equal_raw": false
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "baking/common",
+          "kind": "effective_default_capture",
+          "status": "differs",
+          "equal_raw": false
+        },
+        {
+          "pair": "previous.r3~new.r3",
+          "output_id": "baking/common",
+          "kind": "effective_default_capture",
+          "status": "differs",
+          "equal_raw": false
+        }
+      ],
+      "record_sha256": "53d9cfc9d9d6055457230117952f89e12cb1acc67915766ec5fe3b087883ef96",
+      "previous_record_sha256": "aa823e7adbd5bb5c8759ec2261977997d3779ca2ee50685e0487ce285b9d44ed"
+    },
+    {
+      "golden_id": "tier0/defaults-templates/project-templates",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 27,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 0,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 27,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "a2b3a5b2044ed8deaa934dd4a65b9fa210f8bbe271814e22eccf416f21fb87a0",
+      "previous_record_sha256": "d546c51c1697bc16a9874989696625588978902cb1902306205a93e17f42b0fd"
+    },
+    {
+      "golden_id": "tier0/recorder-sample/blend-multiply-plane",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 7,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 1,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 7,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "caaf469bcbbce4d6c7467ceed0111e84f44cfffc1a8a5f48853eb68a086bfbd5",
+      "previous_record_sha256": "2943c58675c14bd3262f6b3e27350fd76fc6ceb0d12e2b3eb3146a04b3e98853"
+    },
+    {
+      "golden_id": "tier0/semantics/ao-mixed",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 8,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 3,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 8,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 12,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 3,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "2a4f77805d0ce442be10e6ee7c7c8f132c535f6d77493fecf7f69a3769545990",
+      "previous_record_sha256": "bccf7cea410b5ac5bc7a94e2899065f4319953c4fb8d1ed095c64c71e845e845"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-asm-pbr-metallic-roughness",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "2318d74099fde442d703367be3db9dce3ebc28433c89ae06aba554b73353e3ed",
+      "previous_record_sha256": "efc23373f1f1194bbec9eb8cdfb6ad89b20bac604a67374eef3dd38279801605"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-asm-pbr-metallic-roughness-anisotropy-angle",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 7,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 7,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "2b6e023353227a7d50e1cb86fa660e16a170ea890a0df16be88b14a7fd181ebc",
+      "previous_record_sha256": "05e73e0709160f59702b7e7a7de61076e845f278546333d39c46004cfbed40d9"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-asm-pbr-metallic-roughness-coated",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "1a04028bb03f2bc438fa0ed67bc7f7950ebc49735270ee6a211cda4a6099c1b5",
+      "previous_record_sha256": "61ab788f0523725c548d1780d3750f329613b56a521ea67d68cfeaec4a084326"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-asm-pbr-metallic-roughness-sheen",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "40d55228770df7def8a342d847384530846e1c983231d3bfccff516f70c77711",
+      "previous_record_sha256": "ff39ba958b3dae140325e5da04f09937b2600883f17bcc4bf669723b8c54fe47"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-asm-pbr-metallic-roughness-sss",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "f9a3bc2892e36daed6d32642b9c5bf0fef3019e895544361d1d70011b55bce2d",
+      "previous_record_sha256": "05f66b71ef64a9bde08a20d77f85c1a6391355d7dcdef091f6aed2a1f7fad881"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-blender",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 7,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 7,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "78018e8e03832132faf754e72e5272b220fc0c02d4ec092e8e8f10c8c991b64c",
+      "previous_record_sha256": "b267f7db07ebf0d7905d8ea856d1f6c1af19d0ab94c4feef11666d572dabe912"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-default",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 14,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 14,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "bfcde7de54ebe75e89cc08a4de756e90ff40d33f6f41f8229f8f23c842314e5b",
+      "previous_record_sha256": "47ee4729e3d0a8a356c9759c1378364b5cd72022a65742ef9769ac24e7fd32f2"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-dota-2",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 10,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 10,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "303f5750c28ccce757f4534bf8155fdb7b461c5bd4e86894c18409a86f503d87",
+      "previous_record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-keyshot",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 10,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 10,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "9fd1efab554f5ad2d38298d890ac795da3bf8094416f3ec7f55f7a9d7418a8e6",
+      "previous_record_sha256": "41dbab96520aa0d7f5554e709b3966bf071a410c25db9195ef8c41324819c348"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-lens-studio",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "41549fce73b5bd073f90d11018f20208be8add06f6a2c525fed972ee3ce6bd0a",
+      "previous_record_sha256": "d5e19fb9646bb694d8983e677d74076d2b6febd86e8e4361c3bbf5d214faeb9a"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-maxwell-metallic-roughness",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "c440cf2c35d93a363c7a83c74e07541480d3bc65c42317b267d43dbeed23d1f4",
+      "previous_record_sha256": "8bc0e9d672d571c80077dd29d14c88ff4054a84c67f198d9c1052958767b138f"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-maxwell-specular-glossiness",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "c0f00190320374188327b3894451576ffaf9f33bcb3cbe7c4d804e06b1639beb",
+      "previous_record_sha256": "56d95b639625c2855f295acdf7d68a100ce4d6375802b5fe53f958ed4f37901a"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-non-pbr-specular-glossiness",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "7ccec9147feab217bb608939661be25b3c1144578c8c5b60569a17e36d7eaf22",
+      "previous_record_sha256": "5e352cfd0b20d45e505e9985a868f43ac7d1e300822049224d4d2b77f4a43033"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-openpbr-anisotropy",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "56c538f9dcbd9748c6b1dc7f40b5fdf771d3721b68425d866690f41dbe786b0f",
+      "previous_record_sha256": "56521f6a89f0ada98d141e78070528d38a0f120a8cfdbf859f62ef95b2f55e10"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-openpbr-coat",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "634c0322ad250d65c91b12db5c08eb4e8cd01c033f5be8ec63609fd8e05f324f",
+      "previous_record_sha256": "fb076738e6c97010dbe3e10004d082c900c52f0af87d21a6ccc713da8f2e95a0"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-openpbr-fuzz",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "8d3da793be7de41fa0b671a16bf12b1318dbd5be11dc3a5a6279c003448581d1",
+      "previous_record_sha256": "b03de56059b4a3265100f677ed151bbbd53019890f5b937f838f92c64d36f484"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-openpbr-subsurface-scattering",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "db13ca9af0ae8621c0dfd78b43b55c122110be10628442a883c21caddbeaf744",
+      "previous_record_sha256": "6b1a2ae39915f1b7e6852f91c1dfa2e02b3f591c01b70d072f1055ffdd788744"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 7,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 7,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "9b6cd76737b6b5e59b716ecebc8581651be9593155e23d93c1662ce35e4e0c9b",
+      "previous_record_sha256": "c56ddb58e99ac5f472e9562f2e935198a74b9f26b3796cfe75443e9581842ce6"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-pbr-metallic-roughness-alpha-test",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 7,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 7,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "70868f67a43e0a91073b87fc18c1baa49c4812eaab663b8e63072055d9d480c1",
+      "previous_record_sha256": "fff8d940ae6838c1762d8f3c31ca7c5d751d510b57afbcdcd57fb4d8e8867dd4"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-pbr-specular-glossiness",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "6428a61f3cf28adf10f76ec171e022adc4c93cac2b3f4999abd1c556f5aacde5",
+      "previous_record_sha256": "95c799726477ca4d694853ca589b9eba005c91e65c9974500038723d77c55f31"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-roblox-materialvariant",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "019957ea83cd771c89e1546668ea57ca8c0671a0443acf5bcc671667b1ea992f",
+      "previous_record_sha256": "7e6d4a29b348ad2fd597ce67124f589fe0a3dd2cd042560f3fd77426d0472b36"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-roblox-surfaceappearance",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 6,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "0b4bb07a0e6959d10f56546a634432caca214d605bbf505507302fa0c201737b",
+      "previous_record_sha256": "99551db9c120df6c19da27fe80d84a740fd5ea965f18e00a170ad9a83afd8a57"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-spark-ar-studio",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 7,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 7,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "3bc482e84fdd131131e53b57f6e077cb01879849ea5310cb68a4e0bb1f83ef63",
+      "previous_record_sha256": "fa5760c8d2094660d89b9725e28101738d6adc191ee4e698fa35a397a2fdb364"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-unity-hd-render-pipeline-metallic-standard",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "279971d2a0280422ec2a11738f400650a1bbf9630910a766f09af5741463ff94",
+      "previous_record_sha256": "79d9783c8a539f080e8d46dbf4087d7adc470184ed2277e061a750e3f1685eef"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-unreal-engine",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 5,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "a324372db9032e83f822ac742b042a6318c77388983d59064062cc1092c7e305",
+      "previous_record_sha256": "d8354f913116b0f6518a9f293852e34d0a8da89b898c91ae55b9c1da1268aa20"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-vraymtl-metallic-roughness",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 9,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 9,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "5df3fcbef6d5a75d33db348f045af43acc05956ba2839ded5a31326b1aa9d99f",
+      "previous_record_sha256": "b73c6c5682c5e64e1c50ecf5ca1cf35d5286886de1d558cad6c3afa79ea7c92e"
+    },
+    {
+      "golden_id": "tier0/semantics/base-values-vraymtl-specular-glossiness",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 9,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 9,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 1,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "1dc2b2acea6f88c35df191e0b69d2b5c95d9cfd62ffac4b966992178ba0ffde6",
+      "previous_record_sha256": "c472395bf03c931045792079629a9f9bd4658a98b936658ab24b8fcf03b6383a"
+    },
+    {
+      "golden_id": "tier0/semantics/blend-additive",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 273,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 128,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 273,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 128,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "a46965d398323fe881be8c52451577015f029f986637959d8476150debf1ded0",
+      "previous_record_sha256": "b32fd950c38c002798341bb10308614f6b26d86896a87644b71e06129713be0d"
+    },
+    {
+      "golden_id": "tier0/semantics/blend-basic",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 273,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 128,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 273,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 128,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "a08e98a8a46fad5e4dde1b483d4305f608d7feb4d39a2cfd44637eb33a4556e9",
+      "previous_record_sha256": "aa29f0fc3dfdc576d9a658838f1659c06e535a044836663b457546376bdedf24"
+    },
+    {
+      "golden_id": "tier0/semantics/blend-component",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 239,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 112,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 239,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 112,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "ca5f1cd5ecaa46f2619f523d754fa4e05eecafe3d5d6d7ad9fe253758d968af1",
+      "previous_record_sha256": "d1126d12c9704a3535c2e376b27e46e2e018d5ed981e5bea6c21d69e0fffa21a"
+    },
+    {
+      "golden_id": "tier0/semantics/blend-contrast",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 273,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 128,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 64,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 273,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 128,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "eb5592917501a662fbb328bf9fd0954ccb6d1607e43cba9307c546d938c269d5",
+      "previous_record_sha256": "8a3805e0d379ab3e51f4b2829a8fccc405f7ce89a1b83f1ada05fb054ace136e"
+    },
+    {
+      "golden_id": "tier0/semantics/blend-inputs",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 32,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 76,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 24,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 32,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 76,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 24,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "e8f9ccdad8c44531ede5c9e08a5328e4de4bf412f3eeae2f602261f1028b5aa5",
+      "previous_record_sha256": "08bccde04a00ed886c7a1908365e7ec0bf7b227bfd1227cfe93fc2c5d1c6bb51"
+    },
+    {
+      "golden_id": "tier0/semantics/blend-normal-channel",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 8,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 25,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 8,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 8,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 25,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 8,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "f73f5a5e8cdc6932595f8c894e9b6864bd12378cdb55b4d87e4bc1af804b6c37",
+      "previous_record_sha256": "475cd300b20ae07c885efc4ba579ae644042e7fafd5dc53f63e335b4de22e4b1"
+    },
+    {
+      "golden_id": "tier0/semantics/blend-order",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 8,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 85,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 16,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 8,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 85,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 16,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "14c64f1684445f4b2f58fb488ab2c3bb315e081e6614aa78ace8f85529f7eb7a",
+      "previous_record_sha256": "b2bd145b0d4f8b19420811f131bbb9c971747b416d44b396ba522dfb96a0edd3"
+    },
+    {
+      "golden_id": "tier0/semantics/colour-ramps-raw",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 192,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 217,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 192,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 217,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "7a429426a14da3fe853fdac1473bc2b7e44ff1ab3d919b23bce746b1b70053a4",
+      "previous_record_sha256": "a08b193ad75daf8156ff011f765b839f1cfd3b1da71144d170fae8d3abfefecf"
+    },
+    {
+      "golden_id": "tier0/semantics/colour-ramps-srgb",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 192,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 217,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 192,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 217,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "ac241b7c0623e7c46268c5a9241631071a0ec6d9c15790ae8afac25839c7a165",
+      "previous_record_sha256": "36cc7a56ae64452fbf0e9effa12fd1a65e78e28b7c1232df65712537dfe77037"
+    },
+    {
+      "golden_id": "tier0/semantics/colour-ramps-working",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 192,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 217,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 192,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 217,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "5aef5c6646ca45d70f29608a33ffe04ebf5e5cf7cab75601b8ed9136c9630813",
+      "previous_record_sha256": "b4e3750b0cbc63d089e179323052868474becd692f08ea20e3bc15e7a5d4d40c"
+    },
+    {
+      "golden_id": "tier0/semantics/effect-order",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 16,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 75,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 16,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 16,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 75,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 16,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "b9627242fdadc932a17503d67cb5b5d0dca166a59306dde5d5e261fe424d65e1",
+      "previous_record_sha256": "c0ece1db3b25f1bf6ab55970f58a5291511e599d9578d11b515db09db49ff7c1"
+    },
+    {
+      "golden_id": "tier0/semantics/group-masks",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 12,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 119,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 28,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 12,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 119,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 28,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "0c709211d33a0b2bbee0cd009514e9ff5f3dad13a8113bbd79142c5c6cec2c78",
+      "previous_record_sha256": "59827dfe7977e5190c405639e5772f7fb5bc789d0821a43c4928d72bbef6986b"
+    },
+    {
+      "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+      "tier": "0",
+      "status": "changed",
+      "changed_recordings": [
+        "r1",
+        "r2"
+      ],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 4,
+          "maps_differing": 3,
+          "values_differing": 3411,
+          "values_compared_in_differing_maps": 458752,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_bevelled_cube/Normal_OpenGL",
+            "storage": "png/uint16/3ch/linear",
+            "max": 4418,
+            "mean": 3.3009033203125,
+            "p99": 0,
+            "differing": 1248,
+            "total": 196608,
+            "affected_texels": 546,
+            "texels": 65536
+          }
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 4,
+          "maps_differing": 3,
+          "values_differing": 3411,
+          "values_compared_in_differing_maps": 458752,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_bevelled_cube/Normal_OpenGL",
+            "storage": "png/uint16/3ch/linear",
+            "max": 4418,
+            "mean": 3.3009033203125,
+            "p99": 0,
+            "differing": 1248,
+            "total": 196608,
+            "affected_texels": 546,
+            "texels": 65536
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_bevelled_cube/Normal_DirectX",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/linear",
+          "sha256": [
+            "99bc3213b529d6a661cfcc59af336ad286f472368462d5c9f0007000d4ac7e1e",
+            "ce794044b9ccbc0f4fc756a5c4d4a8cfa27812dccf82019309e89bb59e64affe"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 4418,
+            "mean": 3.300872802734375,
+            "p99": 0,
+            "differing": 1248,
+            "total": 196608,
+            "affected_texels": 546,
+            "texels": 65536
+          }
+        },
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_bevelled_cube/Normal_OpenGL",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/linear",
+          "sha256": [
+            "f3f0a890b0f221af0c4168d0a3128541504b29915e67341e82b688134a5072bb",
+            "4aa96df9880e2540eca1334ef25f07ac1fc986c6f4f39a29959b5dbcc1b24713"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 4418,
+            "mean": 3.3009033203125,
+            "p99": 0,
+            "differing": 1248,
+            "total": 196608,
+            "affected_texels": 546,
+            "texels": 65536
+          }
+        },
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_bevelled_cube/height",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "exr/float32/1ch/linear",
+          "sha256": [
+            "0d53b9e0191850dee603fb23262a0fb6647738079e3825699da274360a50221f",
+            "f442fb6bf27707f9785879f738e83cdf37371a0d0a84b86224232bdf6300aad3"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 0.89324951171875,
+            "mean": 0.0017808086704462767,
+            "p99": 0.00634765625,
+            "differing": 915,
+            "total": 65536,
+            "affected_texels": 915,
+            "texels": 65536
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_bevelled_cube/Normal_DirectX",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/linear",
+          "sha256": [
+            "99bc3213b529d6a661cfcc59af336ad286f472368462d5c9f0007000d4ac7e1e",
+            "ce794044b9ccbc0f4fc756a5c4d4a8cfa27812dccf82019309e89bb59e64affe"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 4418,
+            "mean": 3.300872802734375,
+            "p99": 0,
+            "differing": 1248,
+            "total": 196608,
+            "affected_texels": 546,
+            "texels": 65536
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_bevelled_cube/Normal_OpenGL",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/linear",
+          "sha256": [
+            "f3f0a890b0f221af0c4168d0a3128541504b29915e67341e82b688134a5072bb",
+            "4aa96df9880e2540eca1334ef25f07ac1fc986c6f4f39a29959b5dbcc1b24713"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 4418,
+            "mean": 3.3009033203125,
+            "p99": 0,
+            "differing": 1248,
+            "total": 196608,
+            "affected_texels": 546,
+            "texels": 65536
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_bevelled_cube/height",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "exr/float32/1ch/linear",
+          "sha256": [
+            "0d53b9e0191850dee603fb23262a0fb6647738079e3825699da274360a50221f",
+            "f442fb6bf27707f9785879f738e83cdf37371a0d0a84b86224232bdf6300aad3"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 0.89324951171875,
+            "mean": 0.0017808086704462767,
+            "p99": 0.00634765625,
+            "differing": 915,
+            "total": 65536,
+            "affected_texels": 915,
+            "texels": 65536
+          }
+        }
+      ],
+      "record_sha256": "74fe1bb68527800c24715732f3ef559abdb2faf958ae55cc0ae97f1e16688f95",
+      "previous_record_sha256": "f31a7fcc24015baa523b97bfe6712e898faf9957d66029e4402bf10616db3161"
+    },
+    {
+      "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 16,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 21,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 5,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 16,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 21,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 5,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "ffbdd78546998ce38e4c10186204e1bd6ba225a3ad1ed8aade90981c65784ffa",
+      "previous_record_sha256": "47818e921f2ae18674d9eb3bc2f8613aed5c2e5b843de9bae61d59a3a0f516c5"
+    },
+    {
+      "golden_id": "tier0/semantics/height-normal-sphere",
+      "tier": "0",
+      "status": "changed",
+      "changed_recordings": [
+        "r1",
+        "r2"
+      ],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 4,
+          "maps_differing": 3,
+          "values_differing": 5678,
+          "values_compared_in_differing_maps": 458752,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/Normal_OpenGL",
+            "storage": "png/uint16/3ch/linear",
+            "max": 21106,
+            "mean": 12.31353759765625,
+            "p99": 12,
+            "differing": 2520,
+            "total": 196608,
+            "affected_texels": 1007,
+            "texels": 65536
+          }
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "differs",
+          "maps_compared": 4,
+          "maps_differing": 3,
+          "values_differing": 5678,
+          "values_compared_in_differing_maps": 458752,
+          "other_outputs_compared": 5,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 1,
+          "unpaired_outputs": 0,
+          "worst_map": {
+            "output_id": "uzp_sphere/Normal_OpenGL",
+            "storage": "png/uint16/3ch/linear",
+            "max": 21106,
+            "mean": 12.31353759765625,
+            "p99": 12,
+            "differing": 2520,
+            "total": 196608,
+            "affected_texels": 1007,
+            "texels": 65536
+          }
+        }
+      ],
+      "differing_outputs": [
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_sphere/Normal_DirectX",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/linear",
+          "sha256": [
+            "85da1488180adaee252341af2ca7b2e2d135af576a608e90e9ea43aea766730d",
+            "3393174f453fed9645325fbbc3fcbf755e26140f5e6938ad5038444a7833ebca"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 21106,
+            "mean": 12.313908894856771,
+            "p99": 12,
+            "differing": 2554,
+            "total": 196608,
+            "affected_texels": 1007,
+            "texels": 65536
+          }
+        },
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_sphere/Normal_OpenGL",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/linear",
+          "sha256": [
+            "c9681bf694f7b6183549e7fe642eaaf27b318c6ae99cf4b69834df31c3e677d4",
+            "86f31f854a74c8fec0a18286927c39f1ca046333941223ca46bea4c8d2d73e2c"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 21106,
+            "mean": 12.31353759765625,
+            "p99": 12,
+            "differing": 2520,
+            "total": 196608,
+            "affected_texels": 1007,
+            "texels": 65536
+          }
+        },
+        {
+          "pair": "previous.r1~new.r1",
+          "output_id": "uzp_sphere/height",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "exr/float32/1ch/linear",
+          "sha256": [
+            "4185adcd1750824338e25e1d52178619f8e7f5e23414364909776122326d8c8c",
+            "e2f71c3f3e133b7e7b00ccecef9ad9b1d2e1e0d1c60316b80700669a11ed3feb"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 0.8787841796875,
+            "mean": 0.0003983059577876702,
+            "p99": 0,
+            "differing": 604,
+            "total": 65536,
+            "affected_texels": 604,
+            "texels": 65536
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/Normal_DirectX",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/linear",
+          "sha256": [
+            "85da1488180adaee252341af2ca7b2e2d135af576a608e90e9ea43aea766730d",
+            "3393174f453fed9645325fbbc3fcbf755e26140f5e6938ad5038444a7833ebca"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 21106,
+            "mean": 12.313908894856771,
+            "p99": 12,
+            "differing": 2554,
+            "total": 196608,
+            "affected_texels": 1007,
+            "texels": 65536
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/Normal_OpenGL",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "png/uint16/3ch/linear",
+          "sha256": [
+            "c9681bf694f7b6183549e7fe642eaaf27b318c6ae99cf4b69834df31c3e677d4",
+            "86f31f854a74c8fec0a18286927c39f1ca046333941223ca46bea4c8d2d73e2c"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 21106,
+            "mean": 12.31353759765625,
+            "p99": 12,
+            "differing": 2520,
+            "total": 196608,
+            "affected_texels": 1007,
+            "texels": 65536
+          }
+        },
+        {
+          "pair": "previous.r2~new.r2",
+          "output_id": "uzp_sphere/height",
+          "kind": "exported_map",
+          "status": "differs",
+          "storage": "exr/float32/1ch/linear",
+          "sha256": [
+            "4185adcd1750824338e25e1d52178619f8e7f5e23414364909776122326d8c8c",
+            "e2f71c3f3e133b7e7b00ccecef9ad9b1d2e1e0d1c60316b80700669a11ed3feb"
+          ],
+          "bytes_differ": true,
+          "difference": {
+            "max": 0.8787841796875,
+            "mean": 0.0003983059577876702,
+            "p99": 0,
+            "differing": 604,
+            "total": 65536,
+            "affected_texels": 604,
+            "texels": 65536
+          }
+        }
+      ],
+      "record_sha256": "1a05c72b79b77abec0e566791dff59fcc76125ae8307a73e3acd8a00eb42816a",
+      "previous_record_sha256": "dc678a400a252a224f7aa280020eaf12440d6b8fa8e0442b0096f9fef6364fff"
+    },
+    {
+      "golden_id": "tier0/semantics/levels-clamp",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 16,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 45,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 16,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 16,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 45,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 16,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "385ff8dd604e5fb04496871392b159d5e2068d2d5a395aced8738f262b6965c4",
+      "previous_record_sha256": "3f59c332680c9bafc33fe53f6be2507660481f91d7611a3a31e1b2fed367ee39"
+    },
+    {
+      "golden_id": "tier0/semantics/mask-precision",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 20,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 64,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 5,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 20,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 64,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 5,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "e2d703c9d28727840b7092358ab98143708022d3db298e2c5d8a9d92af5f50a5",
+      "previous_record_sha256": "0f09db8c86ef4c0fcc16935bab94b7c69904a23f4d2405c63c3f7577e50392b8"
+    },
+    {
+      "golden_id": "tier0/semantics/quantisation-thirds",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 36,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 337,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 36,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 337,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 0,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "7cf9c35b8d633e61ce37cae0730828f66b7e66462e15507632a16f5507a31d8c",
+      "previous_record_sha256": "238ccd015d2d5edf8f02fb941953f3e037c9e80cda2fc5b7f171af227ba061b5"
+    },
+    {
+      "golden_id": "tier0/semantics/resample-uv",
+      "tier": "0",
+      "status": "unchanged",
+      "changed_recordings": [],
+      "unstable_recordings": [],
+      "pairs": [
+        {
+          "left": "previous.r1",
+          "right": "new.r1",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 32,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 97,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 32,
+          "unpaired_outputs": 0
+        },
+        {
+          "left": "previous.r2",
+          "right": "new.r2",
+          "category": "envelope_drift",
+          "status": "equal",
+          "maps_compared": 32,
+          "maps_differing": 0,
+          "values_differing": 0,
+          "values_compared_in_differing_maps": 0,
+          "other_outputs_compared": 97,
+          "other_outputs_differing": 0,
+          "other_outputs_differing_raw": 32,
+          "unpaired_outputs": 0
+        }
+      ],
+      "differing_outputs": [],
+      "record_sha256": "367d491d7c52a1658aa9cc4411a6ad7715e207b76e700793537a9eecd6f9c4f2",
+      "previous_record_sha256": "5ccae31597a65be9bddb2b3f5810dd15f852a4bd1286b35884ac45fde6ea14aa"
+    }
+  ],
+  "divergence_candidates": [
+    "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+    "phase0/procedural-feasibility/leather-damaged/sphere/defaults",
+    "tier0/defaults-templates/baking-defaults",
+    "tier0/semantics/height-normal-bevelled-cube",
+    "tier0/semantics/height-normal-sphere"
+  ],
+  "fits_to_recheck": [
+    {
+      "semantics": "parity/semantics/ao-mixed.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/blend-kernels.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/blend-modes.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/colour-transfer.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/evaluator-profile.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/height-to-normal.json",
+      "reason": "corpus_changed",
+      "changed_goldens": [
+        "tier0/semantics/height-normal-bevelled-cube",
+        "tier0/semantics/height-normal-sphere"
+      ]
+    },
+    {
+      "semantics": "parity/semantics/polygon-triangulation.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/procedural-feasibility.json",
+      "reason": "corpus_changed",
+      "changed_goldens": [
+        "phase0/procedural-feasibility/leather-damaged/rounded-cube/defaults",
+        "phase0/procedural-feasibility/leather-damaged/sphere/defaults"
+      ]
+    },
+    {
+      "semantics": "parity/semantics/quantisation-profile.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/resampling.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/srgb-transfer.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/tangent-frame.json",
+      "reason": "new_envelope",
+      "changed_goldens": []
+    },
+    {
+      "semantics": "parity/semantics/uv-sampling.json",
+      "reason": "corpus_changed",
+      "changed_goldens": [
+        "tier0/semantics/height-normal-bevelled-cube",
+        "tier0/semantics/height-normal-sphere"
+      ]
+    }
+  ],
+  "new_evaluator_profile_needed": true,
+  "stale_tier3": [
+    "tier3/render-procedure/qualification-sphere"
+  ],
+  "summary": {
+    "goldens": 81,
+    "unchanged": 64,
+    "changed": 5,
+    "unstable": 12,
+    "unavailable": 0,
+    "new": 0,
+    "missing": 0,
+    "equal_pairs": 142
+  }
+}

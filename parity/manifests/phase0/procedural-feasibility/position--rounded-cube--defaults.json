@@ -349,6 +349,12 @@
       "kind": "exported_map",
       "sha256": "c558ab37c0620d545175a76a43b6e28a320c2f80d3f1d66862b82b9938c9456c",
       "size_bytes": 38752
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "4526ca47f8626a45e829034a9701ccad6d6f368bc07d367436cd8f52c81e5ecf",
+      "size_bytes": 306
     }
   ]
 }

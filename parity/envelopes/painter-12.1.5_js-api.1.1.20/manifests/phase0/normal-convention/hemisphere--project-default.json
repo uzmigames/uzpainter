@@ -1,0 +1,173 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase0/normal-convention/hemisphere/project-default",
+  "tier": "2b",
+  "domain": "bake_map/normal",
+  "description": "Normal-convention fixture (P0-NORMAL): the hemisphere low/high pair, Normal mesh map baked by Painter at 512 px with the OpenGL normal map format and tangent space the project default (not set), other baking parameters at their defaults; the baked map exported at 16 bits; recorded twice (same session; after save and reopen).",
+  "inputs": [
+    {
+      "input_id": "hemisphere-low",
+      "kind": "mesh",
+      "path": "parity/fixtures/normal-convention/hemisphere-low.obj",
+      "sha256": "04aaca03526fe09efedf39fb2b7262ae88fe0497098dac219d3469052b52f7fc",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    },
+    {
+      "input_id": "hemisphere-high",
+      "kind": "mesh",
+      "path": "parity/fixtures/normal-convention/hemisphere-high.obj",
+      "sha256": "113ff886854cb4638dea059ed47ddb5c66db704499a8aa17135813782200284f",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "hemisphere-low",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 512
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "OutputSize",
+          "value": [
+            9,
+            9
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.baking.BakingParameters.set",
+        "args": {
+          "parameter": "HipolyMesh",
+          "input": "hemisphere-high"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.baking.BakingParameters.set_enabled_bakers",
+        "args": {
+          "usages": [
+            "Normal"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.baking.bake_async",
+        "args": {}
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "meshMap/normal_base:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "passthrough",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 512,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.common.OutputSize",
+      "value": 9,
+      "unit": "log2 px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "baking.enabled_bakers",
+      "value": "Normal",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "passthrough",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "uncontrolled_settings": [
+    "preferences.bake_backend"
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "1146b8296f8f1e3878badedef5f82abe62aa315446e6b4710c64fd310bf29810",
+      "size_bytes": 7076
+    },
+    {
+      "record_id": "r1-uzp_hemisphere_low-normal_base",
+      "kind": "exported_map",
+      "sha256": "3eeef96a40daf305f062580c61ead38e16dd3dcd6877ecb3e113f95b1c538eb0",
+      "size_bytes": 567566
+    },
+    {
+      "record_id": "r2-uzp_hemisphere_low-normal_base",
+      "kind": "exported_map",
+      "sha256": "3eeef96a40daf305f062580c61ead38e16dd3dcd6877ecb3e113f95b1c538eb0",
+      "size_bytes": 567566
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "56fab3aca35fb9c522325bc980e42dea92472cc2a2712e60869592dae13d7bac",
+      "size_bytes": 402
+    }
+  ]
+}

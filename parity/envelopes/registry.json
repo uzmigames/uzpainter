@@ -1,11 +1,11 @@
 {
   "schema": "uzpainter/parity/envelope-registry/1",
-  "current": "painter-12.1.0+js-api.1.1.20",
+  "current": "painter-12.1.5+js-api.1.1.20",
   "candidate": null,
   "envelopes": [
     {
       "envelope_id": "painter-12.1.0+js-api.1.1.20",
-      "status": "current",
+      "status": "superseded",
       "painter_build": "12.1.0+js-api.1.1.20",
       "painter_version": "12.1.0",
       "manifest_root": "parity/manifests",
@@ -15,8 +15,23 @@
       "equivalent_envelopes": [],
       "previous": null,
       "promoted_on": "2026-10-10",
-      "superseded_on": null,
+      "superseded_on": "2026-10-11",
       "drift_report": null
+    },
+    {
+      "envelope_id": "painter-12.1.5+js-api.1.1.20",
+      "status": "current",
+      "painter_build": "12.1.5+js-api.1.1.20",
+      "painter_version": "12.1.5",
+      "manifest_root": "parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests",
+      "record_prefix": "",
+      "envelope_sha256": "1497f6497fd984cadeb5a136ce73fc41c7c601b7a6652c76fa6670be7bc4e406",
+      "environment_known": true,
+      "equivalent_envelopes": [],
+      "previous": "painter-12.1.0+js-api.1.1.20",
+      "promoted_on": "2026-10-11",
+      "superseded_on": null,
+      "drift_report": "parity/reports/phase0/oracle-envelope-drift-corpus-painter-12.1.5_js-api.1.1.20.json"
     }
   ],
   "quarantine": []

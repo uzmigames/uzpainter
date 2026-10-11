@@ -1,0 +1,206 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/semantics/base-values-asm-pbr-metallic-roughness-coated",
+  "tier": "0",
+  "domain": "tier0/stack/base-values",
+  "description": "Stack base values (04 section 2 step 1): empty project on the authored plane created with the shipped template templates/ASM - PBR Metallic Roughness Coated.spt; every documented document map and user channel 0-7 requested with no layer in the stack (Painter writes the ones the template has), plus the constant white default map.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256,
+          "template": "templates/ASM - PBR Metallic Roughness Coated.spt"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/height:RGB",
+            "documentMap/specular:RGB",
+            "documentMap/opacity:RGB",
+            "documentMap/emissive:RGB",
+            "documentMap/displacement:RGB",
+            "documentMap/glossiness:RGB",
+            "documentMap/roughness:RGB",
+            "documentMap/anisotropylevel:RGB",
+            "documentMap/anisotropyangle:RGB",
+            "documentMap/transmissive:RGB",
+            "documentMap/scattering:RGB",
+            "documentMap/reflection:RGB",
+            "documentMap/ior:RGB",
+            "defaultMap/white:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/metallic:RGB",
+            "documentMap/normal:RGB",
+            "documentMap/ambientOcclusion:RGB",
+            "documentMap/diffuse:RGB",
+            "documentMap/specularlevel:RGB",
+            "documentMap/blendingmask:RGB",
+            "documentMap/user0:RGB",
+            "documentMap/user1:RGB",
+            "documentMap/user2:RGB",
+            "documentMap/user3:RGB",
+            "documentMap/user4:RGB",
+            "documentMap/user5:RGB",
+            "documentMap/user6:RGB",
+            "documentMap/user7:RGB",
+            "defaultMap/white:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.template",
+      "value": "templates/ASM - PBR Metallic Roughness Coated.spt",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "1a04028bb03f2bc438fa0ed67bc7f7950ebc49735270ee6a211cda4a6099c1b5",
+      "size_bytes": 10061
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r1-uzp_plane-height",
+      "kind": "exported_map",
+      "sha256": "466f2ab11bc13488afc0b702d3973a24760b507b3623b8a8f536142efa836c16",
+      "size_bytes": 1007
+    },
+    {
+      "record_id": "r1-uzp_plane-roughness",
+      "kind": "exported_map",
+      "sha256": "239f1897a3ca37cd5d4cfedd8c6d596905b7c184bb55ee04c615eab714e00bf5",
+      "size_bytes": 1007
+    },
+    {
+      "record_id": "r1-uzp_plane-metallic",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r1-uzp_plane-normal",
+      "kind": "exported_map",
+      "sha256": "d64c3da89845b1693514bf7f2304e8d476004d66c395a20d2367d30d3a7dcd3d",
+      "size_bytes": 1006
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-height",
+      "kind": "exported_map",
+      "sha256": "466f2ab11bc13488afc0b702d3973a24760b507b3623b8a8f536142efa836c16",
+      "size_bytes": 1007
+    },
+    {
+      "record_id": "r2-uzp_plane-roughness",
+      "kind": "exported_map",
+      "sha256": "239f1897a3ca37cd5d4cfedd8c6d596905b7c184bb55ee04c615eab714e00bf5",
+      "size_bytes": 1007
+    },
+    {
+      "record_id": "r2-uzp_plane-metallic",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r2-uzp_plane-normal",
+      "kind": "exported_map",
+      "sha256": "d64c3da89845b1693514bf7f2304e8d476004d66c395a20d2367d30d3a7dcd3d",
+      "size_bytes": 1006
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "56fab3aca35fb9c522325bc980e42dea92472cc2a2712e60869592dae13d7bac",
+      "size_bytes": 402
+    }
+  ]
+}

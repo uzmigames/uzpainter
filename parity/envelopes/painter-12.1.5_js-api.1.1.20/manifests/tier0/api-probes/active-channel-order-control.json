@@ -1,0 +1,198 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/active-channel-order-control",
+  "tier": "0",
+  "domain": "tier0/api-probes/active-channel-order-control",
+  "description": "API probe (control of the active-channel reset): active_channels assigned before set_source; readback of both sources and the BaseColor and Height exports.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 2,
+          "channels": [
+            "BaseColor",
+            "Height"
+          ]
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 2,
+          "channel": "BaseColor",
+          "color": [
+            0.8,
+            0.3,
+            0.2
+          ],
+          "color_space": "Working"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 2,
+          "channel": "Height",
+          "color": [
+            0.4,
+            0.4,
+            0.4
+          ],
+          "color_space": "Raw"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 2
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 2,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 2,
+          "channel": "Height"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/height:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "4a2b40b8df7212a03632d2bbf37af60238139625790f9672e72628aaf683c1a2",
+      "size_bytes": 9219
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "d44678177fa013cab2437b4b70018cdfab3e02af3ea2e67427f4fd3e6ceef6ed",
+      "size_bytes": 1014
+    },
+    {
+      "record_id": "r1-uzp_plane-height",
+      "kind": "exported_map",
+      "sha256": "e79051e150d7a4e4f8d64520aaa3e573f3cb38cef785207552541245f5c4c558",
+      "size_bytes": 717
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "d44678177fa013cab2437b4b70018cdfab3e02af3ea2e67427f4fd3e6ceef6ed",
+      "size_bytes": 1014
+    },
+    {
+      "record_id": "r2-uzp_plane-height",
+      "kind": "exported_map",
+      "sha256": "e79051e150d7a4e4f8d64520aaa3e573f3cb38cef785207552541245f5c4c558",
+      "size_bytes": 717
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "56fab3aca35fb9c522325bc980e42dea92472cc2a2712e60869592dae13d7bac",
+      "size_bytes": 402
+    }
+  ]
+}
