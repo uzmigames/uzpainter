@@ -1,0 +1,9 @@
+{
+  "id": 47,
+  "slug": "the-ui-only-tier-0-cases-are-the-per-texture-set-height-to-normal-method-a-height-amplitude-sweep-and-ui-set-passthrough-groups",
+  "title": "The UI-only Tier 0 cases are the per-texture-set height-to-normal method, a height-amplitude sweep and UI-set Passthrough groups",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": ["phase0.7_tier0-semantics-ui-cases"],
+  "supersededBy": null
+}

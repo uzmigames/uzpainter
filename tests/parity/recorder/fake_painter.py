@@ -398,6 +398,7 @@ class FakeWorld:
         self.bakes: list[str] = []  # texture sets in the order their bakes were launched
         self.baked_maps: dict[MeshMapUsage, str] = {}  # resource URL of each baked mesh map
         self.event_handlers: dict[type, list[Callable[[Any], None]]] = {}
+        self.active_stacks: list[str] = []  # texture sets made active (set_active_stack)
         self.version = "12.1.0"
         self.version_info = (12, 1, 0)
         self.js_api = "1.1.20"
@@ -592,6 +593,9 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             url = world.baked_maps.get(usage)
             return None if url is None else ResourceID.from_url(url)
 
+        def get_stack(self) -> Stack:
+            return Stack(self.set_name, "")
+
     class Stack:
         def __init__(self, texture_set: str, stack: str) -> None:
             self.texture_set, self.stack = texture_set, stack
@@ -612,6 +616,10 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
     def set_resolutions(sets: list[TextureSet], resolution: Resolution) -> None:
         world.resolution = (resolution.width, resolution.height)
 
+    def set_active_stack(stack: Stack) -> None:
+        world.require_open()
+        world.active_stacks.append(stack.texture_set)
+
     textureset = module(
         "substance_painter.textureset",
         ChannelType=ChannelType,
@@ -622,6 +630,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         Stack=Stack,
         all_texture_sets=lambda: [TextureSet(world.texture_set)],
         get_active_stack=lambda: Stack(world.texture_set, ""),
+        set_active_stack=set_active_stack,
         set_resolutions=set_resolutions,
     )
 
@@ -679,6 +688,9 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
 
         def get_stack(self) -> Stack:
             return Stack(world.texture_set, "")
+
+        def get_name(self) -> str:
+            return f"Fill layer {self.layer.uid_value}"
 
         def get_parent(self) -> None:
             return None  # every fake fill layer is a root layer

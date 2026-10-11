@@ -2,11 +2,14 @@
 
 1. Replay the job's state steps once through the documented API, reading effective defaults as
    they appear (fresh fill layers, the channel set `project.create` produced).
-2. Recording `same_session`: template capture, readback of every property the sequence set,
-   then each export step: wait for readiness (edition state entered, not busy), write the
-   fence, export into a fresh directory, verify the exported files are current (`capture.py`).
+   A golden whose settings sheet names values only Painter's UI can set has them applied by
+   the operator here (`texture_sheet.py`, decision 029).
+2. Recording `same_session`: template capture, the operator's entries and panel images (if
+   any), readback of every property the sequence set, then each export step: wait for
+   readiness (edition state entered, not busy), write the fence, export into a fresh
+   directory, verify the exported files are current (`capture.py`).
 3. Save the project (Full), close it, reopen it, find the layers again at their recorded places.
-4. Recording `after_save_reopen`: the same captures.
+4. Recording `after_save_reopen`: the same captures; the operator re-reads the UI-set values.
 5. Write the private record and the public manifest to the oracle inbox (`output.py`).
 
 The throwaway project and the exports live in the private work directory; the project is closed
@@ -45,6 +48,7 @@ from tools.parity.recorder.session import (
     PainterSession,
     RecorderError,
 )
+from tools.parity.recorder.texture_sheet import Operator, operate, readback_specs, texture_sheet
 
 Now = Callable[[], datetime]
 
@@ -347,6 +351,7 @@ def record_once(
     condition: str,
     now: Now,
     extra_readbacks: list[dict[str, Any]] | None = None,
+    operator_outputs: tuple[list[dict[str, Any]], list[Path]] = ([], []),
 ) -> tuple[dict[str, Any], list[Path]]:
     session.wait_ready()
     template = session.call("template_capture")
@@ -358,8 +363,9 @@ def record_once(
             "values": template,
         }
     ]
+    outputs += operator_outputs[0]
     outputs += readback_outputs(session, job, template, extra_readbacks)
-    blobs: list[Path] = []
+    blobs: list[Path] = list(operator_outputs[1])
     for export in job.exports:
         exported, files = export_outputs(session, export, template, directory)
         outputs += exported
@@ -406,27 +412,47 @@ def record_texture_golden(
     now: Now = utc_now,
     *,
     record_prefix: str = "",
+    operator: Operator | None = None,
 ) -> Path:
-    """Record one Tier 0-2b golden twice and write it to the inbox; returns the run directory."""
+    """Record one Tier 0-2b golden twice and write it to the inbox; returns the run directory.
+
+    A golden whose sheet names UI-set values needs `operator` (`texture_sheet.py`); without one
+    it is refused, so a default can never be recorded in place of the sheet's value."""
     if job.tier == "3":
         raise RecorderError("Tier 3 goldens are Iray references: use the iray command")
     if not job.exports:
         raise RecorderError("a texture golden needs at least one export_project_textures step")
     if job.captures:
         raise RecorderError("baking-defaults captures are recorded by the record-defaults command")
+    sheet = texture_sheet(job)
+    if sheet and operator is None:
+        raise RecorderError(
+            f"{job.golden_id}: its settings sheet names values only Painter's UI can set; "
+            "record it with an operator (--operator ui or console)"
+        )
     identity = session.connect()
     directory = ensure_outside_repository(work) / job.golden_id.replace("/", "__")
     directory = directory / run_name(identity.session_id, now())
     staged = stage_inputs(job, directory / "inputs")
     try:
         defaults = replay(session, job, staged)
-        baked = bake_readback_specs(job, defaults)
+        extra = bake_readback_specs(job, defaults) + readback_specs(sheet)
+        applied = (
+            operate(session, operator, sheet, directory / "r1-operator", apply=True)
+            if sheet and operator is not None
+            else ([], [])
+        )
         first, first_blobs = record_once(
-            session, job, identity, directory / "r1", "r1", "same_session", now, baked
+            session, job, identity, directory / "r1", "r1", "same_session", now, extra, applied
         )
         save_and_reopen(session, directory / "project" / "golden.spp")
+        reread = (
+            operate(session, operator, sheet, directory / "r2-operator", apply=False)
+            if sheet and operator is not None
+            else ([], [])
+        )
         second, second_blobs = record_once(
-            session, job, identity, directory / "r2", "r2", "after_save_reopen", now, baked
+            session, job, identity, directory / "r2", "r2", "after_save_reopen", now, extra, reread
         )
     finally:
         close_quietly(session)

@@ -65,7 +65,14 @@ def admission_problems(record: dict[str, Any]) -> list[str]:
 
 def test_corpus_covers_every_child() -> None:
     families = {path.relative_to(TIER0).parts[0] for path in manifest_paths()}
-    assert families == {"api-probes", "defaults-templates", "recorder-sample", "semantics"}
+    # semantics-ui: phase0.7_tier0-semantics-ui-cases (not a prerequisite of the gate).
+    assert families == {
+        "api-probes",
+        "defaults-templates",
+        "recorder-sample",
+        "semantics",
+        "semantics-ui",
+    }
 
 
 @pytest.mark.parametrize("path", manifest_paths(), ids=golden_id)

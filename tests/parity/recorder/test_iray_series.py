@@ -1,5 +1,5 @@
 """Iray reference series and the `ref_match` session environment (task
-`phase0.7_render-reference-captures`; decisions 038, 039 and 043): a session-environment step
+`phase0.7_render-reference-captures`; decisions 038, 039 and 046): a session-environment step
 names its file by SHA-256 and the recorder stages the given file; `iray --launch` records one
 reference per fresh Painter process, skips goldens that already hold the condition and goes on
 after a refusal."""

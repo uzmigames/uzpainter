@@ -1321,6 +1321,22 @@ def channel_names(args: dict[str, Any]) -> dict[str, str]:
     return names
 
 
+def show_texture_set(args: dict[str, Any]) -> str:
+    """Make a texture set's stack the active one, so Painter's panels show it (the operator
+    step of texture goldens, `texture_sheet.py`); returns the active texture set's name."""
+    texture_set = substance_painter.textureset.TextureSet.from_name(args["texture_set"])
+    substance_painter.textureset.set_active_stack(texture_set.get_stack())
+    return str(substance_painter.textureset.get_active_stack().material().name())
+
+
+def show_node(args: dict[str, Any]) -> dict[str, Any]:
+    """Make the stack of a recorded node the active one; returns the node's name as the Layers
+    panel lists it, and its texture set."""
+    node = NODES[int(args["node_step"])]
+    substance_painter.textureset.set_active_stack(node.get_stack())
+    return {"name": node.get_name(), "texture_set": node.get_stack().material().name()}
+
+
 OPERATIONS = {
     "hello": hello,
     "state": state,
@@ -1336,6 +1352,8 @@ OPERATIONS = {
     "render_state": render_state,
     "switch_mode": switch_mode,
     "channel_names": channel_names,
+    "show_texture_set": show_texture_set,
+    "show_node": show_node,
     "shipped_templates": shipped_templates,
     "baking_capture": baking_capture,
     "baking_state": baking_state,

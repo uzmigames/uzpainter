@@ -1,10 +1,10 @@
 # Iray references and their noise terms
 
-Task `phase0.7_render-reference-captures` (child of `phase0.9_render-reference-capture`, P0-FEAS-RENDER in `docs/dag.md`). It records the Tier 3 Iray references of the fixed render pipeline and measures Iray's own noise per fixture: (a) the run-to-run difference between two session-separated references and (b) Iray's Monte-Carlo error at S against a k·S reference (`docs/architecture/07-preview-and-render-parity.md` §4 step 1). Decisions 018, 029, 038 (fixed pipeline), 039 (pixel route and UI automation), 042 (open-pbr material scope) and 043 (this reference set) apply. This report holds statuses, numbers and SHA-256 hashes only; renders, panel images and readbacks stay in the private store on the owner's machine.
+Task `phase0.7_render-reference-captures` (child of `phase0.9_render-reference-capture`, P0-FEAS-RENDER in `docs/dag.md`). It records the Tier 3 Iray references of the fixed render pipeline and measures Iray's own noise per fixture: (a) the run-to-run difference between two session-separated references and (b) Iray's Monte-Carlo error at S against a k·S reference (`docs/architecture/07-preview-and-render-parity.md` §4 step 1). Decisions 018, 029, 038 (fixed pipeline), 039 (pixel route and UI automation), 042 (open-pbr material scope) and 046 (this reference set) apply. This report holds statuses, numbers and SHA-256 hashes only; renders, panel images and readbacks stay in the private store on the owner's machine.
 
-**Status (2026-10-11).** References admitted, noise terms measured, fixture content proposed. All 23 goldens hold three references each, admitted to the private store: 22 fixtures of decision 043 plus the qualification sphere of `phase0.6_render-reference-procedure`. Each golden has two `separate_session` references and one `k_times_samples` reference at 4 x 256 samples, every one in its own Painter process. Recording took 69 references; 68 were made by this task on 2026-10-11 on Painter `12.1.5+js-api.1.1.20` (Windows 11, RTX 4090), operated by the UI operator under the Assets3D Painter lock. One was the qualification reference `s-2e84a21a97c3` of phase0.6. No reference was refused.
+**Status (2026-10-11).** References admitted, noise terms measured, fixture content proposed. All 23 goldens hold three references each, admitted to the private store: 22 fixtures of decision 046 plus the qualification sphere of `phase0.6_render-reference-procedure`. Each golden has two `separate_session` references and one `k_times_samples` reference at 4 x 256 samples, every one in its own Painter process. Recording took 69 references; 68 were made by this task on 2026-10-11 on Painter `12.1.5+js-api.1.1.20` (Windows 11, RTX 4090), operated by the UI operator under the Assets3D Painter lock. One was the qualification reference `s-2e84a21a97c3` of phase0.6. No reference was refused.
 
-## 1. Scope (decision 043)
+## 1. Scope (decision 046)
 
 The original "analytic fixture profile" (Legacy colour management with `Linear` tone mapping, a constant-colour, a bright-patch and a Poly Haven environment, a white furnace) predates decision 038 and is superseded. Every reference is captured with procedure `iray-capture/1` (`iray-capture-procedure.md` §2) under the Assets3D standard `U-A3D-RENDERSTD-2` (file SHA-256 `2ec4281f7a1414c836eb59aec4fa895db0706c2fc9c4e19433325939a6525be5`, unchanged on 2026-10-11):
 
@@ -14,7 +14,7 @@ The original "analytic fixture profile" (Legacy colour management with `Linear` 
 - **Repeats.** Two `separate_session` references and one `k_times_samples` reference with **k = 4** (1024 samples), each in its own freshly started Painter process.
 - **Shader.** Painter 12.1.5's default `open-pbr` instance at its defaults (decision 042; read back in §5).
 
-Not measured by any reference (decision 043): open-pbr features that are off by default (transmission, subsurface, coat, fuzz, thin-film, specular colour, anisotropy, diffuse roughness), textured base colour, multi-material texture sets, non-default shader parameters, and the realtime `base_color` diagnostic (a viewport capture, never an Iray reference, decision 039; P2-PREVIEW). Energy conservation (white furnace) is an analytic test of UzPainter's own path tracer and needs no Iray reference.
+Not measured by any reference (decision 046): open-pbr features that are off by default (transmission, subsurface, coat, fuzz, thin-film, specular colour, anisotropy, diffuse roughness), textured base colour, multi-material texture sets, non-default shader parameters, and the realtime `base_color` diagnostic (a viewport capture, never an Iray reference, decision 039; P2-PREVIEW). Energy conservation (white furnace) is an analytic test of UzPainter's own path tracer and needs no Iray reference.
 
 ## 2. Fixtures (proposed to the owner for ratification)
 
@@ -188,7 +188,7 @@ Values in units of 1e-4 of full scale of the 16-bit display-referred encoding (o
   - In all three, (a) is unbiased (mean signed Δ 0.00 ± 0.02e-4) and noise-like: its p99 halves with each 2x box average.
   - The cause is not identified. This report does not assign one. `cube-saturated--ref-match-180`, on the same mesh, differs in 1,258 pixels only.
   - (a) is never zero, so Iray is not bit-repeatable across sessions. The seed stays `uncontrolled` (decision 039).
-- **Iray's sequence repeats.** For 20 goldens the mean |Δ| of (a) is about three orders of magnitude below that of (b). Iray's sample sequence therefore does not change between sessions, and (a) is not a repeat with an independent seed. The S-render σ is estimated from (b) alone, as a range (decision 043): rms(b)/√(1+1/k) if the k·S render is independent of the S render, and rms(b)/√(1−1/k) if it continues the same sequence.
+- **Iray's sequence repeats.** For 20 goldens the mean |Δ| of (a) is about three orders of magnitude below that of (b). Iray's sample sequence therefore does not change between sessions, and (a) is not a repeat with an independent seed. The S-render σ is estimated from (b) alone, as a range (decision 046): rms(b)/√(1+1/k) if the k·S render is independent of the S render, and rms(b)/√(1−1/k) if it continues the same sequence.
 - **Monte-Carlo error at S (b).**
   - Object interior: mean |Δ| is 4.5e-4 to 28.1e-4 (0.12 to 0.72 of an 8-bit code). p99 is 26e-4 to 146e-4, except `cube-saturated--ref-match-180` at 223e-4 (5.7 codes).
   - Exceptions: the mirror (`neutral-reflective`: 0.23e-4 under v2, 0.01e-4 under `ref_match`) and the edge band, where p99 reaches 247e-4.
@@ -199,7 +199,7 @@ Values in units of 1e-4 of full scale of the 16-bit display-referred encoding (o
   - `opacity-stripes` differs in 1,743 to 2,578 pixels, max 10.2e-4.
   - Both are at the run-to-run floor of (a), and their (b) statistics equal `metal0-rough050`'s. With the default shader (emission luminance 0, alpha test and blending off), Painter's Iray ignores an emission colour and an opacity map. UzPainter's `painter_iray` must ignore them too under decision 042.
 - **Perturbations act.** Against `metal0-rough050`, `normal-ridges` changes 244,381 pixels (mean |Δ| 74e-4) and `height-stripes` changes 146,992 (bump, as row `height` of the procedure found).
-- **Glossy-fit risk.** The bright-patch environment of the old proposal is gone (decision 043). Glossy lobes are constrained only by Studio White Soft and the `ref_match` HDRI. The fits of `phase0.8_render-reference-fits` must state the residual risk this leaves.
+- **Glossy-fit risk.** The bright-patch environment of the old proposal is gone (decision 046). Glossy lobes are constrained only by Studio White Soft and the `ref_match` HDRI. The fits of `phase0.8_render-reference-fits` must state the residual risk this leaves.
 - These are estimates from three renders per golden, not tolerances. An exception bound derived from them belongs to the exception register and the owner (07 §4 step 3).
 
 ## 5. Default shader read back under OCIO (decision 042 evidence)

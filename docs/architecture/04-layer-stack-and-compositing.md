@@ -67,7 +67,7 @@ Acceptance for every kernel is equality of native decoded values with the Tier 0
 ## 6. Height, normal and the virtual maps
 
 - Height is a signed channel (storage format per template, measured in Tier 0); `SignedAddition` and `LinearDodge` semantics come from Tier 0.
-- Height→normal is a finite-difference gradient of the height channel scaled by a strength parameter; Painter exposes a method choice in its project settings and a strength in its shader settings (public documentation). Both methods are fitted from Tier 0 height ramps (kernel footprint, scaling, edge handling) and recorded in `parity/semantics/height-to-normal.json`.
+- Height→normal is a finite-difference gradient of the height channel. Painter 12.1.5 exposes the method per texture set in Texture Set Settings (`Sharp`, the default, and `Smooth (Sobel)`) and has no strength setting (decision 047, measured; older public help placed a strength in the shader settings). Both methods are fitted from Tier 0 height ramps (kernel footprint, scaling with the height amplitude, edge handling) and recorded in `parity/semantics/height-to-normal.json`.
 - Virtual exports `Normal_OpenGL`/`Normal_DirectX` combine the mesh normal map, the channel normal and the height-derived normal with the fitted normal-blend operator, converted to the requested convention; every exported normal is tagged `geometry_only` or `combined` with the relief round (EXP-09). `AO_Mixed` combines the baked AO with the AO channel; the operator (multiply, minimum or other) is fitted in Tier 0. The definitions of the other virtual maps (`Diffuse`, `Specular`, `Glossiness`, `f0`, `1/ior`, …) come from Adobe's public output-template documentation and are confirmed in Tier 0.
 
 ## 7. Evaluator architecture

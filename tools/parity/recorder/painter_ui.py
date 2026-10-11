@@ -16,9 +16,18 @@ information section is read back the same way. Panel images are taken with `Prin
 The native Save Render file dialog is driven through UI Automation patterns only (file type,
 file name, Save), which the Windows dialog applies directly.
 
-`UiOperator` answers the recorder's operator prompts (`iray.py`, `iray_probe.py`) with these
-actions, so the console operator and the automated operator follow the same procedure text.
-A prompt it does not recognise stops the run.
+`UiOperator` answers the recorder's operator prompts (`iray.py`, `iray_probe.py`, and the
+texture-golden settings sheet of `texture_sheet.py`) with these actions, so the console operator
+and the automated operator follow the same procedure text. A prompt it does not recognise stops
+the run.
+
+Texture goldens (task `phase0.7_tier0-semantics-ui-cases`) use two docked panels that Painter
+12.1.5 shows as tabs of the main window: Texture Set Settings (the height-to-normal method of
+the texture set the recorder made active) and Layers (a layer's blending mode in the channel
+chosen in the panel's channel selector, through the row's blending-mode menu). A hidden tab is
+brought forward with UI Automation's tab selection, which only navigates and sets nothing.
+Before every click on these panels the point is checked to belong to Painter's own window (or
+to the menu it opened), so a click can never land on a window that covers Painter.
 
 Dev-only dependencies (never shipped): `pywinauto` (with `comtypes`), `pywin32`, `Pillow`. They
 are imported when a `PainterUi` is created, so the rest of the recorder and its tests do not
@@ -56,6 +65,26 @@ PANEL_DOCKS = {
     "Shader Settings": "Shader Settings",
 }
 SLIDER_VALUE = ".QWidget.Alg::SliderHeader.value"
+# Main-window docks shown as tabs (texture goldens): sheet panel -> (tab title, automation id).
+TAB_DOCKS = {
+    "Texture Set Settings": (
+        "Texture Set Settings",
+        "QApplication.S4MainWindow.textureSetSettings",
+    ),
+    "Layers": ("Layers", "QApplication.S4MainWindow.LayersStackView"),
+}
+TEXTURE_SET_NAME = ".MaterialViewGeneralProperties.name.Alg::ElidedLabel.QLabel"
+TEXTURE_SET_COMBOS = {"Height to normal method": ".height2NormalMethod"}
+CHANNEL_SELECTOR = ".channelSelector"
+LAYER_NAME = ".layerWidget.name.Alg::ElidedLabel.QLabel"
+LAYER_BLENDING = ".layerWidget.blendingMode"
+MENU_CLASS = "QMenu"
+# What a layer row's blending-mode button shows for a menu label (Painter 12.1.5, observed).
+BLENDING_SHOWN = {"Pthr": "Passthrough", "Norm": "Normal"}
+TEXTURE_SET_TARGET = re.compile(r"^(?P<setting>.+) of texture set '(?P<texture_set>[^']+)'$")
+LAYER_TARGET = re.compile(
+    r"^Blending mode of layer '(?P<layer>[^']+)' in channel '(?P<channel>[^']+)'$"
+)
 TIME_UNITS = {"s": "Seconds", "min": "Minutes", "h": "Hours"}
 VIEWPORT_TRANSFORM = "Viewport display transform"
 TRANSFORM_OVERLAY = (320, 60)  # pixels at the viewport's top-right corner holding the selector
@@ -288,10 +317,165 @@ class PainterUi:
             time.sleep(0.15)
         raise RecorderError(f"widget *{suffix} cannot be scrolled into view")
 
+    # -- tabbed docks of texture goldens -------------------------------------------------------
+
+    def on_screen(self, element: Any) -> bool:
+        box, frame = element.rectangle(), self.window.rectangle()
+        return bool(
+            frame.left <= box.left < box.right <= frame.right
+            and frame.top <= box.top < box.bottom <= frame.bottom
+        )
+
+    def tab_dock(self, panel: str) -> Any:
+        """A main-window dock, its tab brought forward when another tab hides it (UI Automation
+        tab selection: navigation only, it changes no setting)."""
+        title, automation_id = TAB_DOCKS[panel]
+        for _ in range(3):
+            docks = [
+                c for c in self.window.children() if c.element_info.automation_id == automation_id
+            ]
+            if len(docks) != 1:
+                raise RecorderError(f"Painter's {panel!r} dock was not found")
+            if self.on_screen(docks[0]):
+                return docks[0]
+            tabs = [
+                tab
+                for bar in self.window.children()
+                if bar.element_info.class_name == "QMainWindowTabBar"
+                for tab in bar.children()
+                if str(tab.window_text()).strip() == title
+            ]
+            if len(tabs) != 1:
+                raise RecorderError(f"Painter's {panel!r} dock is hidden and has no single tab")
+            tabs[0].iface_selection_item.Select()
+            time.sleep(1.0)
+        raise RecorderError(f"Painter's {panel!r} dock could not be shown")
+
+    def click(self, element: Any, owner: int | None = None) -> None:
+        """A real click at the element's centre, after checking that the point belongs to
+        Painter's window (or to `owner`, a menu Painter opened)."""
+        import win32gui
+
+        box = element.rectangle()
+        point = ((box.left + box.right) // 2, (box.top + box.bottom) // 2)
+        root = win32gui.GetAncestor(win32gui.WindowFromPoint(point), 2)  # GA_ROOT
+        if root != (owner or self.window.handle):
+            raise RecorderError(
+                f"the point {point} of a Painter widget is covered by another window; "
+                "nothing was clicked"
+            )
+        element.click_input()
+
+    def choose(self, combo: Any, text: str) -> None:
+        """Pick a combo box item by its text with real clicks."""
+        if str(combo.iface_value.CurrentValue) == text:
+            return
+        self.front()
+        self.click(combo)
+        time.sleep(0.5)
+        items = [
+            i
+            for i in combo.descendants()
+            if i.element_info.control_type == "ListItem" and i.window_text() == text
+        ]
+        if len(items) != 1:
+            combo.collapse()
+            raise RecorderError(f"combo box offers no single item {text!r}")
+        items[0].click_input()
+        time.sleep(self.settle_s)
+
+    def texture_set_dock(self, texture_set: str) -> Any:
+        """Texture Set Settings, checked to show `texture_set` (the recorder made it active)."""
+        dock = self.tab_dock("Texture Set Settings")
+        shown = str(self.find(dock, TEXTURE_SET_NAME).window_text())
+        if shown != texture_set:
+            raise RecorderError(f"Texture Set Settings shows {shown!r}, not {texture_set!r}")
+        return dock
+
+    def texture_set_value(self, setting: str, texture_set: str, value: str | None) -> str:
+        if setting not in TEXTURE_SET_COMBOS:
+            raise RecorderError(f"the UI operator has no Texture Set Settings widget {setting!r}")
+        combo = TEXTURE_SET_COMBOS[setting]
+        dock = self.texture_set_dock(texture_set)
+        if value is not None:
+            self.choose(self.visible(dock, combo, "ComboBox"), value)
+            dock = self.texture_set_dock(texture_set)
+        return str(self.find(dock, combo, "ComboBox").iface_value.CurrentValue)
+
+    def layer_blending(self, layer: str, channel: str, value: str | None) -> str:
+        """A layer row's blending mode in one channel (the panel's channel selector), set through
+        the row's menu when `value` is given; returns the menu label the row shows."""
+        dock = self.tab_dock("Layers")
+        self.choose(self.find(dock, CHANNEL_SELECTOR, "ComboBox"), channel)
+        shown_channel = str(self.find(dock, CHANNEL_SELECTOR, "ComboBox").iface_value.CurrentValue)
+        if shown_channel != channel:
+            raise RecorderError(f"the Layers channel selector shows {shown_channel!r}")
+        button = self.layer_button(dock, layer)
+        if value is not None and BLENDING_SHOWN.get(str(button.window_text())) != value:
+            self.front()
+            self.click(button)
+            menu = self.menu()
+            items = [
+                i for i in menu.descendants(control_type="MenuItem") if i.window_text() == value
+            ]
+            if len(items) != 1:
+                menu.type_keys("{ESC}")
+                raise RecorderError(f"the blending-mode menu offers no single item {value!r}")
+            self.click(items[0], owner=menu.handle)
+            time.sleep(self.settle_s)
+            button = self.layer_button(self.tab_dock("Layers"), layer)
+        shown = str(button.window_text())
+        return BLENDING_SHOWN.get(shown, shown)
+
+    def layer_button(self, dock: Any, layer: str) -> Any:
+        """The blending-mode button of the one row of the Layers panel named `layer`."""
+        labels = [
+            e
+            for e in dock.descendants()
+            if e.element_info.automation_id.endswith(LAYER_NAME) and e.window_text() == layer
+        ]
+        if len(labels) != 1:
+            raise RecorderError(f"the Layers panel lists {len(labels)} layers named {layer!r}")
+        if not self.on_screen(labels[0]):
+            raise RecorderError(f"layer {layer!r} is not in the visible part of the Layers panel")
+        row = labels[0].parent().parent().parent()
+        buttons = [
+            c for c in row.children() if c.element_info.automation_id.endswith(LAYER_BLENDING)
+        ]
+        if len(buttons) != 1:
+            raise RecorderError(f"layer {layer!r}: no single blending-mode button")
+        return buttons[0]
+
+    def menu(self) -> Any:
+        deadline = time.monotonic() + self.timeout_s
+        while True:
+            menus = [
+                w
+                for w in self.desktop.windows(process=self.window.process_id())
+                if w.element_info.class_name == MENU_CLASS
+            ]
+            if len(menus) == 1:
+                return menus[0]
+            if time.monotonic() > deadline:
+                raise RecorderError("the blending-mode menu did not open")
+            time.sleep(0.2)
+
+    def target_value(self, panel: str, setting: str, value: str | None) -> str | None:
+        """Read (`value` None) or set a targeted texture-golden setting; None when `setting`
+        names no target."""
+        if panel == "Texture Set Settings" and (match := TEXTURE_SET_TARGET.match(setting)):
+            return self.texture_set_value(match["setting"], match["texture_set"], value)
+        if panel == "Layers" and (match := LAYER_TARGET.match(setting)):
+            return self.layer_blending(match["layer"], match["channel"], value)
+        return None
+
     # -- values -------------------------------------------------------------------------------
 
     def read(self, panel: str, setting: str) -> str:
         """What the widget shows now, as text."""
+        targeted = self.target_value(panel, setting, None)
+        if targeted is not None:
+            return targeted
         control = control_for(panel, setting)
         dock = self.dock(panel)
         if control.kind == "colour":
@@ -315,6 +499,9 @@ class PainterUi:
         self, panel: str, setting: str, value: float | int | str | bool, unit: str | None
     ) -> str:
         """Set one widget to `value`, commit it, and return what the widget shows afterwards."""
+        targeted = self.target_value(panel, setting, str(value))
+        if targeted is not None:
+            return targeted
         control = control_for(panel, setting)
         dock = self.dock(panel)
         self.front()
@@ -476,6 +663,13 @@ class PainterUi:
     def panel_image(self, panel: str, path: Path) -> Path:
         if panel == VIEWPORT_TRANSFORM:
             return self.display_transform_image(path)
+        if panel in TAB_DOCKS:
+            image, (left, top) = self.print_window(self.window.handle)
+            box = self.tab_dock(panel).rectangle()
+            crop = image.crop((box.left - left, box.top - top, box.right - left, box.bottom - top))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            crop.save(path)
+            return path
         dock = self.dock(panel)
         image, _ = self.print_window(dock.handle)
         path.parent.mkdir(parents=True, exist_ok=True)

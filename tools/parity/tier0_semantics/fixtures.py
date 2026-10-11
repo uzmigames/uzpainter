@@ -90,6 +90,20 @@ def pattern64() -> bytes:
     return png16(64, 64, 3, lambda x, y: values[y * 64 + x])
 
 
+IMPULSE_TEXELS = ((16, 16), (48, 16), (16, 48), (48, 48))
+
+
+def impulse64() -> bytes:
+    """RGB 64 x 64 for direct kernel reads (`compositor-resample-gaps.md` section 3): R 65535 at
+    four isolated texels on 0, G 49152 at the same texels on 16384, B 65535 for x < 32 (a step)."""
+
+    def texel(x: int, y: int) -> Pixel:
+        hit = (x, y) in IMPULSE_TEXELS
+        return (0xFFFF if hit else 0, 49152 if hit else 16384, 0xFFFF if x < 32 else 0)
+
+    return png16(64, 64, 3, texel)
+
+
 def height_ramps() -> bytes:
     """Grey height field in four quadrants: a linear ramp in x, a cone, steps, a sine ridge."""
 

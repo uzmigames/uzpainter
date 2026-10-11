@@ -1623,6 +1623,10 @@
       "documented_as": "substance_painter.textureset.get_active_stack",
       "page": "substance_painter/textureset/index.html"
     },
+    "substance_painter.textureset.set_active_stack": {
+      "documented_as": "substance_painter.textureset.set_active_stack",
+      "page": "substance_painter/textureset/index.html"
+    },
     "substance_painter.textureset.set_resolutions": {
       "documented_as": "substance_painter.textureset.set_resolutions",
       "page": "substance_painter/textureset/index.html"
