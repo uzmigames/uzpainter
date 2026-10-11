@@ -90,8 +90,8 @@ private:
     /// operands and the hardware arithmetic tables; upload and GPU buffers), copied by the next
     /// flush.
     render::Result<void> EnsureTable16();
-    /// Creates the log2 / exp2 tables buffer of the Levels kernel (kernelgen.h `kPowWords`),
-    /// copied by the next flush.
+    /// Creates the function tables buffer (log2, exp2, sin, cos) of the Levels kernel and the
+    /// normal-map blend kernels (kernelgen.h `kPowWords`), copied by the next flush.
     render::Result<void> EnsurePowTables();
     render::Result<uz::RHIBufferHandle> CreateBuffer(uint64_t bytes, uz::RHIBufferUsage usage,
                                                      uz::RHIMemoryType memory, uint32_t stride,

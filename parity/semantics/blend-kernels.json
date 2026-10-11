@@ -2,7 +2,7 @@
   "schema": "uzpainter/parity/semantics/1",
   "record_class": "public_semantics",
   "semantics_id": "blend-kernels",
-  "description": "The blend kernels of the evaluator (04 section 3, task phase1.10_compositor-blend-kernels) for every documented BlendingMode, evaluated by the CPU store under the current profile on the Tier 0 blend sweeps and on the Normal channel. Residuals are |delta| in export units (16-bit PNG codes, OpenEXR float32 values) per texture set and channel, against both recordings (r1 same session, r2 after save and reopen). Supersedes blend-modes.json for the evaluator; blend-modes.json keeps the phase0.7 candidate fits.",
+  "description": "The blend kernels of the evaluator (04 section 3, tasks phase1.10_compositor-blend-kernels and phase1.11_compositor-blend-gaps) for every documented BlendingMode, evaluated by the CPU store under the current profile on the Tier 0 blend sweeps and on the Normal channel. Residuals are |delta| in export units (16-bit PNG codes, OpenEXR float32 values) per texture set and channel, against both recordings (r1 same session, r2 after save and reopen). Supersedes blend-modes.json for the evaluator; blend-modes.json keeps the phase0.7 candidate fits.",
   "painter_build_id": "12.1.0+js-api.1.1.20",
   "corpus": [
     "tier0/semantics/blend-additive",
@@ -6586,7 +6586,7 @@
       "entry_id": "kernel-tint",
       "subject": "BlendingMode.Tint in the evaluator",
       "status": "calibrated",
-      "formula": "Tint: f = HSV(hue of B, saturation and value of A) with the value doubled, in float32: RGB -> HSV by the hexcone (largest component v; d = v - min; hue = |k + (q.w - q.y) rcp(6d + e)| with the sector offset k in {0, -1/3, 2/3, -1}; s = d rcp(v + e); e = 2^-12); HSV -> RGB v (1 + (clamp(|6 fract(h + k) - 3| - 1, 0, 1) - 1) s), k = 1, 2/3, 1/3. A grey channel keeps A (Value: B). Opacity alpha (times the mask): over an opaque backdrop v = a (1 - alpha) + r alpha, the products rounded and summed in float32; over a transparent backdrop the source; else W3C §5.1. UNORM formats clamp r to [0, 1] first. Operands and writes per channel format as in quantisation-profile.json (isolated root, sRGB8 on linear values). Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
+      "formula": "Tint: f = HSV(hue of B, saturation and value of A) with the value doubled, in float32 (fitted, phase1.11): hue in turns from the smallest component (red first, then green before blue on ties), centre C = 1 (blue), 3 (red), 5 (green) and X the difference of the other two (g - r, b - g, r - b): h6 = fma(X - 3e, rcp(d + e), C), d = max - min, e = 2^-12, h = h6 float32(1/6), plus 1 if negative; hue weights with f = h - floor(h): red |fma(f, 6, -3)| - 1, green 2 - |fma(f, 6, -2)|, blue 2 - |fma(f, 6, -4)|, clamped to [0, 1]; v = 2 max, lo = v fma(-d', rcp(max' + e), 1) of the saturation source (d', max'; Saturation: 1 - d' rcp(max' + e) with two roundings), each component fma(v - lo, w, lo). A grey channel keeps A (Value: B). Opacity alpha (times the mask): over an opaque backdrop v = a (1 - alpha) + r alpha, the products rounded and summed in float32; over a transparent backdrop the source; else W3C §5.1. UNORM formats clamp r to [0, 1] first. Operands and writes per channel format as in quantisation-profile.json (isolated root, sRGB8 on linear values). Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
       "public_sources": [
         {
           "source_id": "S-W3C-BLEND",
@@ -6617,6 +6617,11 @@
           "origin": "fitted"
         },
         {
+          "name": "hue_offset",
+          "value": 0.000732421875,
+          "origin": "fitted"
+        },
+        {
           "name": "hardware_tables",
           "value": "src/evaluator/tables/hw-{rcp,sqrt,rsqrt}.zlib",
           "origin": "fitted"
@@ -6634,12 +6639,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 129,
-            "mean": 10.084208170572916,
-            "p99": 122,
-            "differing": 32634,
+            "max": 1,
+            "mean": 0.0003611246744791667,
+            "p99": 0,
+            "differing": 71,
             "total": 196608,
-            "affected_texels": 32588,
+            "affected_texels": 71,
             "texels": 65536
           }
         },
@@ -6649,12 +6654,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 129,
-            "mean": 10.084208170572916,
-            "p99": 122,
-            "differing": 32634,
+            "max": 1,
+            "mean": 0.0003611246744791667,
+            "p99": 0,
+            "differing": 71,
             "total": 196608,
-            "affected_texels": 32588,
+            "affected_texels": 71,
             "texels": 65536
           }
         },
@@ -6664,12 +6669,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 65,
-            "mean": 5.042124430338542,
-            "p99": 61,
-            "differing": 32454,
+            "max": 1,
+            "mean": 0.0001678466796875,
+            "p99": 0,
+            "differing": 33,
             "total": 196608,
-            "affected_texels": 32419,
+            "affected_texels": 33,
             "texels": 65536
           }
         },
@@ -6679,12 +6684,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 65,
-            "mean": 5.042124430338542,
-            "p99": 61,
-            "differing": 32454,
+            "max": 1,
+            "mean": 0.0001678466796875,
+            "p99": 0,
+            "differing": 33,
             "total": 196608,
-            "affected_texels": 32419,
+            "affected_texels": 33,
             "texels": 65536
           }
         },
@@ -6694,12 +6699,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1024,
-            "mean": 10.039082845052084,
-            "p99": 512,
-            "differing": 5152,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 5152,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -6709,12 +6714,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1024,
-            "mean": 10.039082845052084,
-            "p99": 512,
-            "differing": 5152,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 5152,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -6724,12 +6729,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1024,
-            "mean": 5.2146860758463545,
-            "p99": 256,
-            "differing": 3333,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 3333,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -6739,12 +6744,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1024,
-            "mean": 5.2146860758463545,
-            "p99": 256,
-            "differing": 3333,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 3333,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -6755,11 +6760,11 @@
           "unit": "16-bit code value",
           "difference": {
             "max": 257,
-            "mean": 9.356719970703125,
-            "p99": 257,
-            "differing": 7158,
+            "mean": 0.0013071695963541667,
+            "p99": 0,
+            "differing": 1,
             "total": 196608,
-            "affected_texels": 7158,
+            "affected_texels": 1,
             "texels": 65536
           }
         },
@@ -6770,11 +6775,11 @@
           "unit": "16-bit code value",
           "difference": {
             "max": 257,
-            "mean": 9.356719970703125,
-            "p99": 257,
-            "differing": 7158,
+            "mean": 0.0013071695963541667,
+            "p99": 0,
+            "differing": 1,
             "total": 196608,
-            "affected_texels": 7158,
+            "affected_texels": 1,
             "texels": 65536
           }
         },
@@ -6784,12 +6789,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 0.001983642578125,
-            "mean": 0.00029438378260238096,
-            "p99": 0.001953125,
-            "differing": 52147,
+            "max": 0.00048828125,
+            "mean": 5.607338001330693e-09,
+            "p99": 0,
+            "differing": 5,
             "total": 196608,
-            "affected_texels": 52114,
+            "affected_texels": 5,
             "texels": 65536
           }
         },
@@ -6799,12 +6804,12 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 0.001983642578125,
-            "mean": 0.00029438378260238096,
-            "p99": 0.001953125,
-            "differing": 52147,
+            "max": 0.00048828125,
+            "mean": 5.607338001330693e-09,
+            "p99": 0,
+            "differing": 5,
             "total": 196608,
-            "affected_texels": 52114,
+            "affected_texels": 5,
             "texels": 65536
           }
         },
@@ -6844,12 +6849,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 0.0004900097846984863,
-            "mean": 7.319625001400709e-05,
-            "p99": 0.0004640817642211914,
-            "differing": 70939,
+            "max": 1.1920928955078125e-07,
+            "mean": 2.940093205931286e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 8228,
             "total": 196608,
-            "affected_texels": 65280,
+            "affected_texels": 8228,
             "texels": 65536
           }
         },
@@ -6859,23 +6864,23 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 0.0004900097846984863,
-            "mean": 7.319625001400709e-05,
-            "p99": 0.0004640817642211914,
-            "differing": 70939,
+            "max": 1.1920928955078125e-07,
+            "mean": 2.940093205931286e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 8228,
             "total": 196608,
-            "affected_texels": 65280,
+            "affected_texels": 8228,
             "texels": 65536
           }
         }
       ],
-      "notes": "Release gap: the HSV conversion of blend-modes.json in float32 reproduces the grey (L16) channel exactly but not the colour channels; the hue of nearly grey colours is off (blend-modes.json, open item). Not admitted as exact; no exception proposed."
+      "notes": "Release gap: the fitted hue (phase1.11) reproduces the hue law of every texel to within one code (the earlier hexcone fit left up to 53 100 RGB16 values off); the float32 operation order of Painter's hue arithmetic is not identified, so one-code residuals remain on 16-bit and float channels. The grey (L16) and sRGB8 channels are exact. Not admitted as exact; no exception proposed."
     },
     {
       "entry_id": "kernel-saturation",
       "subject": "BlendingMode.Saturation in the evaluator",
       "status": "calibrated",
-      "formula": "Saturation: f = HSV(saturation of B, hue and value of A) with the value doubled, in float32: RGB -> HSV by the hexcone (largest component v; d = v - min; hue = |k + (q.w - q.y) rcp(6d + e)| with the sector offset k in {0, -1/3, 2/3, -1}; s = d rcp(v + e); e = 2^-12); HSV -> RGB v (1 + (clamp(|6 fract(h + k) - 3| - 1, 0, 1) - 1) s), k = 1, 2/3, 1/3. A grey channel keeps A (Value: B). Opacity alpha (times the mask): over an opaque backdrop v = a (1 - alpha) + r alpha, the products rounded and summed in float32; over a transparent backdrop the source; else W3C §5.1. UNORM formats clamp r to [0, 1] first. Operands and writes per channel format as in quantisation-profile.json (isolated root, sRGB8 on linear values). Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
+      "formula": "Saturation: f = HSV(saturation of B, hue and value of A) with the value doubled, in float32 (fitted, phase1.11): hue in turns from the smallest component (red first, then green before blue on ties), centre C = 1 (blue), 3 (red), 5 (green) and X the difference of the other two (g - r, b - g, r - b): h6 = fma(X - 3e, rcp(d + e), C), d = max - min, e = 2^-12, h = h6 float32(1/6), plus 1 if negative; hue weights with f = h - floor(h): red |fma(f, 6, -3)| - 1, green 2 - |fma(f, 6, -2)|, blue 2 - |fma(f, 6, -4)|, clamped to [0, 1]; v = 2 max, lo = v fma(-d', rcp(max' + e), 1) of the saturation source (d', max'; Saturation: 1 - d' rcp(max' + e) with two roundings), each component fma(v - lo, w, lo). A grey channel keeps A (Value: B). Opacity alpha (times the mask): over an opaque backdrop v = a (1 - alpha) + r alpha, the products rounded and summed in float32; over a transparent backdrop the source; else W3C §5.1. UNORM formats clamp r to [0, 1] first. Operands and writes per channel format as in quantisation-profile.json (isolated root, sRGB8 on linear values). Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
       "public_sources": [
         {
           "source_id": "S-W3C-BLEND",
@@ -6906,6 +6911,11 @@
           "origin": "fitted"
         },
         {
+          "name": "hue_offset",
+          "value": 0.000732421875,
+          "origin": "fitted"
+        },
+        {
           "name": "hardware_tables",
           "value": "src/evaluator/tables/hw-{rcp,sqrt,rsqrt}.zlib",
           "origin": "fitted"
@@ -6923,12 +6933,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 14879,
-            "mean": 49.52424112955729,
-            "p99": 561,
-            "differing": 53100,
+            "max": 1,
+            "mean": 0.0009867350260416667,
+            "p99": 0,
+            "differing": 194,
             "total": 196608,
-            "affected_texels": 40772,
+            "affected_texels": 194,
             "texels": 65536
           }
         },
@@ -6938,12 +6948,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 14879,
-            "mean": 49.52424112955729,
-            "p99": 561,
-            "differing": 53100,
+            "max": 1,
+            "mean": 0.0009867350260416667,
+            "p99": 0,
+            "differing": 194,
             "total": 196608,
-            "affected_texels": 40772,
+            "affected_texels": 194,
             "texels": 65536
           }
         },
@@ -6953,12 +6963,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 7440,
-            "mean": 24.75098164876302,
-            "p99": 280,
-            "differing": 53122,
+            "max": 1,
+            "mean": 0.00054931640625,
+            "p99": 0,
+            "differing": 108,
             "total": 196608,
-            "affected_texels": 40772,
+            "affected_texels": 108,
             "texels": 65536
           }
         },
@@ -6968,12 +6978,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 7440,
-            "mean": 24.75098164876302,
-            "p99": 280,
-            "differing": 53122,
+            "max": 1,
+            "mean": 0.00054931640625,
+            "p99": 0,
+            "differing": 108,
             "total": 196608,
-            "affected_texels": 40772,
+            "affected_texels": 108,
             "texels": 65536
           }
         },
@@ -6983,12 +6993,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 7960,
-            "mean": 47.78516133626302,
-            "p99": 768,
-            "differing": 19121,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 18243,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -6998,12 +7008,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 7960,
-            "mean": 47.78516133626302,
-            "p99": 768,
-            "differing": 19121,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 18243,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7013,12 +7023,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 4096,
-            "mean": 22.939971923828125,
-            "p99": 512,
-            "differing": 10825,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 10283,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7028,12 +7038,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 4096,
-            "mean": 22.939971923828125,
-            "p99": 512,
-            "differing": 10825,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 10283,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7043,12 +7053,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 15420,
-            "mean": 49.96655782063802,
-            "p99": 771,
-            "differing": 20574,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 20474,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7058,12 +7068,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 15420,
-            "mean": 49.96655782063802,
-            "p99": 771,
-            "differing": 20574,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 20474,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7073,12 +7083,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 0.3505859375,
-            "mean": 0.0015625231917510973,
-            "p99": 0.0213623046875,
-            "differing": 78389,
+            "max": 0.0009765625,
+            "mean": 3.222764159242312e-08,
+            "p99": 0,
+            "differing": 40,
             "total": 196608,
-            "affected_texels": 65270,
+            "affected_texels": 40,
             "texels": 65536
           }
         },
@@ -7088,12 +7098,12 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 0.3505859375,
-            "mean": 0.0015625231917510973,
-            "p99": 0.0213623046875,
-            "differing": 78389,
+            "max": 0.0009765625,
+            "mean": 3.222764159242312e-08,
+            "p99": 0,
+            "differing": 40,
             "total": 196608,
-            "affected_texels": 65270,
+            "affected_texels": 40,
             "texels": 65536
           }
         },
@@ -7133,12 +7143,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 0.08605813980102539,
-            "mean": 0.0003785238301740416,
-            "p99": 0.004559576511383057,
-            "differing": 84560,
+            "max": 1.1920928955078125e-07,
+            "mean": 7.410562830045819e-09,
+            "p99": 1.1920928955078125e-07,
+            "differing": 20122,
             "total": 196608,
-            "affected_texels": 65283,
+            "affected_texels": 20122,
             "texels": 65536
           }
         },
@@ -7148,23 +7158,23 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 0.08605813980102539,
-            "mean": 0.0003785238301740416,
-            "p99": 0.004559576511383057,
-            "differing": 84560,
+            "max": 1.1920928955078125e-07,
+            "mean": 7.410562830045819e-09,
+            "p99": 1.1920928955078125e-07,
+            "differing": 20122,
             "total": 196608,
-            "affected_texels": 65283,
+            "affected_texels": 20122,
             "texels": 65536
           }
         }
       ],
-      "notes": "Release gap: the HSV conversion of blend-modes.json in float32 reproduces the grey (L16) channel exactly but not the colour channels; the hue of nearly grey colours is off (blend-modes.json, open item). Not admitted as exact; no exception proposed."
+      "notes": "Release gap: the fitted hue (phase1.11) reproduces the hue law of every texel to within one code (the earlier hexcone fit left up to 53 100 RGB16 values off); the float32 operation order of Painter's hue arithmetic is not identified, so one-code residuals remain on 16-bit and float channels. The grey (L16) and sRGB8 channels are exact. Not admitted as exact; no exception proposed."
     },
     {
       "entry_id": "kernel-color",
       "subject": "BlendingMode.Color in the evaluator",
       "status": "calibrated",
-      "formula": "Color: f = HSV(hue and saturation of B, value of A) with the value doubled, in float32: RGB -> HSV by the hexcone (largest component v; d = v - min; hue = |k + (q.w - q.y) rcp(6d + e)| with the sector offset k in {0, -1/3, 2/3, -1}; s = d rcp(v + e); e = 2^-12); HSV -> RGB v (1 + (clamp(|6 fract(h + k) - 3| - 1, 0, 1) - 1) s), k = 1, 2/3, 1/3. A grey channel keeps A (Value: B). Opacity alpha (times the mask): over an opaque backdrop v = a (1 - alpha) + r alpha, the products rounded and summed in float32; over a transparent backdrop the source; else W3C §5.1. UNORM formats clamp r to [0, 1] first. Operands and writes per channel format as in quantisation-profile.json (isolated root, sRGB8 on linear values). Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
+      "formula": "Color: f = HSV(hue and saturation of B, value of A) with the value doubled, in float32 (fitted, phase1.11): hue in turns from the smallest component (red first, then green before blue on ties), centre C = 1 (blue), 3 (red), 5 (green) and X the difference of the other two (g - r, b - g, r - b): h6 = fma(X - 3e, rcp(d + e), C), d = max - min, e = 2^-12, h = h6 float32(1/6), plus 1 if negative; hue weights with f = h - floor(h): red |fma(f, 6, -3)| - 1, green 2 - |fma(f, 6, -2)|, blue 2 - |fma(f, 6, -4)|, clamped to [0, 1]; v = 2 max, lo = v fma(-d', rcp(max' + e), 1) of the saturation source (d', max'; Saturation: 1 - d' rcp(max' + e) with two roundings), each component fma(v - lo, w, lo). A grey channel keeps A (Value: B). Opacity alpha (times the mask): over an opaque backdrop v = a (1 - alpha) + r alpha, the products rounded and summed in float32; over a transparent backdrop the source; else W3C §5.1. UNORM formats clamp r to [0, 1] first. Operands and writes per channel format as in quantisation-profile.json (isolated root, sRGB8 on linear values). Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
       "public_sources": [
         {
           "source_id": "S-W3C-BLEND",
@@ -7195,6 +7205,11 @@
           "origin": "fitted"
         },
         {
+          "name": "hue_offset",
+          "value": 0.000732421875,
+          "origin": "fitted"
+        },
+        {
           "name": "hardware_tables",
           "value": "src/evaluator/tables/hw-{rcp,sqrt,rsqrt}.zlib",
           "origin": "fitted"
@@ -7212,12 +7227,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 172,
-            "mean": 17.603490193684895,
-            "p99": 142,
-            "differing": 46657,
+            "max": 1,
+            "mean": 0.0009511311848958334,
+            "p99": 0,
+            "differing": 187,
             "total": 196608,
-            "affected_texels": 46592,
+            "affected_texels": 187,
             "texels": 65536
           }
         },
@@ -7227,12 +7242,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 172,
-            "mean": 17.603490193684895,
-            "p99": 142,
-            "differing": 46657,
+            "max": 1,
+            "mean": 0.0009511311848958334,
+            "p99": 0,
+            "differing": 187,
             "total": 196608,
-            "affected_texels": 46592,
+            "affected_texels": 187,
             "texels": 65536
           }
         },
@@ -7242,12 +7257,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 86,
-            "mean": 8.802037556966146,
-            "p99": 71,
-            "differing": 46624,
+            "max": 1,
+            "mean": 0.0003102620442708333,
+            "p99": 0,
+            "differing": 61,
             "total": 196608,
-            "affected_texels": 46556,
+            "affected_texels": 61,
             "texels": 65536
           }
         },
@@ -7257,12 +7272,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 86,
-            "mean": 8.802037556966146,
-            "p99": 71,
-            "differing": 46624,
+            "max": 1,
+            "mean": 0.0003102620442708333,
+            "p99": 0,
+            "differing": 61,
             "total": 196608,
-            "affected_texels": 46556,
+            "affected_texels": 61,
             "texels": 65536
           }
         },
@@ -7272,12 +7287,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1024,
-            "mean": 19.335113525390625,
-            "p99": 512,
-            "differing": 9165,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 9165,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7287,12 +7302,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1024,
-            "mean": 19.335113525390625,
-            "p99": 512,
-            "differing": 9165,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 9165,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7302,12 +7317,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1024,
-            "mean": 11.070444742838541,
-            "p99": 512,
-            "differing": 5489,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 5489,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7317,12 +7332,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1024,
-            "mean": 11.070444742838541,
-            "p99": 512,
-            "differing": 5489,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 5489,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7332,12 +7347,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 257,
-            "mean": 14.827224731445312,
-            "p99": 257,
-            "differing": 11343,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 11343,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7347,12 +7362,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 257,
-            "mean": 14.827224731445312,
-            "p99": 257,
-            "differing": 11343,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 11343,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7362,12 +7377,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 0.00390625,
-            "mean": 0.0004339141050877515,
-            "p99": 0.00244140625,
-            "differing": 65526,
+            "max": 0.00048828125,
+            "mean": 2.421438694000244e-08,
+            "p99": 0,
+            "differing": 16,
             "total": 196608,
-            "affected_texels": 65449,
+            "affected_texels": 16,
             "texels": 65536
           }
         },
@@ -7377,12 +7392,12 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 0.00390625,
-            "mean": 0.0004339141050877515,
-            "p99": 0.00244140625,
-            "differing": 65526,
+            "max": 0.00048828125,
+            "mean": 2.421438694000244e-08,
+            "p99": 0,
+            "differing": 16,
             "total": 196608,
-            "affected_texels": 65449,
+            "affected_texels": 16,
             "texels": 65536
           }
         },
@@ -7422,12 +7437,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 0.0007718801498413086,
-            "mean": 0.00010588976935347698,
-            "p99": 0.0006161928176879883,
-            "differing": 72083,
+            "max": 1.1920928955078125e-07,
+            "mean": 5.043451286231478e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 15090,
             "total": 196608,
-            "affected_texels": 65535,
+            "affected_texels": 15090,
             "texels": 65536
           }
         },
@@ -7437,23 +7452,23 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 0.0007718801498413086,
-            "mean": 0.00010588976935347698,
-            "p99": 0.0006161928176879883,
-            "differing": 72083,
+            "max": 1.1920928955078125e-07,
+            "mean": 5.043451286231478e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 15090,
             "total": 196608,
-            "affected_texels": 65535,
+            "affected_texels": 15090,
             "texels": 65536
           }
         }
       ],
-      "notes": "Release gap: the HSV conversion of blend-modes.json in float32 reproduces the grey (L16) channel exactly but not the colour channels; the hue of nearly grey colours is off (blend-modes.json, open item). Not admitted as exact; no exception proposed."
+      "notes": "Release gap: the fitted hue (phase1.11) reproduces the hue law of every texel to within one code (the earlier hexcone fit left up to 53 100 RGB16 values off); the float32 operation order of Painter's hue arithmetic is not identified, so one-code residuals remain on 16-bit and float channels. The grey (L16) and sRGB8 channels are exact. Not admitted as exact; no exception proposed."
     },
     {
       "entry_id": "kernel-value",
       "subject": "BlendingMode.Value in the evaluator",
       "status": "calibrated",
-      "formula": "Value: f = HSV(value of B, hue and saturation of A) with the value doubled, in float32: RGB -> HSV by the hexcone (largest component v; d = v - min; hue = |k + (q.w - q.y) rcp(6d + e)| with the sector offset k in {0, -1/3, 2/3, -1}; s = d rcp(v + e); e = 2^-12); HSV -> RGB v (1 + (clamp(|6 fract(h + k) - 3| - 1, 0, 1) - 1) s), k = 1, 2/3, 1/3. A grey channel keeps A (Value: B). Opacity alpha (times the mask): over an opaque backdrop v = a (1 - alpha) + r alpha, the products rounded and summed in float32; over a transparent backdrop the source; else W3C §5.1. UNORM formats clamp r to [0, 1] first. Operands and writes per channel format as in quantisation-profile.json (isolated root, sRGB8 on linear values). Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
+      "formula": "Value: f = HSV(value of B, hue and saturation of A) with the value doubled, in float32 (fitted, phase1.11): hue in turns from the smallest component (red first, then green before blue on ties), centre C = 1 (blue), 3 (red), 5 (green) and X the difference of the other two (g - r, b - g, r - b): h6 = fma(X - 3e, rcp(d + e), C), d = max - min, e = 2^-12, h = h6 float32(1/6), plus 1 if negative; hue weights with f = h - floor(h): red |fma(f, 6, -3)| - 1, green 2 - |fma(f, 6, -2)|, blue 2 - |fma(f, 6, -4)|, clamped to [0, 1]; v = 2 max, lo = v fma(-d', rcp(max' + e), 1) of the saturation source (d', max'; Saturation: 1 - d' rcp(max' + e) with two roundings), each component fma(v - lo, w, lo). A grey channel keeps A (Value: B). Opacity alpha (times the mask): over an opaque backdrop v = a (1 - alpha) + r alpha, the products rounded and summed in float32; over a transparent backdrop the source; else W3C §5.1. UNORM formats clamp r to [0, 1] first. Operands and writes per channel format as in quantisation-profile.json (isolated root, sRGB8 on linear values). Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
       "public_sources": [
         {
           "source_id": "S-W3C-BLEND",
@@ -7484,6 +7499,11 @@
           "origin": "fitted"
         },
         {
+          "name": "hue_offset",
+          "value": 0.000732421875,
+          "origin": "fitted"
+        },
+        {
           "name": "hardware_tables",
           "value": "src/evaluator/tables/hw-{rcp,sqrt,rsqrt}.zlib",
           "origin": "fitted"
@@ -7501,12 +7521,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 14011,
-            "mean": 12.097732543945312,
-            "p99": 191,
-            "differing": 23312,
+            "max": 1,
+            "mean": 0.0008138020833333334,
+            "p99": 0,
+            "differing": 160,
             "total": 196608,
-            "affected_texels": 21953,
+            "affected_texels": 160,
             "texels": 65536
           }
         },
@@ -7516,12 +7536,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 14011,
-            "mean": 12.097732543945312,
-            "p99": 191,
-            "differing": 23312,
+            "max": 1,
+            "mean": 0.0008138020833333334,
+            "p99": 0,
+            "differing": 160,
             "total": 196608,
-            "affected_texels": 21953,
+            "affected_texels": 160,
             "texels": 65536
           }
         },
@@ -7531,12 +7551,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 7005,
-            "mean": 6.04888916015625,
-            "p99": 96,
-            "differing": 23261,
+            "max": 1,
+            "mean": 0.0004221598307291667,
+            "p99": 0,
+            "differing": 83,
             "total": 196608,
-            "affected_texels": 21932,
+            "affected_texels": 83,
             "texels": 65536
           }
         },
@@ -7546,12 +7566,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 7005,
-            "mean": 6.04888916015625,
-            "p99": 96,
-            "differing": 23261,
+            "max": 1,
+            "mean": 0.0004221598307291667,
+            "p99": 0,
+            "differing": 83,
             "total": 196608,
-            "affected_texels": 21932,
+            "affected_texels": 83,
             "texels": 65536
           }
         },
@@ -7561,12 +7581,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 14016,
-            "mean": 11.896743774414062,
-            "p99": 512,
-            "differing": 6581,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 6537,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7576,12 +7596,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 14016,
-            "mean": 11.896743774414062,
-            "p99": 512,
-            "differing": 6581,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 6537,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7591,12 +7611,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 7040,
-            "mean": 5.6385447184244795,
-            "p99": 256,
-            "differing": 4522,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 4483,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7606,12 +7626,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 7040,
-            "mean": 5.6385447184244795,
-            "p99": 256,
-            "differing": 4522,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 4483,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7621,12 +7641,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 14392,
-            "mean": 9.474365234375,
-            "p99": 257,
-            "differing": 6192,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 6192,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7636,12 +7656,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 14392,
-            "mean": 9.474365234375,
-            "p99": 257,
-            "differing": 6192,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 6192,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7651,12 +7671,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 0.32421875,
-            "mean": 0.0007262578777348002,
-            "p99": 0.005859375,
-            "differing": 77574,
+            "max": 0.0009765625,
+            "mean": 2.596837778886159e-07,
+            "p99": 0,
+            "differing": 83,
             "total": 196608,
-            "affected_texels": 64623,
+            "affected_texels": 83,
             "texels": 65536
           }
         },
@@ -7666,12 +7686,12 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 0.32421875,
-            "mean": 0.0007262578777348002,
-            "p99": 0.005859375,
-            "differing": 77574,
+            "max": 0.0009765625,
+            "mean": 2.596837778886159e-07,
+            "p99": 0,
+            "differing": 83,
             "total": 196608,
-            "affected_texels": 64623,
+            "affected_texels": 83,
             "texels": 65536
           }
         },
@@ -7711,12 +7731,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 0.08103317022323608,
-            "mean": 0.00016966797435694994,
-            "p99": 0.0014429092407226562,
-            "differing": 89777,
+            "max": 1.1920928955078125e-07,
+            "mean": 6.866988163286199e-09,
+            "p99": 1.1920928955078125e-07,
+            "differing": 19822,
             "total": 196608,
-            "affected_texels": 65280,
+            "affected_texels": 19822,
             "texels": 65536
           }
         },
@@ -7726,23 +7746,23 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 0.08103317022323608,
-            "mean": 0.00016966797435694994,
-            "p99": 0.0014429092407226562,
-            "differing": 89777,
+            "max": 1.1920928955078125e-07,
+            "mean": 6.866988163286199e-09,
+            "p99": 1.1920928955078125e-07,
+            "differing": 19822,
             "total": 196608,
-            "affected_texels": 65280,
+            "affected_texels": 19822,
             "texels": 65536
           }
         }
       ],
-      "notes": "Release gap: the HSV conversion of blend-modes.json in float32 reproduces the grey (L16) channel exactly but not the colour channels; the hue of nearly grey colours is off (blend-modes.json, open item). Not admitted as exact; no exception proposed."
+      "notes": "Release gap: the fitted hue (phase1.11) reproduces the hue law of every texel to within one code (the earlier hexcone fit left up to 53 100 RGB16 values off); the float32 operation order of Painter's hue arithmetic is not identified, so one-code residuals remain on 16-bit and float channels. The grey (L16) and sRGB8 channels are exact. Not admitted as exact; no exception proposed."
     },
     {
       "entry_id": "kernel-normalmapcombine",
       "subject": "BlendingMode.NormalMapCombine in the evaluator (user channels and the Normal channel)",
-      "status": "calibrated",
-      "formula": "NormalMapCombine: a, b = normalise(2c - 1) with z clamped to >= 0, normalise(v) = v rsqrt(fma(z, z, fma(x, x, y y))); b is first rotated toward (0, 0, 1) by the opacity (spherical interpolation, series in float32); whiteout r = (a.xy + b.xy, a.z b.z): t = base + (0, 0, 1), u = detail (-1, -1, 1), d = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r.xy = fma(t.xy, d, -(u.xy t.z)), r.z = t.z (d - u.z); result fma(normalise(r), 1/2, 1/2), written as it is over an opaque backdrop (the opacity enters only through the rotation). A grey channel takes B. Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
+      "status": "exact",
+      "formula": "NormalMapCombine: a, b = normalise(2c - 1) with z clamped to >= 0, normalise(v) = v rsqrt(fma(z, z, fma(x, x, y y))); below opacity 1, b is first rotated toward (0, 0, 1) by the opacity alpha (fitted, phase1.11): t = float32(pi/2) - asin(z), z clamped to [0, 1], with the recording GPU's OpenGL (GLSL) arcsine; b' = (b.x k, b.y k, cos(alpha t)), k = sin(alpha t) rsqrt(fma(-z, z, 1)), sine and cosine the GPU's (table index floor(2^25 trunc(x float32(1/(2 pi))))); whiteout r = (a.xy + b.xy, a.z b.z): t = base + (0, 0, 1), u = detail (-1, -1, 1), d = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r.xy = fma(t.xy, d, -(u.xy t.z)), r.z = t.z (d - u.z); result fma(normalise(r), 1/2, 1/2), written as it is over an opaque backdrop (the opacity enters only through the rotation). A grey channel takes B. Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike. The GPU's sine and cosine come from tables measured on every index of [0, float32(pi/2)] (src/evaluator/tables/hw-{sin,cos}.zlib; uzp-evaluator-tests trig-hardware); the GLSL arcsine is a float32 polynomial with fused multiply-adds (hwmath.h Asin) checked against the GPU's GLSL asin on every float32 of [0, 1].",
       "public_sources": [
         {
           "source_id": "P-BARRE",
@@ -7775,6 +7795,11 @@
         {
           "name": "hardware_gpu",
           "value": "NVIDIA GeForce RTX 4090, D3D12",
+          "origin": "fitted"
+        },
+        {
+          "name": "trig_tables",
+          "value": "src/evaluator/tables/hw-{sin,cos}.zlib",
           "origin": "fitted"
         }
       ],
@@ -7815,12 +7840,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 0.0010274251302083333,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 202,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 202,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7830,12 +7855,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 0.0010274251302083333,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 202,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 202,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -7995,12 +8020,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 1.7881393432617188e-07,
-            "mean": 2.505294105503708e-08,
-            "p99": 1.1920928955078125e-07,
-            "differing": 72042,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 51768,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8010,12 +8035,12 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 1.7881393432617188e-07,
-            "mean": 2.505294105503708e-08,
-            "p99": 1.1920928955078125e-07,
-            "differing": 72042,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 51768,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8049,14 +8074,13 @@
             "texels": 65536
           }
         }
-      ],
-      "notes": "Exact at opacity 1 on every format and on the Normal channel (against both recordings). Release gap at opacity below 1: Painter's float32 evaluation of the rotation toward the flat normal is not identified (RGB16 at 0.5 and RGB32F at 0.25 differ by one code or a few ulp)."
+      ]
     },
     {
       "entry_id": "kernel-normalmapdetail",
       "subject": "BlendingMode.NormalMapDetail in the evaluator (user channels and the Normal channel)",
-      "status": "calibrated",
-      "formula": "NormalMapDetail: a, b = normalise(2c - 1) with z clamped to >= 0, normalise(v) = v rsqrt(fma(z, z, fma(x, x, y y))); b is first rotated toward (0, 0, 1) by the opacity (spherical interpolation, series in float32); reoriented normal mapping with base a, detail b: t = base + (0, 0, 1), u = detail (-1, -1, 1), d = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r.xy = fma(t.xy, d, -(u.xy t.z)), r.z = t.z (d - u.z); result fma(normalise(r), 1/2, 1/2), written as it is over an opaque backdrop (the opacity enters only through the rotation). A grey channel takes B. Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
+      "status": "exact",
+      "formula": "NormalMapDetail: a, b = normalise(2c - 1) with z clamped to >= 0, normalise(v) = v rsqrt(fma(z, z, fma(x, x, y y))); below opacity 1, b is first rotated toward (0, 0, 1) by the opacity alpha (fitted, phase1.11): t = float32(pi/2) - asin(z), z clamped to [0, 1], with the recording GPU's OpenGL (GLSL) arcsine; b' = (b.x k, b.y k, cos(alpha t)), k = sin(alpha t) rsqrt(fma(-z, z, 1)), sine and cosine the GPU's (table index floor(2^25 trunc(x float32(1/(2 pi))))); reoriented normal mapping with base a, detail b: t = base + (0, 0, 1), u = detail (-1, -1, 1), d = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r.xy = fma(t.xy, d, -(u.xy t.z)), r.z = t.z (d - u.z); result fma(normalise(r), 1/2, 1/2), written as it is over an opaque backdrop (the opacity enters only through the rotation). A grey channel takes B. Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike. The GPU's sine and cosine come from tables measured on every index of [0, float32(pi/2)] (src/evaluator/tables/hw-{sin,cos}.zlib; uzp-evaluator-tests trig-hardware); the GLSL arcsine is a float32 polynomial with fused multiply-adds (hwmath.h Asin) checked against the GPU's GLSL asin on every float32 of [0, 1].",
       "public_sources": [
         {
           "source_id": "P-BARRE",
@@ -8089,6 +8113,11 @@
         {
           "name": "hardware_gpu",
           "value": "NVIDIA GeForce RTX 4090, D3D12",
+          "origin": "fitted"
+        },
+        {
+          "name": "trig_tables",
+          "value": "src/evaluator/tables/hw-{sin,cos}.zlib",
           "origin": "fitted"
         }
       ],
@@ -8129,12 +8158,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 0.0013071695963541667,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 257,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 256,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8144,12 +8173,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 0.0013071695963541667,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 257,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 256,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8189,12 +8218,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 511,
-            "mean": 0.10396321614583333,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 40,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 40,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8204,12 +8233,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 511,
-            "mean": 0.10396321614583333,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 40,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 40,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8309,12 +8338,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 1.7881393432617188e-07,
-            "mean": 2.5259396352339536e-08,
-            "p99": 1.1920928955078125e-07,
-            "differing": 72463,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 51174,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8324,12 +8353,12 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 1.7881393432617188e-07,
-            "mean": 2.5259396352339536e-08,
-            "p99": 1.1920928955078125e-07,
-            "differing": 72463,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 51174,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8363,14 +8392,13 @@
             "texels": 65536
           }
         }
-      ],
-      "notes": "Exact at opacity 1 on every format and on the Normal channel (against both recordings). Release gap at opacity below 1: Painter's float32 evaluation of the rotation toward the flat normal is not identified (RGB16 at 0.5 and RGB32F at 0.25 differ by one code or a few ulp)."
+      ]
     },
     {
       "entry_id": "kernel-normalmapinversedetail",
       "subject": "BlendingMode.NormalMapInverseDetail in the evaluator (user channels and the Normal channel)",
-      "status": "calibrated",
-      "formula": "NormalMapInverseDetail: a, b = normalise(2c - 1) with z clamped to >= 0, normalise(v) = v rsqrt(fma(z, z, fma(x, x, y y))); b is first rotated toward (0, 0, 1) by the opacity (spherical interpolation, series in float32); reoriented normal mapping with base b, detail a: t = base + (0, 0, 1), u = detail (-1, -1, 1), d = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r.xy = fma(t.xy, d, -(u.xy t.z)), r.z = t.z (d - u.z); result fma(normalise(r), 1/2, 1/2), written as it is over an opaque backdrop (the opacity enters only through the rotation). A grey channel takes B. Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike.",
+      "status": "exact",
+      "formula": "NormalMapInverseDetail: a, b = normalise(2c - 1) with z clamped to >= 0, normalise(v) = v rsqrt(fma(z, z, fma(x, x, y y))); below opacity 1, b is first rotated toward (0, 0, 1) by the opacity alpha (fitted, phase1.11): t = float32(pi/2) - asin(z), z clamped to [0, 1], with the recording GPU's OpenGL (GLSL) arcsine; b' = (b.x k, b.y k, cos(alpha t)), k = sin(alpha t) rsqrt(fma(-z, z, 1)), sine and cosine the GPU's (table index floor(2^25 trunc(x float32(1/(2 pi))))); reoriented normal mapping with base b, detail a: t = base + (0, 0, 1), u = detail (-1, -1, 1), d = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r.xy = fma(t.xy, d, -(u.xy t.z)), r.z = t.z (d - u.z); result fma(normalise(r), 1/2, 1/2), written as it is over an opaque backdrop (the opacity enters only through the rotation). A grey channel takes B. Divisions and roots use the recording GPU's float32 results (NVIDIA GeForce RTX 4090, D3D12): the correctly rounded value moved by -2..+1 ulp from tables measured over every float32 mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every GPU alike. The GPU's sine and cosine come from tables measured on every index of [0, float32(pi/2)] (src/evaluator/tables/hw-{sin,cos}.zlib; uzp-evaluator-tests trig-hardware); the GLSL arcsine is a float32 polynomial with fused multiply-adds (hwmath.h Asin) checked against the GPU's GLSL asin on every float32 of [0, 1].",
       "public_sources": [
         {
           "source_id": "P-BARRE",
@@ -8403,6 +8431,11 @@
         {
           "name": "hardware_gpu",
           "value": "NVIDIA GeForce RTX 4090, D3D12",
+          "origin": "fitted"
+        },
+        {
+          "name": "trig_tables",
+          "value": "src/evaluator/tables/hw-{sin,cos}.zlib",
           "origin": "fitted"
         }
       ],
@@ -8443,12 +8476,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 0.0008951822916666666,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 176,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 176,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8458,12 +8491,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 0.0008951822916666666,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 176,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 176,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8503,12 +8536,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 511,
-            "mean": 0.10396321614583333,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 40,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 40,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8518,12 +8551,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 511,
-            "mean": 0.10396321614583333,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 40,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 40,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8623,12 +8656,12 @@
           "compared_against": "r1",
           "unit": "float32 value",
           "difference": {
-            "max": 1.7881393432617188e-07,
-            "mean": 1.5578128416867305e-08,
-            "p99": 1.1920928955078125e-07,
-            "differing": 47693,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 34590,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8638,12 +8671,12 @@
           "compared_against": "r2",
           "unit": "float32 value",
           "difference": {
-            "max": 1.7881393432617188e-07,
-            "mean": 1.5578128416867305e-08,
-            "p99": 1.1920928955078125e-07,
-            "differing": 47693,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 34590,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -8677,8 +8710,7 @@
             "texels": 65536
           }
         }
-      ],
-      "notes": "Exact at opacity 1 on every format and on the Normal channel (against both recordings). Release gap at opacity below 1: Painter's float32 evaluation of the rotation toward the flat normal is not identified (RGB16 at 0.5 and RGB32F at 0.25 differ by one code or a few ulp)."
+      ]
     },
     {
       "entry_id": "kernel-passthrough",
@@ -8697,7 +8729,7 @@
       ],
       "parameters": [],
       "residuals": [],
-      "notes": "Release gap until a golden records it."
+      "notes": "Release gap until a golden records it: reachable only in Painter's UI, recorded by phase0.7_tier0-semantics-ui-cases item 2.4 (decision 029) to the specification of parity/reports/phase1/compositor-blend-gaps.md; not ruled not_migratable."
     }
   ]
 }

@@ -1,4 +1,5 @@
-"""The published fit of phase1.10_compositor-blend-kernels: `parity/semantics/blend-kernels.json`.
+"""The published fit of phase1.10_compositor-blend-kernels and phase1.11_compositor-blend-gaps:
+`parity/semantics/blend-kernels.json`.
 
 Every documented `BlendingMode` as the evaluator implements it (`src/evaluator/arith.cpp`,
 `shaders/evaluator_blend.hlsl`, `hwmath.h`), evaluated by the CPU store on the Tier 0 blend sweeps
@@ -137,6 +138,12 @@ HW = (
     "mantissa (src/evaluator/hwmath.h; uzp-evaluator-tests fp-hardware), on the CPU and on every "
     "GPU alike."
 )
+TRIG = (
+    "The GPU's sine and cosine come from tables measured on every index of [0, float32(pi/2)] "
+    "(src/evaluator/tables/hw-{sin,cos}.zlib; uzp-evaluator-tests trig-hardware); the GLSL "
+    "arcsine is a float32 polynomial with fused multiply-adds (hwmath.h Asin) checked against "
+    "the GPU's GLSL asin on every float32 of [0, 1]."
+)
 MIX = (
     "Opacity alpha (times the mask): over an opaque backdrop v = a (1 - alpha) + r alpha, the "
     "products rounded and summed in float32; over a transparent backdrop the source; else W3C "
@@ -187,23 +194,31 @@ NORMAL_TEXT = {
 
 def hsv_formula(mode: str) -> str:
     return (
-        f"{mode}: f = HSV({HSV_TEXT[mode]}) with the value doubled, in float32: RGB -> HSV by "
-        "the hexcone (largest component v; d = v - min; hue = |k + (q.w - q.y) rcp(6d + e)| "
-        "with the sector offset k in {0, -1/3, 2/3, -1}; s = d rcp(v + e); e = 2^-12); HSV -> RGB "
-        "v (1 + (clamp(|6 fract(h + k) - 3| - 1, 0, 1) - 1) s), k = 1, 2/3, 1/3. A grey channel "
-        f"keeps A (Value: B). {MIX} {HW}"
+        f"{mode}: f = HSV({HSV_TEXT[mode]}) with the value doubled, in float32 (fitted, "
+        "phase1.11): hue in turns from the smallest component (red first, then green before "
+        "blue on ties), centre C = 1 (blue), 3 (red), 5 (green) and X the difference of the "
+        "other two (g - r, b - g, r - b): h6 = fma(X - 3e, rcp(d + e), C), d = max - min, "
+        "e = 2^-12, h = h6 float32(1/6), plus 1 if negative; hue weights with f = h - floor(h): "
+        "red |fma(f, 6, -3)| - 1, green 2 - |fma(f, 6, -2)|, blue 2 - |fma(f, 6, -4)|, clamped "
+        "to [0, 1]; v = 2 max, lo = v fma(-d', rcp(max' + e), 1) of the saturation source (d', "
+        "max'; Saturation: 1 - d' rcp(max' + e) with two roundings), each component "
+        f"fma(v - lo, w, lo). A grey channel keeps A (Value: B). {MIX} {HW}"
     )
 
 
 def normal_formula(mode: str) -> str:
     return (
         f"{mode}: a, b = normalise(2c - 1) with z clamped to >= 0, normalise(v) = v rsqrt(fma(z, "
-        "z, fma(x, x, y y))); b is first rotated toward (0, 0, 1) by the opacity (spherical "
-        f"interpolation, series in float32); {NORMAL_TEXT[mode]}: t = base + (0, 0, 1), u = "
+        "z, fma(x, x, y y))); below opacity 1, b is first rotated toward (0, 0, 1) by the "
+        "opacity alpha (fitted, phase1.11): t = float32(pi/2) - asin(z), z clamped to [0, 1], "
+        "with the recording GPU's OpenGL (GLSL) arcsine; b' = (b.x k, b.y k, cos(alpha t)), "
+        "k = sin(alpha t) rsqrt(fma(-z, z, 1)), sine and cosine the GPU's (table index "
+        "floor(2^25 trunc(x float32(1/(2 pi))))); "
+        f"{NORMAL_TEXT[mode]}: t = base + (0, 0, 1), u = "
         "detail (-1, -1, 1), d = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r.xy = fma(t.xy, d, "
         "-(u.xy t.z)), r.z = t.z (d - u.z); result fma(normalise(r), 1/2, 1/2), written as it is "
         f"over an opaque backdrop (the opacity enters only through the rotation). A grey channel "
-        f"takes B. {HW}"
+        f"takes B. {HW} {TRIG}"
     )
 
 
@@ -321,14 +336,16 @@ def mode_entry(runs: Runs, decode: np.ndarray, mode: str) -> dict[str, Any]:
             [
                 parameter("value_gain", 2.0, "fitted"),
                 parameter("hsv_epsilon", 2.0**-12, "fitted"),
+                parameter("hue_offset", 3 * 2.0**-12, "fitted"),
                 *HW_PARAMS,
             ],
             residuals(runs, decode, mode),
             notes=(
-                "Release gap: the HSV conversion of blend-modes.json in float32 reproduces the "
-                "grey (L16) channel exactly but not the colour channels; the hue of nearly grey "
-                "colours is off (blend-modes.json, open item). Not admitted as exact; no "
-                "exception proposed."
+                "Release gap: the fitted hue (phase1.11) reproduces the hue law of every texel "
+                "to within one code (the earlier hexcone fit left up to 53 100 RGB16 values off); "
+                "the float32 operation order of Painter's hue arithmetic is not identified, so "
+                "one-code residuals remain on 16-bit and float channels. The grey (L16) and "
+                "sRGB8 channels are exact. Not admitted as exact; no exception proposed."
             ),
         )
     if mode in NORMAL_MODES:
@@ -337,14 +354,12 @@ def mode_entry(runs: Runs, decode: np.ndarray, mode: str) -> dict[str, Any]:
             f"BlendingMode.{mode} in the evaluator (user channels and the Normal channel)",
             normal_formula(mode),
             [BARRE, PYDOC, D3D],
-            [parameter("flat_normal", [0.0, 0.0, 1.0], "public_documentation"), *HW_PARAMS],
+            [
+                parameter("flat_normal", [0.0, 0.0, 1.0], "public_documentation"),
+                *HW_PARAMS,
+                parameter("trig_tables", "src/evaluator/tables/hw-{sin,cos}.zlib", "fitted"),
+            ],
             residuals(runs, decode, mode),
-            notes=(
-                "Exact at opacity 1 on every format and on the Normal channel (against both "
-                "recordings). Release gap at opacity below 1: Painter's float32 evaluation of "
-                "the rotation toward the flat normal is not identified (RGB16 at 0.5 and "
-                "RGB32F at 0.25 differ by one code or a few ulp)."
-            ),
         )
     hardware = mode in (
         "Divide",
@@ -374,7 +389,11 @@ def passthrough_entry() -> dict[str, Any]:
         [PYDOC, GUIDE],
         [],
         [],
-        notes="Release gap until a golden records it.",
+        notes=(
+            "Release gap until a golden records it: reachable only in Painter's UI, recorded by "
+            "phase0.7_tier0-semantics-ui-cases item 2.4 (decision 029) to the specification of "
+            "parity/reports/phase1/compositor-blend-gaps.md; not ruled not_migratable."
+        ),
         gap=True,
     )
 
@@ -393,8 +412,9 @@ def build(exe: Path, work: Path) -> dict[str, Any]:
     )
     return document(
         "blend-kernels",
-        "The blend kernels of the evaluator (04 section 3, task "
-        "phase1.10_compositor-blend-kernels) for every documented BlendingMode, evaluated by the "
+        "The blend kernels of the evaluator (04 section 3, tasks "
+        "phase1.10_compositor-blend-kernels and phase1.11_compositor-blend-gaps) for every "
+        "documented BlendingMode, evaluated by the "
         "CPU store under the current profile on the Tier 0 blend sweeps and on the Normal "
         "channel. Residuals are |delta| in export units "
         "(16-bit PNG codes, OpenEXR float32 values) per texture set and channel, against both "
