@@ -18,9 +18,13 @@ import pytest
 from tools.parity.recorder.capture import StaleCaptureError
 from tools.parity.recorder.iray import (
     K_TIMES_SAMPLES,
+    SAME_SESSION,
     SEPARATE_SESSION,
+    load_staged,
     record_iray_reference,
+    reference_needed,
     settings_sheet,
+    staging_dir,
 )
 from tools.parity.recorder.job import Job, job_from_manifest
 from tools.parity.recorder.session import PainterSession, RecorderError
@@ -308,6 +312,49 @@ def test_same_session_cannot_record_two_references(
     record(fake, make_session, iray_job, work, inbox, SEPARATE_SESSION, session=same_process())
     with pytest.raises(RecorderError, match="restart Painter"):
         record(fake, make_session, iray_job, work, inbox, SEPARATE_SESSION, session=same_process())
+
+
+def test_same_session_stages_two_renders_of_one_session(
+    fake: types.ModuleType, make_session: MakeSession, iray_job: Job, work: Path, inbox: Path
+) -> None:
+    """Stability probe (decision 062): two S renders of one project, Iray restarted between."""
+    assert reference_needed(iray_job, SAME_SESSION, work)
+    assert record(fake, make_session, iray_job, work, inbox, SAME_SESSION) is None
+    staged = load_staged(staging_dir(work, iray_job))
+    assert [s.recording["condition"] for s in staged] == [SAME_SESSION, SAME_SESSION]
+    assert len({s.recording["session_id"] for s in staged}) == 1
+    assert [s.recording["recording_id"][-2:] for s in staged] == ["-1", "-2"]
+    for item in staged:
+        (reference,) = [o for o in item.recording["outputs"] if o["kind"] == "iray_reference"]
+        assert reference["samples"] == S and reference["current_frame_verified"] is True
+    assert staged[0].key == staged[1].key
+    assert not reference_needed(iray_job, SAME_SESSION, work)
+    assert reference_needed(iray_job, SEPARATE_SESSION, work)
+    assert not (inbox.exists() and any(inbox.iterdir()))  # never assembled into a golden
+    with pytest.raises(RecorderError, match="same-session renders"):
+        record(fake, make_session, iray_job, work, inbox, SAME_SESSION)
+
+
+def test_same_session_refuses_a_restart_that_moves_the_camera(
+    fake: types.ModuleType, make_session: MakeSession, iray_job: Job, work: Path, inbox: Path
+) -> None:
+    session = make_session(fake.FakeWorld())
+    reads = 0
+    call = session.call
+
+    def drifting(operation: str, **args: Any) -> Any:
+        nonlocal reads
+        result = call(operation, **args)
+        if operation == "render_state":
+            reads += 1
+            if reads > 1:
+                result["camera.field_of_view"] += 1.0
+        return result
+
+    session.call = drifting  # type: ignore[method-assign]
+    with pytest.raises(RecorderError, match="second render refused"):
+        record(fake, make_session, iray_job, work, inbox, SAME_SESSION, session=session)
+    assert load_staged(staging_dir(work, iray_job)) == []
 
 
 @pytest.mark.parametrize(
