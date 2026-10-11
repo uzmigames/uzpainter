@@ -295,6 +295,8 @@ def test_recorded_inputs_exact(
                 theirs = golden.map(recording, key).values
                 if map_name == "height":
                     theirs = theirs[..., :1]
+                unit = "16-bit code value" if map_name in MAPS else "float32 value"
+                observe(golden, key, recording, unit, values, theirs)
                 n = differing(values, theirs, None)
                 if n:
                     problems.append(f"{key} {recording}: {n} values differ")

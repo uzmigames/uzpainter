@@ -6660,21 +6660,21 @@ std::vector<ExcludedFeature> ExcludedFeatures() {
                             geometry.inclusion_list = false;
                             geometry.items = {"other"};
                         }});
-    features.push_back({"SignedAddition on Height", "phase1.12_compositor-height-normal", std::nullopt,
-                        [](core::Project& p, core::Id fill) {
-                            core::FindLayer(p, fill)->blending[ChannelType::Height] = Blend(BlendingMode::SignedAddition, 1.0);
-                        }});
-    features.push_back({"a uniform colour on Height", "phase1.12_compositor-height-normal", std::nullopt,
-                        [](core::Project& p, core::Id fill) {
-                            core::FillContent& content = FillOf(p, fill);
-                            content.sources[ChannelType::Height] = Uniform(0.5, 0.5, 0.5);
-                            content.active_channels.insert(ChannelType::Height);
-                        }});
-    features.push_back({"a Normal-channel bitmap in a DirectX project", "phase1.12_compositor-height-normal",
+    // SignedAddition and uniform colours on Height are recorded (height-signed-addition, decision
+    // 079); a DirectX project's Normal channel only as one bitmap fill at opacity 1.
+    features.push_back({"a Normal-channel bitmap at opacity 1/2 in a DirectX project", "phase1.12_compositor-height-normal",
                         ChannelType::Normal, [](core::Project& p, core::Id fill) {
                             p.settings.normal_map_format = core::NormalMapFormat::DirectX;
                             core::FillContent& content = FillOf(p, fill);
                             content.sources[ChannelType::Normal] = Bitmap(std::string(64, 'c'));
+                            content.active_channels.insert(ChannelType::Normal);
+                            core::FindLayer(p, fill)->blending[ChannelType::Normal] = Blend(BlendingMode::Normal, 0.5);
+                        }});
+    features.push_back({"a uniform Normal colour in a DirectX project", "phase1.12_compositor-height-normal",
+                        ChannelType::Normal, [](core::Project& p, core::Id fill) {
+                            p.settings.normal_map_format = core::NormalMapFormat::DirectX;
+                            core::FillContent& content = FillOf(p, fill);
+                            content.sources[ChannelType::Normal] = Uniform(0.5, 0.5, 1.0);
                             content.active_channels.insert(ChannelType::Normal);
                         }});
     return features;
