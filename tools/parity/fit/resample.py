@@ -331,4 +331,5 @@ def fit(ctx: Context) -> dict[str, Any]:
         "Repeat and RepeatNone wrapping, fitted on the Tier 0 golden resample-uv.",
         ["tier0/semantics/resample-uv"],
         entries,
+        painter_build=ctx.painter_build,
     )

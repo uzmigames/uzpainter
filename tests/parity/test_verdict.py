@@ -2,13 +2,25 @@
 
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from tools.parity.schemas import REGISTER_PATH, SCHEMA_DIR, Schema, is_valid, load_json
-from tools.parity.verdict import Comparison, Outcome, diagnose, evaluate, in_force
+from tools.parity.envelope.registry import current_envelope, initial_registry, save_registry
+from tools.parity.schemas import REGISTER_PATH, REPO_ROOT, SCHEMA_DIR, Schema, is_valid, load_json
+from tools.parity.verdict import (
+    Comparison,
+    Outcome,
+    Verdict,
+    diagnose,
+    evaluate,
+    in_force,
+    resolve_golden,
+    whole_product_parity,
+)
 
 ENTRIES = SCHEMA_DIR / "samples" / "exceptions"
 TIER1_DOMAIN = "tier1/wand_v1/Wand/BaseColor"
@@ -270,3 +282,230 @@ def test_decision_032_entries_catch_injected_defects() -> None:
         exact, _ = golden_verdicts(entry, floats, list(floats), last_place)
         assert exact is Outcome.FAIL
         assert entry["defect_detection_test"]["outcome"] == "every_injected_defect_fails"
+
+
+# --- decisions 034 and 037: the envelope -------------------------------------------------------
+
+CURRENT = "painter-12.1.5+js-api.1.1.20"
+OLDER = "painter-12.1.0+js-api.1.1.20"
+DOMAIN = "tier0/blend/multiply/BaseColor"
+
+
+def environment(**changes: str) -> dict[str, str]:
+    record = {
+        "painter_build": "12.1.5+js-api.1.1.20",
+        "gpu_model": "synthetic GPU",
+        "driver_version": "1.0",
+        "os_build": "10.0.1.1",
+        "colour_configuration_sha256": "0" * 64,
+    }
+    return {**record, **changes}
+
+
+def test_verdict_names_the_current_envelope_of_the_registry() -> None:
+    verdict = evaluate(Comparison("0", DOMAIN, [1.0], [1.0]), [])
+    assert verdict.outcome is Outcome.PASS
+    assert verdict.envelope_id == current_envelope()["envelope_id"]
+    named = evaluate(Comparison("0", DOMAIN, [1.0], [1.0]), [], CURRENT)
+    assert named.envelope_id == CURRENT
+
+
+@pytest.mark.parametrize("tier", ["0", "2b", "3"])
+def test_a_golden_of_an_older_envelope_is_stale_never_a_pass(tier: str) -> None:
+    """Decision 037 §4, §6: an old-envelope pass never carries over, whatever the register."""
+    entry = render_entry()
+    regions = {"metal": {"abs_mean_signed_diff_in_se": 0.0, "p99_abs_diff": 0.0}}
+    selector = entry["domain"]["selector"]
+    older = Comparison(tier, selector, [0.5], [0.5], region_metrics=regions, envelope_id=OLDER)
+    verdict = evaluate(older, [entry, bake_entry()], CURRENT)
+    assert verdict.outcome is Outcome.STALE
+    assert verdict.diagnostics is not None and verdict.diagnostics.differing_count == 0
+    assert verdict.exceptions_relied_on == ()
+    current = Comparison(tier, selector, [0.5], [0.5], region_metrics=regions, envelope_id=CURRENT)
+    assert evaluate(current, [entry], CURRENT).outcome is Outcome.PASS
+
+
+def test_uzpainter_comparisons_ignore_the_live_environment() -> None:
+    """Scenario: driver update does not invalidate UzPainter verdicts."""
+    comparison = Comparison(
+        "0",
+        DOMAIN,
+        [1.0, 2.0],
+        [1.0, 2.0],
+        golden_environment=environment(driver_version="A"),
+        candidate_environment=environment(driver_version="B"),
+    )
+    assert evaluate(comparison, [], CURRENT).outcome is Outcome.PASS
+
+
+@pytest.mark.parametrize(
+    "candidate_environment",
+    [
+        environment(driver_version="2.0"),
+        environment(painter_build="12.1.6+js-api.1.1.20"),
+        environment(gpu_model="unknown"),
+        None,
+    ],
+    ids=["driver", "build", "unknown-field", "no-record"],
+)
+@pytest.mark.parametrize(
+    "candidate", [[1.0, 2.0], [1.0, 3.0], [1.0]], ids=["equal", "different", "shape"]
+)
+def test_oracle_side_comparison_outside_the_envelope_is_out_of_envelope(
+    candidate_environment: dict[str, str] | None, candidate: list[float]
+) -> None:
+    """Scenario: re-recording under a new driver is out of envelope, never pass or fail."""
+    comparison = Comparison(
+        "0",
+        DOMAIN,
+        [1.0, 2.0],
+        candidate,
+        oracle_side=True,
+        golden_environment=environment(),
+        candidate_environment=candidate_environment,
+    )
+    verdict = evaluate(comparison, [], CURRENT)
+    assert verdict.outcome is Outcome.OUT_OF_ENVELOPE
+    assert (verdict.diagnostics is None) == (len(candidate) != 2)
+
+
+def test_oracle_rerecording_against_an_older_envelope_golden_is_out_of_envelope() -> None:
+    """The canary's case: a re-recording under 12.1.5 against a 12.1.0 golden."""
+    comparison = Comparison(
+        "0",
+        DOMAIN,
+        [1.0],
+        [1.0],
+        envelope_id=OLDER,
+        oracle_side=True,
+        golden_environment=environment(painter_build="12.1.0+js-api.1.1.20"),
+        candidate_environment=environment(),
+    )
+    assert evaluate(comparison, [], CURRENT).outcome is Outcome.OUT_OF_ENVELOPE
+
+
+def test_oracle_side_comparison_inside_the_envelope_follows_the_rules() -> None:
+    def oracle_side(candidate: list[float]) -> Outcome:
+        comparison = Comparison(
+            "0",
+            DOMAIN,
+            [1.0, 2.0],
+            candidate,
+            oracle_side=True,
+            golden_environment=environment(),
+            candidate_environment=environment(),
+        )
+        return evaluate(comparison, [], CURRENT).outcome
+
+    assert oracle_side([1.0, 2.0]) is Outcome.PASS
+    assert oracle_side([1.0, 3.0]) is Outcome.FAIL
+
+
+def test_decision_032_exact_target_holds_within_the_current_envelope() -> None:
+    for entry in decision_032_entries():
+        r1, _ = recordings(entry)
+        tier, selector = entry["tier"], entry["domain"]["selector"]
+        moved = [v + 1.0 for v in r1]
+        exact = Comparison(
+            tier, selector, r1, moved, oracle_stable=False, exact_target=True, envelope_id=CURRENT
+        )
+        assert evaluate(exact, [entry], CURRENT).outcome is Outcome.FAIL
+        equal = Comparison(
+            tier,
+            selector,
+            r1,
+            list(r1),
+            oracle_stable=False,
+            exact_target=True,
+            envelope_id=CURRENT,
+        )
+        assert evaluate(equal, [entry], CURRENT).outcome is Outcome.PASS
+        older = Comparison(
+            tier, selector, r1, list(r1), oracle_stable=False, exact_target=True, envelope_id=OLDER
+        )
+        assert evaluate(older, [entry], CURRENT).outcome is Outcome.STALE
+
+
+def test_no_whole_product_parity_while_a_tier3_reference_is_stale() -> None:
+    passed = Verdict(Outcome.PASS, None, envelope_id=CURRENT)
+    stale = Verdict(Outcome.STALE, None, envelope_id=CURRENT)
+    assert whole_product_parity([passed, passed], CURRENT)
+    assert not whole_product_parity([passed, stale], CURRENT)
+    assert not whole_product_parity([Verdict(Outcome.PASS, None, envelope_id=OLDER)], CURRENT)
+    assert not whole_product_parity([], CURRENT)
+
+
+# --- golden resolution through the registry -----------------------------------------------------
+
+
+def test_goldens_resolve_through_the_current_envelope() -> None:
+    current = current_envelope()
+    golden = resolve_golden("tier0/semantics/height-normal-sphere")
+    assert golden is not None and not golden.stale
+    assert golden.envelope_id == current["envelope_id"]
+    assert golden.manifest_path.is_relative_to(REPO_ROOT / current["manifest_root"])
+    assert golden.manifest["software"]["painter"]["build_id"] == current["painter_build"]
+    assert resolve_golden("tier0/semantics/no-such-golden") is None
+
+
+def test_a_tier3_reference_of_an_older_envelope_resolves_stale() -> None:
+    golden = resolve_golden("tier3/render-procedure/qualification-sphere")
+    assert golden is not None
+    if not golden.stale:
+        assert golden.envelope_id == current_envelope()["envelope_id"]
+        return
+    assert golden.envelope_id != current_envelope()["envelope_id"]
+    domain = golden.manifest["domain"]
+    comparison = Comparison("3", domain, [0.5], [0.5], envelope_id=golden.envelope_id)
+    assert evaluate(comparison, [render_entry()]).outcome is Outcome.STALE
+
+
+def write_json(path: Path, document: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+
+def synthetic_manifest(golden_id: str, tier: str, build: str) -> dict[str, Any]:
+    painter = {"product": "Adobe Substance 3D Painter", "version": "1.0.0", "build_id": build}
+    return {"golden_id": golden_id, "tier": tier, "software": {"painter": painter}}
+
+
+OLD_ROOT = "parity/manifests"
+NEW_ROOT = "parity/envelopes/painter-2.0.0/manifests"
+
+
+def two_envelope_repository(root: Path) -> None:
+    """A registry where `painter-1.0.0` is superseded by `painter-2.0.0` (current)."""
+    document = initial_registry("1.0.0", "1.0.0", OLD_ROOT, "2026-01-01")
+    old = document["envelopes"][0]
+    new = {
+        **old,
+        "envelope_id": "painter-2.0.0",
+        "painter_build": "2.0.0",
+        "painter_version": "2.0.0",
+        "manifest_root": NEW_ROOT,
+        "previous": "painter-1.0.0",
+        "promoted_on": "2026-02-01",
+    }
+    old.update(status="superseded", superseded_on="2026-02-01")
+    save_registry({**document, "current": "painter-2.0.0", "envelopes": [old, new]}, root)
+    write_json(root / OLD_ROOT / "t0.json", synthetic_manifest("tier0/a", "0", "1.0.0"))
+    write_json(root / OLD_ROOT / "t0b.json", synthetic_manifest("tier0/only-old", "0", "1.0.0"))
+    write_json(root / OLD_ROOT / "t3.json", synthetic_manifest("tier3/ref", "3", "1.0.0"))
+    write_json(root / NEW_ROOT / "t0.json", synthetic_manifest("tier0/a", "0", "2.0.0"))
+    write_json(root / NEW_ROOT / "mixed.json", synthetic_manifest("tier0/mixed", "0", "1.0.0"))
+
+
+def test_resolution_never_carries_a_texture_golden_over_from_an_older_envelope(
+    tmp_path: Path,
+) -> None:
+    two_envelope_repository(tmp_path)
+    current = resolve_golden("tier0/a", tmp_path)
+    assert current is not None
+    assert (current.envelope_id, current.stale) == ("painter-2.0.0", False)
+    assert current.manifest_path == tmp_path / NEW_ROOT / "t0.json"
+    assert resolve_golden("tier0/only-old", tmp_path) is None
+    tier3 = resolve_golden("tier3/ref", tmp_path)
+    assert tier3 is not None and (tier3.envelope_id, tier3.stale) == ("painter-1.0.0", True)
+    mixed = resolve_golden("tier0/mixed", tmp_path)
+    assert mixed is not None and (mixed.envelope_id, mixed.stale) == ("painter-1.0.0", True)

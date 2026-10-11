@@ -8,6 +8,11 @@ Run from the repository root on the owner's machine (the private store must exis
 - `python -m tools.parity.fit check [--fit NAME ...]` re-runs the fits and checks that every
   published residual is reproduced exactly.
 
+Both read the goldens of the current envelope (`parity/envelopes/registry.json`, decision 037).
+A fit published against an older envelope's build is not checked against the current one until
+`check` reproduces it there and `run` republishes it; the current envelope's drift report lists
+it under `fits_to_recheck` (`recheck_problems`).
+
 Exit status: 0 done / reproduced, 1 store unavailable or a difference found, 2 usage error.
 """
 
@@ -25,13 +30,8 @@ from typing import Any
 
 import numpy as np
 
-from tools.parity.fit.common import (
-    MANIFESTS,
-    PAINTER_BUILD,
-    SEMANTICS_DIR,
-    Context,
-    publishable_problems,
-)
+from tools.parity.envelope.registry import current_envelope, load_registry
+from tools.parity.fit.common import SEMANTICS_DIR, Context, publishable_problems
 from tools.parity.fit.oracle import OracleUnavailable, load
 from tools.parity.fit.report import render
 from tools.parity.fit.stability import GoldenStability, golden_stability
@@ -54,13 +54,13 @@ def fit_module(name: str) -> ModuleType:
     return importlib.import_module(f"tools.parity.fit.{name}")
 
 
-def manifests(repository: Path) -> list[Path]:
-    return sorted((repository / MANIFESTS).glob("*/*.json"))
+def manifests(ctx: Context) -> list[Path]:
+    return sorted(ctx.manifests.glob("*/*.json"))
 
 
 def stability_of_all(ctx: Context) -> tuple[list[GoldenStability], dict[str, str]]:
     results, domains = [], {}
-    for path in manifests(ctx.repository):
+    for path in manifests(ctx):
         golden = load(ctx.store, path)
         results.append(golden_stability(golden, ctx.repository))
         domains[golden.golden_id] = str(golden.manifest.get("domain", ""))
@@ -115,7 +115,8 @@ def run(ctx: Context, names: Sequence[str]) -> int:
         "Python": platform.python_version(),
         "numpy": np.__version__,
         "repository commit": commit(ctx.repository) + " plus the working tree of this task",
-        "Painter build of the oracles": f"`{PAINTER_BUILD}`",
+        "Painter build of the oracles": f"`{ctx.painter_build}`",
+        "manifests": f"`{ctx.manifests.relative_to(ctx.repository).as_posix()}/`",
     }
     text = render(stability, domains, published(ctx.repository), meta)
     (ctx.repository / REPORT).write_text(text, encoding="utf-8", newline="\n")
@@ -134,6 +135,11 @@ def reproduction_problems(ctx: Context, name: str) -> list[str]:
     if fresh == old:
         return []
     problems = []
+    if old["painter_build_id"] != fresh["painter_build_id"]:
+        problems.append(
+            f"{module.FILE}: published against Painter {old['painter_build_id']}, re-checked "
+            f"against envelope {ctx.envelope['envelope_id']}"
+        )
     old_entries = {e["entry_id"]: e for e in old["entries"]}
     for e in fresh["entries"]:
         before = old_entries.pop(e["entry_id"], None)
@@ -143,6 +149,35 @@ def reproduction_problems(ctx: Context, name: str) -> list[str]:
             problems.append(f"{module.FILE}: entry {e['entry_id']} differs from the published one")
     problems += [f"{module.FILE}: published entry {k} not reproduced" for k in old_entries]
     return problems or [f"{module.FILE}: document header differs"]
+
+
+def recheck_problems(repository: Path) -> list[str]:
+    """Published fits not checked against the current envelope and not listed for re-check.
+
+    A fit names the Painter build its residuals were measured on. A build of no registered
+    envelope is an error; an older envelope's build must appear in the current envelope's drift
+    report `fits_to_recheck`, so it is never counted as checked against the current build."""
+    registry = load_registry(repository)
+    current = current_envelope(repository)
+    builds = {e["painter_build"] for e in registry["envelopes"]}
+    drift = current["drift_report"]
+    listed = (
+        {f["semantics"] for f in load_json(repository / drift)["fits_to_recheck"]}
+        if drift
+        else set()
+    )
+    problems = []
+    for path in sorted((repository / SEMANTICS_DIR).glob("*.json")):
+        build = load_json(path)["painter_build_id"]
+        relative = path.relative_to(repository).as_posix()
+        if build not in builds:
+            problems.append(f"{relative}: Painter build {build} is no registered envelope's")
+        elif build != current["painter_build"] and relative not in listed:
+            problems.append(
+                f"{relative}: published against {build}, neither checked against the current "
+                f"envelope {current['envelope_id']} nor listed in its fits_to_recheck"
+            )
+    return problems
 
 
 def check(ctx: Context, names: Sequence[str]) -> int:

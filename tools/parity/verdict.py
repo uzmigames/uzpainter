@@ -14,15 +14,40 @@
   the exact target. The comparison against r1 passes only when every value is equal and an
   instability entry names the domain; any difference from r1 `fail`s, whatever the register holds.
 - Diagnostics are computed and reported; they never grant a pass on their own.
+
+Envelope (decisions 034, 037; CONTRACT.md §6.5):
+
+- Goldens resolve through the current envelope's manifest root (`resolve_golden`), and verdicts
+  judge against the current envelope only: a comparison against a golden of any other envelope
+  is `stale`, never a pass, so an old-envelope pass never carries over. A Tier 3 reference is not
+  re-recorded by a refresh; one recorded under an older envelope resolves `stale` until it is
+  re-captured.
+- UzPainter-to-golden comparisons never consult the live environment. Oracle-side comparisons
+  (an oracle re-recording against a golden) compare the two environment records with
+  `envelope_match`; anything but `match` ends in `out_of_envelope`, never `pass` or `fail`.
+- No whole-product parity claim while any required verdict is not a pass against the current
+  envelope (`whole_product_parity`).
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
+
+from tools.parity.envelope.registry import (
+    corpus_manifests,
+    current_envelope,
+    envelope,
+    load_registry,
+)
+from tools.parity.recorder.environment import MATCH, envelope_match
+from tools.parity.schemas import REPO_ROOT, load_json
+
+ALL_TIERS = frozenset({"0", "1", "2a", "2b", "3"})
 
 
 class Outcome(StrEnum):
@@ -30,6 +55,8 @@ class Outcome(StrEnum):
     FAIL = "fail"
     BLOCKED = "blocked"
     ORACLE_UNAVAILABLE = "oracle_unavailable"
+    OUT_OF_ENVELOPE = "out_of_envelope"
+    STALE = "stale"
 
 
 @dataclass(frozen=True)
@@ -59,6 +86,7 @@ class Verdict:
     diagnostics: Diagnostics | None
     exceptions_relied_on: tuple[tuple[str, int], ...] = ()
     reason: str = ""
+    envelope_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -68,6 +96,11 @@ class Comparison:
     `oracle_stable` is the oracle-stability result of the golden (its recordings are equal).
     `exact_target` marks, for an unstable oracle, the comparison against the same-session
     recording r1 (decision 032).
+
+    `envelope_id` is the envelope of the golden compared against (`ResolvedGolden.envelope_id`);
+    None means the caller resolved the golden through the current envelope. `oracle_side` marks
+    an oracle re-recording compared with the golden; `golden_environment` and
+    `candidate_environment` are then the two environment records (`recorder/environment.py`).
     """
 
     tier: str
@@ -78,6 +111,10 @@ class Comparison:
     region_metrics: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     oracle_stable: bool = True
     exact_target: bool = False
+    envelope_id: str | None = None
+    oracle_side: bool = False
+    golden_environment: Mapping[str, Any] | None = None
+    candidate_environment: Mapping[str, Any] | None = None
 
 
 def _equal(a: float, b: float) -> bool:
@@ -155,10 +192,36 @@ def _exact_target(
     return Verdict(Outcome.PASS, diagnostics, relied, reason="exact target r1 equal")
 
 
-def evaluate(comparison: Comparison, register_entries: Sequence[Mapping[str, Any]]) -> Verdict:
-    """Apply the contract to one comparison, given the validated register's entries."""
+def evaluate(
+    comparison: Comparison,
+    register_entries: Sequence[Mapping[str, Any]],
+    current_envelope_id: str | None = None,
+) -> Verdict:
+    """Apply the contract to one comparison, given the validated register's entries and the
+    current envelope (default: the registry's); the verdict names that envelope."""
+    current = current_envelope_id or str(current_envelope()["envelope_id"])
+    verdict = _evaluate(comparison, register_entries, current)
+    return Verdict(
+        verdict.outcome, verdict.diagnostics, verdict.exceptions_relied_on, verdict.reason, current
+    )
+
+
+def _evaluate(
+    comparison: Comparison, register_entries: Sequence[Mapping[str, Any]], current: str
+) -> Verdict:
     if comparison.oracle is None:
         return Verdict(Outcome.ORACLE_UNAVAILABLE, None, reason="oracle blob unavailable")
+    shaped = bool(comparison.oracle) and len(comparison.oracle) == len(comparison.candidate)
+    if comparison.oracle_side:  # judged by the two environment records alone
+        match = envelope_match(comparison.golden_environment, comparison.candidate_environment)
+        if match != MATCH:
+            diagnostics = diagnose(comparison.oracle, comparison.candidate) if shaped else None
+            reason = f"oracle environments {match}: not comparable"
+            return Verdict(Outcome.OUT_OF_ENVELOPE, diagnostics, reason=reason)
+    elif comparison.envelope_id is not None and comparison.envelope_id != current:
+        diagnostics = diagnose(comparison.oracle, comparison.candidate) if shaped else None
+        reason = f"golden of envelope {comparison.envelope_id}, not the current {current}"
+        return Verdict(Outcome.STALE, diagnostics, reason=reason)
     if len(comparison.oracle) != len(comparison.candidate):
         return Verdict(Outcome.FAIL, None, reason="structural difference: shape mismatch")
     diagnostics = diagnose(comparison.oracle, comparison.candidate)
@@ -184,3 +247,68 @@ def evaluate(comparison: Comparison, register_entries: Sequence[Mapping[str, Any
     if comparison.tier == "3":
         return Verdict(Outcome.BLOCKED, diagnostics, reason="no register entry covers Tier 3")
     return Verdict(Outcome.FAIL, diagnostics, reason="difference not covered by the register")
+
+
+def whole_product_parity(verdicts: Iterable[Verdict], current_envelope_id: str) -> bool:
+    """A whole-product parity claim holds only when every required comparison passed against
+    the current envelope: one `stale` Tier 3 reference, or any other outcome, withholds it."""
+    found = list(verdicts)
+    return bool(found) and all(
+        v.outcome is Outcome.PASS and v.envelope_id == current_envelope_id for v in found
+    )
+
+
+@dataclass(frozen=True)
+class ResolvedGolden:
+    """A golden's public manifest and the envelope it belongs to (`stale` when not current)."""
+
+    golden_id: str
+    manifest_path: Path
+    manifest: dict[str, Any]
+    envelope_id: str
+    stale: bool
+
+
+def _find(
+    entry: Mapping[str, Any], golden_id: str, repo_root: Path
+) -> tuple[Path, dict[str, Any]] | None:
+    for path in corpus_manifests(entry, repo_root, ALL_TIERS):
+        manifest: dict[str, Any] = load_json(path)
+        if manifest["golden_id"] == golden_id:
+            return path, manifest
+    return None
+
+
+def _recorded_under(
+    document: Mapping[str, Any], entry: Mapping[str, Any], manifest: Mapping[str, Any]
+) -> str:
+    """The envelope a manifest was recorded under: its root's envelope when the recorded Painter
+    build is that envelope's, else the newest envelope of that build (`painter-<build>` when
+    none is registered)."""
+    build = str(manifest["software"]["painter"]["build_id"])
+    if build == entry["painter_build"]:
+        return str(entry["envelope_id"])
+    same = [e["envelope_id"] for e in document["envelopes"] if e["painter_build"] == build]
+    return str(same[-1]) if same else f"painter-{build}"
+
+
+def resolve_golden(golden_id: str, repo_root: Path = REPO_ROOT) -> ResolvedGolden | None:
+    """The golden through the current envelope's manifest root, or None (`oracle_unavailable`).
+
+    An older envelope never stands in for a texture-tier golden the current envelope lacks. A
+    Tier 3 reference is not re-recorded by a refresh, so one found only in an older envelope
+    (newest first, along `previous`) resolves `stale`; so does any golden whose recorded Painter
+    build is not the current envelope's."""
+    document = load_registry(repo_root)
+    current = envelope(document, document["current"])
+    entry: Mapping[str, Any] | None = current
+    while entry is not None:
+        found = _find(entry, golden_id, repo_root)
+        if found is not None and (entry is current or found[1]["tier"] == "3"):
+            path, manifest = found
+            recorded = _recorded_under(document, entry, manifest)
+            stale = recorded != current["envelope_id"]
+            return ResolvedGolden(golden_id, path, manifest, recorded, stale)
+        previous = entry["previous"]
+        entry = None if previous is None else envelope(document, previous)
+    return None

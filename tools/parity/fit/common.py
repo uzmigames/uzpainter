@@ -5,6 +5,10 @@ A fit module exposes `FILE` (its file name under `parity/semantics/`) and
 `fit(ctx) -> dict` (the public document). Fit modules read recorded values from the private
 store through `Context` and publish only formulas, authored or fitted constants and residual
 statistics; `publishable_problems` refuses a document that is not valid against the schema.
+
+The goldens are those of one envelope (decision 037): by default the current envelope of
+`parity/envelopes/registry.json`, whose manifest root holds the Tier 0 manifests under `tier0/`;
+a fit document names that envelope's Painter build.
 """
 
 from __future__ import annotations
@@ -15,13 +19,16 @@ from typing import Any
 
 import numpy as np
 
+from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.fit.oracle import Golden, load
 from tools.parity.fit.stats import Array, Difference
 from tools.parity.schemas import Schema, validation_errors
 from tools.parity.store.store import OracleStore
 
-PAINTER_BUILD = "12.1.0+js-api.1.1.20"
-MANIFESTS = "parity/manifests/tier0"
+TIER0 = "tier0"
+# The build of the first envelope, whose manifests stay under `parity/manifests`: the default of
+# `document` for callers outside this package that still fit on that corpus.
+FIRST_ENVELOPE_BUILD = "12.1.0+js-api.1.1.20"
 SEMANTICS_DIR = "parity/semantics"
 RECORDINGS = ("r1", "r2")
 
@@ -42,17 +49,33 @@ UNIT = {
 
 @dataclass
 class Context:
-    """Access to the private goldens of the Tier 0 corpus (owner's machine only)."""
+    """Access to the private goldens of the Tier 0 corpus (owner's machine only).
+
+    `envelope` is the registry entry whose goldens are read; empty means the current envelope."""
 
     store: OracleStore | None
     repository: Path
+    envelope: dict[str, Any] = field(default_factory=dict)
     _goldens: dict[str, Golden] = field(default_factory=dict)
     _cache: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.envelope:
+            self.envelope = current_envelope(self.repository)
+
+    @property
+    def manifests(self) -> Path:
+        """The envelope's Tier 0 manifests."""
+        return manifest_root(self.envelope, self.repository) / TIER0
+
+    @property
+    def painter_build(self) -> str:
+        return str(self.envelope["painter_build"])
 
     def golden(self, name: str) -> Golden:
         """`name` is `<folder>/<manifest stem>`, e.g. `semantics/blend-basic`."""
         if name not in self._goldens:
-            path = self.repository / MANIFESTS / f"{name}.json"
+            path = self.manifests / f"{name}.json"
             self._goldens[name] = load(self.store, path)
         return self._goldens[name]
 
@@ -165,14 +188,20 @@ def entry(
 
 
 def document(
-    semantics_id: str, description: str, corpus: list[str], entries: list[dict[str, Any]]
+    semantics_id: str,
+    description: str,
+    corpus: list[str],
+    entries: list[dict[str, Any]],
+    painter_build: str = FIRST_ENVELOPE_BUILD,
 ) -> dict[str, Any]:
+    """A fit document; `painter_build` is the build of the envelope whose goldens it was fitted
+    on (the fits here pass `Context.painter_build`)."""
     return {
         "schema": "uzpainter/parity/semantics/1",
         "record_class": "public_semantics",
         "semantics_id": semantics_id,
         "description": description,
-        "painter_build_id": PAINTER_BUILD,
+        "painter_build_id": painter_build,
         "corpus": sorted(set(corpus)),
         "entries": entries,
     }

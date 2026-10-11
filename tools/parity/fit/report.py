@@ -209,7 +209,7 @@ def render(
     maps = sum(len(g.maps) for g in stability)
     outputs = sum(len(g.outputs) for g in stability)
     add(
-        f"- Goldens compared: {len(stability)} (every manifest under `parity/manifests/tier0/`); "
+        f"- Goldens compared: {len(stability)} (every Tier 0 manifest of the `manifests` above); "
         f"stable {len(stability) - len(unstable_goldens)}, unstable {len(unstable_goldens)}."
     )
     add(

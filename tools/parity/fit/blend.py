@@ -600,4 +600,5 @@ def fit(ctx: Context) -> dict[str, Any]:
         "channel against both recordings (r1 same session, r2 after save and reopen).",
         corpus + more_corpus,
         entries + more,
+        painter_build=ctx.painter_build,
     )

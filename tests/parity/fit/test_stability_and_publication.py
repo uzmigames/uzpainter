@@ -17,7 +17,14 @@ from typing import Any
 import numpy as np
 import pytest
 
-from tools.parity.fit.cli import FITS, REPORT, reproduction_problems
+from tools.parity.envelope.registry import (
+    current_envelope,
+    initial_registry,
+    load_registry,
+    manifest_root,
+    save_registry,
+)
+from tools.parity.fit.cli import FITS, REPORT, recheck_problems, reproduction_problems
 from tools.parity.fit.common import Context
 from tools.parity.fit.decode import Decoded
 from tools.parity.fit.oracle import Golden, Recording
@@ -90,7 +97,7 @@ def _golden(maps: dict[str, tuple[Any, Any]], readbacks: dict[str, tuple[Any, An
         for output_id, pair in readbacks.items():
             outputs[output_id] = {"kind": "api_readback", "value": pair[index]}
         recordings[rid] = Recording(rid, condition, outputs)
-    path = REPO_ROOT / "parity" / "manifests" / "tier0" / "synthetic" / "golden.json"
+    path = manifest_root(current_envelope()) / "tier0" / "synthetic" / "golden.json"
     return Golden("tier0/synthetic/golden", path, {}, "0" * 64, recordings, None, decoded)
 
 
@@ -138,7 +145,8 @@ def test_storage_key_names_every_measured_field() -> None:
 def test_fits_validate_and_name_a_public_source_and_a_residual(path: Path) -> None:
     document = load_json(path)
     assert validation_errors(document, Schema.SEMANTICS) == []
-    assert document["painter_build_id"] == "12.1.0+js-api.1.1.20"
+    builds = {e["painter_build"] for e in load_registry()["envelopes"]}
+    assert document["painter_build_id"] in builds
     ids = [e["entry_id"] for e in document["entries"]]
     assert len(ids) == len(set(ids))
     for entry in document["entries"]:
@@ -153,6 +161,44 @@ def test_fits_validate_and_name_a_public_source_and_a_residual(path: Path) -> No
         assert (entry["status"] == "exact") == zero, entry["entry_id"]
         for r in entry["residuals"]:
             assert r["golden_id"] in document["corpus"]
+
+
+# --- decision 037: fits and the current envelope -------------------------------------------------
+
+
+def test_fits_of_an_older_envelope_are_listed_for_recheck() -> None:
+    """A fit measured on an older build is never counted as checked against the current one."""
+    assert recheck_problems(REPO_ROOT) == []
+
+
+def test_an_older_fit_missing_from_fits_to_recheck_is_reported(tmp_path: Path) -> None:
+    document = initial_registry("1.0.0", "1.0.0", "parity/manifests", "2026-01-01")
+    old = document["envelopes"][0]
+    drift = "parity/reports/phase0/oracle-envelope-drift-corpus-painter-2.0.0.json"
+    new = {
+        **old,
+        "envelope_id": "painter-2.0.0",
+        "painter_build": "2.0.0",
+        "painter_version": "2.0.0",
+        "manifest_root": "parity/envelopes/painter-2.0.0/manifests",
+        "previous": "painter-1.0.0",
+        "promoted_on": "2026-02-01",
+        "drift_report": drift,
+    }
+    old.update(status="superseded", superseded_on="2026-02-01")
+    save_registry({**document, "current": "painter-2.0.0", "envelopes": [old, new]}, tmp_path)
+    semantics = tmp_path / "parity" / "semantics"
+    semantics.mkdir(parents=True)
+    for name, build in (("listed", "1.0.0"), ("unlisted", "1.0.0"), ("current", "2.0.0")):
+        (semantics / f"{name}.json").write_text(json.dumps({"painter_build_id": build}), "utf-8")
+    (semantics / "unknown.json").write_text(json.dumps({"painter_build_id": "9.9.9"}), "utf-8")
+    listed = [{"semantics": "parity/semantics/listed.json", "reason": "new_envelope"}]
+    (tmp_path / drift).parent.mkdir(parents=True)
+    (tmp_path / drift).write_text(json.dumps({"fits_to_recheck": listed}), "utf-8")
+    problems = recheck_problems(tmp_path)
+    assert len(problems) == 2
+    assert problems[0].startswith("parity/semantics/unknown.json: Painter build 9.9.9")
+    assert problems[1].startswith("parity/semantics/unlisted.json: published against 1.0.0")
 
 
 # --- 3.2 guard ---------------------------------------------------------------------------------
@@ -223,4 +269,9 @@ def test_a_calibrated_fit_is_never_reported_as_settled() -> None:
 @pytest.mark.skipif(locate() is None, reason="no private oracle store on this machine")
 @pytest.mark.parametrize("name", list(FITS))
 def test_rerunning_each_fit_reproduces_the_published_residuals(name: str) -> None:
-    assert reproduction_problems(Context(locate(), REPO_ROOT), name) == []
+    """Each fit reproduces against the envelope it was published on. One published on an older
+    envelope stays history until re-checked: `recheck_problems` keeps it listed for re-check."""
+    build = load_json(SEMANTICS / FITS[name])["painter_build_id"]
+    published_on = [e for e in load_registry()["envelopes"] if e["painter_build"] == build]
+    assert published_on, build
+    assert reproduction_problems(Context(locate(), REPO_ROOT, published_on[-1]), name) == []

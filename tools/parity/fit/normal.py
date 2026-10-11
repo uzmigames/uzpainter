@@ -297,4 +297,5 @@ def fit(ctx: Context) -> dict[str, Any]:
         "Tier 0 height-normal goldens.",
         corpus,
         entries,
+        painter_build=ctx.painter_build,
     )

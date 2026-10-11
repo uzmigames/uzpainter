@@ -1,9 +1,10 @@
 """P0-TIER0 acceptance gate (phase0.8_tier0-goldens, `docs/dag.md`).
 
-The whole Tier 0 corpus (every manifest under `parity/manifests/tier0/`, all four children plus
-the recorder sample): each golden names its private record, the record holds at least two
-recordings (same session; after save/reopen), every listed hash verifies in the store, and the
-stability report classifies every golden. Checks that need the owner's private store skip,
+The whole Tier 0 corpus of the current envelope (every manifest under `tier0/` of its manifest
+root in `parity/envelopes/registry.json`, decision 037: all four children plus the recorder
+sample): each golden names its private record, the record holds at least two recordings (same
+session; after save/reopen), every listed hash verifies in the store, and the stability report
+classifies every golden. Checks that need the owner's private store skip,
 saying so, on a machine without one (hosted CI, decision 028); the local oracle run is their
 evidence (`parity/reports/phase0/tier0-goldens.md`). The published fits are checked by
 `tests/parity/fit/test_stability_and_publication.py`.
@@ -19,12 +20,13 @@ from typing import Any
 
 import pytest
 
+from tools.parity.envelope.registry import current_envelope, manifest_root
 from tools.parity.fit.cli import REPORT
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, record_problems, validation_errors
 from tools.parity.store.manifest import verify
 from tools.parity.store.store import OracleStore, Status, locate
 
-TIER0 = REPO_ROOT / "parity" / "manifests" / "tier0"
+TIER0 = manifest_root(current_envelope()) / "tier0"
 CONDITIONS = {"same_session", "after_save_reopen"}
 
 

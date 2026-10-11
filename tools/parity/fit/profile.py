@@ -234,4 +234,5 @@ def fit(ctx: Context) -> dict[str, Any]:
         "painter-12.1-isolated-linear); kept as the phase0.7 record of the provisional profile.",
         [GOLDEN],
         entries,
+        painter_build=ctx.painter_build,
     )

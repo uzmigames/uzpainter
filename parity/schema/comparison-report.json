@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:uzpainter:parity:schema:comparison-report:1",
   "title": "UzPainter parity comparison report",
-  "description": "Machine form of the comparison-tool specification (parity/CONTRACT.md §8). A public report carries numbers and hashes only; difference maps and region crops stay in the private store. Three results are reported separately. A mean or percentile is never reported without the maximum and the differing count next to it.",
+  "description": "Machine form of the comparison-tool specification (parity/CONTRACT.md §8). A public report carries numbers and hashes only; difference maps and region crops stay in the private store. Three results are reported separately. A mean or percentile is never reported without the maximum and the differing count next to it. Every report names the envelope it was judged against (decision 037: the current envelope only).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -12,6 +12,7 @@
     "tier",
     "domain",
     "manifest_sha256",
+    "envelope_id",
     "run",
     "oracle_stability",
     "uzpainter_repeatability",
@@ -24,6 +25,11 @@
     "tier": { "enum": ["0", "1", "2a", "2b", "3"] },
     "domain": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._:-]*(/[A-Za-z0-9][A-Za-z0-9._:-]*)*$" },
     "manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "envelope_id": {
+      "description": "The oracle envelope of the golden (parity/envelopes/registry.json); a verdict against any envelope but the current one is stale (CONTRACT.md §6.5).",
+      "type": "string",
+      "pattern": "^painter-[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
     "run": {
       "description": "Every result carries hardware, driver, backend, build hash, resource hashes (14-parity-testing.md §8).",
       "type": "object",
@@ -49,12 +55,12 @@
       }
     },
     "oracle_stability": {
-      "description": "Does Painter reproduce itself? Painter recording vs Painter recording.",
+      "description": "Does Painter reproduce itself? Painter recording vs Painter recording. Recordings whose environment records do not match (envelope_match) are out_of_envelope: neither stable nor unstable.",
       "type": "object",
       "additionalProperties": false,
       "required": ["status", "maps"],
       "properties": {
-        "status": { "enum": ["stable", "unstable", "not_measured", "oracle_unavailable"] },
+        "status": { "enum": ["stable", "unstable", "not_measured", "oracle_unavailable", "out_of_envelope"] },
         "maps": { "type": "array", "items": { "$ref": "#/$defs/map_diagnostics" } }
       }
     },
@@ -73,7 +79,7 @@
       "additionalProperties": false,
       "required": ["outcome", "exceptions_relied_on", "maps"],
       "properties": {
-        "outcome": { "enum": ["pass", "fail", "blocked", "oracle_unavailable"] },
+        "outcome": { "enum": ["pass", "fail", "blocked", "oracle_unavailable", "stale"] },
         "exceptions_relied_on": {
           "type": "array",
           "items": {
@@ -216,6 +222,17 @@
       "then": {
         "properties": {
           "equality_to_painter": { "properties": { "exceptions_relied_on": { "minItems": 1 } } }
+        }
+      }
+    },
+    {
+      "description": "A stale verdict (golden of an older envelope) relies on no register entry: it is never a pass.",
+      "if": {
+        "properties": { "equality_to_painter": { "properties": { "outcome": { "const": "stale" } } } }
+      },
+      "then": {
+        "properties": {
+          "equality_to_painter": { "properties": { "exceptions_relied_on": { "maxItems": 0 } } }
         }
       }
     },

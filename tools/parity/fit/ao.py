@@ -155,4 +155,5 @@ def fit(ctx: Context) -> dict[str, Any]:
         "quantisation, and the empty AO channel base, fitted on the Tier 0 ao-mixed golden.",
         [ctx.golden(GOLDEN).golden_id],
         entries,
+        painter_build=ctx.painter_build,
     )

@@ -415,6 +415,35 @@ def test_report_tier3_evidence_never_comes_from_warp() -> None:
     assert not is_valid(document, Schema.COMPARISON_REPORT)
 
 
+def test_report_names_its_envelope() -> None:
+    """Decision 037: a verdict always says which envelope it was judged against."""
+    document = report()
+    del document["envelope_id"]
+    assert not is_valid(document, Schema.COMPARISON_REPORT)
+    document["envelope_id"] = "12.1.5"
+    assert not is_valid(document, Schema.COMPARISON_REPORT)
+    document["envelope_id"] = "painter-12.1.5+js-api.1.1.20"
+    assert is_valid(document, Schema.COMPARISON_REPORT)
+
+
+def test_report_stale_relies_on_no_exception() -> None:
+    document = report()
+    document["tier"] = "3"
+    document["equality_to_painter"]["outcome"] = "stale"
+    assert is_valid(document, Schema.COMPARISON_REPORT)
+    relied = [{"exception_id": "EXC-002", "version": 1}]
+    document["equality_to_painter"]["exceptions_relied_on"] = relied
+    assert not is_valid(document, Schema.COMPARISON_REPORT)
+
+
+def test_report_out_of_envelope_is_an_oracle_side_result_only() -> None:
+    document = report()
+    document["oracle_stability"]["status"] = "out_of_envelope"
+    assert is_valid(document, Schema.COMPARISON_REPORT)
+    document["equality_to_painter"]["outcome"] = "out_of_envelope"
+    assert not is_valid(document, Schema.COMPARISON_REPORT)
+
+
 @pytest.mark.parametrize("result", ["oracle_stability", "uzpainter_repeatability"])
 def test_report_flip_anywhere_needs_the_pinned_tool(result: str) -> None:
     document = report()

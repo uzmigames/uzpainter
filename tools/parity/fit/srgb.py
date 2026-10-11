@@ -225,4 +225,5 @@ def fit(ctx: Context) -> dict[str, Any]:
         "after save and reopen).",
         corpus,
         [_rgb16(ctx), _srgb8_store(ctx), _srgb8_export(ctx)],
+        painter_build=ctx.painter_build,
     )

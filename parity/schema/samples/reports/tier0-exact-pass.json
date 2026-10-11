@@ -5,6 +5,7 @@
   "tier": "0",
   "domain": "tier0/blend/multiply/BaseColor",
   "manifest_sha256": "6c2a717e46339b0d3e8411883aa336212f2789dc677551ae41a38b9eb80460c5",
+  "envelope_id": "painter-synthetic-sample-build",
   "run": {
     "hardware": "synthetic GPU",
     "driver": "synthetic driver 1.0",
