@@ -298,5 +298,66 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "s-259541b89909-render-reference",
+      "kind": "iray_reference",
+      "sha256": "343052a4e5764aa391e724fd573eec17a635350495655c06263dd0a1c7952cb4",
+      "size_bytes": 1092547
+    },
+    {
+      "record_id": "s-259541b89909-panel-display-settings",
+      "kind": "settings_panel_evidence",
+      "sha256": "8ab62f2b276a1e440e7c6811f38fd2d8f3567be065bde516e6965fb072a49458",
+      "size_bytes": 18070
+    },
+    {
+      "record_id": "s-259541b89909-panel-iray-settings",
+      "kind": "settings_panel_evidence",
+      "sha256": "b35b10fc78aa63320e2e72aaf6e926060f77c75e1e33c9c32e7e977dd5446d0d",
+      "size_bytes": 16040
+    },
+    {
+      "record_id": "s-259541b89909-panel-viewport-display-transform",
+      "kind": "settings_panel_evidence",
+      "sha256": "2c1fbf7025c038d9cba6c12c823d259323f7c639564cc1690831781455c47a73",
+      "size_bytes": 1838
+    },
+    {
+      "record_id": "s-259541b89909-oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "e8ad37f92fc284b98250fdb4e6c75960bdc0c3f1aded3bd6dfc20d35b16e69bf",
+      "size_bytes": 483
+    },
+    {
+      "record_id": "s-42800adbf279-render-reference",
+      "kind": "iray_reference",
+      "sha256": "a39d6639f7fb0b747238469977af36bdd0c22166092f841310b7bc22d627136d",
+      "size_bytes": 1083953
+    },
+    {
+      "record_id": "s-42800adbf279-panel-display-settings",
+      "kind": "settings_panel_evidence",
+      "sha256": "8ab62f2b276a1e440e7c6811f38fd2d8f3567be065bde516e6965fb072a49458",
+      "size_bytes": 18070
+    },
+    {
+      "record_id": "s-42800adbf279-panel-iray-settings",
+      "kind": "settings_panel_evidence",
+      "sha256": "b35b10fc78aa63320e2e72aaf6e926060f77c75e1e33c9c32e7e977dd5446d0d",
+      "size_bytes": 16040
+    },
+    {
+      "record_id": "s-42800adbf279-panel-viewport-display-transform",
+      "kind": "settings_panel_evidence",
+      "sha256": "2c1fbf7025c038d9cba6c12c823d259323f7c639564cc1690831781455c47a73",
+      "size_bytes": 1838
+    },
+    {
+      "record_id": "s-42800adbf279-oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "e8ad37f92fc284b98250fdb4e6c75960bdc0c3f1aded3bd6dfc20d35b16e69bf",
+      "size_bytes": 483
+    }
+  ]
 }
