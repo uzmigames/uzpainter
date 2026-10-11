@@ -4,9 +4,11 @@ r"""Write or check the Tier 0 semantics fixtures and public manifests.
     python -m tools.parity.tier0_semantics check    # exit 1 if any file differs from the corpus
     python -m tools.parity.tier0_semantics list     # manifest paths, one per line
 
-`write` keeps the `private_records` a manifest already has (filled by `uzpainter parity record`)
-and refuses to change the authored part of a manifest that has records: a recorded golden is
-immutable, so a changed golden needs a new name.
+Besides the 12.1.0 corpus (`corpus.py`, `parity/manifests/tier0/semantics/`) every command covers
+the goldens first recorded under the current envelope (`current.py`: its `tier0/semantics-ui/`
+and new `tier0/semantics/` manifests). `write` keeps the `private_records` a manifest already
+has (filled by `uzpainter parity record`) and refuses to change the authored part of a manifest
+that has records: a recorded golden is immutable, so a changed golden needs a new name.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from tools.parity.tier0_semantics.corpus import (
     manifest,
     sha256,
 )
+from tools.parity.tier0_semantics.current import planned_current, ui_manifest_dir
 
 
 def manifest_text(data: dict[str, Any]) -> str:
@@ -47,7 +50,7 @@ def planned(root: Path = REPO_ROOT) -> tuple[dict[Path, bytes], dict[Path, dict[
     manifests = {
         root / MANIFEST_DIR / f"{g.name}.json": manifest(g, hashes) for g in goldens(TEMPLATES)
     }
-    return files, manifests
+    return files, manifests | planned_current(hashes, root)
 
 
 def authored(data: dict[str, Any]) -> dict[str, Any]:
@@ -68,6 +71,7 @@ def problems(root: Path = REPO_ROOT) -> list[str]:
         if authored(current) != authored(planned_manifest):
             found.append(f"{path.relative_to(root).as_posix()}: authored part differs")
     extra = sorted(set((root / MANIFEST_DIR).glob("*.json")) - set(manifests))
+    extra += sorted(set(ui_manifest_dir(root).glob("*.json")) - set(manifests))
     found += [f"{p.relative_to(root).as_posix()}: not in the corpus" for p in extra]
     return found
 

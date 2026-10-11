@@ -5,7 +5,9 @@ The corpus holds four kinds of jobs; each is recorded exactly as its own command
 
 - API probes (`tier0/api-probes`): `tools.parity.recorder.probes`;
 - baking defaults (`record-defaults`) and shipped templates (`record-templates`);
-- every other texture golden (`record`).
+- every other texture golden (`record`); one whose settings sheet names values only Painter's
+  UI can set (`texture_sheet.py`) is recorded with the UI operator (`painter_ui.py`, decision
+  029), so a refresh or a study never records a default in place of the sheet's value.
 
 A job may be re-targeted to another Painter build (a refresh records the current envelope's
 instruction sequences under the candidate build): only `software.painter` changes and
@@ -30,6 +32,7 @@ from tools.parity.recorder.job import job_from_manifest
 from tools.parity.recorder.probes import probe_job_from_manifest, record_probe_golden
 from tools.parity.recorder.session import PainterIdentity, PainterSession, RecorderError
 from tools.parity.recorder.texture import record_texture_golden
+from tools.parity.recorder.texture_sheet import Operator, texture_sheet
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
 
 TEXTURE, PROBE, DEFAULTS, TEMPLATES = "texture", "probe", "defaults", "templates"
@@ -83,8 +86,10 @@ def record_golden(
     now: Now,
     record_prefix: str = "",
     repo_root: Path = REPO_ROOT,
+    operator: Operator | None = None,
 ) -> Path:
-    """Record one golden with its own recorder command; returns the inbox run."""
+    """Record one golden with its own recorder command; returns the inbox run. A golden with
+    UI-set values uses `operator`, by default the UI operator of Painter's panels."""
     kind = recorder_kind(manifest, repo_root)
     if kind == PROBE:
         probe = probe_job_from_manifest(dict(manifest), repo_root)
@@ -94,7 +99,18 @@ def record_golden(
         return record_project_templates(session, job, work, inbox, now, record_prefix=record_prefix)
     if kind == DEFAULTS:
         return record_baking_defaults(session, job, work, inbox, now, record_prefix=record_prefix)
-    return record_texture_golden(session, job, work, inbox, now, record_prefix=record_prefix)
+    if texture_sheet(job) and operator is None:
+        operator = ui_operator(work)
+    return record_texture_golden(
+        session, job, work, inbox, now, record_prefix=record_prefix, operator=operator
+    )
+
+
+def ui_operator(work: Path) -> Operator:
+    """The UI automation operator of Painter's panels (dev-only dependency, decision 029)."""
+    from tools.parity.recorder.painter_ui import PainterUi, UiOperator
+
+    return UiOperator(PainterUi(), work / "ui-operator")
 
 
 def manifests_under(paths: list[Path]) -> list[Path]:

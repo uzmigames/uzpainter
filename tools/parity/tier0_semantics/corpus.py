@@ -75,6 +75,7 @@ FIXTURES: dict[str, tuple[str, str, Callable[[], bytes] | None]] = {
     "grey-b": ("image", f"{FIXTURE_DIR}/bitmaps/grey-b.png", fixtures.grey_b),
     "mask-codes": ("mask", f"{FIXTURE_DIR}/bitmaps/mask-codes.png", fixtures.mask_codes),
     "pattern64": ("image", f"{FIXTURE_DIR}/bitmaps/pattern64.png", fixtures.pattern64),
+    "impulse64": ("image", f"{FIXTURE_DIR}/bitmaps/impulse64.png", fixtures.impulse64),
     "height-ramps": ("image", f"{FIXTURE_DIR}/bitmaps/height-ramps.png", fixtures.height_ramps),
     "normal-a": (
         "image",
@@ -925,7 +926,7 @@ def applied_settings(golden: Golden) -> list[dict[str, Any]]:
         {"name": "export.padding", "value": "infinite", "applied_by": "recorder_api"},
         {"name": "export.dithering", "value": False, "applied_by": "recorder_api"},
     ]
-    return settings
+    return settings + golden.settings
 
 
 def manifest(golden: Golden, input_hashes: dict[str, str]) -> dict[str, Any]:

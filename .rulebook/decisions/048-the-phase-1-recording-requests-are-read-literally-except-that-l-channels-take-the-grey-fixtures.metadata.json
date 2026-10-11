@@ -1,0 +1,9 @@
+{
+  "id": 48,
+  "slug": "the-phase-1-recording-requests-are-read-literally-except-that-l-channels-take-the-grey-fixtures",
+  "title": "The Phase 1 recording requests are read literally, except that L channels take the grey fixtures",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": ["phase0.7_tier0-semantics-ui-cases", "phase1.9_compositor-resample-gaps", "phase1.10_compositor-float32-residual"],
+  "supersededBy": null
+}

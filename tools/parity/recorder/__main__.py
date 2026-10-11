@@ -1,6 +1,6 @@
 r"""Command line of the Painter oracle recorder (operator guide: `parity/RECORDER.md`).
 
-    python -m tools.parity.recorder record <manifest.json>
+    python -m tools.parity.recorder record <manifest.json> [--operator console|ui]
     python -m tools.parity.recorder iray <manifest.json> --condition separate_session \
         --operator-id ID
     python -m tools.parity.recorder iray <manifest.json> --condition k_times_samples --k 4 \
@@ -22,8 +22,10 @@ current nor the candidate envelope's starts the envelope refresh (decision 037; 
 status 3 once it ends). The last three commands are the oracle envelope's (`parity/RECORDER.md`
 §10, `tools/parity/envelope/`).
 
-`--operator ui` (iray, iray-probe) lets `painter_ui.UiOperator` operate Painter's panels by
-Windows UI automation (decision 029) instead of a person at the console.
+`--operator ui` (iray, iray-probe, record) lets `painter_ui.UiOperator` operate Painter's panels
+by Windows UI automation (decision 029) instead of a person at the console. `record` needs an
+operator only for a golden whose settings sheet names values only the UI can set
+(`texture_sheet.py`) and refuses such a golden without one.
 
 `iray --launch` runs a series: for each manifest (a directory stands for its `*.json`) that still
 needs the condition (`iray.reference_needed`), it starts a fresh Painter process, records one
@@ -84,6 +86,8 @@ def parse(argv: Sequence[str]) -> argparse.Namespace:
             command.add_argument("manifest", type=Path)
         command.add_argument("--host", default=REMOTE_HOST)
         command.add_argument("--port", type=int, default=REMOTE_PORT)
+        if name == "record":
+            command.add_argument("--operator", choices=["console", "ui"], default=None)
     iray = commands.add_parser("iray")
     iray.add_argument("manifests", type=Path, nargs="+", help="manifests or directories")
     iray.add_argument("--host", default=REMOTE_HOST)
@@ -271,7 +275,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         job = load_job(args.manifest)
         if args.command == "record":
-            run = record_texture_golden(session, job, work_root(), inbox_root())
+            operator = make_operator(args.operator) if args.operator else None
+            run = record_texture_golden(session, job, work_root(), inbox_root(), operator=operator)
         elif args.command == "record-defaults":
             run = record_baking_defaults(session, job, work_root(), inbox_root())
         else:
