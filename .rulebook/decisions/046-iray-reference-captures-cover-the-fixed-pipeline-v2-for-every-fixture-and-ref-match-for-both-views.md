@@ -1,4 +1,4 @@
-# 43. Iray reference captures cover the fixed pipeline: v2 for every fixture, ref_match for both views
+# 46. Iray reference captures cover the fixed pipeline: v2 for every fixture, ref_match for both views
 
 **Status**: accepted
 **Date**: 2026-10-11

@@ -4,7 +4,7 @@
   "golden_id": "phase0/iray-references/metal1-rough090",
   "tier": "3",
   "domain": "phase0/iray-references",
-  "description": "Iray reference fixture metal1-rough090 (metalness x roughness grid) of task phase0.7_render-reference-captures under the fixed render pipeline (decisions 038, 039, 043): the sphere with one fill layer (base colour sRGB [0.5, 0.5, 0.5], metalness 1, roughness 0.9), shader at Painter's defaults, under the v2 common block (Studio White Soft by resource URL, clear colour 89,89,89), OCIO with Painter's substance config and Default - sRGB, camera on +Z at 60 looking at the origin, field of view 40, captured by procedure iray-capture/1 (Save Render, 16-bit PNG, 1200x1200, 256 samples; two session-separated references and one at 4 x 256 samples). Fixture values proposed to the owner, not ratified.",
+  "description": "Iray reference fixture metal1-rough090 (metalness x roughness grid) of task phase0.7_render-reference-captures under the fixed render pipeline (decisions 038, 039, 046): the sphere with one fill layer (base colour sRGB [0.5, 0.5, 0.5], metalness 1, roughness 0.9), shader at Painter's defaults, under the v2 common block (Studio White Soft by resource URL, clear colour 89,89,89), OCIO with Painter's substance config and Default - sRGB, camera on +Z at 60 looking at the origin, field of view 40, captured by procedure iray-capture/1 (Save Render, 16-bit PNG, 1200x1200, 256 samples; two session-separated references and one at 4 x 256 samples). Fixture values proposed to the owner, not ratified.",
   "inputs": [
     {
       "input_id": "sphere",
