@@ -1,6 +1,6 @@
 ## 1. Prerequisites
 - [x] 1.1 Prerequisites accepted: phase0.8_tier0-goldens, phase1.7_mesh-loader, phase1.10_compositor-blend-kernels, phase1.11_compositor-mask-effects
-  - All four archived on main (phase1.11 on 2026-10-11 after its 3.3 scope split, decision 069, and 3.4 under the coverage-weights profile); merged here at main `4949d28`.
+  - All four archived on main (phase1.11 on 2026-10-11 after its 3.3 scope split, decision 069, and 3.4 under the coverage-weights profile); merged here at main `7be83f4`.
 
 ## 2. Implementation
 - [x] 2.1 Implement the signed Height channel in its template storage format
@@ -33,7 +33,7 @@
 - [x] 5.2 Write tests covering the new behavior
   - `tests/evaluator/test_compositor_height_normal.py`, native cases `height-normal`, `height-normal-gpu-vs-cpu`, `tests/parity/fit/test_normal.py`.
 - [x] 5.3 Run tests and confirm they pass
-  - After merging main `4949d28`: `tests/evaluator`, `tests/parity/fit`, `tests/parity/test_verdict.py`, `tests/uzp_core`, `tests/sources`: 517 passed (29 min, CPU and DX12); `tests/store`: green before the merge.
+  - After merging main `7be83f4`: `tests/evaluator`, `tests/parity/fit`, `tests/parity/test_verdict.py`, `tests/uzp_core`, `tests/sources`: 517 passed (29 min, CPU and DX12); `tests/store`: green before the merge.
 
 ## Report (2026-10-11)
 - Done: 2.1-2.5, 3.2, 3.4, 5.1, 5.2 (decisions 064, 065; `parity/reports/phase1/compositor-height-normal.md`). Every r1 map of both methods exact on CPU and GPU; `blend-normal-channel` exact.
