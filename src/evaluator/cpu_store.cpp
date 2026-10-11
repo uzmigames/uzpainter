@@ -28,7 +28,7 @@ float OperandOf(uint32_t stored, const TileFormat& format, uint32_t plane) {
     return 0.0f;
 }
 
-uint32_t StoreValue(float value, const TileFormat& format, uint32_t plane, float storeBase) {
+uint32_t StoreValue(float value, const TileFormat& format, uint32_t plane) {
     switch (format.encoding) {
         case TexelEncoding::Unorm8:
             if (format.srgb && !IsCoverage(format, plane)) return arith::Srgb8Store(value);
@@ -36,8 +36,7 @@ uint32_t StoreValue(float value, const TileFormat& format, uint32_t plane, float
         case TexelEncoding::Unorm16: return arith::WriteUnorm(value, 16);
         case TexelEncoding::Float16:
             return std::bit_cast<uint32_t>(arith::HalfToFloat(arith::HalfTowardZero(value)));
-        case TexelEncoding::Float32:
-            return std::bit_cast<uint32_t>(arith::Float32Store(value, storeBase));
+        case TexelEncoding::Float32: return std::bit_cast<uint32_t>(arith::Float32Store(value));
     }
     return 0;
 }
@@ -107,7 +106,7 @@ render::Result<void> CpuTileStore::Upload(TileHandle handle, const DecodedImage&
             }
             if (stored == 4) {
                 for (uint32_t c = tile.format.channels; c < 3; ++c) out[c] = 0;
-                out[3] = StoreValue(1.0f, tile.format, 3, 0.0f);
+                out[3] = StoreValue(1.0f, tile.format, 3);
             }
         }
     }
@@ -166,12 +165,12 @@ render::Result<void> CpuTileStore::Blend(const BlendOp& op) {
         const std::array<float, 4> out = arith::Composite(in);
         uint32_t* values = &dst.values[texel * stored];
         for (uint32_t c = 0; c < dst.format.channels; ++c) {
-            values[c] = StoreValue(out[c], dst.format, c, op.storeBase[c]);
+            values[c] = StoreValue(out[c], dst.format, c);
         }
         if (stored == 4) {
             for (uint32_t c = dst.format.channels; c < 3; ++c) values[c] = 0;
-            values[3] = dst.format.alpha ? StoreValue(out[3], dst.format, 3, 0.0f)
-                                         : StoreValue(1.0f, dst.format, 3, 0.0f);
+            values[3] = dst.format.alpha ? StoreValue(out[3], dst.format, 3)
+                                         : StoreValue(1.0f, dst.format, 3);
         }
     }
     return {};

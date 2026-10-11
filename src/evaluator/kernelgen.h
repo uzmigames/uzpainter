@@ -5,7 +5,9 @@
 // compiled through the render layer's kernel cache (IEEE-strict, DXIL and SPIR-V). The kernel
 // body is shaders/evaluator_blend.hlsl; it mirrors arith.cpp operation for operation and reads
 // its per-dispatch parameters from a block of `kBlendParamsStride` uints in a structured buffer
-// (the parameter arena of gpu_store.h), indexed by two root constants.
+// (the parameter arena of gpu_store.h), indexed by two root constants. 32-bit float results
+// are stored as they are: the channel's re-composition over its base is a read-out step
+// (evaluate.h), not a store.
 
 #include "evaluator/formats.h"
 #include "evaluator/tile_store.h"
@@ -58,10 +60,9 @@ enum BlendParam : uint32_t {
     kParamMaskIndex = 13,
     kParamMaskConst = 14,
     kParamOpacity = 15,
-    kParamStoreBase = 16,  ///< 3 floats.
-    kParamDstUav = 19,
-    kParamTable16Srv = 20,
-    kParamMaskEncoding = 21,
+    kParamDstUav = 16,
+    kParamTable16Srv = 17,
+    kParamMaskEncoding = 18,
 };
 
 struct BlendBindings {

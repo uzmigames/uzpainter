@@ -7,7 +7,9 @@
 //
 // Order of the checks: `AutoUnwrapSettings` (rejected before anything is read), the format
 // (release gaps, unsupported extensions), parsing, duplicate material names, UVs outside tile
-// 1001, then units. A refused import creates nothing.
+// 1001, then units. An accepted mesh then gets its MikkTSpace tangent frames (`tangents.h`) and
+// its certificate (`certificate.h`), stored in the import report beside the hashes. A refused
+// import creates nothing.
 
 #include <cstdint>
 #include <filesystem>
@@ -16,6 +18,7 @@
 #include <string>
 #include <string_view>
 
+#include "mesh/certificate.h"
 #include "mesh/texturing_mesh.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/transaction/transaction.h"
@@ -43,6 +46,8 @@ struct ImportSettings {
     bool allow_duplicate_material_names = false;
     /// `AutoUnwrapSettings`, when given: recorded in the error and rejected (`NotYetSupported`).
     std::optional<core::json::Object> auto_unwrap;
+    /// The texel grid of the certificate's pixel metrics: the texture sets' resolution.
+    CertificateOptions certificate;
 };
 
 struct ImportResult {
@@ -51,8 +56,11 @@ struct ImportResult {
     std::string file_name;
     std::string sha256;  ///< of the original file bytes (the mesh resource)
     std::int64_t size = 0;
+    /// The certificate of `mesh` (12 §4); never a repair.
+    Certificate certificate;
     /// The import report stored as `MeshReference::import_report`: format, source, units
-    /// (requested and effective), objects, materials and merges, counts, flags and hashes.
+    /// (requested and effective), objects, materials and merges, counts, flags, hashes and the
+    /// certificate (`CertificateToJson`).
     core::json::Object report;
 };
 

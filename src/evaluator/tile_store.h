@@ -53,8 +53,7 @@ struct Operand {
 
 /// One blend of a source over a backdrop into `dst` (all tiles of the same size; `dst` of the
 /// channel's tile format, with the coverage plane when it is an isolated intermediate). The mask
-/// is a constant or the first plane of a tile. `storeBase` is the base the 32-bit float store
-/// re-composites over (the channel's base on the stack accumulator, 0 inside a group).
+/// is a constant or the first plane of a tile.
 struct BlendOp {
     TileHandle dst = kNoTile;
     Operand acc;
@@ -62,7 +61,6 @@ struct BlendOp {
     Operand mask = Operand::Constant({1.0f, 1.0f, 1.0f}, 1.0f);
     core::BlendingMode mode = core::BlendingMode::Normal;
     float opacity = 1.0f;
-    std::array<float, 3> storeBase{0.0f, 0.0f, 0.0f};
 };
 
 /// The texels of a tile as the store holds them: `format.channels` channels per texel (the

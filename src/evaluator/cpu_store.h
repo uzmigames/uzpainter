@@ -45,9 +45,7 @@ private:
 
 /// The operand of a stored plane value of `format` (plane 3 is the coverage, linear).
 [[nodiscard]] float OperandOf(uint32_t stored, const TileFormat& format, uint32_t plane);
-/// The stored plane value of a composite result (plane 3 is the coverage, linear);
-/// `storeBase` is the component's base for the 32-bit float store.
-[[nodiscard]] uint32_t StoreValue(float value, const TileFormat& format, uint32_t plane,
-                                  float storeBase);
+/// The stored plane value of a composite result (plane 3 is the coverage, linear).
+[[nodiscard]] uint32_t StoreValue(float value, const TileFormat& format, uint32_t plane);
 
 }  // namespace uzp::evaluator

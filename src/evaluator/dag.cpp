@@ -1,5 +1,6 @@
 #include "evaluator/dag.h"
 
+#include <bit>
 #include <string>
 
 #include "evaluator/arith.h"
@@ -247,7 +248,11 @@ std::array<float, 3> UniformOperand(const std::array<double, 3>& colour, const T
     }
     for (uint32_t c = 0; c < format.channels; ++c) {
         const float value = static_cast<float>(components[c]);
-        const uint32_t stored = StoreValue(value, format, c, base[c]);
+        // A 32-bit float colour reads back as the channel would export it (blend-modes.json
+        // `uniform_operand`: stored like a channel value, 1 + (v - 1) over the white base).
+        const uint32_t stored = format.encoding == render::TexelEncoding::Float32
+                                    ? std::bit_cast<uint32_t>(arith::Float32Readout(value, base[c]))
+                                    : StoreValue(value, format, c);
         result[c] = OperandOf(stored, format, c);
     }
     return result;

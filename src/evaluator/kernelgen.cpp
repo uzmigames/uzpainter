@@ -99,7 +99,6 @@ std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(const BlendOp& op,
     params[kParamMaskIndex] = bindings.maskSrv;
     params[kParamMaskConst] = std::bit_cast<uint32_t>(op.mask.value[0]);
     params[kParamOpacity] = std::bit_cast<uint32_t>(op.opacity);
-    for (size_t i = 0; i < 3; ++i) params[kParamStoreBase + i] = std::bit_cast<uint32_t>(op.storeBase[i]);
     params[kParamDstUav] = bindings.dstUav;
     params[kParamTable16Srv] = bindings.table16Srv;
     params[kParamMaskEncoding] = render::image_pass_detail::EncodingConstant(bindings.maskEncoding);

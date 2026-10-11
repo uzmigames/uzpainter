@@ -10,7 +10,7 @@
 // - `corners[]` are triangle corners as authored: one per face corner of the file (an OBJ `f`
 //   reference, an FBX polygon vertex, a glTF index), in file order, each with its position id,
 //   its authored normal (never recomputed), its first UV set and its material. The tangent slot is
-//   filled by the tangent stage (`phase1.5_mesh-tangents-certificate`), never by a loader.
+//   filled by the tangent stage (`tangents.h`, run by `ImportMesh`), never by a loader.
 // - `objects[]` are the file's objects (OBJ `o`/`g` sections, FBX and glTF mesh nodes; one per
 //   instance), each with its transform to the file's scene space and its triangles. A triangle of
 //   an already-triangulated face keeps the face's corners in their order; a polygon of n > 3
@@ -54,7 +54,7 @@ struct Corner {
     std::uint32_t position = 0;  ///< index into `TexturingMesh::positions`
     Float3 normal;               ///< as authored; (0, 0, 0) when the file has none (flagged)
     Float2 uv0;                  ///< the first UV set; (0, 0) when the file has none (flagged)
-    /// MikkTSpace tangent xyz and bitangent sign, computed by the tangent stage; zero here.
+    /// MikkTSpace tangent xyz and bitangent sign (`ComputeTangents`); zero until it runs.
     std::array<float, 4> tangent{};
     std::uint32_t material = 0;  ///< index into `TexturingMesh::materials`
     bool operator==(const Corner&) const = default;

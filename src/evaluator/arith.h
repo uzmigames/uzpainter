@@ -11,8 +11,8 @@
 //   reciprocal and square root of the fit (one rounding each), and the opacity mix
 //   v = a (1 - alpha) + r alpha (Replace: a + (r - a) alpha);
 // - the write rules ("Write"): UNORM n bits truncated to n + 4 fractional bits then the nearest
-//   code, ties down; sRGB8 round(255 encode(v)); 16-bit float toward zero; 32-bit float
-//   1 + (v - 1) over the white base, generalised to base + (v - base);
+//   code, ties down; sRGB8 round(255 encode(v)); 16-bit float toward zero; 32-bit float as it
+//   is, re-composited over the channel base (1 + (v - 1)) once at read-out;
 // - the isolated-group composite (W3C Compositing and Blending Level 1 §5.1, §6; approved source
 //   S-W3C-BLEND) that the Tier 0 `group-masks` golden confirms for groups without masks.
 //
@@ -73,9 +73,13 @@ namespace uzp::evaluator::arith {
 [[nodiscard]] uint16_t HalfTowardZero(float v);
 /// The float32 value of a binary16 bit pattern (exact).
 [[nodiscard]] float HalfToFloat(uint16_t bits);
-/// The 32-bit float store: float32(float32(v - base) + base); a NaN is stored as the quiet NaN
-/// 0x7FC00000 (payloads carry no value; CONTRACT §3.1 compares NaN with NaN).
-[[nodiscard]] float Float32Store(float v, float base);
+/// The 32-bit float store: the value itself, with NaN as the quiet NaN 0x7FC00000 (payloads
+/// carry no value; CONTRACT §3.1 compares NaN with NaN).
+[[nodiscard]] float Float32Store(float v);
+/// The read-out of a 32-bit float channel: float32(float32(v - base) + base), the channel value
+/// re-composited over its base once (blend-modes.json: 1 + (v - 1) over the white base). The
+/// blend fits use the raw backdrop and apply this to the result, so it is not a per-layer store.
+[[nodiscard]] float Float32Readout(float v, float base);
 
 /// Lookup tables the kernels embed or upload (their CPU twins compute the same values).
 [[nodiscard]] const std::array<float, 256>& Srgb8OperandTable();

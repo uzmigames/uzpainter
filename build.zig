@@ -35,8 +35,10 @@
 //!   `src/store/` with SQLite and zstd); `zig build uzp-store-tests` `uzp-store-tests.exe`, its
 //!   native tests with the test-only fault hooks (`tests/store/store_test.cpp`)
 //! - `zig build mesh-tests`   `uzp-mesh-tests.exe`: the mesh importers (`src/mesh/` with ufbx,
-//!   fastgltf and simdjson, the static library `uzp_mesh`) and their native tests
-//!   (`tests/mesh/mesh_test.cpp`)
+//!   fastgltf and simdjson, the static library `uzp_mesh`, with the MikkTSpace tangents and the
+//!   certificate) and their native tests (`tests/mesh/mesh_test.cpp`), plus
+//!   `uzp-normal-bake.exe`, the normal-convention bake over the production tangent frames
+//!   (`tests/mesh/normal_bake.cpp`)
 //!
 //! Every include and library path is inside this repository. Windows system headers and import
 //! libraries come from the MinGW-w64 files bundled with the pinned Zig release; nothing refers
@@ -280,6 +282,8 @@ const mesh_sources = [_][]const u8{
     "mesh/gltf_import.cpp",
     "mesh/mesh_import.cpp",
     "mesh/mask_image.cpp",
+    "mesh/tangents.cpp",
+    "mesh/certificate.cpp",
 };
 /// Third-party include directories of the mesh importers (`tools/vendoring/thirdparty.py`): ufbx,
 /// fastgltf and the simdjson it parses with, and the PNG decoder of the orientation contract.
@@ -289,6 +293,7 @@ const mesh_thirdparty_include_dirs = [_][]const u8{
     "thirdparty/simdjson/singleheader",
     "thirdparty/zlib",
     "thirdparty/spng/spng",
+    "thirdparty/mikktspace",
 };
 /// ufbx's single C file, vendored unpatched.
 const ufbx_flags = [_][]const u8{"-std=c11"};
@@ -796,6 +801,11 @@ pub fn build(b: *std.Build) void {
         .flags = &(uzp_core_flags ++ [_][]const u8{"-DSPNG_STATIC"}),
     });
     mesh_mod.addCSourceFiles(.{
+        .root = b.path("thirdparty/mikktspace"),
+        .files = &.{"mikktspace.c"},
+        .flags = &mikktspace_flags,
+    });
+    mesh_mod.addCSourceFiles(.{
         .root = b.path("thirdparty/ufbx"),
         .files = &.{"ufbx.c"},
         .flags = &ufbx_flags,
@@ -863,6 +873,29 @@ pub fn build(b: *std.Build) void {
     });
     const mesh_tests_step = b.step("mesh-tests", "Build the mesh importers and their native tests");
     mesh_tests_step.dependOn(&b.addInstallArtifact(mesh_tests_exe, .{}).step);
+
+    // The normal-convention fixture re-run with the production tangent frames
+    // (phase1.5_mesh-tangents-certificate): the Phase 0 prototype's bake over `src/mesh/`.
+    const normal_bake_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    normal_bake_mod.addIncludePath(b.path("src"));
+    normal_bake_mod.addIncludePath(b.path("thirdparty/spng/spng"));
+    normal_bake_mod.linkLibrary(mesh_lib);
+    normal_bake_mod.linkLibrary(uzp_core_lib);
+    normal_bake_mod.addCSourceFiles(.{
+        .root = b.path("tests/mesh"),
+        .files = &.{"normal_bake.cpp"},
+        .flags = &(uzp_core_flags ++ [_][]const u8{"-DSPNG_STATIC"}),
+    });
+    const normal_bake_exe = b.addExecutable(.{
+        .name = "uzp-normal-bake",
+        .root_module = normal_bake_mod,
+    });
+    mesh_tests_step.dependOn(&b.addInstallArtifact(normal_bake_exe, .{}).step);
     b.getInstallStep().dependOn(mesh_tests_step);
 
     // ── Project store (phase1.4_store-container-operations) ──────────────────────────────────

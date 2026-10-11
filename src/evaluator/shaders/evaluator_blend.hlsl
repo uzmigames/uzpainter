@@ -10,8 +10,9 @@
 // Parameters come from a block of 32 uints in the arena behind root constant 0, block index in
 // root constant 1 (kernelgen.h, BlendParam): width, height, flags, backdrop (SRV index or
 // constant rgba), source (SRV index or constant rgba), mask (SRV index of plane 0 or constant),
-// opacity, the 32-bit float store base, the destination UAV, the 16-bit UNORM operand table SRV
-// and the mask tile's encoding.
+// opacity, the destination UAV, the 16-bit UNORM operand table SRV and the mask tile's
+// encoding. 32-bit float results are stored raw (the channel base re-composition is a read-out
+// step of evaluate.cpp).
 
 #include "image_common.hlsli"
 #include "evaluator_tables.hlsli"
@@ -31,10 +32,9 @@ cbuffer Root : register(b0) {
 #define P_MASK_INDEX 13
 #define P_MASK_CONST 14
 #define P_OPACITY 15
-#define P_STORE_BASE 16
-#define P_DST_UAV 19
-#define P_TABLE16_SRV 20
-#define P_MASK_ENC 21
+#define P_DST_UAV 16
+#define P_TABLE16_SRV 17
+#define P_MASK_ENC 18
 
 #define FLAG_ACC_TILE 1u
 #define FLAG_SRC_TILE 2u
@@ -334,7 +334,7 @@ float CompositeChannel(float a, float s, float alphaB, float alphaS) {
     return (backdrop + alphaS * blended) * Rcp(alphaO);
 }
 
-float StoreChannel(float v, float base) {
+float StoreChannel(float v) {
 #if UZP_ENC == 0 || UZP_ENC == 1
 #if UZP_SRGB
     return CodeValue(Srgb8Store(v), UZP_ENC);
@@ -345,8 +345,7 @@ float StoreChannel(float v, float base) {
     return HalfTowardZero(v);
 #else
     if (isnan(v)) return asfloat(0x7FC00000u);
-    const float t = v - base;
-    return t + base;
+    return v;
 #endif
 }
 
@@ -397,13 +396,10 @@ void main(uint3 id : SV_DispatchThreadID) {
     const float alphaB = acc.w;
 
     float4 result = float4(0.0f, 0.0f, 0.0f, 1.0f);
-    result.x = StoreChannel(CompositeChannel(acc.x, src.x, alphaB, alphaS),
-                         asfloat(params[base + P_STORE_BASE]));
+    result.x = StoreChannel(CompositeChannel(acc.x, src.x, alphaB, alphaS));
 #if UZP_CHANNELS == 3
-    result.y = StoreChannel(CompositeChannel(acc.y, src.y, alphaB, alphaS),
-                         asfloat(params[base + P_STORE_BASE + 1]));
-    result.z = StoreChannel(CompositeChannel(acc.z, src.z, alphaB, alphaS),
-                         asfloat(params[base + P_STORE_BASE + 2]));
+    result.y = StoreChannel(CompositeChannel(acc.y, src.y, alphaB, alphaS));
+    result.z = StoreChannel(CompositeChannel(acc.z, src.z, alphaB, alphaS));
 #endif
     float alphaO = 1.0f;
     if (alphaB == 0.0f) alphaO = alphaS;

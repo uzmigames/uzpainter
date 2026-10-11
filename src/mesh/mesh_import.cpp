@@ -14,6 +14,7 @@
 #include "mesh/gltf_import.h"
 #include "mesh/import_error.h"
 #include "mesh/obj_parser.h"
+#include "mesh/tangents.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 
@@ -223,6 +224,7 @@ json::Object Report(const ImportResult& r, const ImportSettings& settings, json:
                                {"v_flip", m.flags.v_flip}}},
         {"format_details", m.flags.format_details},
         {"hashes", HashesToJson(m.hashes)},
+        {"certificate", CertificateToJson(r.certificate, m)},
     };
     if (!merges.empty()) report["merged_materials"] = std::move(merges);
     return report;
@@ -253,6 +255,8 @@ ImportResult ImportMesh(std::string_view bytes, std::string_view file_name, cons
     CheckUvTiles(result.mesh);
     ApplyUnits(result.mesh.units, settings);
     result.mesh.hashes = ComputeHashes(result.mesh);
+    ComputeTangents(result.mesh);
+    result.certificate = Certify(result.mesh, settings.certificate);
     result.report = Report(result, settings, std::move(merges));
     return result;
 }

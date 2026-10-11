@@ -293,7 +293,12 @@ float HalfToFloat(uint16_t bits) {
     return std::bit_cast<float>(sign | ((exponent + 112) << 23) | (mantissa << 13));
 }
 
-float Float32Store(float v, float base) {
+float Float32Store(float v) {
+    if (std::isnan(v)) return std::bit_cast<float>(0x7FC00000u);
+    return v;
+}
+
+float Float32Readout(float v, float base) {
     if (std::isnan(v)) return std::bit_cast<float>(0x7FC00000u);
     const float t = v - base;
     return t + base;

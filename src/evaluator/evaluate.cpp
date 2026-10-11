@@ -1,7 +1,9 @@
 #include "evaluator/evaluate.h"
 
+#include <cstring>
 #include <string>
 
+#include "evaluator/arith.h"
 #include "evaluator/error.h"
 
 namespace uzp::evaluator {
@@ -135,7 +137,6 @@ private:
             op.mask = Operand::Constant({layer.mask, layer.mask, layer.mask}, 1.0f);
             op.mode = layer.mode;
             op.opacity = layer.opacity;
-            op.storeBase = list.isolated ? std::array<float, 3>{0.0f, 0.0f, 0.0f} : m_dag.base;
             render::Result<void> queued = m_env.store.Blend(op);
             if (!queued) return render::Unexpected(queued.error());
             ++m_stats.blends;
@@ -156,6 +157,21 @@ private:
     std::vector<TileHandle> m_pinned;
     std::vector<TileHandle> m_deferred;
 };
+
+/// The read-out of a 32-bit float channel: every sample re-composited over the channel base
+/// once (arith::Float32Readout; blend-modes.json "1 + (v - 1)"). The accumulator tiles stay raw,
+/// as the blend fits read their backdrop.
+void ReadOut(const ChannelDag& dag, TileResult& tile) {
+    if (dag.tileFormat.encoding != render::TexelEncoding::Float32) return;
+    const uint32_t channels = dag.tileFormat.channels;
+    const size_t samples = tile.texels.size() / sizeof(float);
+    for (size_t i = 0; i < samples; ++i) {
+        float value = 0.0f;
+        std::memcpy(&value, tile.texels.data() + i * sizeof(float), sizeof(float));
+        value = arith::Float32Readout(value, dag.base[i % channels]);
+        std::memcpy(tile.texels.data() + i * sizeof(float), &value, sizeof(float));
+    }
+}
 
 }  // namespace
 
@@ -186,6 +202,7 @@ render::Result<ChannelResult> EvaluateChannel(const ChannelDag& dag, EvalEnviron
                     render::Result<TileImage> image = env.store.Read(output->tile);
                     if (!image) return render::Unexpected(image.error());
                     tile.texels = std::move(image->texels);
+                    ReadOut(dag, tile);
                 }
             }
             result.tiles.push_back(std::move(tile));
