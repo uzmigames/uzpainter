@@ -2,7 +2,7 @@
 
 Child of `phase1.14_compositor-core` (P1-COMPOSITOR; `docs/architecture/04-layer-stack-and-compositing.md` §4, §5). Decision 028: the Tier 0 comparisons against the private oracle store and the GPU checks run locally on the owner's machine, and this report is their evidence. Numbers and hashes only; every recorded Painter output stays in the private store. Decision 043 records the choices below and the model panel's verdicts.
 
-**Result: the bilinear near-tie is fixed at its root and `resample-uv` magnification and 1:1 are exact on both backends under every filter and wrap mode (s0, s1, s3 User0-5, 7; s2 User0-7). Bilinear minification is now identified (§5, decision 056). Painter samples a minified bitmap with the recording GPU's anisotropic texture unit through Vulkan; a probe of that unit reproduces the new goldens and the held-out map to one code, but not bit for bit. The evaluator keeps refusing minification with `evaluator:unsupported_source`, and the minification items stay open. The UV offset is now applied before the scale and the rotation (§5.3), on both backends.**
+**Result: the bilinear near-tie is fixed at its root and `resample-uv` magnification and 1:1 are exact on both backends under every filter and wrap mode (s0, s1, s3 User0-5, 7; s2 User0-7). Bilinear minification is now identified (§5, decision 056). Painter samples a minified bitmap with the recording GPU's anisotropic texture unit through Vulkan; a probe of that unit reproduces the new goldens and the held-out map to one code, but not bit for bit. The evaluator keeps refusing minification with `evaluator:unsupported_source`, and the minification items stay open. The UV offset is now applied before the scale and the rotation (§5.3), on both backends. Painter's arithmetic around the texture unit is now identified exactly (§6.1, decision 060): with the GPU's sampler in the loop, every value of every minification golden matches. The texture unit itself has no closed-form software replica (§6.2, decision 061), so the refusal stays; a tabulated replica for axis-aligned footprints is the next step.**
 
 ## 1. Run record
 
@@ -147,6 +147,61 @@ A further Painter recording is needed for two things only, both filters, with ro
 
 The constants were measured on driver 617.14; the probe re-measures them after a driver or Painter update.
 
+## 6. Painter's side exact, the texture unit measured (decisions 060 and 061)
+
+### 6.1 Painter's arithmetic around the sampler
+
+`python -m tools.parity.vk_sampler_probe.measure <work-dir>` uses the recording GPU's sampler as the texture unit and implements everything else as below. Against both recordings it reproduces every value of `resample-uv-minify` and `resample-uv-impulse` (both filters, both wraps) and of the held-out `resample-uv` user 6: 132 map comparisons, 13 566 120 values, 0 differing.
+
+| Piece | Rule | What it fixed |
+|---|---|---|
+| UV | M = float32 of the double composition T(1/2) R S T(-1/2 - o); u' = fma(m00, u, m01 v) + m02 and v' = fma(m10, u, m11 v) + m12, with u = float32((i + 1/2)/W) and v = float32(1 - (j + 1/2)/H) | `-minify` user 7 Sharp: 1 430 misses with the double UV, 0 with this one; other orders miss 366-3 533 |
+| Mips | each level is the exact mean of four texels, rounded to float32 with ties up | users 4-5 Sharp: 8 and 20 one-ulp misses become 0; ties to even or float32 sums miss 8-252 |
+| Sharp | one SampleGrad, maxAnisotropy 4, LOD bias -1.5 | (decision 056) |
+| HQ samples | ddx, ddy are the fine derivatives of (u', v') in the 2 x 2 quad; nine samples at (u' + DX ddx) + DY ddy in float32, with DX, DY in {-1/3, 0, 1/3} and the gradients / 3 | user 1's 28-code column and user 7's 86 codes |
+| HQ sum | acc in float32, in the order centre, (+, 0), (-, 0), (0, -), (0, +), (+, -), (-, -), (-, +), centre, with weights 4, 2, 2, 2, 2, 1, 1, 1, 1 / 16 | the only one of the 9! orders that fits users 3-5 (alpha = 1) |
+| HQ blend | C1 is a level-0 bilinear sample at (u', v'); alpha = clamp(min(\|ddx\|, \|ddy\|) w - 1, 0, 1) in float32; the value is fma(C1, 1 - alpha, acc alpha) | user 6 (anisotropic) goes from 41 % to exact; the per-pixel alpha turns 19 383 misses into 0 |
+
+Two limits remain:
+
+- Composing the matrix in float32 or in double gives the same pixels, so the goldens do not separate the two.
+- Every magnifying golden has the same fixed-point coordinates under the double and the float32 UV, so the evaluator keeps its double UV until a minification model lands (decision 060).
+
+### 6.2 The texture unit, through Vulkan
+
+`python -m tools.parity.vk_sampler_probe.texture_unit <work-dir>` measures it on synthetic textures only (impulses, ramps, random texels). Footprints are in texels; r = major / minor.
+
+| Quantity | Measured |
+|---|---|
+| Texel coordinate | X = floor(256 (u W - 1/2) + 1/2) from the float32 u: 0 of 300 000 adversarial u differ |
+| Gradient input | 9-bit truncated mantissas: the two ends of each bin agree on 20 000 pairs; the 141 LOD steps over p in [1, 2) all fall on the 1/512 grid |
+| Probes, r in (1, 2] | two, at +-d: d is a multiple of 1/128 texel, about 1 - 1/r with irregular one-step deviations; isotropic footprints give d > 0 for some mantissas |
+| Probes, r in (2, 4] | four, at +-1/2 and +-3/2, weighted by their coverage of [-r/2, r/2] in units of 1/512 (r = 2.25: 227 and 29) |
+| Probes, r > 4 | clamped to r = 4 |
+| Taps | the x split is round-half-up(w fx / 256); the y split rounds half up in the far column and half down in the near one (1 920 decoded probes); equal-weight probes tie to even, so the weights carry more than 9 bits |
+| Levels | the offsets follow the trilinear position (2.8 x 1.4 at LOD 0.49: 0.447 level-1 texels, not 0.5); the switch to magnification depends on the major axis |
+| Accumulation | the decision-043 rule on the per-texel weights matches 6 911 of 6 912 level-0 multi-probe samples (108 790 of 108 864 with LOD-biased footprints); the rest are one ulp off |
+| Rotation | the two-probe offsets at 10, 30, 45 and 60 degrees are (90, 20), (76, 48), (46, 46), (48, 76) / 256; along the axis they would be (84.7, 14.9), (74.5, 43.0), (60.8, 60.8), (43.0, 74.5) |
+
+Over all 131 328 pairs of 9-bit mantissas of one octave, the two-probe offset d is monotone in the minor axis but has 8 834 reversals along the major one. Linear-programming feasibility (scipy HiGHS) rejects:
+
+- every form d = G(F(a) + P(b)) with G and P monotone, which covers all separable and log-domain forms;
+- d = G(log2(a - b) + F(a)).
+
+### 6.3 The stop point and the next step
+
+The texture unit is a fixed-point datapath for which no closed form was found: approximate ratios, weights with more than 9 bits, level-dependent offsets and a 2-D direction path. Decision 061 stops the closed-form search here.
+
+- The refusal stays (`evaluator:unsupported_source`). Items 2.2-2.4, 3.1, 3.2 and 4.1 stay open, and no exception-register entry is proposed.
+- The next step is a separate task: a tabulated replica for axis-aligned footprints (rotation a multiple of 90 degrees) at Painter's two biases. Its gates come in order:
+  1. bound the domain;
+  2. prove the table keys sufficient;
+  3. resolve the accumulation;
+  4. validate sample for sample against the hardware, before any golden.
+
+  The tables are pinned to driver 617.14.
+- Rotated minification stays refused. A Painter recording is needed only to validate such a replica beyond these captures: anisotropic HQ, LOD at or above 1, and rotations (decision 056).
+
 ## Reproduce
 
 ```
@@ -154,4 +209,5 @@ zig build evaluator-tests
 python -m pytest tests/evaluator/test_compositor_sources_projection.py
 python tests/evaluator/sources_fits.py zig-out/bin/uzp-evaluator-tests.exe <work-dir>
 python -m tools.parity.vk_sampler_probe.measure <work-dir>
+python -m tools.parity.vk_sampler_probe.texture_unit <work-dir>
 ```

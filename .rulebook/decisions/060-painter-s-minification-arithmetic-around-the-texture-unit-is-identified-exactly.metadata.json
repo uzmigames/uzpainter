@@ -1,0 +1,9 @@
+{
+  "id": 60,
+  "slug": "painter-s-minification-arithmetic-around-the-texture-unit-is-identified-exactly",
+  "title": "Painter's minification arithmetic around the texture unit is identified exactly",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": ["phase1.9_compositor-resample-gaps"],
+  "supersededBy": null
+}
