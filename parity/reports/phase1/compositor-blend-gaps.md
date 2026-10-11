@@ -7,7 +7,7 @@ Under decision 028, the Tier 0 comparisons against the private oracle store and 
 **Result:**
 
 - **NormalMapCombine, NormalMapDetail and NormalMapInverseDetail are exact at every recorded opacity.** This holds on every format, on the Normal channel, against both recordings, on the CPU and on the GPU.
-  - The upper normal is rotated with the recording GPU's OpenGL (GLSL) arcsine and its sine and cosine.
+  - The upper normal is rotated with the recording GPU's GLSL arcsine and its sine and cosine. They are equal through Vulkan, which Painter 12.1.5 renders with (decision 056), and through OpenGL; D3D12's arcsine differs.
   - The arcsine is a polynomial identified by exhaustive measurement. The sine and cosine come from measured tables.
 - **Tint, Saturation, Color and Value now follow a fitted hue law.** It reproduces every texel to within one code: the residual fell from up to 53 100 RGB16 values off to at most 194, all by one code.
   - The grey (L16) and sRGB8 channels are exact.
@@ -73,6 +73,13 @@ How it was established:
   - The double form differs only on the 8 388 607 subnormal inputs. The GPU flushes those to +0, and `hw::Asin` does the same.
 - Values above 1 and NaN give NaN, and the sign carries.
 - The D3D12 `asin` agrees with the GLSL one on only 59 % of a sample, so the D3D12 compiler cannot stand in for it. `arith` checks 48 measured GLSL inputs.
+
+**Vulkan.** Painter 12.1.5 renders through Vulkan (decision 056), so everything this fit uses was re-measured through Vulkan on the same GPU, with `tools/parity/vk_sampler_probe/vkprobe.cpp` and HLSL compiled to SPIR-V:
+
+- `asin` (GLSL.std.450 Asin) equals `hw::Asin` on 16 777 216 inputs spread over [0, 1];
+- `sin` and `cos` equal the tables on 16 777 216 inputs over [0, pi/2];
+- `rsqrt` and `sqrt` equal their tables on every float32 of [1, 4);
+- `1/x` equals the reciprocal table on every float32 of [1, 2).
 
 **`hw::Sin`, `hw::Cos`.** The GPU's sine and cosine are identical in D3D12 and GLSL. They read their argument as a fixed-point turn: u = x float32(1/(2 pi)) rounded toward zero to float32, and k = floor(u 2^25).
 

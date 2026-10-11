@@ -55,8 +55,8 @@
 //
 //   sin: entry k = sin of any x with k(x) = k;   cos: likewise.
 //
-// The arcsine is the recording GPU's GLSL `asin` (Painter's OpenGL shaders; the D3D12 `asin`
-// differs), a polynomial in float32 with fused multiply-adds identified on and checked against
+// The arcsine is the recording GPU's GLSL `asin` (GLSL.std.450 Asin: equal through Vulkan, which
+// Painter 12.1.5 renders with, and OpenGL; the D3D12 `asin` differs), a polynomial in float32 with fused multiply-adds identified on and checked against
 // every float32 in [0, 1]: for t = |x| <= 0.57, s = t t, r = ((((c4 s + c3) s + c2) s + c1) s +
 // c0) s, asin = fma(r, t, t); above, t' = sqrt(fma(-1/2, t, 1/2)) with the hardware square root
 // and asin = fma(-2, P(t'), float32(pi / 2)), P the same polynomial; c0..c4 = 1.666701424e-1,

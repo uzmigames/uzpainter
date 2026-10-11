@@ -46,6 +46,19 @@ The model panel was consulted under the owner's delegation (cx/gpt-6-astra, kimi
 4. The flat normal (z = 1, where the formula would give `0 * rsqrt(0)`) keeps n. No golden covers it. The recording spec in `parity/reports/phase1/compositor-blend-gaps.md` adds a golden for it, and off-grid opacities.
 5. "Painter's blend shaders run as OpenGL GLSL on the recording GPU" is recorded as a working hypothesis. It is used to rank later fits.
 
+## Verification on Vulkan (same day)
+
+Decision 056 found that Painter 12.1.5 renders through Vulkan. The functions this rotation depends on were therefore measured through Vulkan on the same GPU. The probe is `tools/parity/vk_sampler_probe/vkprobe.cpp`, with HLSL compiled to SPIR-V; `asin` becomes GLSL.std.450 Asin.
+
+| Function | Inputs checked through Vulkan | Equal to |
+|---|---|---|
+| `asin` | 16 777 216, spread over [0, 1] | `hw::Asin` |
+| `sin`, `cos` | 16 777 216, spread over [0, pi/2] | the tables |
+| `rsqrt`, `sqrt` | every float32 of [1, 4) | the tables |
+| `1/x` | every float32 of [1, 2) | the reciprocal table |
+
+So the GLSL arcsine is the driver's GLSL.std.450 implementation, the same through Vulkan and OpenGL. The hypothesis of point 5 is restated: Painter's shaders are GLSL compiled by the NVIDIA driver, reached through Vulkan.
+
 ## Consequences
 
 - `blend-component` s4-s6 and `blend-normal-channel` s1-s3 are exact on CPU and GPU. Item 2.2 of phase1.11 is met for the recorded opacities 0.5 and 0.25.

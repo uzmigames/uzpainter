@@ -19,4 +19,4 @@
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
 - [x] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.3 Run tests and confirm they pass
