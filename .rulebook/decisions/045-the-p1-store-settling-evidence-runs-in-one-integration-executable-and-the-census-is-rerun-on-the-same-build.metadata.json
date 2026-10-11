@@ -1,0 +1,11 @@
+{
+  "id": 45,
+  "slug": "the-p1-store-settling-evidence-runs-in-one-integration-executable-and-the-census-is-rerun-on-the-same-build",
+  "title": "The P1-STORE settling evidence runs in one integration executable, and the census is rerun on the same build",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.8_project-store"
+  ],
+  "supersededBy": null
+}
