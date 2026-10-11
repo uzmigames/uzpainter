@@ -1,0 +1,9 @@
+{
+  "id": 50,
+  "slug": "the-render-fits-run-a-cpu-feasibility-prototype-on-the-fixed-pipeline-references-term-c-is-the-prototype-s",
+  "title": "The render fits run a CPU feasibility prototype on the fixed-pipeline references; term (c) is the prototype's",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": ["phase0.8_render-reference-fits", "phase0.7_render-reference-captures", "phase3.6_path-tracer-tier3-report"],
+  "supersededBy": null
+}

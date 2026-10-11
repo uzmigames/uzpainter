@@ -2554,6 +2554,21 @@ int RunSources(const fs::path& assets) {
             }
         }
         Check(ok, "Nearest at scale 0.5 magnifies the centre of the bitmap by two", Describe(magnified));
+        // The offset precedes the scale (decision 056): at scale 0.5 an offset of four set texels along +u moves the
+        // bitmap by two of its texels, not four.
+        render::Result<ChannelResult> moved =
+            project(core::FilteringMode::Nearest, core::UVWrapMode::Repeat, {0.5, 0.5}, 0.0, {4.0 / kSize, 0.0}, sha16);
+        ok = moved.has_value();
+        if (ok) {
+            const std::vector<uint32_t> s = Samples(*moved);
+            for (uint32_t y = 0; y < kSize && ok; ++y) {
+                for (uint32_t x = 0; x < kSize && ok; ++x) {
+                    ok = s[(size_t{y} * kSize + x) * 3] == at(*image16, int64_t{kSize / 4 + x / 2} - 2, kSize / 4 + y / 2, 0);
+                }
+            }
+        }
+        Check(ok, "the UV offset is applied before the scale: an offset of 4 / W at scale 0.5 moves the bitmap by two texels",
+              Describe(moved));
         // Bilinear half way between two texels: (a + b) / 2 through the fixed-point weights.
         render::Result<ChannelResult> half = project(core::FilteringMode::BilinearHQ, core::UVWrapMode::Repeat, {1.0, 1.0}, 0.0,
                                                      {0.5 / kSize, 0.0}, sha16);

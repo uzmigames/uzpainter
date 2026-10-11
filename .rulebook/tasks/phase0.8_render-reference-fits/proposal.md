@@ -22,3 +22,6 @@ Noise floor measured; first clean-room lobe fits published with residuals; ray-t
 - Affected code: feasibility prototype evaluator (not shipped), `parity/semantics/iray.json`, `parity/reports/phase0/iray-noise-floor.md`
 - Breaking change: NO
 - User benefit: Phase 3 starts from fitted, sourced lobe models and a measured noise floor instead of assumptions
+
+## Scope change (2026-10-11, decision 050)
+The task predates decision 038. Under the fixed render pipeline the prototype renders the admitted references of decision 046 (OCIO Default - sRGB, Save Render 16-bit, the pipeline's two environments), not the analytic profile's Legacy `Linear`; it is a CPU program under `tools/parity/render_fits/`, never shipped and never Tier 3 evidence. Term (c) is measured on the prototype; phase3.6 measures the shipped `painter_iray`'s (c) with the same statistics. Spectral transport is reported as the prototype's sensitivity, and the fixed pipeline's convex fixtures cannot identify caustics or a maximum path depth.
