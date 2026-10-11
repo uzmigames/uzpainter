@@ -200,6 +200,7 @@ Values in units of 1e-4 of full scale of the 16-bit display-referred encoding (o
   - Both are at the run-to-run floor of (a), and their (b) statistics equal `metal0-rough050`'s. With the default shader (emission luminance 0, alpha test and blending off), Painter's Iray ignores an emission colour and an opacity map. UzPainter's `painter_iray` must ignore them too under decision 042.
 - **Perturbations act.** Against `metal0-rough050`, `normal-ridges` changes 244,381 pixels (mean |Δ| 74e-4) and `height-stripes` changes 146,992 (bump, as row `height` of the procedure found).
 - **Glossy-fit risk.** The bright-patch environment of the old proposal is gone (decision 046). Glossy lobes are constrained only by Studio White Soft and the `ref_match` HDRI. The fits of `phase0.8_render-reference-fits` must state the residual risk this leaves.
+- **Follow-up (phase0.8, decisions 050-052).** `iray-noise-floor.md` §2 classifies (a): rounding-level (one binary16 step) on 19 goldens, face-confined on the facets with an exactly-zero normal component (a hypothesis and a capture request); the k*S render nests the S render; the negative S - K is in part the encoding's Jensen bias. Its §4 states the glossy-fit risk.
 - These are estimates from three renders per golden, not tolerances. An exception bound derived from them belongs to the exception register and the owner (07 §4 step 3).
 
 ## 5. Default shader read back under OCIO (decision 042 evidence)

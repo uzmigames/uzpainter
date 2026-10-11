@@ -37,6 +37,12 @@ module = ["OpenEXR"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# NVIDIA FLIP's Python package (BSD-3-Clause, N-FLIP): diagnostic metric of the render fits
+# (tools/parity/render_fits) on the owner's machine only; it ships no type information.
+module = ["flip_evaluator"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # Windows UI automation of Painter's panels (tools/parity/recorder/painter_ui.py, decision 029):
 # pywinauto, pywin32 and Pillow are dev-only dependencies on the owner's machine; hosted CI does
 # not install them, and pywinauto and pywin32 ship no type information.
