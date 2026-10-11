@@ -13,6 +13,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- Save, retention and compaction (task `phase1.6_store-save-retention`, awaiting hosted CI): save/save-as/save-as-copy/revert/close, named and previous checkpoints, retention of current + previous + last 50 mutations + protected checkpoints (decision 024), compaction via `VACUUM INTO` on a copy with atomic rename, single-owner `.uzp.lock` sidecar; fault-injected kills at every compaction step.
 - Mesh reload (task `phase1.6_mesh-reload`, awaiting hosted CI): reload keeps the layer stack, re-derives the old mesh from stored bytes, classifies texels (including `removed`), flags dependent mesh maps and nodes, refuses renames without a material mapping, identical reload is a no-op.
 - Mesh tangents and certificate (task `phase1.5_mesh-tangents-certificate`, awaiting hosted CI): MikkTSpace per-object tangents with PerVertex (default) and PerFragment frames reproducing the P0-NORMAL residuals; CPU mesh certificate (normals, tangent frames, coincident opposite faces, UV range/overlap/islands/density) with pass/warn/fail.
 - Compositor tile DAG (task `phase1.5_compositor-tile-dag`): `(stack, channel, tile)` DAG with subtree-hash invalidation, VRAM admission with LRU, evaluation order and generated blend kernels; 28 authored templates in `assets/templates/`; Tier 0 base values, template channel sets, blend order and group goldens exact on CPU and GPU; 23 separable blend modes × 9 formats GPU == CPU bit for bit.

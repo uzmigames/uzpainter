@@ -664,6 +664,8 @@ void NonPortableMissing() {
     const auto error = EXPECT_THROW(StoreError, s.store->ReadResource(sha));
     CHECK(error.code() == StoreError::Code::missing_dependency);
     WriteBytes(hdri, "changed");
+    s.doc.reset();
+    s.store.reset();  // releases the project lock (one owner at a time)
     {
         Session changed = OpenSession(path);
         CHECK(changed.report.missing.size() == 1 && changed.report.missing[0].reason == "changed");

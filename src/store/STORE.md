@@ -1,15 +1,16 @@
-# Project store: container, blobs, raster planes and the mutation commit (`src/store/`)
+# Project store: container, blobs, raster planes, the mutation commit and saving (`src/store/`)
 
-Tasks `phase1.4_store-container-operations` and `phase1.5_store-planes` (children of P1-STORE,
-`phase1.8_project-store`).
+Tasks `phase1.4_store-container-operations`, `phase1.5_store-planes` and
+`phase1.6_store-save-retention` (children of P1-STORE, `phase1.8_project-store`).
 Implements the container of D8 (decision 010) in `docs/architecture/09-project-file-format.md`
 §1, §2, §4 and §5, the durability contract of D1 (`02-runtime-topology.md` §3, §5: the operation
 record is committed atomically with its revision; every commit is the autosave) and the
 idempotency record of ARC-02. The document model it stores is `src/uzp_core/` (`MANIFEST.md`,
 `TRANSACTIONS.md`). The raster planes of §8 implement 09 §1 "Authoritative raster planes" and the
 paint planes of `04-layer-stack-and-compositing.md` §1. `save()`, named and protected
-checkpoints, retention, revert and `compact` are `phase1.6_store-save-retention`; `uzpainter
-inspect` and the census are `phase1.7_store-inspect-census`.
+checkpoints, retention, revert, `compact`, `save_as`, `save_as_copy` and the lock sidecar (§9)
+implement 09 §4 with owner answer Q11 (decision 024); `uzpainter inspect` and the census are
+`phase1.7_store-inspect-census`.
 
 ## 1. Layout
 
@@ -22,7 +23,10 @@ inspect` and the census are `phase1.7_store-inspect-census`.
 | `integrity.h` | `CheckIntegrity`, `IntegrityReport`, `CorruptionError`, `NodesBinding` (affected nodes), `ReadManifestText` |
 | `planes.h` | Raster planes: plane rows, immutable versions, chunk codec, `chunk_root`, manifest bindings, staging, the commit extension and the read path (§8) |
 | `plane_integrity.h` | `CheckPlaneIntegrity`: the plane rules, run by `CheckIntegrity` (§8) |
-| `project_store.h` | `ProjectStore`: `Create`, `Open`, `Attach`, `Submit`, `StageResource`, `StageLocator`, `ReadResource`, `CreatePlane`, `WritePlane`, `ReadPlane`, `ReadPlaneChunk` |
+| `project_store.h` | `ProjectStore`: `Create`, `Open`, `Close`, `Attach`, `Submit`, `StageResource`, `StageLocator`, `ReadResource`, `CreatePlane`, `WritePlane`, `ReadPlane`, `ReadPlaneChunk`, `Save`, `NeedsSaving`, `Compact`, `SaveAs`, `SaveAsCopy`, `Revert` |
+| `save.h` | Checkpoint rows, `save()`'s rows (`WriteSaveCheckpoint`), the dirty flag, the revert project (§9) |
+| `compact.h` | Retention (`ComputeRetention`), reachability, `CollapseAndCollect`, `VacuumInto`, `RenameFile` (§9) |
+| `lock.h` | The lock sidecar `<file>.uzp.lock` (`ProjectLock`, §9) |
 | `fault.h` | Test-only fault hooks (§6) |
 
 `zig build uzp-store` builds `uzp_store.lib` from these sources, the SQLite amalgamation
@@ -47,9 +51,9 @@ mirrored from the manifest of the last written revision, `format_version`, `app_
 `evaluator_profile`, `compat_profile` and `painter_reference` (canonical JSON). Keys this version
 does not know are left untouched.
 
-`Create(path, state, options)` writes, in one SQLite transaction, the schema, `meta`, the
-resources the initial project references, its revision (`kind = checkpoint`) and
-`checkpoint('current')`. A failed creation removes the file.
+`Create(path, state, options)` takes the lock (§9) and writes, in one SQLite transaction, the
+schema, `meta`, the resources the initial project references, its revision (`kind = checkpoint`)
+and `checkpoint('current')`. A failed creation removes the file.
 
 ## 3. Resources
 
@@ -101,6 +105,8 @@ another project) makes the decision `outcome_unknown`, so the call is never exec
 
 `Open(path, options)`:
 
+0. takes the lock sidecar (§9) and removes the temporary files a killed `compact` left
+   (`<file>.compact`, `<file>.vacuum`);
 1. reads `meta.format_version` and refuses another major with `StoreError(version)` before
    anything can write to the file (a newer major: "format_version 2.0.0 is newer than this reader
    supports (1.0.0)");
@@ -123,8 +129,7 @@ Corrupt history, blobs and missing dependencies are reported in `Opened::report`
 raises `CorruptionError` naming the hash and the nodes of the current manifest that bind it (the
 id of the nearest object with an `id`/`uid` and the JSON path, e.g.
 `texture_sets[0].stacks[0].root_layers[0].fill.sources.BaseColor.resource.sha256`); its bytes are
-never returned. The `DocumentState` leaves `named_checkpoint` and `previous_checkpoint` empty
-(phase1.6).
+never returned. The `DocumentState` carries the last named checkpoint and `previous` (§9).
 
 ## 6. Fault hooks (test builds only)
 
@@ -136,7 +141,10 @@ the database file made by `COMMIT` (journal hot, file torn), `disk_full` fails e
 would grow the database file with `SQLITE_FULL`, and `kill_after_commit` terminates the process
 after `COMMIT` returned, before the commit sink returns. `kill_before_revision_row` terminates the
 process inside the commit transaction right after the plane rows were inserted (`AfterPlaneRows`),
-before the revision row.
+before the revision row. For `compact`, `save_as` and `save_as_copy` (§9): `fail_during_vacuum`
+fails every page write to the output of `VACUUM INTO` (`SQLITE_IOERR_WRITE`),
+`kill_during_vacuum` terminates the process after the first one, `kill_before_rename` terminates
+the process between `VACUUM INTO` and the rename, and `fail_rename` fails that rename.
 
 ## 7. Tests
 
@@ -166,6 +174,22 @@ the system temp directory:
 | `planes_interrupted_commit` | a child killed between the plane rows and the revision row: reopening gives the previous revision with the same manifest, pixels, versions, chunk rows and blobs; the same request then commits |
 | `planes_corruption` | an altered chunk blob and a `plane_chunk` row pointing at another blob: each reported on open and by `VerifyLevel::full` (`SHA-256 mismatch`, `chunk_root mismatch`) with the plane and the owning paint layer; reads of the damaged plane raise `CorruptionError`, the other plane reads intact |
 | `planes_binding_rules` | the commit refuses a plane without a binding and a binding of a plane the node does not hold; size, channel, node-kind and UV-tile errors fail the call; three planes coexist on one channel and tile; deleting a node drops its binding; `Create` refuses planes |
+
+`python -m pytest tests/store/test_store_save.py` builds `uzp-store-save-tests.exe` (`zig build
+uzp-store-save-tests`, `tests/store/save_test.cpp`, the same hooked store sources) and runs:
+
+| Case | Checks |
+|---|---|
+| `checkpoints` | `save()` names the current revision and moves `previous` (7 → 8: `previous` = 7); `needs_saving()` false after a save, true after a mutation, exact after a revert and after `save_as_copy`; named saves with a note; reserved names refused; checkpoints survive reopen; a revert copies the selected manifest (with the current `next_id`) as a new revision, history append-only |
+| `retention_window` | 60 mutations with checkpoints a, approved (protected), b, c and a save at 60: retained exactly 4, 8, 11..60; a and b collapsed; operation rows of collapsed revisions deleted; horizon 10; `cache` emptied; a collapsed revision cannot be reverted to, a protected one can |
+| `protected_checkpoint` | saving (and `save_as`) under a protected name is refused (`protected_checkpoint`); 55 mutations later and compacted, its manifest and pixels are unchanged |
+| `revert_edit_reopen_compact` | paint (approved, protected) → two edits → 80 mutations → revert → edit → reopen → compact: manifests and pixels of every retained state equal byte for byte, including the protected checkpoint and a version first written by a collapsed revision; a version only collapsed revisions bound is collected with its chunk |
+| `garbage_collection` | after compaction every `plane`, `plane_version`, `plane_chunk`, `blob` and `blob_meta` row is reachable from a retained manifest and every reachable one exists (computed from the manifests alone); a dropped resource and a deleted layer's plane are collected; later commits and new plane ids work |
+| `pruned_key_replay` | a non-idempotent mutation (key `k1`, precondition 3) pruned by compaction: replays with precondition 3 and with none are `outcome_unknown` with no revision; `k2` inside the window returns its stored outcome at a newer revision; the same after reopen |
+| `save_as_and_copy` | `save_as_copy` keeps path, lock and dirty state, the copy opens portable; `save_as` saves, relocates the project and its lock, leaves the original unchanged; existing and locked targets refused |
+| `interrupted_rewrite` | I/O failure during `VACUUM INTO` and of the rename for `compact`, `save_as`, `save_as_copy`: error names the operation and the step, original bytes unchanged, no target or temporary file, the store keeps working; a child killed during `VACUUM INTO` / before the rename of `compact` and during `VACUUM INTO` of `save_as`: the original reopens at its previous state, temporaries removed, the rewrite then completes |
+| `portability` | after `close`, `compact` and `save_as` no `-wal`/`-shm`/`-journal`; the header says rollback journal; a copied `.uzp` opens from another folder |
+| `lock_sidecar` | the sidecar holds this pid; a second open in the same process and an open while a child worker holds it are refused naming the pid; `close` removes it; a lock left by a killed worker, one with a reused pid (other start time) and an unreadable one are replaced; a closed store refuses calls |
 
 No GPU is used; the cases run on the hosted CPU lane.
 
@@ -230,3 +254,71 @@ node 5 at texture_sets[0].stacks[0].root_layers[0].paint.plane_versions.12`. `pl
 `plane_version` rows no retained manifest reaches are listed in `IntegrityReport::collectable` for
 `compact`; they are not failures. Reads verify the same rules and raise `CorruptionError`; damaged
 bytes are never returned.
+
+## 9. Saving, retention, compaction, revert and the lock
+
+Every commit is already the autosave (§4). The saving vocabulary of 09 §4 sits on top of it.
+
+**Checkpoints** (`save.h`). The `checkpoint` table holds `current` (moved by every commit),
+`previous` and named rows `{name, revision, created_at, note, protected}`. `save()`
+(`ProjectStore::Save`, facade `ProjectSaveMode.Incremental`) writes a named row for the current
+revision (`save-<revision>` unless a name is given) and, when the current revision is not the last
+named checkpoint yet, moves `previous` to that checkpoint; then it marks the document
+(`Document::MarkCheckpoint`). The last named checkpoint is the highest revision a named row names
+(`save()` always names the current revision, which no earlier name exceeds), so `Open` restores
+`named_checkpoint` and `previous_checkpoint` from the file. `needs_saving()` is `current ≠` that
+revision, exactly (`Document::NeedsSaving`, `ProjectStore::NeedsSaving`). A row flagged
+`protected` (an approved baseline, QG-05) is never overwritten: saving under its name, also through
+`save_as`, fails with `protected_checkpoint` and changes nothing. `current` and `previous` cannot be
+given as names (`conflict`). `SaveMode::full` (`save(Full)`) saves, then compacts.
+
+**Retention** (`compact.h`, owner Q11). The retained revisions are `checkpoint('current')`, the last
+named checkpoint (the "current checkpoint" of Q11: what `save()` marked last), `previous`, the last
+50 revisions of kind `mutation` and the revision of every protected checkpoint. Until `compact`
+runs, collapsed revisions still sit in the file, but a revert is refused for any revision outside
+this set, so what can be reverted to does not depend on when compaction ran.
+
+**Compaction** (`ProjectStore::Compact`, also `save(Full)`). The project file is copied to
+`<file>.compact`; in one SQLite transaction on the copy (`CollapseAndCollect`): unprotected named
+checkpoints other than those naming the last named checkpoint or `previous` are deleted, the
+`operation` rows of revisions outside the retained set and those revisions are deleted,
+`meta.operation_horizon_revision` rises to the highest collapsed revision (never lowered), `cache`
+is emptied, and the rows no remaining manifest reaches are deleted: reachability walks every
+retained manifest (plane bindings → `plane_version` → `plane_chunk` → `blob`, the `plane` rows of
+bound versions, and every SHA-256 the manifest names, `resources` keys included, for `blob`,
+`blob_meta` and `locator`). A chunk first written by a collapsed revision stays while a retained
+manifest binds a version that lists it. A retained manifest or binding that does not verify stops
+the compaction (`corrupt`): nothing could be collected safely. `VACUUM INTO <file>.vacuum` then
+writes the compacted file, the connection closes, `MoveFileExW(…, MOVEFILE_REPLACE_EXISTING |
+MOVEFILE_WRITE_THROUGH)` renames it over the project and the connection reopens; the document's
+operation horizon is raised (`Document::SetOperationHorizon`). The project file is only read until
+the rename, so an interruption at any point leaves it in its previous state: a failure removes the
+temporary files and names the step (`compact <file>: VACUUM INTO … failed: …`, `… rename of … failed
+…`); after a killed worker the next `Open` removes them. A pruned key is answered from the horizon
+(§4): with its original precondition or none, `outcome_unknown`, never a second execution.
+
+**save_as / save_as_copy.** `SaveAs(document, target)` refuses an existing `target` (`exists`), takes
+the target's lock, `VACUUM INTO <target>.vacuum` from the open connection (a consistent, closed
+copy with `journal_mode = DELETE`), writes `save()`'s checkpoint into that copy, renames it to
+`target` (`MoveFileExW` without replace), reopens there and releases the original's lock: the open
+project relocates and is saved, the original file is not changed. `SaveAsCopy(target)` does the
+same without the checkpoint and without relocating: the project keeps its path, lock and dirty
+state. A failure removes `<target>.vacuum` and leaves no `target`; a killed worker's leftover
+`<target>.vacuum` is removed by the next `save_as` to that target.
+
+**Revert** (`ProjectStore::Revert(document, request, revision | checkpoint)`, MCP `project_revert`).
+A mutation submitted with the caller's request (idempotency key, precondition) whose call replaces
+the working copy with the verified manifest of the selected retained revision (an older minor
+migrated as `Open` does), keeping the project counter `next_id` at its current value so no node or
+plane id is handed out twice. The raster-plane bindings are copied unchanged, so the commit binds
+the stored versions (no new plane version); history stays append-only. A revision outside the
+retained set or an unknown checkpoint fails the call with `not_retained` and writes nothing.
+
+**Lock sidecar** (`lock.h`, SAV-05). `Create` and `Open` take `<file>.uzp.lock` (the project path
+with `.lock` appended), created exclusively and holding `pid=<pid>` and `started=<process creation
+time>`. While that process runs (same pid, same start time) another open is refused with
+`locked`, naming the pid; a lock whose process exited, whose pid now belongs to a later process or
+whose content is unreadable is stale and replaced. `Close` (and the store's destructor) closes the
+connection, which leaves no `-wal`/`-shm`/`-journal` companion (`journal_mode = DELETE`, re-applied
+before closing), and removes the sidecar; later calls on a closed store fail with `io`. `save_as`
+moves the lock with the project. `inspect` reads through `Container` and takes no lock.
