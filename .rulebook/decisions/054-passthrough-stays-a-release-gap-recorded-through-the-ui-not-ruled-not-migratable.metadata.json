@@ -1,0 +1,12 @@
+{
+  "id": 54,
+  "slug": "passthrough-stays-a-release-gap-recorded-through-the-ui-not-ruled-not-migratable",
+  "title": "PassThrough stays a release gap recorded through the UI, not ruled not_migratable",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.11_compositor-blend-gaps",
+    "phase0.7_tier0-semantics-ui-cases"
+  ],
+  "supersededBy": null
+}

@@ -59,21 +59,9 @@ render::KernelInclude TablesInclude() {
         AppendUintTable(text, "kUnorm8Operand", unorm8Operand, 256);
         AppendUintTable(text, "kSrgb8ThresholdLo", thresholdLo, 256);
         AppendUintTable(text, "kSrgb8ThresholdHi", thresholdHi, 256);
-        const uint32_t colour[4] = {std::bit_cast<uint32_t>(arith::kHsvEpsilon),
-                                    std::bit_cast<uint32_t>(arith::kThird),
-                                    std::bit_cast<uint32_t>(arith::kTwoThirds),
+        const uint32_t colour[2] = {std::bit_cast<uint32_t>(arith::kHsvEpsilon),
                                     std::bit_cast<uint32_t>(arith::kHalfPi)};
-        AppendUintTable(text, "kColourConstants", colour, 4);
-        uint32_t asinSeries[arith::kAsinSeries.size()];
-        for (size_t i = 0; i < arith::kAsinSeries.size(); ++i) {
-            asinSeries[i] = std::bit_cast<uint32_t>(arith::kAsinSeries[i]);
-        }
-        AppendUintTable(text, "kAsinSeries", asinSeries, arith::kAsinSeries.size());
-        uint32_t sinSeries[arith::kSinSeries.size()];
-        for (size_t i = 0; i < arith::kSinSeries.size(); ++i) {
-            sinSeries[i] = std::bit_cast<uint32_t>(arith::kSinSeries[i]);
-        }
-        AppendUintTable(text, "kSinSeries", sinSeries, arith::kSinSeries.size());
+        AppendUintTable(text, "kColourConstants", colour, 2);
         text += "#define UZP_TABLE_UNORM16 " + std::to_string(kTableUnorm16) + "u\n";
         text += "#define UZP_TABLE_RCP " + std::to_string(kTableRcp) + "u\n";
         text += "#define UZP_TABLE_SQRT " + std::to_string(kTableSqrt) + "u\n";
@@ -82,6 +70,8 @@ render::KernelInclude TablesInclude() {
         text += "#define UZP_POW_LOG2LO " + std::to_string(kPowLog2Lo) + "u\n";
         text += "#define UZP_POW_EXP2POS " + std::to_string(kPowExp2Pos) + "u\n";
         text += "#define UZP_POW_EXP2NEG " + std::to_string(kPowExp2Neg) + "u\n";
+        text += "#define UZP_POW_SIN " + std::to_string(kPowSin) + "u\n";
+        text += "#define UZP_POW_COS " + std::to_string(kPowCos) + "u\n";
         return render::KernelInclude{"evaluator_tables.hlsli", std::move(text)};
     }();
     return include;
@@ -148,6 +138,7 @@ std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(const BlendOp& op,
     params[kParamDstUav] = bindings.dstUav;
     params[kParamTable16Srv] = bindings.table16Srv;
     params[kParamMaskEncoding] = render::image_pass_detail::EncodingConstant(bindings.maskEncoding);
+    params[kParamPowSrv] = bindings.powSrv;
     return params;
 }
 

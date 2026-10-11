@@ -51,13 +51,16 @@ inline constexpr uint32_t kTableWords = kTableRsqrt + (1u << 24) / 16;
 /// The operand tables buffer: `kTableWords` uints at the offsets above (built once).
 [[nodiscard]] const std::vector<uint32_t>& OperandTableWords();
 
-/// Offsets (in uints) of the log2 / exp2 tables buffer the Levels kernel reads (`hw::Values` of
-/// `Log2Hi`, `Log2Lo`, `Exp2Pos`, `Exp2Neg`, 2^23 words each; 128 MiB, created on first use).
+/// Offsets (in uints) of the function tables buffer the Levels kernel and the normal-map blend
+/// kernels read (`hw::Values` of `Log2Hi`, `Log2Lo`, `Exp2Pos`, `Exp2Neg`, `Sin`, `Cos`, 2^23
+/// words each; 192 MiB, created on first use).
 inline constexpr uint32_t kPowLog2Hi = 0;
 inline constexpr uint32_t kPowLog2Lo = kPowLog2Hi + (1u << 23);
 inline constexpr uint32_t kPowExp2Pos = kPowLog2Lo + (1u << 23);
 inline constexpr uint32_t kPowExp2Neg = kPowExp2Pos + (1u << 23);
-inline constexpr uint32_t kPowWords = kPowExp2Neg + (1u << 23);
+inline constexpr uint32_t kPowSin = kPowExp2Neg + (1u << 23);
+inline constexpr uint32_t kPowCos = kPowSin + (1u << 23);
+inline constexpr uint32_t kPowWords = kPowCos + (1u << 23);
 
 /// Uints per parameter block.
 inline constexpr uint32_t kBlendParamsStride = 32;
@@ -87,6 +90,7 @@ enum BlendParam : uint32_t {
     kParamDstUav = 16,
     kParamTable16Srv = 17,  ///< The operand tables buffer (`OperandTableWords`).
     kParamMaskEncoding = 18,
+    kParamPowSrv = 19,  ///< The function tables buffer (normal-map modes; `kPowWords`).
 };
 
 struct BlendBindings {
@@ -100,6 +104,7 @@ struct BlendBindings {
     render::TexelEncoding maskEncoding = render::TexelEncoding::Unorm16;
     uint32_t dstUav = 0;
     uint32_t table16Srv = 0;
+    uint32_t powSrv = 0;
 };
 
 /// The parameter block of `op` with the descriptor indices of `bindings`.
