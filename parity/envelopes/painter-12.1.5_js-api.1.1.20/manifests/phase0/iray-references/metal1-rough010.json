@@ -298,5 +298,90 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "e27b207daa1a4ab3e6bd70a16f0f434f5e3913dba53f4f22330107e6d547db05",
+      "size_bytes": 12552
+    },
+    {
+      "record_id": "k-a443c00e0298-render-reference",
+      "kind": "iray_reference",
+      "sha256": "b924d6136e727dd673a6e08bac8cd4b6b8e7fec6f808ad0baa51f5c2b30b204d",
+      "size_bytes": 1117953
+    },
+    {
+      "record_id": "k-a443c00e0298-panel-display-settings",
+      "kind": "settings_panel_evidence",
+      "sha256": "8ab62f2b276a1e440e7c6811f38fd2d8f3567be065bde516e6965fb072a49458",
+      "size_bytes": 18070
+    },
+    {
+      "record_id": "k-a443c00e0298-panel-iray-settings",
+      "kind": "settings_panel_evidence",
+      "sha256": "caa506067fbdf96a7966eeacb9baa7210cb6bd69c0b5f6adc52b1911317807b1",
+      "size_bytes": 16270
+    },
+    {
+      "record_id": "k-a443c00e0298-panel-viewport-display-transform",
+      "kind": "settings_panel_evidence",
+      "sha256": "2c1fbf7025c038d9cba6c12c823d259323f7c639564cc1690831781455c47a73",
+      "size_bytes": 1838
+    },
+    {
+      "record_id": "s-62650bd42ae7-render-reference",
+      "kind": "iray_reference",
+      "sha256": "7de6772f2e51a11f08cb91bf27fd0c3c23726e57d613f9d1dd1e83d0c390a317",
+      "size_bytes": 1198845
+    },
+    {
+      "record_id": "s-62650bd42ae7-panel-display-settings",
+      "kind": "settings_panel_evidence",
+      "sha256": "8ab62f2b276a1e440e7c6811f38fd2d8f3567be065bde516e6965fb072a49458",
+      "size_bytes": 18070
+    },
+    {
+      "record_id": "s-62650bd42ae7-panel-iray-settings",
+      "kind": "settings_panel_evidence",
+      "sha256": "66c4446019141e0426ab662621b398b6cd89da9e0a59326e56c14ccb1928cf0f",
+      "size_bytes": 15883
+    },
+    {
+      "record_id": "s-62650bd42ae7-panel-viewport-display-transform",
+      "kind": "settings_panel_evidence",
+      "sha256": "2c1fbf7025c038d9cba6c12c823d259323f7c639564cc1690831781455c47a73",
+      "size_bytes": 1838
+    },
+    {
+      "record_id": "s-bcf7d574b365-render-reference",
+      "kind": "iray_reference",
+      "sha256": "8a4752d6033f1dee0638b7084820f2d670fedbc8652b45a793bccf42504f5b23",
+      "size_bytes": 1222156
+    },
+    {
+      "record_id": "s-bcf7d574b365-panel-display-settings",
+      "kind": "settings_panel_evidence",
+      "sha256": "8ab62f2b276a1e440e7c6811f38fd2d8f3567be065bde516e6965fb072a49458",
+      "size_bytes": 18070
+    },
+    {
+      "record_id": "s-bcf7d574b365-panel-iray-settings",
+      "kind": "settings_panel_evidence",
+      "sha256": "66c4446019141e0426ab662621b398b6cd89da9e0a59326e56c14ccb1928cf0f",
+      "size_bytes": 15883
+    },
+    {
+      "record_id": "s-bcf7d574b365-panel-viewport-display-transform",
+      "kind": "settings_panel_evidence",
+      "sha256": "2c1fbf7025c038d9cba6c12c823d259323f7c639564cc1690831781455c47a73",
+      "size_bytes": 1838
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "4686b1f35f6229496d9abcdf7509f801e696f989ec182eeb5f84848916024b5d",
+      "size_bytes": 483
+    }
+  ]
 }
