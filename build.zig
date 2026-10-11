@@ -281,6 +281,7 @@ const evaluator_sources = [_][]const u8{
     "evaluator/profile.cpp",
     "evaluator/projection_uv.cpp",
     "evaluator/sources.cpp",
+    "evaluator/support.cpp",
     "evaluator/templates.cpp",
 };
 /// spng is linked statically wherever the evaluator is (its bitmap decoder, `sources.h`).
@@ -610,8 +611,8 @@ pub fn build(b: *std.Build) void {
     capabilities_run.addFileArg(b.path("tools/capabilities/painter-api-inventory.json"));
     capabilities_run.addArg("--additions");
     capabilities_run.addFileArg(b.path("tools/capabilities/uzpainter-additions.json"));
-    capabilities_run.addArg("--tier0");
-    capabilities_run.addDirectoryArg(b.path("parity/manifests/tier0"));
+    capabilities_run.addArg("--compositor");
+    capabilities_run.addFileArg(b.path("tools/capabilities/compositor-capabilities.json"));
     capabilities_run.addArg("--repo-root");
     capabilities_run.addDirectoryArg(b.path("."));
     capabilities_run.addArg("--output");

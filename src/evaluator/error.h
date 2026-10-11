@@ -22,6 +22,7 @@ enum class EvalErrorKind : uint8_t {
     UnsupportedNode,       ///< A node kind this profile does not evaluate (paint, effects, ...).
     UnsupportedBlendMode,  ///< A blend mode without a kernel in this build.
     UnsupportedSource,     ///< A source or conversion outside this profile.
+    InvalidArgument,       ///< A malformed caller argument (a diagnostic's material or mask).
     MissingResource,       ///< A bitmap source whose bytes the resource provider lacks.
     TextureSetOverBudget,  ///< A texture set whose live tiles do not fit the admission budget.
     TileBudgetExceeded,    ///< The working set of one tile evaluation exceeds the budget.
@@ -31,10 +32,16 @@ enum class EvalErrorKind : uint8_t {
 };
 
 /// "not_found", "unknown_template", "missing_base_value", "unsupported_node",
-/// "unsupported_blend_mode", "unsupported_source", "missing_resource",
+/// "unsupported_blend_mode", "unsupported_source", "invalid_argument", "missing_resource",
 /// "texture_set_over_budget", "tile_budget_exceeded", "unknown_profile", "invalid_profile" or
 /// "internal".
 [[nodiscard]] std::string_view EvalErrorKindName(EvalErrorKind kind);
+
+/// The error class the Python API raises for `kind` (decision 082): `NotYetSupported` for
+/// `unsupported_node`, `unsupported_blend_mode` and `unsupported_source` (a feature outside the
+/// implemented subset, a release gap), `ValueError` for `not_found`, `unknown_template` and
+/// `invalid_argument`, `ResourceNotFoundError` for `missing_resource`, `RuntimeError` otherwise.
+[[nodiscard]] std::string_view ErrorClassName(EvalErrorKind kind);
 
 /// `request_failed` with the reason `evaluator:<kind>[ node=<node>]: <detail>`.
 [[nodiscard]] render::Unexpected EvalFail(EvalErrorKind kind, std::string detail,

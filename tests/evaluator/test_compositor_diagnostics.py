@@ -126,7 +126,7 @@ def test_material_views_detect_the_injected_leak(diagnostics_run: tuple[set[str]
     assert has(passed, "a mask that spills onto another ID island is an ID leak")
     assert has(passed, "a nested material's region is its effective mask")
     assert has(passed, "views the set or stack cannot give are listed as missing")
-    assert has(passed, "an instance material fails with unsupported_node")
+    assert has(passed, "an instance material fails with invalid_argument")
 
 
 @pytest.mark.parametrize("name", ["colour", "grey", "empty"])

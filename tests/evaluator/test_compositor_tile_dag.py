@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from tests.evaluator.union_run import note_rasters, observe
 from tools.parity.fit.common import Context
 from tools.parity.fit.oracle import Golden
 from tools.parity.schemas import load_json
@@ -280,11 +281,12 @@ def evaluate(exe: Path, spec: dict[str, Any], workdir: Path, backend: str) -> di
     workdir.mkdir(parents=True, exist_ok=True)
     (workdir / "spec.json").write_text(json.dumps(spec), encoding="utf-8")
     out = workdir / f"out-{backend}"
-    run_case(
+    _, output = run_case(
         exe, "evaluate", str(workdir / "spec.json"), str(out), backend, needs_gpu=backend == "gpu"
     )
     result: dict[str, Any] = load_json(out / "result.json")
     result["_dir"] = str(out)
+    note_rasters(result, output)
     return result
 
 
@@ -372,6 +374,14 @@ def test_base_values_equal_the_empty_project_exports(
         for recording in ("r1", "r2"):
             decoded = golden.map(recording, map_name)
             observed = decoded.values
+            if decoded.integer:
+                ours = np.asarray(export16_of_constant(entry["constant"], channel), np.int64)
+                unit = "16-bit code value"
+            else:
+                ours = np.asarray([float(np.float32(v)) for v in entry["constant"]], np.float64)
+                unit = "float32 value"
+            ours = np.broadcast_to(ours[: observed.shape[-1]], observed.shape)
+            observe(golden, map_name, recording, unit, ours, observed)
             unique = np.unique(observed.reshape(-1, observed.shape[-1]), axis=0)
             assert len(unique) == 1, f"{map_name} is not uniform"
             components = unique[0].tolist()
@@ -597,6 +607,8 @@ def compare_exact(ours: np.ndarray, golden: Golden, map_name: str) -> None:
     for recording in ("r1", "r2"):
         theirs = golden.map(recording, map_name).values
         assert ours.shape == theirs.shape, (ours.shape, theirs.shape)
+        unit = "float32 value" if ours.dtype.kind == "f" else "16-bit code value"
+        observe(golden, map_name, recording, unit, ours, theirs)
         equal = (ours == theirs) | (np.isnan(ours) & np.isnan(theirs))
         differing = int(np.count_nonzero(~equal))
         worst = float(np.abs(ours - theirs).max()) if differing else 0.0

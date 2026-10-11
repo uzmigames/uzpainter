@@ -10,6 +10,7 @@ three statuses, so nothing in UzPainter is silently a no-op.
 | File | Content |
 |---|---|
 | `painter-api-inventory.json` | Documented Painter symbols (approved source A-PYDOC): every Python object of the Painter 12.1.0 python-doc inventory plus the enum members and constructor parameters recorded in `tools/parity/recorder/documented_symbols.json`. One entry per line. |
+| `compositor-capabilities.json` | The compositor's support of documented Painter symbols (`phase1.14_compositor-core` item 2.8, decision 081): every Phase 1 node kind, source, projection, sampling mode and blend mode in the operation context `compositor` or a narrower `compositor:<case>` (`compositor:minification`, `compositor:mask-stack`, `compositor:height`, ...). |
 | `uzpainter-additions.json` | UzPainter-only modules, operations and errors of `uzpainter` (`10-…` §1, §5, §7; capture modes of `07-…` §5). |
 | `capabilities.schema.json` | JSON Schema (draft 2020-12) of `capabilities.json`. |
 | `generate_capabilities.py` | The generator (standard library only). |
@@ -32,7 +33,15 @@ indent, so the same inputs always give the same bytes.
   `python-doc/<page>#<object>`, where the object is the symbol, its owner (an enum member is
   documented on its class) or `module-<symbol>`; a module documented only by a page cites the
   page. Additions cite the defining section, `docs/<file>.md#<heading>`, which must exist.
-- `tier_evidence` lists `golden_id`s of Tier 0 public manifests in `parity/manifests/tier0/`.
+- `tier_evidence` lists `golden_id`s of the Tier 0 public manifests of the current oracle envelope
+  (`<manifest_root>/tier0/` of the `current` entry of `parity/envelopes/registry.json`, decision
+  037); `--tier0 <dir>` names another directory.
+- Compositor entries (decision 081) say whether the compositor reproduces the symbol's effect on
+  the channel maps; the `any` entry of the same symbol (the Python API call) stays a release gap
+  until the API tasks prove its set → get readback. A compositor entry always has `notes`; a
+  `supported` one names the goldens it equals exactly (r1, and r2 where stable or covered by an
+  exception); a `release-gap` one names its owner task (`phase<N>.<M>_<name>`). Requesting a
+  compositor release gap raises `NotYetSupported` before any mutation (decision 082).
 
 ## Statuses and rules
 
@@ -43,10 +52,11 @@ indent, so the same inputs always give the same bytes.
 | `release-gap` | Not implemented yet; using it raises `NotYetSupported` before any mutation | nothing; `since` stays null |
 
 Generation also fails on: a Painter entry without a documentation anchor of its symbol; a
-symbol outside its namespace (`substance_painter`/`substance_painter_plugins` in the inventory,
-`uzpainter` in the additions); any symbol or context naming a stroke; a repeated (symbol,
-context) pair; unknown or malformed fields; a missing release gap of `10-…` §3
-(`RELEASE_GAPS` in the generator). Each error names the entry.
+symbol outside its namespace (`substance_painter`/`substance_painter_plugins` in the inventory
+and the compositor file, `uzpainter` in the additions); any symbol or context naming a stroke; a
+repeated (symbol, context) pair; unknown or malformed fields; a missing release gap of `10-…` §3
+(`RELEASE_GAPS` in the generator); a compositor entry outside the `compositor` contexts, without
+notes, or a compositor release gap naming no owner task. Each error names the entry.
 
 The release gaps of §3 are seeded as their own entries with a note (paint layers and effects
 receiving bitmaps or projections, warp and UV-set-to-UV-set projections, the UV-tile workflows,

@@ -29,6 +29,7 @@ from tests.evaluator.test_compositor_tile_dag import (
     run_case,
     spec_from_manifest,
 )
+from tests.evaluator.union_run import observe
 from tools.parity.fit.oracle import Golden
 from tools.parity.schemas import load_json
 
@@ -167,6 +168,7 @@ def compare_export(
     for recording in ("r1", "r2"):
         theirs = golden.map(recording, map_name).values.astype(np.int64)
         theirs = theirs.reshape(expected.shape)
+        observe(golden, map_name, recording, "16-bit code value", expected, theirs)
         differing = int(np.count_nonzero(expected != theirs))
         worst = int(np.abs(expected - theirs).max()) if differing else 0
         assert differing == 0, (
@@ -263,6 +265,9 @@ def test_uv_projection_equals_the_golden(
         ours = raster(result, f"User{user}")
         for recording in ("r1", "r2"):
             theirs = golden.map(recording, f"{texture_set}/user{user}").values.astype(np.int64)
+            observe(
+                golden, f"{texture_set}/user{user}", recording, "16-bit code value", ours, theirs
+            )
             differing = np.argwhere(ours != theirs)
             assert len(differing) == 0, (
                 f"{texture_set}/user{user} {recording}: {len(differing)} differing values"
@@ -340,6 +345,7 @@ def test_height_bitmap_equals_the_golden(
     for recording in ("r1", "r2"):
         theirs = golden.map(recording, f"{texture_set}/height").values.astype(np.float64)
         theirs = theirs.reshape(ours.shape[0], ours.shape[1], -1)[..., 0]
+        observe(golden, f"{texture_set}/height", recording, "float32 value", ours, theirs)
         differing = int(np.count_nonzero(ours != theirs))
         assert differing == 0, f"{texture_set}/height {recording}: {differing} differing values"
 
@@ -376,6 +382,7 @@ def test_island_edges_equal_the_golden(
     for recording in ("r1", "r2"):
         theirs = golden.map(recording, f"{texture_set}/height").values.astype(np.float64)
         theirs = theirs.reshape(ours.shape[0], ours.shape[1], -1)[..., 0]
+        observe(golden, f"{texture_set}/height", recording, "float32 value", ours, theirs, covered)
         differing = int(np.count_nonzero((ours != theirs) & covered))
         assert differing == 0, (
             f"{golden_stem} {recording}: {differing} of {int(covered.sum())} covered texels differ"
