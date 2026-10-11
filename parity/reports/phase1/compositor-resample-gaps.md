@@ -1,0 +1,83 @@
+# `phase1.9_compositor-resample-gaps` — local run and the minification recording request
+
+Child of `phase1.14_compositor-core` (P1-COMPOSITOR; `docs/architecture/04-layer-stack-and-compositing.md` §4, §5). Decision 028: the Tier 0 comparisons against the private oracle store and the GPU checks run locally on the owner's machine, and this report is their evidence. Numbers and hashes only; every recorded Painter output stays in the private store. Decision 043 records the choices below and the model panel's verdicts.
+
+**Result: the bilinear near-tie is fixed at its root and `resample-uv` magnification and 1:1 are exact on both backends under every filter and wrap mode (s0, s1, s3 User0-5, 7; s2 User0-7). Bilinear minification (User6 of s0, s1, s3) is not determined by the existing golden: the evaluator keeps refusing it with `evaluator:unsupported_source`, and the task stays open until the recording of §3 is made and fitted.**
+
+## 1. Run record
+
+| Item | Value |
+|---|---|
+| Hardware | NVIDIA GeForce RTX 4090, Windows 11 Pro 10.0.26200 |
+| Backend | DX12; kernels `cs_6_6` through the render layer's kernel cache |
+| Build | Zig 0.15.2, `zig build evaluator-tests` exit 0 with `-Wall -Wextra -Werror` |
+| Oracle | `%LOCALAPPDATA%\UzPainter\parity-store`, current envelope `painter-12.1.5+js-api.1.1.20` (the `resample-uv` exported maps are byte-identical to the 12.1.0 envelope's); recordings `r1` and `r2` identical on every map |
+
+## 2. The near-tie (item 2.1)
+
+The phase1.8 rule summed float32 texels `float32(c / 65535)` with the 8-bit integer weights exactly and rounded once. One value per set was one code high (s0 and s1 User2, scale 1.37 × 2.11, texel (175, 18), green: codes 38535, 65357, 55719, 1194 weighed 15, 52, 44, 145; the exact sum lies 2^-9.7 ulp above a float32 midpoint and rounds up to 412591 / 2^20, Painter holds 412590 / 2^20).
+
+**Root cause: Painter's bilinear filter is the GPU's linear filter of a float32 texture, which does not sum the float texels exactly.** Measured on the recording GPU (`uzp-evaluator-tests bilinear-hardware`: a 64 × 64 float32 RGBA texture of random texels, with designed operands beside 1.0 and 0 and the near-tie quad, sampled by a linear wrap sampler at float32-exact coordinates for every 8-bit weight pair on 64 taps and 4 channels, 16 777 216 samples), the GPU equals on every sample:
+
+- weights w11 = (fx fy + 128) >> 8, w10 = fx − w11, w01 = fy − w11, w00 = 256 − fx − fy + w11;
+- E the binary exponent of the largest texel of non-zero weight (t_max in [2^(E−1), 2^E)); each operand floor(t 2^(28 − E));
+- the weighted sum of the operands times 2^(E − 36), rounded to the nearest float32, ties up.
+
+| Variant against the GPU (16 777 216 samples) | Mismatching samples |
+|---|---|
+| **the rule above** | **0** |
+| 28 absolute fractional bits (E capped at 0) | 11 035 |
+| 27 / 29 bits below E | 108 770 / 41 274 |
+| ties to even instead of up | 25 242 |
+| w11 rounded ties down (the goldens' frame applied to the GPU's) | 262 144 |
+| float32 texels summed exactly, rounded to nearest even / ties up | 80 551 / 56 634 |
+| the same probe as an RGBA16_UNORM texture | 16 709 251 (the GPU filters UNORM16 at a lower precision): Painter samples float32 textures |
+
+A bitmap stored bottom-up (rows flipped, fy' = 256 − fy) turns the GPU's ties-up w11 into round_half_down(fx fy / 256) = (fx fy + 127) >> 8 in the goldens' top-down frame, the rounding phase0.7 fitted. With those weights the rule reproduces all 3 867 033 magnifying and 1:1 values of s0, s1 and s3, and keeps a texel weighed 256/256 unchanged (E is its own exponent). An earlier fit, 28 absolute fractional bits, also fitted `resample-uv` (27 bits break 16 values, 29 to 33 keep the miss) but broke `blend-basic` user7 (a 1:1 bitmap on RGB32F, 514 values): the exponent-relative operands of the GPU are what fits both.
+
+Evaluator: `src/evaluator/projection_uv.{h,cpp}` `BilinearFilter` (integers, the reference) and `src/evaluator/shaders/evaluator_project.hlsl` (the same integers from the floats' bits, the sum in `uint64_t`, the rounding by shifts, the scale an exact power of two); manual filtering, so the evaluator does not depend on any GPU's sampler. Every golden through the projection was re-compared on both backends (`colour-ramps-*`, `blend-inputs`, `blend-basic` and the other blend sweeps, `blend-order`, `group-masks`, the mask goldens, `height-normal-*`, island edges and `resample-uv` s0-s3): exact. `parity/semantics/uv-sampling.json` is re-derived by `tests/evaluator/sources_fits.py` (`uv-bilinear-repeat` now `exact`, parameter `operand_bits` 28); `colour-transfer.json` is unchanged. `Nearest` keeps the float32 texel.
+
+## 3. Bilinear minification (item 2.2) and the recording it needs
+
+`resample-uv` User6 projects field A (256 × 256; R = 257 x, G = 257 y, B = 256 x + y) at scale 3.3. Every channel is a linear ramp, so in the interior any normalised filter returns 257 × its centroid: the golden measures the kernel's first moment, ±1-code arithmetic noise, and the step response at the wrap seams, which the sample positions x = -293.25 + 3.3 i cross at only four sub-texel offsets per axis. Measured (both recordings, all rows identical in R and all columns in G):
+
+| | BilinearHQ (s0; s3 with RepeatNone) | BilinearSharp (s1) |
+|---|---|---|
+| interior against single-level bilinear | a constant -17.65 codes on every value range (a -0.0687-texel shift), deterministic per (x fraction, x parity) | mean 0.00, a ±1.35-code sawtooth depending on x mod 2 |
+| weight beyond the seam at d = -0.95 / -0.45 / +0.45 / +0.95 texel | 0.120 / 0.239 / 0.702 / 0.841 | 2/256 / 35/256 / 221/256 / 254/256 (symmetric) |
+| seam influence at \|d\| ≥ 2.35 | none | none |
+| clamp edges (s3) | about 0.12 + 0.04 of the weight at 1.45 and 2.45 texels on one side, 0.09 + 0.03 on the other | — |
+
+Rejected structures (interior exact rate; max error with the seams): the recording GPU's own trilinear and 16× anisotropic sampling of a float32 box mip chain (bottom-up, gradients of 3.3 texels, LOD bias −1.5 to 0, explicit LOD 0 to 2 in 1/32 steps; Sharp at best 39-51 % of the interior, max ≥ 1 285 codes; HQ never); numerically, single-level bilinear on box mip levels 0 to 3, the mip chain in float, UNORM16 rounded or truncated; trilinear between levels (0, 1), (1, 2) and (0, 2) at every 8-bit blend weight (Sharp at best 45 % of the interior, max 162 codes; HQ 0 %); an interval analysis shows no blend weight even fits the interior noise. `phase0.7_tier0-stability-fits` failed the same way (`resampling.json`). The data cannot pin a kernel of unknown support, level selection and arithmetic (panel: AGREE × 3), so the refusal stays and the fit waits for a recording that determines it.
+
+**Recording request** (owner or the agent that owns Painter; `uzpainter parity record`, both recordings, PNG 16, padding infinite, no dithering, like every Tier 0 golden). Mesh `grid2x2` (four texture sets s0-s3), resolution 256, channels User0-7 RGB16, one fill per user channel with a UV projection in `Factors` scale mode:
+
+| Set | Filter | Wrap |
+|---|---|---|
+| s0 | BilinearHQ | Repeat |
+| s1 | BilinearSharp | Repeat |
+| s2 | BilinearHQ | RepeatNone |
+| s3 | BilinearSharp | RepeatNone |
+
+1. `resample-uv-minify` (the fit), bitmap `pattern64` (the existing 64 × 64 pseudo-random 16-bit RGB fixture; footprint = 64 s / 256): User0 scale 5.13 (footprint 1.28), User1 6.07 (1.52), User2 7.77 (1.94), User3 10.3 (2.58), User4 13.2 (3.3), User5 16.6 (4.15), User6 13.2 × 5.13 (3.3 × 1.28), User7 7.77 with rotation 30 and offset (0.123, 0.456). The irregular scales give many sub-texel phase classes; with random texels each class is an over-determined linear system for the effective taps (check rank before reading them), across footprints for the level selection, and with RepeatNone for the clamp edges.
+2. `resample-uv-impulse` (direct kernel reads), a new authored fixture `impulse64` (64 × 64 RGB16: R 65535 at the four texels (16, 16), (48, 16), (16, 48), (48, 48) on 0; G 49152 at the same texels on 16384, for linearity and offset; B 65535 for x < 32, 0 otherwise, a step): User0-5 the scales of 1. above, User6 13.2 with offset (0.001953125, 0.0009765625), User7 7.77 with offset (0.0048828125, 0).
+3. Held out for validation, not fitted: `resample-uv` User6 (field A at 3.3, both filters, Repeat and RepeatNone), and the User6-7 channels of 1.
+
+Then: fit the kernels (`tests/evaluator/sources_fits.py` and the fits module of the new goldens), implement them in `ProjectTexel` and the projection kernel, lift the `CheckSampling` refusal, and add the GPU-vs-CPU minifying stacks (items 2.2-2.4, 3.1, 3.2, 4.1).
+
+## 4. Unit tests and kernels
+
+| Case | Evidence |
+|---|---|
+| `bilinear-hardware` (RTX 4090) | `BilinearFilter` equals the GPU's linear filter of float32 texels on 16 777 216 of 16 777 216 samples; the GPU rounds the near-tie down |
+| `sources` (CPU) | 1:1 copies under every filter on all nine formats (unchanged texels); the half-texel bilinear sample against an independent double-precision reference; the near-tie (412590 / 2^20, where float texels summed exactly give 412591 / 2^20), a 256/256 texel unchanged, 27 bits beside 1.0 |
+| `projection-gpu-vs-cpu` | 36 random projection stacks over the nine formats: 43 581 440 samples, GPU = CPU bit for bit |
+| `gpu-vs-cpu`, `masks-gpu-vs-cpu`, `order` | unchanged, bit for bit and green |
+
+## Reproduce
+
+```
+zig build evaluator-tests
+python -m pytest tests/evaluator/test_compositor_sources_projection.py
+python tests/evaluator/sources_fits.py zig-out/bin/uzp-evaluator-tests.exe <work-dir>
+```

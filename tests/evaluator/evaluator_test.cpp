@@ -42,6 +42,10 @@
 //                                        reciprocal square root on every float32 of their reduced
 //                                        domains, writes the measured tables and compares them and
 //                                        hw::Rcp/Sqrt/Rsqrt with the GPU (hwmath.h)
+//   bilinear-hardware <assets> <work-dir>
+//                                        measures the GPU's linear filter of float32 texels at
+//                                        every 8-bit weight pair and compares it with
+//                                        BilinearFilter (projection_uv.h); writes the samples
 //   masks <assets>                       masks, mask and content effects, levels, geometry masks,
 //                                        group masks, the Height override, complementary masks
 //                                        and the cache shape of effect chains on the CPU store
@@ -306,6 +310,25 @@ std::map<ChannelType, core::Source> SameSource(const std::vector<ChannelType>& c
     std::map<ChannelType, core::Source> result;
     for (const ChannelType channel : channels) result[channel] = source;
     return result;
+}
+
+/// The bilinear filter of projection_uv.h BilinearFilter written independently, in double: the
+/// operands floor(t 2^(28 - E)) of the texels below the largest weighed one's exponent E, their
+/// exact weighted sum times 2^(E - 36), the nearest float32 with ties up.
+float ReferenceFilter(const std::array<uint32_t, 4>& weights, const std::array<float, 4>& texels) {
+    float largest = 0.0f;
+    for (size_t k = 0; k < 4; ++k) largest = weights[k] != 0 ? std::max(largest, texels[k]) : largest;
+    if (largest == 0.0f) return 0.0f;
+    const int exponent = std::ilogb(largest) + 1;
+    double sum = 0.0;
+    for (size_t k = 0; k < 4; ++k) sum += weights[k] * std::floor(std::ldexp(static_cast<double>(texels[k]), 28 - exponent));
+    const double exact = std::ldexp(sum, exponent - 36);
+    const float nearest = static_cast<float>(exact);
+    const float up = std::nextafter(nearest, 2.0f);
+    const float down = std::nextafter(nearest, 0.0f);
+    if (exact == (static_cast<double>(down) + static_cast<double>(nearest)) / 2.0) return nearest;
+    if (exact == (static_cast<double>(nearest) + static_cast<double>(up)) / 2.0) return up;
+    return nearest;
 }
 
 /// A deterministic 16-bit pattern image (every code along the rows).
@@ -2343,15 +2366,37 @@ int RunSources(const fs::path& assets) {
             const std::vector<uint32_t> s = Samples(*half);
             for (uint32_t y = 0; y < kSize && ok; ++y) {
                 for (uint32_t x = 0; x < kSize && ok; ++x) {
-                    const double left = arith::UnormOperand(at(*image16, int64_t{x} - 1, y, 0), 16);
-                    const double right = arith::UnormOperand(at(*image16, x, y, 0), 16);
-                    const float value = static_cast<float>((128.0 * left + 128.0 * right) / 256.0);
+                    const float left = arith::UnormOperand(at(*image16, int64_t{x} - 1, y, 0), 16);
+                    const float right = arith::UnormOperand(at(*image16, x, y, 0), 16);
+                    const float value = ReferenceFilter({128, 128, 0, 0}, {left, right, 0.0f, 0.0f});
                     ok = s[(size_t{y} * kSize + x) * 3] == arith::WriteUnorm(value, 16);
                 }
             }
         }
-        Check(ok, "BilinearHQ half a texel off weighs both float texels 128/256, rounds the sum once and stores it with the write rule",
+        Check(ok, "BilinearHQ half a texel off weighs both texels 128/256 through the GPU's linear filter and stores it with the "
+                  "write rule",
               Describe(half));
+        // The GPU's linear filter keeps 28 bits below the largest weighed texel's exponent. The resample-uv near-tie
+        // (user2, texel (175, 18), green): codes 38535, 65357, 55719, 1194 weighed 15, 52, 44, 145 give 412590 / 2^20
+        // truncated (Painter's value), where the float texels' exact sum would round up to 412591 / 2^20; a texel
+        // weighed 256 comes back unchanged; beside 1.0 a small texel keeps 27 fractional bits.
+        const std::array<uint32_t, 4> tieWeights{15, 52, 44, 145};
+        std::array<float, 4> tieTexels{};
+        double floatSum = 0.0;
+        const std::array<uint32_t, 4> tieCodes{38535, 65357, 55719, 1194};
+        for (size_t k = 0; k < 4; ++k) {
+            tieTexels[k] = arith::UnormOperand(tieCodes[k], 16);
+            floatSum += tieWeights[k] * static_cast<double>(tieTexels[k]);
+        }
+        const float tie = BilinearFilter(tieWeights, tieTexels);
+        const float small = arith::UnormOperand(1322, 16);
+        const float beside = BilinearFilter({255, 1, 0, 0}, {small, 1.0f, 0.0f, 0.0f});
+        Check(std::floor(std::ldexp(static_cast<double>(tie), 20)) == 412590.0 &&
+                  std::floor(std::ldexp(static_cast<double>(static_cast<float>(floatSum / 256.0)), 20)) == 412591.0 &&
+                  tie == ReferenceFilter(tieWeights, tieTexels) && BilinearFilter({256, 0, 0, 0}, {small, 1.0f, 1.0f, 1.0f}) == small &&
+                  beside == ReferenceFilter({255, 1, 0, 0}, {small, 1.0f, 0.0f, 0.0f}),
+              "the bilinear filter aligns the weighed texels to the largest one's exponent with 28 bits (the resample-uv near-tie "
+              "rounds down; a 256/256 texel is unchanged)");
     }
     {
         // RepeatNone: the texels moved in from outside the UV square keep the value below (the base, 1.0).
@@ -2941,6 +2986,231 @@ render::Result<std::vector<float>> FpKernelTexels(render::Engine& engine, const 
 
 bool SameFloat(float a, float b) {
     return (std::isnan(a) && std::isnan(b)) || std::bit_cast<uint32_t>(a) == std::bit_cast<uint32_t>(b);
+}
+
+// ── bilinear-hardware ────────────────────────────────────────────────────────
+
+/// Output texel k of a 2048 x 2048 target samples the bound texture (64 x 64, one mip, a linear
+/// wrap sampler) at the texel coordinate (x0 + fx / 256, y0 + fy / 256): fx = k & 255,
+/// fy = (k >> 8) & 255 and the tap (x0, y0) = (t & 63, (t * 7 + 5) & 63) for t = k >> 16. The
+/// normalised coordinates are exact in float32, so the filter alone decides the value.
+constexpr char kBilinearHardwareHlsl[] = R"(
+cbuffer Root : register(b0) { uint g_src; uint g_sampler; uint g_dst; };
+[numthreads(8, 8, 1)]
+void main(uint3 id : SV_DispatchThreadID) {
+    Texture2D<float4> src = ResourceDescriptorHeap[g_src];
+    SamplerState linearWrap = SamplerDescriptorHeap[g_sampler];
+    RWTexture2D<float4> dst = ResourceDescriptorHeap[g_dst];
+    const uint k = id.y * 2048u + id.x;
+    const uint t = k >> 16;
+    const float x = (float)(t & 63u) + 0.5f + (float)(k & 255u) / 256.0f;
+    const float y = (float)((t * 7u + 5u) & 63u) + 0.5f + (float)((k >> 8) & 255u) / 256.0f;
+    dst[id.xy] = src.SampleLevel(linearWrap, float2(x, y) / 64.0f, 0.0f);
+}
+)";
+
+constexpr uint32_t kBilinearProbeSize = 64;
+constexpr uint32_t kBilinearTargetSize = 2048;
+
+/// The texels of the probe: random 16-bit codes in four channels, with the resample-uv near-tie
+/// codes (38535, 65357, 55719, 1194) on the green channel of the quad at (10, 11), tap t = 10.
+std::vector<uint16_t> BilinearProbeCodes() {
+    std::vector<uint16_t> codes(size_t{kBilinearProbeSize} * kBilinearProbeSize * 4);
+    std::mt19937 rng(20261011);
+    for (uint16_t& code : codes) code = static_cast<uint16_t>(rng() & 0xFFFF);
+    // Edge operands: rows 19-21 of the red channel alternate 1.0 (65535) with codes below 2048 whose
+    // float32 texel has its 2^-28 bit set (the bit a 1.0 neighbour's exponent would drop); rows 29-31
+    // of the blue channel alternate 0 with such codes.
+    auto lowCode = [&rng] {
+        for (;;) {
+            const uint32_t code = rng() & 0x7FF;
+            const double scaled = std::ldexp(static_cast<double>(arith::UnormOperand(code, 16)), 28);
+            if ((static_cast<uint64_t>(scaled) & 1) != 0) return static_cast<uint16_t>(code);
+        }
+    };
+    for (uint32_t x = 0; x < kBilinearProbeSize; ++x) {
+        for (uint32_t y : {19u, 20u, 21u, 29u, 30u, 31u}) {
+            const bool edge = ((x + y) & 1) == 0;
+            const uint32_t c = y < 29 ? 0 : 2;
+            codes[(size_t{y} * kBilinearProbeSize + x) * 4 + c] = edge ? static_cast<uint16_t>(y < 29 ? 65535 : 0) : lowCode();
+        }
+    }
+    const std::array<std::array<uint32_t, 3>, 4> tie{{{10, 11, 38535}, {11, 11, 65357}, {10, 12, 55719}, {11, 12, 1194}}};
+    for (const auto& [x, y, code] : tie) codes[(size_t{y} * kBilinearProbeSize + x) * 4 + 1] = static_cast<uint16_t>(code);
+    return codes;
+}
+
+/// The GPU's linear filter at every 8-bit weight pair on 64 taps, of the probe uploaded as
+/// RGBA16_UNORM codes (`unorm16`) or as RGBA32_FLOAT texels float32(c / 65535).
+render::Result<std::vector<float>> BilinearHardwareSamples(render::Engine& engine, const std::vector<uint16_t>& codes,
+                                                           bool unorm16) {
+    auto token = std::make_shared<const int>(0);
+    std::future<render::Result<std::vector<float>>> future = engine.Submit(
+        token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<float>> {
+            render::IDevice& device = context.Device();
+            const uint32_t texelBytes = unorm16 ? 8 : 16;
+            const uint32_t rowPitch = kBilinearProbeSize * texelBytes;
+            uz::RHITextureDesc sdesc;
+            sdesc.width = kBilinearProbeSize;
+            sdesc.height = kBilinearProbeSize;
+            sdesc.format = unorm16 ? uz::RHIFormat::RGBA16Unorm : uz::RHIFormat::RGBA32Float;
+            sdesc.usage = uz::RHITextureUsage::ShaderResource | uz::RHITextureUsage::CopyDst;
+            render::Result<uz::RHITextureHandle> src = device.CreateTexture(sdesc);
+            if (!src) return render::Unexpected(src.error());
+            uz::RHITextureDesc ddesc;
+            ddesc.width = kBilinearTargetSize;
+            ddesc.height = kBilinearTargetSize;
+            ddesc.format = uz::RHIFormat::RGBA32Float;
+            ddesc.usage = uz::RHITextureUsage::UnorderedAccess | uz::RHITextureUsage::CopySrc;
+            render::Result<uz::RHITextureHandle> dst = device.CreateTexture(ddesc);
+            uz::RHIBufferDesc bdesc;
+            bdesc.sizeBytes = uint64_t{rowPitch} * kBilinearProbeSize;
+            bdesc.usage = uz::RHIBufferUsage::CopySrc;
+            bdesc.memory = uz::RHIMemoryType::Upload;
+            render::Result<uz::RHIBufferHandle> staging = device.CreateBuffer(bdesc);
+            uz::RHISamplerDesc sampler;
+            sampler.filter = uz::RHIFilterMode::Linear;
+            sampler.maxLod = 0.0f;
+            const uz::RHISamplerHandle linearWrap = device.Rhi().CreateSampler(sampler);
+            auto cleanup = [&] {
+                if (linearWrap.IsValid()) device.Rhi().DestroySampler(linearWrap);
+                if (staging) device.DestroyBuffer(*staging);
+                if (dst) device.DestroyTexture(*dst);
+                device.DestroyTexture(*src);
+            };
+            if (!dst || !staging || !linearWrap.IsValid()) {
+                cleanup();
+                return render::Fail(render::ErrorCode::ResourceCreationFailed, device.GetBackend(),
+                                    "bilinear-hardware: resources not created");
+            }
+            auto* mapped = static_cast<uint8_t*>(device.Rhi().MapBuffer(*staging));
+            for (size_t i = 0; i < codes.size(); ++i) {
+                if (unorm16) {
+                    std::memcpy(mapped + i * 2, &codes[i], 2);
+                } else {
+                    const float texel = arith::UnormOperand(codes[i], 16);
+                    std::memcpy(mapped + i * 4, &texel, 4);
+                }
+            }
+            device.Rhi().UnmapBuffer(*staging);
+            render::KernelSource source;
+            source.name = "bilinear_hardware";
+            source.hlsl = kBilinearHardwareHlsl;
+            render::Result<render::ComputeKernel> kernel = context.Kernel(source);
+            if (!kernel) {
+                cleanup();
+                return render::Unexpected(kernel.error());
+            }
+            using State = uz::RHIResourceState;
+            using render::image_pass_detail::Transition;
+            const uint32_t root[3] = {device.Rhi().GetTextureSRVIndex(*src), device.Rhi().GetSamplerIndex(linearWrap),
+                                      device.Rhi().GetTextureUAVIndex(*dst)};
+            render::Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+                const uz::RHIBarrierDesc toCopy = Transition(*src, State::Common, State::CopyDst);
+                cmd.ResourceBarrier(&toCopy, 1);
+                cmd.CopyBufferToTexture(*staging, 0, rowPitch, *src, 0, 0);
+                const uz::RHIBarrierDesc before[2] = {Transition(*src, State::CopyDst, State::ShaderResource),
+                                                      Transition(*dst, State::Common, State::UnorderedAccess)};
+                cmd.ResourceBarrier(before, 2);
+                cmd.SetPipeline(kernel->pipeline);
+                cmd.SetRootConstants(render::kRootConstantsParam, root, 3);
+                cmd.Dispatch(kBilinearTargetSize / 8, kBilinearTargetSize / 8, 1);
+                const uz::RHIBarrierDesc after[2] = {Transition(*src, State::ShaderResource, State::Common),
+                                                     Transition(*dst, State::UnorderedAccess, State::Common)};
+                cmd.ResourceBarrier(after, 2);
+            });
+            if (!done) {
+                cleanup();
+                return render::Unexpected(done.error());
+            }
+            render::TextureReadback readback(context);
+            render::ReadbackDesc desc;
+            desc.texture = *dst;
+            render::Result<render::ReadbackId> id = readback.Request(desc);
+            render::Result<render::ReadbackImage> image =
+                id ? readback.Complete(*id) : render::Result<render::ReadbackImage>(render::Unexpected(id.error()));
+            cleanup();
+            if (!image) return render::Unexpected(image.error());
+            std::vector<float> values(image->texels.size() / sizeof(float));
+            std::memcpy(values.data(), image->texels.data(), values.size() * sizeof(float));
+            return values;
+        });
+    return Get(future);
+}
+
+/// Measures the GPU's linear filter at every 8-bit weight pair (64 taps x 65 536 pairs x 4
+/// channels, edge operands beside 1.0 and 0 included) and compares the float32 texture with
+/// projection_uv.h BilinearFilter under the GPU's own weights, w11 = (fx fy + 128) >> 8 (the
+/// projection's ties-down rounding is this one seen through Painter's bottom-up bitmap). The
+/// RGBA16_UNORM texture filters at a lower precision and is reported only. Writes the samples
+/// (`bilinear-<format>.bin`) and the probe's codes to the work directory.
+int RunBilinearHardware(const fs::path& dir) {
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
+    const std::vector<uint16_t> codes = BilinearProbeCodes();
+    {
+        std::ofstream probe(dir / "bilinear-probe-codes.bin", std::ios::binary);
+        probe.write(reinterpret_cast<const char*>(codes.data()), static_cast<std::streamsize>(codes.size() * sizeof(uint16_t)));
+    }
+    for (const bool unorm16 : {false, true}) {
+        const std::string format = unorm16 ? "RGBA16_UNORM" : "RGBA32_FLOAT";
+        render::Result<std::vector<float>> samples = BilinearHardwareSamples(engine, codes, unorm16);
+        if (!samples) {
+            Check(false, "bilinear-hardware " + format, Describe(samples));
+            continue;
+        }
+        {
+            std::ofstream out(dir / ("bilinear-" + format + ".bin"), std::ios::binary);
+            out.write(reinterpret_cast<const char*>(samples->data()), static_cast<std::streamsize>(samples->size() * sizeof(float)));
+        }
+        uint64_t total = 0;
+        uint64_t equal = 0;
+        bool tie = false;
+        std::string firstMiss;
+        for (uint32_t k = 0; k < kBilinearTargetSize * kBilinearTargetSize; ++k) {
+            const uint32_t fx = k & 255;
+            const uint32_t fy = (k >> 8) & 255;
+            const uint32_t t = k >> 16;
+            const uint32_t x0 = t & 63;
+            const uint32_t y0 = (t * 7 + 5) & 63;
+            const uint32_t w11 = (fx * fy + 128) >> 8;
+            const std::array<uint32_t, 4> weights{256 - fx - fy + w11, fx - w11, fy - w11, w11};
+            const std::array<std::array<uint32_t, 2>, 4> taps{
+                {{x0, y0}, {(x0 + 1) & 63, y0}, {x0, (y0 + 1) & 63}, {(x0 + 1) & 63, (y0 + 1) & 63}}};
+            for (uint32_t c = 0; c < 4; ++c) {
+                std::array<float, 4> texels{};
+                for (size_t q = 0; q < 4; ++q) {
+                    texels[q] = arith::UnormOperand(codes[(size_t{taps[q][1]} * kBilinearProbeSize + taps[q][0]) * 4 + c], 16);
+                }
+                const float rule = BilinearFilter(weights, texels);
+                const float gpu = (*samples)[size_t{k} * 4 + c];
+                ++total;
+                if (SameFloat(gpu, rule)) {
+                    ++equal;
+                } else if (firstMiss.empty()) {
+                    firstMiss = "tap (" + std::to_string(x0) + ", " + std::to_string(y0) + ") fx " + std::to_string(fx) +
+                                " fy " + std::to_string(fy) + " channel " + std::to_string(c) + ": GPU bits " +
+                                std::to_string(std::bit_cast<uint32_t>(gpu)) + ", rule bits " +
+                                std::to_string(std::bit_cast<uint32_t>(rule));
+                }
+                // The near-tie quad seen from the GPU's frame: weights 15, 52, 44, 145 there.
+                if (x0 == 10 && y0 == 11 && c == 1 && fx == 197 && fy == 189) {
+                    tie = weights == std::array<uint32_t, 4>{15, 52, 44, 145} &&
+                          std::floor(std::ldexp(static_cast<double>(gpu), 20)) == 412590.0;
+                }
+            }
+        }
+        Info(format + ": BilinearFilter equals the GPU on " + std::to_string(equal) + " of " + std::to_string(total) +
+             " samples");
+        if (unorm16) continue;
+        Check(equal == total,
+              "the GPU's linear filter of float32 texels equals BilinearFilter (operands aligned to the largest weighed texel "
+              "with 28 bits, one rounding, ties up) at every 8-bit weight pair (" + std::to_string(total) + " samples)",
+              firstMiss);
+        Check(tie, "the GPU's linear filter of float32 texels rounds the resample-uv near-tie down", "");
+    }
+    return Finish();
 }
 
 /// A measured delta table in the stored form of hwmath.h (zlib of the packed words).
@@ -3915,7 +4185,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks <assets-dir> | "
                      "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
-                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|masks-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
+                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|bilinear-hardware|masks-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
         return 2;
     }
@@ -3960,6 +4230,7 @@ int main(int argc, char** argv) {
         else if (mode == "srgb8-hardware") code = RunSrgb8Hardware(dir);
         else if (mode == "tables") code = RunTables(dir);
         else if (mode == "fp-hardware") code = RunFpHardware(dir);
+        else if (mode == "bilinear-hardware") code = RunBilinearHardware(dir);
         else if (mode == "pow-hardware") code = RunPowHardware(dir);
         else if (mode == "masks-gpu-vs-cpu") code = RunMasksGpuVsCpu(assets, dir);
         else if (mode == "uv-coverage") {
