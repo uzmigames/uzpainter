@@ -100,6 +100,7 @@
 #include "evaluator/profile.h"
 #include "evaluator/projection_uv.h"
 #include "evaluator/sources.h"
+#include "evaluator/support.h"
 #include "evaluator/templates.h"
 #include "render/capabilities.h"
 #include "render/engine_thread.h"
@@ -5977,9 +5978,9 @@ int RunDiagnostics(const fs::path& assets, const fs::path& dir) {
         Check(missingOk, "views the set or stack cannot give are listed as missing (no ID mesh map, absent channels); a "
                          "material without a mask covers the whole set",
               Describe(missingId) + " " + Describe(missingChannels));
-        Check(!ofInstance && KindName(ofInstance.error()) == "unsupported_node" && !unknown &&
+        Check(!ofInstance && KindName(ofInstance.error()) == "invalid_argument" && !unknown &&
                   KindName(unknown.error()) == "not_found" && !wrongSize && KindName(wrongSize.error()) == "unsupported_source",
-              "an instance material fails with unsupported_node, an unknown one with not_found, an ID mesh map off the "
+              "an instance material fails with invalid_argument, an unknown one with not_found, an ID mesh map off the "
               "set resolution with unsupported_source",
               Describe(ofInstance) + " " + Describe(unknown) + " " + Describe(wrongSize));
     }
@@ -6023,9 +6024,10 @@ int RunDiagnostics(const fs::path& assets, const fs::path& dir) {
         DiagnosticMap full{37, 23, 1, std::vector<float>(37 * 23, 1.0f)};
         render::Result<RegionStats> wide = ComputeRegionStats(grey, colour);
         render::Result<RegionStats> notFinite = ComputeRegionStats(nan, full);
-        Check(!wide && KindName(wide.error()) == "unsupported_source" && !notFinite &&
-                  KindName(notFinite.error()) == "unsupported_source",
-              "region_stats refuses a mask of more than one component and a value inside that is not finite");
+        Check(!wide && KindName(wide.error()) == "invalid_argument" && !notFinite &&
+                  KindName(notFinite.error()) == "invalid_argument",
+              "region_stats refuses a mask of more than one component and a value inside that is not finite "
+              "(invalid_argument)");
 
         // The export plan's statistics source is the same computation over the evaluated map and mask.
         MaterialRig rig(false, false);
@@ -6260,13 +6262,325 @@ int RunDiagnosticsGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     return Finish();
 }
 
+// ── not-yet-supported (phase1.14_compositor-core item 3.3, decision 082) ─────
+
+/// One excluded feature: how a request applies it, the owner task the refusal names, and the
+/// channel whose evaluation the evaluator itself refuses (nullopt: the evaluator evaluates it
+/// without a golden; only the check before mutation refuses it).
+struct ExcludedFeature {
+    std::string name;
+    std::string owner;
+    std::optional<ChannelType> evaluatorRefuses;
+    std::function<void(core::Project&, core::Id fill)> apply;
+};
+
+core::Effect EffectOf(core::Project& project, core::EffectKind kind) {
+    core::Effect effect;
+    effect.uid = project.AllocateId();
+    effect.kind = kind;
+    effect.name = std::string(core::ToString(kind));
+    return effect;
+}
+
+core::FillContent& FillOf(core::Project& project, core::Id fill) { return *core::FindLayer(project, fill)->fill; }
+
+void SetProjection(core::Project& project, core::Id fill, core::ProjectionMode mode) {
+    FillOf(project, fill).projection.mode = mode;
+}
+
+std::vector<ExcludedFeature> ExcludedFeatures() {
+    using core::EffectKind;
+    using core::ProjectionMode;
+    std::vector<ExcludedFeature> features;
+    const auto projection = [&](ProjectionMode mode, const std::string& owner) {
+        features.push_back({std::string(core::ToString(mode)) + " projection", owner, ChannelType::User0,
+                            [mode](core::Project& p, core::Id fill) { SetProjection(p, fill, mode); }});
+    };
+    for (const ProjectionMode mode : {ProjectionMode::Triplanar, ProjectionMode::Planar, ProjectionMode::Spherical,
+                                      ProjectionMode::Cylindrical}) {
+        projection(mode, "phase3.4_smart-projections");
+    }
+    projection(ProjectionMode::Warp, "phase4.1_nodes-projections");
+    projection(ProjectionMode::UVSetToUVSet, "phase4.1_nodes-projections");
+    features.push_back({"symmetry", "phase3.4_smart-projections", ChannelType::User0,
+                        [](core::Project& p, core::Id fill) { FillOf(p, fill).symmetry.enabled = true; }});
+    features.push_back({"a physical-size UV scale mode", "phase3.4_smart-projections", std::nullopt,
+                        [](core::Project& p, core::Id fill) {
+                            FillOf(p, fill).projection.mode = core::ProjectionMode::UV;
+                            FillOf(p, fill).projection.uv.uv_transformation.scale_mode = core::ScaleMode::CustomPhysicalSize;
+                        }});
+    features.push_back({"a one-axis wrap mode", "phase4.2_remaining-nodes", std::nullopt,
+                        [](core::Project& p, core::Id fill) {
+                            FillOf(p, fill).projection.mode = core::ProjectionMode::UV;
+                            FillOf(p, fill).projection.uv.uv_wrapping_mode = core::UVWrapMode::RepeatVertically;
+                        }});
+    features.push_back({"the Material source mode", "phase3.2_proc-material-families", ChannelType::User0,
+                        [](core::Project& p, core::Id fill) { FillOf(p, fill).source_mode = core::SourceMode::Material; }});
+    const auto source = [&](const std::string& name, const std::string& owner, core::Source value) {
+        features.push_back({name, owner, ChannelType::User0, [value](core::Project& p, core::Id fill) {
+                                FillOf(p, fill).sources[ChannelType::User0] = value;
+                            }});
+    };
+    core::VectorSource vector;
+    vector.resource.sha256 = std::string(64, 'a');
+    source("a vector source", "phase4.1_nodes-vector-font-sources", core::Source{vector});
+    core::FontSource font;
+    font.resource.sha256 = std::string(64, 'b');
+    source("a font source", "phase4.1_nodes-vector-font-sources", core::Source{font});
+    core::ProceduralSource procedural;
+    procedural.ref.asset = "uzasset://generator/dirt@1";
+    source("a procedural source", "phase3.3_procedural-families", core::Source{procedural});
+    source("an anchor reference source", "phase4.1_nodes-instances-anchors", core::Source{core::ReferenceSource{}});
+    features.push_back({"OCIO colour management", "phase1.20_pyapi-facade", ChannelType::User0,
+                        [](core::Project& p, core::Id) { p.settings.color_management.mode = "ocio"; }});
+    const auto content = [&](EffectKind kind, const std::string& owner) {
+        features.push_back({std::string(core::ToString(kind)) + " effect in a content stack", owner, ChannelType::User0,
+                            [kind](core::Project& p, core::Id fill) {
+                                core::Effect effect = EffectOf(p, kind);
+                                core::FindLayer(p, fill)->content_effects.insert(
+                                    core::FindLayer(p, fill)->content_effects.begin(), std::move(effect));
+                            }});
+    };
+    content(EffectKind::generator, "phase3.2_proc-generator-families");
+    content(EffectKind::filter, "phase3.2_proc-filter-families");
+    content(EffectKind::paint, "phase4.1_nodes-paint-layers");
+    content(EffectKind::anchor, "phase4.1_nodes-instances-anchors");
+    const auto mask = [&](EffectKind kind, const std::string& owner, bool refused) {
+        features.push_back({std::string(core::ToString(kind)) + " effect in a mask stack", owner,
+                            refused ? std::optional<ChannelType>(ChannelType::User0) : std::nullopt,
+                            [kind](core::Project& p, core::Id fill) {
+                                core::Effect effect = EffectOf(p, kind);
+                                if (kind == EffectKind::levels) {
+                                    effect.levels = core::LevelsParams{};
+                                    effect.levels->components.push_back(core::LevelsComponent{});
+                                }
+                                std::vector<core::Effect>& effects = core::FindLayer(p, fill)->mask->effects;
+                                effects.insert(effects.begin(), std::move(effect));
+                            }});
+    };
+    mask(EffectKind::compare_mask, "phase4.1_nodes-mask-effects", true);
+    mask(EffectKind::color_selection, "phase4.1_nodes-mask-effects", true);
+    mask(EffectKind::levels, "phase4.2_remaining-nodes", false);
+    features.push_back({"a fill effect in a content stack", "phase3.2_proc-filter-families", std::nullopt,
+                        [](core::Project& p, core::Id fill) {
+                            core::Effect effect = EffectOf(p, core::EffectKind::fill);
+                            core::FillContent content;
+                            content.sources[ChannelType::User0] = Uniform(0.1, 0.2, 0.3);
+                            content.active_channels.insert(ChannelType::User0);
+                            effect.fill = std::move(content);
+                            core::FindLayer(p, fill)->content_effects.insert(
+                                core::FindLayer(p, fill)->content_effects.begin(), std::move(effect));
+                        }});
+    const auto layer = [&](const std::string& name, const std::string& owner, bool refused,
+                           const std::function<void(core::Project&, core::Layer&, core::Id)>& shape) {
+        features.push_back({name, owner, refused ? std::optional<ChannelType>(ChannelType::User0) : std::nullopt,
+                            [shape](core::Project& p, core::Id fill) {
+                                core::Layer added;
+                                added.uid = p.AllocateId();
+                                added.name = "added";
+                                shape(p, added, fill);
+                                std::vector<core::Layer>& roots = p.texture_sets.front().stacks.front().root_layers;
+                                roots.insert(roots.begin(), std::move(added));
+                            }});
+    };
+    layer("a paint layer", "phase4.1_nodes-paint-layers", true, [](core::Project&, core::Layer& l, core::Id) {
+        l.kind = core::LayerKind::paint;
+        l.paint = core::PaintContent{};
+    });
+    layer("an instance layer", "phase4.1_nodes-instances-anchors", false, [](core::Project&, core::Layer& l, core::Id fill) {
+        l.kind = core::LayerKind::instance;
+        l.instance_source = fill;
+    });
+    features.push_back({"a UVTile geometry mask", "phase4.5_uv-tiles", ChannelType::User0,
+                        [](core::Project& p, core::Id fill) {
+                            core::GeometryMask& geometry = core::FindLayer(p, fill)->geometry_mask;
+                            geometry.type = core::GeometryMaskType::UVTile;
+                            geometry.inclusion_list = true;
+                            geometry.items = {"1001"};
+                        }});
+    features.push_back({"a Mesh geometry mask", "phase4.2_remaining-nodes", std::nullopt,
+                        [](core::Project& p, core::Id fill) {
+                            core::GeometryMask& geometry = core::FindLayer(p, fill)->geometry_mask;
+                            geometry.inclusion_list = false;
+                            geometry.items = {"other"};
+                        }});
+    features.push_back({"SignedAddition on Height", "phase1.12_compositor-height-normal", std::nullopt,
+                        [](core::Project& p, core::Id fill) {
+                            core::FindLayer(p, fill)->blending[ChannelType::Height] = Blend(BlendingMode::SignedAddition, 1.0);
+                        }});
+    features.push_back({"a uniform colour on Height", "phase1.12_compositor-height-normal", std::nullopt,
+                        [](core::Project& p, core::Id fill) {
+                            core::FillContent& content = FillOf(p, fill);
+                            content.sources[ChannelType::Height] = Uniform(0.5, 0.5, 0.5);
+                            content.active_channels.insert(ChannelType::Height);
+                        }});
+    features.push_back({"a Normal-channel bitmap in a DirectX project", "phase1.12_compositor-height-normal",
+                        ChannelType::Normal, [](core::Project& p, core::Id fill) {
+                            p.settings.normal_map_format = core::NormalMapFormat::DirectX;
+                            core::FillContent& content = FillOf(p, fill);
+                            content.sources[ChannelType::Normal] = Bitmap(std::string(64, 'c'));
+                            content.active_channels.insert(ChannelType::Normal);
+                        }});
+    return features;
+}
+
+int RunNotYetSupported(const fs::path& assets) {
+    std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
+    const std::vector<ChannelType> user0{ChannelType::User0};
+    Builder builder(128, 128, {{ChannelType::User0, ChannelFormat::RGB16}, {ChannelType::Height, ChannelFormat::L16F},
+                             {ChannelType::Normal, ChannelFormat::RGB16F}});
+    core::Layer base = builder.Fill("base", SameSource(user0, Uniform(0.25, 0.5, 0.75)), Same(user0, BlendingMode::Normal, 1.0));
+    base.mask = core::Mask{};
+    base.fill->projection.mode = core::ProjectionMode::Fill;
+    const core::Id fill = base.uid;
+    builder.SetRoot({base});
+    if (!builder.Validate("not-yet-supported")) return Finish();
+
+    const auto newDocument = [&](const std::string& uuid) {
+        core::DocumentState state;
+        state.project_uuid = uuid;
+        state.project = builder.project;
+        return std::make_unique<core::Document>(std::move(state));
+    };
+    const auto request = [](const core::Document& document, const std::string& key) {
+        core::MutationRequest mutation;
+        mutation.tool = "set_feature";
+        mutation.idempotency_key = key;
+        mutation.expected_revision = document.revision();
+        return mutation;
+    };
+    const auto evaluateOn = [&](const core::Project& project, ChannelType channel, CpuEvaluator& cpu) {
+        EvaluateRequest evaluation;
+        evaluation.textureSet = builder.SetId();
+        evaluation.stack = builder.StackId();
+        evaluation.channel = channel;
+        evaluation.resources = std::make_shared<MapResourceProvider>();
+        return cpu.Evaluate(project, evaluation);
+    };
+
+    // Every excluded feature of the proposal: refused before any mutation, naming its owner.
+    std::string transactionFailures;
+    std::string evaluatorFailures;
+    size_t refusedByEvaluator = 0;
+    const std::vector<ExcludedFeature> features = ExcludedFeatures();
+    for (const ExcludedFeature& feature : features) {
+        std::unique_ptr<core::Document> document = newDocument("nys-" + feature.name);
+        document->MarkCheckpoint();
+        const core::Snapshot before = document->snapshot();
+        const core::Project copy = *before.project;
+        const core::RequestOutcome outcome =
+            core::Execute(*document, request(*document, feature.name), [&](core::Edit& edit) {
+                feature.apply(edit.project(), fill);
+                RequireSupported(edit.base(), edit.project());
+            });
+        const core::Snapshot now = document->snapshot();
+        const bool refused = outcome.result && outcome.result->status == core::ResultStatus::failed &&
+                             outcome.result->error_type == "NotYetSupported" &&
+                             outcome.result->error.find(feature.owner) != std::string::npos;
+        const bool unchanged = now.revision == before.revision && now.project.get() == before.project.get() &&
+                               *now.project == copy && document->operations().empty() && !document->NeedsSaving();
+        if (!refused || !unchanged) {
+            transactionFailures += feature.name + " (" +
+                                   (outcome.result ? outcome.result->error_type + ": " + outcome.result->error
+                                                   : std::string("not executed")) +
+                                   ") ";
+        }
+        if (!feature.evaluatorRefuses) continue;
+        core::Project direct = builder.project;
+        feature.apply(direct, fill);
+        CpuEvaluator cpu(templates, kWideLimits);
+        const render::Result<ChannelResult> result = evaluateOn(direct, *feature.evaluatorRefuses, cpu);
+        const std::optional<EvalErrorKind> kind = result ? std::nullopt : EvalErrorKindOf(result.error());
+        if (!kind || ErrorClassName(*kind) != "NotYetSupported" || cpu.cache().stats().liveTiles != 0 ||
+            cpu.cache().stats().misses != 0) {
+            evaluatorFailures += feature.name + " (" + Describe(result) + ") ";
+        }
+        ++refusedByEvaluator;
+    }
+    Check(transactionFailures.empty(),
+          "every excluded feature (" + std::to_string(features.size()) +
+              ": 3D, warp and UV-set projections, symmetry, physical-size scale, one-axis wrap, Material mode, vector, "
+              "font, procedural and reference sources, OCIO, generator, filter, paint, anchor, compare-mask, "
+              "colour-selection effects, content fill and mask levels effects, paint and instance layers, geometry "
+              "masks, Height and DirectX Normal cases) fails its transaction with NotYetSupported naming its owner "
+              "task; the document, its revision, records and save state are unchanged",
+          transactionFailures);
+    Check(evaluatorFailures.empty(),
+          "the " + std::to_string(refusedByEvaluator) +
+              " features the evaluator refuses itself fail evaluation with a kind whose API class is NotYetSupported, "
+              "before any tile is allocated or looked up",
+          evaluatorFailures);
+
+    // The kinds map to one API class each.
+    Check(ErrorClassName(EvalErrorKind::UnsupportedNode) == "NotYetSupported" &&
+              ErrorClassName(EvalErrorKind::UnsupportedBlendMode) == "NotYetSupported" &&
+              ErrorClassName(EvalErrorKind::UnsupportedSource) == "NotYetSupported" &&
+              ErrorClassName(EvalErrorKind::InvalidArgument) == "ValueError" &&
+              ErrorClassName(EvalErrorKind::NotFound) == "ValueError" &&
+              ErrorClassName(EvalErrorKind::MissingResource) == "ResourceNotFoundError" &&
+              ErrorClassName(EvalErrorKind::Internal) == "RuntimeError",
+          "unsupported_node, unsupported_blend_mode and unsupported_source are NotYetSupported; invalid_argument and "
+          "not_found ValueError; missing_resource ResourceNotFoundError; internal RuntimeError");
+
+    // A supported request commits and evaluates.
+    {
+        std::unique_ptr<core::Document> document = newDocument("nys-supported");
+        const core::RequestOutcome outcome =
+            core::Execute(*document, request(*document, "supported"), [&](core::Edit& edit) {
+                core::Layer* layer = core::FindLayer(edit.project(), fill);
+                layer->blending[ChannelType::User0].opacity = 0.5;
+                layer->fill->projection.mode = core::ProjectionMode::UV;
+                layer->fill->projection.uv.filtering_mode = core::FilteringMode::Nearest;
+                core::Effect levels = EffectOf(edit.project(), core::EffectKind::levels);
+                levels.levels = core::LevelsParams{};
+                levels.levels->affected_channel = ChannelType::User0;
+                levels.levels->components.push_back(core::LevelsComponent{});
+                layer->content_effects.insert(layer->content_effects.begin(), std::move(levels));
+                RequireSupported(edit.base(), edit.project());
+            });
+        CpuEvaluator cpu(templates, kWideLimits);
+        const render::Result<ChannelResult> result = evaluateOn(*document->snapshot().project, ChannelType::User0, cpu);
+        Check(outcome.result && outcome.result->status == core::ResultStatus::committed && result,
+              "a supported request (opacity, UV projection with Nearest, a content levels effect) commits and evaluates",
+              (outcome.result ? outcome.result->error_type + ": " + outcome.result->error : std::string("not executed")) +
+                  " / " + Describe(result));
+    }
+
+    // A project that already holds a gap stays editable elsewhere: only touched nodes are checked.
+    {
+        Builder holding = builder;
+        core::Layer instance = holding.Instance("instance", fill);
+        const core::Id instanceUid = instance.uid;
+        holding.Stack().root_layers.insert(holding.Stack().root_layers.begin(), std::move(instance));
+        core::DocumentState state;
+        state.project_uuid = "nys-holding";
+        state.project = holding.project;
+        core::Document document(std::move(state));
+        const core::RequestOutcome edit = core::Execute(document, request(document, "elsewhere"), [&](core::Edit& e) {
+            core::FindLayer(e.project(), fill)->blending[ChannelType::User0].opacity = 0.75;
+            RequireSupported(e.base(), e.project());
+        });
+        const core::RequestOutcome touch = core::Execute(document, request(document, "touch"), [&](core::Edit& e) {
+            core::FindLayer(e.project(), instanceUid)->name = "renamed";
+            RequireSupported(e.base(), e.project());
+        });
+        Check(edit.result && edit.result->status == core::ResultStatus::committed && touch.result &&
+                  touch.result->status == core::ResultStatus::failed && touch.result->error_type == "NotYetSupported",
+              "an edit of a supported node commits in a project that holds an instance layer; touching the instance "
+              "fails with NotYetSupported",
+              (edit.result ? edit.result->error : std::string()) + " / " + (touch.result ? touch.result->error : std::string()));
+    }
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     const std::string_view mode = argc > 1 ? argv[1] : "";
     if (argc < 3) {
         std::fprintf(stderr,
-                     "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks|height-normal <assets-dir> | "
+                     "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks|height-normal|"
+                     "not-yet-supported <assets-dir> | "
                      "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
                      "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|masks-gpu-vs-cpu|"
                      "height-normal-gpu-vs-cpu|diagnostics|diagnostics-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
@@ -6285,6 +6599,7 @@ int main(int argc, char** argv) {
         if (mode == "sources") return RunSources(assets);
         if (mode == "masks") return RunMasks(assets);
         if (mode == "height-normal") return RunHeightNormal(assets);
+        if (mode == "not-yet-supported") return RunNotYetSupported(assets);
         if (mode == "evaluate") {
             if (argc < 6) {
                 std::fprintf(stderr, "usage: uzp-evaluator-tests evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu\n");

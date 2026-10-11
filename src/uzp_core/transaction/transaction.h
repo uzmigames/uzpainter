@@ -74,7 +74,7 @@ struct TransactionResult {
     ChangeSet changes;
     /// Values the calls returned (`Edit::returned`), e.g. the node a named insert resolved.
     json::Object returned;
-    /// Failed: the error class (`ValueError`, `RuntimeError`) and its message.
+    /// Failed: the error class (`ValueError`, `NotYetSupported`, `RuntimeError`) and its message.
     std::string error_type;
     std::string error;
 

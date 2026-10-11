@@ -67,7 +67,9 @@ hidden. `imported` is a hash new in the project; `skipped` a hash an import foun
 (`Edit::NoteSkippedResource`). `ToJson` gives
 `{status, revision, returned, created, modified, removed, hidden, imported, skipped}` plus
 `committed_revision` when committed; a failed result has `error {type, message}` and its changes
-under `would_change`, so a failure never reads as a success.
+under `would_change`, so a failure never reads as a success. The error type is `ValueError` for a
+`core::ValueError`, `NotYetSupported` for a `core::NotYetSupported` (a release gap refused before
+any mutation, decision 082) and `RuntimeError` for any other exception.
 
 ## 4. Operation records and the admission decision
 

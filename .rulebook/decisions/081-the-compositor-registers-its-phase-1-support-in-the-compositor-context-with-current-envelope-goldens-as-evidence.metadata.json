@@ -1,0 +1,13 @@
+{
+  "id": 81,
+  "slug": "the-compositor-registers-its-phase-1-support-in-the-compositor-context-with-current-envelope-goldens-as-evidence",
+  "title": "The compositor registers its Phase 1 support in the `compositor` context, with current-envelope goldens as evidence",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.14_compositor-core",
+    "phase1.2_docmodel-capability-manifest",
+    "phase1.22_pyapi-cli-capabilities"
+  ],
+  "supersededBy": null
+}

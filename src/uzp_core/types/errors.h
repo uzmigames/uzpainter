@@ -16,6 +16,14 @@ public:
     using std::invalid_argument::invalid_argument;
 };
 
+/// A release gap (`docs/architecture/10-python-api.md` §3): the request uses a feature outside the
+/// implemented subset. Raised before any mutation (decision 082); the Python binding maps it to
+/// `uzpainter.NotYetSupported`. The message names the feature and the task that owns it.
+class NotYetSupported : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 /// A manifest cannot be read: malformed JSON, a missing or mistyped key, an unknown enum
 /// member or an unsupported `format_version`. The message starts with the JSON path.
 class ManifestError : public std::runtime_error {

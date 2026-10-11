@@ -1,0 +1,13 @@
+{
+  "id": 82,
+  "slug": "excluded-features-raise-notyetsupported-before-any-mutation-through-one-support-check-and-one-error-class-mapping",
+  "title": "Excluded features raise NotYetSupported before any mutation, through one support check and one error-class mapping",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.14_compositor-core",
+    "phase1.19_pyapi-native-module",
+    "phase1.20_pyapi-facade"
+  ],
+  "supersededBy": null
+}

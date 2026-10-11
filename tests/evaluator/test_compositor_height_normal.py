@@ -28,6 +28,7 @@ from tests.evaluator.test_compositor_tile_dag import (
     raster,
     run_case,
 )
+from tests.evaluator.union_run import observe
 from tools.parity.fit import normal as normal_fit
 from tools.parity.fit.common import Context
 from tools.parity.fit.oracle import Golden
@@ -163,6 +164,7 @@ def test_height_normal_goldens_exact(
                 if recording == "r2" and not stable(golden, key):
                     continue
                 theirs = golden.map(recording, key).values
+                observe(golden, key, recording, "16-bit code value", ours, theirs, domain)
                 n = differing(ours, theirs, domain)
                 if n:
                     problems.append(f"{key} {recording}: {n} values differ")
@@ -172,6 +174,7 @@ def test_height_normal_goldens_exact(
             if recording == "r2" and not stable(golden, key):
                 continue
             theirs = golden.map(recording, key).values[..., :1]
+            observe(golden, key, recording, "float32 value", height, theirs, domain)
             n = differing(height, theirs, domain)
             if n:
                 problems.append(f"{key} {recording}: {n} values differ")
@@ -196,6 +199,9 @@ def test_normal_channel_in_the_virtual_map_exact(
         ours = write16(raster(result, "Normal_OpenGL"))
         for recording in ("r1", "r2"):
             theirs = golden.map(recording, f"{texture_set}/Normal_OpenGL").values
+            observe(
+                golden, f"{texture_set}/Normal_OpenGL", recording, "16-bit code value", ours, theirs
+            )
             n = differing(ours, theirs, None)
             if n:
                 problems.append(f"{texture_set} {recording}: {n} values differ")

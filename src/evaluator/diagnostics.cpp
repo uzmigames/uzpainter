@@ -345,7 +345,7 @@ render::Result<MaterialContext> MaterialOf(const core::Project& project, core::I
                             std::to_string(request.stack));
     }
     if (ctx.path.back()->kind == core::LayerKind::instance) {
-        return EvalFail(EvalErrorKind::UnsupportedNode,
+        return EvalFail(EvalErrorKind::InvalidArgument,
                         "an instance layer is not a material (its solo is undefined): name its source", material);
     }
     return ctx;
@@ -572,14 +572,14 @@ render::Result<RegionStats> ComputeRegionStats(const DiagnosticMap& map, const D
     if (mask.components != 1 || mask.width != map.width || mask.height != map.height ||
         map.values.size() != size_t{map.width} * map.height * map.components ||
         mask.values.size() != size_t{mask.width} * mask.height) {
-        return EvalFail(EvalErrorKind::UnsupportedSource,
+        return EvalFail(EvalErrorKind::InvalidArgument,
                         "region statistics need a one-component mask of the map's size");
     }
     RegionStats stats;
     stats.texels = size_t{map.width} * map.height;
     std::vector<double> maskValues(mask.values.begin(), mask.values.end());
     for (const double m : maskValues) {
-        if (!std::isfinite(m)) return EvalFail(EvalErrorKind::UnsupportedSource, "a mask value is not finite");
+        if (!std::isfinite(m)) return EvalFail(EvalErrorKind::InvalidArgument, "a mask value is not finite");
     }
     stats.maskMean = stats.texels == 0 ? 0.0 : ExactSum(maskValues) / static_cast<double>(stats.texels);
     const uint32_t components = map.components;
@@ -592,7 +592,7 @@ render::Result<RegionStats> ComputeRegionStats(const DiagnosticMap& map, const D
         for (uint32_t c = 0; c < components; ++c) {
             const double v = map.values[t * components + c];
             if (!std::isfinite(v)) {
-                return EvalFail(EvalErrorKind::UnsupportedSource, "a map value inside the mask is not finite");
+                return EvalFail(EvalErrorKind::InvalidArgument, "a map value inside the mask is not finite");
             }
             values[c].push_back(v);
         }
