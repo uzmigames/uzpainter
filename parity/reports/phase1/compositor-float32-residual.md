@@ -49,6 +49,7 @@ It reproduces every RGB32F, L32F and RGB16 map of the four sets. With ab = 1 it 
 | `blend-inputs` s2 | RGB16 x2, sRGB8 x2, RGB8, RGB16F, L16, RGB32F | exact | as before (`EXC-002`) |
 | `group-masks` s0-s3 | RGB16, sRGB8, RGB32F | exact (was 57 RGB16 and 20 631 RGB32F values off in s2-s3) | exact |
 | `group-coverage-order` s0-s3 | RGB32F, L32F, RGB16, sRGB8, RGB8, L8 | exact | exact |
+| `coverage-srgb8-ties` s0-s7 (confirmation, 2026-10-11) | sRGB8 x9, RGB32F | exact | exact |
 | `mask-precision`, `levels-clamp`, `effect-order` s6, blend sweeps, sources, UV sampling | all | unchanged (`blend-kernels.json` residuals identical; `colour-transfer.json`, `uv-sampling.json` byte-identical; `masks-levels.json` changed only by `group-masks` and the new entry) | unchanged |
 
 `parity/semantics/quantisation-profile.json` gains the selected entry `quantisation-isolated-coverage-weights` (exact against r1; r2 within the register entries); `quantisation-isolated-half-alpha`, `quantisation-isolated-root` and `quantisation-over-base` keep their residuals. `parity/semantics/masks-levels.json`: `group-masks` exact, new entry `group-coverage-order` (48 residuals, all 0).
@@ -74,5 +75,10 @@ It reproduces every RGB32F, L32F and RGB16 map of the four sets. With ab = 1 it 
 
 ## Open items
 
-- The sRGB8 coverage rule below 1/2 is measured on eight tie rows of one golden; its mechanism (why binary16 shows only from 1/2 up) is not identified. A recording with sRGB8 coverages on 8-bit ties in [0.25, 0.5) at other opacities would test it.
+- **The sRGB8 coverage rule below 1/2 is confirmed.** The rule was first measured on eight tie rows of one golden. Decision 067 recorded `coverage-srgb8-ties`: the `group-coverage-order` s1 stack, with the top opacity of set i and channel j < 8 at (2k + 1)/510, k = 64 + 8i + j.
+  - Row 0 therefore puts the group coverage on the 8-bit tie (k + 1/2)/255: 63 ties in [0.25, 0.5) and the boundary 1/2.
+  - User8 adds eight opacities with several tied rows (0.3, the earlier golden's, among them). User9 is an RGB32F control.
+  - Under the current profile `painter-12.1-isolated-coverage-weights`, all 80 maps equal both recordings, on the CPU and on the GPU (`test_compositor_mask_effects.py::test_coverage_srgb8_ties_equal_the_golden`).
+  - On 31 of the 63 ties below 1/2, binary16 to nearest would store the code above the plain rule. The recording takes the plain rule on all of them, so the rule of decision 059 holds and the profile is unchanged.
+  - The mechanism is still not identified (why binary16 shows only from 1/2 up). Below 1/2, binary16 toward zero and the plain 8-bit rule are identical (both keep 12 fractional bits), so this golden cannot separate them.
 - The fused read-out and the unrounded grey mean are each decided by few values (3 of 12 RGB32F values, 1 of 4 L32F values of `quantisation-thirds`); further 32-bit float goldens over the base would confirm them.

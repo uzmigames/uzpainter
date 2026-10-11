@@ -119,6 +119,49 @@ std::future<render::Result<VirtualNormalResult>> Evaluator::EvaluateNormal(core:
         });
 }
 
+std::future<render::Result<DiagnosticOutput>> Evaluator::Diagnose(core::Snapshot snapshot, DiagnosticSource source,
+                                                                  DiagnosticRequest request) {
+    const std::int64_t revision = snapshot.revision;
+    return m_engine.Submit(
+        snapshot.project,
+        [this, revision, source, request = std::move(request)](render::EngineContext& context,
+                                                               const core::Project& project)
+            -> render::Result<DiagnosticOutput> {
+            render::Result<State*> state = StateFor(context);
+            if (!state) return render::Unexpected(state.error());
+            (*state)->store.BeginRequest(context);
+            render::Result<DiagnosticOutput> result = EvaluateDiagnosticOn(
+                project, revision, source, request, *m_templates, (*state)->store, (*state)->cache);
+            render::Result<void> flushed = (*state)->store.Flush();
+            (*state)->cache.UnpinAll();
+            (*state)->store.EndRequest();
+            if (result && !flushed) return render::Unexpected(flushed.error());
+            return result;
+        });
+}
+
+std::future<render::Result<MaterialViews>> Evaluator::EvaluateMaterialViews(core::Snapshot snapshot,
+                                                                            core::Id material,
+                                                                            DiagnosticRequest request) {
+    const std::int64_t revision = snapshot.revision;
+    return m_engine.Submit(
+        snapshot.project,
+        [this, revision, material, request = std::move(request)](render::EngineContext& context,
+                                                                 const core::Project& project)
+            -> render::Result<MaterialViews> {
+            render::Result<State*> state = StateFor(context);
+            if (!state) return render::Unexpected(state.error());
+            (*state)->store.BeginRequest(context);
+            render::Result<MaterialViews> result = MaterialViewsOn(
+                project, revision, material, request, *m_templates, (*state)->store, (*state)->cache);
+            render::Result<void> flushed = (*state)->store.Flush();
+            (*state)->cache.UnpinAll();
+            (*state)->store.EndRequest();
+            if (result && !flushed) return render::Unexpected(flushed.error());
+            return result;
+        });
+}
+
 std::future<render::Result<CacheStats>> Evaluator::Stats() {
     auto token = std::make_shared<const int>(0);
     return m_engine.Submit(token, [this](render::EngineContext& context, const int&)
@@ -167,6 +210,24 @@ render::Result<VirtualNormalResult> CpuEvaluator::EvaluateNormal(const core::Pro
                                                                  const VirtualNormalRequest& request) {
     render::Result<VirtualNormalResult> result =
         EvaluateVirtualNormalOn(project, revision, request, *m_templates, m_store, m_cache);
+    m_cache.UnpinAll();
+    return result;
+}
+
+render::Result<DiagnosticOutput> CpuEvaluator::Diagnose(const core::Project& project, std::int64_t revision,
+                                                        const DiagnosticSource& source,
+                                                        const DiagnosticRequest& request) {
+    render::Result<DiagnosticOutput> result =
+        EvaluateDiagnosticOn(project, revision, source, request, *m_templates, m_store, m_cache);
+    m_cache.UnpinAll();
+    return result;
+}
+
+render::Result<MaterialViews> CpuEvaluator::EvaluateMaterialViews(const core::Project& project, std::int64_t revision,
+                                                                  core::Id material,
+                                                                  const DiagnosticRequest& request) {
+    render::Result<MaterialViews> result =
+        MaterialViewsOn(project, revision, material, request, *m_templates, m_store, m_cache);
     m_cache.UnpinAll();
     return result;
 }

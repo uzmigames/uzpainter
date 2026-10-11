@@ -367,17 +367,19 @@ float Hue(float3 c) {
     const bool minR = c.x <= c.y && c.x <= c.z;
     const bool minB = !minR && c.z < c.y;
     const float centre = minB ? 1.0f : (minR ? 3.0f : 5.0f);
-    const float x = minB ? c.y - c.x : (minR ? c.z - c.y : c.x - c.z);
-    const float h6 = Fma(x - 3.0f * eps, HwRcp(d + eps), centre);
+    const float p = minB ? c.y : (minR ? c.z : c.x);
+    const float q = minB ? c.x : (minR ? c.y : c.z);
+    const float h6 = Fma(p - (q + 3.0f * eps), HwRcp(d + eps), centre);
     const float h = h6 * (1.0f / 6.0f);
     return h < 0.0f ? h + 1.0f : h;
 }
 
-// The hexcone weights of a hue (arith.cpp HueWeights).
+// The hexcone weights of a hue in [0, 1], centred on each primary (arith.cpp HueWeights; 1/3 and
+// 2/3 as float32).
 float3 HueWeights(float h) {
-    const float f = h - floor(h);
-    return float3(Clamp01(abs(Fma(f, 6.0f, -3.0f)) - 1.0f), Clamp01(2.0f - abs(Fma(f, 6.0f, -2.0f))),
-                  Clamp01(2.0f - abs(Fma(f, 6.0f, -4.0f))));
+    return float3(Clamp01(Fma(6.0f, abs(h - 0.5f), -1.0f)),
+                  Clamp01(Fma(-6.0f, abs(h - asfloat(0x3EAAAAABu)), 2.0f)),
+                  Clamp01(Fma(-6.0f, abs(h - asfloat(0x3F2AAAABu)), 2.0f)));
 }
 
 float3 BlendColour(float3 a, float3 b, float alpha) {

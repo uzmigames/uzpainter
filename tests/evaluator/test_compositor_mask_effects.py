@@ -223,6 +223,21 @@ def test_group_coverage_order_equals_the_golden(
 
 
 @pytest.mark.parametrize("backend", backends())
+@pytest.mark.parametrize("texture_set", ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"])
+def test_coverage_srgb8_ties_equal_the_golden(
+    evaluator_tests: Path, srgb8_decode: np.ndarray, tmp_path: Path, texture_set: str, backend: str
+) -> None:
+    """phase1.10 (confirmation of decision 059): `coverage-srgb8-ties` (the `group-coverage-order`
+    s1 stack with the top opacity (2k + 1)/510, k = 64..127, so that row 0 puts the sRGB8 group
+    coverage on the 8-bit tie (k + 1/2)/255; User8 at opacities with several tied rows, User9
+    RGB32F) equals both recordings: below 1/2 the coverage takes the plain 8-bit rule, from 1/2
+    up it passes through binary16."""
+    assert_golden(
+        evaluator_tests, tmp_path, srgb8_decode, "coverage-srgb8-ties", texture_set, backend
+    )
+
+
+@pytest.mark.parametrize("backend", backends())
 @pytest.mark.parametrize("texture_set", ["s0", "s1", "s2", "s3"])
 def test_levels_clamp_equals_the_golden(
     evaluator_tests: Path, srgb8_decode: np.ndarray, tmp_path: Path, texture_set: str, backend: str

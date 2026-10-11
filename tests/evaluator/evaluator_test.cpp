@@ -1,6 +1,7 @@
 // Native tests of the compositor (rulebook tasks phase1.5_compositor-tile-dag,
 // phase1.8_compositor-sources-projection, phase1.9_compositor-quantisation-profile,
-// phase1.11_compositor-mask-effects and phase1.12_compositor-height-normal,
+// phase1.11_compositor-mask-effects, phase1.12_compositor-height-normal and
+// phase1.13_compositor-diagnostics,
 // src/evaluator/,
 // docs/architecture/04-layer-stack-and-compositing.md §2, §4, §5, §7). Built by
 // `zig build evaluator-tests` and driven by tests/evaluator/test_compositor_tile_dag.py and
@@ -65,6 +66,14 @@
 //                                        the virtual normal kernel across tile edges, the raw
 //                                        read-out on every format and whole evaluations: GPU =
 //                                        CPU bit for bit
+//   diagnostics <assets> <work-dir>      the diagnostics on the CPU store (phase1.13): isolation
+//                                        never touches the document (also failing midway),
+//                                        contribution = full - isolated, material views and leaks,
+//                                        region statistics (fixtures for the Python check), source
+//                                        names, byte-identical repeats
+//   diagnostics-gpu-vs-cpu <assets> <work-dir>
+//                                        every diagnostic source on the GPU equals the CPU bit for
+//                                        bit; a GPU isolation failing midway
 //   uv-coverage <assets> <work-dir> <mesh> <size>
 //                                        imports <mesh>, rasterises its UV tile and writes the
 //                                        texel-centre coverage (island-edge goldens)
@@ -79,6 +88,7 @@
 #include "evaluator/arith.h"
 #include "evaluator/cpu_store.h"
 #include "evaluator/dag.h"
+#include "evaluator/diagnostics.h"
 #include "evaluator/error.h"
 #include "evaluator/evaluate.h"
 #include "evaluator/evaluator.h"
@@ -703,6 +713,20 @@ int RunArith() {
         }
         Check(kernels == 31, "every documented BlendingMode but PassThrough has a kernel (31 of 32)",
               std::to_string(kernels));
+    }
+    {
+        // The fitted hue of the component modes (blend-kernels.json): a grey hue source takes hue
+        // 0 (red), and a hue that wraps from just below 0 to 1 keeps 1, so blue's centred weight
+        // 2 - 6 |1 - float32(2/3)| stays above zero.
+        const std::array<float, 3> lower{0.5f, 0.0f, 0.0f};
+        const std::array<float, 3> grey =
+            arith::BlendColour(BlendingMode::Tint, lower, {0.25f, 0.25f, 0.25f}, 3, 1.0f);
+        const float u = arith::UnormOperand(15436, 16);
+        const std::array<float, 3> wrapped = arith::BlendColour(
+            BlendingMode::Tint, lower, {u, u, arith::UnormOperand(15404, 16)}, 3, 1.0f);
+        Check(grey[0] == 1.0f && grey[1] == grey[2] && grey[1] > 0.0f && wrapped[0] == 1.0f &&
+                  wrapped[2] > wrapped[1] && wrapped[1] == grey[1],
+              "the component hue: grey is red, a hue wrapped to 1 is not reduced");
     }
 
     // Composite: opaque backdrop is the fitted mix; transparent backdrop passes the source.
@@ -5526,6 +5550,972 @@ int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     return Finish();
 }
 
+// ── diagnostics (phase1.13_compositor-diagnostics) ───────────────────────────
+
+/// A provider that serves `allowed` fetches of its images, then fails (an evaluation that fails
+/// midway: the bitmap of a later tile is not available).
+class FailingProvider final : public IResourceProvider {
+public:
+    FailingProvider(std::shared_ptr<const IResourceProvider> inner, int allowed) : m_inner(std::move(inner)), m_allowed(allowed) {}
+    std::shared_ptr<const DecodedImage> Fetch(std::string_view sha256) const override {
+        ++fetches;
+        return fetches <= m_allowed ? m_inner->Fetch(sha256) : nullptr;
+    }
+    mutable int fetches = 0;
+
+private:
+    std::shared_ptr<const IResourceProvider> m_inner;
+    int m_allowed;
+};
+
+/// The values of a channel result decoded independently of diagnostics.cpp: constant tiles as their
+/// constant, stored samples through the arithmetic tables.
+std::vector<float> DecodedValues(const ChannelResult& result) {
+    const TileFormat& format = result.tileFormat;
+    const uint32_t channels = format.channels;
+    std::vector<float> out(size_t{result.width} * result.height * channels, 0.0f);
+    for (const TileResult& tile : result.tiles) {
+        for (uint32_t y = 0; y < tile.height; ++y) {
+            for (uint32_t x = 0; x < tile.width; ++x) {
+                for (uint32_t c = 0; c < channels; ++c) {
+                    float value = 0.0f;
+                    if (tile.constant) {
+                        value = (*tile.constant)[c];
+                    } else {
+                        const size_t i = (size_t{y} * tile.width + x) * channels + c;
+                        switch (format.encoding) {
+                            case render::TexelEncoding::Unorm8: {
+                                const uint32_t code = static_cast<uint32_t>(tile.texels[i]);
+                                value = format.srgb ? arith::Srgb8Operand(code) : arith::UnormOperand(code, 8);
+                                break;
+                            }
+                            case render::TexelEncoding::Unorm16: {
+                                uint16_t code = 0;
+                                std::memcpy(&code, tile.texels.data() + i * 2, 2);
+                                value = arith::UnormOperand(code, 16);
+                                break;
+                            }
+                            case render::TexelEncoding::Float16: {
+                                uint16_t bits = 0;
+                                std::memcpy(&bits, tile.texels.data() + i * 2, 2);
+                                value = arith::HalfToFloat(bits);
+                                break;
+                            }
+                            case render::TexelEncoding::Float32:
+                                std::memcpy(&value, tile.texels.data() + i * 4, 4);
+                                break;
+                        }
+                    }
+                    out[((size_t{tile.y0} + y) * result.width + tile.x0 + x) * channels + c] = value;
+                }
+            }
+        }
+    }
+    return out;
+}
+
+bool SameBytes(const std::vector<float>& a, const std::vector<float>& b) {
+    return a.size() == b.size() && (a.empty() || std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0);
+}
+
+bool SameMap(const DiagnosticMap& a, const DiagnosticMap& b) {
+    return a.width == b.width && a.height == b.height && a.components == b.components && SameBytes(a.values, b.values);
+}
+
+/// Sets the visibility of layer or effect `uid` of the builder's stack by walking it (the test's
+/// own hide, independent of diagnostics.cpp HiddenCopy).
+bool SetVisible(std::vector<core::Layer>& layers, core::Id uid, bool visible) {
+    for (core::Layer& layer : layers) {
+        bool* flag = layer.uid == uid ? &layer.visible : nullptr;
+        for (core::Effect& effect : layer.content_effects) flag = effect.uid == uid ? &effect.visible : flag;
+        if (layer.mask) {
+            for (core::Effect& effect : layer.mask->effects) flag = effect.uid == uid ? &effect.visible : flag;
+        }
+        if (flag != nullptr) {
+            *flag = visible;
+            return true;
+        }
+        if (SetVisible(layer.children, uid, visible)) return true;
+    }
+    return false;
+}
+
+DiagnosticRequest DiagRequestOf(Builder& builder, std::shared_ptr<const IResourceProvider> resources) {
+    DiagnosticRequest request;
+    request.textureSet = builder.SetId();
+    request.stack = builder.StackId();
+    request.resources = std::move(resources);
+    return request;
+}
+
+/// The contribution fixture: a `width` x 128 set (2048: two tiles) on six channel formats with
+/// uniform and bitmap fills, a group with a mask, content and mask effects and an invisible layer.
+struct ContributionRig {
+    uint32_t width;
+    static constexpr uint32_t kHeight = 128;
+    std::string patternSha = std::string(63, 'c') + "1";
+    std::string maskSha = std::string(63, 'c') + "2";
+    std::shared_ptr<MapResourceProvider> provider = std::make_shared<MapResourceProvider>();
+    Builder builder;
+    explicit ContributionRig(uint32_t width = 128)
+        : width(width),
+          builder(width, kHeight,
+                  {{ChannelType::BaseColor, ChannelFormat::sRGB8},
+                     {ChannelType::SpecularRoughness, ChannelFormat::L16},
+                     {ChannelType::BaseMetalness, ChannelFormat::L8},
+                     {ChannelType::Height, ChannelFormat::L16F},
+                   {ChannelType::User0, ChannelFormat::RGB32F},
+                   {ChannelType::User1, ChannelFormat::RGB16}}) {
+        Build();
+    }
+    std::vector<ChannelType> channels{ChannelType::BaseColor, ChannelType::SpecularRoughness, ChannelType::BaseMetalness,
+                                      ChannelType::Height,    ChannelType::User0,     ChannelType::User1};
+    /// Every node the cases isolate: base, bmp, group, child, top, a content effect, a mask effect,
+    /// an invisible layer.
+    std::vector<core::Id> nodes;
+    core::Id invisible = core::kNoId;
+    core::Id bitmapLayer = core::kNoId;
+    core::Id top = core::kNoId;
+    core::Id effect = core::kNoId;
+    core::Id maskEffect = core::kNoId;
+    core::Id group = core::kNoId;
+
+    void Build() {
+        provider->Add(patternSha, PatternImage(width, kHeight, 3, render::TexelEncoding::Unorm16, 31));
+        provider->Add(maskSha, PatternImage(width, kHeight, 1, render::TexelEncoding::Unorm16, 32));
+        builder.AddResource(patternSha, 100);
+        builder.AddResource(maskSha, 100);
+        core::Layer base = builder.Fill("base", SameSource(channels, Uniform(0.3, 0.5, 0.7)), Same(channels, BlendingMode::Normal, 1.0));
+        core::Layer bmp = builder.Fill("bmp", SameSource(channels, Bitmap(patternSha)), Same(channels, BlendingMode::Normal, 0.6));
+        bmp.fill->projection.mode = core::ProjectionMode::Fill;
+        core::Effect levels = LevelsEffect(builder, LevelsComponentOf(0.1, 0.9, 1.0, 0.0, 1.0, true), ChannelType::SpecularRoughness);
+        core::Effect tint = ContentFillEffect(builder, channels, Uniform(0.9, 0.2, 0.4), BlendingMode::Multiply, 0.5);
+        bmp.content_effects = {tint, levels};  // top first
+        core::Layer c1 = builder.Fill("c1", SameSource(channels, Uniform(0.6, 0.6, 0.2)), Same(channels, BlendingMode::Screen, 0.7));
+        core::Layer c2 = builder.Fill("c2", SameSource(channels, Bitmap(patternSha)), Same(channels, BlendingMode::Overlay, 0.5));
+        c2.fill->projection.mode = core::ProjectionMode::Fill;
+        core::Layer group = builder.Group("g", {c1, c2}, Same(channels, BlendingMode::Multiply, 0.8));
+        core::Effect maskFill = MaskFillEffect(builder, Bitmap(maskSha), BlendingMode::Normal, 1.0);
+        maskFill.fill->projection.mode = core::ProjectionMode::Fill;
+        group.mask = MaskWith(core::MaskBackground::Black, {maskFill});
+        core::Layer off = builder.Fill("off", SameSource(channels, Uniform(1.0, 0.0, 0.0)), Same(channels, BlendingMode::Normal, 1.0));
+        off.visible = false;
+        core::Layer topLayer = builder.Fill("top", SameSource(channels, Uniform(0.2, 0.9, 0.1)), Same(channels, BlendingMode::Normal, 0.4));
+        core::Effect subtract = MaskFillEffect(builder, Bitmap(maskSha), BlendingMode::Subtract, 0.5);
+        subtract.fill->projection.mode = core::ProjectionMode::Fill;
+        topLayer.mask = MaskWith(core::MaskBackground::White, {subtract});
+        nodes = {base.uid, bmp.uid, group.uid, c2.uid, topLayer.uid, tint.uid, subtract.uid, off.uid};
+        effect = tint.uid;
+        maskEffect = subtract.uid;
+        this->group = group.uid;
+        invisible = off.uid;
+        bitmapLayer = bmp.uid;
+        top = topLayer.uid;
+        builder.SetRoot({base, bmp, group, off, topLayer});
+    }
+};
+
+/// The material fixture (128 x 128, an ID mesh map): material B (a group, its mask the right
+/// half) under material A (a group, its mask the left half) and a one-texel Roughness touch-up of
+/// A at (80, 20), inside B's region. `idSpill` adds texel (63, 40), on A's ID island, to B's mask;
+/// `nested` puts B in a group G whose mask is the top half, with one soft texel (100, 10) where
+/// both masks hold code 45000.
+struct MaterialRig {
+    static constexpr uint32_t kSize = 128;
+    std::string maskASha = std::string(63, 'd') + "1";
+    std::string maskBSha;
+    std::string leakSha = std::string(63, 'd') + "3";
+    std::string idSha = std::string(63, 'd') + "4";
+    std::string maskGSha = std::string(63, 'd') + "5";
+    std::shared_ptr<MapResourceProvider> provider = std::make_shared<MapResourceProvider>();
+    std::shared_ptr<DecodedImage> maskB;
+    std::shared_ptr<DecodedImage> maskG;
+    Builder builder{kSize, kSize,
+                    {{ChannelType::BaseColor, ChannelFormat::sRGB8},
+                     {ChannelType::Height, ChannelFormat::L16F},
+                     {ChannelType::Normal, ChannelFormat::RGB16F},
+                     {ChannelType::SpecularRoughness, ChannelFormat::L16},
+                     {ChannelType::BaseMetalness, ChannelFormat::L16}}};
+    core::Id a = core::kNoId;
+    core::Id b = core::kNoId;
+    core::Id g = core::kNoId;
+    core::Id touchUp = core::kNoId;
+    core::Id instance = core::kNoId;
+
+    MaterialRig(bool idSpill, bool nested, bool withId = true)
+        // B's mask differs per variant, so does its hash (bitmaps are bound by content hash).
+        : maskBSha(std::string(62, 'd') + (idSpill ? "1" : "0") + (nested ? "1" : "0")) {
+        provider->Add(maskASha, GreyImage(kSize, [](uint32_t x, uint32_t) { return x < 64 ? 65535u : 0u; }));
+        maskB = GreyImage(kSize, [&](uint32_t x, uint32_t y) {
+            if (nested && x == 100 && y == 10) return 45000u;
+            return x >= 64 || (idSpill && x == 63 && y == 40) ? 65535u : 0u;
+        });
+        provider->Add(maskBSha, maskB);
+        provider->Add(leakSha, GreyImage(kSize, [](uint32_t x, uint32_t y) { return x == 80 && y == 20 ? 65535u : 0u; }));
+        maskG = GreyImage(kSize, [](uint32_t x, uint32_t y) { return x == 100 && y == 10 ? 45000u : y < 64 ? 65535u : 0u; });
+        provider->Add(maskGSha, maskG);
+        auto id = std::make_shared<DecodedImage>();
+        id->width = kSize;
+        id->height = kSize;
+        id->channels = 3;
+        id->encoding = render::TexelEncoding::Unorm8;
+        for (uint32_t y = 0; y < kSize; ++y) {
+            for (uint32_t x = 0; x < kSize; ++x) {
+                const bool left = x < 64;
+                id->values.insert(id->values.end(), {left ? 255u : 0u, 0u, left ? 0u : 255u});
+            }
+        }
+        provider->Add(idSha, id);
+        for (const std::string& sha : {maskASha, maskBSha, leakSha, idSha, maskGSha}) builder.AddResource(sha, 100);
+        if (withId) {
+            core::MeshMapBinding binding;
+            binding.resource = idSha;
+            binding.format = ChannelFormat::RGB8;
+            binding.provenance = core::ImportedProvenance{"id.png", idSha, core::MeshMapRole::geometry_only,
+                                                          core::NormalMapFormat::OpenGL, "", {}};
+            builder.Set().mesh_maps[core::MeshMapUsage::ID] = binding;
+        }
+        const std::vector<ChannelType> all{ChannelType::BaseColor, ChannelType::Height, ChannelType::Normal,
+                                           ChannelType::SpecularRoughness, ChannelType::BaseMetalness};
+        auto material = [&](const std::string& name, std::array<double, 3> colour, double height, double rough,
+                            double metal, std::array<double, 3> normal) {
+            return builder.Fill(name,
+                                {{ChannelType::BaseColor, Uniform(colour[0], colour[1], colour[2])},
+                                 {ChannelType::Height, Uniform(height, height, height)},
+                                 {ChannelType::Normal, Uniform(normal[0], normal[1], normal[2])},
+                                 {ChannelType::SpecularRoughness, Uniform(rough, rough, rough)},
+                                 {ChannelType::BaseMetalness, Uniform(metal, metal, metal)}},
+                                Same(all, BlendingMode::Normal, 1.0));
+        };
+        auto maskOf = [&](const std::string& sha) {
+            core::Effect effect = MaskFillEffect(builder, Bitmap(sha), BlendingMode::Normal, 1.0);
+            effect.fill->projection.mode = core::ProjectionMode::Fill;
+            return MaskWith(core::MaskBackground::Black, {effect});
+        };
+        core::Layer groupB = builder.Group("B", {material("B fill", {0.1, 0.2, 0.8}, 0.0, 0.2, 0.0, {0.5, 0.5, 1.0})},
+                                           Same(all, BlendingMode::Normal, 1.0));
+        groupB.mask = maskOf(maskBSha);
+        b = groupB.uid;
+        core::Layer groupA = builder.Group("A", {material("A fill", {0.8, 0.1, 0.1}, 0.3, 0.8, 1.0, {0.6, 0.5, 0.9})},
+                                           Same(all, BlendingMode::Normal, 1.0));
+        groupA.mask = maskOf(maskASha);
+        a = groupA.uid;
+        core::Layer touch = builder.Fill("A roughness touch-up", {{ChannelType::SpecularRoughness, Uniform(0.8, 0.8, 0.8)}},
+                                         {{ChannelType::SpecularRoughness, Blend(BlendingMode::Normal, 1.0)}});
+        touch.mask = maskOf(leakSha);
+        touchUp = touch.uid;
+        core::Layer copy = builder.Instance("A copy", groupA.uid);
+        copy.visible = false;
+        instance = copy.uid;
+        if (nested) {
+            core::Layer groupG = builder.Group("G", {groupB}, Same(all, BlendingMode::Normal, 1.0));
+            groupG.mask = maskOf(maskGSha);
+            g = groupG.uid;
+            builder.SetRoot({groupG, groupA, touch, copy});
+        } else {
+            builder.SetRoot({groupB, groupA, touch, copy});
+        }
+    }
+
+    /// The channel evaluated by the general evaluator on `project`, decoded.
+    std::vector<float> Channel(const TemplateLibrary& templates, const core::Project& project, ChannelType channel) const {
+        CpuTileStore store;
+        TileCache cache(kWideLimits);
+        EvaluateRequest request;
+        request.textureSet = project.texture_sets.front().id;
+        request.stack = project.texture_sets.front().stacks.front().id;
+        request.channel = channel;
+        request.resources = provider;
+        render::Result<ChannelResult> result = EvaluateOn(project, request, templates, store, cache);
+        if (!result) Check(false, "material fixture evaluates", Describe(result));
+        return result ? DecodedValues(*result) : std::vector<float>{};
+    }
+};
+
+std::vector<DiagnosticSource> MaterialSources(core::Id material) {
+    std::vector<DiagnosticSource> sources;
+    DiagnosticSource mask;
+    mask.kind = DiagnosticSource::Kind::MaterialMask;
+    mask.node = material;
+    sources.push_back(mask);
+    for (const MaterialViewKind view : {MaterialViewKind::ID, MaterialViewKind::BaseColor, MaterialViewKind::Height,
+                                        MaterialViewKind::Normal, MaterialViewKind::Roughness, MaterialViewKind::Metallic}) {
+        for (const auto kind : {DiagnosticSource::Kind::MaterialView, DiagnosticSource::Kind::MaterialLeaks}) {
+            DiagnosticSource source;
+            source.kind = kind;
+            source.view = view;
+            source.node = material;
+            sources.push_back(source);
+        }
+    }
+    for (const ChannelType channel : {ChannelType::BaseColor, ChannelType::SpecularRoughness}) {
+        DiagnosticSource stats;
+        stats.kind = DiagnosticSource::Kind::RegionStats;
+        stats.map = DiagnosticMapId::Channel(channel);
+        stats.node = material;
+        sources.push_back(stats);
+    }
+    return sources;
+}
+
+std::vector<DiagnosticSource> NodeSources(const std::vector<core::Id>& nodes, const std::vector<ChannelType>& channels) {
+    std::vector<DiagnosticSource> sources;
+    for (const core::Id node : nodes) {
+        for (const ChannelType channel : channels) {
+            for (const auto kind : {DiagnosticSource::Kind::Isolated, DiagnosticSource::Kind::Contribution}) {
+                DiagnosticSource source;
+                source.kind = kind;
+                source.map = DiagnosticMapId::Channel(channel);
+                source.node = node;
+                sources.push_back(source);
+            }
+        }
+    }
+    return sources;
+}
+
+/// The bytes an output stands for: its map's floats or its statistics' JSON.
+std::string OutputBytes(const DiagnosticOutput& output) {
+    if (output.stats) return RegionStatsJson(*output.stats);
+    const DiagnosticMap& map = *output.map;
+    std::string bytes = std::to_string(map.width) + "x" + std::to_string(map.height) + "x" + std::to_string(map.components) + ":";
+    bytes.append(reinterpret_cast<const char*>(map.values.data()), map.values.size() * sizeof(float));
+    return bytes;
+}
+
+std::string ViewsBytes(const MaterialViews& views) {
+    std::string bytes = std::to_string(views.material) + ":" + std::to_string(views.inside) + ":";
+    auto append = [&](const DiagnosticMap& map) {
+        bytes.append(reinterpret_cast<const char*>(map.values.data()), map.values.size() * sizeof(float));
+    };
+    append(views.mask);
+    for (const MaterialView& view : views.views) {
+        bytes += std::string(MaterialViewName(view.view)) + ":" + std::to_string(view.leakTexels.size());
+        append(view.values);
+        append(view.leaks);
+    }
+    for (const MaterialViewKind missing : views.missing) bytes += "missing:" + std::string(MaterialViewName(missing));
+    return bytes;
+}
+
+/// The visibility of layer or effect `node` in `project`, or nullopt.
+std::optional<bool> VisibleIn(const core::Project& project, core::Id node) {
+    std::optional<bool> visible;
+    core::ForEachNode(project, [&](const core::NodeVisit& visit) {
+        if (visit.layer != nullptr && visit.layer->uid == node) visible = visit.layer->visible;
+        if (visit.effect != nullptr && visit.effect->uid == node) visible = visit.effect->visible;
+    });
+    return visible;
+}
+
+/// The document checks of 3.1: the document is exactly as it was (same revision object, deep
+/// equality, no record, nothing to save) and `node` has its prior visibility.
+bool DocumentUnchanged(const core::Document& document, const core::Snapshot& before, const core::Project& copy,
+                       core::Id node, bool visible) {
+    const core::Snapshot now = document.snapshot();
+    return now.revision == before.revision && now.project.get() == before.project.get() && *now.project == copy &&
+           document.operations().empty() && !document.NeedsSaving() && VisibleIn(*now.project, node) == visible;
+}
+
+/// The bitmap fetches of one run of `source` on a fresh CPU evaluator (each tile fetches its
+/// uncached bitmaps; a two-tile set fetches half of them in its first tile).
+int FetchesOf(const std::shared_ptr<const TemplateLibrary>& templates, Builder& builder,
+              const std::shared_ptr<const IResourceProvider>& provider, const DiagnosticSource& source) {
+    auto counting = std::make_shared<FailingProvider>(provider, 1 << 30);
+    CpuEvaluator cpu(templates, kWideLimits);
+    (void)cpu.Diagnose(builder.project, 1, source, DiagRequestOf(builder, counting));
+    return counting->fetches;
+}
+
+int RunDiagnostics(const fs::path& assets, const fs::path& dir) {
+    std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
+
+    // 3.1 Isolation never touches the document; a failure midway leaves it exactly as it was.
+    {
+        ContributionRig rig(2048);
+        if (!rig.builder.Validate("diagnostics isolation")) return Finish();
+        core::DocumentState state;
+        state.project_uuid = "diagnostics-isolation";
+        state.project = rig.builder.project;
+        core::Document document(std::move(state));
+        document.MarkCheckpoint();
+        const core::Snapshot before = document.snapshot();
+        const core::Project copy = *before.project;
+        bool ok = true;
+        std::string detail;
+        const std::pair<core::Id, DiagnosticSource::Kind> cases[] = {
+            {rig.bitmapLayer, DiagnosticSource::Kind::Isolated}, {rig.group, DiagnosticSource::Kind::Isolated},
+            {rig.effect, DiagnosticSource::Kind::Isolated},      {rig.maskEffect, DiagnosticSource::Kind::Isolated},
+            {rig.invisible, DiagnosticSource::Kind::Isolated},   {rig.top, DiagnosticSource::Kind::Contribution}};
+        for (const auto& [node, kind] : cases) {
+            {
+                DiagnosticSource source;
+                source.kind = kind;
+                source.map = DiagnosticMapId::Channel(ChannelType::User1);
+                source.node = node;
+                // The fetches of tile 0 succeed, the first of tile 1 fails.
+                const int fetches = FetchesOf(templates, rig.builder, rig.provider, source);
+                auto failing = std::make_shared<FailingProvider>(rig.provider, fetches / 2);
+                CpuEvaluator cpu(templates, kWideLimits);
+                render::Result<DiagnosticOutput> failed =
+                    cpu.Diagnose(*before.project, before.revision, source, DiagRequestOf(rig.builder, failing));
+                const bool midway = fetches >= 2 && fetches % 2 == 0 && !failed &&
+                                    KindName(failed.error()) == "missing_resource" && failing->fetches == fetches / 2 + 1;
+                CpuEvaluator fine(templates, kWideLimits);
+                render::Result<DiagnosticOutput> succeeded =
+                    fine.Diagnose(*before.project, before.revision, source, DiagRequestOf(rig.builder, rig.provider));
+                const bool visible = node != rig.invisible;
+                const bool unchanged = DocumentUnchanged(document, before, copy, node, visible);
+                if (!midway || !succeeded || !unchanged) {
+                    ok = false;
+                    detail += SourceName(source) + (midway ? "" : " (did not fail midway: " + Describe(failed) + ")") +
+                              (succeeded ? "" : " (" + Describe(succeeded) + ")") + (unchanged ? " " : " (document changed) ");
+                }
+            }
+        }
+        Check(ok, "isolation and contribution leave the document, its revision, records and save state exactly as "
+                  "they were, when the evaluation fails midway (tile 1 of 2) and when it succeeds (a layer, a group, "
+                  "content and mask effects, an invisible layer; isolate and contribution)",
+              detail);
+        render::Result<core::Project> unknown = HiddenCopy(*before.project, rig.builder.SetId(), rig.builder.StackId(),
+                                                           std::vector<core::Id>{core::kMaxId});
+        Check(!unknown && KindName(unknown.error()) == "not_found", "isolating a node outside the stack fails with not_found",
+              Describe(unknown));
+    }
+
+    // 3.2 contribution = full - isolated, texel for texel, on six channel formats.
+    {
+        ContributionRig rig;
+        if (!rig.builder.Validate("diagnostics contribution")) return Finish();
+        CpuEvaluator cpu(templates, kWideLimits);
+        const DiagnosticRequest request = DiagRequestOf(rig.builder, rig.provider);
+        bool ok = true;
+        bool zero = true;
+        bool changed = false;
+        size_t compared = 0;
+        std::string detail;
+        for (const ChannelType channel : rig.channels) {
+            for (const core::Id node : rig.nodes) {
+                Builder hidden = rig.builder;
+                SetVisible(hidden.Stack().root_layers, node, false);
+                CpuTileStore store;
+                TileCache cache(kWideLimits);
+                EvaluateRequest er;
+                er.textureSet = rig.builder.SetId();
+                er.stack = rig.builder.StackId();
+                er.channel = channel;
+                er.resources = rig.provider;
+                render::Result<ChannelResult> fullResult = EvaluateOn(rig.builder.project, er, *templates, store, cache);
+                cache.UnpinAll();
+                render::Result<ChannelResult> isolatedResult = EvaluateOn(hidden.project, er, *templates, store, cache);
+                render::Result<ContributionResult> contribution =
+                    ContributionOn(rig.builder.project, 1, DiagnosticMapId::Channel(channel), node, request, *templates,
+                                   cpu.store(), cpu.cache());
+                cpu.cache().UnpinAll();
+                if (!fullResult || !isolatedResult || !contribution) {
+                    ok = false;
+                    detail += std::string(core::ToString(channel)) + " " + std::to_string(node) + ": " +
+                              Describe(contribution) + " ";
+                    continue;
+                }
+                const std::vector<float> expectedFull = DecodedValues(*fullResult);
+                const std::vector<float> expectedIsolated = DecodedValues(*isolatedResult);
+                std::vector<float> expected(expectedFull.size());
+                for (size_t i = 0; i < expected.size(); ++i) expected[i] = expectedFull[i] - expectedIsolated[i];
+                const bool same = SameBytes(contribution->full.values, expectedFull) &&
+                                  SameBytes(contribution->isolated.values, expectedIsolated) &&
+                                  SameBytes(contribution->difference.values, expected);
+                if (!same) detail += std::string(core::ToString(channel)) + " node " + std::to_string(node) + " ";
+                ok = ok && same;
+                compared += expected.size();
+                const bool allZero = std::all_of(expected.begin(), expected.end(), [](float v) { return v == 0.0f; });
+                if (node == rig.invisible) zero = zero && allZero;
+                if (node == rig.bitmapLayer) changed = changed || !allZero;
+            }
+        }
+        Check(ok, "contribution equals the full evaluation minus the evaluation with the node hidden, texel for texel (" +
+                      std::to_string(compared) + " values: sRGB8, L16, L8, L16F, RGB32F, RGB16; 8 nodes), and returns both maps",
+              detail);
+        Check(zero && changed, "an invisible node contributes exactly 0; a visible bitmap layer contributes");
+
+        // The hidden copy is evaluated by the same engine: the prefix below the top layer is served
+        // from the cache.
+        CpuEvaluator warm(templates, kWideLimits);
+        render::Result<DiagnosticMap> full =
+            EvaluateMapOn(rig.builder.project, 1, DiagnosticMapId::Channel(ChannelType::User1), request, *templates,
+                          warm.store(), warm.cache());
+        const uint64_t hitsBefore = warm.cache().stats().hits;
+        render::Result<IsolationResult> isolated =
+            IsolateOn(rig.builder.project, 1, DiagnosticMapId::Channel(ChannelType::User1), rig.top, request, *templates,
+                      warm.store(), warm.cache());
+        Check(full && isolated && warm.cache().stats().hits > hitsBefore && isolated->wasVisible,
+              "isolating the top layer reuses the cached tiles below it (the general evaluator's cache)",
+              Describe(isolated));
+
+        // The virtual normal map: the relief a Height layer adds.
+        const std::string heightSha(64, 'e');
+        auto resources = std::make_shared<MapResourceProvider>();
+        resources->Add(heightSha, HeightCodes(256, 9));
+        Builder nb(256, 256, {{ChannelType::Height, ChannelFormat::L16F}, {ChannelType::Normal, ChannelFormat::RGB16F}});
+        nb.AddResource(heightSha, 1);
+        core::Layer h = nb.Fill("h", {{ChannelType::Height, Bitmap(heightSha)}}, {{ChannelType::Height, Blend(BlendingMode::Normal, 0.75)}});
+        core::Layer h2 = nb.Fill("h2", {{ChannelType::Height, Bitmap(heightSha)}}, {{ChannelType::Height, Blend(BlendingMode::LinearDodge, 0.4)}});
+        const core::Id h2uid = h2.uid;
+        nb.SetRoot({h, h2});
+        if (!nb.Validate("diagnostics virtual normal")) return Finish();
+        Builder nbHidden = nb;
+        SetVisible(nbHidden.Stack().root_layers, h2uid, false);
+        bool normalOk = true;
+        for (const core::NormalMapFormat convention : {core::NormalMapFormat::OpenGL, core::NormalMapFormat::DirectX}) {
+            VirtualNormalRequest vr;
+            vr.textureSet = nb.SetId();
+            vr.stack = nb.StackId();
+            vr.convention = convention;
+            vr.resources = resources;
+            CpuEvaluator reference(templates, kWideLimits);
+            render::Result<VirtualNormalResult> a = reference.EvaluateNormal(nb.project, 1, vr);
+            render::Result<VirtualNormalResult> bHidden = reference.EvaluateNormal(nbHidden.project, 1, vr);
+            render::Result<ContributionResult> c = ContributionOn(nb.project, 1, DiagnosticMapId::VirtualNormal(convention), h2uid,
+                                                                 DiagRequestOf(nb, resources), *templates, cpu.store(), cpu.cache());
+            cpu.cache().UnpinAll();
+            if (!a || !bHidden || !c) {
+                normalOk = false;
+                continue;
+            }
+            std::vector<float> expected(a->texels.size());
+            for (size_t i = 0; i < expected.size(); ++i) expected[i] = a->texels[i] - bHidden->texels[i];
+            normalOk = normalOk && SameBytes(c->difference.values, expected) && c->difference.components == 3 &&
+                       std::any_of(expected.begin(), expected.end(), [](float v) { return v != 0.0f; });
+        }
+        Check(normalOk, "contribution on Normal_OpenGL and Normal_DirectX equals the virtual map minus the map with the "
+                        "Height layer hidden (the relief the layer adds)");
+    }
+
+    // 3.3 material views on the two-material fixture, the injected leaks, the effective mask.
+    {
+        MaterialRig rig(false, false);
+        if (!rig.builder.Validate("diagnostics materials")) return Finish();
+        CpuEvaluator cpu(templates, kWideLimits);
+        render::Result<MaterialViews> views =
+            cpu.EvaluateMaterialViews(rig.builder.project, 1, rig.b, DiagRequestOf(rig.builder, rig.provider));
+        bool ok = views.has_value() && views->views.size() == 6 && views->missing.empty() && views->inside == 64 * 128;
+        std::string detail = Describe(views);
+        if (views) {
+            // The ID view: blue everywhere inside, no leak.
+            const MaterialView& id = views->views[0];
+            ok = ok && id.view == MaterialViewKind::ID && id.leakTexels.empty() && id.modalId &&
+                 *id.modalId == std::array<float, 3>{0.0f, 0.0f, 1.0f};
+            // Channel views: the full values inside, 0 outside; only Roughness leaks, at (40, 10).
+            Builder solo = rig.builder;
+            SetVisible(solo.Stack().root_layers, rig.a, false);
+            SetVisible(solo.Stack().root_layers, rig.touchUp, false);
+            for (size_t k = 1; k < views->views.size(); ++k) {
+                const MaterialView& view = views->views[k];
+                const ChannelType channel = MaterialViewChannel(view.view);
+                ok = ok && view.channel == channel;
+                const std::vector<float> full = rig.Channel(*templates, rig.builder.project, channel);
+                const std::vector<float> own = rig.Channel(*templates, solo.project, channel);
+                const uint32_t n = view.values.components;
+                if (full.size() != view.values.values.size() || own.size() != full.size()) {
+                    ok = false;
+                    continue;
+                }
+                std::vector<float> expected(full.size(), 0.0f);
+                std::vector<float> leaks(size_t{MaterialRig::kSize} * MaterialRig::kSize, 0.0f);
+                for (uint32_t y = 0; y < MaterialRig::kSize; ++y) {
+                    for (uint32_t x = 0; x < MaterialRig::kSize; ++x) {
+                        if (x < 64) continue;
+                        const size_t t = size_t{y} * MaterialRig::kSize + x;
+                        for (uint32_t c = 0; c < n; ++c) {
+                            expected[t * n + c] = full[t * n + c];
+                            if (!SameFloat(full[t * n + c], own[t * n + c])) leaks[t] = 1.0f;
+                        }
+                    }
+                }
+                const bool roughness = view.view == MaterialViewKind::Roughness;
+                const size_t leakTexel = size_t{20} * MaterialRig::kSize + 80;
+                const bool leakOk = roughness ? view.leakTexels.size() == 1 && view.leakTexels[0].x == 80 &&
+                                                    view.leakTexels[0].y == 20 &&
+                                                    SameFloat(view.leakTexels[0].value[0], full[leakTexel]) &&
+                                                    SameFloat(view.leakTexels[0].own[0], own[leakTexel]) &&
+                                                    view.leakTexels[0].value[0] == arith::UnormOperand(arith::WriteUnorm(0.8f, 16), 16) &&
+                                                    view.leakTexels[0].own[0] == arith::UnormOperand(arith::WriteUnorm(0.2f, 16), 16)
+                                              : view.leakTexels.empty();
+                const bool same = SameBytes(view.values.values, expected) && SameBytes(view.leaks.values, leaks) && leakOk;
+                if (!same) detail += std::string(MaterialViewName(view.view)) + " ";
+                ok = ok && same;
+            }
+            // The mask is B's (the bitmap's codes as the 16-bit mask).
+            std::vector<float> mask(size_t{MaterialRig::kSize} * MaterialRig::kSize);
+            for (size_t t = 0; t < mask.size(); ++t) mask[t] = arith::UnormOperand(rig.maskB->values[t], 16);
+            ok = ok && SameBytes(views->mask.values, mask);
+        }
+        Check(ok, "material_views of B on the two-material fixture: the ID view is the ID mesh map inside B's mask (modal "
+                  "blue, no leak), each channel view is the full evaluation inside the mask and 0 outside, and the injected "
+                  "texel of A's Roughness at (80, 20) is the only leak, with its full and solo values",
+              detail);
+
+        MaterialRig spill(true, false);
+        render::Result<MaterialViews> spilled =
+            cpu.EvaluateMaterialViews(spill.builder.project, 1, spill.b, DiagRequestOf(spill.builder, spill.provider));
+        bool spillOk = spilled.has_value() && spilled->views.size() == 6;
+        std::string spillDetail = Describe(spilled);
+        if (spilled) {
+            for (const MaterialView& view : spilled->views) {
+                spillDetail += " " + std::string(MaterialViewName(view.view)) + ":" + std::to_string(view.leakTexels.size());
+                for (const LeakTexel& leak : view.leakTexels) {
+                    spillDetail += "(" + std::to_string(leak.x) + "," + std::to_string(leak.y) + ")";
+                }
+            }
+            const MaterialView& id = spilled->views[0];
+            spillOk = spillOk && id.leakTexels.size() == 1 && id.leakTexels[0].x == 63 && id.leakTexels[0].y == 40 &&
+                      id.leakTexels[0].value == std::array<float, 3>{1.0f, 0.0f, 0.0f} &&
+                      id.leakTexels[0].own == std::array<float, 3>{0.0f, 0.0f, 1.0f} && id.leaks.At(63, 40, 0) == 1.0f;
+            for (size_t k = 1; k < spilled->views.size(); ++k) {
+                const MaterialView& view = spilled->views[k];
+                const size_t expectedLeaks = view.view == MaterialViewKind::Roughness ? 2 : 1;
+                spillOk = spillOk && view.leakTexels.size() == expectedLeaks && view.leaks.At(63, 40, 0) == 1.0f;
+            }
+        }
+        Check(spillOk, "a mask that spills onto another ID island is an ID leak (the texel's ID colour against the modal "
+                       "one) and, with material A over it, a leak of every channel view",
+              spillDetail);
+
+        MaterialRig nested(false, true);
+        if (!nested.builder.Validate("diagnostics nested material")) return Finish();
+        render::Result<MaterialViews> inner =
+            cpu.EvaluateMaterialViews(nested.builder.project, 1, nested.b, DiagRequestOf(nested.builder, nested.provider));
+        bool nestedOk = inner.has_value() && inner->inside == 64 * 64 - 1;
+        std::string nestedDetail = Describe(inner);
+        if (inner) {
+            nestedDetail += " inside " + std::to_string(inner->inside);
+            for (size_t t = 0; t < inner->mask.values.size(); ++t) {
+                const float expected = arith::UnormOperand(nested.maskB->values[t], 16) * arith::UnormOperand(nested.maskG->values[t], 16);
+                if (!SameFloat(inner->mask.values[t], expected) && nestedOk) {
+                    nestedDetail += " texel " + std::to_string(t) + ": " + std::to_string(inner->mask.values[t]) + " vs " +
+                                    std::to_string(expected);
+                }
+                nestedOk = nestedOk && SameFloat(inner->mask.values[t], expected);
+            }
+            const size_t soft = size_t{10} * MaterialRig::kSize + 100;
+            nestedOk = nestedOk && inner->mask.values[soft] < kInsideThreshold &&
+                       arith::UnormOperand(45000, 16) >= kInsideThreshold && inner->views[4].values.At(100, 10, 0) == 0.0f;
+        }
+        Check(nestedOk, "a nested material's region is its effective mask, the float32 product of its mask and the "
+                        "enclosing group's, inside where it is at least 1/2 (a soft texel inside each mask alone is "
+                        "outside the product)",
+              nestedDetail);
+
+        MaterialRig noId(false, false, false);
+        Builder noHeight(MaterialRig::kSize, MaterialRig::kSize, {{ChannelType::BaseColor, ChannelFormat::sRGB8}});
+        core::Layer only = noHeight.Fill("only", {{ChannelType::BaseColor, Uniform(0.5, 0.5, 0.5)}}, {});
+        const core::Id onlyUid = only.uid;
+        noHeight.SetRoot({only});
+        render::Result<MaterialViews> missingId =
+            cpu.EvaluateMaterialViews(noId.builder.project, 1, noId.b, DiagRequestOf(noId.builder, noId.provider));
+        render::Result<MaterialViews> missingChannels =
+            cpu.EvaluateMaterialViews(noHeight.project, 1, onlyUid, DiagRequestOf(noHeight, nullptr));
+        render::Result<MaterialViews> ofInstance =
+            cpu.EvaluateMaterialViews(rig.builder.project, 1, rig.instance, DiagRequestOf(rig.builder, rig.provider));
+        render::Result<MaterialViews> unknown =
+            cpu.EvaluateMaterialViews(rig.builder.project, 1, core::kMaxId, DiagRequestOf(rig.builder, rig.provider));
+        MaterialRig badId(false, false);
+        badId.provider->Add(badId.idSha, PatternImage(32, 32, 3, render::TexelEncoding::Unorm8, 3));
+        render::Result<MaterialViews> wrongSize =
+            cpu.EvaluateMaterialViews(badId.builder.project, 1, badId.b, DiagRequestOf(badId.builder, badId.provider));
+        const bool missingOk =
+            missingId && missingId->missing == std::vector<MaterialViewKind>{MaterialViewKind::ID} &&
+            missingId->views.size() == 5 && missingChannels &&
+            missingChannels->missing == std::vector<MaterialViewKind>{MaterialViewKind::ID, MaterialViewKind::Height,
+                                                                      MaterialViewKind::Normal, MaterialViewKind::Roughness,
+                                                                      MaterialViewKind::Metallic} &&
+            missingChannels->views.size() == 1 && missingChannels->inside == size_t{MaterialRig::kSize} * MaterialRig::kSize;
+        Check(missingOk, "views the set or stack cannot give are listed as missing (no ID mesh map, absent channels); a "
+                         "material without a mask covers the whole set",
+              Describe(missingId) + " " + Describe(missingChannels));
+        Check(!ofInstance && KindName(ofInstance.error()) == "unsupported_node" && !unknown &&
+                  KindName(unknown.error()) == "not_found" && !wrongSize && KindName(wrongSize.error()) == "unsupported_source",
+              "an instance material fails with unsupported_node, an unknown one with not_found, an ID mesh map off the "
+              "set resolution with unsupported_source",
+              Describe(ofInstance) + " " + Describe(unknown) + " " + Describe(wrongSize));
+    }
+
+    // 3.4 region statistics: the fixtures the Python test recomputes independently.
+    {
+        std::mt19937 rng(1313);
+        std::uniform_real_distribution<float> value(-0.25f, 1.25f);
+        auto write = [&](const std::string& name, const DiagnosticMap& map, const DiagnosticMap& mask) {
+            render::Result<RegionStats> stats = ComputeRegionStats(map, mask);
+            std::ofstream out(dir / ("region-stats-" + name + ".json"), std::ios::binary);
+            out << "{\"width\":" << map.width << ",\"height\":" << map.height << ",\"components\":" << map.components
+                << ",\"map\":[";
+            for (size_t i = 0; i < map.values.size(); ++i) out << (i ? "," : "") << std::bit_cast<uint32_t>(map.values[i]);
+            out << "],\"mask\":[";
+            for (size_t i = 0; i < mask.values.size(); ++i) out << (i ? "," : "") << std::bit_cast<uint32_t>(mask.values[i]);
+            out << "],\"stats\":" << (stats ? RegionStatsJson(*stats) : std::string("null")) << "}";
+            return stats;
+        };
+        const float maskValues[] = {0.0f, 0.25f, 0.4999f, 0.5f, 0.75f, 1.0f};
+        DiagnosticMap colour{37, 23, 3, {}};
+        DiagnosticMap grey{37, 23, 1, {}};
+        DiagnosticMap mask{37, 23, 1, {}};
+        DiagnosticMap empty{37, 23, 1, std::vector<float>(37 * 23, 0.25f)};
+        for (size_t t = 0; t < size_t{37} * 23; ++t) {
+            for (int c = 0; c < 3; ++c) colour.values.push_back(t % 7 == 0 ? 0.5f : value(rng));
+            grey.values.push_back(t % 5 == 0 ? 0.0f : value(rng));
+            mask.values.push_back(maskValues[rng() % 6]);
+        }
+        render::Result<RegionStats> a = write("colour", colour, mask);
+        render::Result<RegionStats> b = write("grey", grey, mask);
+        render::Result<RegionStats> c = write("empty", grey, empty);
+        size_t inside = 0;
+        for (const float m : mask.values) inside += m >= 0.5f ? 1 : 0;
+        Check(a && b && c && a->inside == inside && a->luminance && a->saturation && a->components.size() == 3 &&
+                  b->components.size() == 1 && !b->luminance && c->inside == 0 && c->components.empty() && c->maskMean == 0.25,
+              "region_stats counts the texels whose mask is at least 1/2, gives per-component, luminance and saturation "
+              "statistics of three-component maps and none over an empty region (fixtures written for the Python check)");
+        DiagnosticMap nan = grey;
+        nan.values[0] = std::nanf("");
+        DiagnosticMap full{37, 23, 1, std::vector<float>(37 * 23, 1.0f)};
+        render::Result<RegionStats> wide = ComputeRegionStats(grey, colour);
+        render::Result<RegionStats> notFinite = ComputeRegionStats(nan, full);
+        Check(!wide && KindName(wide.error()) == "unsupported_source" && !notFinite &&
+                  KindName(notFinite.error()) == "unsupported_source",
+              "region_stats refuses a mask of more than one component and a value inside that is not finite");
+
+        // The export plan's statistics source is the same computation over the evaluated map and mask.
+        MaterialRig rig(false, false);
+        CpuEvaluator cpu(templates, kWideLimits);
+        const DiagnosticRequest request = DiagRequestOf(rig.builder, rig.provider);
+        DiagnosticSource source;
+        source.kind = DiagnosticSource::Kind::RegionStats;
+        source.map = DiagnosticMapId::Channel(ChannelType::BaseColor);
+        source.node = rig.b;
+        render::Result<DiagnosticOutput> named = cpu.Diagnose(rig.builder.project, 1, source, request);
+        render::Result<DiagnosticMap> map = EvaluateMapOn(rig.builder.project, 1, source.map, request, *templates, cpu.store(), cpu.cache());
+        render::Result<DiagnosticMap> materialMask = MaterialMaskOn(rig.builder.project, rig.b, request, *templates, cpu.store(), cpu.cache());
+        cpu.cache().UnpinAll();
+        std::optional<RegionStats> direct;
+        if (map && materialMask) {
+            render::Result<RegionStats> computed = ComputeRegionStats(*map, *materialMask);
+            if (computed) direct = *computed;
+        }
+        Check(named && direct && named->stats && *named->stats == *direct && direct->inside == 64 * 128 &&
+                  direct->components[2].p50 == arith::Srgb8Operand(arith::Srgb8Store(0.8f)),
+              "the regionStats source equals region_stats over the evaluated map and the material's mask",
+              Describe(named));
+    }
+
+    // 2.5 Every diagnostic is a source the export plan names.
+    {
+        bool roundTrip = true;
+        std::string detail;
+        std::vector<DiagnosticSource> sources = NodeSources({7}, {ChannelType::BaseColor, ChannelType::User31});
+        for (const DiagnosticSource& s : MaterialSources(9)) sources.push_back(s);
+        for (const auto kind : {DiagnosticSource::Kind::Isolated, DiagnosticSource::Kind::Contribution,
+                                DiagnosticSource::Kind::RegionStats}) {
+            for (const core::NormalMapFormat convention : {core::NormalMapFormat::OpenGL, core::NormalMapFormat::DirectX}) {
+                DiagnosticSource s;
+                s.kind = kind;
+                s.map = DiagnosticMapId::VirtualNormal(convention);
+                s.node = core::kMaxId;
+                sources.push_back(s);
+            }
+        }
+        for (const DiagnosticSource& s : sources) {
+            render::Result<DiagnosticSource> parsed = ParseSourceName(SourceName(s));
+            if (!parsed || !(*parsed == s)) {
+                roundTrip = false;
+                detail += SourceName(s) + " ";
+            }
+        }
+        Check(roundTrip && SourceName(sources.front()) == "isolated/BaseColor/7" &&
+                  SourceName(MaterialSources(9)[0]) == "materialMask/9" &&
+                  SourceName(MaterialSources(9)[1]) == "materialView/ID/9" && kDiagnosticMapType == "diagnosticMap",
+              "every diagnostic source name round-trips (" + std::to_string(sources.size()) +
+                  " names: isolated, contribution, materialMask, materialView, materialLeaks, regionStats; channels and "
+                  "both virtual normal maps)",
+              detail);
+        bool refused = true;
+        for (const std::string_view bad :
+             {"", "isolated", "isolated/BaseColor", "isolated/BaseColor/1/2", "unknown/BaseColor/1", "isolated/Nope/1",
+              "isolated/BaseColor/0", "isolated/BaseColor/01", "isolated/BaseColor/-1", "isolated/BaseColor/1x",
+              "materialView/User0/5", "materialMask/x", "materialMask/BaseColor/5", "isolated/BaseColor/9223372036854775808"}) {
+            render::Result<DiagnosticSource> parsed = ParseSourceName(bad);
+            if (parsed || KindName(parsed.error()) != "not_found") {
+                refused = false;
+                detail += std::string(bad) + " ";
+            }
+        }
+        Check(refused, "malformed source names fail with not_found (kind, map, view, part count, uid)", detail);
+    }
+
+    // 2.5 / 3.5 The named sources equal the direct diagnostics, and every output is byte-identical
+    // across two runs (fresh evaluators) and on a warm cache.
+    {
+        ContributionRig crig;
+        MaterialRig mrig(true, true);
+        struct Case {
+            Builder* builder;
+            std::shared_ptr<const IResourceProvider> provider;
+            std::vector<DiagnosticSource> sources;
+        };
+        std::vector<Case> cases{{&crig.builder, crig.provider, NodeSources(crig.nodes, {ChannelType::BaseColor, ChannelType::User0})},
+                                {&mrig.builder, mrig.provider, MaterialSources(mrig.b)}};
+        for (const core::Id node : {mrig.a, mrig.touchUp}) {
+            for (const DiagnosticSource& s : NodeSources({node}, {ChannelType::SpecularRoughness})) cases[1].sources.push_back(s);
+        }
+        bool identical = true;
+        bool direct = true;
+        size_t outputs = 0;
+        std::string detail;
+        for (Case& c : cases) {
+            CpuEvaluator first(templates, kWideLimits);
+            CpuEvaluator second(templates, kWideLimits);
+            const DiagnosticRequest request = DiagRequestOf(*c.builder, c.provider);
+            for (const DiagnosticSource& source : c.sources) {
+                render::Result<DiagnosticOutput> one = first.Diagnose(c.builder->project, 4, source, request);
+                render::Result<DiagnosticOutput> two = second.Diagnose(c.builder->project, 4, source, request);
+                render::Result<DiagnosticOutput> warm = first.Diagnose(c.builder->project, 4, source, request);
+                if (!one || !two || !warm || OutputBytes(*one) != OutputBytes(*two) || OutputBytes(*one) != OutputBytes(*warm) ||
+                    one->revision != 4) {
+                    identical = false;
+                    detail += SourceName(source) + (one ? "" : ": " + Describe(one)) + " ";
+                    continue;
+                }
+                ++outputs;
+                CpuEvaluator reference(templates, kWideLimits);
+                std::optional<DiagnosticMap> expected;
+                switch (source.kind) {
+                    case DiagnosticSource::Kind::Isolated: {
+                        render::Result<IsolationResult> r = IsolateOn(c.builder->project, 4, source.map, source.node, request,
+                                                                      *templates, reference.store(), reference.cache());
+                        if (r) expected = r->map;
+                        break;
+                    }
+                    case DiagnosticSource::Kind::Contribution: {
+                        render::Result<ContributionResult> r = ContributionOn(c.builder->project, 4, source.map, source.node,
+                                                                              request, *templates, reference.store(), reference.cache());
+                        if (r) expected = r->difference;
+                        break;
+                    }
+                    case DiagnosticSource::Kind::MaterialMask:
+                    case DiagnosticSource::Kind::MaterialView:
+                    case DiagnosticSource::Kind::MaterialLeaks: {
+                        render::Result<MaterialViews> r = reference.EvaluateMaterialViews(c.builder->project, 4, source.node, request);
+                        if (!r) break;
+                        if (source.kind == DiagnosticSource::Kind::MaterialMask) {
+                            expected = r->mask;
+                            break;
+                        }
+                        for (const MaterialView& view : r->views) {
+                            if (view.view == source.view) {
+                                expected = source.kind == DiagnosticSource::Kind::MaterialView ? view.values : view.leaks;
+                            }
+                        }
+                        break;
+                    }
+                    case DiagnosticSource::Kind::RegionStats: continue;
+                }
+                if (!expected || !SameMap(*expected, *one->map)) {
+                    direct = false;
+                    detail += "direct:" + SourceName(source) + " ";
+                }
+            }
+        }
+        Check(identical, "every diagnostic output is byte-identical across two runs and on a warm cache (" +
+                             std::to_string(outputs) + " outputs)",
+              detail);
+        Check(direct, "every named source equals its direct diagnostic (isolate, contribution, material mask, views and leaks)",
+              detail);
+    }
+    return Finish();
+}
+
+int RunDiagnosticsGpuVsCpu(const fs::path& assets, const fs::path& dir) {
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
+    std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
+    ContributionRig crig;
+    MaterialRig mrig(true, true);
+    struct Case {
+        Builder* builder;
+        std::shared_ptr<const IResourceProvider> provider;
+        std::vector<DiagnosticSource> sources;
+    };
+    std::vector<Case> cases{{&crig.builder, crig.provider, NodeSources(crig.nodes, crig.channels)},
+                            {&mrig.builder, mrig.provider, MaterialSources(mrig.b)}};
+    for (const core::Id node : {mrig.a, mrig.touchUp, mrig.g}) {
+        for (const DiagnosticSource& s : NodeSources({node}, {ChannelType::BaseColor, ChannelType::SpecularRoughness, ChannelType::Normal})) {
+            cases[1].sources.push_back(s);
+        }
+    }
+    Evaluator gpu(engine, templates);
+    size_t outputs = 0;
+    bool same = true;
+    std::string detail;
+    for (Case& c : cases) {
+        const core::Snapshot snapshot{5, std::make_shared<const core::Project>(c.builder->project)};
+        const DiagnosticRequest request = DiagRequestOf(*c.builder, c.provider);
+        CpuEvaluator cpu(templates, kWideLimits);
+        for (const DiagnosticSource& source : c.sources) {
+            render::Result<DiagnosticOutput> expected = cpu.Diagnose(*snapshot.project, snapshot.revision, source, request);
+            std::future<render::Result<DiagnosticOutput>> once = gpu.Diagnose(snapshot, source, request);
+            render::Result<DiagnosticOutput> actual = Get(once);
+            std::future<render::Result<DiagnosticOutput>> twice = gpu.Diagnose(snapshot, source, request);
+            render::Result<DiagnosticOutput> again = Get(twice);
+            if (!expected || !actual || !again || OutputBytes(*expected) != OutputBytes(*actual) ||
+                OutputBytes(*actual) != OutputBytes(*again) || actual->revision != 5) {
+                same = false;
+                detail += SourceName(source) + (actual ? "" : ": " + Describe(actual)) + " ";
+                continue;
+            }
+            ++outputs;
+        }
+        if (c.builder != &mrig.builder) continue;
+        CpuEvaluator cpuViews(templates, kWideLimits);
+        render::Result<MaterialViews> expectedViews = cpuViews.EvaluateMaterialViews(*snapshot.project, 5, mrig.b, request);
+        std::future<render::Result<MaterialViews>> viewsFuture = gpu.EvaluateMaterialViews(snapshot, mrig.b, request);
+        render::Result<MaterialViews> actualViews = Get(viewsFuture);
+        if (!expectedViews || !actualViews || ViewsBytes(*expectedViews) != ViewsBytes(*actualViews) ||
+            expectedViews->views[0].leakTexels != actualViews->views[0].leakTexels) {
+            same = false;
+            detail += "material views ";
+        }
+    }
+    Check(same, "every diagnostic source on the GPU equals the CPU reference bit for bit and is byte-identical across two "
+                "GPU runs (" + std::to_string(outputs) + " outputs; isolate and contribution on six channel formats, "
+                "material masks, views, leaks and region statistics)",
+          detail);
+
+    // A GPU evaluation that fails midway leaves the document as it was.
+    ContributionRig wide(2048);
+    core::DocumentState state;
+    state.project_uuid = "diagnostics-gpu-isolation";
+    state.project = wide.builder.project;
+    core::Document document(std::move(state));
+    document.MarkCheckpoint();
+    const core::Snapshot before = document.snapshot();
+    const core::Project copy = *before.project;
+    DiagnosticSource source;
+    source.kind = DiagnosticSource::Kind::Contribution;
+    source.map = DiagnosticMapId::Channel(ChannelType::BaseColor);
+    source.node = wide.top;
+    const int fetches = FetchesOf(templates, wide.builder, wide.provider, source);
+    auto failing = std::make_shared<FailingProvider>(wide.provider, fetches / 2);
+    Evaluator fresh(engine, templates);
+    std::future<render::Result<DiagnosticOutput>> future = fresh.Diagnose(before, source, DiagRequestOf(wide.builder, failing));
+    render::Result<DiagnosticOutput> failed = Get(future);
+    fresh.Shutdown();
+    gpu.Shutdown();
+    Check(!failed && KindName(failed.error()) == "missing_resource" && failing->fetches == fetches / 2 + 1 &&
+              DocumentUnchanged(document, before, copy, wide.top, true),
+          "a GPU isolation that fails midway leaves the document, its revision, records and save state as they were",
+          Describe(failed));
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -5535,7 +6525,7 @@ int main(int argc, char** argv) {
                      "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks|height-normal <assets-dir> | "
                      "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
                      "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|masks-gpu-vs-cpu|"
-                     "height-normal-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
+                     "height-normal-gpu-vs-cpu|diagnostics|diagnostics-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
         return 2;
     }
@@ -5586,6 +6576,8 @@ int main(int argc, char** argv) {
         else if (mode == "trig-hardware") code = RunTrigHardware(dir);
         else if (mode == "masks-gpu-vs-cpu") code = RunMasksGpuVsCpu(assets, dir);
         else if (mode == "height-normal-gpu-vs-cpu") code = RunHeightNormalGpuVsCpu(assets, dir);
+        else if (mode == "diagnostics") code = RunDiagnostics(assets, dir);
+        else if (mode == "diagnostics-gpu-vs-cpu") code = RunDiagnosticsGpuVsCpu(assets, dir);
         else if (mode == "uv-coverage") {
             if (argc < 6) {
                 std::fprintf(stderr, "usage: uzp-evaluator-tests uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");

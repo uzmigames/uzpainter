@@ -3,12 +3,12 @@
 `src/evaluator/hwmath.h`, `src/evaluator/shaders/evaluator_blend.hlsl`).
 
 The normal-map modes rotate the upper normal by the opacity with the recording GPU's sine, cosine
-and GLSL arcsine; the component modes use the fitted hue; a PassThrough group composites its
-children onto a copy of the stack below it and mixes by its opacity and mask (the UI-set golden
-`semantics-ui/group-passthrough-masks` of the current envelope). Their Tier 0 sweeps run in
-`test_compositor_blend_kernels.py` (the normal-map modes are exact there, the component modes
-reproduce their published residuals), and GPU = CPU over every mode is `kernel-sweep` and
-`gpu-vs-cpu` of `test_compositor_tile_dag.py`. The native `arith` case runs anywhere;
+and GLSL arcsine; the component modes use the float32 hue identified on `blend-component-hue`; a
+PassThrough group composites its children onto a copy of the stack below it and mixes by its
+opacity and mask (the UI-set golden `semantics-ui/group-passthrough-masks` of the current
+envelope). Their Tier 0 sweeps run in `test_compositor_blend_kernels.py` (every mode is exact
+there), and GPU = CPU over every mode is `kernel-sweep` and `gpu-vs-cpu` of
+`test_compositor_tile_dag.py`. The native `arith` case runs anywhere;
 `trig-hardware` needs a DX12 adapter (decision 028), and the sine and cosine tables describe the
 RTX 4090 the Tier 0 goldens were recorded on.
 """
@@ -39,6 +39,14 @@ def test_glsl_arcsine_and_trig_index(evaluator_tests: Path) -> None:
     passed, _ = run_case(evaluator_tests, "arith")
     assert "hw::Asin equals the recording GPU's GLSL asin on 48 measured inputs" in passed
     assert "the sine and cosine tables cover [0, float32(pi / 2)] with 2^23 entries" in passed
+
+
+def test_component_hue_rules(evaluator_tests: Path) -> None:
+    """2.1, 2.4: the fitted hue of Tint, Saturation, Color and Value takes red for a grey source
+    and keeps a hue wrapped to 1 unreduced (its Tier 0 sweeps, `blend-component` and
+    `blend-component-hue`, run in `test_compositor_blend_kernels.py`)."""
+    passed, _ = run_case(evaluator_tests, "arith")
+    assert "the component hue: grey is red, a hue wrapped to 1 is not reduced" in passed
 
 
 def test_trig_tables_equal_the_gpu(evaluator_tests: Path, tmp_path: Path) -> None:

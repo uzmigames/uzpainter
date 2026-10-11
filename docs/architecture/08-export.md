@@ -84,3 +84,14 @@ Pass condition: rows 1–7 also run on the Painter delivery of the same project,
 ## 6. Diagnostics through the same engine
 
 Any channel, mesh map, mask, isolated layer, difference map or unlit BaseColor is an export with the appropriate `srcMapType`/diagnostic source (EXP-04, LAY-09, LAY-14, INT-13); curvature and other mesh maps export at native precision with their recorded normalisation.
+
+The diagnostic sources (decision 076, `src/evaluator/diagnostics.h`) use `srcMapType` `diagnosticMap`. This is a UzPainter extension; Painter's own values keep their meaning. The `srcMapName` values are:
+
+- `isolated/<map>/<node>`: the map with the node hidden;
+- `contribution/<map>/<node>`: full − isolated, a signed float map;
+- `materialMask/<material>`: the effective mask;
+- `materialView/<view>/<material>`: the view inside the region, 0 outside;
+- `materialLeaks/<view>/<material>`: 1 at a leak, else 0;
+- `regionStats/<map>/<material>`: statistics, written as canonical JSON, never as an image.
+
+`<map>` is a channel name, `Normal_OpenGL` or `Normal_DirectX`. `<view>` is `ID`, `BaseColor`, `Height`, `Normal`, `Roughness` or `Metallic`. Uids are in decimal. Raster sources are float32 values, written with the file's write rule. A name that does not parse is an invalid config, and so is a statistics source in an image channel slot.

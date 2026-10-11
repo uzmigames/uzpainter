@@ -1,0 +1,11 @@
+{
+  "id": 73,
+  "slug": "the-component-modes-float32-hue-is-identified-on-the-hue-grid-and-tint-saturation-color-and-value-are-exact",
+  "title": "The component modes' float32 hue is identified on the hue grid, and Tint, Saturation, Color and Value are exact",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.11_compositor-blend-gaps"
+  ],
+  "supersededBy": null
+}

@@ -268,6 +268,7 @@ const evaluator_sources = [_][]const u8{
     "evaluator/arith.cpp",
     "evaluator/cpu_store.cpp",
     "evaluator/dag.cpp",
+    "evaluator/diagnostics.cpp",
     "evaluator/error.cpp",
     "evaluator/evaluate.cpp",
     "evaluator/evaluator.cpp",

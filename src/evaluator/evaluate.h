@@ -79,6 +79,13 @@ struct EvalEnvironment {
 [[nodiscard]] render::Result<ChannelResult> EvaluateChannel(const ChannelDag& dag,
                                                             EvalEnvironment& env);
 
+/// The mask of `layer` (BuildLayerMask) over the set of `frame`, tile by tile: its constant or its
+/// 16-bit raster as the layer blends with it, computed and cached by the same mask chain as a
+/// channel evaluation (the tiles one serves the other). The result's format is `kMaskFormat`
+/// (one channel); its `channel` is `frame`'s, which the mask does not depend on.
+[[nodiscard]] render::Result<ChannelResult> EvaluateLayerMask(const ChannelDag& frame, const DagLayer& layer,
+                                                              EvalEnvironment& env);
+
 /// The read-out of tile (`tx`, `ty`) before the channel's write rule (the virtual normal maps'
 /// input, height_to_normal.h): the isolated root composited over `base` in float32, a constant
 /// for an empty stack, else a raw 32-bit float tile of the channel's channel count, cached and

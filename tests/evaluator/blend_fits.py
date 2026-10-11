@@ -4,9 +4,11 @@
 Every documented `BlendingMode` as the evaluator implements it (`src/evaluator/arith.cpp`,
 `shaders/evaluator_blend.hlsl`, `hwmath.h`), evaluated by the CPU store on the Tier 0 blend sweeps
 (`blend-basic`, `blend-additive`, `blend-contrast`, `blend-component`: field B over field A in one
-mode per texture set on eight channels of six formats at opacities 1, 0.5 and 0.25) and on the
-Normal channel (`blend-normal-channel`), against both recordings, as |delta| statistics in export
-units only (CONTRACT §6.4; nothing recorded is published). The Normal-channel stacks import the
+mode per texture set on eight channels of six formats at opacities 1, 0.5 and 0.25), on the hue
+grid of the component modes and the off-grid opacities and flat normals of the normal-map modes
+(`blend-component-hue`, `blend-normal-opacity` of the current envelope) and on the Normal channel
+(`blend-normal-channel`), against both recordings, as |delta| statistics in export units
+only (CONTRACT §6.4; nothing recorded is published). The Normal-channel stacks import the
 authored normal fields as they are: the evaluator applies the channel's import rule (r, 1 - g, b)
 that `blend-modes.json` records (phase1.12_compositor-height-normal). Run on the owner's machine:
 
@@ -118,6 +120,19 @@ SWEEPS: dict[str, tuple[str, str]] = {
 }
 NORMAL_SETS = {"NormalMapCombine": "s1", "NormalMapDetail": "s2", "NormalMapInverseDetail": "s3"}
 COMPONENT_MODES = ("Tint", "Saturation", "Color", "Value")
+# Goldens of the current envelope (decision 067) and the texture sets recording each mode: the hue
+# grid of the component modes, the normal-map modes off the recorded opacities and on flat normals.
+HUE = "semantics/blend-component-hue"
+NORMAL_OPACITY = "semantics/blend-normal-opacity"
+ENVELOPE_SETS: dict[str, tuple[tuple[str, str], ...]] = {
+    "Tint": ((HUE, "s0"), (HUE, "s4")),
+    "Color": ((HUE, "s1"),),
+    "Saturation": ((HUE, "s2"),),
+    "Value": ((HUE, "s3"),),
+    "NormalMapCombine": ((NORMAL_OPACITY, "s0"), (NORMAL_OPACITY, "s3")),
+    "NormalMapDetail": ((NORMAL_OPACITY, "s1"), (NORMAL_OPACITY, "s4")),
+    "NormalMapInverseDetail": ((NORMAL_OPACITY, "s2"), (NORMAL_OPACITY, "s5")),
+}
 NORMAL_MODES = tuple(NORMAL_SETS)
 
 W3C = source("S-W3C-BLEND", "§10.1-10.2 separable blend modes; §10.3 non-separable (candidate)")
@@ -194,13 +209,14 @@ def hsv_formula(mode: str) -> str:
     return (
         f"{mode}: f = HSV({HSV_TEXT[mode]}) with the value doubled, in float32 (fitted, "
         "phase1.11): hue in turns from the smallest component (red first, then green before "
-        "blue on ties), centre C = 1 (blue), 3 (red), 5 (green) and X the difference of the "
-        "other two (g - r, b - g, r - b): h6 = fma(X - 3e, rcp(d + e), C), d = max - min, "
-        "e = 2^-12, h = h6 float32(1/6), plus 1 if negative; hue weights with f = h - floor(h): "
-        "red |fma(f, 6, -3)| - 1, green 2 - |fma(f, 6, -2)|, blue 2 - |fma(f, 6, -4)|, clamped "
-        "to [0, 1]; v = 2 max, lo = v fma(-d', rcp(max' + e), 1) of the saturation source (d', "
-        "max'; Saturation: 1 - d' rcp(max' + e) with two roundings), each component "
-        f"fma(v - lo, w, lo). A grey channel keeps A (Value: B). {MIX} {HW}"
+        "blue on ties), centre C = 1 (blue), 3 (red), 5 (green) and p, q the other two (g and "
+        "r, b and g, r and b): h6 = fma(p - (q + 3e), rcp(d + e), C), d = max - min, e = 2^-12, "
+        "h = h6 float32(1/6), plus 1 if negative (1 itself kept); hue weights centred on the "
+        "primaries: red fma(6, |h - 1/2|, -1), green fma(-6, |h - 1/3|, 2), blue "
+        "fma(-6, |h - 2/3|, 2) with 1/3 and 2/3 as float32, clamped to [0, 1]; v = 2 max, "
+        "lo = v fma(-d', rcp(max' + e), 1) of the saturation source (d', max'; Saturation: "
+        "1 - d' rcp(max' + e) with two roundings), each component fma(v - lo, w, lo). A grey "
+        f"channel keeps A (Value: B). {MIX} {HW}"
     )
 
 
@@ -212,7 +228,7 @@ def normal_formula(mode: str) -> str:
         "with the recording GPU's GLSL arcsine (Vulkan and OpenGL; D3D12 differs); "
         "b' = (b.x k, b.y k, cos(alpha t)), "
         "k = sin(alpha t) rsqrt(fma(-z, z, 1)), sine and cosine the GPU's (table index "
-        "floor(2^25 trunc(x float32(1/(2 pi))))); "
+        "floor(2^25 trunc(x float32(1/(2 pi))))); a flat b (z = 1) is kept; "
         f"{NORMAL_TEXT[mode]}: t = base + (0, 0, 1), u = "
         "detail (-1, -1, 1), d = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r.xy = fma(t.xy, d, "
         "-(u.xy t.z)), r.z = t.z (d - u.z); result fma(normalise(r), 1/2, 1/2), written as it is "
@@ -259,6 +275,19 @@ class Runs:
         values: np.ndarray = self.ctx.golden(f"semantics/{stem}").map(recording, map_name).values
         return values
 
+    def envelope_result(self, name: str, texture_set: str, backend: str = "cpu") -> dict[str, Any]:
+        """The evaluation of a texture set of the golden `name` of the current envelope."""
+        key = (name, texture_set, backend)
+        if key not in self._results:
+            manifest = masks_fits.envelope_manifest(name)
+            workdir = self.work / name.replace("/", "-") / texture_set
+            workdir.mkdir(parents=True, exist_ok=True)
+            spec = spec_from_manifest(
+                manifest, texture_set, workdir, list(channel_formats(manifest))
+            )
+            self._results[key] = evaluate(self.exe, spec, workdir, backend)
+        return self._results[key]
+
 
 def comparisons(
     runs: Runs, decode: np.ndarray, mode: str, backend: str = "cpu"
@@ -274,6 +303,17 @@ def comparisons(
             map_name = f"{texture_set}/{channel.lower()}"
             theirs = runs.recorded(stem, recording, map_name).reshape(ours.shape).astype(ours.dtype)
             out.append((f"tier0/semantics/{stem}", map_name, recording, unit(fmt), ours, theirs))
+    for name, texture_set in ENVELOPE_SETS.get(mode, ()):
+        golden = masks_fits.envelope_golden(name)
+        envelope_formats = channel_formats(masks_fits.envelope_manifest(name))
+        result = runs.envelope_result(name, texture_set, backend)
+        for channel, fmt in envelope_formats.items():
+            ours = exported(result, channel, fmt, decode)
+            for recording in ("r1", "r2"):
+                map_name = f"{texture_set}/{channel.lower()}"
+                recorded: np.ndarray = golden.map(recording, map_name).values
+                theirs = recorded.reshape(ours.shape).astype(ours.dtype)
+                out.append((f"tier0/{name}", map_name, recording, unit(fmt), ours, theirs))
     if mode in NORMAL_SETS:
         texture_set = NORMAL_SETS[mode]
         ours = raster(runs.result(NORMAL_CHANNEL, texture_set, backend), "Normal")
@@ -321,11 +361,9 @@ def mode_entry(runs: Runs, decode: np.ndarray, mode: str) -> dict[str, Any]:
             ],
             residuals(runs, decode, mode),
             notes=(
-                "Release gap: the fitted hue (phase1.11) reproduces the hue law of every texel "
-                "to within one code (the earlier hexcone fit left up to 53 100 RGB16 values off); "
-                "the float32 operation order of Painter's hue arithmetic is not identified, so "
-                "one-code residuals remain on 16-bit and float channels. The grey (L16) and "
-                "sRGB8 channels are exact. Not admitted as exact; no exception proposed."
+                "The float32 hue was identified on tier0/semantics/blend-component-hue (decision "
+                "073): the numerator p - (q + 3e) and the weights centred on the primaries; "
+                "tier0/semantics/blend-component is the held-out validation."
             ),
         )
     if mode in NORMAL_MODES:
@@ -442,18 +480,21 @@ def build(exe: Path, work: Path) -> dict[str, Any]:
     entries.append(passthrough_entry(runs, decode))
     corpus = sorted(
         {f"tier0/semantics/{stem}" for stem, _ in SWEEPS.values()}
-        | {f"tier0/semantics/{NORMAL_CHANNEL}", f"tier0/{PASSTHROUGH}"}
+        | {f"tier0/semantics/{NORMAL_CHANNEL}", f"tier0/{HUE}", f"tier0/{NORMAL_OPACITY}"}
+        | {f"tier0/{PASSTHROUGH}"}
     )
     return document(
         "blend-kernels",
         "The blend kernels of the evaluator (04 section 3, tasks "
         "phase1.10_compositor-blend-kernels and phase1.11_compositor-blend-gaps) for every "
         "documented BlendingMode, evaluated by the "
-        "CPU store under the current profile on the Tier 0 blend sweeps, on the Normal "
-        "channel and on the UI-set Passthrough groups. Residuals are |delta| in export units "
-        "(16-bit PNG codes, OpenEXR float32 values) per texture set and channel, against both "
-        "recordings (r1 same session, r2 after save and reopen). Supersedes blend-modes.json for "
-        "the evaluator; blend-modes.json keeps the phase0.7 candidate fits.",
+        "CPU store under the current profile on the Tier 0 blend sweeps, on the hue grid of the "
+        "component modes, on the normal-map modes off the recorded opacities and on flat "
+        "normals, on the Normal channel and on the UI-set Passthrough groups. Residuals are "
+        "|delta| in export units (16-bit PNG codes, OpenEXR float32 values) per texture set and "
+        "channel, against both recordings (r1 same session, r2 after save and reopen). "
+        "Supersedes blend-modes.json for the evaluator; blend-modes.json keeps the phase0.7 "
+        "candidate fits.",
         corpus,
         entries,
     )

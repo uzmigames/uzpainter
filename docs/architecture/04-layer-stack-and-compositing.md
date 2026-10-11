@@ -80,7 +80,17 @@ Acceptance for every kernel is equality of native decoded values with the Tier 0
 
 ## 8. Diagnostics (LAY-09, LAY-14, EXP-04)
 
-`isolate(layer)` evaluates with one node hidden and restores visibility atomically; `contribution(layer)` returns the difference map; `material_views(mask)` returns per-channel values under a material mask for ID/BaseColor/Height/Normal/Roughness/Metallic leak checks. All diagnostics are exports of the general engine, not separate code paths.
+`isolate(layer)` evaluates with one node hidden and restores visibility atomically; `contribution(layer)` returns the difference map; `material_views(mask)` returns per-channel values under a material mask for ID/BaseColor/Height/Normal/Roughness/Metallic leak checks; `region_stats(map, mask)` returns statistics of a map inside a mask. All diagnostics are exports of the general engine, not separate code paths.
+
+Settled in phase1.13 (decisions 075, 076; `src/evaluator/diagnostics.h`):
+
+- **Isolation.** The node is hidden in a private copy of the revision, evaluated and never committed. The document, its revision, records and save state never change, so the restore is atomic by construction, also on a failure midway.
+- **Contribution.** The full map minus the isolated map is one float32 subtraction per sample of the decoded values. Any channel or virtual normal map can be used.
+- **Material views.** A material is a fill layer or group. Its region is its effective mask: its own mask times each enclosing group's, inside where at least 1/2.
+  - ID view: the ID mesh map inside the region. Leaks are colours that are not the region's modal colour.
+  - Channel views: BaseColor, Height, Normal, SpecularRoughness and BaseMetalness inside the region. Leaks are texels where the full stack differs from the material's solo evaluation.
+- **Region statistics.** Count, thresholded and weighted coverage, min, max, mean, p10, p50 and p90 per component, plus luminance and saturation for colour maps.
+- **Export-plan sources.** Every diagnostic is a source with `srcMapType` `diagnosticMap` (08 §6).
 
 ## 9. What Tier 0 must settle before the kernels are frozen
 
