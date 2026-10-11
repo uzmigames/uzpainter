@@ -1,5 +1,6 @@
-// Native tests of the compositor (rulebook tasks phase1.5_compositor-tile-dag and
-// phase1.8_compositor-sources-projection, src/evaluator/,
+// Native tests of the compositor (rulebook tasks phase1.5_compositor-tile-dag,
+// phase1.8_compositor-sources-projection and phase1.9_compositor-quantisation-profile,
+// src/evaluator/,
 // docs/architecture/04-layer-stack-and-compositing.md §2, §4, §5, §7). Built by
 // `zig build evaluator-tests` and driven by tests/evaluator/test_compositor_tile_dag.py and
 // tests/evaluator/test_compositor_sources_projection.py.
@@ -16,6 +17,9 @@
 //                                        tiles; one layer's opacity changes on one channel
 //   admission <assets>                   admission: three 4096^2 sets under a budget that holds
 //                                        one, LRU eviction, refusal of a set above the budget
+//   profile <assets>                     evaluator profiles (profile.h): the registry, dispatch on
+//                                        the project's profile, pinning after a later profile is
+//                                        registered, unknown profiles
 //   evaluate <assets> <spec> <out> <cpu|gpu>
 //                                        evaluates the stack described by <spec> (JSON) and
 //                                        writes the channel rasters to <out> (golden driver)
@@ -53,6 +57,7 @@
 #include "evaluator/evaluator.h"
 #include "evaluator/gpu_store.h"
 #include "evaluator/kernelgen.h"
+#include "evaluator/profile.h"
 #include "evaluator/projection_uv.h"
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
@@ -159,7 +164,7 @@ struct Builder {
     Builder(uint32_t width, uint32_t height,
             const std::vector<std::pair<ChannelType, ChannelFormat>>& channels) {
         project.versions.app_version = "uzp-evaluator-tests";
-        project.versions.evaluator_profile = std::string(kEvaluatorProfile);
+        project.versions.evaluator_profile = std::string(kCurrentProfile);
         core::TextureSet set;
         set.id = project.AllocateId();
         set.name = "set";
@@ -923,8 +928,9 @@ int RunOrder(const fs::path& assets) {
         }
         Check(encoded, "a 1:1 16-bit bitmap on sRGB8 stores each code as a linear value through the sRGB8 conversion",
               Describe(srgb));
-        Check(rgb16 && rgb16->stats.uploads == 1 && rgb16->stats.blends == 1,
-              "the bitmap is uploaded once and blended once over the base");
+        Check(rgb16 && rgb16->stats.uploads == 1 && rgb16->stats.blends == 2,
+              "the bitmap is uploaded once, blended once into the isolated root and composited once "
+              "over the base");
     }
 
     // 5. Explicit failures.
@@ -1057,9 +1063,10 @@ int RunCache(const fs::path& assets) {
     Check(user0 && user1, "the ten-layer stack evaluates on both channels",
           Describe(user0) + " / " + Describe(user1));
     if (!user0 || !user1) return Finish();
-    Check(user0->stats.tiles == 2 && user0->stats.blends == 20 && user0->stats.uploads == 2 &&
+    Check(user0->stats.tiles == 2 && user0->stats.blends == 22 && user0->stats.uploads == 2 &&
               user0->stats.cacheHits == 0,
-          "first evaluation: two tiles, ten blends each, the bitmap uploaded per tile, no hit",
+          "first evaluation: two tiles, ten blends and the read-out over the base each, the bitmap "
+          "uploaded per tile, no hit",
           "tiles " + std::to_string(user0->stats.tiles) + " blends " + std::to_string(user0->stats.blends) +
               " uploads " + std::to_string(user0->stats.uploads) + " hits " + std::to_string(user0->stats.cacheHits));
 
@@ -1088,10 +1095,11 @@ int RunCache(const fs::path& assets) {
     Check(second.revision == first.revision + 1, "the snapshot is the next revision");
 
     render::Result<ChannelResult> edited0 = evaluate(second, ChannelType::User0);
-    Check(edited0 && edited0->stats.cacheHits == 2 && edited0->stats.cacheMisses == 10 &&
-              edited0->stats.blends == 10 && edited0->stats.uploads == 0,
-          "the edited channel re-evaluates only the layers above the edit: per tile the five prefixes above "
-          "miss, the prefix below the edit hits, five blends run, nothing is uploaded",
+    Check(edited0 && edited0->stats.cacheHits == 2 && edited0->stats.cacheMisses == 12 &&
+              edited0->stats.blends == 12 && edited0->stats.uploads == 0,
+          "the edited channel re-evaluates only the layers above the edit: per tile the read-out and the "
+          "five prefixes above miss, the prefix below the edit hits, five blends and the read-out run, "
+          "nothing is uploaded",
           edited0 ? "hits " + std::to_string(edited0->stats.cacheHits) + " misses " +
                         std::to_string(edited0->stats.cacheMisses) + " blends " +
                         std::to_string(edited0->stats.blends) + " uploads " + std::to_string(edited0->stats.uploads)
@@ -1117,9 +1125,154 @@ int RunCache(const fs::path& assets) {
     const CacheStats& stats = cpu.cache().stats();
     Info("cache live tiles " + std::to_string(stats.liveTiles) + ", live bytes " + std::to_string(stats.liveBytes) +
          ", hits " + std::to_string(stats.hits) + ", misses " + std::to_string(stats.misses));
-    Check(stats.evictions == 0 && stats.liveTiles == 2 * 2 + 2 * 2 * 10 + 2 * 5,
-          "with a wide budget nothing is evicted: content tiles, prefixes of both channels and the five new prefixes stay",
+    Check(stats.evictions == 0 && stats.liveTiles == 2 * 2 + 2 * 2 * (10 + 1) + 2 * (5 + 1),
+          "with a wide budget nothing is evicted: content tiles, prefixes and read-outs of both channels and "
+          "the five new prefixes and read-out stay",
           std::to_string(stats.liveTiles));
+    return Finish();
+}
+
+// ── profile ──────────────────────────────────────────────────────────────────
+
+/// The bits a channel result holds under an isolated-root profile (profile.h,
+/// `RootComposite::Isolated`): the root layers composited from a transparent start, then over
+/// `base` with the Replace mix at opacity 1, stored with the write rule (32-bit floats as they
+/// are: the read-out composite is the re-composition over the base).
+std::array<uint32_t, 3> IsolatedRootModel(const std::vector<ModelLayer>& layers, const TileFormat& format,
+                                          const std::array<float, 3>& base) {
+    const ModelValue stack = ModelComposite(layers, format, base, true);
+    const ModelValue out = ModelComposite(
+        {ModelLayer{BlendingMode::Replace, 1.0f, {stack.value[0], stack.value[1], stack.value[2]}, stack.value[3]}},
+        format, base, false);
+    std::array<uint32_t, 3> bits = out.stored;
+    for (uint32_t c = 0; c < format.channels; ++c) {
+        if (format.encoding == render::TexelEncoding::Float16) {
+            bits[c] = arith::HalfTowardZero(std::bit_cast<float>(out.stored[c]));
+        }
+    }
+    return bits;
+}
+
+int RunProfile(const fs::path& assets) {
+    std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
+    const std::vector<ChannelType> channels{ChannelType::User0, ChannelType::User1, ChannelType::User2};
+    const std::vector<std::pair<ChannelType, ChannelFormat>> formats{
+        {ChannelType::User0, ChannelFormat::RGB8},
+        {ChannelType::User1, ChannelFormat::sRGB8},
+        {ChannelType::User2, ChannelFormat::RGB32F}};
+    const std::array<float, 3> base{1.0f, 1.0f, 1.0f};
+    // The Tier 0 quantisation experiment's first texture set: three uniform fills at opacity 1/3.
+    const std::array<std::array<double, 3>, 3> colours{{{0.2, 0.7, 0.123}, {0.9, 0.05, 0.5}, {0.333, 0.1, 0.8}}};
+    const double third = 1.0 / 3.0;
+
+    // 1. The registry.
+    render::Result<EvaluatorProfile> legacy = FindProfile(kProfileLayerqLinear);
+    render::Result<EvaluatorProfile> settled = FindProfile(kProfileIsolatedLinear);
+    Check(legacy && legacy->root == RootComposite::OverBase && settled &&
+              settled->root == RootComposite::Isolated && kCurrentProfile == kProfileIsolatedLinear,
+          "the build registers painter-12.1-layerq-linear (over the base) and painter-12.1-isolated-linear "
+          "(isolated root), the current profile");
+    const std::vector<std::string> ids = RegisteredProfiles();
+    Check(ids.size() >= 2 && ids[0] == kProfileLayerqLinear && ids[1] == kProfileIsolatedLinear,
+          "the built-in profiles are listed first, in registration order");
+    render::Result<EvaluatorProfile> unknown = FindProfile("painter-12.1-no-such-profile");
+    Check(!unknown && EvalErrorKindOf(unknown.error()) == EvalErrorKind::UnknownProfile,
+          "an unregistered profile id fails with unknown_profile", Describe(unknown));
+    render::Result<void> malformed = RegisterProfile({"isolated", RootComposite::Isolated});
+    render::Result<void> taken = RegisterProfile({std::string(kProfileLayerqLinear), RootComposite::Isolated});
+    Check(!malformed && EvalErrorKindOf(malformed.error()) == EvalErrorKind::InvalidProfile && !taken &&
+              EvalErrorKindOf(taken.error()) == EvalErrorKind::InvalidProfile,
+          "a registration with a malformed or taken id fails with invalid_profile (an id never changes meaning)");
+
+    auto project = [&](std::string_view profile) {
+        Builder builder(128, 128, formats);
+        builder.project.versions.evaluator_profile = std::string(profile);
+        std::vector<core::Layer> layers;
+        for (size_t i = 0; i < colours.size(); ++i) {
+            layers.push_back(builder.Fill("third" + std::to_string(i),
+                                          SameSource(channels, Uniform(colours[i][0], colours[i][1], colours[i][2])),
+                                          Same(channels, BlendingMode::Normal, third)));
+        }
+        builder.SetRoot(layers);
+        return builder;
+    };
+    auto evaluate = [&](Builder& builder, ChannelType channel, CpuEvaluator& cpu) {
+        EvaluateRequest request;
+        request.textureSet = builder.SetId();
+        request.stack = builder.StackId();
+        request.channel = channel;
+        return cpu.Evaluate(builder.project, request);
+    };
+    auto model = [&](ChannelFormat format, bool isolated) {
+        const TileFormat tileFormat = TileFormatOf(format);
+        std::vector<ModelLayer> layers;
+        for (const auto& colour : colours) {
+            layers.push_back(ModelLayer{BlendingMode::Normal, static_cast<float>(third),
+                                        UniformOperand(colour, tileFormat, base)});
+        }
+        return isolated ? IsolatedRootModel(layers, tileFormat, base)
+                        : Output(ModelComposite(layers, tileFormat, base, false).stored, tileFormat, base);
+    };
+
+    // 2. Each profile evaluates as its own model, and the two differ on this stack.
+    Builder projectA = project(kProfileLayerqLinear);
+    Builder projectCurrent = project(kCurrentProfile);
+    if (!projectA.Validate("profile A") || !projectCurrent.Validate("current profile")) return Finish();
+    CpuEvaluator cpu(templates, kWideLimits);
+    std::map<ChannelType, std::vector<uint32_t>> resultA;
+    std::map<ChannelType, std::vector<uint32_t>> resultCurrent;
+    for (const auto& [channel, format] : formats) {
+        const std::string label = std::string(core::ToString(format));
+        const uint32_t n = TileFormatOf(format).channels;
+        render::Result<ChannelResult> a = evaluate(projectA, channel, cpu);
+        render::Result<ChannelResult> current = evaluate(projectCurrent, channel, cpu);
+        std::string detail;
+        Check(a && AllEqual(Samples(*a), n, model(format, false), detail),
+              label + ": a project stamped painter-12.1-layerq-linear evaluates over the base, quantised per layer",
+              a ? detail : Describe(a));
+        Check(current && AllEqual(Samples(*current), n, model(format, true), detail),
+              label + ": a project stamped painter-12.1-isolated-linear evaluates its root isolated, composited "
+                      "over the base at read-out",
+              current ? detail : Describe(current));
+        if (a) resultA[channel] = Samples(*a);
+        if (current) resultCurrent[channel] = Samples(*current);
+    }
+    Check(model(ChannelFormat::RGB8, false) != model(ChannelFormat::RGB8, true),
+          "the two profiles give different RGB8 codes for the three 1/3 fills (the dispatch is observable)");
+
+    // 3. Pinning: a synthetic profile B registered after A's project exists changes nothing for it.
+    render::Result<void> registered = RegisterProfile({"painter-12.1-synthetic-b", RootComposite::Isolated});
+    Check(registered.has_value(), "a synthetic profile painter-12.1-synthetic-b registers", Describe(registered));
+    CpuEvaluator fresh(templates, kWideLimits);
+    bool pinned = true;
+    bool cached = true;
+    for (const auto& [channel, format] : formats) {
+        render::Result<ChannelResult> again = evaluate(projectA, channel, cpu);
+        render::Result<ChannelResult> anew = evaluate(projectA, channel, fresh);
+        pinned = pinned && again && anew && Samples(*again) == resultA[channel] && Samples(*anew) == resultA[channel];
+        cached = cached && again && again->stats.blends == 0;
+    }
+    Check(pinned, "after profile B is registered, the project stamped A evaluates with A: its results are unchanged "
+                  "bit for bit (same evaluator and a fresh one)");
+    Check(cached, "the project stamped A is still served by its own cached tiles");
+    Builder projectB = project("painter-12.1-synthetic-b");
+    if (!projectB.Validate("profile B")) return Finish();
+    bool sameRules = true;
+    bool ownTiles = true;
+    for (const auto& [channel, format] : formats) {
+        render::Result<ChannelResult> b = evaluate(projectB, channel, cpu);
+        sameRules = sameRules && b && Samples(*b) == resultCurrent[channel];
+        ownTiles = ownTiles && b && b->stats.cacheHits == 0;
+    }
+    Check(sameRules, "a project stamped B evaluates with B's rules (here those of the current profile)");
+    Check(ownTiles, "tiles of different profiles never serve each other (subtree hashes are seeded by the profile)");
+
+    // 4. A project stamped with a profile this build does not have fails explicitly.
+    Builder future = project("painter-12.1-from-a-newer-build");
+    if (!future.Validate("unknown profile")) return Finish();
+    render::Result<ChannelResult> refused = evaluate(future, ChannelType::User0, cpu);
+    Check(!refused && EvalErrorKindOf(refused.error()) == EvalErrorKind::UnknownProfile,
+          "a project stamped with an unregistered profile fails with unknown_profile", Describe(refused));
     return Finish();
 }
 
@@ -1451,6 +1604,9 @@ Spec ParseSpec(const fs::path& path) {
                       static_cast<uint32_t>(Num(resolution.at(1), "height")), channels),
               std::make_shared<SpecResources>(), {}};
     if (o.contains("template")) spec.templateId = Str(o.at("template"), "template");
+    if (o.contains("evaluator_profile")) {
+        spec.builder.project.versions.evaluator_profile = Str(o.at("evaluator_profile"), "evaluator_profile");
+    }
     if (o.contains("color_management")) {
         spec.builder.project.settings.color_management.mode = Str(o.at("color_management"), "color_management");
     }
@@ -2686,6 +2842,7 @@ int main(int argc, char** argv) {
         if (mode == "order") return RunOrder(assets);
         if (mode == "cache") return RunCache(assets);
         if (mode == "admission") return RunAdmission(assets);
+        if (mode == "profile") return RunProfile(assets);
         if (mode == "sources") return RunSources(assets);
         if (mode == "evaluate") {
             if (argc < 6) {

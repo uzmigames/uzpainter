@@ -25,12 +25,15 @@ enum class EvalErrorKind : uint8_t {
     MissingResource,       ///< A bitmap source whose bytes the resource provider lacks.
     TextureSetOverBudget,  ///< A texture set whose live tiles do not fit the admission budget.
     TileBudgetExceeded,    ///< The working set of one tile evaluation exceeds the budget.
+    UnknownProfile,        ///< The project's evaluator profile is not registered (profile.h).
+    InvalidProfile,        ///< A profile registration with a malformed or taken id.
     Internal,              ///< An invariant failed.
 };
 
 /// "not_found", "unknown_template", "missing_base_value", "unsupported_node",
 /// "unsupported_blend_mode", "unsupported_source", "missing_resource",
-/// "texture_set_over_budget", "tile_budget_exceeded" or "internal".
+/// "texture_set_over_budget", "tile_budget_exceeded", "unknown_profile", "invalid_profile" or
+/// "internal".
 [[nodiscard]] std::string_view EvalErrorKindName(EvalErrorKind kind);
 
 /// `request_failed` with the reason `evaluator:<kind>[ node=<node>]: <detail>`.

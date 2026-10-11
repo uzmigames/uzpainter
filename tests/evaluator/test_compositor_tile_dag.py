@@ -159,10 +159,12 @@ def test_cache_and_invalidation(evaluator_tests: Path) -> None:
     other channel is served from the cache, and the partial result equals a fresh evaluation."""
     passed, _ = run_case(evaluator_tests, "cache")
     assert {
-        "first evaluation: two tiles, ten blends each, the bitmap uploaded per tile, no hit",
+        "first evaluation: two tiles, ten blends and the read-out over the base each, the bitmap "
+        "uploaded per tile, no hit",
         "the same revision again: both tiles served from the cache, nothing computed",
-        "the edited channel re-evaluates only the layers above the edit: per tile the five "
-        "prefixes above miss, the prefix below the edit hits, five blends run, nothing is uploaded",
+        "the edited channel re-evaluates only the layers above the edit: per tile the read-out "
+        "and the five prefixes above miss, the prefix below the edit hits, five blends and the "
+        "read-out run, nothing is uploaded",
         "the other channel's tiles keep their subtree hash and are served from the cache",
         "the partially re-evaluated result equals a fresh evaluation bit for bit",
     } <= passed

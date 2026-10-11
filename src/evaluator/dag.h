@@ -5,8 +5,9 @@
 // hash of every node output, so that the cache (admission.h) serves unchanged subtrees and only
 // what changed is re-evaluated.
 //
-// Order (04 §2): the accumulator starts at the channel's base value; root layers are walked
-// bottom-up (storage keeps Painter's top-first order); an invisible layer or a layer in `Disable`
+// Order (04 §2): the accumulator starts at the channel's base value (profile.h: under the
+// settled profile the root layers composite from a transparent start like a group and the result
+// is composited over the base at read-out); root layers are walked bottom-up (storage keeps Painter's top-first order); an invisible layer or a layer in `Disable`
 // for the channel is skipped; a fill layer contributes its source for the channel when the
 // channel is active on it; a group composites its visible children from a transparent start
 // into an isolated intermediate and that intermediate is blended with the group's mode and
@@ -28,6 +29,7 @@
 
 #include "evaluator/formats.h"
 #include "evaluator/hash.h"
+#include "evaluator/profile.h"
 #include "evaluator/projection_uv.h"
 #include "evaluator/templates.h"
 #include "render/backend.h"
@@ -45,10 +47,6 @@
 #include "uzp_core/types/project.h"
 
 namespace uzp::evaluator {
-
-/// The evaluator profile this build implements (parity/semantics/evaluator-profile.json,
-/// provisional): per-layer quantisation to the channel format, sRGB8 blended on linear values.
-inline constexpr std::string_view kEvaluatorProfile = "painter-12.1-layerq-linear";
 
 /// What a fill layer contributes to the channel (sources.h states the colour rules).
 struct DagSource {
@@ -108,11 +106,17 @@ struct ChannelDag {
     std::array<float, 3> base{0.0f, 0.0f, 0.0f};
     TileGrid grid;
     std::string templateId;
+    /// The project's evaluator profile (profile.h): the root list is isolated under
+    /// `RootComposite::Isolated` and composited over `base` at read-out.
+    EvaluatorProfile profile;
     DagList root;
+    /// Hash of the root list composited over the base (Isolated profiles; the read-out tile).
+    Digest readoutHash{};
 };
 
 /// Builds the DAG of `channel` of `stack` of `textureSet` in `project`, with the base values of
-/// `templateId`. Fails with `evaluator:not_found`, `unknown_template`, `missing_base_value`,
+/// `templateId` and the profile the project records (`versions.evaluator_profile`). Fails with
+/// `evaluator:unknown_profile`, `not_found`, `unknown_template`, `missing_base_value`,
 /// `unsupported_node`, `unsupported_source` or `unsupported_blend_mode`.
 [[nodiscard]] render::Result<ChannelDag> BuildDag(const core::Project& project,
                                                   core::Id textureSet, core::Id stack,

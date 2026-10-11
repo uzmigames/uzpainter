@@ -1,0 +1,1121 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "quantisation-profile",
+  "description": "Quantisation profile of the evaluator (04 section 4, task phase1.9_compositor-quantisation-profile): the registered profiles evaluated on the Tier 0 quantisation experiment and on the one-layer partial-coverage stack of blend-inputs. Residuals are |delta| in export units (16-bit PNG codes, OpenEXR float32 values) pooled over the texture sets, against both recordings (r1 same session, r2 after save and reopen).",
+  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "corpus": [
+    "tier0/semantics/blend-inputs",
+    "tier0/semantics/quantisation-thirds"
+  ],
+  "entries": [
+    {
+      "entry_id": "quantisation-isolated-root",
+      "subject": "Evaluator profile painter-12.1-isolated-linear: isolated root stack, per-layer storage in the channel format, one composite over the base at read-out, sRGB8 on linear values",
+      "status": "calibrated",
+      "formula": "Root stack isolated (a group without its own blend): the root layers composite bottom-up from a transparent start, straight colour C and coverage a, with the fitted kernels of blend-modes.json and W3C Compositing §5.1 (a transparent backdrop passes the source through, a partly covered one uses the general source-over formula in float32 with a correctly rounded reciprocal); after every layer C and a are stored in the channel format (UNORM n bits: truncate to n + 4 fractional bits, nearest, ties down; sRGB8: the recording GPU's float-to-sRGB8 conversion, blending on its linear decode; 16-bit float toward zero; 32-bit float as it is). At read-out the result is composited over the channel base once, v = base + (C - base) * a in float32 (one subtraction, one multiplication, one addition), and stored with the same write rule; an empty stack is the base. A grey channel takes the mean of the colour's three components. With a = 1 this is the 1 + (v - 1) read-out of blend-modes.json; with a < 1 the stored coverage below 1/2 (32767/65535 on 16 bits) sends every exact tie of a 0.5-opacity layer over the base up, as Painter does.",
+      "public_sources": [
+        {
+          "source_id": "S-W3C-BLEND",
+          "locator": "§5.1 simple alpha compositing (source-over), §6 group isolation"
+        },
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 §5.2-5.3 (transfer functions)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM, FLOAT to SRGB, FLOAT to FLOAT16"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: Node.set_opacity, BlendingMode.Normal; textureset: ChannelFormat"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "opacity",
+          "value": 0.3333333432674408,
+          "origin": "authored"
+        },
+        {
+          "name": "opacity_blend_inputs_s2",
+          "value": 0.5,
+          "origin": "authored"
+        },
+        {
+          "name": "evaluator_profile",
+          "value": "painter-12.1-isolated-linear",
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 786432,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 512,
+            "mean": 42.666666666666664,
+            "p99": 512,
+            "differing": 65536,
+            "total": 786432,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 786432,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 21.416666666666668,
+            "p99": 257,
+            "differing": 65536,
+            "total": 786432,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 786432,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.08333333333333333,
+            "p99": 1,
+            "differing": 65536,
+            "total": 786432,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user3",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 786432,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user3",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0003458658854166667,
+            "p99": 0.00048828125,
+            "differing": 589824,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user4",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 1.7384688059488933e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 262144,
+            "total": 786432,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user4",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 3.2285849253336586e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 458752,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user5",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 262144,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user5",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 64.25,
+            "p99": 257,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user6",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 262144,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user6",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 262144,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user7",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 262144,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user7",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.000244140625,
+            "p99": 0.00048828125,
+            "differing": 131072,
+            "total": 262144,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/scattering",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 2.9802322387695312e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 131072,
+            "total": 262144,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/scattering",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 2.9802322387695312e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 131072,
+            "total": 262144,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 768,
+            "mean": 58.791666666666664,
+            "p99": 512,
+            "differing": 22912,
+            "total": 196608,
+            "affected_texels": 16020,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 768,
+            "mean": 58.791666666666664,
+            "p99": 512,
+            "differing": 22912,
+            "total": 196608,
+            "affected_texels": 16020,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user4",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user4",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 15.05859375,
+            "p99": 257,
+            "differing": 11520,
+            "total": 196608,
+            "affected_texels": 9263,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user5",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user5",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user6",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user6",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user7",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user7",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        }
+      ],
+      "notes": "Selected: profile painter-12.1-isolated-linear (src/evaluator/profile.h), stamped into new projects; painter-12.1-layerq-linear stays registered for projects stamped with it. Against the same-session recording r1 the isolated model reproduces every UNORM, sRGB8 and 16-bit float map of the experiment and every map of the blend-inputs s2 stack exactly (sRGB8 blended on linear values). The 32-bit float maps of the experiment are not exact: 4 of the 12 RGB32F values and 2 of the 4 L32F values lie 2^-25 or 2^-24 from r1 (the float32 operation order of Painter's source-over is not identified; r1 and r2 themselves differ on 9 of these 16 values). The after-reopen recording r2 differs from r1 itself on 16 of the experiment's 36 maps and on the sRGB8 and RGB8 maps of blend-inputs s2 (parity/reports/phase0/tier0-stability.md): both goldens are unstable, so under decision 017 their comparisons are blocked, never passed; no exception is proposed or in force (parity/exceptions.json unchanged). Run: parity/reports/phase1/compositor-quantisation-profile.md."
+    },
+    {
+      "entry_id": "quantisation-over-base",
+      "subject": "Evaluator profile painter-12.1-layerq-linear (provisional, superseded): per-layer quantisation over the base",
+      "status": "calibrated",
+      "formula": "Root layers blended onto an accumulator that starts at the channel base, v = acc (1 - alpha) + r alpha in float32, stored in the channel format after every layer with the same write rules; 32-bit float channels re-composited over the base once at read-out (1 + (v - 1)). The provisional profile of evaluator-profile.json.",
+      "public_sources": [
+        {
+          "source_id": "S-W3C-BLEND",
+          "locator": "§5.1 simple alpha compositing (source-over), §6 group isolation"
+        },
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 §5.2-5.3 (transfer functions)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM, FLOAT to SRGB, FLOAT to FLOAT16"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: Node.set_opacity, BlendingMode.Normal; textureset: ChannelFormat"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "opacity",
+          "value": 0.3333333432674408,
+          "origin": "authored"
+        },
+        {
+          "name": "opacity_blend_inputs_s2",
+          "value": 0.5,
+          "origin": "authored"
+        },
+        {
+          "name": "evaluator_profile",
+          "value": "painter-12.1-layerq-linear",
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 512,
+            "mean": 42.666666666666664,
+            "p99": 512,
+            "differing": 65536,
+            "total": 786432,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 512,
+            "mean": 85.33333333333333,
+            "p99": 512,
+            "differing": 131072,
+            "total": 786432,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 128.5,
+            "p99": 257,
+            "differing": 393216,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 107.08333333333333,
+            "p99": 257,
+            "differing": 327680,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.4166666666666667,
+            "p99": 1,
+            "differing": 327680,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.3333333333333333,
+            "p99": 1,
+            "differing": 262144,
+            "total": 786432,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user3",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0004069010416666667,
+            "p99": 0.00048828125,
+            "differing": 655360,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user3",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.00014241536458333334,
+            "p99": 0.00048828125,
+            "differing": 262144,
+            "total": 786432,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user4",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 1.1920928955078125e-07,
+            "mean": 7.2022279103597e-08,
+            "p99": 1.1920928955078125e-07,
+            "differing": 720896,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user4",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 1.7881393432617188e-07,
+            "mean": 1.0679165522257487e-07,
+            "p99": 1.7881393432617188e-07,
+            "differing": 720896,
+            "total": 786432,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user5",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 257.0,
+            "p99": 257,
+            "differing": 262144,
+            "total": 262144,
+            "affected_texels": 262144,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user5",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 192.75,
+            "p99": 257,
+            "differing": 196608,
+            "total": 262144,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user6",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 262144,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user6",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 262144,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user7",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0003662109375,
+            "p99": 0.00048828125,
+            "differing": 196608,
+            "total": 262144,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/user7",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0001220703125,
+            "p99": 0.00048828125,
+            "differing": 65536,
+            "total": 262144,
+            "affected_texels": 65536,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/scattering",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 2.9802322387695312e-08,
+            "p99": 5.960464477539063e-08,
+            "differing": 131072,
+            "total": 262144,
+            "affected_texels": 131072,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/quantisation-thirds",
+          "map": "s0-s3/scattering",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 1.1920928955078125e-07,
+            "mean": 5.960464477539063e-08,
+            "p99": 1.1920928955078125e-07,
+            "differing": 196608,
+            "total": 262144,
+            "affected_texels": 196608,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.4826253255208333,
+            "p99": 1,
+            "differing": 94888,
+            "total": 196608,
+            "affected_texels": 48592,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.4826253255208333,
+            "p99": 1,
+            "differing": 94888,
+            "total": 196608,
+            "affected_texels": 48592,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.4826253255208333,
+            "p99": 1,
+            "differing": 94888,
+            "total": 196608,
+            "affected_texels": 48592,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.4826253255208333,
+            "p99": 1,
+            "differing": 94888,
+            "total": 196608,
+            "affected_texels": 48592,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 512,
+            "mean": 37.739583333333336,
+            "p99": 512,
+            "differing": 16672,
+            "total": 196608,
+            "affected_texels": 12459,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 768,
+            "mean": 88.28125,
+            "p99": 512,
+            "differing": 34912,
+            "total": 196608,
+            "affected_texels": 23449,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 512,
+            "mean": 37.739583333333336,
+            "p99": 512,
+            "differing": 16672,
+            "total": 196608,
+            "affected_texels": 12459,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 768,
+            "mean": 88.28125,
+            "p99": 512,
+            "differing": 34912,
+            "total": 196608,
+            "affected_texels": 23449,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user4",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 128.5,
+            "p99": 257,
+            "differing": 98304,
+            "total": 196608,
+            "affected_texels": 53248,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user4",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 257,
+            "mean": 113.44140625,
+            "p99": 257,
+            "differing": 86784,
+            "total": 196608,
+            "affected_texels": 49063,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user5",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user5",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user6",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.484375,
+            "p99": 1,
+            "differing": 31744,
+            "total": 65536,
+            "affected_texels": 31744,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user6",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.484375,
+            "p99": 1,
+            "differing": 31744,
+            "total": 65536,
+            "affected_texels": 31744,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user7",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 3.3111670442546406e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 10922,
+            "total": 196608,
+            "affected_texels": 9300,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s2/user7",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 5.960464477539063e-08,
+            "mean": 3.3111670442546406e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 10922,
+            "total": 196608,
+            "affected_texels": 9300,
+            "texels": 65536
+          }
+        }
+      ],
+      "notes": "Superseded: per-layer quantisation over the base leaves ties of a 0.5-opacity layer over the base going down (Painter: up) and does not reproduce the 8-bit and 16-bit codes of the three 1/3 fills on either recording."
+    }
+  ]
+}

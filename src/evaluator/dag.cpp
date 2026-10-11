@@ -20,6 +20,7 @@ using core::LayerKind;
 
 struct Context {
     const core::Project& project;
+    std::string_view profile;
     const core::Stack& stack;
     ChannelType channel;
     TileFormat tileFormat;
@@ -31,12 +32,13 @@ struct Context {
 
 constexpr int kMaxInstanceDepth = 64;
 
-/// The seed of every subtree hash: profile, kind, channel, format and the set resolution (a tile
+/// The seed of every subtree hash: the project's profile, kind, channel, format and the set
+/// resolution (tiles of two profiles never serve each other; a tile
 /// of one resolution never serves another: the grid decides the tiles' sizes and, for projected
 /// bitmaps, their texel centres).
 Digest ContentStartHash(const Context& ctx, std::string_view what) {
     HashWriter writer;
-    writer.Str(kEvaluatorProfile).Str(what).U32(static_cast<uint32_t>(ctx.channel));
+    writer.Str(ctx.profile).Str(what).U32(static_cast<uint32_t>(ctx.channel));
     writer.U32(static_cast<uint32_t>(ctx.format));
     writer.U32(ctx.grid.width).U32(ctx.grid.height);
     return writer.Finish();
@@ -291,6 +293,8 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     }
     render::Result<std::array<float, 3>> base = templates.BaseValue(templateId, channel);
     if (!base) return render::Unexpected(base.error());
+    render::Result<EvaluatorProfile> profile = FindProfile(project.versions.evaluator_profile);
+    if (!profile) return render::Unexpected(profile.error());
 
     ChannelDag dag;
     dag.textureSet = textureSet;
@@ -302,9 +306,11 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     dag.grid = TileGrid{static_cast<uint32_t>(set->resolution.width),
                         static_cast<uint32_t>(set->resolution.height)};
     dag.templateId = std::string(templateId);
+    dag.profile = std::move(*profile);
     dag.root.owner = stack;
-    dag.root.isolated = false;
-    Context ctx{project, *stackPtr, channel, dag.tileFormat, dag.format, dag.base, dag.grid};
+    dag.root.isolated = dag.profile.root == RootComposite::Isolated;
+    Context ctx{project,        dag.profile.id, *stackPtr, channel,
+                dag.tileFormat, dag.format,     dag.base,  dag.grid};
     {
         HashWriter writer;
         writer.Sub(ContentStartHash(ctx, "root"));
@@ -313,6 +319,11 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     }
     render::Result<void> ok = AppendLayers(ctx, stackPtr->root_layers, dag.root, 1.0f, 1.0f);
     if (!ok) return render::Unexpected(ok.error());
+    if (dag.root.isolated && !dag.root.layers.empty()) {
+        HashWriter writer;
+        writer.Sub(dag.root.layers.back().prefixHash).Str("readout");
+        dag.readoutHash = writer.Finish();
+    }
     return dag;
 }
 

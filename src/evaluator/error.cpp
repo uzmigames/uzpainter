@@ -6,10 +6,11 @@ namespace uzp::evaluator {
 
 namespace {
 
-constexpr std::array<std::string_view, 10> kKindNames = {
+constexpr std::array<std::string_view, 12> kKindNames = {
     "not_found",          "unknown_template",      "missing_base_value",   "unsupported_node",
     "unsupported_blend_mode", "unsupported_source", "missing_resource",
-    "texture_set_over_budget", "tile_budget_exceeded", "internal",
+    "texture_set_over_budget", "tile_budget_exceeded", "unknown_profile", "invalid_profile",
+    "internal",
 };
 
 constexpr std::string_view kPrefix = "evaluator:";

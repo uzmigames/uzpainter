@@ -59,9 +59,11 @@ struct EvalEnvironment {
     const IResourceProvider* resources = nullptr;
 };
 
-/// Evaluates every tile of `dag`, reading each back; 32-bit float channels are re-composited
-/// over their base once at read-out (arith::Float32Readout). Nothing stays pinned afterwards;
-/// the computed tiles stay cached.
+/// Evaluates every tile of `dag`, reading each back. The root meets the base as the profile says
+/// (profile.h): an isolated root is composited over the base by one read-out blend per tile;
+/// under `RootComposite::OverBase` 32-bit float channels are re-composited over their base once
+/// at read-out (arith::Float32Readout). Nothing stays pinned afterwards; the computed tiles stay
+/// cached.
 [[nodiscard]] render::Result<ChannelResult> EvaluateChannel(const ChannelDag& dag,
                                                             EvalEnvironment& env);
 

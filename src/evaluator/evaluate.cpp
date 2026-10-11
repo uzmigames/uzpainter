@@ -26,7 +26,33 @@ public:
     }
 
     render::Result<Operand> Run() {
-        return EvaluateList(m_dag.root, Operand::Constant(m_dag.base, 1.0f));
+        if (!m_dag.root.isolated) {
+            return EvaluateList(m_dag.root, Operand::Constant(m_dag.base, 1.0f));
+        }
+        if (m_dag.root.layers.empty()) return Operand::Constant(m_dag.base, 1.0f);
+        // Isolated root (profile.h): the layers composite from a transparent start, then the
+        // result is composited over the base once, v = base + (C - base) a, stored with the
+        // channel's write rule (the Replace mix at opacity 1, whose alpha is the coverage).
+        const CacheKey key{m_dag.root.owner, CacheKind::Readout, m_dag.readoutHash, m_tx, m_ty};
+        render::Result<std::optional<TileHandle>> cached = Lookup(key);
+        if (!cached) return render::Unexpected(cached.error());
+        if (*cached) return Operand::Of(**cached);
+        render::Result<Operand> stack =
+            EvaluateList(m_dag.root, Operand::Constant({0.0f, 0.0f, 0.0f}, 0.0f));
+        if (!stack) return stack;
+        render::Result<TileHandle> dst = Allocate(key, m_dag.tileFormat);
+        if (!dst) return render::Unexpected(dst.error());
+        BlendOp op;
+        op.dst = *dst;
+        op.acc = Operand::Constant(m_dag.base, 1.0f);
+        op.source = *stack;
+        op.mode = core::BlendingMode::Replace;
+        op.opacity = 1.0f;
+        render::Result<void> queued = m_env.store.Blend(op);
+        if (!queued) return render::Unexpected(queued.error());
+        ++m_stats.blends;
+        Defer(*stack);
+        return Operand::Of(*dst);
     }
 
 private:
@@ -175,11 +201,13 @@ private:
     std::vector<TileHandle> m_deferred;
 };
 
-/// The read-out of a 32-bit float channel: every sample re-composited over the channel base
-/// once (arith::Float32Readout; blend-modes.json "1 + (v - 1)"). The accumulator tiles stay raw,
-/// as the blend fits read their backdrop.
+/// The read-out of a 32-bit float channel under a profile that blends the root layers over the
+/// base (`RootComposite::OverBase`): every sample re-composited over the channel base once
+/// (arith::Float32Readout; blend-modes.json "1 + (v - 1)"). The accumulator tiles stay raw, as
+/// the blend fits read their backdrop. An isolated root is composited over the base by its
+/// read-out blend instead (`TileEvaluation::Run`), which is this rule at full coverage.
 void ReadOut(const ChannelDag& dag, TileResult& tile) {
-    if (dag.tileFormat.encoding != render::TexelEncoding::Float32) return;
+    if (dag.tileFormat.encoding != render::TexelEncoding::Float32 || dag.root.isolated) return;
     const uint32_t channels = dag.tileFormat.channels;
     const size_t samples = tile.texels.size() / sizeof(float);
     for (size_t i = 0; i < samples; ++i) {

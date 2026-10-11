@@ -63,6 +63,7 @@ inline constexpr uint64_t kWorkingSetTiles = 3;
 enum class CacheKind : uint8_t {
     Content,  ///< A layer's content for one channel (a bitmap source tile).
     Prefix,   ///< The accumulator of a layer list after one of its layers (bottom-up).
+    Readout,  ///< An isolated root list composited over the channel base (profile.h).
 };
 
 struct CacheKey {
