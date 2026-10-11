@@ -1,0 +1,11 @@
+{
+  "id": 38,
+  "slug": "the-iray-render-reference-procedure-covers-only-the-fixed-assets3d-render-pipeline",
+  "title": "The Iray render reference procedure covers only the fixed Assets3D render pipeline",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase0.6_render-reference-procedure"
+  ],
+  "supersededBy": null
+}
