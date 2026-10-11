@@ -11,6 +11,13 @@ Round-4 changes (owner answers of 2026-10-10 recorded in `docs/open-questions.md
 | Renamed | `phase1_engine-integration-layer` → `phase1.4_render-core-layer` (P1-ENGINE → P1-CORE; no UzEngine integration exists any more); `phase2_parity-viewport` → `phase2.3_realtime-preview` (P2-VIEWPORT → P2-PREVIEW; the viewport is preview only, owner Q2, decision 018); `phase5_assets3d-cutover` → `phase3.1_assets3d-cutover` (P5-CUTOVER → P3-CUTOVER; the cutover follows Tunic v10's parity gate, owner Q13, decision 026) |
 | Kept, retargeted | `phase0.9_render-reference-capture` (P0-FEAS-RENDER) now captures converged **Iray** references (owner Q2, decision 018); `phase4.3_dxr-baker` (P4-DXR) is now the optional `GpuBaker` with `dx12_rt` and `vulkan_rt` backends (`architecture/06-baking.md`) |
 
+Panel changes of 2026-10-11 (owner delegated decisions to a model panel; decisions 033–035; historical context: `docs/analysis/multi-model-review/`):
+
+| Change | Ids |
+|---|---|
+| Added | `phase0.9_oracle-envelope` (P0-ORACLE-ENVELOPE: golden environment record and Tier 0 stability study, joins G0 — decision 034) |
+| Re-routed | `phase0.9_render-reference-capture` (P0-FEAS-RENDER) no longer joins G0; it stays the entry gate of P3-PATHTRACER and adds a reproducibility probe to its acceptance (decision 033) |
+
 ## Graph
 
 ```mermaid
@@ -27,6 +34,7 @@ graph TD
     P0_TOOLCHAIN[P0-TOOLCHAIN build + selftest]
     P0_FEAS_PROC[P0-FEAS-PROC procedural feasibility]
     P0_FEAS_RENDER[P0-FEAS-RENDER Iray reference capture]
+    P0_ENVELOPE[P0-ORACLE-ENVELOPE oracle envelope + stability study]
     P0_NORMAL[P0-NORMAL* normal convention fixture]
     G0{{G0 Contract frozen}}
   end
@@ -98,7 +106,8 @@ graph TD
   P0_TIER0 --> G0
   P0_TOOLCHAIN --> G0
   P0_FEAS_PROC --> G0
-  P0_FEAS_RENDER --> G0
+  P0_TIER0 --> P0_ENVELOPE
+  P0_ENVELOPE --> G0
   P0_NORMAL --> G0
 
   P0_TOOLCHAIN --> P1_CORE
@@ -226,12 +235,13 @@ The node ids are stable **parent work packages**. Before implementation tasks ar
 | P0-RECORDER | Painter oracle recorder | 0 | P0-CONTRACT | `tools/parity/recorder/*.py`: documented Python API for state; a qualified, permitted capture procedure for pixels (texture export, Iray render export) with readiness and current-frame verification; operator-recorded form for render settings the API does not expose; every golden recorded twice | A Tier 0 sample recorded end to end; no bridge code path; no private interface | `phase0.3_painter-oracle-recorder` | D13, CLR |
 | P0-STORE | Private oracle store and local oracle run | 0 | P0-CONTRACT | `UZP_PARITY_STORE` content-addressed store on the owner's machine; the local oracle run procedure documented and executed once on the owner's machine (GPU, licensed Painter 12.1.0, store; decision 028 — no GPU CI, hosted CI skips oracle tests with an explicit reason); `uzpainter parity fetch/verify/record` prototypes; repository guard for private records (hash match against the store index and public-schema validation, not only file signatures) | Fetch/verify round trip on the owner's machine; guard blocks a recorded PNG and a recorded JSON readback and passes an authored fixture image and an authored expectation JSON | `phase0.5_private-oracle-store` | D13, CLR-05 |
 | P0-TIER0 | Tier 0 corpus and oracle stability | 0 | P0-RECORDER, P0-STORE | Private goldens for `04-…` §9, baking defaults, template channel formats, API probes (blobs in the store, hashes in public manifests); stability report; first `parity/semantics/*.json` fits with residuals (public numbers) | Each golden recorded ≥ 2×; stability classified; fits published | `phase0.8_tier0-goldens` | D3, D5, D9, D13 |
+| P0-ORACLE-ENVELOPE | Oracle reproducibility envelope | 0 | P0-TIER0 | Environment record on every admitted golden (Painter build, GPU model, driver, OS build, colour-configuration hash, recorder version; Iray: operator id); Tier 0 re-recorded 5× per golden (2 same session, 2 after save/reopen, 1 in a fresh Painter process) with per-golden self-variance published; fresh-process instability classified apart from save/reopen (decision 032); 10-golden canary procedure for GPU/driver/OS/Painter updates | Study published and run before any further calibration of `calibrated` fits; envelope recorded on every golden; canary procedure tested (decision 034) | `phase0.9_oracle-envelope` | D13 |
 | P0-VENDOR | Vendor render core from UzEngine | 0 | P0-OWNER | `thirdparty/uzengine-render-core/` **copied, not linked**, from a clean UzEngine commit (RHI with DX12 and Vulkan backends, shader pipeline, DXR primitives, readback primitives, platform, crash handler, format definitions); `ORIGIN.md` (commit hash for attribution only), `NOTICE` entries, Apache-2.0 headers kept, modification markers; known defects fixed in the copy or the path avoided (glTF cook stride avoided) | Builds standalone in UzPainter's own build; no `runtime.lib`, no submodule, no engine path, no pin or patch queue | `phase0.5_vendor-render-core` | D12 |
 | P0-TOOLCHAIN | Build and selftest | 0 | P0-VENDOR | `build.zig` (Zig-first unless the vendored subset dictates otherwise), `UzPainter.exe selftest` (DX12 hardware adapter, compute, readback, PNG16, CPython import and exception round trip, MCP SDK import, Embree, DXR and Vulkan/Vulkan ray-tracing availability probes, WARP probe), link map, DLL closure | Hardware slice green on the owner's machine; WARP probe completed and reported (supported capabilities, executed checks, unsupported reasons) — WARP failure leaves that path unsupported and does not fail G0; CPython boundary qualified or fallback chosen | `phase0.8_toolchain-slice` | D12, D1 |
 | P0-FEAS-PROC | Procedural feasibility | 0 | P0-RECORDER, P0-STORE | Black-box calibration of two mesh-map generators and Leather Damaged on the sphere/cube fixtures; residual report | Residuals published; go/no-go for Phase 3 scope | `phase0.6_procedural-feasibility` | D4 |
-| P0-FEAS-RENDER | Iray reference capture | 0 | P0-RECORDER, P0-STORE | Evidence-backed answer for every "not confirmed" row of `07-…` §2.1; qualified Iray capture procedure (`07-…` §2.2: Save Render after convergence, readiness and current-frame verification); per analytic fixture, converged references recorded twice in separate sessions plus once at k·S samples (blobs private, hashes public); operator-recorded render settings (private); noise-floor report; first clean-room lobe fits with residuals; DXR Tier 1.1 and Vulkan ray-query probes on the owner's GPU | Procedure qualified; references admitted; noise floor measured; fixture values proposed to the owner for ratification | `phase0.9_render-reference-capture` | D6 |
+| P0-FEAS-RENDER | Iray reference capture | 0 | P0-RECORDER, P0-STORE | Evidence-backed answer for every "not confirmed" row of `07-…` §2.1; qualified Iray capture procedure (`07-…` §2.2: Save Render after convergence, readiness and current-frame verification); per analytic fixture, converged references recorded twice in separate sessions plus once at k·S samples (blobs private, hashes public); operator-recorded render settings (private); noise-floor report; first clean-room lobe fits with residuals; DXR Tier 1.1 and Vulkan ray-query probes on the owner's GPU | Procedure qualified; references admitted; noise floor measured; fixture values proposed to the owner for ratification; reproducibility probe (one trivial scene captured repeatedly: pixel equality, per-setting observability, variance) published. Entry gate of P3-PATHTRACER, not a G0 join (decision 033) | `phase0.9_render-reference-capture` | D6 |
 | P0-NORMAL | Normal convention fixture | 0 | P0-RECORDER, P0-STORE, P0-TOOLCHAIN | Hemisphere normal baked in Painter vs computed by the UzPainter prototype; tangent-frame verdicts | Convention and per-fragment frame settled with evidence | `phase0.9_normal-convention-fixture` | D11, D6 |
-| G0 | Gate: Contract frozen | 0 | P0-SOURCES, P0-TIER0, P0-TOOLCHAIN, P0-FEAS-PROC, P0-FEAS-RENDER, P0-NORMAL | Gate record in `parity/reports/` | All joined items accepted | `phase0.10_gate-g0` | D14 |
+| G0 | Gate: Contract frozen | 0 | P0-SOURCES, P0-TIER0, P0-ORACLE-ENVELOPE, P0-TOOLCHAIN, P0-FEAS-PROC, P0-NORMAL | Gate record in `parity/reports/` | All joined items accepted | `phase0.10_gate-g0` | D14 |
 | P1-CORE | Render-core layer (DX12) | 1 | P0-TOOLCHAIN | UzPainter-owned layer on the vendored RHI: device/queue wrapper, kernel compile + cache (DXIL and SPIR-V), `TextureReadback`, UV raster pass, dilation, resampling, mip generation, capability query; qualified on DX12 behind backend-neutral interfaces | Unit tests on synthetic meshes; readback drain tests on DX12 | `phase1.4_render-core-layer` | D12, D3 |
 | P1-DOCMODEL | Document model and manifest | 1 | P0-CONTRACT | `uzp_core` types, canonical JSON manifest + schema, revisions, transactions, operation records `{project_uuid, idempotency_key, request_hash, outcome, committed_revision}`, capability manifest generator | Round-trip tests; digest stable | `phase1.3_document-model` | D3, D2 |
 | P1-STORE | Project store | 1 | P1-DOCMODEL | Self-contained portable `.uzp` (revision, blob, plane with `plane_id`, chunk, operation, checkpoint), operation record committed atomically with its revision, retention of current + previous checkpoint and the last 50 mutation revisions (Q11), autosave-by-commit, `inspect`, `export-bundle`, fault injection incl. commit-then-die retry, census instrumentation | `09-…` §7 tests pass | `phase1.8_project-store` | D8, D1 |

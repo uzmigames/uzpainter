@@ -17,6 +17,7 @@
 
 ## 4. Acceptance
 - [ ] 4.1 Acceptance (P1-WAND gate): maps equal and byte-stable across two runs; report published for the G1 gate record, listing any exceptions relied on (none expected)
+- [ ] 4.2 Schedule checkpoint (decision 035): when the pilot completes, pass or fail, record in `docs/roadmap.md` a re-forecast of every remaining phase from this slice's measured wall-clock, failure causes and exception counts, marking which estimates are measured and which stay extrapolated
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

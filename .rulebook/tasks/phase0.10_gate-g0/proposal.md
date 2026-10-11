@@ -10,13 +10,13 @@ Every phase ends at an evidence gate that joins all mandatory acceptance items o
   - vendored render core builds standalone;
   - hardware `selftest` green on the owner's machine; WARP probe completed and reported (WARP failure leaves that path unsupported and does not fail G0);
   - feasibility reports published (procedural; normal convention);
-  - Iray capture procedure qualified and references admitted with their noise floor; analytic fixture values proposed to the owner.
-- Cross-check of the DXR Tier 1.1 / Vulkan ray-query results recorded by `phase0.8_render-reference-fits` against the `selftest` probe report of `phase0.7_toolchain-probes`.
-- `.rulebook` archive of every Phase 0 task (roadmap rule 3). No capability manifest exists before `phase1.3_document-model` delivers its generator; the gate record states this.
+  - oracle environment recorded on every golden and Tier 0 stability study published (decision 034).
+  The Iray capture procedure and references are no longer a G0 clause: they gate the path tracer in Phase 3 (decision 033).
+- `.rulebook` archive of every Phase 0 task (roadmap rule 3) except the Iray leg, which stays open until it gates P3-PATHTRACER (decision 033). No capability manifest exists before `phase1.3_document-model` delivers its generator; the gate record states this.
 - Revision of the Phase 1 duration Hypothesis at the gate (owner Q14).
 
 ## Dependencies
-- Joined items (must be accepted): `phase0.1_approved-source-index` (P0-SOURCES), `phase0.8_tier0-goldens` (P0-TIER0), `phase0.8_toolchain-slice` (P0-TOOLCHAIN), `phase0.6_procedural-feasibility` (P0-FEAS-PROC), `phase0.9_render-reference-capture` (P0-FEAS-RENDER), `phase0.9_normal-convention-fixture` (P0-NORMAL). The other Phase 0 items reach G0 through them: `phase0_owner-decisions`, `phase0.2_parity-contract`, `phase0.3_painter-oracle-recorder`, `phase0.5_private-oracle-store`, `phase0.5_vendor-render-core`.
+- Joined items (must be accepted): `phase0.1_approved-source-index` (P0-SOURCES), `phase0.8_tier0-goldens` (P0-TIER0), `phase0.8_toolchain-slice` (P0-TOOLCHAIN), `phase0.6_procedural-feasibility` (P0-FEAS-PROC), `phase0.9_oracle-envelope` (P0-ORACLE-ENVELOPE), `phase0.9_normal-convention-fixture` (P0-NORMAL). `phase0.9_render-reference-capture` (P0-FEAS-RENDER) no longer joins G0 (decision 033). The other Phase 0 items reach G0 through them: `phase0_owner-decisions`, `phase0.2_parity-contract`, `phase0.3_painter-oracle-recorder`, `phase0.5_private-oracle-store`, `phase0.5_vendor-render-core`.
 - Previous gate: none (G0 is the first gate).
 - Successor: `phase1.26_gate-g1` (G1 requires G0).
 

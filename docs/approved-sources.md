@@ -170,6 +170,13 @@ Not implementation inputs; they may be named only as `historical context`. Cited
 | QH-UZE-BUILD | `docs/analysis/uzengine-renderer/07-build-and-packaging.md` | Not cited; not audited |
 | QH-UZE-IPC | `docs/analysis/uzengine-renderer/08-mcp-and-ipc-patterns.md` | Not cited; not audited |
 | QH-UZE-GAPS | `docs/analysis/uzengine-renderer/09-gaps-and-risks.md` | Not cited; not audited |
+| QH-MMR-DOSSIER | `docs/analysis/multi-model-review/01-dossier.md` | Cited only as historical context (`dag.md`, decisions 033–035); model-panel opinions of 2026-10-11 without repository access, no Adobe content; not audited |
+| QH-MMR-ASTRA | `docs/analysis/multi-model-review/02-review-gpt-6-astra.md` | Cited only as historical context (`dag.md`, decisions 033–035); model-panel opinions of 2026-10-11 without repository access, no Adobe content; not audited |
+| QH-MMR-SOL | `docs/analysis/multi-model-review/03-review-gpt-5-6-sol.md` | Cited only as historical context (`dag.md`, decisions 033–035); model-panel opinions of 2026-10-11 without repository access, no Adobe content; not audited |
+| QH-MMR-KIMI | `docs/analysis/multi-model-review/04-review-kimi-k3.md` | Cited only as historical context (`dag.md`, decisions 033–035); model-panel opinions of 2026-10-11 without repository access, no Adobe content; not audited |
+| QH-MMR-GROK | `docs/analysis/multi-model-review/05-review-grok-4-5.md` | Cited only as historical context (`dag.md`, decisions 033–035); model-panel opinions of 2026-10-11 without repository access, no Adobe content; not audited |
+| QH-MMR-VOTES | `docs/analysis/multi-model-review/06-decision-round.md` | Cited only as historical context (`dag.md`, decisions 033–035); model-panel opinions of 2026-10-11 without repository access, no Adobe content; not audited |
+| QH-MMR-SYNTHESIS | `docs/analysis/multi-model-review/07-synthesis.md` | Cited only as historical context (`dag.md`, decisions 033–035); model-panel opinions of 2026-10-11 without repository access, no Adobe content; not audited |
 
 ### Q3. Uncleared historical revisions
 
