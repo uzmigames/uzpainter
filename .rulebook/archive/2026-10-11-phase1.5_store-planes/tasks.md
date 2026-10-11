@@ -21,9 +21,13 @@
 - [x] 3.7 Corruption tests: a chunk blob with altered bytes and a `plane_chunk` row altered so it no longer hashes to `chunk_root` are each detected on open and by the integrity checker, naming the plane and owning node
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green on the hosted CPU lane; results attached to `phase1.8_project-store` as part of its `09-…` §7 evidence
+- [x] 4.1 Every §3 test green on the hosted CPU lane; results attached to `phase1.8_project-store` as part of its `09-…` §7 evidence
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
 - [x] 5.2 Write tests covering the new behavior
 - [x] 5.3 Run tests and confirm they pass
+
+## Hosted CPU lane evidence
+
+- Run 38095977466 on commit 6fb4a16 (job 114341839771, success, 2026-10-11): `tests/store/test_project_store.py` 23 passed (all §3 plane cases included); full suite 939 passed, 78 skipped (GPU/oracle, decision 028).

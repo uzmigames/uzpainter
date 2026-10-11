@@ -25,3 +25,7 @@ DAG gate of P1-STORE: the settling-evidence tests of `docs/architecture/09-proje
 - Affected code: `src/store/`, `tests/store/`, vendored SQLite amalgamation and zstd under `thirdparty/`
 - Breaking change: NO
 - User benefit: A compact, portable, crash-safe project file whose history, retries and approved baselines behave exactly as specified.
+
+## Child evidence
+
+- phase1.5_store-planes: hosted run 38095977466 on 6fb4a16, `tests/store` 23/23 passed.
