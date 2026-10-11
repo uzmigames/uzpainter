@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from tools.parity.render_fits.fixtures import QUALIFICATION
 from tools.parity.render_fits.pipeline import ALL_GOLDENS, FACE_GOLDENS
 from tools.parity.render_procedure.noise import FULL_SCALE
 from tools.parity.render_procedure.report import replace_block
@@ -18,6 +19,12 @@ from tools.parity.schemas import REPO_ROOT
 
 REPORT = REPO_ROOT / "parity" / "reports" / "phase0" / "iray-noise-floor.md"
 REGIONS = ("interior", "edge", "background")
+
+
+def noise_goldens(results: dict[str, Any]) -> tuple[str, ...]:
+    """The fixture goldens, then the qualification sphere once its (c) is measured."""
+    extra = (QUALIFICATION.name,) if QUALIFICATION.name in results["noise_c"] else ()
+    return ALL_GOLDENS + extra
 
 
 def c(value: float | None, digits: int = 0) -> str:
@@ -166,7 +173,7 @@ def sequence_block(results: dict[str, Any]) -> str:
 
 def noise_block(results: dict[str, Any]) -> str:
     rows = []
-    for name in ALL_GOLDENS:
+    for name in noise_goldens(results):
         ab = results["noise_ab"][name]
         cc = results["noise_c"][name]
         for region in REGIONS:
@@ -314,7 +321,7 @@ def filter_block(results: dict[str, Any]) -> str:
 
 def flip_block(results: dict[str, Any]) -> str:
     rows = []
-    for name in ALL_GOLDENS:
+    for name in noise_goldens(results):
         flip = results["noise_c"][name].get("flip")
         if not flip:
             continue

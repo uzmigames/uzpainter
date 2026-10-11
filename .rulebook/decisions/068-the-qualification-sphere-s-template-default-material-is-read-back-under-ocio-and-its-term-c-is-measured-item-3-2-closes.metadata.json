@@ -1,0 +1,13 @@
+{
+  "id": 68,
+  "slug": "the-qualification-sphere-s-template-default-material-is-read-back-under-ocio-and-its-term-c-is-measured-item-3-2-closes",
+  "title": "The qualification sphere's template-default material is read back under OCIO and its term (c) is measured; item 3.2 closes",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase0.9_render-reference-capture",
+    "phase3.5_path-tracer-materials",
+    "phase3.6_path-tracer-tier3-report"
+  ],
+  "supersededBy": null
+}

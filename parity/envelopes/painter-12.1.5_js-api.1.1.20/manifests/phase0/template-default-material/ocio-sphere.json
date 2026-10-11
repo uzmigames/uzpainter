@@ -1,0 +1,172 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "phase0/template-default-material/ocio-sphere",
+  "tier": "0",
+  "domain": "phase0/template-default-material",
+  "description": "Template-default material of the qualification sphere (task phase0.9_render-reference-capture item 3.2, decision 063): the authored sphere created as the qualification job creates it (mesh only, every project setting Painter's default) in an OCIO session (Painter's substance config), no layer in the stack; the template's channels BaseColor, BaseMetalness, SpecularRoughness, Normal and Height exported (the 8-bit channels at PNG 16, the 16-bit float ones at OpenEXR 32f), padding infinite, no dithering. Recorded twice (same session; after save and reopen).",
+  "inputs": [
+    {
+      "input_id": "sphere",
+      "kind": "mesh",
+      "path": "parity/fixtures/render-procedure/sphere.obj",
+      "sha256": "037ae3ce625732e6a2e8f3873f7ff5ce76c58a78a9c14b66581a3bad9dd2f26c",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "sphere"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/basemetalness:L",
+            "documentMap/specularroughness:L"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/normal:RGB",
+            "documentMap/height:L"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "OCIO",
+      "value": "resources/ocio/substance/config.ocio",
+      "applied_by": "environment_variable"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.exr.bit_depth",
+      "value": "32f",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "f6ac6f70c43d0df1d0051ad16e7a6805ce4f98b1143852c7b113b9d3f4faa2bb",
+      "size_bytes": 9011
+    },
+    {
+      "record_id": "r1-uzp_sphere-basecolor",
+      "kind": "exported_map",
+      "sha256": "da1ae4a0c4f8148658abc56f388d79428a256c497929f29e2a9fa7ec827f0869",
+      "size_bytes": 8539
+    },
+    {
+      "record_id": "r1-uzp_sphere-basemetalness",
+      "kind": "exported_map",
+      "sha256": "f0753802cfe7482515d84060b1e8f9a45036350c36f2d397d288d7894aab9646",
+      "size_bytes": 2134
+    },
+    {
+      "record_id": "r1-uzp_sphere-specularroughness",
+      "kind": "exported_map",
+      "sha256": "d3f2aee66869bf3779f8dd73adf6f037ada24cd711f07e165b8edefea2b0158a",
+      "size_bytes": 4332
+    },
+    {
+      "record_id": "r1-uzp_sphere-normal",
+      "kind": "exported_map",
+      "sha256": "8ab23f71a872c2d79a1348506339332697e37e0b2bc6f185271768ea54a7425a",
+      "size_bytes": 243993
+    },
+    {
+      "record_id": "r1-uzp_sphere-height",
+      "kind": "exported_map",
+      "sha256": "d6db8eee5d8d594fd016fc525c8821a68ca4680d09e258ac2efb10d7b973e184",
+      "size_bytes": 11989
+    },
+    {
+      "record_id": "r2-uzp_sphere-basecolor",
+      "kind": "exported_map",
+      "sha256": "da1ae4a0c4f8148658abc56f388d79428a256c497929f29e2a9fa7ec827f0869",
+      "size_bytes": 8539
+    },
+    {
+      "record_id": "r2-uzp_sphere-basemetalness",
+      "kind": "exported_map",
+      "sha256": "f0753802cfe7482515d84060b1e8f9a45036350c36f2d397d288d7894aab9646",
+      "size_bytes": 2134
+    },
+    {
+      "record_id": "r2-uzp_sphere-specularroughness",
+      "kind": "exported_map",
+      "sha256": "d3f2aee66869bf3779f8dd73adf6f037ada24cd711f07e165b8edefea2b0158a",
+      "size_bytes": 4332
+    },
+    {
+      "record_id": "r2-uzp_sphere-normal",
+      "kind": "exported_map",
+      "sha256": "8ab23f71a872c2d79a1348506339332697e37e0b2bc6f185271768ea54a7425a",
+      "size_bytes": 243993
+    },
+    {
+      "record_id": "r2-uzp_sphere-height",
+      "kind": "exported_map",
+      "sha256": "d6db8eee5d8d594fd016fc525c8821a68ca4680d09e258ac2efb10d7b973e184",
+      "size_bytes": 11989
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "40d7a9ebe4c2e7c75c9a9256f7bc909189717e71a09287dbaee0fd6abc87de96",
+      "size_bytes": 402
+    }
+  ]
+}

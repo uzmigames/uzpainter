@@ -11,7 +11,23 @@ import re
 import numpy as np
 import pytest
 
-from tools.parity.render_fits import display, fit, report, semantics, spectral, stability
+from tools.parity.render_fits import (
+    display,
+    fit,
+    pipeline,
+    report,
+    semantics,
+    spectral,
+    stability,
+)
+from tools.parity.render_fits.fixtures import (
+    QUALIFICATION,
+    QUALIFICATION_EXPORT_CODE,
+    by_name,
+    qualification_base,
+    srgb_to_linear,
+    unorm8,
+)
 from tools.parity.schemas import REPO_ROOT, Schema, validation_errors
 from tools.sources.check import INDEX_PATH
 from tools.sources.index import parse_index
@@ -177,3 +193,32 @@ def test_report_formats_fractions_as_codes() -> None:
     assert report.c(1e-4, 2) == "6.55"
     assert report.c(math.nan) == "-"
     assert report.c(None) == "-"
+
+
+def test_noise_floor_covers_every_admitted_analytic_fixture() -> None:
+    """Item 3.2 of phase0.9 (decisions 063, 068): the 22 fixtures and the qualification sphere
+    each have (a), (b) and the prototype's (c) in the noise-floor table."""
+    text = report.REPORT.read_text(encoding="utf-8")
+    body = re.search(r"<!-- noise-floor:begin -->\n(.*?)<!-- noise-floor:end -->", text, re.DOTALL)
+    assert body is not None
+    rows = [line.split(" | ") for line in body.group(1).splitlines()[2:]]
+    covered = {row[0].strip("| `") for row in rows if row[1] == "interior" and row[8] != "-"}
+    assert covered == {*fit.FIT_GOLDENS, *fit.HELD_OUT_GOLDENS, QUALIFICATION.name}
+
+
+def test_qualification_scene_takes_the_read_back_material() -> None:
+    """Decision 068: BaseColor is the export's linear value (off the sRGB8 lattice), metalness
+    L8 code 0, roughness L8 code 76; the fixture is found by name like the others."""
+    assert by_name(QUALIFICATION.name) is QUALIFICATION
+    assert QUALIFICATION_EXPORT_CODE % 257 != 0
+    assert qualification_base() == (srgb_to_linear(QUALIFICATION_EXPORT_CODE / 65535.0),) * 3
+    assert abs(qualification_base()[0] - 0.8) < 2e-5
+    assert (unorm8(QUALIFICATION.metalness), unorm8(QUALIFICATION.roughness)) == (0.0, 76 / 255)
+    assert QUALIFICATION.perturbation is None
+    assert pipeline.SCENE_OVERRIDES[QUALIFICATION.name] == {"base_override": qualification_base()}
+
+
+def test_noise_rows_add_the_qualification_sphere_once_measured() -> None:
+    assert report.noise_goldens({"noise_c": {}}) == fit.FIT_GOLDENS + fit.HELD_OUT_GOLDENS
+    measured = report.noise_goldens({"noise_c": {QUALIFICATION.name: {}}})
+    assert measured[-1] == QUALIFICATION.name and len(measured) == 23

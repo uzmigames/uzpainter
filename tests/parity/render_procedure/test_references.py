@@ -15,6 +15,8 @@ from tools.parity.recorder.capture import decode_png
 from tools.parity.recorder.iray import K_TIMES_SAMPLES, SEPARATE_SESSION, settings_sheet
 from tools.parity.recorder.iray_probe import REF_MATCH_HDRI_SHA256, STUDIO_WHITE_SOFT
 from tools.parity.recorder.job import load_job
+from tools.parity.recorder.session import PainterIdentity, RecorderError
+from tools.parity.recorder.texture import require_colour_management
 from tools.parity.render_procedure import references as refs
 from tools.parity.render_procedure.noise import (
     admission_problems,
@@ -232,3 +234,54 @@ def test_report_blocks_are_replaced_in_place() -> None:
     assert replace_block(text, "x", "new\n") == "a\n<!-- x:begin -->\nnew\n<!-- x:end -->\nb\n"
     with pytest.raises(ValueError, match="no y block"):
         replace_block(text, "y", "")
+
+
+def test_template_default_manifest_reads_the_qualification_project_back() -> None:
+    """Decisions 063, 068: the qualification job's project (mesh only, OCIO), its empty stack
+    exported channel by channel; the committed manifest is the generator's."""
+    committed = json.loads(refs.TEMPLATE_DEFAULT_MANIFEST.read_text(encoding="utf-8"))
+    generated = refs.template_default_manifest()
+    generated["private_records"] = committed["private_records"]
+    assert committed == generated
+    assert validation_errors(committed, Schema.GOLDEN_PUBLIC) == []
+    qualification = json.loads(refs.QUALIFICATION_MANIFEST.read_text(encoding="utf-8"))
+    first = qualification["instruction_sequence"]["steps"][0]
+    steps = committed["instruction_sequence"]["steps"]
+    assert (steps[0]["call"], steps[0]["args"]) == (first["call"], first["args"])
+    assert {i["sha256"] for i in committed["inputs"]} == {
+        i["sha256"] for i in qualification["inputs"]
+    }
+    exported = sorted(m.split("/")[1].split(":")[0] for s in steps[1:] for m in s["args"]["maps"])
+    assert exported == sorted(
+        ["basecolor", "basemetalness", "normal", "specularroughness", "height"]
+    )
+    assert {"name": "OCIO", "value": refs.OCIO_CONFIG, "applied_by": "environment_variable"} in (
+        committed["applied_settings"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("colour", "refused"),
+    [
+        ({"mode": "legacy", "OCIO": None, "PAINTER_ACE_CONFIG": None}, True),
+        ({"mode": "ocio", "OCIO": r"C:\other\config.ocio", "PAINTER_ACE_CONFIG": None}, True),
+        (
+            {
+                "mode": "ocio",
+                "OCIO": r"C:\Painter\resources\ocio\substance\config.ocio",
+                "PAINTER_ACE_CONFIG": None,
+            },
+            False,
+        ),
+    ],
+)
+def test_an_ocio_manifest_is_recorded_only_in_an_ocio_session(
+    colour: dict[str, Any], refused: bool
+) -> None:
+    job = load_job(refs.TEMPLATE_DEFAULT_MANIFEST)
+    identity = PainterIdentity("12.1.5", (12, 1, 5), "1.1.20", "s", colour)
+    if refused:
+        with pytest.raises(RecorderError, match="OCIO"):
+            require_colour_management(job, identity)
+    else:
+        require_colour_management(job, identity)

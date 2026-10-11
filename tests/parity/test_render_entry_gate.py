@@ -4,8 +4,9 @@
 The record `parity/reports/phase0/gate-p3-pathtracer-entry.md` names its prerequisites and its
 three children, which must be archived, and every evidence path it cites must exist. On the
 owner's machine (private store) every admitted Iray reference must name the qualified procedure,
-its settings sheet hash and its `uncontrolled` settings (item 3.1), and every stability capture
-of decision 052's capture request must resolve in the store (item 3.4).
+its settings sheet hash and its `uncontrolled` settings (item 3.1), every stability capture of
+decision 052's capture request must resolve in the store (item 3.4), and so must the read-back of
+the qualification sphere's template-default material (item 3.2, decision 068).
 """
 
 from __future__ import annotations
@@ -20,7 +21,11 @@ import pytest
 from tools.parity.recorder.iray import settings_sheet
 from tools.parity.recorder.job import load_job
 from tools.parity.render_procedure.noise import private_record
-from tools.parity.render_procedure.references import reference_manifests, stability_manifests
+from tools.parity.render_procedure.references import (
+    TEMPLATE_DEFAULT_MANIFEST,
+    reference_manifests,
+    stability_manifests,
+)
 from tools.parity.schemas import REPO_ROOT
 from tools.parity.store.manifest import verify
 from tools.parity.store.store import Status, locate
@@ -91,3 +96,15 @@ def test_stability_captures_resolve_in_the_store(path: Path) -> None:
     renders = [r for r in manifest["private_records"] if r["kind"] == "iray_reference"]
     assert len(renders) == 2
     assert all(r.status is Status.AVAILABLE for r in verify(store, manifest))
+
+
+def test_template_default_material_resolves_in_the_store() -> None:
+    """Item 3.2 (decisions 063, 068): the read-back of the qualification sphere's material, every
+    blob available, the five maps identical in both recordings."""
+    store = needs_store()
+    manifest = json.loads(TEMPLATE_DEFAULT_MANIFEST.read_text(encoding="utf-8"))
+    assert all(r.status is Status.AVAILABLE for r in verify(store, manifest))
+    maps = {r["record_id"]: r["sha256"] for r in manifest["private_records"]}
+    first = {k[3:]: v for k, v in maps.items() if k.startswith("r1-")}
+    assert len(first) == 5
+    assert first == {k[3:]: v for k, v in maps.items() if k.startswith("r2-")}

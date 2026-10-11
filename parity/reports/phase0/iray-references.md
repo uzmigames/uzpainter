@@ -223,6 +223,20 @@ Read on 2026-10-11 in an OCIO session of Painter `12.1.5+js-api.1.1.20` (throwaw
 
 These are the values the earlier unhashed tree dump on a Legacy project showed; under OCIO they are the same. The bump-not-displacement answer of the procedure (row `height`) and decision 042 rest on them.
 
+### 5.1 Template-default channels read back under OCIO (decision 068)
+
+The qualification sphere's material: golden `phase0/template-default-material/ocio-sphere` (manifest `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/phase0/template-default-material/ocio-sphere.json`), recorded on 2026-10-11 in one session of Painter `12.1.5+js-api.1.1.20` started with `OCIO` naming `resources/ocio/substance/config.ocio`. The sphere is created as the qualification job creates it (mesh only), with no layer; the template's channels are exported, the 8-bit ones at PNG 16 and the 16-bit float ones at OpenEXR 32f. r1 and r2 (after save and reopen) are byte-identical on all five maps. Private record `f6ac6f70c43d0df1d0051ad16e7a6805ce4f98b1143852c7b113b9d3f4faa2bb`; `store verify` ok.
+
+| Channel (format) | Empty-stack value, every texel | Map SHA-256 (r1 = r2) |
+|---|---|---|
+| BaseColor (sRGB8) | 59396/65535 sRGB-encoded = linear 0.799986, off the sRGB8 lattice (Legacy `base-values-default`: 59397) | `da1ae4a0c4f8148658abc56f388d79428a256c497929f29e2a9fa7ec827f0869` |
+| BaseMetalness (L8) | 0 | `f0753802cfe7482515d84060b1e8f9a45036350c36f2d397d288d7894aab9646` |
+| SpecularRoughness (L8) | 19532/65535 = code 76 | `d3f2aee66869bf3779f8dd73adf6f037ada24cd711f07e165b8edefea2b0158a` |
+| Normal (RGB16F) | (127/255, 127/255, 1) | `8ab23f71a872c2d79a1348506339332697e37e0b2bc6f185271768ea54a7425a` |
+| Height (L16F) | 0 | `d6db8eee5d8d594fd016fc525c8821a68ca4680d09e258ac2efb10d7b973e184` |
+
+The texture set is 1024 px. `iray-noise-floor.md` §1 states how the prototype's scene takes these values.
+
 ## 6. Verification
 
 - **Admission (item 3.1).** `python -m tools.parity.render_procedure noise` checks every golden record before it measures (`noise.admission_problems`): two `separate_session` recordings from different Painter sessions; one `k_times_samples` recording at 1024 samples; no two recordings from one session; each converged (Done, iterations = samples) and `current_frame_verified`. 23 of 23 pass. During capture the recorder also checked each render against its fence, its size and bit depth, its silhouette and the background canary (89,89,89 for v2, 141,142,148 for `ref_match`). It refused nothing.
