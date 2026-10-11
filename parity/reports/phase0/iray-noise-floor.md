@@ -349,7 +349,7 @@ Item 2.5 (decision 051). On the fixed pipeline's fixtures no light-carrying path
 |---|---|---|---|---|---|---|---|
 | `base-saturated` | 0.6038 / 0.0331 / 0.0103 | 0.092 | -1.2 / -112.8 / -29.3 | 505 | +580 | +532 | 4.4e-16 |
 | `cube-saturated--ref-match-000` | 0.6038 / 0.0331 / 0.0103 | 0.000 | +0.0 / +0.0 / +0.0 | 0 | +528 | +528 | 5.6e-17 |
-| `cube-saturated--ref-match-180` | 0.6038 / 0.0331 / 0.0103 | 0.000 | +0.0 / +0.0 / +0.0 | 0 | +928 | +928 | 1.4e-17 |
+| `cube-saturated--ref-match-180` | 0.6038 / 0.0331 / 0.0103 | 0.000 | +0.0 / +0.0 / +0.0 | 0 | +928 | +928 | 5.6e-17 |
 <!-- transport:end -->
 
 ## 6. Defect detection (item 3.2)

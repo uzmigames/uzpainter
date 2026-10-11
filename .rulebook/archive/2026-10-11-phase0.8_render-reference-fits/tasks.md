@@ -23,7 +23,7 @@
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
 - [x] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.3 Run tests and confirm they pass
 
 ## Notes
 - Scope change 2026-10-11 (decision 050, after decisions 038, 042 and 046): the analytic profile's Legacy colour management and its extra environments are replaced by the fixed pipeline; the prototype stays a CPU feasibility tool; term (c) is the prototype's, and phase3.6 item 2.3 measures the shipped tracer's. Items 2.1-2.8, 3.1-3.3 and 4.1 were reworded, none deleted.

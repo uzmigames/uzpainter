@@ -97,8 +97,9 @@ render::Result<void> CheckSampling(const UvProjection& projection, uint32_t setW
             return EvalFail(EvalErrorKind::UnsupportedSource,
                             std::string(core::ToString(projection.filter)) +
                                 " minification (" + std::to_string(footprint) +
-                                " bitmap texels per texel) is a release gap: Painter prefilters "
-                                "there and the filter is not fitted (resampling.json)",
+                                " bitmap texels per texel) is a release gap: Painter samples it "
+                                "with the GPU's anisotropic texture unit, not modelled bit for "
+                                "bit (decision 056)",
                             node);
         }
     }
@@ -136,14 +137,14 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
     const double invHeight = 1.0 / setHeight;
     const double u = (i + 0.5) * invWidth;
     const double v = 1.0 - (j + 0.5) * invHeight;
-    const double a = (u - 0.5) * p.scale[0];
-    const double b = (v - 0.5) * p.scale[1];
+    const double a = ((u - 0.5) - p.offset[0]) * p.scale[0];
+    const double b = ((v - 0.5) - p.offset[1]) * p.scale[1];
     const double ca = p.cosR * a;
     const double sb = p.sinR * b;
-    const double u2 = ((ca + sb) + 0.5) - p.offset[0];
+    const double u2 = (ca + sb) + 0.5;
     const double sa = (-p.sinR) * a;
     const double cb = p.cosR * b;
-    const double v2 = ((sa + cb) + 0.5) - p.offset[1];
+    const double v2 = (sa + cb) + 0.5;
     const double x = u2 * image.width - 0.5;
     const double y = (1.0 - v2) * image.height - 0.5;
 
