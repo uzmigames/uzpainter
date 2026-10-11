@@ -34,6 +34,20 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
   - the display encoding is sRGB of a half-float value;
   - the run-to-run spikes sit on faces with n_x = 0, a hypothesis under test;
   - report in `parity/reports/phase0/iray-noise-floor.md`.
+- Profile `painter-12.1-isolated-coverage-weights` (task `phase1.10_compositor-float32-residual`, decisions 058, 059, 066). Painter's float32 source-over onto a partly covered backdrop is identified: the source weight is re-derived from the rounded coverage, `ws = fl(ao − ab)`, and the result goes through the hardware reciprocal. The profile also adds:
+  - a fused read-out;
+  - an unrounded uniform grey;
+  - binary16 sRGB8 coverage from 1/2 up only.
+
+  `quantisation-thirds`, `group-masks` s2–s3 and the new `group-coverage-order` golden are now exact on every map, CPU and GPU. A PassThrough group's first child takes the coverage weights unless the group itself sits at the start of its list. Earlier profiles stay pinned bit for bit.
+- Blend gaps (task `phase1.11_compositor-blend-gaps`, decisions 053, 054):
+  - Normal-map modes are exact below opacity 1, using the GPU's GLSL `asin` and sine and cosine tables measured on the recording GPU (`hw::Asin`, `hw::Sin`, `hw::Cos`).
+  - PassThrough groups are exact with and without masks.
+  - The Tint, Saturation, Color and Value hue law is fitted. These modes are exact on grey and sRGB8 channels and within one code elsewhere, and they stay release gaps until the `blend-component-hue` recording.
+- Iray render-capture parent (task `phase0.9_render-reference-capture`, decisions 062, 063):
+  - The run-to-run spikes are triggered by facets with an exactly zero normal x component and are redrawn on every render.
+  - The reproducibility probe is published.
+  - The P3-PATHTRACER entry gate record is prepared for the owner's signature.
 - Minification through Painter's Vulkan anisotropic sampler identified (task `phase1.9_compositor-resample-gaps`, decision 056). The UV transform now applies offset before scale and rotation. Minification stays refused until a bit-exact model exists.
 - Project store settle tests (task `phase1.8_project-store`, items 3.1–3.6, decision 045):
   - `uzp-store-settle-tests` chains the `09-project-file-format.md` §7 faults on one file: kills during commit and compaction, I/O failures and blob or manifest corruption. After each fault, the full-file state must equal the snapshot taken before it.
