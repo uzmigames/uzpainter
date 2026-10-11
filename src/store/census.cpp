@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -249,6 +250,12 @@ std::vector<CensusProjectInput> ReadCensusInputs(const Value& inputs, const fs::
     for (const Value& entry : RequiredList(inputs, "projects", "the document")) {
         CensusProjectInput project;
         project.id = RequiredText(entry, "id", "a project");
+        // The id names the project's folder in the work dir, which the census replaces.
+        if (project.id.empty() || !std::all_of(project.id.begin(), project.id.end(), [](char c) {
+                return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-';
+            })) {
+            throw core::ValueError("census inputs: project id '" + project.id + "' is not a plain name ([A-Za-z0-9_-]+)");
+        }
         const std::string where = "project " + project.id;
         const std::string spp = RequiredText(entry, "spp", where);
         if (!spp.empty()) project.spp = assets_root / FromUtf8(spp);

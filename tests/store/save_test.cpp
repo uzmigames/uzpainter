@@ -16,6 +16,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
@@ -26,6 +27,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -118,6 +120,18 @@ std::string ReadBytes(const fs::path& path) {
 void WriteBytes(const fs::path& path, std::string_view bytes) {
     std::ofstream file(path, std::ios::binary);
     file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+}
+
+/// Opens `lock` the way `ProjectLock` holds it (write access, sharing reads only) with `content`.
+HANDLE HoldSidecar(const fs::path& lock, const std::string& content) {
+    const HANDLE file = CreateFileW(lock.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    DWORD written = 0;
+    if (file == INVALID_HANDLE_VALUE ||
+        !WriteFile(file, content.data(), static_cast<DWORD>(content.size()), &written, nullptr)) {
+        throw Failure{"cannot hold the lock sidecar"};
+    }
+    return file;
 }
 
 fs::path With(const fs::path& path, const char* suffix) {
@@ -729,10 +743,12 @@ void SaveAsAndCopy() {
         CHECK(a.doc->revision() == 2 && a.doc->NeedsSaving());
     }
     CHECK(EXPECT_THROW(StoreError, s.store->SaveAs(*s.doc, copy)).code() == StoreError::Code::exists);
-    // A target whose lock a live worker holds is refused.
+    // A target whose lock another owner holds is refused.
     const fs::path busy = dir / "busy.uzp";
-    WriteBytes(LockPath(busy), "pid=" + std::to_string(CurrentOwner().pid) + "\nstarted=" + std::to_string(CurrentOwner().started) + "\n");
-    CHECK(EXPECT_THROW(StoreError, s.store->SaveAs(*s.doc, busy)).code() == StoreError::Code::locked);
+    {
+        const ProjectLock held = ProjectLock::Acquire(busy);
+        CHECK(EXPECT_THROW(StoreError, s.store->SaveAs(*s.doc, busy)).code() == StoreError::Code::locked);
+    }
     CHECK(!fs::exists(busy) && s.store->path() == target);
     s.Close();
     CHECK(!fs::exists(LockPath(target)) && AtRest(target));
@@ -875,12 +891,52 @@ void LockSidecar() {
         s.Close();
         CHECK(!fs::exists(LockPath(path)) && AtRest(path));
     }
-    // A reused pid (another start time) and an unreadable lock are stale too.
-    for (const std::string& content : {"pid=" + std::to_string(GetCurrentProcessId()) + "\nstarted=1\n", std::string("garbage")}) {
+    // A sidecar no process holds is stale whatever it records: a reused pid (another start time),
+    // a live pid (this process) and an unreadable lock.
+    const std::string self = "pid=" + std::to_string(CurrentOwner().pid) + "\nstarted=" + std::to_string(CurrentOwner().started) + "\n";
+    for (const std::string& content : {"pid=" + std::to_string(GetCurrentProcessId()) + "\nstarted=1\n", self, std::string("garbage")}) {
         WriteBytes(LockPath(path), content);
         Session s = OpenSession(path);
         CHECK(ReadLockOwner(LockPath(path)) == CurrentOwner());
         s.Close();
+        CHECK(!fs::exists(LockPath(path)));
+    }
+    // A held sidecar its owner has not written yet (empty) or that cannot be parsed is not stolen:
+    // the open is refused and the sidecar left as it is; once the holder lets go it is stale.
+    for (const std::string& content : {std::string(), std::string("garbage")}) {
+        const HANDLE held = HoldSidecar(LockPath(path), content);
+        const auto refused = EXPECT_THROW(StoreError, ProjectStore::Open(path));
+        CHECK(refused.code() == StoreError::Code::locked && Contains(refused.what(), "another process"));
+        CHECK(EXPECT_THROW(StoreError, ProjectLock::Acquire(path)).code() == StoreError::Code::locked);
+        CHECK(!DeleteFileW(LockPath(path).c_str()) && ReadBytes(LockPath(path)) == content);
+        CloseHandle(held);
+        Session s = OpenSession(path);
+        CHECK(ReadLockOwner(LockPath(path)) == CurrentOwner());
+        s.Close();
+        CHECK(!fs::exists(LockPath(path)));
+    }
+    // Workers racing for a stale sidecar: exactly one takes it, every other one is refused.
+    for (int round = 0; round < 20; ++round) {
+        WriteBytes(LockPath(path), "garbage");
+        std::vector<ProjectLock> locks(8);
+        std::atomic<bool> go = false;
+        std::atomic<int> taken = 0, refused = 0;
+        std::vector<std::thread> workers;
+        for (ProjectLock& lock : locks) {
+            workers.emplace_back([&] {
+                while (!go) std::this_thread::yield();
+                try {
+                    lock = ProjectLock::Acquire(path);
+                    ++taken;
+                } catch (const StoreError& error) {
+                    if (error.code() == StoreError::Code::locked) ++refused;
+                }
+            });
+        }
+        go = true;
+        for (std::thread& worker : workers) worker.join();
+        CHECK(taken == 1 && refused == 7 && ReadLockOwner(LockPath(path)) == CurrentOwner());
+        locks.clear();
         CHECK(!fs::exists(LockPath(path)));
     }
 }

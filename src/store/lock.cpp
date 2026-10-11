@@ -33,13 +33,16 @@ std::optional<std::uint64_t> StartTime(HANDLE process) {
     return Ticks(created);
 }
 
-/// Creates the sidecar holding `owner`; false when it already exists.
-bool CreateLockFile(const std::filesystem::path& lock, const LockOwner& owner) {
-    const HANDLE file = CreateFileW(lock.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
-                                    CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+/// Opens the sidecar for writing, sharing reads only, and records `owner` in it; nothing while
+/// another handle holds it. The handle is kept for the lock's lifetime: no other process can then
+/// open it for writing or delete it, and the OS closes it when the owner dies, so a sidecar nobody
+/// holds is stale whatever it contains and is overwritten.
+HANDLE CreateLockFile(const std::filesystem::path& lock, const LockOwner& owner) {
+    const HANDLE file = CreateFileW(lock.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         const DWORD error = GetLastError();
-        if (error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS) return false;
+        if (error == ERROR_SHARING_VIOLATION) return nullptr;
         throw StoreError(StoreError::Code::io, "cannot create the lock " + Utf8(lock) + " (error " +
                                                    std::to_string(error) + ")");
     }
@@ -47,12 +50,12 @@ bool CreateLockFile(const std::filesystem::path& lock, const LockOwner& owner) {
     DWORD written = 0;
     const bool ok = WriteFile(file, text.data(), static_cast<DWORD>(text.size()), &written, nullptr) &&
                     written == text.size() && FlushFileBuffers(file);
-    CloseHandle(file);
     if (!ok) {
+        CloseHandle(file);
         DeleteFileW(lock.c_str());
         throw StoreError(StoreError::Code::io, "cannot write the lock " + Utf8(lock));
     }
-    return true;
+    return file;
 }
 
 }  // namespace
@@ -105,33 +108,22 @@ bool OwnerAlive(const LockOwner& owner) {
 
 ProjectLock ProjectLock::Acquire(const std::filesystem::path& project) {
     const std::filesystem::path lock = LockPath(project);
-    const LockOwner self = CurrentOwner();
-    // A stale lock is removed and the creation retried; another worker may win that race, and is
-    // then a live owner.
-    for (int attempt = 0; attempt < 3; ++attempt) {
-        if (CreateLockFile(lock, self)) return ProjectLock(lock);
-        const std::optional<LockOwner> owner = ReadLockOwner(lock);
-        if (owner && OwnerAlive(*owner)) {
-            throw StoreError(StoreError::Code::locked, Utf8(project) + " is open in process " +
-                                                           std::to_string(owner->pid) + " (" + Utf8(lock) + ")");
-        }
-        if (!DeleteFileW(lock.c_str())) {
-            const DWORD error = GetLastError();
-            if (error != ERROR_FILE_NOT_FOUND) {
-                throw StoreError(StoreError::Code::io, "cannot replace the stale lock " + Utf8(lock) + " (error " +
-                                                           std::to_string(error) + ")");
-            }
-        }
-    }
-    throw StoreError(StoreError::Code::locked, "cannot take the lock " + Utf8(lock) + ": it keeps being recreated");
+    if (const HANDLE file = CreateLockFile(lock, CurrentOwner())) return ProjectLock(lock, file);
+    // Held: the recorded pid is diagnostics only (the holder may not have written it yet).
+    const std::optional<LockOwner> owner = ReadLockOwner(lock);
+    throw StoreError(StoreError::Code::locked, Utf8(project) + " is open in " +
+                                                   (owner ? "process " + std::to_string(owner->pid) : "another process") +
+                                                   " (" + Utf8(lock) + ")");
 }
 
-ProjectLock::ProjectLock(ProjectLock&& other) noexcept : path_(std::exchange(other.path_, {})) {}
+ProjectLock::ProjectLock(ProjectLock&& other) noexcept
+    : path_(std::exchange(other.path_, {})), handle_(std::exchange(other.handle_, nullptr)) {}
 
 ProjectLock& ProjectLock::operator=(ProjectLock&& other) noexcept {
     if (this != &other) {
         Release();
         path_ = std::exchange(other.path_, {});
+        handle_ = std::exchange(other.handle_, nullptr);
     }
     return *this;
 }
@@ -140,6 +132,10 @@ ProjectLock::~ProjectLock() { Release(); }
 
 void ProjectLock::Release() noexcept {
     if (path_.empty()) return;
+    // Once the handle closes another worker may take the lock first; its handle then refuses the
+    // delete, so only an unheld sidecar is removed.
+    CloseHandle(handle_);
+    handle_ = nullptr;
     DeleteFileW(path_.c_str());
     path_.clear();
 }

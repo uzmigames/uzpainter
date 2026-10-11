@@ -64,7 +64,8 @@ struct CensusOptions {
 /// texture_sets [{name, resolution, mesh_maps {usage: file}}], resources [file | folder],
 /// not_measured [id]}]) with every path relative to `assets_root`; a `resources` folder adds the
 /// files directly inside it, sorted by name. Throws `StoreError(io)` for a missing dependency
-/// file and `core::ValueError` for a malformed document.
+/// file and `core::ValueError` for a malformed document, including an id that is not a plain
+/// name (`[A-Za-z0-9_-]+`: it names a folder of `CensusOptions::work_dir`).
 std::vector<CensusProjectInput> ReadCensusInputs(const core::json::Value& inputs, const std::filesystem::path& assets_root);
 
 /// Runs the scripted sequence on one project and returns its measurements: `id`, `spp_bytes`,

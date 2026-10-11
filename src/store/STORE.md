@@ -337,13 +337,14 @@ the stored versions (no new plane version); history stays append-only. A revisio
 retained set or an unknown checkpoint fails the call with `not_retained` and writes nothing.
 
 **Lock sidecar** (`lock.h`, SAV-05). `Create` and `Open` take `<file>.uzp.lock` (the project path
-with `.lock` appended), created exclusively and holding `pid=<pid>` and `started=<process creation
-time>`. While that process runs (same pid, same start time) another open is refused with
-`locked`, naming the pid; a lock whose process exited, whose pid now belongs to a later process or
-whose content is unreadable is stale and replaced. `Close` (and the store's destructor) closes the
-connection, which leaves no `-wal`/`-shm`/`-journal` companion (`journal_mode = DELETE`, re-applied
-before closing), and removes the sidecar; later calls on a closed store fail with `io`. `save_as`
-moves the lock with the project. `inspect` reads through `Container` and takes no lock (§10).
+with `.lock` appended), holding `pid=<pid>` and `started=<process creation time>`. The owner keeps
+the sidecar open for writing, sharing reads only, while it holds the lock, so the OS decides
+ownership: another open is refused with `locked` (naming the recorded pid when it can be read) and
+a held sidecar cannot be deleted. The OS closes the handle when the owner dies; a sidecar no process
+holds open is stale whatever it records and is overwritten. `Close` (and the store's destructor)
+closes the connection, which leaves no `-wal`/`-shm`/`-journal` companion (`journal_mode = DELETE`,
+re-applied before closing), then closes the sidecar and removes it; later calls on a closed store
+fail with `io`. `save_as` moves the lock with the project. `inspect` reads through `Container` and takes no lock (§10).
 
 ## 10. Inspection and the export bundle
 
@@ -376,7 +377,8 @@ adds `verify {ok, corrupt, missing, collectable}` and exits 1 when it is not `ok
 **`uzpainter export-bundle <file.uzp> <dir|file.zip> [--revision N]`** (`ExportBundle`) writes
 one revision as files from a snapshot (no lock, no GPU): `manifest.json` (the canonical manifest
 byte for byte), `res/<sha256>.<ext>` (resources, original bytes), `meshmaps/<set>_<usage>.<ext>`
-(mesh-map resources), `planes/<plane_id>.png|.exr` (PNG for 8/16-bit formats, uncompressed
+(mesh-map resources; a name already taken, ignoring case, falls back to `meshmaps/<sha256>.<ext>`),
+`planes/<plane_id>.png|.exr` (PNG for 8/16-bit formats, uncompressed
 scanline OpenEXR for half/float formats, texels unmodified; `bundle_codec.h`) and `bundle.json`
 (`uzpainter/bundle/1`: uuid, revision, `manifest_sha256`, the resource and plane index with each
 plane's row and binding). Everything is verified on the way out. A name ending in `.zip` gives a
@@ -388,8 +390,10 @@ ZIP of the same paths (stored entries, ZIP64 when needed). The bundle is written
 project uuid, one revision with the bundle's number (`kind = checkpoint`) whose manifest is
 `manifest.json` byte for byte (checked against `manifest_sha256` and its canonical form), every
 resource embedded (each file checked against its SHA-256), every plane rebuilt with the version id
-its manifest binds (`InsertPlaneVersion`) and checked against the bound `chunk_root`. A bundle that
-does not verify is refused and leaves no file.
+its manifest binds (`InsertPlaneVersion`) and checked against the bound `chunk_root`, and
+`meta.operation_horizon_revision` set to that revision: no operation row comes along, so a retried
+key whose precondition is older is `outcome_unknown` (§4). A bundle that does not verify is
+refused and leaves no file.
 
 ## 11. The size census (owner Q11)
 

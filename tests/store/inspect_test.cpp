@@ -585,6 +585,11 @@ void BundleRoundTrip() {
     CHECK(imported.store->ReadResource(f.mesh) == source.store->ReadResource(f.mesh));
     const json::Value verify = Inspect(target, InspectOptions{std::nullopt, true});
     CHECK(std::get<bool>(At(verify, "verify.ok").data));
+    // No operation row comes along: a retried key with an older precondition is expired, not stale (§4).
+    CHECK(IntAt(verify, "project.operation_horizon_revision") == imported.doc->revision());
+    const RequestOutcome retried = imported.store->Submit(
+        *imported.doc, MutationRequest{"test", json::Object{{"key", "retried"}}, "retried", imported.doc->revision() - 1}, [](Edit&) {});
+    CHECK(retried.decision.admission == Admission::outcome_unknown);
     // The imported project keeps working: a further edit commits.
     Mutate(imported, "after-import", [&](Edit& e) {
         e.Insert(InsertPosition::FromStack(f.set, f.stack), NodeType::FillLayer, "After import");
@@ -625,6 +630,44 @@ void BundleRoundTrip() {
     WriteBytes(edited / "manifest.json", ReadBytes(edited / "manifest.json") + " ");
     CHECK(EXPECT_THROW(StoreError, ImportBundle(edited, dir / "edited.uzp")).code() == StoreError::Code::corrupt);
     CHECK(!fs::exists(dir / "edited.uzp"));
+
+    // Texture sets "Body" and "body": their mesh maps get two files, not one on NTFS.
+    DocumentState cased;
+    cased.project_uuid = kUuid;
+    Project& p = cased.project;
+    p.versions.app_version = "0.0.0";
+    p.versions.evaluator_profile = "painter-12.1-layerq-linear";
+    const std::string mesh = "FBX" + Noise(500, 41);
+    p.resources[Sha256Hex(mesh)] = {Meta(p, "cased.fbx", "model/fbx", mesh.size(), "MESH")};
+    p.mesh = MeshReference{Sha256Hex(mesh), json::Object{{"triangles", 12}}, {}};
+    CreateOptions options;
+    options.resources = {{mesh, "model/fbx"}};
+    std::uint64_t seed = 42;
+    for (const char* name : {"Body", "body"}) {
+        const std::string normal = Noise(400, ++seed);
+        TextureSet set;
+        set.id = p.AllocateId();
+        set.name = set.original_name = name;
+        set.material_id = std::string("material-") + name;
+        set.uv_tiles = {UVTile{p.AllocateId(), 1001, {}}};
+        Stack stack;
+        stack.id = p.AllocateId();
+        set.stacks = {stack};
+        MeshMapBinding map;
+        map.resource = Sha256Hex(normal);
+        map.color_space = "Raw";
+        ImportedProvenance provenance;
+        provenance.source_sha256 = map.resource;
+        map.provenance = provenance;
+        set.mesh_maps[MeshMapUsage::Normal] = map;
+        p.texture_sets.push_back(set);
+        p.resources[map.resource] = {Meta(p, std::string(name) + "_normal.png", "image/png", normal.size(), "TEXTURE")};
+        options.resources.push_back({normal, "image/png"});
+    }
+    ProjectStore::Create(dir / "cased.uzp", cased, options);
+    CHECK(ExportBundle(dir / "cased.uzp", dir / "cased").mesh_maps == 2);
+    CHECK(std::distance(fs::directory_iterator(dir / "cased" / "meshmaps"), fs::directory_iterator{}) == 2);
+    ImportBundle(dir / "cased", dir / "cased.import.uzp");  // every resource file hashes
 }
 
 /// The bundle codecs: every plane format round-trips bit-exact through PNG or OpenEXR.
@@ -702,6 +745,13 @@ void CensusSequence() {
     const json::Value bad = json::Parse(R"({"schema": "uzpainter/store-census-inputs/1", "projects": [{"id": "x", "spp": "",
         "mesh": "absent.fbx", "texture_sets": [], "resources": [], "not_measured": []}]})");
     CHECK(Contains(EXPECT_THROW(StoreError, ReadCensusInputs(bad, assets)).what(), "absent.fbx"));
+    // An id is a plain name: it names a folder of the work dir that the census replaces.
+    for (const std::string id : {"", "..", ".", "a/b", "a\\\\b", "C:/x", "piece v1"}) {
+        const json::Value unsafe = json::Parse(R"({"schema": "uzpainter/store-census-inputs/1", "projects": [{"id": ")" + id +
+                                               R"(", "spp": "", "mesh": "piece.fbx", "texture_sets": [{"name": "Piece", "resolution": 2048,
+            "mesh_maps": {}}], "resources": [], "not_measured": []}]})");
+        CHECK(Contains(EXPECT_THROW(ValueError, ReadCensusInputs(unsafe, assets)).what(), "is not a plain name"));
+    }
 }
 
 // ── Commands ───────────────────────────────────────────────────────────────────────────────

@@ -109,6 +109,13 @@ std::string SafeName(std::string_view text) {
     return out.empty() ? std::string("_") : out;
 }
 
+/// `name` in ASCII lower case: bundle paths that differ only in case are one file on NTFS and in
+/// a ZIP extracted there.
+std::string Folded(std::string name) {
+    std::transform(name.begin(), name.end(), name.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+    return name;
+}
+
 /// Where the files of a bundle go: a directory or a ZIP.
 class Sink {
 public:
@@ -202,7 +209,7 @@ BundleSummary ExportBundle(const fs::path& project, const fs::path& requested, s
 
     // Mesh-map resources go to meshmaps/, named after their first binding.
     std::map<std::string, std::string, std::less<>> mesh_map_files;
-    std::set<std::string, std::less<>> used;
+    std::set<std::string, std::less<>> used;  // case-folded (`Folded`)
     if (const Value* sets = Member(manifest, "texture_sets"); sets && sets->IsArray()) {
         for (const Value& set : std::get<Array>(sets->data)) {
             const Value* maps = Member(set, "mesh_maps");
@@ -245,12 +252,12 @@ BundleSummary ExportBundle(const fs::path& project, const fs::path& requested, s
                 std::string file;
                 if (const auto it = mesh_map_files.find(sha256); it != mesh_map_files.end()) {
                     file = "meshmaps/" + it->second + "." + ext;
-                    if (used.count(file) != 0) file = "meshmaps/" + sha256 + "." + ext;
+                    if (used.count(Folded(file)) != 0) file = "meshmaps/" + sha256 + "." + ext;
                     ++summary.mesh_maps;
                 } else {
                     file = "res/" + sha256 + "." + ext;
                 }
-                used.insert(file);
+                used.insert(Folded(file));
                 sink->Put(file, bytes);
                 resources.push_back(Object{{"sha256", sha256},
                                            {"file", file},
@@ -381,7 +388,8 @@ void ImportBundle(const fs::path& bundle, const fs::path& target) {
         container.CreateSchema();
         container.SetMeta("project_uuid", uuid);
         container.SetMeta("created", UtcNow());
-        container.SetMeta("operation_horizon_revision", "0");
+        // No operation row survives: every precondition below the imported revision is expired (§4).
+        container.SetMeta("operation_horizon_revision", std::to_string(revision));
         container.SetMeta("portable", "1");
         WriteResources(container, project, pending, true);
         for (const ManifestBinding& binding : bindings) {
