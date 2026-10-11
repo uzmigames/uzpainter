@@ -13,7 +13,7 @@
 | Version source | UzEngine commit `380c142e481d`: `runtime/thirdparty/mikktspace` holds the same upstream code (its `mikktspace.c` carries one local patch, below); upstream has no release tags, so UzPainter pins commit `3e895b49`, the head of `master` on the retrieval date (approved source S-MIKK, `docs/architecture/12-mesh-import.md` §3) |
 | Licence | zlib licence, stated in the comment block at the top of `mikktspace.h` (the same notice heads `mikktspace.c`) |
 | Licence files | `mikktspace.h` (verbatim) |
-| Distribution role | build-only: compiled into `uzp-normal-prototype.exe`, the Phase 0 tangent-frame prototype of `phase0.9_normal-convention-fixture`; not shipped |
+| Distribution role | build-only today: compiled into `uzp-normal-prototype.exe`, the Phase 0 tangent-frame prototype of `phase0.9_normal-convention-fixture`, and into `uzp_mesh.lib` (UzPainter's per-corner tangent frames, `src/mesh/tangents.cpp`, `phase1.5_mesh-tangents-certificate`) with its test executables; shipped once `UzPainter.exe` links the mesh module |
 | Selected features | `mikktspace.c` compiled as C11 (`genTangSpaceDefault`, per-corner tangents and bitangent sign); the repository's `README.md` is not vendored |
 | Include directories | `thirdparty/mikktspace/.` |
 

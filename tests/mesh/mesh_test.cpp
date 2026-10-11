@@ -1,6 +1,7 @@
 // Native tests and driver of UzPainter's mesh importers (`src/mesh/`, task
-// phase1.4_mesh-importers). Built by `zig build mesh-tests` and driven by
-// tests/mesh/test_mesh_import.py.
+// phase1.4_mesh-importers) and of their tangent frames and certificate (task
+// phase1.5_mesh-tangents-certificate). Built by `zig build mesh-tests` and driven by
+// tests/mesh/test_mesh_import.py and tests/mesh/test_mesh_certificate.py.
 //
 // Usage:
 //   uzp-mesh-tests run [case]               run every native case (or one); exit 0 when all pass
@@ -13,22 +14,28 @@
 // "<ErrorClass>: <message>" and then its details as canonical JSON on stderr and exits 3; for
 // `project`, the unchanged document is still printed on stdout.
 
+#include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <initializer_list>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "mesh/certificate.h"
 #include "mesh/import_error.h"
 #include "mesh/mask_image.h"
 #include "mesh/mesh_builder.h"
 #include "mesh/mesh_import.h"
 #include "mesh/obj_parser.h"
+#include "mesh/tangents.h"
 #include "mesh/texturing_mesh.h"
 #include "uzp_core/document/document.h"
 #include "uzp_core/manifest/json.h"
@@ -235,6 +242,324 @@ void HashesSeparateConcerns() {
     CHECK(a.mesh.hashes.triangulation != wind.mesh.hashes.triangulation);
 }
 
+// ── Tangent frames and the certificate (phase1.5_mesh-tangents-certificate) ──────────────────
+
+bool Near(double a, double b, double tolerance = 1e-6) { return std::abs(a - b) <= tolerance; }
+
+bool Near3(const Float3& a, const Float3& b, double tolerance = 1e-6) {
+    return Near(a.x, b.x, tolerance) && Near(a.y, b.y, tolerance) && Near(a.z, b.z, tolerance);
+}
+
+/// The value at `keys` under `root`.
+const json::Value& At(const json::Object& root, std::initializer_list<std::string_view> keys) {
+    const json::Object* object = &root;
+    const json::Value* value = nullptr;
+    for (std::string_view key : keys) {
+        if (object == nullptr) throw Failure{"not an object before '" + std::string(key) + "'"};
+        const auto it = object->find(key);
+        if (it == object->end()) throw Failure{"no key '" + std::string(key) + "'"};
+        value = &it->second;
+        object = std::get_if<json::Object>(&value->data);
+    }
+    return *value;
+}
+
+/// Everything of the mesh that certification must leave alone, bit for bit.
+struct MeshCopy {
+    std::vector<Object> objects;
+    std::vector<Corner> corners;
+    std::vector<Float3> positions;
+    std::vector<Material> materials;
+    mesh::Units units;
+    Hashes hashes;
+    explicit MeshCopy(const TexturingMesh& m)
+        : objects(m.objects), corners(m.corners), positions(m.positions), materials(m.materials), units(m.units),
+          hashes(m.hashes) {}
+    bool Same(const TexturingMesh& m) const {
+        return objects == m.objects && corners.size() == m.corners.size() &&
+               std::memcmp(corners.data(), m.corners.data(), corners.size() * sizeof(Corner)) == 0 &&
+               positions.size() == m.positions.size() &&
+               std::memcmp(positions.data(), m.positions.data(), positions.size() * sizeof(Float3)) == 0 &&
+               materials == m.materials && units == m.units && hashes == m.hashes && ComputeHashes(m) == hashes;
+    }
+};
+
+/// Certifies `mesh` and checks that nothing in it changed.
+Certificate CertifyUnchanged(const TexturingMesh& mesh, const CertificateOptions& options = {}) {
+    const MeshCopy before(mesh);
+    const Certificate certificate = Certify(mesh, options);
+    CHECK(before.Same(mesh));
+    return certificate;
+}
+
+using CornerSpec = std::pair<Float3, Float2>;
+using TriangleSpec = std::array<CornerSpec, 3>;
+
+/// A mesh of one object and one material `M`, triangle by triangle, every corner with `normal`;
+/// hashes and tangents computed.
+TexturingMesh BuildMesh(const std::vector<TriangleSpec>& triangles, Float3 normal) {
+    TexturingMesh mesh;
+    MeshBuilder builder(mesh);
+    builder.BeginObject("o");
+    const std::uint32_t m = builder.Material(0, 0, "M");
+    for (const TriangleSpec& tri : triangles) {
+        std::vector<Corner> corners;
+        for (const auto& [p, uv] : tri) {
+            corners.push_back(Corner{static_cast<std::uint32_t>(mesh.positions.size()), normal, uv, {}, m});
+            mesh.positions.push_back(p);
+        }
+        builder.AddPolygon(corners);
+    }
+    builder.Finish();
+    mesh.hashes = ComputeHashes(mesh);
+    ComputeTangents(mesh);
+    return mesh;
+}
+
+const TriangleSpec kSound{{{{0, 0, 0}, {0.1f, 0.1f}}, {{1, 0, 0}, {0.9f, 0.1f}}, {{0, 1, 0}, {0.1f, 0.9f}}}};
+
+void TangentFrameRules() {
+    // A plane in XZ facing +Y, u = (x + 1) / 2, v = (1 - z) / 2: T = +X, B = +v = -Z, sign +1.
+    const ImportResult plane = ImportText(
+        "v -1 0 1\nv 1 0 1\nv 1 0 -1\nv -1 0 -1\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nvn 0 1 0\n"
+        "f 1/1/1 2/2/1 3/3/1 4/4/1\n");
+    for (const Corner& c : plane.mesh.corners) {
+        CHECK(Near3(CornerTangent(c), {1, 0, 0}) && c.tangent[3] == 1.0f);
+        CHECK(Near3(CornerBitangent(c), {0, 0, -1}));
+    }
+    const Triangle& t0 = plane.mesh.objects.at(0).triangles.at(0);
+    const std::array<float, 3> centre{1.0f / 3, 1.0f / 3, 1.0f / 3};
+    // OpenGL (+Y): a normal leaning towards +v (-Z here) has a positive green (y) component.
+    const Float3 lean = v3::Normalize({0.0f, 1.0f, -0.5f});
+    for (core::TangentSpace mode : {core::TangentSpace::PerVertex, core::TangentSpace::PerFragment}) {
+        const Frame f = InterpolateFrame(plane.mesh, t0, centre, mode);
+        CHECK(Near3(ToTangentSpace(f, {0, 1, 0}), {0, 0, 1}));
+        const Float3 t = ToTangentSpace(f, lean);
+        CHECK(t.y > 0.4f && Near(t.x, 0.0) && t.z > 0.8f);
+        CHECK(Near3(FromTangentSpace(f, t), lean));
+    }
+    // Curved corners: the two modes differ, and unset is PerVertex (decision 031).
+    TexturingMesh curved = BuildMesh({kSound}, {0, 0, 1});
+    curved.corners[0].normal = v3::Normalize({-0.5f, -0.5f, 1.0f});
+    curved.corners[1].normal = v3::Normalize({0.5f, 0.0f, 1.0f});
+    curved.corners[2].normal = v3::Normalize({0.0f, 0.5f, 1.0f});
+    ComputeTangents(curved);
+    const Triangle& tri = curved.objects[0].triangles[0];
+    const std::array<float, 3> w{0.2f, 0.3f, 0.5f};
+    const Frame unset = InterpolateFrame(curved, tri, w);
+    const Frame per_vertex = InterpolateFrame(curved, tri, w, core::TangentSpace::PerVertex);
+    const Frame per_fragment = InterpolateFrame(curved, tri, w, core::TangentSpace::PerFragment);
+    CHECK(kDefaultTangentSpace == core::TangentSpace::PerVertex);
+    CHECK(unset.b == per_vertex.b && unset.t == per_fragment.t && unset.n == per_fragment.n);
+    Float3 b{};
+    for (std::size_t i = 0; i < 3; ++i) b = v3::Add(b, v3::Scale(CornerBitangent(curved.corners[tri.corners[i]]), w[i]));
+    CHECK(Near3(per_vertex.b, b));
+    CHECK(Near3(per_fragment.b, v3::Cross(per_fragment.n, per_fragment.t), 1e-7));
+    CHECK(!Near3(per_vertex.b, per_fragment.b, 1e-3));
+    for (const Frame& f : {per_vertex, per_fragment}) {
+        const Float3 n = v3::Normalize({0.3f, -0.2f, 0.9f});
+        CHECK(Near3(FromTangentSpace(f, ToTangentSpace(f, n)), n, 1e-5));
+    }
+}
+
+void MirroredUvs() {
+    // Two quads facing +Y side by side; the right one mirrors u (u = 1 - x), so its tangent is -X
+    // and its bitangent sign -1: cross(+Y, -X) = +Z while +v runs along -Z.
+    const ImportResult r = ImportText(
+        "v -1 0 1\nv 0 0 1\nv 0 0 0\nv -1 0 0\nv 1 0 1\nv 1 0 0\n"
+        "vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nvn 0 1 0\n"
+        "f 1/1/1 2/2/1 3/3/1 4/4/1\n"    // left: u = x + 1
+        "f 2/2/1 5/1/1 6/4/1 3/3/1\n");  // right: u = 1 - x
+    const TexturingMesh& m = r.mesh;
+    for (std::size_t i = 0; i < m.corners.size(); ++i) {
+        const Corner& c = m.corners[i];
+        const bool mirrored = i >= 4;
+        // The sign is that of det(dP/du, dP/dv, n) on the corner's face.
+        CHECK(c.tangent[3] == (mirrored ? -1.0f : 1.0f));
+        CHECK(Near3(CornerTangent(c), mirrored ? Float3{-1, 0, 0} : Float3{1, 0, 0}));
+        CHECK(Near3(CornerBitangent(c), {0, 0, -1}));  // +v in 3D on both halves
+    }
+    const Certificate cert = CertifyUnchanged(m);
+    CHECK(cert.corners.flipped_handedness == 4);
+    CHECK(cert.faces.flipped_uv == 2);
+    CHECK(cert.corners.degenerate_tbn == 0 && cert.faces.coincident_opposite == 0);
+    CHECK(cert.status == CertificateStatus::warn);
+    CHECK(r.certificate.corners == cert.corners);
+}
+
+void HardEdge() {
+    // A floor (normal +Y) and a wall (normal +Z) share the edge y = z = 0 with split normals and
+    // continuous UVs (v = 0.5 on the edge).
+    const ImportResult r = ImportText(
+        "v 0 0 1\nv 1 0 1\nv 1 0 0\nv 0 0 0\nv 1 1 0\nv 0 1 0\n"
+        "vt 0 0\nvt 1 0\nvt 1 0.5\nvt 0 0.5\nvt 1 1\nvt 0 1\nvn 0 1 0\nvn 0 0 1\n"
+        "f 1/1/1 2/2/1 3/3/1 4/4/1\n"
+        "f 4/4/2 3/3/2 5/5/2 6/6/2\n");
+    const TexturingMesh& m = r.mesh;
+    // Corner normals as authored: the shared positions keep one normal per face, and each corner
+    // has its own frame.
+    CHECK(m.corners[2].position == m.corners[5].position && m.corners[3].position == m.corners[4].position);
+    for (std::size_t i = 0; i < m.corners.size(); ++i) {
+        const Corner& c = m.corners[i];
+        const bool floor = i < 4;
+        CHECK((c.normal == (floor ? Float3{0, 1, 0} : Float3{0, 0, 1})));
+        CHECK(Near3(CornerTangent(c), {1, 0, 0}) && c.tangent[3] == 1.0f);
+        CHECK(Near3(CornerBitangent(c), floor ? Float3{0, 0, -1} : Float3{0, 1, 0}));
+    }
+    const Certificate cert = CertifyUnchanged(m);
+    CHECK(cert.corners == CornerCounts{});
+    CHECK(cert.per_set.at("default").islands == 1 && cert.per_set.at("default").overlap_px == 0);
+    CHECK(cert.status == CertificateStatus::warn);  // two quads fanned
+}
+
+void CoincidentOppositeFaces() {
+    const std::string quad = "v -1 0 -1\nv 1 0 -1\nv 1 0 1\nv -1 0 1\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n";
+    // The same triangle twice with opposite winding.
+    const ImportResult tri = ImportText(quad + "f 1/1 2/2 3/3\nf 3/3 2/2 1/1\n");
+    CHECK(CertifyUnchanged(tri.mesh).faces.coincident_opposite == 2);
+    CHECK(tri.certificate.status == CertificateStatus::fail);
+    // A quad and its reverse, whose fans split along different diagonals (the hat lesson: a
+    // double-sided shell). Each of the four triangles overlaps one facing the other way.
+    const ImportResult shell =
+        ImportText(quad + "vn 0 -1 0\nvn 0 1 0\nf 1/1/1 2/2/1 3/3/1 4/4/1\nf 4/4/2 3/3/2 2/2/2 1/1/2\n");
+    const Certificate cert = CertifyUnchanged(shell.mesh);
+    CHECK(cert.faces.coincident_opposite == 4);
+    CHECK(cert.status == CertificateStatus::fail);
+    CHECK(shell.mesh.corners.size() == 8 && shell.mesh.TriangleCount() == 4);  // nothing removed
+    CHECK((At(shell.report, {"certificate", "faces", "coincident_opposite"}) == json::Value(std::int64_t{4})));
+    CHECK((At(shell.report, {"certificate", "status"}) == json::Value("fail")));
+    // Not coincident opposite: the same winding twice, a shell offset by 0.01, a tetrahedron.
+    CHECK(CertifyUnchanged(ImportText(quad + "f 1/1 2/2 3/3\nf 1/1 2/2 3/3\n").mesh).faces.coincident_opposite == 0);
+    CHECK(CertifyUnchanged(ImportText(quad + "v -1 0.01 -1\nv 1 0.01 -1\nv 1 0.01 1\nf 1/1 2/2 3/3\nf 7/3 6/2 5/1\n").mesh)
+              .faces.coincident_opposite == 0);
+    CHECK(CertifyUnchanged(ImportText("v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 3 2\nf 1 2 4\nf 2 3 4\nf 3 1 4\n").mesh)
+              .faces.coincident_opposite == 0);
+    // Across objects, in scene space: a second object over the same corners, mirrored in z
+    // (the plane z = 0 maps onto itself).
+    TexturingMesh two = BuildMesh({kSound}, {0, 0, 1});
+    two.objects.push_back(Object{"mirrored", {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1}, {Triangle{{0, 1, 2}}}});
+    two.hashes = ComputeHashes(two);
+    CHECK(CertifyUnchanged(two).faces.coincident_opposite == 0);  // same winding
+    two.objects[1].triangles[0] = Triangle{{0, 2, 1}};
+    two.hashes = ComputeHashes(two);
+    CHECK(CertifyUnchanged(two).faces.coincident_opposite == 2);
+}
+
+void CertificateDefects() {
+    const Float3 up{0, 0, 1};
+    // Zero-area UV triangle (collinear UVs) beside a sound one.
+    {
+        const TexturingMesh m =
+            BuildMesh({kSound, {{{{1, 0, 0}, {0.2f, 0.2f}}, {{1, 1, 0}, {0.4f, 0.4f}}, {{0, 1, 0}, {0.6f, 0.6f}}}}}, up);
+        const Certificate c = CertifyUnchanged(m);
+        CHECK(c.faces.zero_area_uv == 1 && c.faces.flipped_uv == 0 && c.outside_0_1 == 0);
+        CHECK(c.status != CertificateStatus::pass);
+    }
+    // Flipped UV triangle: clockwise in UV for its winding (and so mirrored: sign -1).
+    {
+        const TexturingMesh m = BuildMesh(
+            {{{{{0, 0, 0}, {0.1f, 0.1f}}, {{1, 0, 0}, {0.4f, 0.1f}}, {{0, 1, 0}, {0.1f, 0.4f}}}},
+             {{{{2, 0, 0}, {0.6f, 0.6f}}, {{3, 0, 0}, {0.6f, 0.9f}}, {{2, 1, 0}, {0.9f, 0.6f}}}}},
+            up);
+        const Certificate c = CertifyUnchanged(m);
+        CHECK(c.faces.flipped_uv == 1 && c.faces.zero_area_uv == 0);
+        CHECK(c.corners.flipped_handedness == 3 && c.corners.degenerate_tbn == 0);
+        CHECK(c.status == CertificateStatus::warn);
+    }
+    // Degenerate TBN: the normal lies along dP/du, so no tangent is left once it is made
+    // perpendicular to the normal.
+    {
+        const Certificate c = CertifyUnchanged(BuildMesh({kSound}, {1, 0, 0}));
+        CHECK(c.corners.degenerate_tbn == 3 && c.corners.zero_tangents == 3 && c.corners.zero_bitangents == 3);
+        CHECK(c.corners.zero_normals == 0 && c.status == CertificateStatus::fail);
+    }
+    // UVs outside 0-1 (ImportMesh refuses them; a mesh built otherwise is still certified).
+    {
+        const TexturingMesh m =
+            BuildMesh({kSound, {{{{2, 0, 0}, {1.1f, 0.1f}}, {{3, 0, 0}, {1.9f, 0.1f}}, {{2, 1, 0}, {1.1f, 0.9f}}}}}, up);
+        const Certificate c = CertifyUnchanged(m);
+        CHECK(c.outside_0_1 == 1 && c.status == CertificateStatus::fail);
+        CHECK(c.per_set.at("M").overlap_px == 0);
+    }
+    // Missing and non-finite normals.
+    {
+        const ImportResult missing = ImportText("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nf 1/1 2/2 3/3\n");
+        CHECK(missing.certificate.corners.zero_normals == 3 && missing.certificate.corners.degenerate_tbn == 3);
+        CHECK(missing.certificate.status == CertificateStatus::fail);
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        const Certificate c = CertifyUnchanged(BuildMesh({kSound}, {nan, 0, 1}));
+        CHECK(c.corners.non_finite_normals == 3 && c.corners.degenerate_tbn == 3 && c.status == CertificateStatus::fail);
+    }
+    // A sound mesh passes.
+    {
+        const Certificate c = CertifyUnchanged(BuildMesh({kSound}, up));
+        CHECK(c.corners == CornerCounts{} && c.faces == FaceCounts{} && c.outside_0_1 == 0);
+        CHECK(c.status == CertificateStatus::pass);
+    }
+}
+
+void UvMetricsTwoIslands() {
+    // Set A: island 1, a 4 x 4 cm square on UV [0.0625, 0.3125]^2 (256 px at 1024: 64 px/cm,
+    // isotropic); island 2, a 2 x 2 cm square on u [0.5, 0.75] x v [0.125, 0.25] (256 x 128 px:
+    // 128 and 64 px/cm, anisotropy 2, density sqrt(256 * 128 / 4)). Set S: two separate 1 cm
+    // squares stacked on UV [0.5, 1]^2. OBJ units are centimetres here (scale_to_internal 1).
+    const ImportResult r = ImportText(
+        "v 0 0 0\nv 4 0 0\nv 4 4 0\nv 0 4 0\nv 10 0 0\nv 12 0 0\nv 12 2 0\nv 10 2 0\n"
+        "v 20 0 0\nv 21 0 0\nv 21 1 0\nv 20 1 0\nv 30 0 0\nv 31 0 0\nv 31 1 0\nv 30 1 0\n"
+        "vt 0.0625 0.0625\nvt 0.3125 0.0625\nvt 0.3125 0.3125\nvt 0.0625 0.3125\n"
+        "vt 0.5 0.125\nvt 0.75 0.125\nvt 0.75 0.25\nvt 0.5 0.25\n"
+        "vt 0.5 0.5\nvt 1 0.5\nvt 1 1\nvt 0.5 1\nvn 0 0 1\n"
+        "usemtl A\nf 1/1/1 2/2/1 3/3/1 4/4/1\nf 5/5/1 6/6/1 7/7/1 8/8/1\n"
+        "usemtl S\nf 9/9/1 10/10/1 11/11/1 12/12/1\nf 13/9/1 14/10/1 15/11/1 16/12/1\n");
+    const Certificate c = CertifyUnchanged(r.mesh);
+    const UvSetMetrics& a = c.per_set.at("A");
+    CHECK(a.islands == 2);
+    CHECK(a.overlap_px == 0);  // texel centres on the squares' diagonals are covered once
+    CHECK(a.density_px_per_cm.has_value());
+    CHECK(Near(a.density_px_per_cm->min, 64.0, 1e-9));
+    CHECK(Near(a.density_px_per_cm->p50, 64.0, 1e-9));  // 16 of the 20 cm^2 at 64 px/cm
+    CHECK(Near(a.density_px_per_cm->max, std::sqrt(256.0 * 128.0 / 4.0), 1e-9));
+    CHECK(a.anisotropy_max && Near(*a.anisotropy_max, 2.0, 1e-9));
+    CHECK(a.gap_px && Near(*a.gap_px, (0.5 - 0.3125) * 1024, 1e-9));
+    CHECK(a.border_px && Near(*a.border_px, 0.0625 * 1024, 1e-9));
+    const UvSetMetrics& s = c.per_set.at("S");
+    CHECK(s.islands == 2);
+    CHECK(s.overlap_px == 512u * 512u);
+    CHECK(s.gap_px && *s.gap_px == 0.0);
+    CHECK(s.border_px && *s.border_px == 0.0);
+    CHECK(s.anisotropy_max && Near(*s.anisotropy_max, 1.0, 1e-9));
+    CHECK(Near(s.density_px_per_cm->p50, 512.0, 1e-9));
+    CHECK(c.status == CertificateStatus::warn);  // n-gons fanned and the stacked set
+    // Another grid scales the pixel metrics.
+    const Certificate half = CertifyUnchanged(r.mesh, CertificateOptions{512, 512});
+    CHECK(Near(half.per_set.at("A").density_px_per_cm->min, 32.0, 1e-9));
+    CHECK(half.per_set.at("S").overlap_px == 256u * 256u);
+    CHECK(Near(*half.per_set.at("A").gap_px, 96.0, 1e-9));
+    // One island: no gap.
+    const ImportResult one =
+        ImportText("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0.25 0.25\nvt 0.75 0.25\nvt 0.25 0.75\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
+    CHECK(one.certificate.per_set.at("default").islands == 1 && !one.certificate.per_set.at("default").gap_px);
+}
+
+void CertificateInReport() {
+    const std::string tri = "v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0.25 0.25\nvt 0.75 0.25\nvt 0.25 0.75\nvn 0 0 1\n";
+    const ImportResult r = ImportText(tri + "usemtl M\nf 1/1/1 2/2/1 3/3/1\n");
+    CHECK((At(r.report, {"certificate", "status"}) == json::Value("pass")));
+    CHECK((At(r.report, {"certificate", "hashes"}) == At(r.report, {"hashes"})));
+    CHECK((At(r.report, {"certificate", "mesh", "materials"}) == json::Value(json::Array{"M"})));
+    CHECK((At(r.report, {"certificate", "mesh", "triangles"}) == json::Value(std::int64_t{1})));
+    CHECK((At(r.report, {"certificate", "uv", "grid", "width"}) == json::Value(1024)));
+    CHECK((At(r.report, {"certificate", "uv", "per_set", "M", "islands"}) == json::Value(std::int64_t{1})));
+    CHECK((At(r.report, {"certificate", "uv", "per_set", "M", "gap_px"}) == json::Value(nullptr)));
+    CHECK((At(r.report, {"certificate", "corners", "flipped_handedness"}) == json::Value(std::int64_t{0})));
+    // The grid follows the settings (the texture sets' resolution).
+    ImportSettings settings;
+    settings.certificate = CertificateOptions{2048, 512};
+    const ImportResult wide = ImportText(tri + "f 1/1/1 2/2/1 3/3/1\n", "m.obj", settings);
+    CHECK(wide.certificate.grid.width == 2048 && wide.certificate.grid.height == 512);
+    CHECK(Near(*wide.certificate.per_set.at("default").border_px, 0.25 * 512, 1e-9));
+}
+
 const std::map<std::string, std::function<void()>, std::less<>>& Cases() {
     static const std::map<std::string, std::function<void()>, std::less<>> cases = {
         {"fan_triangulation", FanTriangulation},
@@ -248,6 +573,13 @@ const std::map<std::string, std::function<void()>, std::less<>>& Cases() {
         {"auto_unwrap_rejected_first", AutoUnwrapRejectedFirst},
         {"texel_convention", TexelConvention},
         {"hashes_separate_concerns", HashesSeparateConcerns},
+        {"tangent_frame_rules", TangentFrameRules},
+        {"mirrored_uvs", MirroredUvs},
+        {"hard_edge", HardEdge},
+        {"coincident_opposite_faces", CoincidentOppositeFaces},
+        {"certificate_defects", CertificateDefects},
+        {"uv_metrics_two_islands", UvMetricsTwoIslands},
+        {"certificate_in_report", CertificateInReport},
     };
     return cases;
 }

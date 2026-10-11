@@ -870,8 +870,11 @@ LIBRARIES: tuple[Library, ...] = (
             "notice heads `mikktspace.c`)"
         ),
         role=(
-            "build-only: compiled into `uzp-normal-prototype.exe`, the Phase 0 tangent-frame "
-            "prototype of `phase0.9_normal-convention-fixture`; not shipped"
+            "build-only today: compiled into `uzp-normal-prototype.exe`, the Phase 0 tangent-frame "
+            "prototype of `phase0.9_normal-convention-fixture`, and into `uzp_mesh.lib` "
+            "(UzPainter's per-corner tangent frames, `src/mesh/tangents.cpp`, "
+            "`phase1.5_mesh-tangents-certificate`) with its test executables; shipped once "
+            "`UzPainter.exe` links the mesh module"
         ),
         features=(
             "`mikktspace.c` compiled as C11 (`genTangSpaceDefault`, per-corner tangents and "

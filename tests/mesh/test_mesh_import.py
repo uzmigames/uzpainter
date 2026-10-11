@@ -45,15 +45,22 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 NATIVE_CASES = (
     "auto_unwrap_rejected_first",
+    "certificate_defects",
+    "certificate_in_report",
+    "coincident_opposite_faces",
     "fan_triangulation",
     "formats",
+    "hard_edge",
     "hashes_separate_concerns",
+    "mirrored_uvs",
     "obj_missing_attributes",
     "obj_negative_indices",
     "obj_objects_and_materials",
     "obj_parse_errors",
+    "tangent_frame_rules",
     "texel_convention",
     "units",
+    "uv_metrics_two_islands",
     "uv_tiles",
 )
 
