@@ -43,7 +43,11 @@ def reference_rows(manifests: list[Path]) -> list[str]:
     for path in manifests:
         manifest = json.loads(path.read_text(encoding="utf-8"))
         records = {r["record_id"]: r["sha256"] for r in manifest["private_records"]}
-        renders = [f"`{records[r]}`" for r in sorted(records) if r.endswith("render-reference")]
+        renders = [
+            f"`{records[r]}`"
+            for r in sorted(records, key=lambda r: (r.startswith("k-"), r))
+            if r.endswith("render-reference")
+        ]
         background = next(
             s["value"]
             for s in manifest["applied_settings"]

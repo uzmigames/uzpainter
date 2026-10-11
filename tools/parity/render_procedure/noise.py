@@ -20,8 +20,14 @@ Per region and pair: pixel count, differing-pixel count (any channel), max, mean
 |delta| over the channel samples, mean signed delta with a standard error taken over 16 x 16
 pixel blocks (noise is spatially correlated by the pixel filter, so per-sample errors would
 understate it), and max, mean, p99 of |delta| after 2x, 4x and 8x box averaging over blocks that
-lie wholly inside the region. Per region the estimate of one S render's noise is also given:
-rms(a) / sqrt(2) and rms(b) / sqrt(1 + 1/k).
+lie wholly inside the region.
+
+Per region the Monte-Carlo noise of one S render is estimated from (b) only, as a range. Two
+sessions of Painter 12.1.5 reproduce almost every pixel exactly (term (a) is orders of magnitude
+below (b)), so Iray's sample sequence does not change between sessions and (a) is not an
+independent-seed repeat. If the k*S render continues the same sequence, the S render's samples
+are nested in it and rms(b) = sigma * sqrt(1 - 1/k); if the two were independent,
+rms(b) = sigma * sqrt(1 + 1/k). `s_render_sigma` gives sigma for both cases.
 
 Only numbers leave this module; the renders stay in the store.
 """
@@ -197,13 +203,14 @@ def noise_terms(
     mc = {r: pair_statistics(images[r], images[k_run], masks) for r in (first, second)}
     sigma: dict[str, Any] = {}
     for region in masks:
-        a_rms = run_to_run[region].get("rms")
         b_rms = [mc[r][region].get("rms") for r in (first, second)]
+        if None in b_rms:
+            sigma[region] = {"nested": None, "independent": None}
+            continue
+        rms = float(np.sqrt(np.mean(np.square(b_rms))))
         sigma[region] = {
-            "from_run_to_run": None if a_rms is None else a_rms / math.sqrt(2.0),
-            "from_mc_error": None
-            if None in b_rms
-            else float(np.sqrt(np.mean(np.square(b_rms)))) / math.sqrt(1.0 + 1.0 / k),
+            "nested": rms / math.sqrt(1.0 - 1.0 / k),
+            "independent": rms / math.sqrt(1.0 + 1.0 / k),
         }
     return {
         "pairs": {
@@ -287,11 +294,12 @@ def summary_rows(results: Iterable[dict[str, Any]]) -> list[str]:
             b_signed = " / ".join(
                 f"{scaled(x['mean_signed'])} ± {scaled(x['mean_signed_se'])}" for x in b
             )
-            sigma = result["s_render_sigma"][region]["from_run_to_run"]
+            sigma = result["s_render_sigma"][region]
             rows.append(
                 f"| `{name}` | {region} | {a['pixels']} | {a['differing_pixels']} | "
                 f"{scaled(a['mean_abs'])} | {scaled(a['p99_abs'])} | {scaled(a['max_abs'])} | "
                 f"{scaled(a['mean_signed'])} ± {scaled(a['mean_signed_se'])} | {scaled(b_mean)} | "
-                f"{scaled(b_p99)} | {b_signed} | {scaled(sigma)} |"
+                f"{scaled(b_p99)} | {b_signed} | "
+                f"{scaled(sigma['independent'])} to {scaled(sigma['nested'])} |"
             )
     return rows

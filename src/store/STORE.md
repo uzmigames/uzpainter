@@ -213,6 +213,22 @@ build uzp-store-inspect-tests`, `tests/store/inspect_test.cpp`) and runs:
 The driver also checks the ZIP bundle with Python's `zipfile` and the PNG reader against PNGs that
 Python's zlib compressed (fixed and dynamic Huffman blocks, every scanline filter).
 
+`python -m pytest tests/store/test_store_settle.py` builds `uzp-store-settle-tests.exe` (`zig build
+uzp-store-settle-tests`, `tests/store/settle_test.cpp`, the same hooked store sources) and runs the
+settling evidence of 09 §7 end to end (parent task `phase1.8_project-store`). Every case works on
+the same content: a 300 KB resource bound to a fill layer and two paint layers whose 2048×2048
+sRGB8 planes (2×2 chunks) share one set, stack, channel and UV tile. Recovery is checked as
+whole-file equality: per revision the manifest bytes, the SHA-256 of the pixels of every bound
+plane and of every named resource, plus the checkpoint and operation rows.
+
+| Case | Checks |
+|---|---|
+| `interruptions` | one project (a protected checkpoint, 55 fills, a stroke per plane, a save) through, in turn: a child killed in `COMMIT` of a stroke (hot journal, torn file), one killed between the plane rows and the revision row, one killed during `VACUUM INTO` of `compact` and one before its rename, then I/O failures of `VACUUM INTO` and of the rename in process; after each, the file equals its state before the fault and its bytes are unchanged; the killed strokes then commit once each with exact pixels; `compact` keeps every retained state equal and collects the rest; on byte copies, a corrupt resource blob, a corrupt chunk blob, a corrupt older manifest and a corrupt current manifest are each detected and name the affected node, revision or plane while everything else reads exactly; the project itself is unchanged |
+| `two_layers` | two paint layers on one channel and tile: reopened, A edited, a stroke on B killed in `COMMIT` and recovered, B edited, reverted to the saved checkpoint, compacted, reopened: each plane reads its own pixels at every checked revision, every retained revision binds two distinct versions whose chunk hashes never overlap |
+| `commit_then_die` | a child commits a stroke durably and dies before the acknowledgement: the retry with the original key, arguments and precondition returns the stored outcome without executing, a changed stroke under the key is `idempotency_conflict`; neither creates a revision or a plane version; the same after the current revision advanced and after reopen |
+| `pruned_key_replay` | a stroke `k1` pruned by `compact`: replays with its precondition and with none are `outcome_unknown`, not executed, no revision or version; `k2` inside the window returns its stored outcome at a newer revision; the plane holds `k1` exactly once; the same after reopen and after a second (empty) compaction |
+| `revert_edit_reopen_compact` | approved (protected) → two strokes → 80 fills → revert → stroke → reopen → compact: every retained state equal byte for byte, the protected checkpoint's chunks written at revision 2 kept, a version only a collapsed revision bound collected; after reopen the protected checkpoint still reverts to its exact pixels |
+
 No GPU is used; the cases run on the hosted CPU lane.
 
 ## 8. Raster planes
