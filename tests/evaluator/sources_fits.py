@@ -542,16 +542,22 @@ def uv_sampling(ev: Evaluations, exe: Path) -> dict[str, Any]:
             "uv-bilinear-minification",
             "BilinearHQ and BilinearSharp under minification",
             "Not reproduced. Painter samples a minified bitmap with the recording GPU's "
-            "texture unit through Vulkan: a float32 texture with a box mip chain and an "
-            "anisotropic sampler whose trilinear band is that of maxAnisotropy 4 to 7 "
-            "(t = 1.75 f); BilinearSharp is one sample at LOD bias -1.5, BilinearHQ a 3 x 3 "
-            "supersample at 1/3 output-texel steps with the gradients divided by 3, tent weights "
-            "(the (+1/3, +1/3) sample replaced by the centre) blended in by "
-            "min(footprint - 1, 1). Measured on that GPU this reproduces resample-uv-minify, "
-            "resample-uv-impulse and the held-out resample-uv user 6 to one code, not exactly "
-            "(the hardware's float coordinates, anisotropic probes and blend arithmetic are not "
-            "modelled bit for bit; decision 056). The evaluator refuses a bilinear projection "
-            "whose footprint exceeds one texel with evaluator:unsupported_source.",
+            "texture unit through Vulkan (decision 056); with that unit as the sampler the "
+            "following reproduces every value of resample-uv-minify, resample-uv-impulse and "
+            "the held-out resample-uv user 6, both filters, both wraps, both recordings "
+            "(decision 060): the UV in float32, u' = fma(m00, u, m01 v) + m02 and "
+            "v' = fma(m10, u, m11 v) + m12 with M = float32 of T(1/2) R S T(-1/2 - o); a "
+            "float32 texture with a mip chain of four-texel means rounded to float32 ties up; "
+            "an anisotropic sampler with maxAnisotropy 4; BilinearSharp one SampleGrad at LOD "
+            "bias -1.5; BilinearHQ nine samples at (u', v') + DX ddx + DY ddy (fine "
+            "derivatives, DX and DY in {-1/3, 0, 1/3}) with the gradients divided by 3, summed "
+            "in float32 in the order centre, (+, 0), (-, 0), (0, -), (0, +), (+, -), (-, -), "
+            "(-, +), centre with weights 4, 2, 2, 2, 2, 1, 1, 1, 1 / 16, blended with the "
+            "level-0 bilinear sample C1 as fma(C1, 1 - alpha, acc alpha), "
+            "alpha = clamp(min(|ddx|, |ddy|) w - 1, 0, 1). The texture unit itself has no "
+            "closed-form software replica (decision 061: its probe offsets are a non-separable "
+            "function of the 9-bit gradient mantissas), so the evaluator refuses a bilinear "
+            "projection whose footprint exceeds one texel with evaluator:unsupported_source.",
             [PYDOC_UV, D3D_FILTER],
             [],
             [],
