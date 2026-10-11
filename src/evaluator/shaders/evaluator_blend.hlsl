@@ -1,6 +1,7 @@
 // Blend kernel of the compositor (src/evaluator/kernelgen.h), one specialisation per blend mode
 // and tile format: UZP_MODE_<Mode>, UZP_ENC (ENC_* of image_common.hlsli), UZP_CHANNELS (1 or
-// 3), UZP_SRGB (codes are sRGB8), UZP_ALPHA (the destination carries a coverage plane).
+// 3), UZP_SRGB (codes are sRGB8), UZP_ALPHA (the destination carries a coverage plane),
+// UZP_HALF_COVERAGE (that plane is written through binary16, TileFormat::halfCoverage).
 // Mirrors src/evaluator/arith.cpp operation for operation: every float operation is one IEEE
 // operation (compiled IEEE-strict), Fma is the float32 rounding of the exact x y + z (exact
 // product and one addition in double), Rcp, Sqrt and RsqrtCorrect are correctly rounded (the
@@ -574,7 +575,34 @@ float StoreChannel(float v) {
 #endif
 }
 
+// The float32 value of the binary16 nearest to v, ties to even (arith.cpp HalfNearestEven).
+float HalfNearestEven(float v) {
+    const uint bits = asuint(v);
+    const uint sign = bits & 0x80000000u;
+    const uint magnitude = bits & 0x7FFFFFFFu;
+    if (magnitude > 0x7F800000u) return asfloat(sign | 0x7FC00000u);  // quiet NaN
+    if (magnitude == 0x7F800000u) return v;
+    if (magnitude >= 0x477FF000u) return asfloat(sign | 0x7F800000u);  // >= 65520: infinity
+    if (magnitude < 0x38800000u) {  // a subnormal half (or zero), step 2^-24
+        if (magnitude < 0x33000000u) return asfloat(sign);
+        const uint significand = (magnitude & 0x7FFFFFu) | 0x800000u;
+        const uint shift = 126u - (magnitude >> 23);
+        uint q = significand >> shift;
+        const uint rest = significand & ((1u << shift) - 1u);
+        const uint half = 1u << (shift - 1u);
+        if (rest > half || (rest == half && (q & 1u) != 0u)) q += 1u;
+        return asfloat(sign | asuint(float(q) * 5.9604644775390625e-08f));
+    }
+    uint h = (magnitude >> 13) - (112u << 10);
+    const uint rest = magnitude & 0x1FFFu;
+    if (rest > 0x1000u || (rest == 0x1000u && (h & 1u) != 0u)) h += 1u;
+    return asfloat(sign | (((h >> 10) + 112u) << 23) | ((h & 0x3FFu) << 13));
+}
+
 float StoreCoverage(float alpha) {
+#if UZP_HALF_COVERAGE
+    alpha = HalfNearestEven(alpha);
+#endif
 #if UZP_ENC == 0 || UZP_ENC == 1
     return CodeValue(WriteValue(alpha, UZP_ENC), UZP_ENC);
 #elif UZP_ENC == 2

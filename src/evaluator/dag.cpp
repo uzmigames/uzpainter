@@ -29,6 +29,8 @@ struct Context {
     std::array<float, 3> base;
     TileGrid grid;
     int depth = 0;
+    /// The profile's `float32UniformPlain` (UniformOperand).
+    bool float32UniformPlain = false;
 };
 
 constexpr int kMaxInstanceDepth = 64;
@@ -78,7 +80,7 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             const auto& uniform = std::get<core::UniformColorSource>(source.value);
             result.kind = DagSource::Kind::Uniform;
             result.uniform = mask ? UniformOperand(uniform.rgb, TileFormatOf(kMaskFormat), {0.0f, 0.0f, 0.0f})
-                                  : UniformOperand(uniform.rgb, ctx.tileFormat, ctx.base);
+                                  : UniformOperand(uniform.rgb, ctx.tileFormat, ctx.base, ctx.float32UniformPlain);
             writer.Str("uniform");
             for (const float component : result.uniform) writer.F32(component);
             break;
@@ -444,7 +446,7 @@ core::Blending EffectiveBlending(const core::Layer& layer, core::ChannelType cha
 }
 
 std::array<float, 3> UniformOperand(const std::array<double, 3>& colour, const TileFormat& format,
-                                    const std::array<float, 3>& base) {
+                                    const std::array<float, 3>& base, bool float32Plain) {
     std::array<float, 3> result{0.0f, 0.0f, 0.0f};
     std::array<double, 3> components;
     if (format.channels == 1) {
@@ -457,11 +459,13 @@ std::array<float, 3> UniformOperand(const std::array<double, 3>& colour, const T
     }
     for (uint32_t c = 0; c < format.channels; ++c) {
         const float value = static_cast<float>(components[c]);
-        // A 32-bit float colour reads back as the channel would export it (blend-modes.json
+        // A 32-bit float colour is its float32 value (`float32Plain`, profile.h), or, under the
+        // earlier profiles, reads back as the channel would export it (blend-modes.json
         // `uniform_operand`: stored like a channel value, 1 + (v - 1) over the white base).
-        const uint32_t stored = format.encoding == render::TexelEncoding::Float32
-                                    ? std::bit_cast<uint32_t>(arith::Float32Readout(value, base[c]))
-                                    : StoreValue(value, format, c);
+        const uint32_t stored = format.encoding != render::TexelEncoding::Float32
+                                    ? StoreValue(value, format, c)
+                                : float32Plain ? std::bit_cast<uint32_t>(arith::Float32Store(value))
+                                               : std::bit_cast<uint32_t>(arith::Float32Readout(value, base[c]));
         result[c] = OperandOf(stored, format, c);
     }
     return result;
@@ -505,10 +509,12 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
                         static_cast<uint32_t>(set->resolution.height)};
     dag.templateId = std::string(templateId);
     dag.profile = std::move(*profile);
+    dag.tileFormat.halfCoverage = dag.profile.srgb8HalfCoverage && dag.tileFormat.srgb;
     dag.root.owner = stack;
     dag.root.isolated = dag.profile.root == RootComposite::Isolated;
     Context ctx{project,        dag.profile.id, *set,     *stackPtr, channel,
                 dag.tileFormat, dag.format,     dag.base, dag.grid};
+    ctx.float32UniformPlain = dag.profile.float32UniformPlain;
     {
         HashWriter writer;
         writer.Sub(ContentStartHash(ctx, "root"));

@@ -31,22 +31,37 @@ enum class RootComposite : uint8_t {
     /// group: colour and coverage stored in the channel format after every layer. That
     /// intermediate is composited over the base once at read-out, `v = base + (C - base) a` (the
     /// `Replace` mix of arith::Composite at opacity 1), and stored with the channel's write rule.
-    /// Profile painter-12.1-isolated-linear (quantisation-profile.json).
+    /// Profiles painter-12.1-isolated-linear and painter-12.1-isolated-half-alpha
+    /// (quantisation-profile.json).
     Isolated,
 };
 
 struct EvaluatorProfile {
     std::string id;
     RootComposite root = RootComposite::Isolated;
+    /// The coverage plane of an sRGB8 intermediate is written as the 8-bit UNORM code of its
+    /// binary16 value (round to nearest even), not of its float32 value: the recording GPU
+    /// passes the outputs of sRGB8 targets through binary16 (Tier 0 `group-masks` s2-s3: a
+    /// coverage half-way between two codes is stored up or down as its binary16 value lies).
+    /// Profile painter-12.1-isolated-half-alpha (quantisation-profile.json).
+    bool srgb8HalfCoverage = false;
+    /// A uniform colour on a 32-bit float channel is the float32 of the value. Without it the
+    /// value is read back re-composited over the channel base, `1 + (v - 1)`, the rule of the
+    /// earlier profiles (`group-masks` row 0 shows the plain value).
+    bool float32UniformPlain = false;
 };
 
 /// The first, provisional profile (evaluator-profile.json): stamped into projects before the
 /// quantisation experiment settled the profile; still registered and evaluated as it was.
 inline constexpr std::string_view kProfileLayerqLinear = "painter-12.1-layerq-linear";
-/// The profile the quantisation experiment settled (quantisation-profile.json).
+/// The profile the quantisation experiment settled (quantisation-profile.json); superseded by
+/// painter-12.1-isolated-half-alpha, still registered and evaluated as it was.
 inline constexpr std::string_view kProfileIsolatedLinear = "painter-12.1-isolated-linear";
+/// The isolated root with the sRGB8 coverage written through binary16 and plain 32-bit float
+/// uniform colours (phase1.10_compositor-float32-residual, quantisation-profile.json).
+inline constexpr std::string_view kProfileIsolatedHalfAlpha = "painter-12.1-isolated-half-alpha";
 /// The profile new projects are stamped with.
-inline constexpr std::string_view kCurrentProfile = kProfileIsolatedLinear;
+inline constexpr std::string_view kCurrentProfile = kProfileIsolatedHalfAlpha;
 
 /// The registered profile `id`; `evaluator:unknown_profile` when the build has none of that id
 /// (a project from a newer build, a typo, an empty field).

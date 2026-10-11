@@ -29,7 +29,8 @@ struct BlendKernelVariant {
 };
 
 /// The HLSL of the variant: `evaluator_blend.hlsl` with the defines `UZP_MODE_<Mode>`,
-/// `UZP_ENC`, `UZP_CHANNELS`, `UZP_SRGB` and `UZP_ALPHA`, including the render layer's
+/// `UZP_ENC`, `UZP_CHANNELS`, `UZP_SRGB`, `UZP_ALPHA` and `UZP_HALF_COVERAGE` (the coverage plane
+/// written through binary16, `TileFormat::halfCoverage`), including the render layer's
 /// `image_common.hlsli` and the generated `evaluator_tables.hlsli`.
 [[nodiscard]] render::KernelSource BlendKernelSource(const BlendKernelVariant& variant);
 

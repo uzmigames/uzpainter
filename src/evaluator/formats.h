@@ -28,6 +28,10 @@ struct TileFormat {
     bool srgb = false;
     /// A fourth plane holds the coverage (alpha) of an isolated group's intermediate.
     bool alpha = false;
+    /// The coverage plane is written through binary16 first (round to nearest even), then with
+    /// the plane's write rule: the sRGB8 intermediates of profiles with
+    /// `EvaluatorProfile::srgb8HalfCoverage` (profile.h). No effect without `alpha`.
+    bool halfCoverage = false;
 
     /// Planes the texture stores: 1, or 4 for colour and for intermediates with coverage.
     [[nodiscard]] uint32_t StoredChannels() const { return channels == 1 && !alpha ? 1u : 4u; }

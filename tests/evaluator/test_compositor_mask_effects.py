@@ -210,13 +210,14 @@ def test_group_masks_differ_only_where_the_child_is_partly_covered(
 ) -> None:
     """3.4: `group-masks` with masks: a mask (grey A) on the group in its default mode (s2) and in
     `Normal` (s3), and a mask (grey B, a ramp along y) on its Multiply child, on RGB16, sRGB8 and
-    RGB32F. The group masks are exact: every texel where the child's mask is 1 equals both
-    recordings, and so does every texel where it is 0 but on RGB32F (there the uniform fill's
-    float32 operand enters the result directly). Where the child's mask lies strictly between 0
-    and 1 the uniform fill above it composites over a partly covered backdrop, the source-over
-    whose float32 operation order is phase1.10_compositor-float32-residual's open item: those
-    texels keep the published residual of `masks-levels.json` (entry `group-masks`, a release
-    gap), which this test pins."""
+    RGB32F. The group masks are exact: every texel where the child's mask is 1 or 0 equals both
+    recordings (where it is 0 the uniform fill's plain float32 operand enters the result
+    directly, profile painter-12.1-isolated-half-alpha), and so does every sRGB8 texel (the
+    coverage written through binary16). Where the child's mask lies strictly between 0 and 1 the
+    uniform fill above it composites over a partly covered backdrop, the source-over whose
+    float32 operation order phase1.10_compositor-float32-residual did not identify: those RGB16
+    and RGB32F texels keep the published residual of `masks-levels.json` (entry `group-masks`, a
+    divergence), which this test pins."""
     needs_store()
     golden = envelope_golden("semantics/group-masks")
     document = envelope_manifest("semantics/group-masks")
@@ -234,7 +235,7 @@ def test_group_masks_differ_only_where_the_child_is_partly_covered(
             theirs = golden.map(recording, map_name).values.reshape(exported.shape)
             differs = (exported != theirs).any(axis=-1)
             rows = set(np.flatnonzero(differs.any(axis=1)).tolist())
-            allowed = set(range(0 if fmt.endswith("F") else 1, 255))
+            allowed = set(range(1, 255))
             assert rows <= allowed, (map_name, recording, sorted(rows - allowed))
             expected = published[(map_name, recording)]["differing"]
             assert int(np.count_nonzero(exported != theirs)) == expected, (map_name, recording)

@@ -718,12 +718,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 768,
-            "mean": 7.2945505777994795,
-            "p99": 384,
-            "differing": 3709,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 3361,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -733,12 +733,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 768,
-            "mean": 7.2945505777994795,
-            "p99": 384,
-            "differing": 3709,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 3361,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -749,11 +749,11 @@
           "unit": "float32 value",
           "difference": {
             "max": 1.1920928955078125e-07,
-            "mean": 6.749663346757491e-09,
+            "mean": 6.495914324962844e-09,
             "p99": 5.960464477539063e-08,
-            "differing": 21469,
+            "differing": 20631,
             "total": 196608,
-            "affected_texels": 18277,
+            "affected_texels": 17694,
             "texels": 65536
           }
         },
@@ -764,11 +764,11 @@
           "unit": "float32 value",
           "difference": {
             "max": 1.1920928955078125e-07,
-            "mean": 6.749663346757491e-09,
+            "mean": 6.495914324962844e-09,
             "p99": 5.960464477539063e-08,
-            "differing": 21469,
+            "differing": 20631,
             "total": 196608,
-            "affected_texels": 18277,
+            "affected_texels": 17694,
             "texels": 65536
           }
         },
@@ -808,12 +808,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 768,
-            "mean": 7.2945505777994795,
-            "p99": 384,
-            "differing": 3709,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 3361,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -823,12 +823,12 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 768,
-            "mean": 7.2945505777994795,
-            "p99": 384,
-            "differing": 3709,
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 3361,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -839,11 +839,11 @@
           "unit": "float32 value",
           "difference": {
             "max": 1.1920928955078125e-07,
-            "mean": 6.749663346757491e-09,
+            "mean": 6.495914324962844e-09,
             "p99": 5.960464477539063e-08,
-            "differing": 21469,
+            "differing": 20631,
             "total": 196608,
-            "affected_texels": 18277,
+            "affected_texels": 17694,
             "texels": 65536
           }
         },
@@ -854,16 +854,16 @@
           "unit": "float32 value",
           "difference": {
             "max": 1.1920928955078125e-07,
-            "mean": 6.749663346757491e-09,
+            "mean": 6.495914324962844e-09,
             "p99": 5.960464477539063e-08,
-            "differing": 21469,
+            "differing": 20631,
             "total": 196608,
-            "affected_texels": 18277,
+            "affected_texels": 17694,
             "texels": 65536
           }
         }
       ],
-      "notes": "The masks are exact: every texel where the child's mask (a ramp along y) is 1 equals both recordings, and every texel where it is 0 but on RGB32F. The residual lies where the child's mask is strictly between 0 and 1: the uniform Screen fill above it composites over a partly covered backdrop inside the group, the source-over whose float32 operation order is not identified (phase1.10_compositor-float32-residual; it shows on RGB16 and sRGB8 here, not only on 32-bit floats). On the RGB32F row where the child's mask is 0 the uniform's float32 value float32(v) reproduces the recordings and the read-out operand 1 + (v - 1) of blend-modes.json does not; changing it changes the meaning of profile painter-12.1-isolated-linear (decision 017 pinning), so both are left to that task's new profile. Release gap; no exception proposed."
+      "notes": "Evaluated under profile painter-12.1-isolated-half-alpha (decision 044). The masks are exact: every texel where the child's mask (a ramp along y) is 1 or 0 equals both recordings, and the sRGB8 maps are exact: the group coverage (255 + y)/510 lies half-way between two 8-bit codes on even rows, and Painter stores the code of its binary16 value (up on rows y mod 64 >= 32, down elsewhere), the profile's sRGB8 coverage rule; the float32 value stored all ties down (3 709 values off). On the RGB32F row where the child's mask is 0 the uniform's float32 value reproduces the recordings (the profile's plain 32-bit float operand; 1 + (v - 1) leaves 8 values off). The RGB32F and RGB16 residual lies where the child's mask is strictly between 0 and 1: the uniform Screen fill above it composites over a partly covered backdrop inside the group, the source-over whose float32 operation order is not identified (phase1.10_compositor-float32-residual, parity/reports/phase1/compositor-float32-residual.md); a divergence, no exception proposed (the owner's decision)."
     },
     {
       "entry_id": "levels",

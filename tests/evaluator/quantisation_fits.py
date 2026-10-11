@@ -1,5 +1,5 @@
-"""The published fit of phase1.9_compositor-quantisation-profile:
-`parity/semantics/quantisation-profile.json`.
+"""The published fit of phase1.9_compositor-quantisation-profile and
+phase1.10_compositor-float32-residual: `parity/semantics/quantisation-profile.json`.
 
 The Tier 0 quantisation experiment (`tier0/semantics/quantisation-thirds`: three uniform fills at
 opacity 1/3 on one channel per ChannelFormat member, four colour triplets) and the one-layer
@@ -51,6 +51,7 @@ THIRDS = "quantisation-thirds"
 INPUTS = "blend-inputs"
 SETS = ("s0", "s1", "s2", "s3")
 PROFILE_ISOLATED = "painter-12.1-isolated-linear"
+PROFILE_HALF_ALPHA = "painter-12.1-isolated-half-alpha"
 PROFILE_LAYERQ = "painter-12.1-layerq-linear"
 # Painter's API names the L32F channel of the experiment `Scattering`; the document model's
 # channel type is its alias SubsurfaceRadiusScale (assets/templates/channel-defaults.json).
@@ -59,6 +60,10 @@ CHANNEL_ALIASES = {"Scattering": "SubsurfaceRadiusScale"}
 W3C = source("S-W3C-BLEND", "§5.1 simple alpha compositing (source-over), §6 group isolation")
 SRGB = source("S-SRGB", "IEC 61966-2-1:1999 §5.2-5.3 (transfer functions)")
 D3D = source("X-D3D12", "Data conversion rules: FLOAT to UNORM, FLOAT to SRGB, FLOAT to FLOAT16")
+D3D_HALF = source(
+    "X-D3D12",
+    "Data conversion rules: FLOAT32 to FLOAT16 (round to nearest even), then FLOAT to UNORM",
+)
 PYDOC = source(
     "A-PYDOC", "layerstack: Node.set_opacity, BlendingMode.Normal; textureset: ChannelFormat"
 )
@@ -174,15 +179,37 @@ ISOLATED_FORMULA = (
     "blend-modes.json; with a < 1 the stored coverage below 1/2 (32767/65535 on 16 bits) sends "
     "every exact tie of a 0.5-opacity layer over the base up, as Painter does."
 )
+HALF_ALPHA_FORMULA = (
+    "The isolated root of painter-12.1-isolated-linear (entry quantisation-isolated-root) with two "
+    "write rules changed: the coverage plane of an sRGB8 intermediate is written as the 8-bit "
+    "UNORM code of its binary16 value (round to nearest even), WriteUnorm(binary16(a), 8), and a "
+    "uniform colour on a 32-bit float channel is the float32 of the value (the earlier profiles "
+    "read it back as 1 + (v - 1) over the white base)."
+)
 LAYERQ_FORMULA = (
     "Root layers blended onto an accumulator that starts at the channel base, "
     "v = acc (1 - alpha) + r alpha in float32, stored in the channel format after every layer "
     "with the same write rules; 32-bit float channels re-composited over the base once at "
     "read-out (1 + (v - 1)). The provisional profile of evaluator-profile.json."
 )
+HALF_ALPHA_NOTES = (
+    "Selected: profile painter-12.1-isolated-half-alpha (src/evaluator/profile.h, decision 044), "
+    "stamped into new projects; painter-12.1-isolated-linear and painter-12.1-layerq-linear stay "
+    "registered for projects stamped with them. The binary16 coverage rule is measured on "
+    "group-masks s2-s3 (masks-levels.json): a group coverage half-way between two 8-bit codes "
+    "is stored up or down as its binary16 value lies, and only that rule makes their sRGB8 maps "
+    "exact. The partial coverages of this experiment (1/3, 5/9, 19/27, 1/2) store the same codes "
+    "under both rules, so every UNORM, sRGB8 and 16-bit float map here is exact against r1 as "
+    "before. The plain 32-bit float operand is measured on group-masks row 0 and makes one more "
+    "value of this experiment exact (s0 RGB32F G). The 32-bit float maps are still not exact: 3 "
+    "of the 12 RGB32F values and 2 of the 4 L32F values lie 2^-25 or 2^-24 from r1; the float32 "
+    "operation order of Painter's source-over onto a partly covered backdrop is not identified "
+    "(parity/reports/phase1/compositor-float32-residual.md; a divergence, never counted as a "
+    "pass, decision 032). r2 is covered by EXC-001 and EXC-002 as for the earlier profile."
+)
 ISOLATED_NOTES = (
-    "Selected: profile painter-12.1-isolated-linear (src/evaluator/profile.h), stamped into new "
-    "projects; painter-12.1-layerq-linear stays registered for projects stamped with it. Against "
+    "Superseded by painter-12.1-isolated-half-alpha (entry quantisation-isolated-half-alpha); "
+    "still registered and evaluated as it was. Against "
     "the same-session recording r1 the isolated model reproduces every UNORM, sRGB8 and 16-bit "
     "float map of the experiment and every map of the blend-inputs s2 stack exactly (sRGB8 "
     "blended on linear values). The 32-bit float maps of the experiment are not exact: 4 of the "
@@ -212,6 +239,16 @@ def build(exe: Path, work: Path) -> dict[str, Any]:
         parameter("opacity_blend_inputs_s2", 0.5, "authored"),
     ]
     entries = [
+        entry(
+            "quantisation-isolated-half-alpha",
+            "Evaluator profile painter-12.1-isolated-half-alpha: the isolated root with the sRGB8 "
+            "coverage written through binary16 and plain 32-bit float uniform colours",
+            HALF_ALPHA_FORMULA,
+            [W3C, SRGB, D3D, D3D_HALF, PYDOC],
+            [*params, parameter("evaluator_profile", PROFILE_HALF_ALPHA, "fitted")],
+            residuals(runs, decode, PROFILE_HALF_ALPHA),
+            HALF_ALPHA_NOTES,
+        ),
         entry(
             "quantisation-isolated-root",
             "Evaluator profile painter-12.1-isolated-linear: isolated root stack, per-layer "

@@ -15,6 +15,7 @@ struct Registry {
     std::vector<EvaluatorProfile> profiles{
         EvaluatorProfile{std::string(kProfileLayerqLinear), RootComposite::OverBase},
         EvaluatorProfile{std::string(kProfileIsolatedLinear), RootComposite::Isolated},
+        EvaluatorProfile{std::string(kProfileIsolatedHalfAlpha), RootComposite::Isolated, true, true},
     };
 };
 

@@ -30,6 +30,9 @@ float OperandOf(uint32_t stored, const TileFormat& format, uint32_t plane) {
 }
 
 uint32_t StoreValue(float value, const TileFormat& format, uint32_t plane) {
+    if (format.halfCoverage && IsCoverage(format, plane)) {
+        value = arith::HalfToFloat(arith::HalfNearestEven(value));
+    }
     switch (format.encoding) {
         case TexelEncoding::Unorm8:
             if (format.srgb && !IsCoverage(format, plane)) return arith::Srgb8Store(value);

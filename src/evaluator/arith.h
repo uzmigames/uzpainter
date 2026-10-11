@@ -109,6 +109,11 @@ inline constexpr std::array<float, 9> kSinSeries = {
 /// The bits of the binary16 value of `v` rounded toward zero (finite values beyond the
 /// largest half give the largest half; infinities and NaN keep their class).
 [[nodiscard]] uint16_t HalfTowardZero(float v);
+/// The bits of the binary16 value of `v` rounded to nearest, ties to even (IEEE 754
+/// convertFormat; magnitudes from 65520 up give infinity; infinities and NaN keep their class).
+/// The coverage plane of an sRGB8 intermediate passes through it before its 8-bit write
+/// (profile.h `EvaluatorProfile::srgb8HalfCoverage`).
+[[nodiscard]] uint16_t HalfNearestEven(float v);
 /// The float32 value of a binary16 bit pattern (exact).
 [[nodiscard]] float HalfToFloat(uint16_t bits);
 /// The 32-bit float store: the value itself, with NaN as the quiet NaN 0x7FC00000 (payloads

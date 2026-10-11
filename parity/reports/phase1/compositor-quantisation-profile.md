@@ -73,6 +73,6 @@ The shipped templates use sRGB8, RGB8, RGB16, RGB16F, L8, L16 and L16F (`assets/
 
 ## Open items
 
-- 32-bit float channels of partly covered stacks: 6 of 16 values of the experiment within 2^-24 of r1 (above), a divergence; task `phase1.10_compositor-float32-residual` (no shipped template uses a 32-bit float format).
+- 32-bit float channels of partly covered stacks: 6 of 16 values of the experiment within 2^-24 of r1 (above), a divergence; task `phase1.10_compositor-float32-residual` (no shipped template uses a 32-bit float format). Update 2026-10-11: under the new current profile `painter-12.1-isolated-half-alpha` (decision 044) 5 of the 16 values remain; the order was not identified (`parity/reports/phase1/compositor-float32-residual.md`).
 - Resolved after the archive: `src/store/census.cpp` and the store and mesh test fixtures stamp `painter-12.1-isolated-linear` (the id of `evaluator::kCurrentProfile`, spelled out because the store does not depend on the evaluator; `tests/evaluator/test_compositor_quantisation_profile.py` checks they agree). The document-model fixtures of phase1.1 keep `painter-12.1-layerq-linear` (still registered), because their manifest digests are pinned evidence.
 - Resolved after the archive: `parity/semantics/evaluator-profile.json` and `tools/parity/fit/profile.py` state that `quantisation-profile.json` supersedes them for the evaluator; the phase0.7 fit and its numbers are unchanged (`python -m tools.parity.fit check --fit profile` reproduces it).

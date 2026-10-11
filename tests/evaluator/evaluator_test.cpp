@@ -547,6 +547,61 @@ int RunArith() {
     }
     Check(halfRoundTrip, "every finite half converts to float and back to its own bits");
 
+    // Half nearest, ties to even (the binary16 pass of an sRGB8 coverage plane).
+    // Reference: the two halves around v (toward zero and the next one out) compared in double.
+    auto nearestReference = [](float v) -> uint16_t {
+        const uint16_t down = arith::HalfTowardZero(v);
+        if (std::isnan(v) || std::isinf(v)) return down;
+        const uint16_t up = static_cast<uint16_t>(down + 1u);  // the next half away from zero (0x7C00 is inf)
+        const double magnitude = std::fabs(static_cast<double>(v));
+        const double lo = std::fabs(static_cast<double>(arith::HalfToFloat(down)));
+        // Past the largest half, IEEE 754 rounds as if the next value were 2^16.
+        const double hi = (up & 0x7FFFu) == 0x7C00u ? 65536.0 : std::fabs(static_cast<double>(arith::HalfToFloat(up)));
+        if (magnitude - lo < hi - magnitude) return down;
+        if (magnitude - lo > hi - magnitude) return up;
+        return (down & 1u) == 0 ? down : up;
+    };
+    bool nearestOk = true;
+    std::string nearestDetail;
+    auto checkNearest = [&](float v) {
+        const uint16_t got = arith::HalfNearestEven(v);
+        const uint16_t want = nearestReference(v);
+        if (got != want && nearestOk) {
+            nearestOk = false;
+            nearestDetail = Hex32(std::bit_cast<uint32_t>(v)) + ": " + Hex32(got) + ", expected " + Hex32(want);
+        }
+    };
+    for (uint32_t bits = 0; bits < 0x7C00; ++bits) {
+        for (const uint32_t sign : {0u, 0x8000u}) {
+            const float value = arith::HalfToFloat(static_cast<uint16_t>(bits | sign));
+            checkNearest(value);
+            if (bits + 1 < 0x7C00) {
+                // The midpoint to the next half (exact in float32) and the floats on either side.
+                const float next = arith::HalfToFloat(static_cast<uint16_t>((bits + 1) | sign));
+                const float mid = static_cast<float>((static_cast<double>(value) + static_cast<double>(next)) / 2.0);
+                checkNearest(mid);
+                checkNearest(std::nextafter(mid, 0.0f));
+                checkNearest(std::nextafter(mid, 2.0f * mid));
+            }
+        }
+    }
+    for (const float v : {65504.0f, 65519.99f, 65520.0f, 1.0e30f, 2.98023223876953125e-08f, 2.9802326e-08f,
+                          8.940697e-08f, 6.103515625e-05f, 6.1035156e-05f}) {
+        checkNearest(v);
+        checkNearest(-v);
+    }
+    Check(nearestOk, "binary16 rounding to nearest, ties to even: every half, every midpoint between neighbours "
+                     "and the floats beside it, overflow from 65520, the subnormal range", nearestDetail);
+    Check(std::isinf(arith::HalfToFloat(arith::HalfNearestEven(65520.0f))) &&
+              arith::HalfNearestEven(65519.99f) == 0x7BFF && arith::HalfNearestEven(2.98023223876953125e-08f) == 0 &&
+              arith::HalfNearestEven(std::numeric_limits<float>::quiet_NaN()) == 0x7E00,
+          "65520 rounds to infinity, 2^-25 ties to zero, NaN stays NaN");
+    // `group-masks` row 32: the coverage 287/510 is a tie of 8-bit codes; its binary16 value lies
+    // above it, so the code is 144 (the float32 value gives 143).
+    const float tie = 0.5f + 0.5f * (32.0f * 257.0f / 65535.0f);
+    Check(arith::WriteUnorm(tie, 8) == 143 && arith::WriteUnorm(arith::HalfToFloat(arith::HalfNearestEven(tie)), 8) == 144,
+          "the coverage (255 + 32) / 510 writes as code 143 from float32 and 144 through binary16");
+
     // sRGB tables.
     Check(arith::Srgb8Store(0.0f) == 0 && arith::Srgb8Store(1.0f) == 255,
           "sRGB8 store maps 0 and 1 to the end codes");
@@ -1186,19 +1241,32 @@ int RunProfile(const fs::path& assets) {
         {ChannelType::User1, ChannelFormat::sRGB8},
         {ChannelType::User2, ChannelFormat::RGB32F}};
     const std::array<float, 3> base{1.0f, 1.0f, 1.0f};
+    using Colours = std::vector<std::array<double, 3>>;
+    using Opacities = std::vector<double>;
     // The Tier 0 quantisation experiment's first texture set: three uniform fills at opacity 1/3.
-    const std::array<std::array<double, 3>, 3> colours{{{0.2, 0.7, 0.123}, {0.9, 0.05, 0.5}, {0.333, 0.1, 0.8}}};
+    const Colours colours{{0.2, 0.7, 0.123}, {0.9, 0.05, 0.5}, {0.333, 0.1, 0.8}};
     const double third = 1.0 / 3.0;
+    const Opacities thirds{third, third, third};
+    // A 0.5 fill over a fill at opacity 32/255: the coverage (255 + 32) / 510 lies half-way between
+    // two 8-bit codes, and its binary16 value rounds up (Tier 0 `group-masks` row 32).
+    const Colours tieColours{{0.2, 0.7, 0.123}, {0.9, 0.05, 0.5}};
+    const Opacities tieOpacities{static_cast<double>(32.0f / 255.0f), 0.5};
 
     // 1. The registry.
     render::Result<EvaluatorProfile> legacy = FindProfile(kProfileLayerqLinear);
-    render::Result<EvaluatorProfile> settled = FindProfile(kProfileIsolatedLinear);
-    Check(legacy && legacy->root == RootComposite::OverBase && settled &&
-              settled->root == RootComposite::Isolated && kCurrentProfile == kProfileIsolatedLinear,
-          "the build registers painter-12.1-layerq-linear (over the base) and painter-12.1-isolated-linear "
-          "(isolated root), the current profile");
+    render::Result<EvaluatorProfile> linear = FindProfile(kProfileIsolatedLinear);
+    render::Result<EvaluatorProfile> halfAlpha = FindProfile(kProfileIsolatedHalfAlpha);
+    Check(legacy && legacy->root == RootComposite::OverBase && !legacy->srgb8HalfCoverage &&
+              !legacy->float32UniformPlain && linear && linear->root == RootComposite::Isolated &&
+              !linear->srgb8HalfCoverage && !linear->float32UniformPlain && halfAlpha &&
+              halfAlpha->root == RootComposite::Isolated && halfAlpha->srgb8HalfCoverage &&
+              halfAlpha->float32UniformPlain && kCurrentProfile == kProfileIsolatedHalfAlpha,
+          "the build registers painter-12.1-layerq-linear (over the base), painter-12.1-isolated-linear (isolated "
+          "root) and painter-12.1-isolated-half-alpha (isolated root, binary16 sRGB8 coverage, plain 32-bit float "
+          "uniform colours), the current profile");
     const std::vector<std::string> ids = RegisteredProfiles();
-    Check(ids.size() >= 2 && ids[0] == kProfileLayerqLinear && ids[1] == kProfileIsolatedLinear,
+    Check(ids.size() >= 3 && ids[0] == kProfileLayerqLinear && ids[1] == kProfileIsolatedLinear &&
+              ids[2] == kProfileIsolatedHalfAlpha,
           "the built-in profiles are listed first, in registration order");
     render::Result<EvaluatorProfile> unknown = FindProfile("painter-12.1-no-such-profile");
     Check(!unknown && EvalErrorKindOf(unknown.error()) == EvalErrorKind::UnknownProfile,
@@ -1208,19 +1276,21 @@ int RunProfile(const fs::path& assets) {
     Check(!malformed && EvalErrorKindOf(malformed.error()) == EvalErrorKind::InvalidProfile && !taken &&
               EvalErrorKindOf(taken.error()) == EvalErrorKind::InvalidProfile,
           "a registration with a malformed or taken id fails with invalid_profile (an id never changes meaning)");
+    if (!legacy || !linear || !halfAlpha) return Finish();
 
-    auto project = [&](std::string_view profile) {
+    auto stackOf = [&](std::string_view profile, const Colours& stackColours, const Opacities& opacities) {
         Builder builder(128, 128, formats);
         builder.project.versions.evaluator_profile = std::string(profile);
         std::vector<core::Layer> layers;
-        for (size_t i = 0; i < colours.size(); ++i) {
-            layers.push_back(builder.Fill("third" + std::to_string(i),
-                                          SameSource(channels, Uniform(colours[i][0], colours[i][1], colours[i][2])),
-                                          Same(channels, BlendingMode::Normal, third)));
+        for (size_t i = 0; i < stackColours.size(); ++i) {
+            const std::array<double, 3>& c = stackColours[i];
+            layers.push_back(builder.Fill("layer" + std::to_string(i), SameSource(channels, Uniform(c[0], c[1], c[2])),
+                                          Same(channels, BlendingMode::Normal, opacities[i])));
         }
         builder.SetRoot(layers);
         return builder;
     };
+    auto project = [&](std::string_view profile) { return stackOf(profile, colours, thirds); };
     auto evaluate = [&](Builder& builder, ChannelType channel, CpuEvaluator& cpu) {
         EvaluateRequest request;
         request.textureSet = builder.SetId();
@@ -1228,68 +1298,102 @@ int RunProfile(const fs::path& assets) {
         request.channel = channel;
         return cpu.Evaluate(builder.project, request);
     };
-    auto model = [&](ChannelFormat format, bool isolated) {
-        const TileFormat tileFormat = TileFormatOf(format);
+    // The expected codes of a stack under a profile, from arith and the store's write rules.
+    auto modelOf = [&](ChannelFormat format, const EvaluatorProfile& profile, const Colours& stackColours,
+                       const Opacities& opacities) {
+        TileFormat tileFormat = TileFormatOf(format);
+        tileFormat.halfCoverage = profile.srgb8HalfCoverage && tileFormat.srgb;
         std::vector<ModelLayer> layers;
-        for (const auto& colour : colours) {
-            layers.push_back(ModelLayer{BlendingMode::Normal, static_cast<float>(third),
-                                        UniformOperand(colour, tileFormat, base)});
+        for (size_t i = 0; i < stackColours.size(); ++i) {
+            layers.push_back(ModelLayer{BlendingMode::Normal, static_cast<float>(opacities[i]),
+                                        UniformOperand(stackColours[i], tileFormat, base, profile.float32UniformPlain)});
         }
-        return isolated ? IsolatedRootModel(layers, tileFormat, base)
-                        : Output(ModelComposite(layers, tileFormat, base, false).stored, tileFormat, base);
+        return profile.root == RootComposite::Isolated
+                   ? IsolatedRootModel(layers, tileFormat, base)
+                   : Output(ModelComposite(layers, tileFormat, base, false).stored, tileFormat, base);
+    };
+    auto model = [&](ChannelFormat format, const EvaluatorProfile& profile) {
+        return modelOf(format, profile, colours, thirds);
     };
 
-    // 2. Each profile evaluates as its own model, and the two differ on this stack.
+    // 2. Each profile evaluates as its own model, and they differ on these stacks.
     Builder projectA = project(kProfileLayerqLinear);
+    Builder projectLinear = project(kProfileIsolatedLinear);
     Builder projectCurrent = project(kCurrentProfile);
-    if (!projectA.Validate("profile A") || !projectCurrent.Validate("current profile")) return Finish();
+    Builder tieLinear = stackOf(kProfileIsolatedLinear, tieColours, tieOpacities);
+    Builder tieCurrent = stackOf(kCurrentProfile, tieColours, tieOpacities);
+    if (!projectA.Validate("profile A") || !projectLinear.Validate("isolated-linear") ||
+        !projectCurrent.Validate("current profile") || !tieLinear.Validate("tie, isolated-linear") ||
+        !tieCurrent.Validate("tie, current profile")) {
+        return Finish();
+    }
     CpuEvaluator cpu(templates, kWideLimits);
     std::map<ChannelType, std::vector<uint32_t>> resultA;
-    std::map<ChannelType, std::vector<uint32_t>> resultCurrent;
+    std::map<ChannelType, std::vector<uint32_t>> resultLinear;
     for (const auto& [channel, format] : formats) {
         const std::string label = std::string(core::ToString(format));
         const uint32_t n = TileFormatOf(format).channels;
         render::Result<ChannelResult> a = evaluate(projectA, channel, cpu);
+        render::Result<ChannelResult> isolated = evaluate(projectLinear, channel, cpu);
         render::Result<ChannelResult> current = evaluate(projectCurrent, channel, cpu);
+        render::Result<ChannelResult> tieOld = evaluate(tieLinear, channel, cpu);
+        render::Result<ChannelResult> tieNew = evaluate(tieCurrent, channel, cpu);
         std::string detail;
-        Check(a && AllEqual(Samples(*a), n, model(format, false), detail),
+        Check(a && AllEqual(Samples(*a), n, model(format, *legacy), detail),
               label + ": a project stamped painter-12.1-layerq-linear evaluates over the base, quantised per layer",
               a ? detail : Describe(a));
-        Check(current && AllEqual(Samples(*current), n, model(format, true), detail),
+        Check(isolated && tieOld && AllEqual(Samples(*isolated), n, model(format, *linear), detail) &&
+                  AllEqual(Samples(*tieOld), n, modelOf(format, *linear, tieColours, tieOpacities), detail),
               label + ": a project stamped painter-12.1-isolated-linear evaluates its root isolated, composited "
                       "over the base at read-out",
-              current ? detail : Describe(current));
+              !isolated ? Describe(isolated) : !tieOld ? Describe(tieOld) : detail);
+        Check(current && tieNew && AllEqual(Samples(*current), n, model(format, *halfAlpha), detail) &&
+                  AllEqual(Samples(*tieNew), n, modelOf(format, *halfAlpha, tieColours, tieOpacities), detail),
+              label + ": a project stamped painter-12.1-isolated-half-alpha evaluates its root isolated, the sRGB8 "
+                      "coverage written through binary16 and 32-bit float uniform colours plain",
+              !current ? Describe(current) : !tieNew ? Describe(tieNew) : detail);
         if (a) resultA[channel] = Samples(*a);
-        if (current) resultCurrent[channel] = Samples(*current);
+        if (isolated) resultLinear[channel] = Samples(*isolated);
     }
-    Check(model(ChannelFormat::RGB8, false) != model(ChannelFormat::RGB8, true),
-          "the two profiles give different RGB8 codes for the three 1/3 fills (the dispatch is observable)");
+    Check(model(ChannelFormat::RGB8, *legacy) != model(ChannelFormat::RGB8, *linear),
+          "painter-12.1-layerq-linear and painter-12.1-isolated-linear give different RGB8 codes for the three 1/3 "
+          "fills (the dispatch is observable)");
+    Check(modelOf(ChannelFormat::sRGB8, *linear, tieColours, tieOpacities) !=
+                  modelOf(ChannelFormat::sRGB8, *halfAlpha, tieColours, tieOpacities) &&
+              model(ChannelFormat::RGB32F, *linear) != model(ChannelFormat::RGB32F, *halfAlpha),
+          "painter-12.1-isolated-linear and painter-12.1-isolated-half-alpha differ on the sRGB8 coverage tie and on "
+          "the 32-bit float uniform colours");
 
-    // 3. Pinning: a synthetic profile B registered after A's project exists changes nothing for it.
+    // 3. Pinning: a synthetic profile B registered after the projects exist changes nothing for them.
     render::Result<void> registered = RegisterProfile({"painter-12.1-synthetic-b", RootComposite::Isolated});
     Check(registered.has_value(), "a synthetic profile painter-12.1-synthetic-b registers", Describe(registered));
     CpuEvaluator fresh(templates, kWideLimits);
     bool pinned = true;
     bool cached = true;
     for (const auto& [channel, format] : formats) {
-        render::Result<ChannelResult> again = evaluate(projectA, channel, cpu);
-        render::Result<ChannelResult> anew = evaluate(projectA, channel, fresh);
-        pinned = pinned && again && anew && Samples(*again) == resultA[channel] && Samples(*anew) == resultA[channel];
-        cached = cached && again && again->stats.blends == 0;
+        const std::array<std::pair<Builder*, const std::vector<uint32_t>*>, 2> stamped{
+            {{&projectA, &resultA[channel]}, {&projectLinear, &resultLinear[channel]}}};
+        for (const auto& [builder, expected] : stamped) {
+            render::Result<ChannelResult> again = evaluate(*builder, channel, cpu);
+            render::Result<ChannelResult> anew = evaluate(*builder, channel, fresh);
+            pinned = pinned && again && anew && Samples(*again) == *expected && Samples(*anew) == *expected;
+            cached = cached && again && again->stats.blends == 0;
+        }
     }
-    Check(pinned, "after profile B is registered, the project stamped A evaluates with A: its results are unchanged "
-                  "bit for bit (same evaluator and a fresh one)");
-    Check(cached, "the project stamped A is still served by its own cached tiles");
+    Check(pinned, "after profile B is registered, the projects stamped painter-12.1-layerq-linear and "
+                  "painter-12.1-isolated-linear evaluate with their own profiles: their results are unchanged bit "
+                  "for bit (same evaluator and a fresh one)");
+    Check(cached, "those projects are still served by their own cached tiles");
     Builder projectB = project("painter-12.1-synthetic-b");
     if (!projectB.Validate("profile B")) return Finish();
     bool sameRules = true;
     bool ownTiles = true;
     for (const auto& [channel, format] : formats) {
         render::Result<ChannelResult> b = evaluate(projectB, channel, cpu);
-        sameRules = sameRules && b && Samples(*b) == resultCurrent[channel];
+        sameRules = sameRules && b && Samples(*b) == resultLinear[channel];
         ownTiles = ownTiles && b && b->stats.cacheHits == 0;
     }
-    Check(sameRules, "a project stamped B evaluates with B's rules (here those of the current profile)");
+    Check(sameRules, "a project stamped B evaluates with B's rules (here those of painter-12.1-isolated-linear)");
     Check(ownTiles, "tiles of different profiles never serve each other (subtree hashes are seeded by the profile)");
 
     // 4. A project stamped with a profile this build does not have fails explicitly.

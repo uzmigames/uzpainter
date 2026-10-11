@@ -102,11 +102,13 @@ const std::vector<uint32_t>& OperandTableWords() {
 }
 
 render::KernelSource BlendKernelSource(const BlendKernelVariant& variant) {
+    const bool halfCoverage = variant.format.alpha && variant.format.halfCoverage;
     render::KernelSource source;
     source.name = "evaluator_blend_" + std::string(core::ToString(variant.mode)) + "_" +
                   std::to_string(variant.format.BytesPerChannel() * 8) +
                   (variant.format.IsUnorm() ? (variant.format.srgb ? "srgb" : "unorm") : "float") +
-                  "_c" + std::to_string(variant.format.channels) + (variant.format.alpha ? "a" : "");
+                  "_c" + std::to_string(variant.format.channels) + (variant.format.alpha ? "a" : "") +
+                  (halfCoverage ? "h" : "");
     source.hlsl = std::string(kBlendHlsl, sizeof(kBlendHlsl));
     source.entryPoint = "main";
     source.defines = {
@@ -115,6 +117,7 @@ render::KernelSource BlendKernelSource(const BlendKernelVariant& variant) {
         "UZP_CHANNELS=" + std::to_string(variant.format.channels),
         std::string("UZP_SRGB=") + (variant.format.srgb ? "1" : "0"),
         std::string("UZP_ALPHA=") + (variant.format.alpha ? "1" : "0"),
+        std::string("UZP_HALF_COVERAGE=") + (halfCoverage ? "1" : "0"),
     };
     source.includes = {render::image_pass_detail::CommonInclude(), TablesInclude()};
     return source;
