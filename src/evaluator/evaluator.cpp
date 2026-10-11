@@ -36,7 +36,7 @@ render::Result<ChannelResult> EvaluateOn(const core::Project& project, const Eva
     render::Result<ChannelDag> dag = BuildDag(project, request.textureSet, request.stack,
                                               request.channel, templates, request.templateId);
     if (!dag) return render::Unexpected(dag.error());
-    EvalEnvironment env{store, cache, request.resources.get()};
+    EvalEnvironment env{store, cache, request.resources.get(), request.geometry.get()};
     return EvaluateChannel(*dag, env);
 }
 

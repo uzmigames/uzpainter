@@ -64,10 +64,12 @@ enum class CacheKind : uint8_t {
     Content,  ///< A layer's content for one channel (a bitmap source tile).
     Prefix,   ///< The accumulator of a layer list after one of its layers (bottom-up).
     Readout,  ///< An isolated root list composited over the channel base (profile.h).
+    Effect,   ///< A layer's content after one of its content effects (chained hash).
+    Mask,     ///< A layer's mask after one of its effects or its geometry mask (chained hash).
 };
 
 struct CacheKey {
-    core::Id node = core::kNoId;  ///< The layer (Content) or the list owner (Prefix).
+    core::Id node = core::kNoId;  ///< The layer or effect (Content, Effect, Mask) or the list owner (Prefix).
     CacheKind kind = CacheKind::Prefix;
     Digest hash{};  ///< The subtree hash (channel, format, profile included).
     uint32_t tileX = 0;

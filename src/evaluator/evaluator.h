@@ -30,6 +30,8 @@ struct EvaluateRequest {
     std::string templateId{kDefaultTemplateId};
     /// The bytes of bitmap sources; may be null when the stack has none.
     std::shared_ptr<const IResourceProvider> resources;
+    /// The rasters of `Mesh` geometry masks (geometry_mask.h); may be null when the stack has none.
+    std::shared_ptr<const IGeometryMaskProvider> geometry;
 };
 
 struct EvaluatorOptions {

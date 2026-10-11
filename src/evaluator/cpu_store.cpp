@@ -170,6 +170,7 @@ render::Result<void> CpuTileStore::Blend(const BlendOp& op) {
     in.mode = op.mode;
     in.opacity = op.opacity;
     in.clampUnorm = dst.format.IsUnorm();
+    in.effectMix = op.effectMix;
     in.channels = dst.format.channels;
     auto load = [](const Tile& tile, size_t texel, std::array<float, 4>& out) {
         const uint32_t planes = tile.format.StoredChannels();
@@ -201,6 +202,33 @@ render::Result<void> CpuTileStore::Blend(const BlendOp& op) {
             for (uint32_t c = dst.format.channels; c < 3; ++c) values[c] = 0;
             values[3] = dst.format.alpha ? StoreValue(out[3], dst.format, 3)
                                          : StoreValue(1.0f, dst.format, 3);
+        }
+    }
+    return {};
+}
+
+render::Result<void> CpuTileStore::Levels(const LevelsOp& op) {
+    const auto dstIt = m_tiles.find(op.dst);
+    const Tile* src = Find(op.src);
+    if (dstIt == m_tiles.end() || src == nullptr) {
+        return EvalFail(EvalErrorKind::Internal, "levels into or from an unknown tile");
+    }
+    Tile& dst = dstIt->second;
+    if (src->width != dst.width || src->height != dst.height || !(src->format == dst.format)) {
+        return EvalFail(EvalErrorKind::Internal, "levels operands differ in size or format");
+    }
+    const uint32_t stored = dst.format.StoredChannels();
+    const size_t texels = size_t{dst.width} * dst.height;
+    for (size_t texel = 0; texel < texels; ++texel) {
+        const uint32_t* in = &src->values[texel * stored];
+        uint32_t* out = &dst.values[texel * stored];
+        for (uint32_t c = 0; c < stored; ++c) {
+            if (c < dst.format.channels) {
+                const float v = OperandOf(in[c], dst.format, c);
+                out[c] = StoreValue(arith::Levels(v, op.components[c]), dst.format, c);
+            } else {
+                out[c] = in[c];
+            }
         }
     }
     return {};

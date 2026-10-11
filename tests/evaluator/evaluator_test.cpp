@@ -1,5 +1,6 @@
 // Native tests of the compositor (rulebook tasks phase1.5_compositor-tile-dag,
-// phase1.8_compositor-sources-projection and phase1.9_compositor-quantisation-profile,
+// phase1.8_compositor-sources-projection, phase1.9_compositor-quantisation-profile and
+// phase1.11_compositor-mask-effects,
 // src/evaluator/,
 // docs/architecture/04-layer-stack-and-compositing.md §2, §4, §5, §7). Built by
 // `zig build evaluator-tests` and driven by tests/evaluator/test_compositor_tile_dag.py and
@@ -41,6 +42,14 @@
 //                                        reciprocal square root on every float32 of their reduced
 //                                        domains, writes the measured tables and compares them and
 //                                        hw::Rcp/Sqrt/Rsqrt with the GPU (hwmath.h)
+//   masks <assets>                       masks, mask and content effects, levels, geometry masks,
+//                                        group masks, the Height override, complementary masks
+//                                        and the cache shape of effect chains on the CPU store
+//   masks-gpu-vs-cpu <assets> <work-dir> random masked stacks with effects and levels over every
+//                                        channel format: GPU kernels equal the CPU reference
+//   pow-hardware <assets> <work-dir>     measures the GPU's log2 and exp2 over the table domains of
+//                                        hwmath.h, writes the measured tables and compares them
+//                                        and hw::Log2/Exp2/Pow with the GPU
 //   uv-coverage <assets> <work-dir> <mesh> <size>
 //                                        imports <mesh>, rasterises its UV tile and writes the
 //                                        texel-centre coverage (island-edge goldens)
@@ -58,6 +67,7 @@
 #include "evaluator/error.h"
 #include "evaluator/evaluate.h"
 #include "evaluator/evaluator.h"
+#include "evaluator/geometry_mask.h"
 #include "evaluator/gpu_store.h"
 #include "evaluator/hwmath.h"
 #include "evaluator/kernelgen.h"
@@ -72,6 +82,7 @@
 #include "render/uv_raster.h"
 #include "mesh/import_error.h"
 #include "mesh/mesh_import.h"
+#include "mesh/texturing_mesh.h"
 #include "uzp_core/document/document.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/json.h"
@@ -90,6 +101,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <iterator>
 #include <map>
@@ -967,18 +979,17 @@ int RunOrder(const fs::path& assets) {
         Builder effects(128, 128, formats);
         core::Layer withEffect = effects.Fill("fx", SameSource(channels, Uniform(0.5, 0.5, 0.5)),
                                               Same(channels, BlendingMode::Normal, 1.0));
-        core::Effect levels;
-        levels.uid = effects.project.AllocateId();
-        levels.kind = core::EffectKind::levels;
-        levels.name = "levels";
-        levels.levels = core::LevelsParams{};
-        levels.levels->affected_channel = ChannelType::User0;
-        levels.levels->components.resize(3);
-        withEffect.content_effects.push_back(levels);
+        core::Effect anchor;
+        anchor.uid = effects.project.AllocateId();
+        anchor.kind = core::EffectKind::anchor;
+        anchor.name = "anchor";
+        anchor.anchor_name = "anchor";
+        withEffect.content_effects.push_back(anchor);
         effects.SetRoot({withEffect});
         if (!effects.Validate("effects")) return Finish();
         result = evaluate(effects, ChannelType::User0, cpu);
-        Check(!result && KindName(result.error()) == "unsupported_node", "a content effect fails with unsupported_node",
+        Check(!result && KindName(result.error()) == "unsupported_node",
+              "an anchor content effect fails with unsupported_node (P4-NODES)",
               Describe(result));
 
         Builder triplanar(128, 128, formats);
@@ -1312,6 +1323,7 @@ public:
     render::Result<void> Upload(TileHandle, const DecodedImage&, uint32_t, uint32_t) override { return {}; }
     render::Result<void> Project(const ProjectOp&) override { return {}; }
     render::Result<void> Blend(const BlendOp&) override { return {}; }
+    render::Result<void> Levels(const LevelsOp&) override { return {}; }
     render::Result<void> Flush() override { return {}; }
     render::Result<TileImage> Read(TileHandle tile) override {
         const auto& t = m_tiles.at(tile);
@@ -1515,6 +1527,122 @@ E EnumOf(const std::string& name, const std::string& what) {
     return *parsed;
 }
 
+/// A spec source: {"uniform": [r, g, b], "color_space"?} or {"bitmap": sha256, "alias"?, "color_space"?}.
+core::Source ParseSource(const core::json::Object& s) {
+    if (s.contains("uniform")) {
+        const core::json::Array& rgb = Arr(s.at("uniform"), "uniform");
+        core::UniformColorSource uniform;
+        for (size_t i = 0; i < 3 && i < rgb.size(); ++i) uniform.rgb[i] = Num(rgb[i], "uniform component");
+        uniform.color_space = s.contains("color_space") ? Str(s.at("color_space"), "color_space") : "Working";
+        return core::Source{uniform};
+    }
+    core::BitmapSource bitmap;
+    bitmap.resource.sha256 = Str(Key(s, "bitmap"), "bitmap");
+    if (s.contains("alias")) bitmap.resource.alias = Str(s.at("alias"), "alias");
+    bitmap.color_space = s.contains("color_space") ? Str(s.at("color_space"), "color_space") : "Raw";
+    return core::Source{bitmap};
+}
+
+/// A spec projection {"mode"?, "filtering_mode"?, "uv_wrapping_mode"?, "scale_mode"?, "scale"?,
+/// "rotation"?, "offset"?}.
+void ParseProjection(const core::json::Object& p, core::Projection& projection) {
+    if (p.contains("mode")) projection.mode = EnumOf<core::ProjectionMode>(Str(p.at("mode"), "mode"), "projection mode");
+    core::UVProjectionParams& uv = projection.uv;
+    if (p.contains("filtering_mode")) {
+        uv.filtering_mode = EnumOf<core::FilteringMode>(Str(p.at("filtering_mode"), "filtering_mode"), "filtering mode");
+    }
+    if (p.contains("uv_wrapping_mode")) {
+        uv.uv_wrapping_mode = EnumOf<core::UVWrapMode>(Str(p.at("uv_wrapping_mode"), "uv_wrapping_mode"), "wrap mode");
+    }
+    core::UVTransformation& t = uv.uv_transformation;
+    if (p.contains("scale_mode")) t.scale_mode = EnumOf<core::ScaleMode>(Str(p.at("scale_mode"), "scale_mode"), "scale mode");
+    if (p.contains("scale")) {
+        const core::json::Array& scale = Arr(p.at("scale"), "scale");
+        t.scale = {Num(scale.at(0), "scale u"), Num(scale.at(1), "scale v")};
+    }
+    if (p.contains("rotation")) t.rotation = Num(p.at("rotation"), "rotation");
+    if (p.contains("offset")) {
+        const core::json::Array& offset = Arr(p.at("offset"), "offset");
+        t.offset = {Num(offset.at(0), "offset u"), Num(offset.at(1), "offset v")};
+    }
+}
+
+/// Spec levels {"affected_channel"?, "components": [{"input_min"?, "input_max"?, "gamma"?,
+/// "output_min"?, "output_max"?, "clamp"?}]}.
+core::LevelsParams ParseLevels(const core::json::Object& o) {
+    core::LevelsParams levels;
+    if (o.contains("affected_channel")) {
+        levels.affected_channel = EnumOf<ChannelType>(Str(o.at("affected_channel"), "affected_channel"), "affected channel");
+    }
+    for (const core::json::Value& entry : Arr(Key(o, "components"), "components")) {
+        const core::json::Object& c = Obj(entry, "levels component");
+        core::LevelsComponent component;
+        if (c.contains("input_min")) component.input_min = Num(c.at("input_min"), "input_min");
+        if (c.contains("input_max")) component.input_max = Num(c.at("input_max"), "input_max");
+        if (c.contains("gamma")) component.gamma = Num(c.at("gamma"), "gamma");
+        if (c.contains("output_min")) component.output_min = Num(c.at("output_min"), "output_min");
+        if (c.contains("output_max")) component.output_max = Num(c.at("output_max"), "output_max");
+        if (c.contains("clamp")) component.clamp = std::get<bool>(c.at("clamp").data);
+        levels.components.push_back(component);
+    }
+    return levels;
+}
+
+/// A spec effect of a content stack (`mask` false) or of a mask stack: {"kind": "fill" |
+/// "levels", "uid"?, "visible"?, ...}. A content fill effect has "sources", "active_channels"?,
+/// "blending"? and "projection"?; a mask fill effect "source", "mode"?, "opacity"? and
+/// "projection"?; a levels effect the fields of `ParseLevels`.
+core::Effect ParseEffect(Spec& spec, const core::json::Value& value, bool mask) {
+    const core::json::Object& o = Obj(value, "effect");
+    const std::string kind = Str(Key(o, "kind"), "effect.kind");
+    core::Effect effect;
+    effect.uid = o.contains("uid") ? static_cast<core::Id>(Num(o.at("uid"), "uid")) : spec.builder.project.AllocateId();
+    effect.name = kind;
+    if (o.contains("visible")) effect.visible = std::get<bool>(o.at("visible").data);
+    if (kind == "fill") {
+        effect.kind = core::EffectKind::fill;
+        core::FillContent fill;
+        fill.projection.mode = core::ProjectionMode::UV;
+        if (o.contains("projection")) ParseProjection(Obj(o.at("projection"), "projection"), fill.projection);
+        if (mask) {
+            if (o.contains("source")) fill.mono_source = ParseSource(Obj(o.at("source"), "source"));
+            core::Blending blending;
+            if (o.contains("mode")) blending.mode = EnumOf<BlendingMode>(Str(o.at("mode"), "mode"), "mode");
+            if (o.contains("opacity")) blending.opacity = Num(o.at("opacity"), "opacity");
+            effect.mono_blending = blending;
+        } else {
+            for (const auto& [channel, entry] : Obj(Key(o, "sources"), "effect.sources")) {
+                const ChannelType type = EnumOf<ChannelType>(channel, "source channel");
+                fill.sources[type] = ParseSource(Obj(entry, "source"));
+                fill.active_channels.insert(type);
+            }
+            if (o.contains("active_channels")) {
+                fill.active_channels.clear();
+                for (const core::json::Value& c : Arr(o.at("active_channels"), "active_channels")) {
+                    fill.active_channels.insert(EnumOf<ChannelType>(Str(c, "active channel"), "active channel"));
+                }
+            }
+            if (o.contains("blending")) {
+                for (const auto& [channel, entry] : Obj(o.at("blending"), "effect.blending")) {
+                    const core::json::Object& b = Obj(entry, "blending entry");
+                    effect.blending[EnumOf<ChannelType>(channel, "blending channel")] =
+                        Blend(EnumOf<BlendingMode>(Str(Key(b, "mode"), "mode"), "mode"), Num(Key(b, "opacity"), "opacity"));
+                }
+            }
+        }
+        effect.fill = fill;
+    } else if (kind == "levels") {
+        effect.kind = core::EffectKind::levels;
+        effect.levels = ParseLevels(o);
+        // The document model keeps a mono blending on every mask effect; a levels effect's is
+        // not evaluated (Painter's API refuses blending on it).
+        if (mask) effect.mono_blending = core::Blending{};
+    } else {
+        throw core::ManifestError("effect.kind: unknown kind '" + kind + "'");
+    }
+    return effect;
+}
+
 core::Layer ParseLayer(Spec& spec, const core::json::Value& value) {
     const core::json::Object& o = Obj(value, "layer");
     const std::string kind = Str(Key(o, "kind"), "layer.kind");
@@ -1531,46 +1659,10 @@ core::Layer ParseLayer(Spec& spec, const core::json::Value& value) {
     if (kind == "fill") {
         std::map<ChannelType, core::Source> sources;
         for (const auto& [channel, entry] : Obj(Key(o, "sources"), "layer.sources")) {
-            const core::json::Object& s = Obj(entry, "source");
-            const ChannelType type = EnumOf<ChannelType>(channel, "source channel");
-            if (s.contains("uniform")) {
-                const core::json::Array& rgb = Arr(s.at("uniform"), "uniform");
-                core::UniformColorSource uniform;
-                for (size_t i = 0; i < 3 && i < rgb.size(); ++i) uniform.rgb[i] = Num(rgb[i], "uniform component");
-                uniform.color_space = s.contains("color_space") ? Str(s.at("color_space"), "color_space") : "Working";
-                sources[type] = core::Source{uniform};
-            } else {
-                core::BitmapSource bitmap;
-                bitmap.resource.sha256 = Str(Key(s, "bitmap"), "bitmap");
-                if (s.contains("alias")) bitmap.resource.alias = Str(s.at("alias"), "alias");
-                bitmap.color_space = s.contains("color_space") ? Str(s.at("color_space"), "color_space") : "Raw";
-                sources[type] = core::Source{bitmap};
-            }
+            sources[EnumOf<ChannelType>(channel, "source channel")] = ParseSource(Obj(entry, "source"));
         }
         layer = spec.builder.Fill(name, sources, blending);
-        if (o.contains("projection")) {
-            const core::json::Object& p = Obj(o.at("projection"), "projection");
-            core::Projection& projection = layer.fill->projection;
-            if (p.contains("mode")) projection.mode = EnumOf<core::ProjectionMode>(Str(p.at("mode"), "mode"), "projection mode");
-            core::UVProjectionParams& uv = projection.uv;
-            if (p.contains("filtering_mode")) {
-                uv.filtering_mode = EnumOf<core::FilteringMode>(Str(p.at("filtering_mode"), "filtering_mode"), "filtering mode");
-            }
-            if (p.contains("uv_wrapping_mode")) {
-                uv.uv_wrapping_mode = EnumOf<core::UVWrapMode>(Str(p.at("uv_wrapping_mode"), "uv_wrapping_mode"), "wrap mode");
-            }
-            core::UVTransformation& t = uv.uv_transformation;
-            if (p.contains("scale_mode")) t.scale_mode = EnumOf<core::ScaleMode>(Str(p.at("scale_mode"), "scale_mode"), "scale mode");
-            if (p.contains("scale")) {
-                const core::json::Array& scale = Arr(p.at("scale"), "scale");
-                t.scale = {Num(scale.at(0), "scale u"), Num(scale.at(1), "scale v")};
-            }
-            if (p.contains("rotation")) t.rotation = Num(p.at("rotation"), "rotation");
-            if (p.contains("offset")) {
-                const core::json::Array& offset = Arr(p.at("offset"), "offset");
-                t.offset = {Num(offset.at(0), "offset u"), Num(offset.at(1), "offset v")};
-            }
-        }
+        if (o.contains("projection")) ParseProjection(Obj(o.at("projection"), "projection"), layer.fill->projection);
         if (o.contains("active_channels")) {
             layer.fill->active_channels.clear();
             for (const core::json::Value& c : Arr(o.at("active_channels"), "active_channels")) {
@@ -1596,6 +1688,16 @@ core::Layer ParseLayer(Spec& spec, const core::json::Value& value) {
         layer.mask = core::Mask{};
         layer.mask->background = EnumOf<core::MaskBackground>(Str(Key(m, "background"), "background"), "background");
         if (m.contains("enabled")) layer.mask->enabled = std::get<bool>(m.at("enabled").data);
+        if (m.contains("effects")) {  // top first, like Painter
+            for (const core::json::Value& e : Arr(m.at("effects"), "mask.effects")) {
+                layer.mask->effects.push_back(ParseEffect(spec, e, true));
+            }
+        }
+    }
+    if (o.contains("effects")) {  // the content stack, top first
+        for (const core::json::Value& e : Arr(o.at("effects"), "effects")) {
+            layer.content_effects.push_back(ParseEffect(spec, e, false));
+        }
     }
     return layer;
 }
@@ -2782,7 +2884,9 @@ void Samples(uint3 id : SV_DispatchThreadID) {
 }
 )";
 
-render::Result<std::vector<float>> FpKernelTexels(render::Engine& engine, const char* entry, uint32_t size) {
+render::Result<std::vector<float>> FpKernelTexels(render::Engine& engine, const char* entry, uint32_t size,
+                                                  const char* hlsl = kFpHardwareHlsl,
+                                                  std::vector<uint32_t> constants = {}) {
     auto token = std::make_shared<const int>(0);
     std::future<render::Result<std::vector<float>>> future = engine.Submit(
         token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<float>> {
@@ -2795,8 +2899,8 @@ render::Result<std::vector<float>> FpKernelTexels(render::Engine& engine, const 
             render::Result<uz::RHITextureHandle> dst = device.CreateTexture(ddesc);
             if (!dst) return render::Unexpected(dst.error());
             render::KernelSource source;
-            source.name = std::string("fp_hardware_") + entry;
-            source.hlsl = kFpHardwareHlsl;
+            source.name = std::string(hlsl == kFpHardwareHlsl ? "fp_hardware_" : "pow_hardware_") + entry;
+            source.hlsl = hlsl;
             source.entryPoint = entry;
             render::Result<render::ComputeKernel> kernel = context.Kernel(source);
             if (!kernel) {
@@ -2805,12 +2909,13 @@ render::Result<std::vector<float>> FpKernelTexels(render::Engine& engine, const 
             }
             using State = uz::RHIResourceState;
             using render::image_pass_detail::Transition;
-            const uint32_t root[1] = {device.Rhi().GetTextureUAVIndex(*dst)};
+            std::vector<uint32_t> root = {device.Rhi().GetTextureUAVIndex(*dst)};
+            root.insert(root.end(), constants.begin(), constants.end());
             render::Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
                 const uz::RHIBarrierDesc before = Transition(*dst, State::Common, State::UnorderedAccess);
                 cmd.ResourceBarrier(&before, 1);
                 cmd.SetPipeline(kernel->pipeline);
-                cmd.SetRootConstants(render::kRootConstantsParam, root, 1);
+                cmd.SetRootConstants(render::kRootConstantsParam, root.data(), static_cast<uint32_t>(root.size()));
                 cmd.Dispatch(size / 8, size / 8, 1);
                 const uz::RHIBarrierDesc after = Transition(*dst, State::UnorderedAccess, State::Common);
                 cmd.ResourceBarrier(&after, 1);
@@ -2916,6 +3021,802 @@ int RunFpHardware(const fs::path& dir) {
     return Finish();
 }
 
+// ── masks (phase1.11_compositor-mask-effects) ────────────────────────────────
+
+core::Effect MaskFillEffect(Builder& builder, const core::Source& source, BlendingMode mode, double opacity) {
+    core::Effect effect;
+    effect.uid = builder.project.AllocateId();
+    effect.kind = core::EffectKind::fill;
+    effect.name = "mask fill";
+    core::FillContent fill;
+    fill.mono_source = source;
+    effect.fill = fill;
+    effect.mono_blending = Blend(mode, opacity);
+    return effect;
+}
+
+core::LevelsComponent LevelsComponentOf(double inMin, double inMax, double gamma, double outMin, double outMax,
+                                        bool clamp) {
+    core::LevelsComponent c;
+    c.input_min = inMin;
+    c.input_max = inMax;
+    c.gamma = gamma;
+    c.output_min = outMin;
+    c.output_max = outMax;
+    c.clamp = clamp;
+    return c;
+}
+
+core::Effect LevelsEffect(Builder& builder, const core::LevelsComponent& component,
+                          std::optional<ChannelType> affected) {
+    core::Effect effect;
+    effect.uid = builder.project.AllocateId();
+    effect.kind = core::EffectKind::levels;
+    effect.name = "levels";
+    core::LevelsParams levels;
+    levels.affected_channel = affected;
+    levels.components = {component};
+    effect.levels = levels;
+    if (!affected) effect.mono_blending = core::Blending{};  // mask stack
+    return effect;
+}
+
+core::Effect ContentFillEffect(Builder& builder, const std::vector<ChannelType>& channels, const core::Source& source,
+                               BlendingMode mode, double opacity) {
+    core::Effect effect;
+    effect.uid = builder.project.AllocateId();
+    effect.kind = core::EffectKind::fill;
+    effect.name = "content fill";
+    core::FillContent fill;
+    fill.sources = SameSource(channels, source);
+    for (const ChannelType channel : channels) fill.active_channels.insert(channel);
+    effect.fill = fill;
+    effect.blending = Same(channels, mode, opacity);
+    return effect;
+}
+
+/// A mask with `background` and its effects given bottom-up (stored top first).
+core::Mask MaskWith(core::MaskBackground background, std::vector<core::Effect> effectsBottomUp) {
+    core::Mask mask;
+    mask.background = background;
+    std::reverse(effectsBottomUp.begin(), effectsBottomUp.end());
+    mask.effects = std::move(effectsBottomUp);
+    return mask;
+}
+
+/// A one-channel 16-bit image of `size`^2 from `code(x, y)`.
+template <class F>
+std::shared_ptr<DecodedImage> GreyImage(uint32_t size, F code) {
+    auto image = std::make_shared<DecodedImage>();
+    image->width = size;
+    image->height = size;
+    image->channels = 1;
+    image->encoding = render::TexelEncoding::Unorm16;
+    image->values.resize(size_t{size} * size);
+    for (uint32_t y = 0; y < size; ++y) {
+        for (uint32_t x = 0; x < size; ++x) image->values[size_t{y} * size + x] = code(x, y) & 0xFFFFu;
+    }
+    return image;
+}
+
+/// The operand a 16-bit mask stores for `v` (masks-levels.json: 16-bit masks).
+float Mask16(float v) { return arith::UnormOperand(arith::WriteUnorm(v, 16), 16); }
+
+struct MaskRig {
+    static constexpr uint32_t kSize = 64;
+    std::shared_ptr<const TemplateLibrary> templates;
+    std::shared_ptr<MapResourceProvider> provider = std::make_shared<MapResourceProvider>();
+    std::shared_ptr<DecodedImage> grey = GreyImage(kSize, [](uint32_t x, uint32_t y) { return (y * kSize + x) * 16u + 7u; });
+    std::shared_ptr<DecodedImage> ramp = GreyImage(kSize, [](uint32_t x, uint32_t) { return x * 1040u; });
+    std::string greySha = std::string(63, 'a') + "1";
+    std::string rampSha = std::string(63, 'a') + "2";
+
+    explicit MaskRig(const fs::path& assets) : templates(LoadTemplates(assets)) {
+        provider->Add(greySha, grey);
+        provider->Add(rampSha, ramp);
+    }
+    void Register(Builder& builder) const {
+        builder.AddResource(greySha, 100);
+        builder.AddResource(rampSha, 100);
+    }
+    render::Result<ChannelResult> Evaluate(Builder& builder, ChannelType channel, CpuEvaluator* cpu = nullptr,
+                                           std::shared_ptr<const IGeometryMaskProvider> geometry = nullptr) const {
+        CpuEvaluator local(templates, kWideLimits);
+        EvaluateRequest request;
+        request.textureSet = builder.SetId();
+        request.stack = builder.StackId();
+        request.channel = channel;
+        request.resources = provider;
+        request.geometry = std::move(geometry);
+        return (cpu != nullptr ? *cpu : local).Evaluate(builder.project, request);
+    }
+    /// The mask operand of texel i of the grey image.
+    float G(size_t i) const { return arith::UnormOperand(grey->values[i], 16); }
+};
+
+/// The samples of a channel, or empty on failure (with a failed check).
+std::vector<uint32_t> SamplesOf(const render::Result<ChannelResult>& result, const std::string& what) {
+    if (!result) {
+        Check(false, what + " evaluates", Describe(result));
+        return {};
+    }
+    return Samples(*result);
+}
+
+/// A User0 stack on `format` of a white fill under a black fill whose mask is `mask` (the
+/// mask-precision layout).
+Builder BlackOverWhite(const MaskRig& rig, ChannelFormat format,
+                       const std::function<std::optional<core::Mask>(Builder&)>& mask) {
+    Builder builder(MaskRig::kSize, MaskRig::kSize, {{ChannelType::User0, format}});
+    rig.Register(builder);
+    const std::vector<ChannelType> channels{ChannelType::User0};
+    core::Layer white = builder.Fill("white", SameSource(channels, Uniform(1, 1, 1)), Same(channels, BlendingMode::Normal, 1));
+    core::Layer black = builder.Fill("black", SameSource(channels, Uniform(0, 0, 0)), Same(channels, BlendingMode::Normal, 1));
+    if (mask) black.mask = mask(builder);
+    builder.SetRoot({white, black});
+    return builder;
+}
+
+/// The User0 samples the mask-precision layout gives for the per-texel mask `m` (the root composite
+/// of the isolated profile written out: white onto transparent, black over it at m, the read-out
+/// over the user channel's base 1).
+std::vector<uint32_t> BlackOverWhiteModel(ChannelFormat format, const std::vector<float>& m) {
+    const TileFormat tile = TileFormatOf(format);
+    std::vector<uint32_t> out;
+    for (const float mask : m) {
+        arith::CompositeInput in;
+        in.channels = tile.channels;
+        in.clampUnorm = tile.IsUnorm();
+        in.acc = {1.0f, 1.0f, 1.0f, 1.0f};
+        in.src = {0.0f, 0.0f, 0.0f, 1.0f};
+        in.mask = mask;
+        const std::array<float, 4> blended = arith::Composite(in);
+        arith::CompositeInput readout;
+        readout.channels = tile.channels;
+        readout.clampUnorm = tile.IsUnorm();
+        readout.mode = BlendingMode::Replace;
+        readout.acc = {1.0f, 1.0f, 1.0f, 1.0f};
+        for (uint32_t c = 0; c < tile.channels; ++c) {
+            readout.src[c] = OperandOf(StoreValue(blended[c], tile, c), tile, c);
+        }
+        const std::array<float, 4> result = arith::Composite(readout);
+        for (uint32_t c = 0; c < tile.channels; ++c) {
+            uint32_t v = StoreValue(result[c], tile, c);
+            if (tile.encoding == render::TexelEncoding::Float16) v = arith::HalfTowardZero(result[c]);
+            out.push_back(v);
+        }
+    }
+    return out;
+}
+
+/// A minimal texturing mesh: material "set" with two quads over the left and the right half of
+/// the UV square, objects "left" and "right".
+std::shared_ptr<uzp::mesh::TexturingMesh> TwoHalvesMesh() {
+    auto mesh = std::make_shared<uzp::mesh::TexturingMesh>();
+    mesh->materials.push_back({"set", 0});
+    mesh->positions.push_back({0.0f, 0.0f, 0.0f});
+    auto quad = [&](const std::string& name, float u0, float u1) {
+        uzp::mesh::Object object;
+        object.name = name;
+        const uint32_t base = static_cast<uint32_t>(mesh->corners.size());
+        const float uv[4][2] = {{u0, 0.0f}, {u1, 0.0f}, {u1, 1.0f}, {u0, 1.0f}};
+        for (const auto& c : uv) {
+            uzp::mesh::Corner corner;
+            corner.uv0 = {c[0], c[1]};
+            mesh->corners.push_back(corner);
+        }
+        object.triangles.push_back({{base, base + 1, base + 2}});
+        object.triangles.push_back({{base, base + 2, base + 3}});
+        mesh->objects.push_back(std::move(object));
+    };
+    quad("left", 0.0f, 0.5f);
+    quad("right", 0.5f, 1.0f);
+    return mesh;
+}
+
+int RunMasks(const fs::path& assets) {
+    const MaskRig rig(assets);
+    const size_t texels = size_t{MaskRig::kSize} * MaskRig::kSize;
+    const std::vector<ChannelType> user0{ChannelType::User0};
+
+    // Background, disabled mask.
+    {
+        auto run = [&](std::optional<core::Mask> mask) {
+            Builder builder(MaskRig::kSize, MaskRig::kSize, {{ChannelType::User0, ChannelFormat::L16}});
+            core::Layer low = builder.Fill("low", SameSource(user0, Uniform(0.2, 0.2, 0.2)), Same(user0, BlendingMode::Normal, 1));
+            core::Layer high = builder.Fill("high", SameSource(user0, Uniform(0.8, 0.8, 0.8)), Same(user0, BlendingMode::Normal, 1));
+            high.mask = mask;
+            builder.SetRoot({low, high});
+            return SamplesOf(rig.Evaluate(builder, ChannelType::User0), "mask background stack");
+        };
+        auto lowOnly = [&] {
+            Builder builder(MaskRig::kSize, MaskRig::kSize, {{ChannelType::User0, ChannelFormat::L16}});
+            builder.SetRoot({builder.Fill("low", SameSource(user0, Uniform(0.2, 0.2, 0.2)), Same(user0, BlendingMode::Normal, 1))});
+            return SamplesOf(rig.Evaluate(builder, ChannelType::User0), "low stack");
+        };
+        core::Mask disabled = MaskWith(core::MaskBackground::Black, {});
+        disabled.enabled = false;
+        const std::vector<uint32_t> none = run(std::nullopt);
+        Check(run(MaskWith(core::MaskBackground::White, {})) == none && run(MaskWith(core::MaskBackground::Black, {})) == lowOnly() &&
+                  run(disabled) == none,
+              "a mask is its background without effects (White 1, Black 0); a disabled mask counts as 1");
+    }
+
+    // The effect mix and the 16-bit storage: a fill effect at opacity 0.6 over a Black background.
+    {
+        Builder builder = BlackOverWhite(rig, ChannelFormat::L16, [&](Builder& b) {
+            return MaskWith(core::MaskBackground::Black, {MaskFillEffect(b, Bitmap(rig.greySha), BlendingMode::Normal, 0.6)});
+        });
+        std::vector<float> m(texels);
+        for (size_t i = 0; i < texels; ++i) {
+            const float g = rig.G(i);
+            m[i] = Mask16(0.0f + (g - 0.0f) * 0.6f);
+        }
+        Check(SamplesOf(rig.Evaluate(builder, ChannelType::User0), "effect mix") == BlackOverWhiteModel(ChannelFormat::L16, m),
+              "a mask fill effect blends with the effect mix a + (r - a) alpha and is stored at 16 bits");
+    }
+
+    // Subtraction in the mask.
+    {
+        Builder builder = BlackOverWhite(rig, ChannelFormat::RGB16, [&](Builder& b) {
+            return MaskWith(core::MaskBackground::White, {MaskFillEffect(b, Bitmap(rig.greySha), BlendingMode::Subtract, 1.0)});
+        });
+        std::vector<float> m(texels);
+        for (size_t i = 0; i < texels; ++i) {
+            const float r = arith::Clamp01(arith::BlendKernel(BlendingMode::Subtract, 1.0f, rig.G(i)));
+            m[i] = Mask16(1.0f + (r - 1.0f) * 1.0f);
+        }
+        Check(SamplesOf(rig.Evaluate(builder, ChannelType::User0), "subtract") == BlackOverWhiteModel(ChannelFormat::RGB16, m),
+              "subtraction in a mask goes through the Subtract kernel, clamped to [0, 1]");
+    }
+
+    // Levels in the mask.
+    {
+        const core::LevelsComponent component = LevelsComponentOf(0.1, 0.9, 1.2, 0.0, 1.0, true);
+        Builder builder = BlackOverWhite(rig, ChannelFormat::RGB32F, [&](Builder& b) {
+            return MaskWith(core::MaskBackground::Black, {MaskFillEffect(b, Bitmap(rig.greySha), BlendingMode::Screen, 0.75),
+                                                          LevelsEffect(b, component, std::nullopt)});
+        });
+        const arith::LevelsComponent levels{0.1f, 0.9f, 1.2f, 0.0f, 1.0f, true};
+        std::vector<float> m(texels);
+        for (size_t i = 0; i < texels; ++i) {
+            const float r = arith::Clamp01(arith::BlendKernel(BlendingMode::Screen, 0.0f, rig.G(i)));
+            const float fill = Mask16(0.0f + (r - 0.0f) * 0.75f);
+            m[i] = Mask16(arith::Levels(fill, levels));
+        }
+        Check(SamplesOf(rig.Evaluate(builder, ChannelType::User0), "mask levels") == BlackOverWhiteModel(ChannelFormat::RGB32F, m),
+              "a mask levels effect remaps the mask (clamped, gamma through the hardware pow)");
+    }
+
+    // 16-bit masks on an 8-bit channel.
+    {
+        Builder builder = BlackOverWhite(rig, ChannelFormat::L8, [&](Builder& b) {
+            return MaskWith(core::MaskBackground::Black, {MaskFillEffect(b, Bitmap(rig.greySha), BlendingMode::Normal, 0.5)});
+        });
+        std::vector<float> m16(texels), m8(texels);
+        for (size_t i = 0; i < texels; ++i) {
+            const float v = 0.0f + (rig.G(i) - 0.0f) * 0.5f;
+            m16[i] = Mask16(v);
+            m8[i] = arith::UnormOperand(arith::WriteUnorm(v, 8), 8);
+        }
+        const std::vector<uint32_t> ours = SamplesOf(rig.Evaluate(builder, ChannelType::User0), "L8 mask");
+        Check(ours == BlackOverWhiteModel(ChannelFormat::L8, m16) && ours != BlackOverWhiteModel(ChannelFormat::L8, m8),
+              "a mask is stored at 16 bits on an 8-bit channel");
+    }
+
+    // Content effects: order, affected channel, visibility.
+    {
+        const std::vector<ChannelType> both{ChannelType::User0, ChannelType::User1};
+        const core::LevelsComponent component = LevelsComponentOf(0.1, 0.8, 1.6, 0.05, 0.95, false);
+        // levels: 0 visible, 1 invisible, 2 absent.
+        auto stack = [&](bool fillFirst, int levelsState, bool withEffects) {
+            Builder builder(MaskRig::kSize, MaskRig::kSize, {{ChannelType::User0, ChannelFormat::L16}, {ChannelType::User1, ChannelFormat::L16}});
+            rig.Register(builder);
+            core::Layer layer = builder.Fill("content", SameSource(both, Bitmap(rig.greySha)), Same(both, BlendingMode::Normal, 1));
+            if (withEffects) {
+                core::Effect fill = ContentFillEffect(builder, both, Uniform(0.8, 0.8, 0.8), BlendingMode::Multiply, 0.7);
+                core::Effect levels = LevelsEffect(builder, component, ChannelType::User0);
+                levels.visible = levelsState == 0;
+                // Storage is top first: the first effect applied is the last stored.
+                layer.content_effects = fillFirst ? std::vector<core::Effect>{levels, fill} : std::vector<core::Effect>{fill, levels};
+                if (levelsState == 2) layer.content_effects = {fill};
+            }
+            builder.SetRoot({layer});
+            return builder;
+        };
+        Builder fl = stack(true, 0, true);
+        Builder lf = stack(false, 0, true);
+        Builder hidden = stack(true, 1, true);
+        Builder plain = stack(true, 0, false);
+        const std::vector<uint32_t> flU0 = SamplesOf(rig.Evaluate(fl, ChannelType::User0), "fill-levels");
+        const std::vector<uint32_t> lfU0 = SamplesOf(rig.Evaluate(lf, ChannelType::User0), "levels-fill");
+        const TileFormat tile = TileFormatOf(ChannelFormat::L16);
+        const float u = OperandOf(StoreValue(0.8f, tile, 0), tile, 0);
+        const arith::LevelsComponent levels{0.1f, 0.8f, 1.6f, 0.05f, 0.95f, false};
+        std::vector<uint32_t> model;
+        for (size_t i = 0; i < texels; ++i) {
+            const float s = rig.G(i);
+            const float r = arith::Clamp01(arith::BlendKernel(BlendingMode::Multiply, s, u));
+            const float e1 = OperandOf(StoreValue(s + (r - s) * 0.7f, tile, 0), tile, 0);
+            const float e2 = OperandOf(StoreValue(arith::Levels(e1, levels), tile, 0), tile, 0);
+            model.push_back(StoreValue(1.0f + (e2 - 1.0f) * 1.0f, tile, 0));
+        }
+        Check(flU0 == model && lfU0 != flU0, "content effects run in list order: fill then levels differs from levels then fill",
+              std::to_string(flU0 == model) + " " + std::to_string(lfU0 != flU0));
+        Builder fillOnly = stack(true, 2, true);
+        const std::vector<uint32_t> flU1 = SamplesOf(rig.Evaluate(fl, ChannelType::User1), "fill-levels User1");
+        const std::vector<uint32_t> fillOnlyU1 = SamplesOf(rig.Evaluate(fillOnly, ChannelType::User1), "fill User1");
+        Check(flU1 == fillOnlyU1 && flU1 != SamplesOf(rig.Evaluate(plain, ChannelType::User1), "plain User1"),
+              "a levels effect touches only its affected channel");
+        Check(SamplesOf(rig.Evaluate(hidden, ChannelType::User0), "hidden levels") != flU0 &&
+                  SamplesOf(rig.Evaluate(hidden, ChannelType::User0), "hidden levels") ==
+                      SamplesOf(rig.Evaluate(fillOnly, ChannelType::User0), "fill only"),
+              "an invisible effect is skipped");
+    }
+
+    // Geometry masks.
+    {
+        auto geometry = std::make_shared<MeshGeometryMasks>(TwoHalvesMesh());
+        auto run = [&](bool inclusion, core::GeometryMaskType type) {
+            Builder builder = BlackOverWhite(rig, ChannelFormat::L16, nullptr);
+            core::Layer& black = builder.Stack().root_layers.front();
+            black.geometry_mask.type = type;
+            black.geometry_mask.inclusion_list = inclusion;
+            black.geometry_mask.items = {"left"};
+            return rig.Evaluate(builder, ChannelType::User0, nullptr, geometry);
+        };
+        const std::vector<uint32_t> included = SamplesOf(run(true, core::GeometryMaskType::Mesh), "inclusion");
+        const std::vector<uint32_t> excluded = SamplesOf(run(false, core::GeometryMaskType::Mesh), "exclusion");
+        std::vector<float> left(texels), right(texels);
+        for (size_t i = 0; i < texels; ++i) {
+            const bool isLeft = (i % MaskRig::kSize) < MaskRig::kSize / 2;
+            left[i] = isLeft ? 1.0f : 0.0f;
+            right[i] = isLeft ? 0.0f : 1.0f;
+        }
+        Check(included == BlackOverWhiteModel(ChannelFormat::L16, left) && excluded == BlackOverWhiteModel(ChannelFormat::L16, right),
+              "a Mesh geometry mask multiplies the mask (inclusion and exclusion lists)");
+        render::Result<ChannelResult> uvTile = run(true, core::GeometryMaskType::UVTile);
+        Check(!uvTile && KindName(uvTile.error()) == "unsupported_node", "a UVTile geometry mask fails with unsupported_node",
+              Describe(uvTile));
+    }
+
+    // Group masks.
+    {
+        auto run = [&](bool grouped) {
+            Builder builder(MaskRig::kSize, MaskRig::kSize, {{ChannelType::User0, ChannelFormat::RGB16}});
+            rig.Register(builder);
+            core::Layer base = builder.Fill("base", SameSource(user0, Uniform(0.3, 0.6, 0.9)), Same(user0, BlendingMode::Normal, 1));
+            core::Layer fill = builder.Fill("fill", SameSource(user0, Bitmap(rig.rampSha)), Same(user0, BlendingMode::Normal, 1));
+            const core::Mask mask = MaskWith(core::MaskBackground::Black,
+                                             {MaskFillEffect(builder, Bitmap(rig.greySha), BlendingMode::Normal, 1.0)});
+            if (grouped) {
+                core::Layer group = builder.Group("group", {fill}, Same(user0, BlendingMode::Normal, 1));
+                group.mask = mask;
+                builder.SetRoot({base, group});
+            } else {
+                fill.mask = mask;
+                builder.SetRoot({base, fill});
+            }
+            return SamplesOf(rig.Evaluate(builder, ChannelType::User0), grouped ? "group" : "masked fill");
+        };
+        Check(run(true) == run(false), "a group mask scales the group composite");
+    }
+
+    // The Height override of a group.
+    {
+        Builder builder(MaskRig::kSize, MaskRig::kSize, {{ChannelType::Height, ChannelFormat::L16F}});
+        const std::vector<ChannelType> height{ChannelType::Height};
+        core::Layer child = builder.Fill("child", SameSource(height, Uniform(0.5, 0.5, 0.5)), Same(height, BlendingMode::Multiply, 0.4));
+        core::Layer plain = builder.Fill("plain", SameSource(height, Uniform(0.5, 0.5, 0.5)), {});
+        core::Layer group = builder.Group("group", {child}, Same(height, BlendingMode::LinearDodge, 0.7));
+        const core::Blending g = EffectiveBlending(group, ChannelType::Height);
+        const core::Blending c = EffectiveBlending(group.children.front(), ChannelType::Height);
+        const core::Blending p = EffectiveBlending(plain, ChannelType::Height);
+        Check(g.mode == BlendingMode::LinearDodge && g.opacity == 0.7 && c.mode == BlendingMode::Multiply && c.opacity == 0.4 &&
+                  p.mode == BlendingMode::Normal && p.opacity == 1.0,
+              "a group's Height entry is its effective Height blend; a child keeps its own");
+    }
+
+    // Complementary masks over the template base (LAY-10).
+    {
+        const std::vector<ChannelType> colour{ChannelType::BaseColor};
+        Builder builder(MaskRig::kSize, MaskRig::kSize, {{ChannelType::BaseColor, ChannelFormat::RGB16}});
+        rig.Register(builder);
+        core::Layer a = builder.Fill("a", SameSource(colour, Uniform(0.2, 0.4, 0.6)), Same(colour, BlendingMode::Normal, 1));
+        a.mask = MaskWith(core::MaskBackground::Black, {MaskFillEffect(builder, Bitmap(rig.greySha), BlendingMode::Normal, 1.0)});
+        core::Layer b = builder.Fill("b", SameSource(colour, Uniform(0.7, 0.5, 0.1)), Same(colour, BlendingMode::Normal, 1));
+        b.mask = MaskWith(core::MaskBackground::White, {MaskFillEffect(builder, Bitmap(rig.greySha), BlendingMode::Subtract, 1.0)});
+        builder.SetRoot({a, b});
+        const std::vector<uint32_t> ours = SamplesOf(rig.Evaluate(builder, ChannelType::BaseColor), "complementary masks");
+        const render::Result<std::array<float, 3>> base = rig.templates->BaseValue(kDefaultTemplateId, ChannelType::BaseColor);
+        const TileFormat tile = TileFormatOf(ChannelFormat::RGB16);
+        const TileFormat inter = TileFormatOf(ChannelFormat::RGB16, true);
+        auto model = [&](const std::array<float, 3>& under) {
+            std::vector<uint32_t> out;
+            const std::array<float, 3> ca = UniformOperand({0.2, 0.4, 0.6}, tile, under);
+            const std::array<float, 3> cb = UniformOperand({0.7, 0.5, 0.1}, tile, under);
+            for (size_t i = 0; i < texels; ++i) {
+                const float g = rig.G(i);
+                const float m1 = Mask16(0.0f + (g - 0.0f) * 1.0f);
+                const float m2 = Mask16(1.0f + (arith::Clamp01(1.0f - g) - 1.0f) * 1.0f);
+                arith::CompositeInput first;
+                first.clampUnorm = true;
+                first.acc = {0.0f, 0.0f, 0.0f, 0.0f};
+                first.src = {ca[0], ca[1], ca[2], 1.0f};
+                first.mask = m1;
+                std::array<float, 4> acc = arith::Composite(first);
+                for (uint32_t c = 0; c < 4; ++c) acc[c] = OperandOf(StoreValue(acc[c], inter, c), inter, c);
+                arith::CompositeInput second;
+                second.clampUnorm = true;
+                second.acc = acc;
+                second.src = {cb[0], cb[1], cb[2], 1.0f};
+                second.mask = m2;
+                std::array<float, 4> top = arith::Composite(second);
+                for (uint32_t c = 0; c < 4; ++c) top[c] = OperandOf(StoreValue(top[c], inter, c), inter, c);
+                arith::CompositeInput readout;
+                readout.clampUnorm = true;
+                readout.mode = BlendingMode::Replace;
+                readout.acc = {under[0], under[1], under[2], 1.0f};
+                readout.src = top;
+                const std::array<float, 4> result = arith::Composite(readout);
+                for (uint32_t c = 0; c < 3; ++c) out.push_back(StoreValue(result[c], tile, c));
+            }
+            return out;
+        };
+        Check(base && ours == model(*base) && ours != model({0.0f, 0.0f, 0.0f}),
+              "two fills under complementary masks leave exactly the template base uncovered (no default bleed)");
+    }
+
+    // Explicit failures.
+    {
+        bool allFail = true;
+        std::string detail;
+        for (const core::EffectKind kind : {core::EffectKind::filter, core::EffectKind::generator, core::EffectKind::anchor}) {
+            Builder builder(MaskRig::kSize, MaskRig::kSize, {{ChannelType::User0, ChannelFormat::L16}});
+            core::Layer layer = builder.Fill("fx", SameSource(user0, Uniform(0.5, 0.5, 0.5)), Same(user0, BlendingMode::Normal, 1));
+            core::Effect effect;
+            effect.uid = builder.project.AllocateId();
+            effect.kind = kind;
+            effect.name = "fx";
+            if (kind == core::EffectKind::anchor) {
+                effect.anchor_name = "anchor";
+            } else {
+                core::ProceduralRef ref;
+                ref.asset = "uzasset://filter/blur@1";
+                effect.procedural = ref;
+                effect.active_channels = {ChannelType::User0};
+            }
+            layer.content_effects.push_back(effect);
+            builder.SetRoot({layer});
+            render::Result<ChannelResult> result = rig.Evaluate(builder, ChannelType::User0);
+            if (result || KindName(result.error()) != "unsupported_node") {
+                allFail = false;
+                detail += std::string(core::ToString(kind)) + ": " + Describe(result) + "; ";
+            }
+        }
+        Check(allFail, "filter, generator and anchor effects fail with unsupported_node", detail);
+
+        Builder builder(MaskRig::kSize, MaskRig::kSize, {{ChannelType::User0, ChannelFormat::L16}});
+        rig.Register(builder);
+        core::Layer child = builder.Fill("child", SameSource(user0, Uniform(0.5, 0.5, 0.5)), Same(user0, BlendingMode::Normal, 1));
+        core::Layer pass = builder.Group("pass", {child}, Same(user0, BlendingMode::PassThrough, 1));
+        pass.mask = MaskWith(core::MaskBackground::Black, {MaskFillEffect(builder, Bitmap(rig.greySha), BlendingMode::Normal, 1.0)});
+        builder.SetRoot({pass});
+        render::Result<ChannelResult> result = rig.Evaluate(builder, ChannelType::User0);
+        Check(!result && KindName(result.error()) == "unsupported_node",
+              "a PassThrough group with a mask raster fails with unsupported_node", Describe(result));
+    }
+
+    // The cache shape: effect chains are graph nodes keyed by chained hashes.
+    {
+        const std::vector<ChannelType> both{ChannelType::User0, ChannelType::User1};
+        Builder builder(256, 256, {{ChannelType::User0, ChannelFormat::RGB16}, {ChannelType::User1, ChannelFormat::RGB16}});
+        rig.Register(builder);
+        core::Layer low = builder.Fill("low", SameSource(both, Bitmap(rig.rampSha)), Same(both, BlendingMode::Normal, 1));
+        core::Layer mid = builder.Fill("mid", SameSource(both, Bitmap(rig.greySha)), Same(both, BlendingMode::Normal, 0.9));
+        core::Effect contentFill = ContentFillEffect(builder, both, Uniform(0.8, 0.3, 0.5), BlendingMode::Multiply, 0.7);
+        core::Effect contentLevels = LevelsEffect(builder, LevelsComponentOf(0.1, 0.8, 1.6, 0.05, 0.95, false), ChannelType::User0);
+        mid.content_effects = {contentLevels, contentFill};  // top first
+        core::Effect m1 = MaskFillEffect(builder, Bitmap(rig.greySha), BlendingMode::Normal, 1.0);
+        core::Effect m2 = MaskFillEffect(builder, Bitmap(rig.rampSha), BlendingMode::Multiply, 0.8);
+        core::Effect m3 = LevelsEffect(builder, LevelsComponentOf(0.05, 0.95, 0.8, 0.0, 1.0, true), std::nullopt);
+        mid.mask = MaskWith(core::MaskBackground::Black, {m1, m2, m3});
+        core::Layer top = builder.Fill("top", SameSource(both, Uniform(0.4, 0.5, 0.6)), Same(both, BlendingMode::Screen, 0.5));
+        const core::Id m2Uid = m2.uid;
+        const core::Id levelsUid = contentLevels.uid;
+        builder.SetRoot({low, mid, top});
+        if (!builder.Validate("mask cache")) return Finish();
+        // 256^2 = one tile; masks are 16-bit tiles shared by both channels.
+        core::DocumentState state;
+        state.project_uuid = "mask-cache-test";
+        state.project = builder.project;
+        core::Document document(std::move(state));
+        CpuEvaluator cpu(rig.templates, kWideLimits);
+        auto evaluate = [&](const core::Snapshot& snapshot, ChannelType channel, CpuEvaluator& evaluator) {
+            EvaluateRequest request;
+            request.textureSet = builder.SetId();
+            request.stack = builder.StackId();
+            request.channel = channel;
+            request.resources = rig.provider;
+            return evaluator.Evaluate(*snapshot.project, request);
+        };
+        auto fresh = [&](const core::Snapshot& snapshot, ChannelType channel) {
+            CpuEvaluator other(rig.templates, kWideLimits);
+            return evaluate(snapshot, channel, other);
+        };
+        auto stats = [](const render::Result<ChannelResult>& r) {
+            return r ? "blends " + std::to_string(r->stats.blends) + " levels " + std::to_string(r->stats.levels) +
+                           " uploads " + std::to_string(r->stats.uploads) + " hits " + std::to_string(r->stats.cacheHits)
+                     : Describe(r);
+        };
+        auto edit = [&](const std::string& key, const std::function<void(core::Edit&)>& change) {
+            core::MutationRequest mutation;
+            mutation.tool = "set_parameters";
+            mutation.idempotency_key = key;
+            mutation.expected_revision = document.revision();
+            core::RequestOutcome outcome = core::Execute(document, mutation, change);
+            return outcome.result && outcome.result->status == core::ResultStatus::committed;
+        };
+        bool equalFresh = true;
+        const core::Snapshot first = document.snapshot();
+        render::Result<ChannelResult> initial = evaluate(first, ChannelType::User0, cpu);
+        Info("first evaluation: " + stats(initial));
+        const bool maskEdited = edit("mask-edit", [&](core::Edit& e) {
+            core::FindEffect(e.project(), m2Uid)->mono_blending->opacity = 0.6;
+        });
+        const core::Snapshot second = document.snapshot();
+        render::Result<ChannelResult> afterMask = evaluate(second, ChannelType::User0, cpu);
+        // Mask: m1 served, m2 and m3 run (one blend, one levels); content served; prefix of "low"
+        // served; "mid", "top" and the read-out blend.
+        Check(maskEdited && afterMask && afterMask->stats.blends == 4 && afterMask->stats.levels == 1 &&
+                  afterMask->stats.uploads == 0,
+              "an upstream mask-effect change re-evaluates the mask from the change up and the prefixes above, "
+              "serving the content chain, the lower mask effects and the prefixes below",
+              stats(afterMask));
+        equalFresh = equalFresh && afterMask && Samples(*afterMask) == SamplesOf(fresh(second, ChannelType::User0), "fresh");
+        const bool contentEdited = edit("content-edit", [&](core::Edit& e) {
+            core::FindEffect(e.project(), levelsUid)->levels->components.front().gamma = 1.3;
+        });
+        const core::Snapshot third = document.snapshot();
+        render::Result<ChannelResult> afterContent = evaluate(third, ChannelType::User0, cpu);
+        // Content: the fill effect served, the levels run; mask served; "mid", "top", read-out.
+        Check(contentEdited && afterContent && afterContent->stats.blends == 3 && afterContent->stats.levels == 1 &&
+                  afterContent->stats.uploads == 0,
+              "an upstream content-effect change re-evaluates the content from the change up, serving the mask "
+              "and the lower content effects",
+              stats(afterContent));
+        equalFresh = equalFresh && afterContent && Samples(*afterContent) == SamplesOf(fresh(third, ChannelType::User0), "fresh");
+        render::Result<ChannelResult> other = evaluate(third, ChannelType::User1, cpu);
+        // User1: its two bitmaps projected, its content fill effect, the three layers and the
+        // read-out; the mask (with its levels) served from User0's evaluation.
+        Check(other && other->stats.levels == 0 && other->stats.uploads == 2 && other->stats.blends == 5,
+              "the masks of one layer are shared by its channels", stats(other));
+        equalFresh = equalFresh && other && Samples(*other) == SamplesOf(fresh(third, ChannelType::User1), "fresh");
+        Check(equalFresh, "every partially re-evaluated result equals a fresh evaluation bit for bit");
+    }
+    return Finish();
+}
+
+// ── masks-gpu-vs-cpu ─────────────────────────────────────────────────────────
+
+int RunMasksGpuVsCpu(const fs::path& assets, const fs::path& dir) {
+    std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
+    std::mt19937 rng(1111);
+    auto unit = [&] { return std::uniform_real_distribution<double>(0.0, 1.0)(rng); };
+    const std::vector<BlendingMode> modes{BlendingMode::Normal, BlendingMode::Multiply, BlendingMode::Subtract,
+                                          BlendingMode::Screen, BlendingMode::Overlay, BlendingMode::LinearDodge,
+                                          BlendingMode::Divide, BlendingMode::SoftLight};
+    auto provider = std::make_shared<MapResourceProvider>();
+    const std::string grey = std::string(63, 'e') + "1";
+    const std::string colour = std::string(63, 'e') + "2";
+    provider->Add(grey, PatternImage(256, 256, 1, render::TexelEncoding::Unorm16, 31));
+    provider->Add(colour, PatternImage(256, 256, 3, render::TexelEncoding::Unorm16, 32));
+    size_t compared = 0;
+    bool allEqual = true;
+    Evaluator gpu(engine, templates);
+    for (const ChannelFormat format : kAllFormats) {
+        const std::vector<ChannelType> channels{ChannelType::User0};
+        for (int variant = 0; variant < 2; ++variant) {
+            Builder builder(256, 256, {{ChannelType::User0, format}});
+            builder.AddResource(grey, 100);
+            builder.AddResource(colour, 100);
+            auto levels = [&](std::optional<ChannelType> affected) {
+                return LevelsEffect(builder,
+                                    LevelsComponentOf(0.3 * unit() - 0.1, 0.6 + 0.6 * unit(), 0.3 + 2.0 * unit(),
+                                                      0.2 * unit() - 0.1, 0.8 + 0.4 * unit(), unit() < 0.5),
+                                    affected);
+            };
+            auto mask = [&] {
+                return MaskWith(unit() < 0.5 ? core::MaskBackground::Black : core::MaskBackground::White,
+                                {MaskFillEffect(builder, Bitmap(grey), modes[rng() % modes.size()], unit()),
+                                 MaskFillEffect(builder, Uniform(unit(), unit(), unit()), modes[rng() % modes.size()], unit()),
+                                 levels(std::nullopt)});
+            };
+            std::vector<core::Layer> layers;
+            core::Layer bottom = builder.Fill("bottom", SameSource(channels, Bitmap(colour)), Same(channels, BlendingMode::Normal, 1));
+            bottom.content_effects = {levels(ChannelType::User0),
+                                      ContentFillEffect(builder, channels, Uniform(unit(), unit(), unit()),
+                                                        modes[rng() % modes.size()], unit())};
+            layers.push_back(bottom);
+            core::Layer masked = builder.Fill("masked", SameSource(channels, Uniform(unit(), unit(), unit())),
+                                              Same(channels, modes[rng() % modes.size()], 0.5 + 0.5 * unit()));
+            masked.mask = mask();
+            masked.content_effects = {levels(ChannelType::User0),
+                                      ContentFillEffect(builder, channels, Bitmap(colour), modes[rng() % modes.size()], unit())};
+            layers.push_back(masked);
+            core::Layer child = builder.Fill("child", SameSource(channels, Bitmap(colour)), Same(channels, modes[rng() % modes.size()], unit()));
+            child.mask = mask();
+            core::Layer group = builder.Group("group", {child}, Same(channels, BlendingMode::Normal, 0.4 + 0.6 * unit()));
+            if (variant == 1) group.mask = mask();
+            layers.push_back(group);
+            builder.SetRoot(layers);
+            if (!builder.Validate(std::string(core::ToString(format)))) return Finish();
+            EvaluateRequest request;
+            request.textureSet = builder.SetId();
+            request.stack = builder.StackId();
+            request.channel = ChannelType::User0;
+            request.resources = provider;
+            CpuEvaluator cpu(templates, kWideLimits);
+            render::Result<ChannelResult> cpuResult = cpu.Evaluate(builder.project, request);
+            auto project = std::make_shared<const core::Project>(builder.project);
+            std::future<render::Result<ChannelResult>> future = gpu.Evaluate(core::Snapshot{1, project}, request);
+            render::Result<ChannelResult> gpuResult = Get(future);
+            const std::string label = std::string(core::ToString(format)) + " masked stack " + std::to_string(variant);
+            if (!cpuResult || !gpuResult) {
+                allEqual = false;
+                Check(false, label + " evaluates on both stores", Describe(cpuResult) + " / " + Describe(gpuResult));
+                continue;
+            }
+            std::string first;
+            const size_t mismatches = Mismatches(Samples(*cpuResult), Samples(*gpuResult), first, cpuResult->tileFormat.encoding);
+            compared += Samples(*cpuResult).size();
+            if (mismatches != 0) {
+                allEqual = false;
+                Check(false, label + ": GPU equals CPU", std::to_string(mismatches) + " mismatches; " + first);
+            }
+        }
+    }
+    gpu.Shutdown();
+    Check(allEqual, "every masked stack evaluates to the same bytes on the GPU and on the CPU (" + std::to_string(compared) +
+                        " samples over 9 formats: mask and content fill effects, levels with gamma, group masks)");
+    return Finish();
+}
+
+// ── pow-hardware ─────────────────────────────────────────────────────────────
+
+/// Domain kernel: texel i of a 4096 x 4096 target holds, for i < 2^23, log2(1 + m 2^-23) and
+/// exp2(m 2^-23) (m = i), for i >= 2^23 log2((1 + m 2^-23) / 2) and exp2(-m 2^-23). Sample kernel:
+/// texel i of a 1024 x 1024 target holds log2(x), x, exp2(y), y for an edge value (i < 40) or
+/// hashed bit patterns (y over the exponents 2^-7 .. 2^7 and, every 16th texel, any bit pattern);
+/// Pow kernel: pow(x, g), x, g and exp2(g log2(x)) for hashed x and g in [0.2, 3).
+constexpr char kPowHardwareHlsl[] = R"(
+cbuffer Root : register(b0) { uint g_dst; };
+static const uint kEdges[40] = {
+    0x00000000u, 0x80000000u, 0x00000001u, 0x007FFFFFu, 0x80000001u, 0x807FFFFFu, 0x00800000u,
+    0x00800001u, 0x7E7FFFFFu, 0x7F000000u, 0x7F7FFFFFu, 0x7F800000u, 0xFF800000u, 0x7FC00000u,
+    0xFFC00000u, 0x7F800001u, 0xBF800000u, 0xC0000000u, 0x3F800000u, 0x3F7FFFFFu, 0x3F800001u,
+    0x43000000u, 0x42FFFFFFu, 0x43010000u, 0xC3000000u, 0xC3160000u, 0xC3150000u, 0xC2FC0000u,
+    0xC2FE0000u, 0xC3100000u, 0x4B000000u, 0xCB000000u, 0x34000000u, 0xB4000000u, 0x3F000000u,
+    0xBF000000u, 0x40000000u, 0x3E800000u, 0x42F00000u, 0xC2F00000u};
+uint Hash(uint i) {
+    uint h = i * 0x9E3779B9u;
+    h ^= h >> 16;
+    h *= 0x85EBCA6Bu;
+    h ^= h >> 13;
+    h *= 0xC2B2AE35u;
+    h ^= h >> 16;
+    return h;
+}
+[numthreads(8, 8, 1)]
+void Domain(uint3 id : SV_DispatchThreadID) {
+    RWTexture2D<float4> dst = ResourceDescriptorHeap[g_dst];
+    const uint i = id.y * 4096u + id.x;
+    const uint m = i & 0x7FFFFFu;
+    const float x = asfloat((i < 0x800000u ? 0x3F800000u : 0x3F000000u) | m);
+    const float y = (i < 0x800000u ? 1.0f : -1.0f) * (float(m) * (1.0f / 8388608.0f));
+    dst[id.xy] = float4(log2(x), exp2(y), 0.0f, 0.0f);
+}
+[numthreads(8, 8, 1)]
+void Samples(uint3 id : SV_DispatchThreadID) {
+    RWTexture2D<float4> dst = ResourceDescriptorHeap[g_dst];
+    const uint i = id.y * 1024u + id.x;
+    const uint h = Hash(i);
+    const uint k = Hash(i + 0x51ED270Bu);
+    const float x = asfloat(i < 40u ? kEdges[i] : ((i & 15u) == 0u ? h : (h & 0x7FFFFFFFu)));
+    const float y = asfloat(i < 40u ? kEdges[i] : ((i & 15u) == 0u ? k
+                                     : ((k & 0x807FFFFFu) | ((((k >> 23) & 0xFFu) % 15u + 120u) << 23))));
+    dst[id.xy] = float4(log2(x), x, exp2(y), y);
+}
+[numthreads(8, 8, 1)]
+void Pow(uint3 id : SV_DispatchThreadID) {
+    RWTexture2D<float4> dst = ResourceDescriptorHeap[g_dst];
+    const uint i = id.y * 1024u + id.x;
+    const uint h = Hash(i);
+    const uint k = Hash(i + 0x2545F491u);
+    const float x = asfloat(0x3D800000u + (h % 0x02800000u));
+    const float g = 0.2f + float(k >> 8) * (2.8f / 16777216.0f);
+    dst[id.xy] = float4(pow(x, g), x, g, exp2(g * log2(x)));
+}
+)";
+
+/// Measures the GPU's log2 and exp2 (as the render layer compiles them, `-Gis`) over the four
+/// table domains of hwmath.h, writes the measured tables (`hw-lg2-hi.zlib`, `hw-lg2-lo.zlib`,
+/// `hw-ex2-pos.zlib`, `hw-ex2-neg.zlib`) to the work directory and compares them with the
+/// embedded ones, then compares hw::Log2, hw::Exp2 and hw::Pow with the GPU on edge values and
+/// 2^20 hashed inputs each, and the GPU's pow with its exp2(g log2 x).
+int RunPowHardware(const fs::path& dir) {
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
+    render::Result<std::vector<float>> domain = FpKernelTexels(engine, "Domain", 4096, kPowHardwareHlsl);
+    render::Result<std::vector<float>> samples = FpKernelTexels(engine, "Samples", 1024, kPowHardwareHlsl);
+    render::Result<std::vector<float>> pows = FpKernelTexels(engine, "Pow", 1024, kPowHardwareHlsl);
+    if (!domain || !samples || !pows) {
+        Check(false, "the GPU's log2, exp2 and pow are measured",
+              (!domain ? domain : (!samples ? samples : pows)).error().Describe());
+        return Finish();
+    }
+    const std::vector<float>& v = *domain;
+    const uint32_t n = hw::kTableEntries;
+    const hw::Table tables[4] = {hw::Table::Log2Hi, hw::Table::Log2Lo, hw::Table::Exp2Pos, hw::Table::Exp2Neg};
+    const char* names[4] = {"lg2-hi", "lg2-lo", "ex2-pos", "ex2-neg"};
+    for (int t = 0; t < 4; ++t) {
+        std::vector<uint32_t> measured(n);
+        const size_t offset = (t == 1 || t == 3) ? n : 0;
+        const size_t component = t < 2 ? 0 : 1;
+        for (uint32_t m = 0; m < n; ++m) measured[m] = std::bit_cast<uint32_t>(v[(offset + m) * 4 + component]);
+        const std::vector<unsigned char> packed = hw::CompressValues(measured);
+        std::ofstream(dir / (std::string("hw-") + names[t] + ".zlib"), std::ios::binary)
+            .write(reinterpret_cast<const char*>(packed.data()), static_cast<std::streamsize>(packed.size()));
+        const std::vector<uint32_t>& embedded = hw::Values(tables[t]);
+        size_t differing = 0;
+        for (uint32_t m = 0; m < n; ++m) differing += embedded[m] != measured[m];
+        Check(differing == 0,
+              std::string("the embedded ") + names[t] + " table equals the GPU on every entry of its domain (" +
+                  std::to_string(n) + ")",
+              std::to_string(differing) + " entries differ");
+    }
+    size_t differing = 0;
+    std::string first;
+    const std::vector<float>& s = *samples;
+    for (size_t i = 0; i < s.size() / 4; ++i) {
+        const float x = s[i * 4 + 1];
+        const float y = s[i * 4 + 3];
+        const float ours[2] = {hw::Log2(x), hw::Exp2(y)};
+        const float theirs[2] = {s[i * 4], s[i * 4 + 2]};
+        const float inputs[2] = {x, y};
+        for (int k = 0; k < 2; ++k) {
+            if (SameFloat(ours[k], theirs[k])) continue;
+            if (differing++ < 8) {
+                first += std::string(k == 0 ? "log2(" : "exp2(") + Hex32(std::bit_cast<uint32_t>(inputs[k])) + "): GPU " +
+                         Hex32(std::bit_cast<uint32_t>(theirs[k])) + ", hw " + Hex32(std::bit_cast<uint32_t>(ours[k])) + "; ";
+            }
+        }
+    }
+    const std::vector<float>& p = *pows;
+    size_t composed = 0;
+    for (size_t i = 0; i < p.size() / 4; ++i) {
+        const float x = p[i * 4 + 1];
+        const float g = p[i * 4 + 2];
+        composed += !SameFloat(p[i * 4], p[i * 4 + 3]);
+        if (SameFloat(hw::Pow(x, g), p[i * 4])) continue;
+        if (differing++ < 8) {
+            first += "pow(" + Hex32(std::bit_cast<uint32_t>(x)) + ", " + Hex32(std::bit_cast<uint32_t>(g)) + "): GPU " +
+                     Hex32(std::bit_cast<uint32_t>(p[i * 4])) + ", hw " + Hex32(std::bit_cast<uint32_t>(hw::Pow(x, g))) + "; ";
+        }
+    }
+    Check(composed == 0, "the GPU's pow(x, g) is exp2(g log2(x)) on " + std::to_string(p.size() / 4) + " hashed inputs",
+          std::to_string(composed) + " differ");
+    Check(differing == 0,
+          "hw::Log2, hw::Exp2 and hw::Pow equal the GPU on 40 edge values and " + std::to_string(s.size() / 4 - 40) +
+              " hashed inputs each, and on " + std::to_string(p.size() / 4) + " hashed pow inputs",
+          std::to_string(differing) + " results differ: " + first);
+    return Finish();
+}
+
 // ── uv-coverage ──────────────────────────────────────────────────────────────
 
 /// The texturing mesh of an imported file as the UV raster's corner layout (one interleaved
@@ -3012,9 +3913,9 @@ int main(int argc, char** argv) {
     const std::string_view mode = argc > 1 ? argv[1] : "";
     if (argc < 3) {
         std::fprintf(stderr,
-                     "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources <assets-dir> | "
+                     "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks <assets-dir> | "
                      "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
-                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|tables <assets-dir> <work-dir> | "
+                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|masks-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
         return 2;
     }
@@ -3028,6 +3929,7 @@ int main(int argc, char** argv) {
         if (mode == "admission") return RunAdmission(assets);
         if (mode == "profile") return RunProfile(assets);
         if (mode == "sources") return RunSources(assets);
+        if (mode == "masks") return RunMasks(assets);
         if (mode == "evaluate") {
             if (argc < 6) {
                 std::fprintf(stderr, "usage: uzp-evaluator-tests evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu\n");
@@ -3058,6 +3960,8 @@ int main(int argc, char** argv) {
         else if (mode == "srgb8-hardware") code = RunSrgb8Hardware(dir);
         else if (mode == "tables") code = RunTables(dir);
         else if (mode == "fp-hardware") code = RunFpHardware(dir);
+        else if (mode == "pow-hardware") code = RunPowHardware(dir);
+        else if (mode == "masks-gpu-vs-cpu") code = RunMasksGpuVsCpu(assets, dir);
         else if (mode == "uv-coverage") {
             if (argc < 6) {
                 std::fprintf(stderr, "usage: uzp-evaluator-tests uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");

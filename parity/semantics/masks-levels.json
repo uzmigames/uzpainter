@@ -1,0 +1,1575 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "masks-levels",
+  "description": "Masks, mask and content effects and the Levels effect of the evaluator (04 sections 1 and 2, task phase1.11_compositor-mask-effects), evaluated by the CPU store under the current profile. Residuals are |delta| in export units (16-bit PNG codes, OpenEXR float32 values) per texture set and channel, against both recordings (r1 same session, r2 after save and reopen).",
+  "painter_build_id": "12.1.5+js-api.1.1.20",
+  "corpus": [
+    "tier0/api-probes/mask-stack",
+    "tier0/semantics/effect-order",
+    "tier0/semantics/group-masks",
+    "tier0/semantics/levels-clamp",
+    "tier0/semantics/mask-precision"
+  ],
+  "entries": [
+    {
+      "entry_id": "mask-precision",
+      "subject": "Mask stacks: background, a bitmap fill effect and its opacity, mask storage precision",
+      "status": "exact",
+      "formula": "m := background (White 1, Black 0); each visible mask effect bottom-up: a fill effect m := m + (r - m) alpha with r = kernel(mode, m, b) clamped to [0, 1], b the source's mono value and alpha the effect's opacity; m is stored at 16 bits (the UNORM write rule) after every effect on every channel format; the layer blends with opacity x m (a disabled or absent mask counts as 1).",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.layerstack: LayerNode.add_mask, MaskBackground, insert_fill (mask and content stacks), FillEffectNode, LevelsEffectNode and its parameters, Node.set_blending_mode"
+        },
+        {
+          "source_id": "A-HELP-GUIDE",
+          "locator": "Masks, fill and levels effects, blending modes"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Floating-point rules: rcp within 1 ULP, log2 / exp2 approximations, FLOAT to UNORM"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "mask_bits",
+          "value": 16,
+          "origin": "fitted"
+        },
+        {
+          "name": "write_rule",
+          "value": "UNORM16, n + 4 fractional bits, ties down",
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s0/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s0/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s0/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s0/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s0/user2",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s0/user2",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s0/user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s0/user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s0/user4",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s0/user4",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s1/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s1/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s1/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s1/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s1/user2",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s1/user2",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s1/user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s1/user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s1/user4",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s1/user4",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s2/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s2/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s2/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s2/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s2/user2",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s2/user2",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s2/user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s2/user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s2/user4",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s2/user4",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "mask-stack-effect-mix",
+      "subject": "The mix of a mask effect over the mask below it (two mask effects, Multiply)",
+      "status": "exact",
+      "formula": "v = a + (r - a) alpha for every mode (the layer mix a (1 - alpha) + r alpha misses 6 of 65536 texels of the second, Multiply, effect); the same mix is used for content fill effects.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.layerstack: LayerNode.add_mask, MaskBackground, insert_fill (mask and content stacks), FillEffectNode, LevelsEffectNode and its parameters, Node.set_blending_mode"
+        },
+        {
+          "source_id": "S-W3C-BLEND",
+          "locator": "§5.1 simple alpha compositing; §10 blend modes (the mask kernels)"
+        }
+      ],
+      "parameters": [],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s3/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s3/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s3/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s3/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s3/user2",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s3/user2",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s3/user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s3/user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s3/user4",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/mask-precision",
+          "map": "s3/user4",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "group-masks",
+      "subject": "Masks on a group (default mode and Normal) and on its Multiply child",
+      "status": "calibrated",
+      "formula": "A group's mask multiplies the opacity of its isolated composite exactly as a layer's mask does; a child's mask applies inside the group.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.layerstack: LayerNode.add_mask, MaskBackground, insert_fill (mask and content stacks), FillEffectNode, LevelsEffectNode and its parameters, Node.set_blending_mode"
+        },
+        {
+          "source_id": "S-W3C-BLEND",
+          "locator": "§5.1 simple alpha compositing; §10 blend modes (the mask kernels)"
+        }
+      ],
+      "parameters": [],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s2/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.0002899169921875,
+            "p99": 0,
+            "differing": 57,
+            "total": 196608,
+            "affected_texels": 57,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s2/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.0002899169921875,
+            "p99": 0,
+            "differing": 57,
+            "total": 196608,
+            "affected_texels": 57,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s2/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 768,
+            "mean": 7.2945505777994795,
+            "p99": 384,
+            "differing": 3709,
+            "total": 196608,
+            "affected_texels": 3361,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s2/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 768,
+            "mean": 7.2945505777994795,
+            "p99": 384,
+            "differing": 3709,
+            "total": 196608,
+            "affected_texels": 3361,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s2/user2",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 1.1920928955078125e-07,
+            "mean": 6.749663346757491e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 21469,
+            "total": 196608,
+            "affected_texels": 18277,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s2/user2",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 1.1920928955078125e-07,
+            "mean": 6.749663346757491e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 21469,
+            "total": 196608,
+            "affected_texels": 18277,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s3/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.0002899169921875,
+            "p99": 0,
+            "differing": 57,
+            "total": 196608,
+            "affected_texels": 57,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s3/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 0.0002899169921875,
+            "p99": 0,
+            "differing": 57,
+            "total": 196608,
+            "affected_texels": 57,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s3/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 768,
+            "mean": 7.2945505777994795,
+            "p99": 384,
+            "differing": 3709,
+            "total": 196608,
+            "affected_texels": 3361,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s3/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 768,
+            "mean": 7.2945505777994795,
+            "p99": 384,
+            "differing": 3709,
+            "total": 196608,
+            "affected_texels": 3361,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s3/user2",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 1.1920928955078125e-07,
+            "mean": 6.749663346757491e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 21469,
+            "total": 196608,
+            "affected_texels": 18277,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s3/user2",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 1.1920928955078125e-07,
+            "mean": 6.749663346757491e-09,
+            "p99": 5.960464477539063e-08,
+            "differing": 21469,
+            "total": 196608,
+            "affected_texels": 18277,
+            "texels": 65536
+          }
+        }
+      ],
+      "notes": "The masks are exact: every texel where the child's mask (a ramp along y) is 1 equals both recordings, and every texel where it is 0 but on RGB32F. The residual lies where the child's mask is strictly between 0 and 1: the uniform Screen fill above it composites over a partly covered backdrop inside the group, the source-over whose float32 operation order is not identified (phase1.10_compositor-float32-residual; it shows on RGB16 and sRGB8 here, not only on 32-bit floats). On the RGB32F row where the child's mask is 0 the uniform's float32 value float32(v) reproduces the recordings and the read-out operand 1 + (v - 1) of blend-modes.json does not; changing it changes the meaning of profile painter-12.1-isolated-linear (decision 017 pinning), so both are left to that task's new profile. Release gap; no exception proposed."
+    },
+    {
+      "entry_id": "levels",
+      "subject": "The Levels effect of a content stack (one effect per channel)",
+      "status": "exact",
+      "formula": "t = (v - in_min) Rcp(in_max - in_min) with the recording GPU's reciprocal; when gamma is not 1, t = sign(t) pow(|t|, gamma) with pow(x, g) = exp2(g log2 x) through the recording GPU's log2 and exp2 (hwmath.h tables); out = fma(t, out_max - out_min, out_min); the result is stored in the channel format.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.layerstack: LayerNode.add_mask, MaskBackground, insert_fill (mask and content stacks), FillEffectNode, LevelsEffectNode and its parameters, Node.set_blending_mode"
+        },
+        {
+          "source_id": "A-HELP-GUIDE",
+          "locator": "Masks, fill and levels effects, blending modes"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Floating-point rules: rcp within 1 ULP, log2 / exp2 approximations, FLOAT to UNORM"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "hardware_tables",
+          "value": "src/evaluator/tables/hw-{lg2-hi,lg2-lo,ex2-pos,ex2-neg}.zlib",
+          "origin": "fitted"
+        },
+        {
+          "name": "hardware_rcp",
+          "value": "src/evaluator/tables/hw-rcp.zlib",
+          "origin": "fitted"
+        },
+        {
+          "name": "hardware_gpu",
+          "value": "NVIDIA GeForce RTX 4090, D3D12",
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s6/user0",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s6/user0",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s6/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/effect-order",
+          "map": "s6/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "levels-clamp",
+      "subject": "Levels at and beyond the range ends, with and without clamp",
+      "status": "exact",
+      "formula": "clamp limits the normalised input t to [0, 1] before gamma; the output range is not clamped (out of [0, 1] values reach the float channels; UNORM channels clamp at storage); chained levels effects store between effects.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.layerstack: LayerNode.add_mask, MaskBackground, insert_fill (mask and content stacks), FillEffectNode, LevelsEffectNode and its parameters, Node.set_blending_mode"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Floating-point rules: rcp within 1 ULP, log2 / exp2 approximations, FLOAT to UNORM"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "hardware_tables",
+          "value": "src/evaluator/tables/hw-{lg2-hi,lg2-lo,ex2-pos,ex2-neg}.zlib",
+          "origin": "fitted"
+        },
+        {
+          "name": "hardware_rcp",
+          "value": "src/evaluator/tables/hw-rcp.zlib",
+          "origin": "fitted"
+        },
+        {
+          "name": "hardware_gpu",
+          "value": "NVIDIA GeForce RTX 4090, D3D12",
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s0/user0",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s0/user0",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s0/user1",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s0/user1",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s0/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s0/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s0/user3",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s0/user3",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s1/user0",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s1/user0",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s1/user1",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s1/user1",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s1/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s1/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s1/user3",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s1/user3",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s2/user0",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s2/user0",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s2/user1",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s2/user1",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s2/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s2/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s2/user3",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s2/user3",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s3/user0",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s3/user0",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s3/user1",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s3/user1",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s3/user2",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s3/user2",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s3/user3",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/levels-clamp",
+          "map": "s3/user3",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "mask-stack-probe",
+      "subject": "A Black mask with a UV-projected 8-bit bitmap fill effect in Screen at 0.75 under a clamped levels effect with gamma 1.2 (API probe, BaseColor sRGB8)",
+      "status": "calibrated",
+      "formula": "The mask formulas above; the levels effect of a mask has no blending (the API refuses it) and remaps the mask in place. Unstable golden: r1 (same session) is the exact target (decision 032); r2's residual is reported.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.layerstack: LayerNode.add_mask, MaskBackground, insert_fill (mask and content stacks), FillEffectNode, LevelsEffectNode and its parameters, Node.set_blending_mode"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "hardware_tables",
+          "value": "src/evaluator/tables/hw-{lg2-hi,lg2-lo,ex2-pos,ex2-neg}.zlib",
+          "origin": "fitted"
+        },
+        {
+          "name": "hardware_rcp",
+          "value": "src/evaluator/tables/hw-rcp.zlib",
+          "origin": "fitted"
+        },
+        {
+          "name": "hardware_gpu",
+          "value": "NVIDIA GeForce RTX 4090, D3D12",
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/api-probes/mask-stack",
+          "map": "uzp_plane/basecolor",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 3048,
+            "mean": 1493.0703125,
+            "p99": 3048,
+            "differing": 196608,
+            "total": 196608,
+            "affected_texels": 65536,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/mask-stack",
+          "map": "uzp_plane/basecolor",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 3048,
+            "mean": 1487.25,
+            "p99": 3048,
+            "differing": 196608,
+            "total": 196608,
+            "affected_texels": 65536,
+            "texels": 65536
+          }
+        }
+      ],
+      "notes": "Not a compositing golden: the masked half of the export lies above both the 0.9 fill and the template base, and every value lies off the sRGB8 export lattice of the semantics goldens, so the colour path of a Working colour on this project's BaseColor channel differs from the evaluator's linear colour (a sources question). The residual is published, not counted; the mask stack it records (fill effect, then levels without blending) converts and evaluates."
+    },
+    {
+      "entry_id": "content-effect-order",
+      "subject": "Content effects in list order (fill effect and levels)",
+      "status": "gap",
+      "formula": "Content effects run bottom-up in list order on the layer's own content for the channel, the content stored in the channel format after each effect: a fill effect blends its source for the channel with its per-channel mode and opacity through the effect mix, a levels effect remaps its affected channel only.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.layerstack: LayerNode.add_mask, MaskBackground, insert_fill (mask and content stacks), FillEffectNode, LevelsEffectNode and its parameters, Node.set_blending_mode"
+        }
+      ],
+      "parameters": [],
+      "residuals": [],
+      "notes": "Release gap until P3-PROC: every Tier 0 order but s6 (levels alone, entry `levels`) and s7 (Blur alone) holds the starter-asset Blur filter, so the order of fill and levels effects and the content fill effect's mix are implemented from the documented list order and the fitted mask-effect mix but not observed."
+    },
+    {
+      "entry_id": "geometry-mask-mesh",
+      "subject": "Geometry masks of type Mesh (inclusion or exclusion list of mesh objects)",
+      "status": "gap",
+      "formula": "The mask is multiplied by the texel-centre coverage (UV raster convention) of the texture set's triangles of the included objects; UVTile geometry masks fail explicitly.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.layerstack: LayerNode.add_mask, MaskBackground, insert_fill (mask and content stacks), FillEffectNode, LevelsEffectNode and its parameters, Node.set_blending_mode"
+        }
+      ],
+      "parameters": [],
+      "residuals": [],
+      "notes": "Release gap: no Tier 0 golden records a geometry mask."
+    }
+  ]
+}

@@ -7,6 +7,7 @@
 
 #include "evaluator/arith.h"
 #include "evaluator/error.h"
+#include "evaluator/hwmath.h"
 #include "evaluator/projection_uv.h"
 #include "render/image_pass.h"
 #include "render/texture_readback.h"
@@ -49,6 +50,8 @@ GpuTileStore::~GpuTileStore() {
     ReleaseBitmaps();
     if (m_table16Upload.IsValid()) m_device.DestroyBuffer(m_table16Upload);
     if (m_table16.IsValid()) m_device.DestroyBuffer(m_table16);
+    if (m_powUpload.IsValid()) m_device.DestroyBuffer(m_powUpload);
+    if (m_pow.IsValid()) m_device.DestroyBuffer(m_pow);
 }
 
 const GpuTileStore::Tile* GpuTileStore::Find(TileHandle tile) const {
@@ -107,6 +110,41 @@ render::Result<void> GpuTileStore::EnsureTable16() {
     m_table16Upload = *upload;
     m_table16 = *gpu;
     m_table16Copied = false;
+    return {};
+}
+
+render::Result<void> GpuTileStore::EnsurePowTables() {
+    if (m_pow.IsValid()) return {};
+    const uint64_t bytes = uint64_t{kPowWords} * sizeof(uint32_t);
+    render::Result<uz::RHIBufferHandle> upload =
+        CreateBuffer(bytes, uz::RHIBufferUsage::CopySrc, uz::RHIMemoryType::Upload, 0,
+                     "evaluator_pow_tables_upload");
+    if (!upload) return render::Unexpected(upload.error());
+    auto* mapped = static_cast<std::byte*>(m_device.Rhi().MapBuffer(*upload));
+    if (mapped == nullptr) {
+        m_device.DestroyBuffer(*upload);
+        return render::Fail(render::ErrorCode::ResourceCreationFailed, m_device.GetBackend(),
+                            "evaluator: pow table upload buffer not mapped");
+    }
+    const std::pair<hw::Table, uint32_t> tables[4] = {{hw::Table::Log2Hi, kPowLog2Hi},
+                                                      {hw::Table::Log2Lo, kPowLog2Lo},
+                                                      {hw::Table::Exp2Pos, kPowExp2Pos},
+                                                      {hw::Table::Exp2Neg, kPowExp2Neg}};
+    for (const auto& [table, offset] : tables) {
+        const std::vector<uint32_t>& values = hw::Values(table);
+        std::memcpy(mapped + uint64_t{offset} * sizeof(uint32_t), values.data(), values.size() * sizeof(uint32_t));
+    }
+    m_device.Rhi().UnmapBuffer(*upload);
+    render::Result<uz::RHIBufferHandle> gpu =
+        CreateBuffer(bytes, uz::RHIBufferUsage::StructuredBuffer | uz::RHIBufferUsage::CopyDst,
+                     uz::RHIMemoryType::Default, sizeof(uint32_t), "evaluator_pow_tables");
+    if (!gpu) {
+        m_device.DestroyBuffer(*upload);
+        return render::Unexpected(gpu.error());
+    }
+    m_powUpload = *upload;
+    m_pow = *gpu;
+    m_powCopied = false;
     return {};
 }
 
@@ -324,6 +362,42 @@ render::Result<void> GpuTileStore::Blend(const BlendOp& op) {
     return {};
 }
 
+render::Result<void> GpuTileStore::Levels(const LevelsOp& op) {
+    render::Result<void> context = RequireContext();
+    if (!context) return context;
+    const Tile* dst = Find(op.dst);
+    const Tile* src = Find(op.src);
+    if (dst == nullptr || src == nullptr) {
+        return EvalFail(EvalErrorKind::Internal, "levels into or from an unknown tile");
+    }
+    if (src->width != dst->width || src->height != dst->height || !(src->format == dst->format)) {
+        return EvalFail(EvalErrorKind::Internal, "levels operands differ in size or format");
+    }
+    render::Result<void> table = EnsureTable16();
+    if (!table) return table;
+    render::Result<void> pow = EnsurePowTables();
+    if (!pow) return pow;
+    render::Result<render::ComputeKernel> kernel = m_context->Kernel(LevelsKernelSource(dst->format));
+    if (!kernel) return render::Unexpected(kernel.error());
+    LevelsBindings bindings;
+    bindings.width = dst->width;
+    bindings.height = dst->height;
+    bindings.srcSrv = m_device.Rhi().GetTextureSRVIndex(src->texture);
+    bindings.dstUav = m_device.Rhi().GetTextureUAVIndex(dst->texture);
+    bindings.table16Srv = m_device.Rhi().GetBufferSRVIndex(m_table16);
+    bindings.powSrv = m_device.Rhi().GetBufferSRVIndex(m_pow);
+    bindings.srcAlpha = src->format.alpha;
+    PendingDispatch pending;
+    pending.kernel = *kernel;
+    pending.params = EncodeLevelsParams(op, bindings);
+    pending.groupsX = render::image_pass_detail::Groups(dst->width, 8);
+    pending.groupsY = render::image_pass_detail::Groups(dst->height, 8);
+    pending.dst = dst->texture;
+    pending.inputs[0] = src->texture;
+    m_dispatches.push_back(pending);
+    return {};
+}
+
 render::Result<void> GpuTileStore::Project(const ProjectOp& op) {
     render::Result<void> context = RequireContext();
     if (!context) return context;
@@ -361,7 +435,7 @@ render::Result<void> GpuTileStore::Flush() {
     bool bitmapsPending = false;
     for (const auto& [key, bitmap] : m_bitmaps) bitmapsPending = bitmapsPending || bitmap.upload.IsValid();
     if (m_uploads.empty() && m_dispatches.empty() && !bitmapsPending &&
-        (m_table16Copied || !m_table16.IsValid())) {
+        (m_table16Copied || !m_table16.IsValid()) && (m_powCopied || !m_pow.IsValid())) {
         return {};
     }
     render::Result<void> context = RequireContext();
@@ -400,6 +474,7 @@ render::Result<void> GpuTileStore::Flush() {
     }
     const uint32_t arenaSrv = arena.IsValid() ? m_device.Rhi().GetBufferSRVIndex(arena) : 0;
     const bool copyTable = m_table16.IsValid() && !m_table16Copied;
+    const bool copyPow = m_pow.IsValid() && !m_powCopied;
 
     render::Result<void> done = m_context->SubmitAndWait([&](uz::IRHICommandList& cmd) {
         if (copyTable) {
@@ -408,6 +483,13 @@ render::Result<void> GpuTileStore::Flush() {
             cmd.CopyBuffer(m_table16Upload, 0, m_table16, 0, OperandTableWords().size() * sizeof(uint32_t));
             const uz::RHIBarrierDesc toRead =
                 Transition(m_table16, State::CopyDst, State::ShaderResource);
+            cmd.ResourceBarrier(&toRead, 1);
+        }
+        if (copyPow) {
+            const uz::RHIBarrierDesc toCopy = Transition(m_pow, State::Common, State::CopyDst);
+            cmd.ResourceBarrier(&toCopy, 1);
+            cmd.CopyBuffer(m_powUpload, 0, m_pow, 0, uint64_t{kPowWords} * sizeof(uint32_t));
+            const uz::RHIBarrierDesc toRead = Transition(m_pow, State::CopyDst, State::ShaderResource);
             cmd.ResourceBarrier(&toRead, 1);
         }
         if (arena.IsValid()) {
@@ -463,6 +545,12 @@ render::Result<void> GpuTileStore::Flush() {
         if (arena.IsValid()) m_device.DestroyBuffer(arena);
         DestroyRetired();
         if (copyTable) m_table16Copied = true;
+        if (copyPow) {
+            // The 128 MiB staging copy is not needed once the GPU holds the tables.
+            m_device.DestroyBuffer(m_powUpload);
+            m_powUpload = uz::RHIBufferHandle::Invalid();
+            m_powCopied = true;
+        }
         for (auto& [key, bitmap] : m_bitmaps) {
             if (bitmap.upload.IsValid()) m_device.DestroyBuffer(bitmap.upload);
             bitmap.upload = uz::RHIBufferHandle::Invalid();

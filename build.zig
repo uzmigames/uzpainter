@@ -269,6 +269,7 @@ const evaluator_sources = [_][]const u8{
     "evaluator/error.cpp",
     "evaluator/evaluate.cpp",
     "evaluator/evaluator.cpp",
+    "evaluator/geometry_mask.cpp",
     "evaluator/gpu_store.cpp",
     "evaluator/hash.cpp",
     "evaluator/hwmath.cpp",

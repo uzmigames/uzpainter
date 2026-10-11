@@ -50,6 +50,14 @@ inline constexpr uint32_t kTableWords = kTableRsqrt + (1u << 24) / 16;
 /// The operand tables buffer: `kTableWords` uints at the offsets above (built once).
 [[nodiscard]] const std::vector<uint32_t>& OperandTableWords();
 
+/// Offsets (in uints) of the log2 / exp2 tables buffer the Levels kernel reads (`hw::Values` of
+/// `Log2Hi`, `Log2Lo`, `Exp2Pos`, `Exp2Neg`, 2^23 words each; 128 MiB, created on first use).
+inline constexpr uint32_t kPowLog2Hi = 0;
+inline constexpr uint32_t kPowLog2Lo = kPowLog2Hi + (1u << 23);
+inline constexpr uint32_t kPowExp2Pos = kPowLog2Lo + (1u << 23);
+inline constexpr uint32_t kPowExp2Neg = kPowExp2Pos + (1u << 23);
+inline constexpr uint32_t kPowWords = kPowExp2Neg + (1u << 23);
+
 /// Uints per parameter block.
 inline constexpr uint32_t kBlendParamsStride = 32;
 
@@ -60,6 +68,7 @@ enum BlendFlags : uint32_t {
     kFlagMaskIsTile = 4,
     kFlagAccAlpha = 8,
     kFlagSrcAlpha = 16,
+    kFlagEffectMix = 32,  ///< The effect mix (BlendOp::effectMix).
 };
 
 /// Offsets inside a parameter block.
@@ -95,6 +104,26 @@ struct BlendBindings {
 /// The parameter block of `op` with the descriptor indices of `bindings`.
 [[nodiscard]] std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(
     const BlendOp& op, const BlendBindings& bindings);
+
+// ── Levels (tile_store.h LevelsOp) ───────────────────────────────────────────
+
+/// The HLSL of the Levels kernel over tiles of `format` (`evaluator_blend.hlsl` with
+/// `UZP_LEVELS`). Its parameter blocks share the arena and stride of the blend kernels.
+[[nodiscard]] render::KernelSource LevelsKernelSource(const TileFormat& format);
+
+struct LevelsBindings {
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t srcSrv = 0;
+    uint32_t dstUav = 0;
+    uint32_t table16Srv = 0;
+    uint32_t powSrv = 0;
+    bool srcAlpha = false;
+};
+
+/// The parameter block of `op` with the descriptor indices of `bindings`.
+[[nodiscard]] std::array<uint32_t, kBlendParamsStride> EncodeLevelsParams(
+    const LevelsOp& op, const LevelsBindings& bindings);
 
 // ── UV projection (projection_uv.h) ──────────────────────────────────────────
 

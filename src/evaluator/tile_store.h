@@ -8,6 +8,7 @@
 // Errors are the render layer's `Result`/`Error`: evaluator failures use `RequestFailed` with a
 // reason that starts with `evaluator:<kind>` (evaluator.h, `EvalFail`).
 
+#include "evaluator/arith.h"
 #include "evaluator/formats.h"
 #include "render/backend.h"
 
@@ -63,6 +64,17 @@ struct BlendOp {
     Operand mask = Operand::Constant({1.0f, 1.0f, 1.0f}, 1.0f);
     core::BlendingMode mode = core::BlendingMode::Normal;
     float opacity = 1.0f;
+    /// An effect's mix (a mask or content effect, arith.h `CompositeInput::effectMix`).
+    bool effectMix = false;
+};
+
+/// A Levels effect (arith::Levels) of `src` into `dst` (same size and format): component c of
+/// every texel through `components[c]` (a grey tile or a mask uses the first), each result
+/// stored with the tile's write rule; the coverage plane is copied.
+struct LevelsOp {
+    TileHandle dst = kNoTile;
+    TileHandle src = kNoTile;
+    std::array<arith::LevelsComponent, 3> components{};
 };
 
 /// The texels of a tile as the store holds them: `format.channels` channels per texel (the
@@ -99,6 +111,9 @@ public:
 
     /// Queues one blend; `Flush` runs the queue.
     virtual render::Result<void> Blend(const BlendOp& op) = 0;
+
+    /// Queues one Levels effect; `Flush` runs the queue.
+    virtual render::Result<void> Levels(const LevelsOp& op) = 0;
 
     /// Runs every queued operation and waits for it.
     virtual render::Result<void> Flush() = 0;

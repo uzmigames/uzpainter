@@ -15,7 +15,13 @@
 // opacity, the destination UAV, the operand tables SRV (the 16-bit UNORM operands and the
 // hardware arithmetic tables at the offsets of evaluator_tables.hlsli) and the mask tile's
 // encoding. 32-bit float results are stored raw (the channel base re-composition is a read-out
-// step of evaluate.cpp).
+// step of evaluate.cpp). The flag FLAG_EFFECT_MIX selects the mix of an effect (a mask or content
+// effect: a + (r - a) alpha for every mode).
+//
+// With UZP_LEVELS the kernel is the Levels effect instead (arith.cpp Levels, LevelsOp of
+// tile_store.h): parameter block width, height, source SRV, destination UAV, operand tables SRV,
+// log2/exp2 tables SRV (hwmath.h, at the offsets UZP_POW_*), the source's coverage flag and three
+// components of six words (input min, input max, gamma, output min, output max, clamp).
 
 #include "image_common.hlsli"
 #include "evaluator_tables.hlsli"
@@ -44,10 +50,13 @@ cbuffer Root : register(b0) {
 #define FLAG_MASK_TILE 4u
 #define FLAG_ACC_ALPHA 8u
 #define FLAG_SRC_ALPHA 16u
+#define FLAG_EFFECT_MIX 32u
 
 static const float kNaN = asfloat(0x7FC00000u);
 /// The SRV of the operand tables (kernelgen.h OperandTableWords), set from the parameter block.
 static uint g_tables;
+/// The blend is an effect's (FLAG_EFFECT_MIX).
+static bool g_effectMix;
 
 uint TableWord(uint index) {
     StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_tables];
@@ -512,6 +521,10 @@ float LoadMask(uint srv, int2 p, uint enc) {
 // ── Compositing of one texel (arith.cpp Composite) ───────────────────────────
 
 float Mix(float a, float r, float alphaS) {
+    if (g_effectMix) {
+        const float e = r - a;
+        return a + e * alphaS;
+    }
 #if defined(UZP_MODE_Replace)
     const float d = r - a;
     return a + d * alphaS;
@@ -571,6 +584,7 @@ float StoreCoverage(float alpha) {
 #endif
 }
 
+#if !defined(UZP_LEVELS)
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
     StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
@@ -580,6 +594,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (id.x >= width || id.y >= height) return;
     const uint flags = params[base + P_FLAGS];
     g_tables = params[base + P_TABLE16_SRV];
+    g_effectMix = (flags & FLAG_EFFECT_MIX) != 0u;
     const int2 p = int2(id.xy);
 
     float4 acc;
@@ -633,3 +648,112 @@ void main(uint3 id : SV_DispatchThreadID) {
 #endif
     StoreTexel(params[base + P_DST_UAV], p, result);
 }
+#endif
+
+#if defined(UZP_LEVELS)
+// ── Levels (arith.cpp Levels, hwmath.cpp Log2 / Exp2) ────────────────────────
+
+#define L_WIDTH 0
+#define L_HEIGHT 1
+#define L_SRC 2
+#define L_DST_UAV 3
+#define L_TABLE16_SRV 4
+#define L_POW_SRV 5
+#define L_SRC_ALPHA 6
+#define L_COMPONENTS 8
+
+/// The SRV of the log2 / exp2 tables (hwmath.h Values, at the offsets UZP_POW_*).
+static uint g_pow;
+
+uint PowWord(uint index) {
+    StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_pow];
+    return tables[index];
+}
+
+// v (exact in double) rounded toward zero to float32.
+float TowardZero(double v) {
+    float r = (float)v;
+    if (abs((double)r) > abs(v)) r = asfloat(asuint(r) - 1u);
+    return r;
+}
+
+float HwLog2(float x) {
+    const uint bits = asuint(x);
+    const uint magnitude = bits & 0x7FFFFFFFu;
+    if (magnitude > 0x7F800000u) return asfloat(kQuietNaN);
+    if (magnitude < 0x00800000u) return asfloat(0xFF800000u);
+    if ((bits & 0x80000000u) != 0u) return asfloat(kQuietNaN);
+    if (bits == 0x7F800000u) return x;
+    const int e = int(bits >> 23) - 127;
+    const uint m = bits & 0x7FFFFFu;
+    if (e >= 0) {
+        const float hi = asfloat(PowWord(UZP_POW_LOG2HI + m));
+        return e == 0 ? hi : TowardZero((double)e + (double)hi);
+    }
+    const float lo = asfloat(PowWord(UZP_POW_LOG2LO + m));
+    return e == -1 ? lo : TowardZero((double)(e + 1) + (double)lo);
+}
+
+float HwExp2(float y) {
+    if (isnan(y)) return asfloat(kQuietNaN);
+    const float a = abs(y);
+    const bool negative = y < 0.0f;
+    if (a >= 256.0f) return negative ? 0.0f : asfloat(0x7F800000u);
+    const float k = floor(a);
+    const float f = a - k;
+    const uint j = uint(f * 8388608.0f);
+    const uint v = PowWord((negative ? UZP_POW_EXP2NEG : UZP_POW_EXP2POS) + j);
+    // 2^k moves the exponent field; the float32 range decides the result.
+    const int exponent = int((v >> 23) & 0xFFu) + (negative ? -int(k) : int(k));
+    if (exponent <= 0) return 0.0f;
+    if (exponent >= 255) return asfloat(0x7F800000u);
+    return asfloat((v & 0x807FFFFFu) | (uint(exponent) << 23));
+}
+
+float Levels(float v, uint at) {
+    StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
+    const float inMin = asfloat(params[at]);
+    const float inMax = asfloat(params[at + 1u]);
+    const float gamma = asfloat(params[at + 2u]);
+    const float outMin = asfloat(params[at + 3u]);
+    const float outMax = asfloat(params[at + 4u]);
+    const float range = inMax - inMin;
+    const float d = v - inMin;
+    float t = d * HwRcp(range);
+    if (params[at + 5u] != 0u) t = Clamp01(t);
+    if (gamma != 1.0f) {
+        const float l = HwLog2(abs(t));
+        const float product = gamma * l;
+        const float pw = HwExp2(product);
+        t = t > 0.0f ? pw : (t < 0.0f ? -pw : t * pw);
+    }
+    const float outRange = outMax - outMin;
+    return Fma(t, outRange, outMin);
+}
+
+[numthreads(8, 8, 1)]
+void main(uint3 id : SV_DispatchThreadID) {
+    StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
+    const uint base = g_block * 32u;
+    const uint width = params[base + L_WIDTH];
+    const uint height = params[base + L_HEIGHT];
+    if (id.x >= width || id.y >= height) return;
+    g_tables = params[base + L_TABLE16_SRV];
+    g_pow = params[base + L_POW_SRV];
+    const int2 p = int2(id.xy);
+    const bool hasAlpha = params[base + L_SRC_ALPHA] != 0u;
+    const float4 v = LoadOperand(params[base + L_SRC], p, hasAlpha);
+    float4 result = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    result.x = StoreChannel(Levels(v.x, base + L_COMPONENTS));
+#if UZP_CHANNELS == 3
+    result.y = StoreChannel(Levels(v.y, base + L_COMPONENTS + 6u));
+    result.z = StoreChannel(Levels(v.z, base + L_COMPONENTS + 12u));
+#endif
+#if UZP_ALPHA
+    result.w = StoreCoverage(v.w);
+#else
+    result.w = StoreCoverage(1.0f);
+#endif
+    StoreTexel(params[base + L_DST_UAV], p, result);
+}
+#endif

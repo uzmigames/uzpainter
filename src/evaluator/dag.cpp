@@ -21,6 +21,7 @@ using core::LayerKind;
 struct Context {
     const core::Project& project;
     std::string_view profile;
+    const core::TextureSet& set;
     const core::Stack& stack;
     ChannelType channel;
     TileFormat tileFormat;
@@ -44,58 +45,40 @@ Digest ContentStartHash(const Context& ctx, std::string_view what) {
     return writer.Finish();
 }
 
-/// The blending of `layer` for the channel: the per-channel entry or the default (Normal, 1).
-core::Blending BlendingOf(const Layer& layer, ChannelType channel) {
-    const auto it = layer.blending.find(channel);
-    return it == layer.blending.end() ? core::Blending{} : it->second;
+/// The seed of a mask's hashes: the profile and the set resolution. A mask does not depend on the
+/// channel, so every channel of a layer shares its mask tiles.
+Digest MaskStartHash(const Context& ctx) {
+    HashWriter writer;
+    writer.Str(ctx.profile).Str("mask").U32(static_cast<uint32_t>(kMaskFormat));
+    writer.U32(ctx.grid.width).U32(ctx.grid.height);
+    return writer.Finish();
 }
 
-render::Result<float> MaskOf(const Layer& layer) {
-    if (!layer.geometry_mask.items.empty()) {
-        return EvalFail(EvalErrorKind::UnsupportedNode,
-                        "geometry masks are evaluated by phase1.11_compositor-mask-effects",
-                        layer.uid);
-    }
-    if (!layer.mask || !layer.mask->enabled) return 1.0f;
-    if (!layer.mask->effects.empty()) {
-        return EvalFail(EvalErrorKind::UnsupportedNode,
-                        "mask effects are evaluated by phase1.11_compositor-mask-effects",
-                        layer.uid);
-    }
-    return layer.mask->background == core::MaskBackground::White ? 1.0f : 0.0f;
-}
-
-render::Result<std::optional<DagSource>> SourceOf(const Context& ctx, const Layer& layer) {
-    const core::FillContent& fill = *layer.fill;
-    if (fill.source_mode == core::SourceMode::Material) {
-        return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "Material source mode is a release gap (P3-PROC)", layer.uid);
-    }
-    if (!fill.active_channels.contains(ctx.channel)) return std::optional<DagSource>{};
-    const auto sourceIt = fill.sources.find(ctx.channel);
-    if (sourceIt == fill.sources.end()) return std::optional<DagSource>{};
+/// A fill (a layer or a fill effect) source for the channel, or, with `mask`, for a mask (the
+/// mono value stored at 16 bits; a uniform colour takes the mean of its components).
+render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillContent& fill,
+                                        const core::Source& source, core::Id uid, bool mask) {
     if (fill.projection.mode != core::ProjectionMode::Fill &&
         fill.projection.mode != core::ProjectionMode::UV) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
                         std::string(core::ToString(fill.projection.mode)) +
                             " projection is outside this profile (P3-SMART / P4-NODES)",
-                        layer.uid);
+                        uid);
     }
     if (fill.symmetry.enabled) {
-        return EvalFail(EvalErrorKind::UnsupportedSource, "symmetry is a release gap (P3-SMART)",
-                        layer.uid);
+        return EvalFail(EvalErrorKind::UnsupportedSource, "symmetry is a release gap (P3-SMART)", uid);
     }
-    render::Result<void> colour = CheckColourManagement(ctx.project, layer.uid);
+    render::Result<void> colour = CheckColourManagement(ctx.project, uid);
     if (!colour) return render::Unexpected(colour.error());
-    const core::Source& source = sourceIt->second;
     DagSource result;
     HashWriter writer;
-    writer.Sub(ContentStartHash(ctx, "content"));
+    writer.Sub(mask ? MaskStartHash(ctx) : ContentStartHash(ctx, "content"));
     switch (source.kind()) {
         case core::SourceKind::uniform_color: {
             const auto& uniform = std::get<core::UniformColorSource>(source.value);
             result.kind = DagSource::Kind::Uniform;
-            result.uniform = UniformOperand(uniform.rgb, ctx.tileFormat, ctx.base);
+            result.uniform = mask ? UniformOperand(uniform.rgb, TileFormatOf(kMaskFormat), {0.0f, 0.0f, 0.0f})
+                                  : UniformOperand(uniform.rgb, ctx.tileFormat, ctx.base);
             writer.Str("uniform");
             for (const float component : result.uniform) writer.F32(component);
             break;
@@ -103,15 +86,14 @@ render::Result<std::optional<DagSource>> SourceOf(const Context& ctx, const Laye
         case core::SourceKind::bitmap: {
             const auto& bitmap = std::get<core::BitmapSource>(source.value);
             if (bitmap.resource.sha256.empty()) {
-                return EvalFail(EvalErrorKind::MissingResource, "a bitmap source without a hash",
-                                layer.uid);
+                return EvalFail(EvalErrorKind::MissingResource, "a bitmap source without a hash", uid);
             }
-            render::Result<UvProjection> projection = UvProjectionOf(fill.projection, layer.uid);
+            render::Result<UvProjection> projection = UvProjectionOf(fill.projection, uid);
             if (!projection) return render::Unexpected(projection.error());
             result.kind = DagSource::Kind::Bitmap;
             result.sha256 = bitmap.resource.sha256;
             result.projection = *projection;
-            result.signedRange = ctx.channel == ChannelType::Height;
+            result.signedRange = !mask && ctx.channel == ChannelType::Height;
             // Bound by content hash (LAY-13): the alias and, under legacy colour management, the
             // colour-space tag do not change the samples (sources.h).
             writer.Str("bitmap").Str(result.sha256);
@@ -131,10 +113,205 @@ render::Result<std::optional<DagSource>> SourceOf(const Context& ctx, const Laye
             return EvalFail(EvalErrorKind::UnsupportedSource,
                             std::string(core::ToString(source.kind())) +
                                 " sources are outside this profile (P3-PROC / P4-NODES)",
-                            layer.uid);
+                            uid);
     }
     result.hash = writer.Finish();
-    return std::optional<DagSource>{std::move(result)};
+    return result;
+}
+
+render::Result<std::optional<DagSource>> SourceOf(const Context& ctx, const Layer& layer) {
+    const core::FillContent& fill = *layer.fill;
+    if (fill.source_mode == core::SourceMode::Material) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        "Material source mode is a release gap (P3-PROC)", layer.uid);
+    }
+    if (!fill.active_channels.contains(ctx.channel)) return std::optional<DagSource>{};
+    const auto sourceIt = fill.sources.find(ctx.channel);
+    if (sourceIt == fill.sources.end()) return std::optional<DagSource>{};
+    render::Result<DagSource> source = ResolveSource(ctx, fill, sourceIt->second, layer.uid, false);
+    if (!source) return render::Unexpected(source.error());
+    return std::optional<DagSource>{std::move(*source)};
+}
+
+/// The float32 parameters Painter stores for one levels component.
+arith::LevelsComponent LevelsOf(const core::LevelsComponent& c) {
+    return {static_cast<float>(c.input_min), static_cast<float>(c.input_max),
+            static_cast<float>(c.gamma),     static_cast<float>(c.output_min),
+            static_cast<float>(c.output_max), c.clamp};
+}
+
+/// The failure of an effect kind outside this profile.
+render::Unexpected UnsupportedEffect(const core::Effect& effect, bool mask) {
+    std::string owner;
+    switch (effect.kind) {
+        case core::EffectKind::generator:
+        case core::EffectKind::filter: owner = "P3-PROC"; break;
+        case core::EffectKind::paint:
+        case core::EffectKind::compare_mask:
+        case core::EffectKind::color_selection:
+        case core::EffectKind::anchor: owner = "P4-NODES"; break;
+        case core::EffectKind::fill:
+        case core::EffectKind::levels: owner = "phase1.11_compositor-mask-effects"; break;
+    }
+    return EvalFail(EvalErrorKind::UnsupportedNode,
+                    std::string(core::ToString(effect.kind)) + " effects in " +
+                        (mask ? "mask" : "content") + " stacks are outside this profile (" + owner + ")",
+                    effect.uid);
+}
+
+/// Appends `effect` to `chain` with its hash chained from `previous`.
+void Chain(DagEffect& effect, const Digest& previous, std::vector<DagEffect>& chain) {
+    HashWriter writer;
+    writer.Sub(previous).U64(effect.uid).U32(static_cast<uint32_t>(effect.kind));
+    if (effect.kind == DagEffect::Kind::Fill) {
+        writer.Str("fill").U32(static_cast<uint32_t>(effect.mode)).F32(effect.opacity);
+        writer.Sub(effect.source->hash);
+    } else {
+        writer.Str("levels");
+        for (const arith::LevelsComponent& c : effect.levels) {
+            writer.F32(c.inMin).F32(c.inMax).F32(c.gamma).F32(c.outMin).F32(c.outMax);
+            writer.U32(c.clamp ? 1u : 0u);
+        }
+    }
+    effect.hash = writer.Finish();
+    chain.push_back(std::move(effect));
+}
+
+/// The content effects of a fill layer that touch the channel, bottom-up, chained from the
+/// source's hash. Storage keeps Painter's top-first order.
+render::Result<std::vector<DagEffect>> ContentEffectsOf(const Context& ctx, const Layer& layer,
+                                                        const Digest& start) {
+    std::vector<DagEffect> chain;
+    for (auto it = layer.content_effects.rbegin(); it != layer.content_effects.rend(); ++it) {
+        const core::Effect& effect = *it;
+        if (!effect.visible) continue;
+        DagEffect node;
+        node.uid = effect.uid;
+        if (effect.kind == core::EffectKind::fill) {
+            if (!effect.fill) return EvalFail(EvalErrorKind::Internal, "a fill effect without content", effect.uid);
+            const core::FillContent& fill = *effect.fill;
+            if (fill.source_mode == core::SourceMode::Material) {
+                return EvalFail(EvalErrorKind::UnsupportedSource,
+                                "Material source mode is a release gap (P3-PROC)", effect.uid);
+            }
+            if (!fill.active_channels.contains(ctx.channel)) continue;
+            const auto sourceIt = fill.sources.find(ctx.channel);
+            if (sourceIt == fill.sources.end()) continue;
+            const auto blendIt = effect.blending.find(ctx.channel);
+            const core::Blending blending = blendIt == effect.blending.end() ? core::Blending{} : blendIt->second;
+            if (blending.mode == BlendingMode::Disable) continue;
+            if (!arith::HasKernel(blending.mode)) {
+                return EvalFail(EvalErrorKind::UnsupportedBlendMode,
+                                std::string(core::ToString(blending.mode)) + " has no blend kernel",
+                                effect.uid);
+            }
+            render::Result<DagSource> source = ResolveSource(ctx, fill, sourceIt->second, effect.uid, false);
+            if (!source) return render::Unexpected(source.error());
+            node.kind = DagEffect::Kind::Fill;
+            node.mode = blending.mode;
+            node.opacity = static_cast<float>(blending.opacity);
+            node.source = std::move(*source);
+        } else if (effect.kind == core::EffectKind::levels) {
+            if (!effect.levels || effect.levels->components.empty()) {
+                return EvalFail(EvalErrorKind::Internal, "a levels effect without parameters", effect.uid);
+            }
+            if (!effect.levels->affected_channel) {
+                return EvalFail(EvalErrorKind::UnsupportedNode,
+                                "a content levels effect without an affected channel", effect.uid);
+            }
+            if (*effect.levels->affected_channel != ctx.channel) continue;
+            node.kind = DagEffect::Kind::Levels;
+            const std::vector<core::LevelsComponent>& components = effect.levels->components;
+            for (size_t c = 0; c < 3; ++c) {
+                node.levels[c] = LevelsOf(components[components.size() == 3 ? c : 0]);
+            }
+        } else {
+            return UnsupportedEffect(effect, false);
+        }
+        Chain(node, chain.empty() ? start : chain.back().hash, chain);
+    }
+    return chain;
+}
+
+/// The mask of `layer`: a constant (`constant`, with no `DagMask`) or a `DagMask`. A missing or
+/// disabled mask counts as 1; a mask without effects is its background; a `Mesh` geometry mask
+/// multiplies the result.
+render::Result<std::optional<DagMask>> MaskOf(const Context& ctx, const Layer& layer, float& constant) {
+    constant = 1.0f;
+    const core::GeometryMask& geometry = layer.geometry_mask;
+    const bool geometryApplies = geometry.inclusion_list || !geometry.items.empty();
+    if (geometryApplies && geometry.type == core::GeometryMaskType::UVTile) {
+        return EvalFail(EvalErrorKind::UnsupportedNode,
+                        "UVTile geometry masks are a release gap (UV-tile workflow)", layer.uid);
+    }
+    DagMask mask;
+    if (layer.mask && layer.mask->enabled) {
+        mask.background = layer.mask->background == core::MaskBackground::White ? 1.0f : 0.0f;
+        constant = mask.background;
+        HashWriter start;
+        start.Sub(MaskStartHash(ctx)).F32(mask.background);
+        const Digest startHash = start.Finish();
+        const std::vector<core::Effect>& effects = layer.mask->effects;
+        for (auto it = effects.rbegin(); it != effects.rend(); ++it) {
+            const core::Effect& effect = *it;
+            if (!effect.visible) continue;
+            DagEffect node;
+            node.uid = effect.uid;
+            if (effect.kind == core::EffectKind::fill) {
+                if (!effect.fill) return EvalFail(EvalErrorKind::Internal, "a fill effect without content", effect.uid);
+                if (!effect.fill->mono_source) continue;
+                const core::Blending blending = effect.mono_blending.value_or(core::Blending{});
+                if (blending.mode == BlendingMode::Disable) continue;
+                if (!arith::HasKernel(blending.mode)) {
+                    return EvalFail(EvalErrorKind::UnsupportedBlendMode,
+                                    std::string(core::ToString(blending.mode)) + " has no blend kernel",
+                                    effect.uid);
+                }
+                render::Result<DagSource> source =
+                    ResolveSource(ctx, *effect.fill, *effect.fill->mono_source, effect.uid, true);
+                if (!source) return render::Unexpected(source.error());
+                node.kind = DagEffect::Kind::Fill;
+                node.mode = blending.mode;
+                node.opacity = static_cast<float>(blending.opacity);
+                node.source = std::move(*source);
+            } else if (effect.kind == core::EffectKind::levels) {
+                if (!effect.levels || effect.levels->components.empty()) {
+                    return EvalFail(EvalErrorKind::Internal, "a levels effect without parameters", effect.uid);
+                }
+                node.kind = DagEffect::Kind::Levels;
+                for (arith::LevelsComponent& c : node.levels) c = LevelsOf(effect.levels->components[0]);
+            } else {
+                return UnsupportedEffect(effect, true);
+            }
+            Chain(node, mask.effects.empty() ? startHash : mask.effects.back().hash, mask.effects);
+        }
+        mask.hash = mask.effects.empty() ? startHash : mask.effects.back().hash;
+    } else {
+        HashWriter start;
+        start.Sub(MaskStartHash(ctx)).F32(1.0f);
+        mask.hash = start.Finish();
+    }
+    if (geometryApplies) {
+        DagGeometry g;
+        g.query.material = ctx.set.material_id;
+        g.query.inclusionList = geometry.inclusion_list;
+        g.query.items = geometry.items;
+        g.query.width = ctx.grid.width;
+        g.query.height = ctx.grid.height;
+        HashWriter writer;
+        writer.Str("geometry").Str(ctx.project.mesh ? ctx.project.mesh->resource : std::string());
+        writer.Str(g.query.material).U32(g.query.inclusionList ? 1u : 0u);
+        writer.U32(static_cast<uint32_t>(g.query.items.size()));
+        for (const std::string& item : g.query.items) writer.Str(item);
+        writer.U32(g.query.width).U32(g.query.height);
+        g.hash = writer.Finish();
+        HashWriter combined;
+        combined.Sub(mask.hash).Sub(g.hash);
+        mask.hash = combined.Finish();
+        mask.geometry = std::move(g);
+    }
+    if (mask.effects.empty() && !mask.geometry) return std::optional<DagMask>{};
+    return std::optional<DagMask>{std::move(mask)};
 }
 
 render::Result<void> AppendLayers(Context& ctx, const std::vector<Layer>& layersTopFirst,
@@ -144,14 +321,13 @@ render::Result<void> AppendLayers(Context& ctx, const std::vector<Layer>& layers
 render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list,
                                  float opacityScale, float maskScale) {
     if (!layer.visible) return {};
-    if (!layer.content_effects.empty()) {
-        return EvalFail(EvalErrorKind::UnsupportedNode,
-                        "content effects are evaluated by phase1.11_compositor-mask-effects",
-                        layer.uid);
+    if (!layer.content_effects.empty() && layer.kind == LayerKind::group) {
+        return EvalFail(EvalErrorKind::UnsupportedNode, "a group has no content stack", layer.uid);
     }
-    const core::Blending blending = BlendingOf(layer, ctx.channel);
+    const core::Blending blending = EffectiveBlending(layer, ctx.channel);
     if (blending.mode == BlendingMode::Disable) return {};
-    render::Result<float> mask = MaskOf(layer);
+    float constantMask = 1.0f;
+    render::Result<std::optional<DagMask>> mask = MaskOf(ctx, layer, constantMask);
     if (!mask) return render::Unexpected(mask.error());
 
     if (layer.kind == LayerKind::instance) {
@@ -175,9 +351,17 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
     node.uid = layer.uid;
     node.mode = blending.mode;
     node.opacity = static_cast<float>(blending.opacity) * opacityScale;
-    node.mask = *mask * maskScale;
+    node.mask = constantMask * maskScale;
+    if (*mask && maskScale != 1.0f) {
+        return EvalFail(EvalErrorKind::UnsupportedNode,
+                        "a masked layer inside a masked PassThrough group is a release gap "
+                        "(phase0.7_tier0-semantics-ui-cases)",
+                        layer.uid);
+    }
+    node.maskStack = std::move(*mask);
     HashWriter writer;
     writer.U64(layer.uid).U32(static_cast<uint32_t>(node.mode)).F32(node.opacity).F32(node.mask);
+    if (node.maskStack) writer.Str("mask").Sub(node.maskStack->hash);
 
     switch (layer.kind) {
         case LayerKind::fill: {
@@ -193,12 +377,21 @@ render::Result<void> AppendLayer(Context& ctx, const Layer& layer, DagList& list
                                     " has no blend kernel (a group placement)",
                                 layer.uid);
             }
-            writer.Str("fill").Sub((**source).hash);
+            render::Result<std::vector<DagEffect>> effects = ContentEffectsOf(ctx, layer, (**source).hash);
+            if (!effects) return render::Unexpected(effects.error());
+            writer.Str("fill").Sub(effects->empty() ? (**source).hash : effects->back().hash);
             node.source = std::move(*source);
+            node.effects = std::move(*effects);
             break;
         }
         case LayerKind::group: {
             if (node.mode == BlendingMode::PassThrough) {
+                if (node.maskStack) {
+                    return EvalFail(EvalErrorKind::UnsupportedNode,
+                                    "a PassThrough group with mask effects or a geometry mask is a "
+                                    "release gap (phase0.7_tier0-semantics-ui-cases)",
+                                    layer.uid);
+                }
                 // Children composite directly into the parent list.
                 return AppendLayers(ctx, layer.children, list, node.opacity, node.mask);
             }
@@ -244,6 +437,11 @@ render::Result<void> AppendLayers(Context& ctx, const std::vector<Layer>& layers
 }
 
 }  // namespace
+
+core::Blending EffectiveBlending(const core::Layer& layer, core::ChannelType channel) {
+    const auto it = layer.blending.find(channel);
+    return it == layer.blending.end() ? core::Blending{} : it->second;
+}
 
 std::array<float, 3> UniformOperand(const std::array<double, 3>& colour, const TileFormat& format,
                                     const std::array<float, 3>& base) {
@@ -309,8 +507,8 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     dag.profile = std::move(*profile);
     dag.root.owner = stack;
     dag.root.isolated = dag.profile.root == RootComposite::Isolated;
-    Context ctx{project,        dag.profile.id, *stackPtr, channel,
-                dag.tileFormat, dag.format,     dag.base,  dag.grid};
+    Context ctx{project,        dag.profile.id, *set,     *stackPtr, channel,
+                dag.tileFormat, dag.format,     dag.base, dag.grid};
     {
         HashWriter writer;
         writer.Sub(ContentStartHash(ctx, "root"));

@@ -3,11 +3,14 @@
 // Running a channel DAG (dag.h) on a tile store (tile_store.h) under the tile cache
 // (admission.h): per tile, bottom-up through the layer lists, serving every node output whose
 // (node, subtree hash, tile) is cached and computing the rest; results are read back at native
-// precision. Backend-neutral: the GPU store runs it on the engine thread (evaluator.h), the CPU
+// precision. A layer's content runs through its content effects and its mask through its mask
+// effects and geometry mask, each chain served from its highest cached output; effects on
+// constants (uniform sources, backgrounds) are folded on the CPU with the same arithmetic. Backend-neutral: the GPU store runs it on the engine thread (evaluator.h), the CPU
 // store anywhere.
 
 #include "evaluator/admission.h"
 #include "evaluator/dag.h"
+#include "evaluator/geometry_mask.h"
 #include "evaluator/resources.h"
 #include "evaluator/tile_store.h"
 #include "render/backend.h"
@@ -25,7 +28,8 @@ struct EvaluationStats {
     uint64_t constantTiles = 0;  ///< Tiles whose result is the base constant (no layer).
     uint64_t cacheHits = 0;      ///< Node outputs served from the cache.
     uint64_t cacheMisses = 0;    ///< Node outputs computed.
-    uint64_t blends = 0;         ///< Blend operations run.
+    uint64_t blends = 0;         ///< Blend operations run (layers, read-outs and fill effects).
+    uint64_t levels = 0;         ///< Levels operations run on tiles.
     uint64_t uploads = 0;        ///< Bitmap tiles projected (bitmap content computed).
     uint64_t evictions = 0;      ///< Tiles evicted during the evaluation.
     uint64_t flushes = 0;        ///< Store flushes forced by the budget.
@@ -57,6 +61,8 @@ struct EvalEnvironment {
     TileCache& cache;
     /// May be null when the DAG has no bitmap source.
     const IResourceProvider* resources = nullptr;
+    /// May be null when the DAG has no geometry mask (geometry_mask.h).
+    const IGeometryMaskProvider* geometry = nullptr;
 };
 
 /// Evaluates every tile of `dag`, reading each back. The root meets the base as the profile says

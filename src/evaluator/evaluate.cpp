@@ -4,6 +4,7 @@
 #include <string>
 
 #include "evaluator/arith.h"
+#include "evaluator/cpu_store.h"
 #include "evaluator/error.h"
 #include "evaluator/projection_uv.h"
 
@@ -103,47 +104,200 @@ private:
         }
     }
 
-    render::Result<Operand> ContentOf(const DagLayer& layer) {
-        const DagSource& source = *layer.source;
+    /// The source of a layer or fill effect: a constant, or its projected tile of `format`.
+    render::Result<Operand> SourceOperand(core::Id node, const DagSource& source, TileFormat format) {
         if (source.kind == DagSource::Kind::Uniform) {
             return Operand::Constant(source.uniform, 1.0f);
         }
-        const CacheKey key{layer.uid, CacheKind::Content, source.hash, m_tx, m_ty};
+        const CacheKey key{node, CacheKind::Content, source.hash, m_tx, m_ty};
         render::Result<std::optional<TileHandle>> cached = Lookup(key);
         if (!cached) return render::Unexpected(cached.error());
         if (*cached) return Operand::Of(**cached);
         if (m_env.resources == nullptr) {
             return EvalFail(EvalErrorKind::MissingResource,
-                            "no resource provider for bitmap " + source.sha256, layer.uid);
+                            "no resource provider for bitmap " + source.sha256, node);
         }
         std::shared_ptr<const DecodedImage> image = m_env.resources->Fetch(source.sha256);
         if (!image) {
             return EvalFail(EvalErrorKind::MissingResource,
-                            "bitmap " + source.sha256 + " is not available", layer.uid);
+                            "bitmap " + source.sha256 + " is not available", node);
         }
         render::Result<void> sampling = CheckSampling(source.projection, m_dag.grid.width,
-                                                      m_dag.grid.height, *image, layer.uid);
+                                                      m_dag.grid.height, *image, node);
         if (!sampling) return render::Unexpected(sampling.error());
         // A wrap mode that can leave texels uncovered gives the content a coverage plane: the
         // fill keeps the value below there (resampling.json, RepeatNone).
-        TileFormat format = m_dag.tileFormat;
         format.alpha = source.projection.MayUncover();
+        return Projected(key, format, image, source.sha256, source.projection, source.signedRange);
+    }
+
+    render::Result<Operand> Projected(const CacheKey& key, const TileFormat& format,
+                                      std::shared_ptr<const DecodedImage> image, const std::string& imageKey,
+                                      const UvProjection& projection, bool signedRange) {
         render::Result<TileHandle> tile = Allocate(key, format);
         if (!tile) return render::Unexpected(tile.error());
         ProjectOp op;
         op.dst = *tile;
-        op.image = image;
-        op.imageKey = source.sha256;
-        op.projection = source.projection;
+        op.image = std::move(image);
+        op.imageKey = imageKey;
+        op.projection = projection;
         op.setWidth = m_dag.grid.width;
         op.setHeight = m_dag.grid.height;
         op.x0 = m_tx * kTileSize;
         op.y0 = m_ty * kTileSize;
-        op.signedRange = source.signedRange;
+        op.signedRange = signedRange;
         render::Result<void> projected = m_env.store.Project(op);
         if (!projected) return render::Unexpected(projected.error());
         ++m_stats.uploads;
         return Operand::Of(*tile);
+    }
+
+    /// A constant stored in `format` and read back (the operand a tile of it would hold).
+    static std::array<float, 4> StoredConstant(const std::array<float, 4>& value, const TileFormat& format) {
+        std::array<float, 4> out{0.0f, 0.0f, 0.0f, value[3]};
+        for (uint32_t c = 0; c < format.channels; ++c) {
+            out[c] = OperandOf(StoreValue(value[c], format, c), format, c);
+        }
+        return out;
+    }
+
+    /// Runs `effects` over `start` (a layer's content or a mask) in `format`, from the highest
+    /// cached output up; each output is stored in `format` (whose coverage plane is the start's:
+    /// levels keep it, a fill effect over a covered backdrop keeps full coverage) and cached
+    /// under (`owner`, `kind`, the effect's chained hash).
+    render::Result<Operand> RunEffects(core::Id owner, CacheKind kind, Operand start,
+                                       const std::vector<DagEffect>& effects, TileFormat format) {
+        Operand acc = start;
+        size_t first = 0;
+        for (size_t i = effects.size(); i > 0; --i) {
+            const CacheKey key{owner, kind, effects[i - 1].hash, m_tx, m_ty};
+            render::Result<std::optional<TileHandle>> cached = Lookup(key);
+            if (!cached) return render::Unexpected(cached.error());
+            if (*cached) {
+                acc = Operand::Of(**cached);
+                first = i;
+                break;
+            }
+        }
+        for (size_t i = first; i < effects.size(); ++i) {
+            const DagEffect& effect = effects[i];
+            const CacheKey key{owner, kind, effect.hash, m_tx, m_ty};
+            if (effect.kind == DagEffect::Kind::Levels) {
+                if (acc.kind == Operand::Kind::Constant) {
+                    std::array<float, 4> value = acc.value;
+                    for (uint32_t c = 0; c < format.channels; ++c) value[c] = arith::Levels(value[c], effect.levels[c]);
+                    const std::array<float, 4> stored = StoredConstant(value, format);
+                    acc = Operand::Constant({stored[0], stored[1], stored[2]}, stored[3]);
+                    continue;
+                }
+                render::Result<TileHandle> dst = Allocate(key, format);
+                if (!dst) return render::Unexpected(dst.error());
+                LevelsOp op;
+                op.dst = *dst;
+                op.src = acc.tile;
+                op.components = effect.levels;
+                render::Result<void> queued = m_env.store.Levels(op);
+                if (!queued) return render::Unexpected(queued.error());
+                ++m_stats.levels;
+                Defer(acc);
+                acc = Operand::Of(*dst);
+                continue;
+            }
+            render::Result<Operand> source = SourceOperand(effect.uid, *effect.source, format);
+            if (!source) return source;
+            if (acc.kind == Operand::Kind::Constant && source->kind == Operand::Kind::Constant) {
+                arith::CompositeInput in;
+                in.acc = acc.value;
+                in.src = source->value;
+                in.opacity = effect.opacity;
+                in.mode = effect.mode;
+                in.clampUnorm = format.IsUnorm();
+                in.effectMix = true;
+                in.channels = format.channels;
+                const std::array<float, 4> stored = StoredConstant(arith::Composite(in), format);
+                acc = Operand::Constant({stored[0], stored[1], stored[2]}, stored[3]);
+                continue;
+            }
+            render::Result<TileHandle> dst = Allocate(key, format);
+            if (!dst) return render::Unexpected(dst.error());
+            BlendOp op;
+            op.dst = *dst;
+            op.acc = acc;
+            op.source = *source;
+            op.mode = effect.mode;
+            op.opacity = effect.opacity;
+            op.effectMix = true;
+            render::Result<void> queued = m_env.store.Blend(op);
+            if (!queued) return render::Unexpected(queued.error());
+            ++m_stats.blends;
+            Defer(acc);
+            Defer(*source);
+            acc = Operand::Of(*dst);
+        }
+        return acc;
+    }
+
+    render::Result<Operand> ContentOf(const DagLayer& layer) {
+        render::Result<Operand> source = SourceOperand(layer.uid, *layer.source, m_dag.tileFormat);
+        if (!source) return source;
+        if (layer.effects.empty()) return source;
+        TileFormat format = m_dag.tileFormat;
+        format.alpha = layer.source->kind == DagSource::Kind::Bitmap && layer.source->projection.MayUncover();
+        return RunEffects(layer.uid, CacheKind::Effect, *source, layer.effects, format);
+    }
+
+    /// The mask a layer blends with: its constant, or its mask raster (16 bits) after its effects
+    /// and geometry mask.
+    render::Result<Operand> MaskOf(const DagLayer& layer) {
+        if (!layer.maskStack) return Operand::Constant({layer.mask, layer.mask, layer.mask}, 1.0f);
+        const DagMask& mask = *layer.maskStack;
+        const TileFormat format = TileFormatOf(kMaskFormat);
+        if (mask.geometry) {
+            const CacheKey key{layer.uid, CacheKind::Mask, mask.hash, m_tx, m_ty};
+            render::Result<std::optional<TileHandle>> cached = Lookup(key);
+            if (!cached) return render::Unexpected(cached.error());
+            if (*cached) return Operand::Of(**cached);
+        }
+        const Operand background = Operand::Constant({mask.background, mask.background, mask.background}, 1.0f);
+        render::Result<Operand> value = RunEffects(layer.uid, CacheKind::Mask, background, mask.effects, format);
+        if (!value || !mask.geometry) return value;
+        if (m_env.geometry == nullptr) {
+            return EvalFail(EvalErrorKind::MissingResource, "no geometry mask provider", layer.uid);
+        }
+        std::shared_ptr<const DecodedImage> raster = m_env.geometry->Coverage(mask.geometry->query);
+        if (!raster || raster->width != m_dag.grid.width || raster->height != m_dag.grid.height) {
+            return EvalFail(EvalErrorKind::MissingResource, "the geometry mask raster is not available", layer.uid);
+        }
+        UvProjection identity;
+        identity.filter = core::FilteringMode::Nearest;
+        const CacheKey geometryKey{layer.uid, CacheKind::Content, mask.geometry->hash, m_tx, m_ty};
+        render::Result<std::optional<TileHandle>> cachedGeometry = Lookup(geometryKey);
+        if (!cachedGeometry) return render::Unexpected(cachedGeometry.error());
+        Operand geometry;
+        if (*cachedGeometry) {
+            geometry = Operand::Of(**cachedGeometry);
+        } else {
+            const std::string imageKey = "geometry/" + Hex(mask.geometry->hash);
+            render::Result<Operand> projected = Projected(geometryKey, format, raster, imageKey, identity, false);
+            if (!projected) return projected;
+            geometry = *projected;
+        }
+        // The geometry mask multiplies the mask (0 or 1: the effect mix keeps the product exact).
+        const CacheKey key{layer.uid, CacheKind::Mask, mask.hash, m_tx, m_ty};
+        render::Result<TileHandle> dst = Allocate(key, format);
+        if (!dst) return render::Unexpected(dst.error());
+        BlendOp op;
+        op.dst = *dst;
+        op.acc = *value;
+        op.source = geometry;
+        op.mode = core::BlendingMode::Multiply;
+        op.effectMix = true;
+        render::Result<void> queued = m_env.store.Blend(op);
+        if (!queued) return render::Unexpected(queued.error());
+        ++m_stats.blends;
+        Defer(*value);
+        Defer(geometry);
+        return Operand::Of(*dst);
     }
 
     render::Result<Operand> EvaluateList(const DagList& list, Operand start) {
@@ -171,13 +325,15 @@ private:
                 layer.group ? EvaluateList(*layer.group, Operand::Constant({0.0f, 0.0f, 0.0f}, 0.0f))
                             : ContentOf(layer);
             if (!source) return source;
+            render::Result<Operand> mask = MaskOf(layer);
+            if (!mask) return mask;
             render::Result<TileHandle> dst = Allocate(key, format);
             if (!dst) return render::Unexpected(dst.error());
             BlendOp op;
             op.dst = *dst;
             op.acc = acc;
             op.source = *source;
-            op.mask = Operand::Constant({layer.mask, layer.mask, layer.mask}, 1.0f);
+            op.mask = *mask;
             op.mode = layer.mode;
             op.opacity = layer.opacity;
             render::Result<void> queued = m_env.store.Blend(op);
@@ -185,6 +341,7 @@ private:
             ++m_stats.blends;
             Defer(acc);
             Defer(*source);
+            Defer(*mask);
             acc = Operand::Of(*dst);
         }
         return acc;

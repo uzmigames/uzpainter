@@ -78,6 +78,10 @@ render::KernelInclude TablesInclude() {
         text += "#define UZP_TABLE_RCP " + std::to_string(kTableRcp) + "u\n";
         text += "#define UZP_TABLE_SQRT " + std::to_string(kTableSqrt) + "u\n";
         text += "#define UZP_TABLE_RSQRT " + std::to_string(kTableRsqrt) + "u\n";
+        text += "#define UZP_POW_LOG2HI " + std::to_string(kPowLog2Hi) + "u\n";
+        text += "#define UZP_POW_LOG2LO " + std::to_string(kPowLog2Lo) + "u\n";
+        text += "#define UZP_POW_EXP2POS " + std::to_string(kPowExp2Pos) + "u\n";
+        text += "#define UZP_POW_EXP2NEG " + std::to_string(kPowExp2Neg) + "u\n";
         return render::KernelInclude{"evaluator_tables.hlsli", std::move(text)};
     }();
     return include;
@@ -127,6 +131,7 @@ std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(const BlendOp& op,
     if (op.mask.kind == Operand::Kind::Tile) flags |= kFlagMaskIsTile;
     if (bindings.accAlpha) flags |= kFlagAccAlpha;
     if (bindings.srcAlpha) flags |= kFlagSrcAlpha;
+    if (op.effectMix) flags |= kFlagEffectMix;
     params[kParamFlags] = flags;
     params[kParamAccIndex] = bindings.accSrv;
     for (size_t i = 0; i < 4; ++i) params[kParamAccConst + i] = std::bit_cast<uint32_t>(op.acc.value[i]);
@@ -140,6 +145,48 @@ std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(const BlendOp& op,
     params[kParamDstUav] = bindings.dstUav;
     params[kParamTable16Srv] = bindings.table16Srv;
     params[kParamMaskEncoding] = render::image_pass_detail::EncodingConstant(bindings.maskEncoding);
+    return params;
+}
+
+render::KernelSource LevelsKernelSource(const TileFormat& format) {
+    render::KernelSource source;
+    source.name = "evaluator_levels_" + std::to_string(format.BytesPerChannel() * 8) +
+                  (format.IsUnorm() ? (format.srgb ? "srgb" : "unorm") : "float") + "_c" +
+                  std::to_string(format.channels) + (format.alpha ? "a" : "");
+    source.hlsl = std::string(kBlendHlsl, sizeof(kBlendHlsl));
+    source.entryPoint = "main";
+    source.defines = {
+        "UZP_LEVELS=1",
+        "UZP_MODE_Normal=1",
+        "UZP_ENC=" + std::to_string(render::image_pass_detail::EncodingConstant(format.encoding)),
+        "UZP_CHANNELS=" + std::to_string(format.channels),
+        std::string("UZP_SRGB=") + (format.srgb ? "1" : "0"),
+        std::string("UZP_ALPHA=") + (format.alpha ? "1" : "0"),
+    };
+    source.includes = {render::image_pass_detail::CommonInclude(), TablesInclude()};
+    return source;
+}
+
+std::array<uint32_t, kBlendParamsStride> EncodeLevelsParams(const LevelsOp& op,
+                                                            const LevelsBindings& bindings) {
+    std::array<uint32_t, kBlendParamsStride> params{};
+    params[0] = bindings.width;
+    params[1] = bindings.height;
+    params[2] = bindings.srcSrv;
+    params[3] = bindings.dstUav;
+    params[4] = bindings.table16Srv;
+    params[5] = bindings.powSrv;
+    params[6] = bindings.srcAlpha ? 1u : 0u;
+    for (size_t c = 0; c < 3; ++c) {
+        const arith::LevelsComponent& component = op.components[c];
+        const size_t at = 8 + c * 6;
+        params[at] = std::bit_cast<uint32_t>(component.inMin);
+        params[at + 1] = std::bit_cast<uint32_t>(component.inMax);
+        params[at + 2] = std::bit_cast<uint32_t>(component.gamma);
+        params[at + 3] = std::bit_cast<uint32_t>(component.outMin);
+        params[at + 4] = std::bit_cast<uint32_t>(component.outMax);
+        params[at + 5] = component.clamp ? 1u : 0u;
+    }
     return params;
 }
 

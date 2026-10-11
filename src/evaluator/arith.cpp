@@ -543,6 +543,16 @@ float Float32Readout(float v, float base) {
 
 // ── Compositing of one texel ─────────────────────────────────────────────────
 
+float Levels(float v, const LevelsComponent& levels) {
+    float t = Mul(Sub(v, levels.inMin), hw::Rcp(Sub(levels.inMax, levels.inMin)));
+    if (levels.clamp) t = Clamp01(t);
+    if (levels.gamma != kOne) {
+        const float p = hw::Pow(std::fabs(t), levels.gamma);
+        t = t > 0.0f ? p : (t < 0.0f ? -p : Mul(t, p));
+    }
+    return Fma(t, Sub(levels.outMax, levels.outMin), levels.outMin);
+}
+
 std::array<float, 4> Composite(const CompositeInput& in) {
     using M = core::BlendingMode;
     std::array<float, 4> out{0.0f, 0.0f, 0.0f, 1.0f};
@@ -575,7 +585,7 @@ std::array<float, 4> Composite(const CompositeInput& in) {
         if (alphaB == 1.0f) {
             if (rotates) {
                 v = ri;
-            } else if (in.mode == M::Replace) {
+            } else if (in.mode == M::Replace || in.effectMix) {
                 const float d = Sub(ri, a);
                 v = Add(a, Mul(d, alphaS));
             } else if (in.mode == M::ColorBurn) {

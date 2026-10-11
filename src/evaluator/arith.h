@@ -148,8 +148,27 @@ struct CompositeInput {
     core::BlendingMode mode = core::BlendingMode::Normal;
     /// UNORM formats clamp r to [0, 1] before the opacity mix (blend-modes.json).
     bool clampUnorm = false;
+    /// The mix of an effect (a mask or content effect, parity/semantics/masks-levels.json): over
+    /// an opaque backdrop v = a + (r - a) alpha for every mode, instead of the layer mix.
+    bool effectMix = false;
     int channels = 3;
 };
+
+/// One component of a Levels effect as Painter stores it (float32 parameters).
+struct LevelsComponent {
+    float inMin = 0.0f;
+    float inMax = 1.0f;
+    float gamma = 1.0f;
+    float outMin = 0.0f;
+    float outMax = 1.0f;
+    bool clamp = false;
+};
+
+/// Levels of one value (parity/semantics/masks-levels.json): t = (v - inMin) Rcp(inMax - inMin)
+/// with the recording GPU's reciprocal; clamped to [0, 1] when `clamp`; when gamma is not 1,
+/// t = sign(t) pow(|t|, gamma) with the recording GPU's pow (hwmath.h); the output is
+/// fma(t, outMax - outMin, outMin).
+[[nodiscard]] float Levels(float v, const LevelsComponent& levels);
 
 /// The composite before the write rule: straight colour (components past `channels` are 0) and
 /// the resulting alpha. alpha_s = opacity x mask x src alpha; with an opaque backdrop the fitted

@@ -25,6 +25,25 @@
 // them): subnormal inputs count as zero of their sign; 1/(+-0) = +-inf, 1/(+-inf) = +-0, and a
 // reciprocal below the smallest normal is +-0; sqrt(+-0) = +-0, sqrt(+inf) = +inf, rsqrt(+-0) =
 // +-inf, rsqrt(+inf) = +0; sqrt and rsqrt of a negative number and every NaN give the quiet NaN.
+//
+// The base-2 logarithm and exponential (phase1.11_compositor-mask-effects: Painter's Levels gamma
+// is pow(t, gamma), and the GPU's pow is exactly exp2(gamma log2 t)) are not faithful near log2's
+// zero, so their tables hold the measured results themselves: four tables of 2^23 float32 bit
+// patterns, each a zlib stream of little-endian uint32 second differences (entry i = b[i] -
+// 2 b[i-1] + b[i-2] modulo 2^32, b[-1] = b[-2] = 0), measured by `uzp-evaluator-tests
+// pow-hardware`:
+//
+//   lg2-hi:  log2(1 + m 2^-23), in [1, 2);       lg2-lo:  log2((1 + m 2^-23) / 2), in [0.5, 1);
+//   ex2-pos: exp2(m 2^-23);                       ex2-neg: exp2(-m 2^-23).
+//
+// The rest of the domain follows from them (checked on 2^20 hashed inputs over every exponent,
+// subnormals, zeros, infinities and NaN): log2(2^e (1 + m 2^-23)) is e + lg2-hi[m] (e >= 1),
+// lg2-hi[m] (e = 0), lg2-lo[m] (e = -1) or (e + 1) + lg2-lo[m] (e <= -2), the sum exact in double
+// and rounded toward zero to float32; zeros and subnormals give -inf, negative numbers and NaN the
+// quiet NaN, +inf gives +inf. exp2(y) splits the magnitude |y| = k + f (integer k, f in [0, 1)),
+// truncates f to j = floor(f 2^23) and gives ex2-pos[j] 2^k for y >= 0, ex2-neg[j] 2^-k for
+// y < 0; results below 2^-126 flush to +0, results at or above 2^128 are +inf, NaN gives the
+// quiet NaN.
 
 #include <cstdint>
 #include <span>
@@ -33,6 +52,10 @@
 namespace uzp::evaluator::hw {
 
 enum class Op : uint8_t { Rcp, Sqrt, Rsqrt };
+
+/// The tables of the base-2 logarithm and exponential (above), 2^23 entries each.
+enum class Table : uint8_t { Log2Hi, Log2Lo, Exp2Pos, Exp2Neg };
+inline constexpr uint32_t kTableEntries = 1u << 23;
 
 inline constexpr uint32_t kRcpEntries = 1u << 23;
 inline constexpr uint32_t kRootEntries = 1u << 24;
@@ -54,5 +77,18 @@ inline constexpr uint32_t kRootEntries = 1u << 24;
 /// The table of `op` as stored: the zlib stream of `Words(op)` (the `fp-hardware` case writes a
 /// measured table in this form for comparison).
 [[nodiscard]] std::span<const unsigned char> Compressed(Op op);
+
+/// The 2^23 result bit patterns of `table`, inflated once on first use (32 MiB each).
+[[nodiscard]] const std::vector<uint32_t>& Values(Table table);
+/// The stored form of `table` (zlib of the second differences).
+[[nodiscard]] std::span<const unsigned char> Compressed(Table table);
+/// The stored form of 2^23 measured bit patterns (the `pow-hardware` case writes it).
+[[nodiscard]] std::vector<unsigned char> CompressValues(const std::vector<uint32_t>& values);
+
+/// The recording GPU's log2, exp2 and pow(x, g) = exp2(g log2(x)) (the product one float32
+/// multiplication), from the tables (above).
+[[nodiscard]] float Log2(float x);
+[[nodiscard]] float Exp2(float y);
+[[nodiscard]] float Pow(float x, float g);
 
 }  // namespace uzp::evaluator::hw

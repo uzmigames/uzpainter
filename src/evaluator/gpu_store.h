@@ -40,6 +40,7 @@ public:
                                 uint32_t y0) override;
     render::Result<void> Project(const ProjectOp& op) override;
     render::Result<void> Blend(const BlendOp& op) override;
+    render::Result<void> Levels(const LevelsOp& op) override;
     render::Result<void> Flush() override;
     render::Result<TileImage> Read(TileHandle tile) override;
     [[nodiscard]] uint64_t AllocatedBytes() const override { return m_bytes; }
@@ -89,6 +90,9 @@ private:
     /// operands and the hardware arithmetic tables; upload and GPU buffers), copied by the next
     /// flush.
     render::Result<void> EnsureTable16();
+    /// Creates the log2 / exp2 tables buffer of the Levels kernel (kernelgen.h `kPowWords`),
+    /// copied by the next flush.
+    render::Result<void> EnsurePowTables();
     render::Result<uz::RHIBufferHandle> CreateBuffer(uint64_t bytes, uz::RHIBufferUsage usage,
                                                      uz::RHIMemoryType memory, uint32_t stride,
                                                      const char* name);
@@ -109,6 +113,9 @@ private:
     uz::RHIBufferHandle m_table16Upload = uz::RHIBufferHandle::Invalid();
     uz::RHIBufferHandle m_table16 = uz::RHIBufferHandle::Invalid();
     bool m_table16Copied = false;
+    uz::RHIBufferHandle m_powUpload = uz::RHIBufferHandle::Invalid();
+    uz::RHIBufferHandle m_pow = uz::RHIBufferHandle::Invalid();
+    bool m_powCopied = false;
     std::vector<uz::RHIBufferHandle> m_retired;
 };
 

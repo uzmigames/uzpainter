@@ -21,13 +21,26 @@
 // under the `Fill` and `UV` projections (projection_uv.h), in `Split` source mode; a channel
 // contributes only when it is active on the fill (toggling a channel keeps its source).
 //
+// Masks and effects (phase1.11_compositor-mask-effects, parity/semantics/masks-levels.json): a
+// layer's or group's mask is mono and stored at 16 bits: it starts from its background (White 1,
+// Black 0) and runs its visible effects bottom-up, a fill effect blending its source with its own
+// mode and opacity through the effect mix v = a + (r - a) alpha, a levels effect remapping the
+// value (arith::Levels); a disabled mask counts as 1; a `Mesh` geometry mask (geometry_mask.h)
+// multiplies the result. Content effects run in list order on a fill layer's own content for the
+// channel: a fill effect blends its source for the channel (when the channel is active on it)
+// with its per-channel mode and opacity through the effect mix, a levels effect remaps the
+// channel it affects; the content is stored in the channel format after every effect.
+//
 // Outside this profile (explicit `evaluator:unsupported_*` failures, the capability manifest's
-// release gaps): paint layers, content and mask effects, geometry masks, `Material` source mode,
-// procedural, vector, font and reference sources, the 3D projections, symmetry, physical-size UV
-// scale modes, bilinear minification, OCIO colour management, the non-separable and normal-map
-// blend modes.
+// release gaps): paint layers and effects, generator and filter effects (P3-PROC), compare-mask,
+// colour-selection and anchor effects (P4-NODES), `UVTile` geometry masks, content effects on a
+// group, a `PassThrough` group with a mask raster, `Material` source mode, procedural, vector,
+// font and reference sources, the 3D projections, symmetry, physical-size UV scale modes,
+// bilinear minification, OCIO colour management.
 
+#include "evaluator/arith.h"
 #include "evaluator/formats.h"
+#include "evaluator/geometry_mask.h"
 #include "evaluator/hash.h"
 #include "evaluator/profile.h"
 #include "evaluator/projection_uv.h"
@@ -65,6 +78,42 @@ struct DagSource {
     Digest hash{};
 };
 
+/// One effect of a mask or of a fill layer's content stack, bottom-up.
+struct DagEffect {
+    enum class Kind : uint8_t { Fill, Levels };
+    Kind kind = Kind::Fill;
+    core::Id uid = core::kNoId;
+    /// Fill: the effect's mode and opacity (the channel's, or the mono blending of a mask effect).
+    core::BlendingMode mode = core::BlendingMode::Normal;
+    float opacity = 1.0f;
+    /// Fill: the source (in a mask, sampled into the 16-bit mask format).
+    std::optional<DagSource> source;
+    /// Levels: one component per channel component (a mask or a grey channel uses the first).
+    std::array<arith::LevelsComponent, 3> levels{};
+    /// Hash of the value after this effect (chained from the chain's start).
+    Digest hash{};
+};
+
+/// A geometry mask of type `Mesh`: the raster the provider rasterises (geometry_mask.h).
+struct DagGeometry {
+    GeometryMaskQuery query;
+    Digest hash{};
+};
+
+/// A mask that is not a constant: its background, its effects bottom-up and the geometry mask
+/// that multiplies the result. The mask is independent of the channel (one raster for every
+/// channel of the layer).
+struct DagMask {
+    float background = 1.0f;
+    std::vector<DagEffect> effects;
+    std::optional<DagGeometry> geometry;
+    /// Hash of the mask after the geometry mask (the mask the layer blends with).
+    Digest hash{};
+};
+
+/// The format masks are stored in (masks-levels.json: 16-bit precision on every channel format).
+inline constexpr core::ChannelFormat kMaskFormat = core::ChannelFormat::L16;
+
 struct DagList;
 
 struct DagLayer {
@@ -73,11 +122,15 @@ struct DagLayer {
     core::BlendingMode mode = core::BlendingMode::Normal;
     float opacity = 1.0f;
     /// The constant mask: 1 without a mask or with a disabled one, the background of an empty
-    /// mask stack (White 1, Black 0).
+    /// mask stack (White 1, Black 0). Ignored when `maskStack` is set.
     float mask = 1.0f;
+    /// A mask with effects or a geometry mask.
+    std::optional<DagMask> maskStack;
     std::optional<DagSource> source;   ///< Fill layer.
+    /// Fill layer: the content effects that touch the channel, bottom-up (applied to `source`).
+    std::vector<DagEffect> effects;
     std::unique_ptr<DagList> group;    ///< Group (isolated intermediate).
-    /// Hash of this layer's contribution (content, mode, opacity, mask).
+    /// Hash of this layer's contribution (content after its effects, mode, opacity, mask).
     Digest hash{};
     /// Hash of the accumulator after this layer (chained from the list start).
     Digest prefixHash{};
@@ -123,6 +176,12 @@ struct ChannelDag {
                                                   core::ChannelType channel,
                                                   const TemplateLibrary& templates,
                                                   std::string_view templateId);
+
+/// The blending of `layer` on `channel`: its own entry, or Normal at opacity 1 when it has none.
+/// A group's entry is the blending of its composite on that channel; its `Height` entry is the
+/// per-group Height blend override of LAY-03 (the children keep their own entries), and this is
+/// the effective Height blend of any layer.
+[[nodiscard]] core::Blending EffectiveBlending(const core::Layer& layer, core::ChannelType channel);
 
 /// The operand of a uniform colour on a channel of `format` with base `base` (blend-modes.json
 /// `uniform_operand`): each component (the mean of the three on a grey channel) stored with the
