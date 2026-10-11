@@ -14,23 +14,23 @@ Measured for this task on Painter 12.1.5 under OCIO:
 - The template of a new project is the OpenPBR channel set: BaseColor, BaseMetalness, SpecularRoughness, Normal and Height.
 - The repository guard accepts only one golden-public manifest per JSON file under the manifest roots.
 
-The model panel was consulted under the owner's delegation on 2026-10-11. cx/gpt-6-astra and xai/grok-4.5 answered; kimi/kimi-k3 returned HTTP 503 on three attempts. Verdicts per claim:
+The model panel was consulted under the owner's delegation on 2026-10-11 (cx/gpt-6-astra, xai/grok-4.5, kimi/kimi-k3). Verdicts per claim:
 
 | Claim | Verdicts |
 |---|---|
-| OCIO with Default - sRGB replaces Legacy `Linear` | AGREE x2 |
-| Only the pipeline's environments are used | PARTLY x2: the `ref_match` HDRI is still imported, as a session resource |
-| `ref_match` for a neutral pair at rotation 0 only | PARTLY x2: also capture rotation 180 and an asymmetric non-neutral fixture |
-| The white furnace is replaced by the standard's `neutral_control` pair | AGREE x1, PARTLY x1: label them controls under the default shader, not analytic standards; keep the furnace as UzPainter's own analytic test |
-| Content fixtures stay | PARTLY x2: perturbations must vary in space; label the channels the default shader ignores as negative controls; list the non-goals |
-| `base_color` is not captured here | AGREE x2 |
-| One manifest per golden under the envelope root, plus an aggregate table in the report | AGREE x1, PARTLY x1: map golden to records explicitly |
-| A fresh Painter per reference (`--launch` series) | PARTLY x2: a fresh process per capture is required; make the series resumable; batching would need a measurement first |
-| k = 4; regions; statistics | AGREE x1, PARTLY x1: keep the edge band as its own region; the pixel filter correlates noise in space, so take the standard error over blocks |
-| Only the fixture content is proposed for ratification | AGREE x2 |
-| Reword the task in place | AGREE x1, PARTLY x1 |
+| OCIO with Default - sRGB replaces Legacy `Linear` | AGREE x3 |
+| Only the pipeline's environments are used | PARTLY x3: the `ref_match` HDRI is still imported, as a session resource; state the glossy-fit risk of losing the bright patch |
+| `ref_match` for a neutral pair at rotation 0 only | PARTLY x3: also capture rotation 180 and an asymmetric, mid-roughness, non-neutral fixture |
+| The white furnace is replaced by the standard's `neutral_control` pair | AGREE x2, PARTLY x1: label them controls under the default shader, not analytic standards; keep the furnace as UzPainter's own analytic test |
+| Content fixtures stay | PARTLY x3: perturbations must vary in space; label the channels the default shader ignores as negative controls; list the non-goals |
+| `base_color` is not captured here | AGREE x2, PARTLY x1: name the work that captures it |
+| One manifest per golden under the envelope root, plus an aggregate table in the report | AGREE x1, PARTLY x2: map golden to records explicitly; the hashes stay in each manifest and the report only mirrors them |
+| A fresh Painter per reference (`--launch` series) | AGREE x1, PARTLY x2: a fresh process per capture is required; make the series resumable; batching would need a measurement first |
+| k = 4; regions; statistics | AGREE x2, PARTLY x1: keep the edge band as its own region; the pixel filter correlates noise in space, so take the standard error over blocks; say whether deltas are per channel |
+| Only the fixture content is proposed for ratification | AGREE x3 |
+| Reword the task in place | AGREE x2, PARTLY x1 |
 
-Overall: GPT "revise before approval", Grok "reject as-is on coverage holes". Their changes are adopted below.
+Overall: GPT "revise before approval", Grok "reject as-is on coverage holes", Kimi "approve with required changes". Their required changes are adopted below.
 
 ## Decision
 
