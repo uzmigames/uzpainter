@@ -4340,8 +4340,9 @@ void Pow(uint3 id : SV_DispatchThreadID) {
 /// Measures the GPU's log2 and exp2 (as the render layer compiles them, `-Gis`) over the four
 /// table domains of hwmath.h, writes the measured tables (`hw-lg2-hi.zlib`, `hw-lg2-lo.zlib`,
 /// `hw-ex2-pos.zlib`, `hw-ex2-neg.zlib`) to the work directory and compares them with the
-/// embedded ones, then compares hw::Log2, hw::Exp2 and hw::Pow with the GPU on edge values and
-/// 2^20 hashed inputs each, and the GPU's pow with its exp2(g log2 x).
+/// embedded ones, then compares hw::Log2 and hw::Exp2 with the GPU on 2^20 inputs each (40 edge
+/// values and 1 048 536 hashed inputs), hw::Pow on 2^20 hashed inputs, and the GPU's pow with its
+/// exp2(g log2 x).
 int RunPowHardware(const fs::path& dir) {
     render::Engine engine(TestOptions(dir));
     if (NoAdapter(engine)) return kExitSkip;

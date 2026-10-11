@@ -515,7 +515,8 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
                 "Release gap until P3-PROC: every Tier 0 order but s6 (levels alone, entry "
                 "`levels`) and s7 (Blur alone) holds the starter-asset Blur filter, so the order "
                 "of fill and levels effects and the content fill effect's mix are implemented "
-                "from the documented list order and the fitted mask-effect mix but not observed."
+                "from the documented list order and the fitted mask-effect mix but not observed. "
+                "s0-s5 and s7 are owned by phase3.2_proc-filter-families item 3.4 (decision 069)."
             ),
             gap=True,
         ),

@@ -1,0 +1,13 @@
+{
+  "id": 69,
+  "slug": "the-content-effect-order-golden-is-split-s6-closes-in-phase1-11-and-the-blur-sets-move-to-phase3-2-proc-filter-families",
+  "title": "The content-effect order golden is split: s6 closes in phase1.11, and the Blur sets move to phase3.2_proc-filter-families",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.11_compositor-mask-effects",
+    "phase3.2_proc-filter-families",
+    "phase1.14_compositor-core"
+  ],
+  "supersededBy": null
+}

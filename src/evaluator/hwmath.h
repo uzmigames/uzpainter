@@ -36,8 +36,8 @@
 //   lg2-hi:  log2(1 + m 2^-23), in [1, 2);       lg2-lo:  log2((1 + m 2^-23) / 2), in [0.5, 1);
 //   ex2-pos: exp2(m 2^-23);                       ex2-neg: exp2(-m 2^-23).
 //
-// The rest of the domain follows from them (checked on 2^20 hashed inputs over every exponent,
-// subnormals, zeros, infinities and NaN): log2(2^e (1 + m 2^-23)) is e + lg2-hi[m] (e >= 1),
+// The rest of the domain follows from them (checked on 1 048 536 hashed inputs over every
+// exponent and 40 edge values: subnormals, zeros, infinities and NaN): log2(2^e (1 + m 2^-23)) is e + lg2-hi[m] (e >= 1),
 // lg2-hi[m] (e = 0), lg2-lo[m] (e = -1) or (e + 1) + lg2-lo[m] (e <= -2), the sum exact in double
 // and rounded toward zero to float32; zeros and subnormals give -inf, negative numbers and NaN the
 // quiet NaN, +inf gives +inf. exp2(y) splits the magnitude |y| = k + f (integer k, f in [0, 1)),

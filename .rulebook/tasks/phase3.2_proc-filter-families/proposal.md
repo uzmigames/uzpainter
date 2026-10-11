@@ -6,6 +6,7 @@ MAT-03 and MAT-04 require the procedurals used by recorded and locked recipes to
 ## What Changes
 - Clean-room `HlslBackend` filters reproduced under compatibility aliases: Sharpen and grayscale conversion, written from standard image-processing operators and calibrated black-box against private Painter oracles; inputs are the layer content at the filter's position in the effect list (`docs/architecture/04-layer-stack-and-compositing.md` §2 step 4).
 - The Levels filter mapped onto the native levels effect whose semantics Tier 0 settled (`04-layer-stack-and-compositing.md` §9), certified as a filter asset.
+- The starter-asset Blur filter (the `effect-order` Tier 0 golden's filter B: resource search `s:starterassets u:filter n:Blur=`, default parameters) reproduced from the shared blur operators of `phase3.1_proc-backend-seam` and calibrated against that golden: `effect-order` s0–s5 and s7, which hold it, settle the content-effect order of fill and levels effects that `phase1.11_compositor-mask-effects` implements from the documented list order (decision 069).
 - `ResolutionOverride` restriction for sources used by a Filter effect enforced (`05-procedural-content.md` §7).
 - One provenance record per family (public sources, author, calibration corpus id, residuals), parity status per asset and Tier 2a manifests under `parity/manifests/`.
 
