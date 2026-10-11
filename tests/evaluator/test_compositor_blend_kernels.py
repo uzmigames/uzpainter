@@ -38,9 +38,10 @@ from tools.parity.schemas import load_json
 
 PUBLISHED = blend_fits.SEMANTICS / blend_fits.FILE
 INVENTORY = REPO_ROOT / "tools" / "capabilities" / "painter-api-inventory.json"
-# phase1.11_compositor-blend-gaps made the normal-map modes exact at every opacity and fitted
-# PassThrough on its UI-set golden; the component modes keep one-code residuals.
-RELEASE_GAPS = set(blend_fits.COMPONENT_MODES)
+# phase1.11_compositor-blend-gaps made the normal-map modes exact at every opacity, fitted
+# PassThrough on its UI-set golden and identified the component modes' float32 hue on
+# `blend-component-hue` (decision 073): no mode is a release gap.
+RELEASE_GAPS: set[str] = set()
 
 
 def published() -> dict[str, Any]:

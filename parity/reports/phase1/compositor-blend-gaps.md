@@ -2,17 +2,17 @@
 
 `phase1.11_compositor-blend-gaps` follows up the modes that `phase1.10_compositor-blend-kernels` left inexact. It is part of P1-COMPOSITOR (`docs/architecture/04-layer-stack-and-compositing.md` §3).
 
-Under decision 028, the Tier 0 comparisons against the private oracle store and the GPU checks run locally on the owner's machine, and this report is their evidence. It gives numbers and hashes only; every recorded Painter output stays in the private store. Decisions 053 and 054 record the choices below and the model panel's verdicts.
+Under decision 028, the Tier 0 comparisons against the private oracle store and the GPU checks run locally on the owner's machine, and this report is their evidence. It gives numbers and hashes only; every recorded Painter output stays in the private store. Decisions 053, 054 and 073 record the choices below and the model panel's verdicts.
 
 **Result:**
 
 - **NormalMapCombine, NormalMapDetail and NormalMapInverseDetail are exact at every recorded opacity.** This holds on every format, on the Normal channel, against both recordings, on the CPU and on the GPU.
   - The upper normal is rotated with the recording GPU's GLSL arcsine and its sine and cosine. They are equal through Vulkan, which Painter 12.1.5 renders with (decision 056), and through OpenGL; D3D12's arcsine differs.
   - The arcsine is a polynomial identified by exhaustive measurement. The sine and cosine come from measured tables.
-- **Tint, Saturation, Color and Value now follow a fitted hue law.** It reproduces every texel to within one code: the residual fell from up to 53 100 RGB16 values off to at most 194, all by one code.
-  - The grey (L16) and sRGB8 channels are exact.
-  - The float32 operation order of Painter's hue is not identified, so the four modes stay release gaps.
-  - §3.3 specifies a recording that would pin it down.
+- **Tint, Saturation, Color and Value are exact (§3, decision 073).** Their float32 hue was identified on the hue grid `blend-component-hue` (decision 067).
+  - The weights are centred on the primaries, and the hue numerator is p - (q + 3e).
+  - Every map of that golden and of the held-out `blend-component` equals both recordings, on every channel format, on the CPU and the GPU.
+  - The earlier double-precision law left up to 194 RGB16 and 20 122 RGB32F values off per map.
 - **PassThrough is exact (§4, decision 054).** It is fitted on the UI-set golden `semantics-ui/group-passthrough-masks`. The children composite onto a copy of the stack below the group, and the group then mixes by its opacity and mask, fma(g - a, t, a).
 - The GPU equals the CPU bit for bit for every mode.
 
@@ -23,8 +23,8 @@ Under decision 028, the Tier 0 comparisons against the private oracle store and 
 | Hardware | NVIDIA GeForce RTX 4090, Windows 11 Pro 10.0.26200, driver 617.14 |
 | Backend | DX12; kernels `cs_6_6 -Gis` through the render layer's kernel cache |
 | Build | Zig 0.15.2, Debug; `zig build evaluator-tests` exit 0 with `-Wall -Wextra -Werror -ffp-contract=off` |
-| Oracle | `%LOCALAPPDATA%\UzPainter\parity-store`; `blend-component` and `blend-normal-channel`, recordings `r1` (same session) and `r2` (after save and reopen), identical on every map |
-| Research tooling (not committed) | a D3D12 probe of arbitrary HLSL and an OpenGL 4.3 compute context (`moderngl` in a scratch virtual environment) on the same GPU and driver |
+| Oracle | `%LOCALAPPDATA%\UzPainter\parity-store`; `blend-component` and `blend-normal-channel` (12.1.0 manifests), `blend-component-hue` (current envelope `painter-12.1.5+js-api.1.1.20`), recordings `r1` (same session) and `r2` (after save and reopen), identical on every map |
+| Research tooling (not committed) | a D3D12 probe of arbitrary HLSL and an OpenGL 4.3 compute context (`moderngl` in a scratch virtual environment) on the same GPU and driver; for the hue (§3.4), a numpy model of the evaluator's arithmetic and a native probe of `arith::BlendColour` |
 
 ## 2. Normal-map modes below opacity 1 (items 2.2, 3.2)
 
@@ -126,86 +126,125 @@ h6 = C + (X - 3e) / (d + e)
 
 Implemented in double, this law reproduces all four modes to within one 16-bit code. Grey inputs (field A's diagonal) take hue 0, which needs red to win the minimum on ties; a G = B tie needs green to win over blue. The order of tie-breaking is therefore red, green, blue. The form was put to the model panel (one answer; two models were unavailable). It found the same law from a shifted quotient, h6 = (C - 3) + (X + 3d) / (d + e), but no published implementation produces it.
 
-### 3.2 The float32 evaluation
+### 3.2 The float32 evaluation (decision 073)
 
-The fitted float32 form (`arith.cpp Hue`, `HueWeights`, `ComponentBlend` and the HLSL) has two parts.
+The float32 form is in `arith.cpp` (`Hue`, `HueWeights`, `ComponentBlend`) and in the HLSL kernel, which equals it bit for bit. It was identified on `blend-component-hue` (§3.3, §3.4) and has three parts.
 
-**Hue.** h6 = fma(X - 3e, rcp(d + e), C) with the hardware reciprocal; h = h6 float32(1/6), plus 1 when negative. The weights use f = h - floor(h):
+**Hue.**
 
-- red: |fma(f, 6, -3)| - 1;
-- green: 2 - |fma(f, 6, -2)|;
-- blue: 2 - |fma(f, 6, -4)|;
-- each clamped to [0, 1].
+- p and q are the two components other than the smallest: g and r when blue is smallest, b and g when red is, r and b when green is.
+- h6 = fma(p - (q + 3e), rcp(d + e), C), with the hardware reciprocal.
+- h = h6 float32(1/6), plus 1 when negative.
+- A hue just below 0 that rounds to 1.0 after the wrap is kept at 1. It is not reduced again.
 
-**Reconstruction.** v = 2 max of the value source, lo = v (1 - s), and each component is fma(v - lo, w, lo).
+**Weights, centred on the primaries**, each clamped to [0, 1]:
 
-These parts were identified on the extreme components, where the weight is exactly 0 or 1.
+- red: fma(6, |h - 1/2|, -1);
+- green: fma(-6, |h - float32(1/3)|, 2);
+- blue: fma(-6, |h - float32(2/3)|, 2).
 
-- The smallest component equals v fma(-d, rcp(max + e), 1) on every interior texel of Tint, Value and Color (58 096 in Tint). Saturation alone keeps 1 - s with two roundings; the fused form leaves 2 476 off there.
-- The largest component is off by one ulp on 1 010 texels under v (1 + (w - 1) s). It is exact under the lerp fma(v - lo, w, lo) at w = 1, apart from 68 boundary texels, which are ties in B.
-- For the middle component's weight, every hue evaluation tried leaves about 0.5-1 % of the RGB32F values off by one ulp. That covers the hexcone, Taylor-style and centred forms, with and without fused multiply-adds, and h or h6 as the carried value.
-  - In the sector B > G > R, 11 % of the texels admit no float32 hue in [0.5, 2/3) at all. Their weight is finer than 6 h can be.
-  - So Painter does not carry a [0, 1) hue through the usual hexcone weights there.
-- Natural GLSL candidates run through the GPU's OpenGL compiler did not do better than the numpy fits. Those were the min-based law with Hocevar's, Taylor's and the lerp reconstruction.
+**Reconstruction.** v = 2 max of the value source, and lo = v fma(-d', rcp(max' + e), 1) with d' and max' from the saturation source. Saturation alone computes lo with two roundings, 1 - d' rcp(max' + e). Each component is fma(v - lo, w, lo).
 
-| Values differing / max (r1; r2 identical) | Tint | Saturation | Color | Value |
+The reconstruction is unchanged from the earlier fit. It was identified on the extreme components, where the weight is exactly 0 or 1:
+
+- The smallest component equals v fma(-d, rcp(max + e), 1) on every interior texel of Tint, Value and Color (58 096 in Tint). Saturation keeps 1 - s with two roundings; the fused form leaves 2 476 off there.
+- The largest component is off by one ulp on 1 010 texels under v (1 + (w - 1) s). It is exact under the lerp.
+
+**Result on both recordings, CPU and GPU:** every map is exact.
+
+- `blend-component-hue` s0-s4 differ on 0 values on all eight channels: RGB32F at 1, 0.5 and 0.25, RGB16F, RGB16 at 1 and 0.5, sRGB8, L16.
+- The held-out `blend-component` s0-s3 (recorded on Painter 12.1.0) differ on 0 values on all eight channels: RGB16 and sRGB8 at 1 and 0.5, RGB8, RGB16F, L16, RGB32F at 0.25.
+
+| Values differing (r1; r2 identical) | Tint | Saturation | Color | Value |
 |---|---|---|---|---|
-| RGB16 at 1 (phase1.10 → now) | 32 634 → 71 / 1 | 53 100 → 194 / 1 | 46 657 → 187 / 1 | 23 312 → 160 / 1 |
-| RGB16 at 0.5 | 32 454 → 33 / 1 | 53 122 → 108 / 1 | 46 624 → 61 / 1 | 23 261 → 83 / 1 |
-| sRGB8 at 1 and 0.5 | 5 152, 3 333 → 0 | 19 121, 10 825 → 0 | 9 165, 5 489 → 0 | 6 581, 4 522 → 0 |
-| RGB8 | 7 158 → 1 / 257 (one 8-bit code) | 20 574 → 0 | 11 343 → 0 | 6 192 → 0 |
-| RGB16F | 52 147 → 5 / 1 half ulp | 78 389 → 40 | 65 526 → 16 | 77 574 → 83 |
-| L16 (grey) | 0 | 0 | 0 | 0 |
-| RGB32F at 0.25 | 70 939 → 8 228 / 1.2e-7 | 84 560 → 20 122 | 72 083 → 15 090 | 89 777 → 19 822 |
+| `blend-component` RGB16 at 1 (phase1.10 → double-precision law → now) | 32 634 → 71 → 0 | 53 100 → 194 → 0 | 46 657 → 187 → 0 | 23 312 → 160 → 0 |
+| `blend-component` RGB16 at 0.5 | 32 454 → 33 → 0 | 53 122 → 108 → 0 | 46 624 → 61 → 0 | 23 261 → 83 → 0 |
+| `blend-component` RGB16F | 52 147 → 5 → 0 | 78 389 → 40 → 0 | 65 526 → 16 → 0 | 77 574 → 83 → 0 |
+| `blend-component` RGB32F at 0.25 | 70 939 → 8 228 → 0 | 84 560 → 20 122 → 0 | 72 083 → 15 090 → 0 | 89 777 → 19 822 → 0 |
+| `blend-component-hue` RGB32F at 1 (double-precision law → now) | s0 43 375 → 0, s4 5 443 → 0 | s2 37 211 → 0 | s1 10 200 → 0 | s3 5 291 → 0 |
+| `blend-component-hue` RGB32F at 0.5 | s0 30 490 → 0, s4 2 953 → 0 | s2 26 501 → 0 | s1 5 292 → 0 | s3 2 760 → 0 |
+| `blend-component-hue` RGB32F at 0.25 | s0 16 883 → 0, s4 1 659 → 0 | s2 16 847 → 0 | s1 2 684 → 0 | s3 1 322 → 0 |
+| `blend-component-hue` RGB16 at 1 and 0.5, RGB16F | s0 250, 181, 290 → 0, s4 16, 7, 20 → 0 | s2 201, 101, 200 → 0 | s1 44, 22, 9 → 0 | s3 19, 5, 9 → 0 |
+| sRGB8, RGB8, L16 on both goldens | 0 (RGB8 of `blend-component` Tint: 1 → 0) | 0 | 0 | 0 |
 
-The four modes stay `release-gap` (status `calibrated` in `blend-kernels.json`). No exception is proposed.
+- The four modes are `exact` in `parity/semantics/blend-kernels.json`, whose entries now include the hue grid's residuals.
+- Their release-gap notes are removed from the capability inventory.
+- The scope is the recording profile: Painter 12.1.5 on the RTX 4090, driver 617.14, through Vulkan (decision 073). Painter 12.1.0 recorded the held-out golden on the same machine.
 
-### 3.3 Recording request: `blend-component-hue` (owner, or the agent that owns Painter)
+### 3.3 The recording `blend-component-hue` (decision 067)
 
 `blend-component` is a coarse probe of the hue arithmetic:
 
 - Its hue sources are two smooth fields with a chroma d of at least 64 codes on every texel but one.
 - Its opacity-0.25 RGB32F map resolves r only to about 2^-22.
 
-The middle weight must be read at full float32 precision, over every sector, tie and near-grey case.
+Decision 067 recorded the finer golden, `tier0/semantics/blend-component-hue`, on Painter 12.1.5 (r1 = r2 on all 40 maps; manifest in the current envelope).
 
-The recording follows the Tier 0 rules of every blend sweep: `uzpainter parity record`, two recordings (the same session, then after save and reopen), PNG 16 / OpenEXR float, padding infinite, no dithering.
-
-**Setup.**
-
-- Mesh `grid4x2`, resolution 256, normal map format OpenGL.
-- User channels:
-
-| Channel | Format | Opacity |
-|---|---|---|
-| User0 | RGB32F | 1 |
-| User1 | RGB16F | 1 |
-| User2 | RGB16 | 1 |
-| User3 | sRGB8 | 1 |
-| User4 | RGB32F | 0.5 |
-| User5 | RGB16 | 0.5 |
-| User6 | L16 | 1 |
-| User7 | RGB32F | 0.25 |
-
-- New authored fixture `hue-grid` (256 × 256 RGB16):
-  - Row group r (16 rows each) takes a grey level L_r = (r + 1)/17.
-  - Within a group, the column index codes a sector (6), a chroma d from {1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 1 024, 4 096} codes, and a middle position from {0, 1, d/4, d/2, 3d/4, d - 1, d} codes.
-  - The remaining columns hold the 13 tie and grey cases: R = G, G = B, R = B, each as maximum and as minimum, and pure grey, at every level.
-  - This covers d from 1 code up, every rising and falling sector, both tie orders, and middle weights at 0, 1 and ½.
-
-**Texture sets.**
+- Mesh `grid4x2`, resolution 256.
+- Channels: User0 RGB32F at opacity 1, User1 RGB16F at 1, User2 RGB16 at 1, User3 sRGB8 at 1, User4 RGB32F at 0.5, User5 RGB16 at 0.5, User6 L16 at 1, User7 RGB32F at 0.25.
+- The authored fixture `hue-grid` (`fixtures.hue_grid`, 256 × 256 RGB16) has 16 row groups at levels (r + 1)/17. Each group holds:
+  - every sector × 12 chromas from 1 to 4 096 codes × 7 middle positions;
+  - the six tie types at every chroma;
+  - grey;
+  - 3 519 pseudo-random validation cases.
+- Texture sets:
 
 | Set | Mode | Lower fill | Upper fill |
 |---|---|---|---|
-| s0 | Tint | uniform colour (0.5, 0, 0): s = 1 - e/(0.5 + e), 2v = 1, so the output is the hue weights at amplitude 1 | `hue-grid` |
-| s1 | Color | the same | `hue-grid` (hue and saturation of the grid) |
-| s2 | Saturation | `hue-grid` | uniform colour (0.5, 0, 0) (its saturation applied to the grid's hue and value) |
-| s3 | Value | `hue-grid` | uniform grey 0.25 (2v = 0.5) |
-| s4 | Tint | `hue-grid` | `hue-grid` transposed (both sources near grey) |
+| s0 | Tint | uniform colour (0.5, 0, 0): the output is the hue weights at amplitude 1 | `hue-grid` |
+| s1 | Color | the same | `hue-grid` |
+| s2 | Saturation | `hue-grid` | uniform colour (0.5, 0, 0) |
+| s3 | Value | `hue-grid` | uniform grey 0.25 |
+| s4 | Tint | `hue-grid` | `hue-grid` transposed |
 
-**Held out.** `blend-component` s0-s3 stay the held-out validation.
+### 3.4 How the float32 form was identified
 
-**Then:** fit the hue on s0 User0 (the weights read directly), validate on s1-s4 and on `blend-component`, and implement on the CPU and the GPU (items 2.1, 2.4, 3.1).
+The model reproduces the evaluator's input path:
+
+- the grid read as float32(code/65535);
+- the channel's read-out over its white base, fl(fl(C - 1) + 1).
+
+On s0 User0 the reconstruction maps each weight to a distinct output, so every recorded value pins its weight to an interval about 2^-24 wide.
+
+1. **The weights are not the hexcone form.** The low bits of the recorded weights depend on the hue range:
+   - in hue sector [3, 4), all 5 179 weights in [0.5, 1) are odd multiples of 2^-24;
+   - in [4, 6) every weight is a multiple of 2^-23;
+   - in [0, 3) both kinds occur.
+
+   2 - |fma(h, 6, -2)| can only give multiples of 2^-23 in [3, 4), because h has the ulp 2^-24 there. 2 - 6 |h - float32(1/3)| gives odd multiples, since float32(1/3) = 11 184 811 × 2^-25.
+
+   For each texel, the float32 hues that reproduce all three components were then searched within 64 ulps of the law:
+
+   | Weight form | Texels with no admissible hue (of 65 032) |
+   |---|---|
+   | hexcone fma(h, 6, -k) | 33 144 |
+   | centred, product and sum rounded separately | 20 251 |
+   | **centred, fused** | **6** (hues near 0, outside the search window) |
+
+2. **The hue.** With the centred weights, the earlier hue h6 = fma(X - 3e, rcp(d + e), C), h = h6 float32(1/6) leaves 43 values off on s0 User0, all in the random cases.
+
+   | Variant | Values off |
+   |---|---|
+   | h computed in turns (fma with rcp(6 (d + e)) and C/6, or similar) | about 20 000 |
+   | numerator (p - q) - 3e | 43 |
+   | numerator (p - 3e) - q | 40 |
+   | **numerator p - (q + 3e)** | **0** |
+   | reciprocal of (max + e) - min | 5 |
+   | reciprocal of (max - min) + e, or of max - (min - e) | **0** |
+
+3. **No second reduction.** The evaluator first reduced h with h - floor(h). Then 52 values of s0 were off. All of them are hues just below 0 that round to 1.0 after the wrap, where Painter keeps blue = 2 - 6 |1 - float32(2/3)| = 2^-23.
+4. **Validation.** With these three changes, s1-s4 and the held-out `blend-component` became exact on every channel without further adjustment, on the CPU and on the GPU.
+
+The form is a model equal to every observation, with this provenance; it is not a statement about Painter's source.
+
+### 3.5 Open point: the reciprocal argument (optional recording)
+
+(max - min) + e and max - (min - e) give the same value on every hue source of both goldens. The evaluator keeps the first, the form of the earlier fit (decision 073).
+
+- They round the same exact value. The first rounds twice when max - min is inexact; the second rounds once whenever min - e is exact (min >= e/2).
+- An exhaustive scan of the 16-bit sources finds 9 946 of the 2^31 (min, max) code pairs where the two differ: min codes 1 to 4 047, max codes 1 014 to 36 735. The hue grid holds none of them.
+
+A recording that settles it would add one texture set like s0 (Tint of a 16-bit fixture over (0.5, 0, 0), RGB32F at opacity 1) to a sibling golden. Its fixture would hold these pairs as the smallest and largest components, with the middle component at both ends and at the midpoint. This is optional. No recorded map depends on the choice.
 
 ## 4. PassThrough (item 2.3, decision 054)
 
@@ -251,31 +290,39 @@ The golden uses the `group-masks` stack:
 
 Assets3D: no stack in `Pipeline/` uses a PassThrough group or a `blend` key (Wand v1, Belt v5 `waist-v5/stack-belt.json` and `stack-sash.json`, hat, staff). Tunic v10 has no stack file there yet.
 
-## 5. Normal-map recordings that would widen the evidence (optional)
+## 5. Normal-map modes off the recorded opacities and on a flat normal
 
-The fit holds at the recorded opacities 0.5 and 0.25. The panel asked for off-grid evidence, and the flat normal is not covered.
+The fit was made at the recorded opacities 0.5 and 0.25. The panel asked for off-grid evidence, and the flat normal was not covered. Decision 067 recorded both as `tier0/semantics/blend-normal-opacity` (current envelope; r1 = r2 on every map):
 
-- Add to `blend-component`, or a sibling golden `blend-normal-opacity`, the normal-map sets s4-s6 at opacities 0.1, 1/3, 0.7 and 0.99, on RGB32F and RGB16.
-- Add a lower and an upper uniform normal of exactly (0, 0, 1) on an RGB32F channel (colour (0.5, 0.5, 1.0)), at opacity 0.5. Today the evaluator keeps a flat normal, because the formula would give `0 · rsqrt(0)`.
+- s0-s2: NormalMapCombine, NormalMapDetail and NormalMapInverseDetail of fields B over fields A, at upper opacities 0.1, 1/3, 0.7 and 0.99, on RGB32F and RGB16.
+- s3-s5: the same modes with the uniform normal (0.5, 0.5, 1.0): flat under fields B, fields A under flat, and flat under flat, at 0.5 and at 1.
+
+**Result.** All 48 maps equal both recordings, on the CPU and on the GPU, with no change to the evaluator.
+
+- The rotation of §2 holds off the recorded opacities.
+- A flat upper normal (z = 1, where the formula would give `0 · rsqrt(0)`) is kept.
+
+The three normal-map entries of `blend-kernels.json` include these residuals.
 
 ## 6. Unit tests and kernels
 
 | Case | Result |
 |---|---|
-| `arith` (CPU) | passed; includes `hw::Asin` against 48 measured GLSL inputs and the 2^23-entry trigonometric index |
+| `arith` (CPU) | passed; includes `hw::Asin` against 48 measured GLSL inputs, the 2^23-entry trigonometric index and the component hue's rules (a grey source is red; a hue wrapped to 1 is not reduced) |
 | `trig-hardware` (DX12) | the embedded sin and cos tables equal the GPU on all 8 388 608 entries; every measured input lies at its own index; `hw::Sin` and `hw::Cos` equal the GPU on 8 edge values and 1 048 568 hashed inputs of [0, pi/2] |
 | `kernel-sweep` (DX12) | every mode × 9 channel formats × coverage on and off × opacity 1 and 0.7: GPU = CPU on 149 422 080 samples (1 080 combinations) |
 | `gpu-vs-cpu` (DX12) | random stacks over every mode and format: identical bytes (2 490 368 samples) |
-| `blend-component`, `blend-normal-channel` against r1 and r2 | as in §2 and §3, identical on the CPU and the GPU |
+| `blend-component`, `blend-component-hue`, `blend-normal-opacity`, `blend-normal-channel` against r1 and r2 | as in §2, §3 and §5: every map exact, identical on the CPU and the GPU |
 | `semantics-ui/group-passthrough-masks` s0-s3 against r1 and r2 | 0 values differ on RGB16, sRGB8 and RGB32F, CPU and GPU |
 | `order`, `masks`, `masks-gpu-vs-cpu` | the PassThrough model (an RGB16 three-layer case); a masked PassThrough group evaluates; random masked stacks with masked PassThrough groups: GPU = CPU on 2 490 368 samples |
 
 ## 7. Open items and owner actions
 
-- **Item 2.1 (component modes):** one-code residuals remain; the recording of §3.3 is needed. Release gap; no exception proposed.
+- **Item 2.1 (component modes):** met (§3, decision 073).
 - **Item 2.3 (PassThrough):** met (§4).
-- **Items 3.1 and 4.1:** stay open with item 2.1. Item 3.2 (normal maps) and item 3.3 (GPU = CPU) are met.
-- **Owner:** push, and record or delegate the recording of §3.3. §5 is optional.
+- **Items 3.1 and 4.1:** met. `blend-component` s0-s6 and `blend-component-hue` s0-s4 are exact on every channel against both recordings, on the CPU and the GPU, in this local DX12 run on the owner's machine (decision 028). No exception is needed. Item 3.2 (normal maps) and item 3.3 (GPU = CPU) are met.
+- **Optional recording:** §3.5 (the reciprocal argument of the hue). The normal-map extras of §5 are recorded and exact.
+- **Owner:** push.
 
 ## Reproduce
 

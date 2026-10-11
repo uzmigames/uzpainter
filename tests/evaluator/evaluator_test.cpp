@@ -704,6 +704,20 @@ int RunArith() {
         Check(kernels == 31, "every documented BlendingMode but PassThrough has a kernel (31 of 32)",
               std::to_string(kernels));
     }
+    {
+        // The fitted hue of the component modes (blend-kernels.json): a grey hue source takes hue
+        // 0 (red), and a hue that wraps from just below 0 to 1 keeps 1, so blue's centred weight
+        // 2 - 6 |1 - float32(2/3)| stays above zero.
+        const std::array<float, 3> lower{0.5f, 0.0f, 0.0f};
+        const std::array<float, 3> grey =
+            arith::BlendColour(BlendingMode::Tint, lower, {0.25f, 0.25f, 0.25f}, 3, 1.0f);
+        const float u = arith::UnormOperand(15436, 16);
+        const std::array<float, 3> wrapped = arith::BlendColour(
+            BlendingMode::Tint, lower, {u, u, arith::UnormOperand(15404, 16)}, 3, 1.0f);
+        Check(grey[0] == 1.0f && grey[1] == grey[2] && grey[1] > 0.0f && wrapped[0] == 1.0f &&
+                  wrapped[2] > wrapped[1] && wrapped[1] == grey[1],
+              "the component hue: grey is red, a hue wrapped to 1 is not reduced");
+    }
 
     // Composite: opaque backdrop is the fitted mix; transparent backdrop passes the source.
     arith::CompositeInput in;
