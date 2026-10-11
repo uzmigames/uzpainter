@@ -98,6 +98,27 @@ std::future<render::Result<ChannelResult>> Evaluator::Evaluate(core::Snapshot sn
         });
 }
 
+std::future<render::Result<VirtualNormalResult>> Evaluator::EvaluateNormal(core::Snapshot snapshot,
+                                                                          VirtualNormalRequest request) {
+    const std::int64_t revision = snapshot.revision;
+    return m_engine.Submit(
+        snapshot.project,
+        [this, revision, request = std::move(request)](render::EngineContext& context,
+                                                       const core::Project& project)
+            -> render::Result<VirtualNormalResult> {
+            render::Result<State*> state = StateFor(context);
+            if (!state) return render::Unexpected(state.error());
+            (*state)->store.BeginRequest(context);
+            render::Result<VirtualNormalResult> result = EvaluateVirtualNormalOn(
+                project, revision, request, *m_templates, (*state)->store, (*state)->cache);
+            render::Result<void> flushed = (*state)->store.Flush();
+            (*state)->cache.UnpinAll();
+            (*state)->store.EndRequest();
+            if (result && !flushed) return render::Unexpected(flushed.error());
+            return result;
+        });
+}
+
 std::future<render::Result<CacheStats>> Evaluator::Stats() {
     auto token = std::make_shared<const int>(0);
     return m_engine.Submit(token, [this](render::EngineContext& context, const int&)
@@ -137,6 +158,15 @@ render::Result<void> CpuEvaluator::AdmitTextureSet(const core::Project& project,
 render::Result<ChannelResult> CpuEvaluator::Evaluate(const core::Project& project,
                                                      const EvaluateRequest& request) {
     render::Result<ChannelResult> result = EvaluateOn(project, request, *m_templates, m_store, m_cache);
+    m_cache.UnpinAll();
+    return result;
+}
+
+render::Result<VirtualNormalResult> CpuEvaluator::EvaluateNormal(const core::Project& project,
+                                                                 std::int64_t revision,
+                                                                 const VirtualNormalRequest& request) {
+    render::Result<VirtualNormalResult> result =
+        EvaluateVirtualNormalOn(project, revision, request, *m_templates, m_store, m_cache);
     m_cache.UnpinAll();
     return result;
 }

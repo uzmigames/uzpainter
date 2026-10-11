@@ -164,6 +164,8 @@ struct TextureSet {
     std::vector<UVTile> uv_tiles;
     std::map<MeshMapUsage, MeshMapBinding> mesh_maps;
     BakeSettings bake_settings;
+    /// Optional in the manifest: a file without it holds the default, `Sharp`.
+    HeightToNormalMethod height_to_normal_method = HeightToNormalMethod::Sharp;
     std::vector<Stack> stacks;
     json::Object extra;
 

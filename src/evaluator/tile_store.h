@@ -66,6 +66,11 @@ struct BlendOp {
     float opacity = 1.0f;
     /// An effect's mix (a mask or content effect, arith.h `CompositeInput::effectMix`).
     bool effectMix = false;
+    /// The composite before any write rule: `dst` is a 32-bit float tile of the source's channel
+    /// count without a coverage plane, the operands keep their own formats and the clamp of UNORM
+    /// formats follows the source's format (the float32 read-out the virtual normal maps read,
+    /// height_to_normal.h).
+    bool rawOutput = false;
 };
 
 /// A Levels effect (arith::Levels) of `src` into `dst` (same size and format): component c of
@@ -75,6 +80,25 @@ struct LevelsOp {
     TileHandle dst = kNoTile;
     TileHandle src = kNoTile;
     std::array<arith::LevelsComponent, 3> components{};
+};
+
+/// One tile of a virtual normal map (height_to_normal.h): the height-derived normal of every
+/// texel from the float32 height read-out of the tile and its eight neighbours (wrap-around at the
+/// set border), combined with the Normal channel, stored in `dst` as n / 2 + 1/2 (32-bit float,
+/// three channels, raw).
+struct VirtualNormalOp {
+    TileHandle dst = kNoTile;
+    /// The grey 32-bit float height read-out tiles at tile offsets (dx, dy) in [-1, 1]^2, index
+    /// (dy + 1) 3 + dx + 1, all of the dst's size; every entry kNoTile when the Height is the
+    /// constant `heightConstant` (an empty or absent Height channel).
+    std::array<TileHandle, 9> height{kNoTile, kNoTile, kNoTile, kNoTile, kNoTile,
+                                     kNoTile, kNoTile, kNoTile, kNoTile};
+    float heightConstant = 0.0f;
+    /// The Normal channel's float32 read-out over the flat colour (a three-channel 32-bit float
+    /// tile) or a constant colour.
+    Operand normal = Operand::Constant({0.5f, 0.5f, 1.0f}, 1.0f);
+    core::HeightToNormalMethod method = core::HeightToNormalMethod::Sharp;
+    core::NormalMapFormat convention = core::NormalMapFormat::OpenGL;
 };
 
 /// The texels of a tile as the store holds them: `format.channels` channels per texel (the
@@ -114,6 +138,9 @@ public:
 
     /// Queues one Levels effect; `Flush` runs the queue.
     virtual render::Result<void> Levels(const LevelsOp& op) = 0;
+
+    /// Queues one tile of a virtual normal map; `Flush` runs the queue.
+    virtual render::Result<void> VirtualNormal(const VirtualNormalOp& op) = 0;
 
     /// Runs every queued operation and waits for it.
     virtual render::Result<void> Flush() = 0;

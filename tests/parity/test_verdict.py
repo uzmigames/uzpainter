@@ -214,6 +214,7 @@ def decision_032_entries() -> list[dict[str, Any]]:
     assert {e["domain"]["selector"] for e in entries} == {
         "tier0/quantisation/thirds",
         "tier0/blend/inputs",
+        "tier0/height-normal/method",
     }
     return entries
 

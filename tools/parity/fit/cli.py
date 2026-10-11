@@ -72,15 +72,22 @@ def dump(document: dict[str, Any]) -> str:
 
 
 def commit(repository: Path) -> str:
-    """The checked-out commit, read from `.git` without running git."""
-    head = (repository / ".git" / "HEAD").read_text(encoding="utf-8").strip()
+    """The checked-out commit, read from `.git` without running git (a linked worktree's `.git`
+    file names its git directory, whose `commondir` holds the shared refs)."""
+    git = repository / ".git"
+    if git.is_file():
+        git = Path(git.read_text(encoding="utf-8").strip().removeprefix("gitdir: "))
+    common = git
+    if (git / "commondir").is_file():
+        common = (git / (git / "commondir").read_text(encoding="utf-8").strip()).resolve()
+    head = (git / "HEAD").read_text(encoding="utf-8").strip()
     if not head.startswith("ref: "):
         return head[:7]
     ref = head[5:]
-    loose = repository / ".git" / ref
+    loose = common / ref
     if loose.is_file():
         return loose.read_text(encoding="utf-8").strip()[:7]
-    packed = repository / ".git" / "packed-refs"
+    packed = common / "packed-refs"
     for line in packed.read_text(encoding="utf-8").splitlines() if packed.is_file() else []:
         if line.endswith(" " + ref):
             return line.split()[0][:7]

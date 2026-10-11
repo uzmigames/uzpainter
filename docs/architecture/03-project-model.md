@@ -12,7 +12,8 @@ Project
 ├── mesh: resource ref (original bytes), import report, texturing mesh derived data (not stored; re-derived)
 ├── texture_sets[]: TextureSet { id, name, original_name, description, material_id, resolution,
 │     uv_tiles[] (Default workflow: the single tile 1001), mesh_maps{usage → MeshMapBinding},
-│     bake_settings {common, detail, per_baker}, stacks[] }
+│     bake_settings {common, detail, per_baker}, height_to_normal_method (Sharp | SmoothSobel; absent = Sharp,
+│     decisions 047, 065), stacks[] }
 │     └── Stack { id, name ("" for the ordinary stack), channels{type → {format, label}}, root_layers[] }   (04-…)
 ├── resources{sha256 → ResourceMeta {mime, size, name, usage, origin, imported_at, color_space}}
 ├── display: environment ref + rotation/exposure/opacity/blur, color LUT ref, tone_mapping (Linear|ACES),

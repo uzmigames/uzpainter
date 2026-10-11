@@ -1,6 +1,7 @@
 #include "evaluator/evaluate.h"
 
 #include <cstring>
+#include <memory>
 #include <string>
 
 #include "evaluator/arith.h"
@@ -11,6 +12,22 @@
 namespace uzp::evaluator {
 
 namespace {
+
+/// A normal-map bitmap as the Normal channel imports it: every green code c becomes max - c
+/// (blend-modes.json `blend-normal-channel-import`). 8- and 16-bit codes only.
+render::Result<std::shared_ptr<const DecodedImage>> GreenInverted(const DecodedImage& image, core::Id node) {
+    if (image.channels < 3 || (image.encoding != render::TexelEncoding::Unorm16 &&
+                               image.encoding != render::TexelEncoding::Unorm8)) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        "a Normal-channel bitmap must be an 8- or 16-bit RGB image", node);
+    }
+    const uint32_t max = image.encoding == render::TexelEncoding::Unorm16 ? 65535u : 255u;
+    auto inverted = std::make_shared<DecodedImage>(image);
+    for (size_t i = 1; i < inverted->values.size(); i += inverted->channels) {
+        inverted->values[i] = max - inverted->values[i];
+    }
+    return std::shared_ptr<const DecodedImage>(std::move(inverted));
+}
 
 /// One tile evaluation: pins, deferred unpins and the retry that flushes the store when the
 /// budget is full of tiles whose operations are only queued.
@@ -56,7 +73,54 @@ public:
         return Operand::Of(*dst);
     }
 
+    /// The isolated root composited over `base` before the channel's write rule: a constant for
+    /// an empty stack, else a 32-bit float tile (raw), which stays pinned after this evaluation.
+    render::Result<Operand> RunFloat32Readout(const std::array<float, 3>& base) {
+        if (!m_dag.root.isolated) {
+            return EvalFail(EvalErrorKind::UnsupportedSource,
+                            "the float32 read-out needs a profile whose root list is isolated");
+        }
+        if (m_dag.root.layers.empty()) return Operand::Constant(base, 1.0f);
+        HashWriter hash;
+        hash.Sub(m_dag.readoutHash).Str("float32-readout").F32(base[0]).F32(base[1]).F32(base[2]);
+        const CacheKey key{m_dag.root.owner, CacheKind::Readout, hash.Finish(), m_tx, m_ty};
+        render::Result<std::optional<TileHandle>> cached = Lookup(key);
+        if (!cached) return render::Unexpected(cached.error());
+        if (*cached) return Keep(Operand::Of(**cached));
+        render::Result<Operand> stack =
+            EvaluateList(m_dag.root, Operand::Constant({0.0f, 0.0f, 0.0f}, 0.0f));
+        if (!stack) return stack;
+        TileFormat format;
+        format.encoding = render::TexelEncoding::Float32;
+        format.channels = m_dag.tileFormat.channels;
+        render::Result<TileHandle> dst = Allocate(key, format);
+        if (!dst) return render::Unexpected(dst.error());
+        BlendOp op;
+        op.dst = *dst;
+        op.acc = Operand::Constant(base, 1.0f);
+        op.source = *stack;
+        op.mode = core::BlendingMode::Replace;
+        op.opacity = 1.0f;
+        op.rawOutput = true;
+        render::Result<void> queued = m_env.store.Blend(op);
+        if (!queued) return render::Unexpected(queued.error());
+        ++m_stats.blends;
+        Defer(*stack);
+        return Keep(Operand::Of(*dst));
+    }
+
 private:
+    /// Takes `operand`'s pin out of this evaluation's hands: the caller unpins it.
+    Operand Keep(const Operand& operand) {
+        for (auto it = m_pinned.begin(); it != m_pinned.end(); ++it) {
+            if (*it == operand.tile) {
+                m_pinned.erase(it);
+                break;
+            }
+        }
+        return operand;
+    }
+
     render::Result<std::optional<TileHandle>> Lookup(const CacheKey& key) {
         const uint64_t evictionsBefore = m_env.cache.stats().evictions;
         std::optional<TileHandle> tile = m_env.cache.Lookup(key);
@@ -122,13 +186,24 @@ private:
             return EvalFail(EvalErrorKind::MissingResource,
                             "bitmap " + source.sha256 + " is not available", node);
         }
+        std::string imageKey = source.sha256;
+        if (source.invertGreen) {
+            imageKey += "/green-inverted";
+            std::shared_ptr<const DecodedImage>& inverted = m_env.greenInverted[source.sha256];
+            if (!inverted) {
+                render::Result<std::shared_ptr<const DecodedImage>> made = GreenInverted(*image, node);
+                if (!made) return render::Unexpected(made.error());
+                inverted = *made;
+            }
+            image = inverted;
+        }
         render::Result<void> sampling = CheckSampling(source.projection, m_dag.grid.width,
                                                       m_dag.grid.height, *image, node);
         if (!sampling) return render::Unexpected(sampling.error());
         // A wrap mode that can leave texels uncovered gives the content a coverage plane: the
         // fill keeps the value below there (resampling.json, RepeatNone).
         format.alpha = source.projection.MayUncover();
-        return Projected(key, format, image, source.sha256, source.projection, source.signedRange);
+        return Projected(key, format, image, imageKey, source.projection, source.signedRange);
     }
 
     render::Result<Operand> Projected(const CacheKey& key, const TileFormat& format,
@@ -384,6 +459,13 @@ void ReadOut(const ChannelDag& dag, TileResult& tile) {
 }
 
 }  // namespace
+
+render::Result<Operand> EvaluateFloat32Readout(const ChannelDag& dag, EvalEnvironment& env, uint32_t tx,
+                                               uint32_t ty, const std::array<float, 3>& base,
+                                               EvaluationStats& stats) {
+    TileEvaluation evaluation(dag, tx, ty, env, stats);
+    return evaluation.RunFloat32Readout(base);
+}
 
 render::Result<ChannelResult> EvaluateChannel(const ChannelDag& dag, EvalEnvironment& env) {
     ChannelResult result;

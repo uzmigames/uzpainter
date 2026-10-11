@@ -75,6 +75,9 @@ struct DagSource {
     UvProjection projection;
     /// The Height channel maps bitmap values to [-1, 1] (sources.h).
     bool signedRange = false;
+    /// The Normal channel imports a bitmap with its green codes inverted (max - g;
+    /// blend-modes.json `blend-normal-channel-import`, height_to_normal.h).
+    bool invertGreen = false;
     /// Hash of the content (source, projection, channel, format, profile).
     Digest hash{};
 };

@@ -5,6 +5,7 @@
 
 #include "evaluator/arith.h"
 #include "evaluator/error.h"
+#include "evaluator/height_to_normal.h"
 #include "evaluator/projection_uv.h"
 
 namespace uzp::evaluator {
@@ -168,11 +169,17 @@ render::Result<void> CpuTileStore::Blend(const BlendOp& op) {
                         std::string(core::ToString(op.mode)) +
                             " has no blend kernel (a group placement)");
     }
+    if (op.rawOutput && (dst.format.encoding != TexelEncoding::Float32 || dst.format.alpha ||
+                         (src != nullptr && src->format.channels != dst.format.channels))) {
+        return EvalFail(EvalErrorKind::Internal,
+                        "a raw blend writes a 32-bit float tile of the source's channel count");
+    }
     const uint32_t stored = dst.format.StoredChannels();
     arith::CompositeInput in;
     in.mode = op.mode;
     in.opacity = op.opacity;
-    in.clampUnorm = dst.format.IsUnorm();
+    // A raw blend clamps as the source's format would (the channel's own read-out does).
+    in.clampUnorm = op.rawOutput && src != nullptr ? src->format.IsUnorm() : dst.format.IsUnorm();
     in.effectMix = op.effectMix;
     in.channels = dst.format.channels;
     auto load = [](const Tile& tile, size_t texel, std::array<float, 4>& out) {
@@ -232,6 +239,63 @@ render::Result<void> CpuTileStore::Levels(const LevelsOp& op) {
             } else {
                 out[c] = in[c];
             }
+        }
+    }
+    return {};
+}
+
+render::Result<void> CpuTileStore::VirtualNormal(const VirtualNormalOp& op) {
+    const auto dstIt = m_tiles.find(op.dst);
+    if (dstIt == m_tiles.end()) return EvalFail(EvalErrorKind::Internal, "virtual normal into an unknown tile");
+    Tile& dst = dstIt->second;
+    if (dst.format.encoding != TexelEncoding::Float32 || dst.format.channels != 3 || dst.format.alpha) {
+        return EvalFail(EvalErrorKind::Internal, "a virtual normal tile is a three-channel 32-bit float tile");
+    }
+    std::array<const Tile*, 9> heights{};
+    const bool heightTiles = op.height[4] != kNoTile;
+    for (size_t i = 0; i < heights.size(); ++i) {
+        if (!heightTiles) continue;
+        heights[i] = Find(op.height[i]);
+        if (heights[i] == nullptr || heights[i]->width != dst.width || heights[i]->height != dst.height ||
+            heights[i]->format.encoding != TexelEncoding::Float32 || heights[i]->format.channels != 1) {
+            return EvalFail(EvalErrorKind::Internal, "virtual normal height tiles: grey 32-bit float of the tile's size");
+        }
+    }
+    const Tile* normal = op.normal.kind == Operand::Kind::Tile ? Find(op.normal.tile) : nullptr;
+    if (op.normal.kind == Operand::Kind::Tile &&
+        (normal == nullptr || normal->width != dst.width || normal->height != dst.height ||
+         normal->format.encoding != TexelEncoding::Float32 || normal->format.channels != 3)) {
+        return EvalFail(EvalErrorKind::Internal, "virtual normal channel tile: three-channel 32-bit float of the tile's size");
+    }
+    const int width = static_cast<int>(dst.width);
+    const int height = static_cast<int>(dst.height);
+    // The height at (x + dx, y + dy), read from the neighbouring tile across a tile edge.
+    auto at = [&](int x, int y) -> float {
+        if (!heightTiles) return op.heightConstant;
+        const int ox = x < 0 ? -1 : (x >= width ? 1 : 0);
+        const int oy = y < 0 ? -1 : (y >= height ? 1 : 0);
+        const Tile& tile = *heights[static_cast<size_t>((oy + 1) * 3 + ox + 1)];
+        const int lx = x - ox * width;
+        const int ly = y - oy * height;
+        return std::bit_cast<float>(tile.values[static_cast<size_t>(ly) * dst.width + static_cast<size_t>(lx)]);
+    };
+    const uint32_t stored = dst.format.StoredChannels();
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            HeightNeighbourhood h{};
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) h[static_cast<size_t>((dy + 1) * 3 + dx + 1)] = at(x + dx, y + dy);
+            }
+            const size_t texel = static_cast<size_t>(y) * dst.width + static_cast<size_t>(x);
+            std::array<float, 3> channel{op.normal.value[0], op.normal.value[1], op.normal.value[2]};
+            if (normal != nullptr) {
+                const uint32_t* values = &normal->values[texel * normal->format.StoredChannels()];
+                for (uint32_t c = 0; c < 3; ++c) channel[c] = std::bit_cast<float>(values[c]);
+            }
+            const std::array<float, 3> e = VirtualNormalTexel(HeightVector(op.method, h), channel, op.convention);
+            uint32_t* out = &dst.values[texel * stored];
+            for (uint32_t c = 0; c < 3; ++c) out[c] = std::bit_cast<uint32_t>(arith::Float32Store(e[c]));
+            out[3] = std::bit_cast<uint32_t>(1.0f);
         }
     }
     return {};

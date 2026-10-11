@@ -27,7 +27,7 @@ SCHEMA_PATH = REPO_ROOT / "src" / "uzp_core" / "schema" / "manifest.schema.json"
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "every-kind.manifest.json"
 # SHA-256 of the canonical form of FIXTURE_PATH: pinned so a change to the canonical writer, or to
 # what the fixture holds, is a visible, reviewed change.
-FIXTURE_DIGEST = "dc572509c528d6e520230df4d226099fd7711267cd9f53480594d954b21f1db3"
+FIXTURE_DIGEST = "df111fc6dc671f06cfbb795b048fbdb2f491bcc00b634384c837339fd26addcc"
 
 NATIVE_CASES = (
     "sha256_vectors",

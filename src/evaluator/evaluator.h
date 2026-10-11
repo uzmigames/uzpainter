@@ -8,6 +8,7 @@
 #include "evaluator/admission.h"
 #include "evaluator/cpu_store.h"
 #include "evaluator/evaluate.h"
+#include "evaluator/height_to_normal.h"
 #include "evaluator/resources.h"
 #include "evaluator/templates.h"
 #include "render/engine_thread.h"
@@ -61,6 +62,11 @@ public:
     [[nodiscard]] std::future<render::Result<ChannelResult>> Evaluate(core::Snapshot snapshot,
                                                                       EvaluateRequest request);
 
+    /// Evaluates a virtual normal map or the geometry-only pass-through of `snapshot` on the
+    /// engine thread (height_to_normal.h), tagged with the snapshot's revision.
+    [[nodiscard]] std::future<render::Result<VirtualNormalResult>> EvaluateNormal(
+        core::Snapshot snapshot, VirtualNormalRequest request);
+
     /// The cache statistics as of the requests run so far.
     [[nodiscard]] std::future<render::Result<CacheStats>> Stats();
 
@@ -87,6 +93,10 @@ public:
                                                        core::Id set) const;
     [[nodiscard]] render::Result<ChannelResult> Evaluate(const core::Project& project,
                                                          const EvaluateRequest& request);
+    /// A virtual normal map or the geometry-only pass-through of revision `revision`.
+    [[nodiscard]] render::Result<VirtualNormalResult> EvaluateNormal(const core::Project& project,
+                                                                     std::int64_t revision,
+                                                                     const VirtualNormalRequest& request);
 
     [[nodiscard]] CpuTileStore& store() { return m_store; }
     [[nodiscard]] TileCache& cache() { return m_cache; }

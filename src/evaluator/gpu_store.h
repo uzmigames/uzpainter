@@ -41,6 +41,7 @@ public:
     render::Result<void> Project(const ProjectOp& op) override;
     render::Result<void> Blend(const BlendOp& op) override;
     render::Result<void> Levels(const LevelsOp& op) override;
+    render::Result<void> VirtualNormal(const VirtualNormalOp& op) override;
     render::Result<void> Flush() override;
     render::Result<TileImage> Read(TileHandle tile) override;
     [[nodiscard]] uint64_t AllocatedBytes() const override { return m_bytes; }
@@ -76,6 +77,8 @@ private:
         std::array<uz::RHITextureHandle, 3> inputs{uz::RHITextureHandle::Invalid(),
                                                    uz::RHITextureHandle::Invalid(),
                                                    uz::RHITextureHandle::Invalid()};
+        /// Further distinct inputs (a virtual normal tile's height neighbours and channel).
+        std::vector<uz::RHITextureHandle> extraInputs;
     };
     /// A bitmap's packed codes in VRAM; `upload` is valid until the first flush copies it.
     struct Bitmap {

@@ -318,10 +318,21 @@ render::Result<void> GpuTileStore::Blend(const BlendOp& op) {
             return EvalFail(EvalErrorKind::Internal, "blend operands differ in size");
         }
     }
+    // A raw blend reads its operands in the source's format and writes a 32-bit float tile.
+    TileFormat operands = dst->format;
+    if (op.rawOutput) {
+        if (src != nullptr) operands = src->format;
+        operands.alpha = false;
+        if (dst->format.encoding != render::TexelEncoding::Float32 || dst->format.alpha ||
+            dst->format.channels != operands.channels) {
+            return EvalFail(EvalErrorKind::Internal,
+                            "a raw blend writes a 32-bit float tile of the source's channel count");
+        }
+    }
     for (const Tile* input : {acc, src}) {
-        if (input != nullptr && (input->format.encoding != dst->format.encoding ||
-                                 input->format.srgb != dst->format.srgb ||
-                                 input->format.channels != dst->format.channels)) {
+        if (input != nullptr && (input->format.encoding != operands.encoding ||
+                                 input->format.srgb != operands.srgb ||
+                                 input->format.channels != operands.channels)) {
             return EvalFail(EvalErrorKind::Internal, "blend operands differ in format");
         }
     }
@@ -339,8 +350,8 @@ render::Result<void> GpuTileStore::Blend(const BlendOp& op) {
         render::Result<void> pow = EnsurePowTables();
         if (!pow) return pow;
     }
-    render::Result<render::ComputeKernel> kernel =
-        m_context->Kernel(BlendKernelSource(BlendKernelVariant{op.mode, dst->format}));
+    render::Result<render::ComputeKernel> kernel = m_context->Kernel(
+        BlendKernelSource(BlendKernelVariant{op.mode, op.rawOutput ? operands : dst->format, op.rawOutput}));
     if (!kernel) return render::Unexpected(kernel.error());
 
     BlendBindings bindings;
@@ -408,6 +419,56 @@ render::Result<void> GpuTileStore::Levels(const LevelsOp& op) {
     pending.dst = dst->texture;
     pending.inputs[0] = src->texture;
     m_dispatches.push_back(pending);
+    return {};
+}
+
+render::Result<void> GpuTileStore::VirtualNormal(const VirtualNormalOp& op) {
+    render::Result<void> context = RequireContext();
+    if (!context) return context;
+    const Tile* dst = Find(op.dst);
+    if (dst == nullptr) return EvalFail(EvalErrorKind::Internal, "virtual normal into an unknown tile");
+    if (dst->format.encoding != render::TexelEncoding::Float32 || dst->format.channels != 3 || dst->format.alpha) {
+        return EvalFail(EvalErrorKind::Internal, "a virtual normal tile is a three-channel 32-bit float tile");
+    }
+    VirtualNormalBindings bindings;
+    bindings.width = dst->width;
+    bindings.height = dst->height;
+    PendingDispatch pending;
+    const bool heightTiles = op.height[4] != kNoTile;
+    // Inputs a dispatch transitions: the distinct height tiles and the Normal channel's tile.
+    std::vector<uz::RHITextureHandle> inputs;
+    for (size_t i = 0; i < op.height.size(); ++i) {
+        if (!heightTiles) continue;
+        const Tile* height = Find(op.height[i]);
+        if (height == nullptr || height->width != dst->width || height->height != dst->height ||
+            height->format.encoding != render::TexelEncoding::Float32 || height->format.channels != 1) {
+            return EvalFail(EvalErrorKind::Internal, "virtual normal height tiles: grey 32-bit float of the tile's size");
+        }
+        bindings.heightSrv[i] = m_device.Rhi().GetTextureSRVIndex(height->texture);
+        if (std::find(inputs.begin(), inputs.end(), height->texture) == inputs.end()) inputs.push_back(height->texture);
+    }
+    if (op.normal.kind == Operand::Kind::Tile) {
+        const Tile* normal = Find(op.normal.tile);
+        if (normal == nullptr || normal->width != dst->width || normal->height != dst->height ||
+            normal->format.encoding != render::TexelEncoding::Float32 || normal->format.channels != 3) {
+            return EvalFail(EvalErrorKind::Internal, "virtual normal channel tile: three-channel 32-bit float of the tile's size");
+        }
+        bindings.normalSrv = m_device.Rhi().GetTextureSRVIndex(normal->texture);
+        if (std::find(inputs.begin(), inputs.end(), normal->texture) == inputs.end()) inputs.push_back(normal->texture);
+    }
+    render::Result<void> table = EnsureTable16();
+    if (!table) return table;
+    render::Result<render::ComputeKernel> kernel = m_context->Kernel(VirtualNormalKernelSource());
+    if (!kernel) return render::Unexpected(kernel.error());
+    bindings.dstUav = m_device.Rhi().GetTextureUAVIndex(dst->texture);
+    bindings.table16Srv = m_device.Rhi().GetBufferSRVIndex(m_table16);
+    pending.kernel = *kernel;
+    pending.params = EncodeVirtualNormalParams(op, bindings);
+    pending.groupsX = render::image_pass_detail::Groups(dst->width, 8);
+    pending.groupsY = render::image_pass_detail::Groups(dst->height, 8);
+    pending.dst = dst->texture;
+    pending.extraInputs = std::move(inputs);
+    m_dispatches.push_back(std::move(pending));
     return {};
 }
 
@@ -529,24 +590,28 @@ render::Result<void> GpuTileStore::Flush() {
         }
         for (size_t i = 0; i < m_dispatches.size(); ++i) {
             const PendingDispatch& dispatch = m_dispatches[i];
-            uz::RHIBarrierDesc before[4];
-            uint32_t count = 0;
-            before[count++] = Transition(dispatch.dst, State::Common, State::UnorderedAccess);
+            std::vector<uz::RHIBarrierDesc> before;
+            before.push_back(Transition(dispatch.dst, State::Common, State::UnorderedAccess));
             for (const uz::RHITextureHandle input : dispatch.inputs) {
-                if (Valid(input)) before[count++] = Transition(input, State::Common, State::ShaderResource);
+                if (Valid(input)) before.push_back(Transition(input, State::Common, State::ShaderResource));
             }
-            cmd.ResourceBarrier(before, count);
+            for (const uz::RHITextureHandle input : dispatch.extraInputs) {
+                before.push_back(Transition(input, State::Common, State::ShaderResource));
+            }
+            cmd.ResourceBarrier(before.data(), static_cast<uint32_t>(before.size()));
             cmd.SetPipeline(dispatch.kernel.pipeline);
             const uint32_t root[2] = {arenaSrv, static_cast<uint32_t>(i)};
             cmd.SetRootConstants(render::kRootConstantsParam, root, 2);
             cmd.Dispatch(dispatch.groupsX, dispatch.groupsY, 1);
-            uz::RHIBarrierDesc after[4];
-            count = 0;
-            after[count++] = Transition(dispatch.dst, State::UnorderedAccess, State::Common);
+            std::vector<uz::RHIBarrierDesc> after;
+            after.push_back(Transition(dispatch.dst, State::UnorderedAccess, State::Common));
             for (const uz::RHITextureHandle input : dispatch.inputs) {
-                if (Valid(input)) after[count++] = Transition(input, State::ShaderResource, State::Common);
+                if (Valid(input)) after.push_back(Transition(input, State::ShaderResource, State::Common));
             }
-            cmd.ResourceBarrier(after, count);
+            for (const uz::RHITextureHandle input : dispatch.extraInputs) {
+                after.push_back(Transition(input, State::ShaderResource, State::Common));
+            }
+            cmd.ResourceBarrier(after.data(), static_cast<uint32_t>(after.size()));
         }
     });
     // The GPU has finished (or the wait failed): with a successful wait the staging buffers are

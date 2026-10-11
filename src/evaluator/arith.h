@@ -65,6 +65,16 @@ namespace uzp::evaluator::arith {
 [[nodiscard]] std::array<float, 3> BlendColour(core::BlendingMode mode, const std::array<float, 3>& a,
                                                const std::array<float, 3>& b, int channels, float alpha);
 
+/// The steps of the normal-map kernels, shared with the virtual normal maps (height_to_normal.h):
+/// normalise(v) = v hw::Rsqrt(fma(z, z, fma(x, x, y y))); decode(c) = normalise(2c - 1) with z
+/// clamped to >= 0 first; reoriented normal mapping of `detail` on `base` (t = base + (0, 0, 1),
+/// u = detail (-1, -1, 1), d = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r = (fma(t.x, d, -(u.x
+/// t.z)), fma(t.y, d, -(u.y t.z)), t.z (d - u.z)), not normalised).
+[[nodiscard]] std::array<float, 3> NormalNormalise(const std::array<float, 3>& v);
+[[nodiscard]] std::array<float, 3> NormalDecode(const std::array<float, 3>& c);
+[[nodiscard]] std::array<float, 3> NormalReoriented(const std::array<float, 3>& base,
+                                                    const std::array<float, 3>& detail);
+
 /// float32 constants of the colour kernels, shared bit for bit with the generated kernels
 /// (kernelgen.cpp writes them into `evaluator_tables.hlsli`).
 /// The saturation and hue epsilon of the HSV conversion (fitted: 2^-12).

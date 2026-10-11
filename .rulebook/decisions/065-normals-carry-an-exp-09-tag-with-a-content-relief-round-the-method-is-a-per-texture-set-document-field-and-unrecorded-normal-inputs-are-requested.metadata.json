@@ -1,0 +1,11 @@
+{
+  "id": 65,
+  "slug": "normals-carry-an-exp-09-tag-with-a-content-relief-round-the-method-is-a-per-texture-set-document-field-and-unrecorded-normal-inputs-are-requested",
+  "title": "Normals carry an EXP-09 tag with a content relief round, the method is a per-texture-set document field, and unrecorded normal inputs are requested",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.12_compositor-height-normal"
+  ],
+  "supersededBy": null
+}

@@ -2,48 +2,59 @@
   "schema": "uzpainter/parity/semantics/1",
   "record_class": "public_semantics",
   "semantics_id": "height-to-normal",
-  "description": "Height to normal with the project's default method: finite-difference kernel, scale, border handling, encoding to 16-bit and the OpenGL/DirectX green flip, fitted on the Tier 0 height-normal goldens.",
-  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "description": "Height to normal for both methods of Painter 12.1.5 (Sharp, Smooth (Sobel)) and the virtual normal maps Normal_OpenGL / Normal_DirectX: the stencils on the Height read-out, the reoriented combination with the Normal channel, the encoding to 16 bits, fitted on the Tier 0 height-normal goldens and blend-normal-channel.",
+  "painter_build_id": "12.1.5+js-api.1.1.20",
   "corpus": [
+    "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
+    "tier0/semantics-ui/height-normal-sharp-plane-strength",
+    "tier0/semantics-ui/height-normal-sharp-sphere",
+    "tier0/semantics-ui/height-normal-sobel-bevelled-cube",
+    "tier0/semantics-ui/height-normal-sobel-plane-strength",
+    "tier0/semantics-ui/height-normal-sobel-sphere",
+    "tier0/semantics/blend-normal-channel",
     "tier0/semantics/height-normal-bevelled-cube",
     "tier0/semantics/height-normal-plane-amplitudes",
     "tier0/semantics/height-normal-sphere"
   ],
   "entries": [
     {
-      "entry_id": "height-normal-default-opengl",
-      "subject": "Normal_OpenGL virtual map from the Height channel, project default method and strength",
-      "status": "calibrated",
-      "formula": "Input: the stored height h of the Height channel (L16F; the bitmap code c maps to about (2c/65535 - 1) times the layer opacity). In image index space (row 0 is the top row, v up), with wrap-around at the texture borders: dx = h[r,c] - h[r,c-1], dy = h[r,c] - h[r-1,c] (backward differences, one texel). n = normalize(-k dx, k dy, 1), k = 2.56 per unit of height difference at 256 px, computed in float32 (normalize = v * rsqrt(dot(v, v)), rsqrt correctly rounded). Encoding: e = n * 0.5 + 0.5 in float32 for x, y and z. 16-bit code = UNORM16(e): e is truncated to 20 fractional bits (j = floor(e * 2^20)), then code = floor((j * 65535 + 2^19 - 1) / 2^20), the nearest code with ties down (the 0.5 of a flat normal's x and y rounds down). No clamp is needed (e is in [0, 1]). Normal_OpenGL writes (x, y, z) as RGB (y up).",
+      "entry_id": "height-normal-sharp",
+      "subject": "Normal_OpenGL and Normal_DirectX virtual maps from the Height channel, method Sharp (the default)",
+      "status": "exact",
+      "formula": "Input: the Height read-out before its write rule (the root layers composited from a transparent start, colour and coverage written half toward zero after each layer, then over the base 0 as fma(C - base, a, base): at opacity 0.75 and 0.1 the stored half is not what the stencil reads). Rows top first, wrap-around at the texture borders, h(dx, dy) the height at column + dx, row + dy. Sharp: v = (h(-1, 0) - h(0, 0), h(0, 0) - h(0, -1), 0.390625) in float32. H = normalise(v); A = normalise(reoriented(F, H)), F = (0, 0, 1) (the mesh normal slot, flat: no Normal mesh map recorded); C = decode(Normal channel read-out over the flat colour (0.5, 0.5, 1)); n = normalise(reoriented(A, C)). normalise(v) = v rsqrt(fma(z, z, fma(x, x, y y))) with the recording GPU's float32 rsqrt (src/evaluator/hwmath.h); decode(c) = normalise(2c - 1, z clamped to >= 0); reoriented(b, d): t = b + (0, 0, 1), u = d (-1, -1, 1), e = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r = (fma(t.x, e, -(u.x t.z)), fma(t.y, e, -(u.y t.z)), t.z (e - u.z)) (fma: the exact product plus z in double, rounded to float32). Normal_OpenGL = UNORM16(fma(n, 1/2, 1/2)); Normal_DirectX negates n.y first. UNORM16(e): e truncated to 20 fractional bits, then the nearest code, ties down.",
       "public_sources": [
         {
           "source_id": "P-PBRT",
           "locator": "Bump mapping: displacement gradient by finite differences"
         },
         {
+          "source_id": "P-SOBEL",
+          "locator": "The Sobel operator: (1, 2, 1) smoothing times a central difference"
+        },
+        {
+          "source_id": "P-BARRE",
+          "locator": "Blending in Detail (2012): reoriented normal mapping"
+        },
+        {
           "source_id": "A-HELP-GUIDE",
-          "locator": "Project configuration: normal map format (OpenGL / DirectX)"
+          "locator": "Texture Set Settings: height to normal method; normal map format"
         },
         {
           "source_id": "X-D3D12",
-          "locator": "Data conversion rules: FLOAT to UNORM"
+          "locator": "Data conversion rules: FLOAT to UNORM; rsqrt within 1 ULP"
         }
       ],
       "parameters": [
         {
-          "name": "gradient_scale",
-          "value": 2.56,
+          "name": "z",
+          "value": 0.390625,
           "origin": "fitted",
-          "unit": "per unit height difference at 256 px"
+          "unit": "at 256 texels (1 / 2.56)"
         },
         {
           "name": "difference_kernel",
-          "value": [
-            -1,
-            1
-          ],
-          "origin": "fitted",
-          "unit": "previous texel, current texel"
+          "value": "backward",
+          "origin": "fitted"
         },
         {
           "name": "truncation_bits",
@@ -56,21 +67,566 @@
           "value": 256,
           "origin": "authored",
           "unit": "px"
+        },
+        {
+          "name": "hardware_tables",
+          "value": "src/evaluator/tables/hw-rsqrt.zlib",
+          "origin": "fitted"
         }
       ],
       "residuals": [
         {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s0/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s0/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s0/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s0/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s2/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s2/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s2/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s2/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s3/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s3/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s3/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s3/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s5/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s5/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s5/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s5/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s6/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s6/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s6/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s6/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s7/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s7/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s7/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s7/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-sphere",
+          "map": "uzp_sphere/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 176448,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-sphere",
+          "map": "uzp_sphere/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 176448,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-sphere",
+          "map": "uzp_sphere/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 176448,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-sphere",
+          "map": "uzp_sphere/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 176448,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 153120,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 153120,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 153120,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 153120,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
           "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
           "map": "s0/Normal_OpenGL",
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 5.0862630208333336e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 10,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -80,12 +636,42 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 5.0862630208333336e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 10,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -95,12 +681,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 9.663899739583333e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 19,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 19,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -110,12 +696,42 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 9.663899739583333e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 19,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 19,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s1/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s1/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -125,12 +741,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 5.0862630208333336e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 10,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -140,12 +756,42 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 5.0862630208333336e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 10,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s2/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s2/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -155,12 +801,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 3.0517578125e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 6,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 6,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -170,12 +816,42 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 3.0517578125e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 6,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 6,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s3/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s3/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
@@ -185,12 +861,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 5.667392092854552e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 176448,
-            "affected_texels": 10,
+            "affected_texels": 0,
             "texels": 58816
           }
         },
@@ -200,12 +876,42 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 5.667392092854552e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 176448,
-            "affected_texels": 10,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 176448,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 176448,
+            "affected_texels": 0,
             "texels": 58816
           }
         },
@@ -215,12 +921,12 @@
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 6.530825496342738e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 153120,
-            "affected_texels": 10,
+            "affected_texels": 0,
             "texels": 51040
           }
         },
@@ -230,245 +936,1550 @@
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 6.530825496342738e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 153120,
-            "affected_texels": 10,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 153120,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 153120,
+            "affected_texels": 0,
             "texels": 51040
           }
         }
       ],
-      "notes": "Domains: the grid2x2 sets (one quad, full 0-1 UVs) compare the whole image, borders included (the wrap-around is exercised there); the sphere and the bevelled cube compare their UV coverage eroded by one texel (58816 and 51040 texels); outside it the export holds padding. Inside the coverage the stored height of the sphere and cube equals that of the plane at opacity 1, so the normal is computed in texture space only (mesh geometry, UV seams and island borders do not enter except through padding read at island edges). Search: forward, central, Sobel-like mixed kernels miss by thousands of codes; the backward one-texel difference with k = 2.56 leaves only +-1 code; k = 2.56 * (1 +- 0.001) gives about 25000 differing values per set. Plain round-to-nearest leaves 1600-2700 values per set 1 code high at fractions 0.5-0.56; truncation to 20 bits before rounding removes them. Remaining +-1 code values (tens per set) sit within 0.06 of a 2^-20 step: float32 rounding of the GPU's rsqrt and multiply order. The scale is fitted at one resolution: whether it is 0.01 x resolution (a UV-space gradient) or fixed per texel is not separable here. The empty Normal channel (base 127/255, 127/255, 1) does not tilt the result: it acts as (0, 0, 1)."
+      "notes": "Every r1 map, and every r2 map that equals its r1 (plane-strength s1 and s4 differ after save and reopen: height-normal-save-reopen-divergence). Domains: the plane grids compare the whole image, borders included (the wrap-around is exercised there); the sphere and the bevelled cube their UV coverage eroded by one texel (58816 and 51040 texels; outside it the export holds padding). The amplitude sweep stands in for a strength setting Painter 12.1.5 does not have (decision 047): the vector is linear in the height, with no other scale. Search (decisions 064): (-k dx, k dy, 1), k = 2.56, leaves 600+ texels one code off over the sweep; one normalisation of v alone 657, reoriented onto the flat normal with v as detail only (rnm(F, H)) 655 and with H as base only (rnm(H, F)) 359; the two reorientations leave none. For Sobel the float32 summation order is not separated by the goldens (an exact sum and this order both match every texel); this order is the implemented convention. The scale is recorded at 256 texels only: other resolutions are a gap (height-normal-resolution-scaling)."
     },
     {
-      "entry_id": "height-normal-default-directx",
-      "subject": "Normal_DirectX virtual map: the OpenGL normal with the green (y) component negated",
-      "status": "calibrated",
-      "formula": "Input: the stored height h of the Height channel (L16F; the bitmap code c maps to about (2c/65535 - 1) times the layer opacity). In image index space (row 0 is the top row, v up), with wrap-around at the texture borders: dx = h[r,c] - h[r,c-1], dy = h[r,c] - h[r-1,c] (backward differences, one texel). n = normalize(-k dx, k dy, 1), k = 2.56 per unit of height difference at 256 px, computed in float32 (normalize = v * rsqrt(dot(v, v)), rsqrt correctly rounded). Encoding: e = n * 0.5 + 0.5 in float32 for x, y and z. 16-bit code = UNORM16(e): e is truncated to 20 fractional bits (j = floor(e * 2^20)), then code = floor((j * 65535 + 2^19 - 1) / 2^20), the nearest code with ties down (the 0.5 of a flat normal's x and y rounds down). No clamp is needed (e is in [0, 1]). Normal_DirectX writes (x, -y, z): the y component is negated in float32 before the encoding.",
+      "entry_id": "height-normal-sobel",
+      "subject": "Normal_OpenGL and Normal_DirectX virtual maps from the Height channel, method Smooth (Sobel)",
+      "status": "exact",
+      "formula": "Input: the Height read-out before its write rule (the root layers composited from a transparent start, colour and coverage written half toward zero after each layer, then over the base 0 as fma(C - base, a, base): at opacity 0.75 and 0.1 the stored half is not what the stencil reads). Rows top first, wrap-around at the texture borders, h(dx, dy) the height at column + dx, row + dy. Smooth (Sobel): v = (L - R, B - T, 3.125), L = (h(-1,-1) + 2 h(-1,0)) + h(-1,1), R = (h(1,-1) + 2 h(1,0)) + h(1,1), T = (h(-1,-1) + 2 h(0,-1)) + h(1,-1), B = (h(-1,1) + 2 h(0,1)) + h(1,1), each sum in float32 in this order. H = normalise(v); A = normalise(reoriented(F, H)), F = (0, 0, 1) (the mesh normal slot, flat: no Normal mesh map recorded); C = decode(Normal channel read-out over the flat colour (0.5, 0.5, 1)); n = normalise(reoriented(A, C)). normalise(v) = v rsqrt(fma(z, z, fma(x, x, y y))) with the recording GPU's float32 rsqrt (src/evaluator/hwmath.h); decode(c) = normalise(2c - 1, z clamped to >= 0); reoriented(b, d): t = b + (0, 0, 1), u = d (-1, -1, 1), e = fma(t.z, u.z, fma(t.y, u.y, t.x u.x)), r = (fma(t.x, e, -(u.x t.z)), fma(t.y, e, -(u.y t.z)), t.z (e - u.z)) (fma: the exact product plus z in double, rounded to float32). Normal_OpenGL = UNORM16(fma(n, 1/2, 1/2)); Normal_DirectX negates n.y first. UNORM16(e): e truncated to 20 fractional bits, then the nearest code, ties down.",
       "public_sources": [
         {
           "source_id": "P-PBRT",
           "locator": "Bump mapping: displacement gradient by finite differences"
         },
         {
+          "source_id": "P-SOBEL",
+          "locator": "The Sobel operator: (1, 2, 1) smoothing times a central difference"
+        },
+        {
+          "source_id": "P-BARRE",
+          "locator": "Blending in Detail (2012): reoriented normal mapping"
+        },
+        {
           "source_id": "A-HELP-GUIDE",
-          "locator": "Project configuration: normal map format (OpenGL / DirectX)"
+          "locator": "Texture Set Settings: height to normal method; normal map format"
         },
         {
           "source_id": "X-D3D12",
-          "locator": "Data conversion rules: FLOAT to UNORM"
+          "locator": "Data conversion rules: FLOAT to UNORM; rsqrt within 1 ULP"
         }
       ],
       "parameters": [
         {
-          "name": "gradient_scale",
-          "value": 2.56,
+          "name": "z",
+          "value": 3.125,
           "origin": "fitted",
-          "unit": "per unit height difference at 256 px"
+          "unit": "at 256 texels (8 / 2.56)"
         },
         {
-          "name": "green_sign",
-          "value": -1,
-          "origin": "public_documentation"
+          "name": "difference_kernel",
+          "value": "sobel_3x3",
+          "origin": "fitted"
         },
         {
           "name": "truncation_bits",
           "value": 20,
           "origin": "fitted",
           "unit": "fractional bits"
+        },
+        {
+          "name": "resolution",
+          "value": 256,
+          "origin": "authored",
+          "unit": "px"
+        },
+        {
+          "name": "hardware_tables",
+          "value": "src/evaluator/tables/hw-rsqrt.zlib",
+          "origin": "fitted"
         }
       ],
       "residuals": [
         {
-          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s0/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s0/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
           "map": "s0/Normal_DirectX",
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 6.103515625e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 12,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 12,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
           "map": "s0/Normal_DirectX",
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 6.103515625e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 12,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 12,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
           "map": "s1/Normal_DirectX",
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 9.663899739583333e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 19,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 19,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
-          "map": "s1/Normal_DirectX",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s2/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s2/Normal_OpenGL",
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 9.663899739583333e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 19,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 19,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
           "map": "s2/Normal_DirectX",
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 5.0862630208333336e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 10,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
           "map": "s2/Normal_DirectX",
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 5.0862630208333336e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 10,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s3/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s3/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
           "map": "s3/Normal_DirectX",
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 3.5603841145833336e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 7,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 7,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
           "map": "s3/Normal_DirectX",
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 3.5603841145833336e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 7,
+            "differing": 0,
             "total": 196608,
-            "affected_texels": 7,
+            "affected_texels": 0,
             "texels": 65536
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-sphere",
-          "map": "uzp_sphere/Normal_DirectX",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/Normal_OpenGL",
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 6.234131302140008e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 11,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s5/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s5/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s5/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s5/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s6/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s6/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s6/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s6/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s7/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s7/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s7/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s7/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-sphere",
+          "map": "uzp_sphere/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
             "total": 176448,
-            "affected_texels": 11,
+            "affected_texels": 0,
             "texels": 58816
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-sphere",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-sphere",
+          "map": "uzp_sphere/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 176448,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-sphere",
+          "map": "uzp_sphere/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 176448,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-sphere",
           "map": "uzp_sphere/Normal_DirectX",
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 6.234131302140008e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 11,
+            "differing": 0,
             "total": 176448,
-            "affected_texels": 11,
+            "affected_texels": 0,
             "texels": 58816
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
-          "map": "uzp_bevelled_cube/Normal_DirectX",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_OpenGL",
           "compared_against": "r1",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 6.530825496342738e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 153120,
-            "affected_texels": 10,
+            "affected_texels": 0,
             "texels": 51040
           }
         },
         {
-          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 153120,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-bevelled-cube",
+          "map": "uzp_bevelled_cube/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 153120,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-bevelled-cube",
           "map": "uzp_bevelled_cube/Normal_DirectX",
           "compared_against": "r2",
           "unit": "16-bit code value",
           "difference": {
-            "max": 1,
-            "mean": 6.530825496342738e-05,
+            "max": 0,
+            "mean": 0.0,
             "p99": 0,
-            "differing": 10,
+            "differing": 0,
             "total": 153120,
-            "affected_texels": 10,
+            "affected_texels": 0,
             "texels": 51040
           }
         }
       ],
-      "notes": "R and B equal those of Normal_OpenGL in every recorded texel. Domains as in height-normal-default-opengl (whole image for grid2x2, eroded UV coverage for the sphere and the bevelled cube)."
+      "notes": "Every r1 map, and every r2 map that equals its r1 (plane-strength s1 and s4 differ after save and reopen: height-normal-save-reopen-divergence). Domains: the plane grids compare the whole image, borders included (the wrap-around is exercised there); the sphere and the bevelled cube their UV coverage eroded by one texel (58816 and 51040 texels; outside it the export holds padding). The amplitude sweep stands in for a strength setting Painter 12.1.5 does not have (decision 047): the vector is linear in the height, with no other scale. Search (decisions 064): (-k dx, k dy, 1), k = 2.56, leaves 600+ texels one code off over the sweep; one normalisation of v alone 657, reoriented onto the flat normal with v as detail only (rnm(F, H)) 655 and with H as base only (rnm(H, F)) 359; the two reorientations leave none. For Sobel the float32 summation order is not separated by the goldens (an exact sum and this order both match every texel); this order is the implemented convention. The scale is recorded at 256 texels only: other resolutions are a gap (height-normal-resolution-scaling)."
+    },
+    {
+      "entry_id": "height-normal-normal-channel",
+      "subject": "The Normal channel in the virtual map: the last detail of the combination",
+      "status": "exact",
+      "formula": "With a flat Height, Normal_OpenGL = UNORM16(fma(n, 1/2, 1/2)), n = normalise(reoriented(A, decode(C))), A = normalise(reoriented(F, normalise(0, 0, 0.390625))), C the Normal channel read-out (here its exported RGB16F value: full coverage, so the read-out over the flat colour is that value). The channel stores an imported normal map as (r, 65535 - g, b) / 65535 written half toward zero (blend-modes.json blend-normal-channel-import).",
+      "public_sources": [
+        {
+          "source_id": "P-BARRE",
+          "locator": "Blending in Detail (2012): reoriented normal mapping"
+        },
+        {
+          "source_id": "A-HELP-GUIDE",
+          "locator": "Texture Set Settings: height to normal method; normal map format"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM; rsqrt within 1 ULP"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "detail_slot",
+          "value": "Normal channel",
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/blend-normal-channel",
+          "map": "s0/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-normal-channel",
+          "map": "s0/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-normal-channel",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-normal-channel",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-normal-channel",
+          "map": "s2/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-normal-channel",
+          "map": "s2/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-normal-channel",
+          "map": "s3/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-normal-channel",
+          "map": "s3/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        }
+      ],
+      "notes": "The channel as the first base instead (reoriented(C, H)) leaves 180-192 values per set one code off. An empty Normal channel exports its base float32(127/255) yet acts as exactly flat (the height goldens): the virtual map composites the channel over (0.5, 0.5, 1), a rule that also covers full coverage; partial coverage is not recorded (height-normal-unrecorded-inputs)."
+    },
+    {
+      "entry_id": "height-normal-height-readout",
+      "subject": "The Height channel's read-out (EXR export) of the amplitude sweep and the meshes",
+      "status": "exact",
+      "formula": "The exported Height is the read-out of height-normal-sharp written half toward zero: a bitmap fill stores half toward zero of float32(2 t) - 1, t = float32(code / 65535); a fill at opacity a over the transparent start keeps its colour and the coverage half(a); LinearDodge copies over a covered accumulator add, the sum written half toward zero; the read-out fma(C - 0, a, 0) is written half toward zero.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: insert_fill, FillLayerNode.set_source, Node.set_opacity"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM; rsqrt within 1 ULP"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "storage",
+          "value": "L16F",
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s0/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s0/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s2/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s2/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s3/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s3/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s5/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s5/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s6/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s6/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s7/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s7/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-sphere",
+          "map": "uzp_sphere/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 58816,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-sphere",
+          "map": "uzp_sphere/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 58816,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
+          "map": "uzp_bevelled_cube/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 51040,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
+          "map": "uzp_bevelled_cube/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 51040,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s1/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s1/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s2/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s2/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s3/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s3/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 58816,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 58816,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 51040,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 51040,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s0/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s0/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s1/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s2/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s2/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s3/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s3/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s5/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s5/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s6/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s6/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s7/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s7/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-sphere",
+          "map": "uzp_sphere/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 58816,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-sphere",
+          "map": "uzp_sphere/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 58816,
+            "affected_texels": 0,
+            "texels": 58816
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-bevelled-cube",
+          "map": "uzp_bevelled_cube/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 51040,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-bevelled-cube",
+          "map": "uzp_bevelled_cube/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 51040,
+            "affected_texels": 0,
+            "texels": 51040
+          }
+        }
+      ],
+      "notes": "Every r1 export and every r2 export that equals its r1 (whole image on the plane grids, eroded UV coverage on the meshes). LinearDodge on Height: s5-s7 of the sweep and s3 of plane-amplitudes."
     },
     {
       "entry_id": "height-normal-default-normal-channel-base",
       "subject": "Empty Normal channel (no layer) exported as OpenEXR 32f: its base value",
       "status": "exact",
-      "formula": "Every texel = (float32(127/255), float32(127/255), 1.0): the 8-bit flat normal code (127, 127, 255) read as UNORM8, not a half value of the RGB16F storage. The height normal of the virtual maps treats this base as the flat normal (0, 0, 1).",
+      "formula": "Every texel = (float32(127/255), float32(127/255), 1.0): the 8-bit flat normal code (127, 127, 255) read as UNORM8, not a half value of the RGB16F storage. The virtual maps read this empty channel as the flat normal (0, 0, 1) (height-normal-normal-channel).",
       "public_sources": [
         {
           "source_id": "A-HELP-EXPORT",
@@ -476,7 +2487,7 @@
         },
         {
           "source_id": "X-D3D12",
-          "locator": "Data conversion rules: FLOAT to UNORM"
+          "locator": "Data conversion rules: FLOAT to UNORM; rsqrt within 1 ULP"
         }
       ],
       "parameters": [
@@ -492,6 +2503,306 @@
         }
       ],
       "residuals": [
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s0/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s0/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s2/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s2/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s3/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s3/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s5/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s5/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s6/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s6/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s7/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s7/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-sphere",
+          "map": "uzp_sphere/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-sphere",
+          "map": "uzp_sphere/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
+          "map": "uzp_bevelled_cube/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
+          "map": "uzp_bevelled_cube/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
         {
           "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
           "map": "s0/normal",
@@ -659,6 +2970,306 @@
         },
         {
           "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s0/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s0/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s1/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s1/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s2/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s2/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s3/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s3/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s5/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s5/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s6/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s6/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s7/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s7/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-sphere",
+          "map": "uzp_sphere/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-sphere",
+          "map": "uzp_sphere/normal",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-bevelled-cube",
+          "map": "uzp_bevelled_cube/normal",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-bevelled-cube",
           "map": "uzp_bevelled_cube/normal",
           "compared_against": "r2",
           "unit": "half-float value",
@@ -676,14 +3287,432 @@
       "notes": "Compared over the whole image (the channel holds no layer, padding included)."
     },
     {
-      "entry_id": "height-normal-second-method-and-strength",
-      "subject": "Second height-to-normal method and the strength sweep (moved to a UI-recorded task)",
+      "entry_id": "height-normal-save-reopen-divergence",
+      "subject": "r2 of the amplitude sweep at opacity 0.75 and 0.1 (after save and reopen)",
+      "status": "calibrated",
+      "formula": "Not a fit target (decision 032: r1 is the exact target; parity/exceptions.json EXC-003). After save and reopen Painter's Height export and both virtual maps of plane-strength s1 (opacity 0.75) and s4 (opacity 0.1) differ from r1 for both methods; the model, exact on r1, is compared here with both recordings.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "project.save, project.open"
+        }
+      ],
+      "parameters": [],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 31,
+            "mean": 2.458160400390625,
+            "p99": 31,
+            "differing": 42242,
+            "total": 196608,
+            "affected_texels": 23089,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 31,
+            "mean": 2.4582621256510415,
+            "p99": 31,
+            "differing": 42223,
+            "total": 196608,
+            "affected_texels": 23087,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 10,
+            "mean": 0.3118031819661458,
+            "p99": 5,
+            "differing": 22350,
+            "total": 196608,
+            "affected_texels": 19378,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 10,
+            "mean": 0.3085886637369792,
+            "p99": 4,
+            "differing": 21843,
+            "total": 196608,
+            "affected_texels": 19132,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s1/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 16,
+            "mean": 1.4630991617838542,
+            "p99": 16,
+            "differing": 53371,
+            "total": 196608,
+            "affected_texels": 30049,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s1/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s1/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 16,
+            "mean": 1.4605051676432292,
+            "p99": 16,
+            "differing": 53364,
+            "total": 196608,
+            "affected_texels": 30048,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/Normal_OpenGL",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/Normal_OpenGL",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 6,
+            "mean": 0.17551167805989584,
+            "p99": 2,
+            "differing": 24753,
+            "total": 196608,
+            "affected_texels": 22222,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/Normal_DirectX",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 196608,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/Normal_DirectX",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 6,
+            "mean": 0.17294820149739584,
+            "p99": 2,
+            "differing": 24505,
+            "total": 196608,
+            "affected_texels": 21965,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s1/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0001384429633617401,
+            "p99": 0.00048828125,
+            "differing": 30640,
+            "total": 65536,
+            "affected_texels": 30640,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sharp-plane-strength",
+          "map": "s4/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 6.103515625e-05,
+            "mean": 3.9833779737818986e-05,
+            "p99": 6.103515625e-05,
+            "differing": 65536,
+            "total": 65536,
+            "affected_texels": 65536,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s1/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s1/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0.00048828125,
+            "mean": 0.0001384429633617401,
+            "p99": 0.00048828125,
+            "differing": 30640,
+            "total": 65536,
+            "affected_texels": 30640,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/height",
+          "compared_against": "r1",
+          "unit": "half-float value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65536,
+            "affected_texels": 0,
+            "texels": 65536
+          }
+        },
+        {
+          "golden_id": "tier0/semantics-ui/height-normal-sobel-plane-strength",
+          "map": "s4/height",
+          "compared_against": "r2",
+          "unit": "half-float value",
+          "difference": {
+            "max": 6.103515625e-05,
+            "mean": 3.9833779737818986e-05,
+            "p99": 6.103515625e-05,
+            "differing": 65536,
+            "total": 65536,
+            "affected_texels": 65536,
+            "texels": 65536
+          }
+        }
+      ],
+      "notes": "The opacity read back after the reopen equals r1's, so the difference is in Painter's evaluation after the reopen. Neither the reopened Height export as the stencil input nor one opacity for every texel explains r2 (searched: 40 112 and 27 064 values off on s1). The read-out at 0.75 and 0.1 is the only case where the pre-write value is off the half grid."
+    },
+    {
+      "entry_id": "height-normal-mesh-normal-map",
+      "subject": "A Normal mesh map in the virtual maps and the geometry-only pass-through",
       "status": "gap",
-      "formula": "Not fitted here. The height-to-normal method and its strength are project or shader settings the Python API can neither set nor read; the owner moved the second method and the strength sweep to phase0.7_tier0-semantics-ui-cases (recorded through Painter's UI, decision 029). Until that task records them they are release gaps.",
+      "formula": "Not recorded. No golden binds a Normal mesh map (baked or imported) next to the virtual maps. By elimination its slot would be F, the first base under the height normal; the evaluator refuses a bound Normal mesh map in the combined maps (unsupported_source) and passes the map through unchanged (codes as UNORM operands, green inverted for the other convention as Painter's DirectX bake is the inverted OpenGL bake, tangent-frame.json) for the geometry-only source. Recording request: parity/reports/phase1/compositor-height-normal.md \u00a75 (task phase1.12_compositor-height-normal).",
+      "public_sources": [
+        {
+          "source_id": "A-HELP-EXPORT",
+          "locator": "Export: virtual maps Normal_OpenGL / Normal_DirectX; meshMap normal_base"
+        }
+      ],
+      "parameters": [],
+      "residuals": []
+    },
+    {
+      "entry_id": "height-normal-resolution-scaling",
+      "subject": "The height-to-normal scale at set resolutions other than 256",
+      "status": "gap",
+      "formula": "Not recorded. Every height-normal golden is 256 x 256: whether z (0.390625, 3.125) is fixed per texel or scales with the resolution (a UV-space gradient, z = 100 / width) is not separable. The evaluator refuses other resolutions (unsupported_source). Recording request: parity/reports/phase1/compositor-height-normal.md \u00a75 (task phase1.12_compositor-height-normal).",
+      "public_sources": [
+        {
+          "source_id": "P-PBRT",
+          "locator": "Bump mapping: displacement gradient by finite differences"
+        }
+      ],
+      "parameters": [],
+      "residuals": []
+    },
+    {
+      "entry_id": "height-signed-addition",
+      "subject": "SignedAddition on the Height channel",
+      "status": "gap",
+      "formula": "Not recorded. The blend-kernels fit of SignedAddition (r = (a + 2b) - 1) comes from UNORM and float colour channels; no golden blends Height in SignedAddition, so its behaviour on the signed channel (range, clamp, base 0) is unobserved. The evaluator applies the kernel as on any float channel. Recording request: parity/reports/phase1/compositor-height-normal.md \u00a75 (task phase1.12_compositor-height-normal).",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "BlendingMode.SignedAddition"
+        }
+      ],
+      "parameters": [],
+      "residuals": []
+    },
+    {
+      "entry_id": "height-normal-unrecorded-inputs",
+      "subject": "Normal-channel coverage, DirectX projects and 8-bit Normal imports",
+      "status": "gap",
+      "formula": "Not recorded: a Normal-channel layer at partial coverage (the composite over the flat colour is a hypothesis that covers the empty and the fully covered channel), a non-empty Normal channel or a Normal-channel bitmap in a DirectX project (refused, unsupported_source), and 8-bit normal maps imported into the Normal channel (the green inversion applied by analogy). Recording request: parity/reports/phase1/compositor-height-normal.md \u00a75 (task phase1.12_compositor-height-normal).",
       "public_sources": [
         {
           "source_id": "A-HELP-GUIDE",
-          "locator": "Project configuration: height and normal settings"
+          "locator": "Project configuration: normal map format"
         }
       ],
       "parameters": [],

@@ -24,6 +24,17 @@
 // tile_store.h): parameter block width, height, source SRV, destination UAV, operand tables SRV,
 // log2/exp2 tables SRV (hwmath.h, at the offsets UZP_POW_*), the source's coverage flag and three
 // components of six words (input min, input max, gamma, output min, output max, clamp).
+//
+// UZP_RAW_OUTPUT (a raw blend, tile_store.h BlendOp::rawOutput): the destination is a 32-bit float
+// tile and every result is stored as it is (the float32 read-out of the virtual normal maps); the
+// operands keep the encoding UZP_ENC.
+//
+// With UZP_VNORMAL the kernel is one tile of a virtual normal map instead (height_to_normal.cpp,
+// VirtualNormalOp of tile_store.h): parameter block width, height, flags (bit 0 the height is
+// tiles, bit 1 the Normal channel is a tile, bit 2 the Sobel method, bit 3 the DirectX
+// convention), destination UAV, operand tables SRV, the constant height, the Normal channel's
+// SRV or constant rgb, and the SRVs of the nine height tiles around the tile (index (dy + 1) 3 +
+// dx + 1).
 
 #include "image_common.hlsli"
 #include "evaluator_tables.hlsli"
@@ -396,7 +407,7 @@ float3 BlendColour(float3 a, float3 b, float alpha) {
 }
 #endif
 
-#if defined(UZP_NORMALMAP)
+#if defined(UZP_NORMALMAP) || defined(UZP_VNORMAL)
 float DotYxz(float3 u, float3 v) { return Fma(u.z, v.z, Fma(u.x, v.x, u.y * v.y)); }
 float DotXyz(float3 u, float3 v) { return Fma(u.z, v.z, Fma(u.y, v.y, u.x * v.x)); }
 
@@ -410,7 +421,9 @@ float3 DecodeNormal(float3 c) {
     n.z = Fmax(n.z, 0.0f);
     return Normalise(n);
 }
+#endif
 
+#if defined(UZP_NORMALMAP)
 // The recording GPU's GLSL asin (hwmath.cpp Asin).
 float HwAsin(float x) {
     const uint bits = asuint(x);
@@ -452,14 +465,18 @@ float3 TowardFlat(float3 n, float alpha) {
     const float scale = sine * HwRsqrt(w);
     return float3(n.x * scale, n.y * scale, cosine);
 }
+#endif
 
+#if defined(UZP_NORMALMAP) || defined(UZP_VNORMAL)
 float3 Reoriented(float3 base, float3 detail) {
     const float3 t = float3(base.x, base.y, base.z + 1.0f);
     const float3 u = float3(-detail.x, -detail.y, detail.z);
     const float d = DotXyz(t, u);
     return float3(Fma(t.x, d, -(u.x * t.z)), Fma(t.y, d, -(u.y * t.z)), t.z * (d - u.z));
 }
+#endif
 
+#if defined(UZP_NORMALMAP)
 float3 BlendColour(float3 a, float3 b, float alpha) {
 #if UZP_CHANNELS == 1
     return b;
@@ -614,7 +631,10 @@ float PassThroughChannel(float a, float s, float alphaB, float alphaG, float t) 
 }
 
 float StoreChannel(float v) {
-#if UZP_ENC == 0 || UZP_ENC == 1
+#if UZP_RAW_OUTPUT
+    if (isnan(v)) return asfloat(0x7FC00000u);
+    return v;
+#elif UZP_ENC == 0 || UZP_ENC == 1
 #if UZP_SRGB
     return CodeValue(Srgb8Store(v), UZP_ENC);
 #else
@@ -653,6 +673,9 @@ float HalfNearestEven(float v) {
 }
 
 float StoreCoverage(float alpha) {
+#if UZP_RAW_OUTPUT
+    return alpha;
+#endif
 #if UZP_HALF_COVERAGE
     alpha = HalfNearestEven(alpha);
 #endif
@@ -665,7 +688,7 @@ float StoreCoverage(float alpha) {
 #endif
 }
 
-#if !defined(UZP_LEVELS)
+#if !defined(UZP_LEVELS) && !defined(UZP_VNORMAL)
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
     StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
@@ -833,5 +856,82 @@ void main(uint3 id : SV_DispatchThreadID) {
     result.w = StoreCoverage(1.0f);
 #endif
     StoreTexel(params[base + L_DST_UAV], p, result);
+}
+#endif
+
+#if defined(UZP_VNORMAL)
+// ── Virtual normal maps (height_to_normal.cpp) ──────────────────────────────
+
+#define V_WIDTH 0
+#define V_HEIGHT 1
+#define V_FLAGS 2
+#define V_DST_UAV 3
+#define V_TABLE16_SRV 4
+#define V_HEIGHT_CONST 5
+#define V_NORMAL_SRV 6
+#define V_NORMAL_CONST 7
+#define V_HEIGHT_SRV 10
+
+#define V_FLAG_HEIGHT_TILES 1u
+#define V_FLAG_NORMAL_TILE 2u
+#define V_FLAG_SOBEL 4u
+#define V_FLAG_DIRECTX 8u
+
+// The height at (x, y) of the tile's frame, read from the neighbouring tile across an edge.
+float HeightAt(uint base, uint flags, int x, int y, int width, int height) {
+    StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
+    if ((flags & V_FLAG_HEIGHT_TILES) == 0u) return asfloat(params[base + V_HEIGHT_CONST]);
+    const int ox = x < 0 ? -1 : (x >= width ? 1 : 0);
+    const int oy = y < 0 ? -1 : (y >= height ? 1 : 0);
+    const uint srv = params[base + V_HEIGHT_SRV + uint((oy + 1) * 3 + ox + 1)];
+    return LoadTexel(srv, int2(x - ox * width, y - oy * height)).x;
+}
+
+// (a + 2 b) + c: one (1, 2, 1) row or column of the Sobel stencil.
+float Smooth(float a, float b, float c) { return (a + 2.0f * b) + c; }
+
+[numthreads(8, 8, 1)]
+void main(uint3 id : SV_DispatchThreadID) {
+    StructuredBuffer<uint> params = ResourceDescriptorHeap[g_paramsSrv];
+    const uint base = g_block * 32u;
+    const int width = int(params[base + V_WIDTH]);
+    const int height = int(params[base + V_HEIGHT]);
+    if (int(id.x) >= width || int(id.y) >= height) return;
+    const uint flags = params[base + V_FLAGS];
+    g_tables = params[base + V_TABLE16_SRV];
+    const int x = int(id.x);
+    const int y = int(id.y);
+    float h[9];
+    [unroll] for (int dy = -1; dy <= 1; ++dy) {
+        [unroll] for (int dx = -1; dx <= 1; ++dx) {
+            h[(dy + 1) * 3 + dx + 1] = HeightAt(base, flags, x + dx, y + dy, width, height);
+        }
+    }
+    float3 v;
+    if ((flags & V_FLAG_SOBEL) != 0u) {
+        const float left = Smooth(h[0], h[3], h[6]);
+        const float right = Smooth(h[2], h[5], h[8]);
+        const float top = Smooth(h[0], h[1], h[2]);
+        const float bottom = Smooth(h[6], h[7], h[8]);
+        v = float3(left - right, bottom - top, 3.125f);
+    } else {
+        v = float3(h[3] - h[4], h[4] - h[1], 0.390625f);
+    }
+    float3 channel;
+    if ((flags & V_FLAG_NORMAL_TILE) != 0u) {
+        channel = LoadTexel(params[base + V_NORMAL_SRV], int2(x, y)).xyz;
+    } else {
+        channel = float3(asfloat(params[base + V_NORMAL_CONST]), asfloat(params[base + V_NORMAL_CONST + 1]),
+                         asfloat(params[base + V_NORMAL_CONST + 2]));
+    }
+    const float3 heightNormal = Normalise(v);
+    const float3 combined = Normalise(Reoriented(float3(0.0f, 0.0f, 1.0f), heightNormal));
+    const float3 n = Normalise(Reoriented(combined, DecodeNormal(channel)));
+    const float ny = (flags & V_FLAG_DIRECTX) != 0u ? -n.y : n.y;
+    float4 result = float4(Fma(n.x, 0.5f, 0.5f), Fma(ny, 0.5f, 0.5f), Fma(n.z, 0.5f, 0.5f), 1.0f);
+    result.x = StoreChannel(result.x);
+    result.y = StoreChannel(result.y);
+    result.z = StoreChannel(result.z);
+    StoreTexel(params[base + V_DST_UAV], int2(x, y), result);
 }
 #endif

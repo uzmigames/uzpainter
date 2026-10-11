@@ -520,6 +520,7 @@
             "per_baker": { "type": "object", "additionalProperties": { "type": "object" } }
           }
         },
+        "height_to_normal_method": { "enum": ["Sharp", "SmoothSobel"] },
         "stacks": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/stack" } }
       }
     },

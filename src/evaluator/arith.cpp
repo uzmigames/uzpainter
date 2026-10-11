@@ -654,4 +654,12 @@ std::array<float, 4> Composite(const CompositeInput& in) {
     return out;
 }
 
+std::array<float, 3> NormalNormalise(const std::array<float, 3>& v) { return Normalise(v); }
+
+std::array<float, 3> NormalDecode(const std::array<float, 3>& c) { return DecodeNormal(c); }
+
+std::array<float, 3> NormalReoriented(const std::array<float, 3>& base, const std::array<float, 3>& detail) {
+    return Reoriented(base, detail);
+}
+
 }  // namespace uzp::evaluator::arith
