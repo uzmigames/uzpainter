@@ -1,37 +1,46 @@
 # Iray capture procedure `iray-capture/1`
 
-Task `phase0.6_render-reference-procedure` (child of `phase0.9_render-reference-capture`, P0-FEAS-RENDER in `docs/dag.md`). It qualifies the capture procedure of `docs/architecture/07-preview-and-render-parity.md` §2.2 and answers every "not confirmed" row of §2.1 and the bump-or-displacement question of §3.3. Decisions 002 (clean room), 018 (Iray is the render-parity target) and 022 apply. This report holds statuses, answers and SHA-256 hashes only. No Painter pixels are in it; probe renders and panel images stay on the owner's machine.
+Task `phase0.6_render-reference-procedure` (child of `phase0.9_render-reference-capture`, P0-FEAS-RENDER in `docs/dag.md`). It qualifies the capture procedure of `docs/architecture/07-preview-and-render-parity.md` §2.2 for the fixed render pipeline and answers every "not confirmed" row of §2.1 and the bump-or-displacement question of §3.3. Decisions 002 (clean room), 018 (Iray is the render-parity target), 022, 029 (UI automation), 038 (fixed pipeline) and 039 (pixel route and automation) apply. This report holds statuses, answers, numbers and SHA-256 hashes only. No Painter pixels are in it: probe renders, panel images and readbacks stay in the private work directory on the owner's machine.
 
-**Status (2026-10-10).** The procedure, the probe and the analyses are implemented and tested against the fake Painter. Answers that public documentation settles are recorded. The probe session and the qualification run need the owner at Painter's panels (rulebook question on this task), so the rows marked `pending_probe` stay open until then. `iray-capture/1` is not qualified until every row is settled and the qualification run has passed (§4).
+**Status (2026-10-11).** Qualified. The probe session and the qualification run were made on Painter `12.1.5+js-api.1.1.20` (the current envelope, decision 037), Windows 11, RTX 4090. The UI operator `tools/parity/recorder/painter_ui.py` operated the panels under the Assets3D Painter lock. Every row is settled. The only `uncontrolled` row is the random seed.
+
+**Scope change (decision 038, 2026-10-11).** The owner fixed the render pipeline ("nao tem a necessidade do uzpainter ter todas as configuracoes de render do substance, nossa pipe de render e sempre fixa"). The procedure covers only the Assets3D render comparison standard: `E:\UzmiGames\Assets3D\Pipeline\render\Render-Comparison-Standard.json` (approved source `U-A3D-RENDERSTD-2`, `docs/approved-sources.md`; file SHA-256 `2ec4281f7a1414c836eb59aec4fa895db0706c2fc9c4e19433325939a6525be5`), summarised in `docs/analysis/assets3d-pipeline/06-review-render-standard.md` §2. That means the v2 top-level block, the `ref_match` v3 preset and the `base_color` diagnostic. Every other Iray or display setting is pinned to the standard's value or to Painter's default and is not a supported variable. The first version of this report planned open-ended probes: colour-profile LUT placement, tone-mapping and post-effect sweeps, the Viewer/MDL parameter sweep, and setting persistence across projects. Those probes were dropped. Their rows are answered `not_required` with the pinned value, or settled for the pinned values only.
+
+**Prior Assets3D evidence** (referenced by path and hash, not copied):
+
+- `Render-Comparison.md` (`cf34ec2c8c2fb8dc041be000887f03d5c57b673dd762f77ecfd7ccd22ec36925`): the OCIO selection is not saved with the project; `display.save_viewport` returned a stale camera in 12.1; Iray pauses the layer engine; the custom clear colour is not serialised.
+- `Render-Standard-Validation.json` (`3de3c4af0bf7c7d3d3e1aa201c98c19618da30a1882b6ce4c97cd1f4d964ee91`): Painter's Default/sRGB view equals the sRGB transfer function within 0.0015 of an 8-bit code. Its config is `resources/ocio/substance/config.ocio`, SHA-256 `15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4`; re-hashed identical on 12.1.5.
+- `painter_render_standard.py` (approved source `U-A3D-RENDERPY-2`; file SHA-256 `1ac9fd73ffaa55580cadfdb220b3997e0204a67d2f13ec881805ede410ca4238`): which widgets the standard touches.
 
 ## 1. Answers
 
 The table below is generated from the JSON block that follows it. `python -m tools.parity.render_procedure answers` checks the block, and `--merge <probe directory>` folds a finished probe in. Statuses:
 
 - `documented`: settled by public documentation (A-PYDOC, A-JSDOC, A-HELP-*).
-- `confirmed_by_probe`: settled by the black-box probe (A-OBSERVE).
+- `confirmed_by_probe`: settled by the black-box probe (A-OBSERVE), for the pinned values of the fixed pipeline.
 - `uncontrolled`: the setting can be neither fixed nor read. Every reference manifest names it in `uncontrolled_settings`, and every exception that relies on the reference names it too (07 §4).
+- `not_required`: not a variable of the fixed pipeline (decision 038). The entry names the pinned value, which every capture applies and reads back.
 - `pending_probe`: still open.
 
-Evidence is a SHA-256: of the documentation page as retrieved, or of the private probe file.
+Evidence is a SHA-256. For documentation it is the hash of the page as retrieved. For the probe it is the hash of a private probe file (`probe:<name>`), which `probe.json` lists with its hash. `presets` records whether the `ref_match` preset and the `base_color` diagnostic apply and verify.
 
 <!-- answers-table:begin -->
 | Row (07 §2.1, §3.3) | Status | Evidence |
 |---|---|---|
-| `colour_lut`: Colour LUT: where Iray applies it in the display chain | `pending_probe` | A-HELP-GUIDE color-profile, A-PYDOC display.html |
-| `display_view_transform`: Colour-management mode: the selected display/view transform | `documented` | A-HELP-GUIDE color-management, A-PYDOC display.html, A-PYDOC objects.inv |
-| `iray_settings`: Min Sample, Max Sample, Max Time, Caustic Sampler, Firefly Filter, override resolution: persistence and readback | `pending_probe` | A-PYDOC objects.inv, A-JSDOC alg.display.html, A-HELP-IRAYSET |
-| `readiness`: Convergence state (Status, Iterations, Rendering time): programmatic readiness | `documented` | A-PYDOC objects.inv, A-JSDOC alg.display.html, A-HELP-IRAYSET |
-| `viewer_mdl_settings`: Environment exposure and rotation, dome, ground (Viewer and MDL) | `pending_probe` | A-HELP-VIEWER, A-PYDOC objects.inv |
-| `display_settings`: Which display settings shared with the viewport change the Iray image | `pending_probe` | A-HELP-IRAY, A-HELP-GUIDE post-processing |
-| `default_mdl_parameters`: Default-MDL material parameters per material instance | `pending_probe` | A-HELP-VIEWER |
-| `denoiser`: Denoiser: does it affect the saved render, can it be disabled | `pending_probe` | A-HELP-IRAYSET |
-| `random_seed`: Random seed: are repeated renders bit-identical | `pending_probe` | A-PYDOC objects.inv |
-| `save_render`: Save Render: format, bit depth, display transform baked in | `pending_probe` | A-HELP-IRAYSET |
-| `stale_frame`: Save Render: stale-frame behaviour | `pending_probe` | A-HELP-IRAYSET |
-| `height`: Height applied as bump or displacement (§3.3) | `pending_probe` | A-HELP-VIEWER |
-| `camera_projection`: Camera conventions behind silhouette verification (§2.2 step 5) | `pending_probe` | A-PYDOC display.html |
-| `pixel_route`: Pixel route: Save Render or the external 1:1 observation fallback | `pending_probe` | A-HELP-IRAYSET |
+| `colour_lut`: Colour LUT: where Iray applies it in the display chain | `not_required` | probe:probe.json, probe:panel/v2/display-settings |
+| `display_view_transform`: Colour-management mode: the selected display/view transform | `confirmed_by_probe` | probe:probe.json, probe:render/A, probe:panel/v2/viewport-display-transform |
+| `iray_settings`: Min Sample, Max Sample, Max Time, Caustic Sampler, Firefly Filter, override resolution: persistence and readback | `confirmed_by_probe` | probe:probe.json, probe:panel/v2/iray-settings, probe:render/A |
+| `readiness`: Convergence state (Status, Iterations, Rendering time): programmatic readiness | `confirmed_by_probe` | probe:probe.json, probe:panel/v2/iray-settings |
+| `viewer_mdl_settings`: Environment exposure and rotation, dome, ground (Viewer and MDL) | `confirmed_by_probe` | probe:probe.json, probe:panel/v2/display-settings |
+| `display_settings`: Which display settings shared with the viewport change the Iray image | `not_required` | probe:probe.json, probe:panel/v2/display-settings |
+| `default_mdl_parameters`: Default-MDL material parameters per material instance | `not_required` | probe:panel/defaults/shader-settings, probe:panel/height/shader-settings |
+| `denoiser`: Denoiser: does it affect the saved render, can it be disabled | `confirmed_by_probe` | probe:render/A, probe:render/I, probe:panel/defaults/iray-settings |
+| `random_seed`: Random seed: are repeated renders bit-identical | `uncontrolled` | probe:render/A, probe:render/B |
+| `save_render`: Save Render: format, bit depth, display transform baked in | `confirmed_by_probe` | probe:render/A, probe:render/A_exr |
+| `stale_frame`: Save Render: stale-frame behaviour | `confirmed_by_probe` | probe:render/A, probe:render/F, probe:render/G, probe:probe.json |
+| `height`: Height applied as bump or displacement (§3.3) | `confirmed_by_probe` | probe:render/A, probe:render/J, probe:panel/height/shader-settings |
+| `camera_projection`: Camera conventions behind silhouette verification (§2.2 step 5) | `confirmed_by_probe` | probe:render/A, probe:render/H, probe:probe.json |
+| `pixel_route`: Pixel route: Save Render or the external 1:1 observation fallback | `confirmed_by_probe` | probe:render/A, probe:render/F, probe:render/G, probe:view/V |
 <!-- answers-table:end -->
 
 <!-- answers:begin -->
@@ -55,262 +64,565 @@ Evidence is a SHA-256: of the documentation page as retrieved, or of the private
   },
   "rows": {
     "colour_lut": {
-      "status": "pending_probe",
-      "answer": "Documentation: the colour profile is a 3D LUT stored as a 2D float texture, applied after tone mapping, and the help page names only the viewport's Material mode, not Iray. The probe sets an all-magenta LUT through the documented API (render D) to see whether Iray's view and its saved render contain it.",
+      "status": "not_required",
+      "answer": "Fixed pipeline (decision 038): no colour profile and no LUT. Activate Color Profile is applied off and read back (False).",
       "evidence": [
         {
-          "source": "A-HELP-GUIDE color-profile",
-          "sha256": "73b682cb18cd9a98721d1bb4222d61a3c7aae89782c558996185384103eb55f7"
+          "source": "probe:probe.json",
+          "sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3"
         },
         {
-          "source": "A-PYDOC display.html",
-          "sha256": "488d5c6a3c66826ea5f52a401d663213dd1272fd7ccc73be9570c4771eeea42c"
+          "source": "probe:panel/v2/display-settings",
+          "sha256": "8ab62f2b276a1e440e7c6811f38fd2d8f3567be065bde516e6965fb072a49458"
         }
-      ]
+      ],
+      "details": {
+        "pinned": {
+          "Display Settings/Activate Color Profile": false,
+          "color_lut_url": null
+        }
+      }
     },
     "display_view_transform": {
-      "status": "documented",
-      "answer": "Legacy projects (the analytic fixture profile) have no view transform: the display transform is the documented tone mapping, recorded by API. In colour-managed projects the display transform is chosen in a viewport drop-down that is not saved with the project (it depends on the monitor) and has no Python or JavaScript API: the recorder can neither fix nor read it, so the operator sets and reads it, and a colour-managed sheet must name it as an operator setting with a panel image.",
+      "status": "confirmed_by_probe",
+      "answer": "Colour management 'ocio' (OCIO = Painter's substance config). The viewport's display-transform selector is drawn over the viewport, outside the UI Automation tree and both APIs, so automation cannot set it: a fresh Painter session shows Default - sRGB (panel image), and every capture verifies it through the background, which must read 89,89,89 (read [89, 89, 89]).",
       "evidence": [
         {
-          "source": "A-HELP-GUIDE color-management",
-          "sha256": "e6761c1de5f9f94ef787d4cf742d5bc18a8bbb643d94eca70c22823b97d584ca"
+          "source": "probe:probe.json",
+          "sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3"
         },
         {
-          "source": "A-PYDOC display.html",
-          "sha256": "488d5c6a3c66826ea5f52a401d663213dd1272fd7ccc73be9570c4771eeea42c"
+          "source": "probe:render/A",
+          "sha256": "4d4fa7d149807f92639df1387d9b5e1a43e5fc9a164994740290ed42c28e35f9"
         },
         {
-          "source": "A-PYDOC objects.inv",
-          "sha256": "e7d6388ff97f20ff09b0c31a8dabbb536eb418eab7146e9845278a1ff1426522"
+          "source": "probe:panel/v2/viewport-display-transform",
+          "sha256": "2c1fbf7025c038d9cba6c12c823d259323f7c639564cc1690831781455c47a73"
         }
-      ]
+      ],
+      "details": {
+        "pinned": "Default - sRGB",
+        "background": [
+          89,
+          89,
+          89
+        ]
+      }
     },
     "iray_settings": {
-      "status": "pending_probe",
-      "answer": "No Python or JavaScript API symbol reads or sets them (documentation scan): they are operator-applied and operator-read in the Iray Settings panel. Whether they are saved with the project or carried into a new project is answered by the probe's persistence form.",
+      "status": "confirmed_by_probe",
+      "answer": "No API reads or sets them; the UI operator applies each pinned value and reads it back from the widget ({'Iray Settings/Min Sample': 256, 'Iray Settings/Max Sample': 256, 'Iray Settings/Max Time': 3600, 'Iray Settings/Caustic Sampler': False, 'Iray Settings/Firefly Filter': False, 'Iray Settings/Override viewport resolution': True, 'Iray Settings/Width': 1200, 'Iray Settings/Height': 1200}); the saved render is 1200x1200. Persistence is not relied on: every capture re-applies and re-reads the sheet. Caustic Sampler and the resolution override beyond the pinned values are not required (decision 038).",
       "evidence": [
         {
-          "source": "A-PYDOC objects.inv",
-          "sha256": "e7d6388ff97f20ff09b0c31a8dabbb536eb418eab7146e9845278a1ff1426522"
+          "source": "probe:probe.json",
+          "sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3"
         },
         {
-          "source": "A-JSDOC alg.display.html",
-          "sha256": "70006bbf0a7601e69af8c88e836aa6af74c48a814846ac6c9c659c707aa66299"
+          "source": "probe:panel/v2/iray-settings",
+          "sha256": "66c4446019141e0426ab662621b398b6cd89da9e0a59326e56c14ccb1928cf0f"
         },
         {
-          "source": "A-HELP-IRAYSET",
-          "sha256": "41023bb8bd49a131d042f729ddb4ce67594dfecb4072daf673039de4c08a7c0b"
+          "source": "probe:render/A",
+          "sha256": "4d4fa7d149807f92639df1387d9b5e1a43e5fc9a164994740290ed42c28e35f9"
         }
-      ]
+      ],
+      "details": {
+        "pinned": {
+          "Iray Settings/Min Sample": 256,
+          "Iray Settings/Max Sample": 256,
+          "Iray Settings/Max Time": 3600,
+          "Iray Settings/Caustic Sampler": false,
+          "Iray Settings/Firefly Filter": false,
+          "Iray Settings/Override viewport resolution": true,
+          "Iray Settings/Width": 1200,
+          "Iray Settings/Height": 1200
+        }
+      }
     },
     "readiness": {
-      "status": "documented",
-      "answer": "There is no programmatic readiness check: neither API exposes Status, Iterations or Rendering time (documentation scan). Readiness is read by the operator in the Iray information section and gated by the recorder: it refuses the capture unless Status is Done, Iterations equals the sample count and Rendering time is below Max Time, and the panel image is kept as private evidence.",
+      "status": "confirmed_by_probe",
+      "answer": "No API exposes it; the UI operator reads Status, Iterations and Rendering time from Iray's information section ({'status': 'Done', 'iterations': 256, 'rendering_time_s': 1.0, 'max_time_s': 3600.0}), and the recorder gates the capture on Done, Iterations = S and a time below Max Time.",
       "evidence": [
         {
-          "source": "A-PYDOC objects.inv",
-          "sha256": "e7d6388ff97f20ff09b0c31a8dabbb536eb418eab7146e9845278a1ff1426522"
+          "source": "probe:probe.json",
+          "sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3"
         },
         {
-          "source": "A-JSDOC alg.display.html",
-          "sha256": "70006bbf0a7601e69af8c88e836aa6af74c48a814846ac6c9c659c707aa66299"
-        },
-        {
-          "source": "A-HELP-IRAYSET",
-          "sha256": "41023bb8bd49a131d042f729ddb4ce67594dfecb4072daf673039de4c08a7c0b"
+          "source": "probe:panel/v2/iray-settings",
+          "sha256": "66c4446019141e0426ab662621b398b6cd89da9e0a59326e56c14ccb1928cf0f"
         }
-      ]
+      ],
+      "details": {
+        "convergence": {
+          "status": "Done",
+          "iterations": 256,
+          "rendering_time_s": 1.0,
+          "max_time_s": 3600.0
+        }
+      }
     },
     "viewer_mdl_settings": {
-      "status": "pending_probe",
-      "answer": "Not in either API (documentation scan): operator-applied and operator-read. Persistence is answered by the probe's persistence form.",
+      "status": "confirmed_by_probe",
+      "answer": "Not in the APIs; the UI operator applies each pinned environment and dome value and reads it back ({'Display Settings/View mode': 'Material', 'Display Settings/Override environment map color space': True, 'Display Settings/Environment map color space': 'Linear', 'Display Settings/Environment Exposure': 0.0, 'Display Settings/Environment Rotation': 0.0, 'Display Settings/Environment Alignment': 'World', 'Display Settings/Dome': 'Infinite sphere', 'Display Settings/Clear color': True, 'Display Settings/Clear color value': '595959', 'Display Settings/Ground': False, 'Display Settings/Activate Post Effects': False, 'Display Settings/Activate Color Profile': False, 'Display Settings/Activate Subsurface Scattering': False}). The MDL settings sweep is not required (decision 038).",
       "evidence": [
         {
-          "source": "A-HELP-VIEWER",
-          "sha256": "a73231c61002c96b50fbbe483608b63c4f5ec16067b100e1284883979d9c420a"
+          "source": "probe:probe.json",
+          "sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3"
         },
         {
-          "source": "A-PYDOC objects.inv",
-          "sha256": "e7d6388ff97f20ff09b0c31a8dabbb536eb418eab7146e9845278a1ff1426522"
+          "source": "probe:panel/v2/display-settings",
+          "sha256": "8ab62f2b276a1e440e7c6811f38fd2d8f3567be065bde516e6965fb072a49458"
         }
-      ]
+      ],
+      "details": {
+        "pinned": {
+          "Display Settings/View mode": "Material",
+          "Display Settings/Override environment map color space": true,
+          "Display Settings/Environment map color space": "Linear",
+          "Display Settings/Environment Exposure": 0.0,
+          "Display Settings/Environment Rotation": 0.0,
+          "Display Settings/Environment Alignment": "World",
+          "Display Settings/Dome": "Infinite sphere",
+          "Display Settings/Clear color": true,
+          "Display Settings/Clear color value": "595959",
+          "Display Settings/Ground": false,
+          "Display Settings/Activate Post Effects": false,
+          "Display Settings/Activate Color Profile": false,
+          "Display Settings/Activate Subsurface Scattering": false
+        }
+      }
     },
     "display_settings": {
-      "status": "pending_probe",
-      "answer": "The help page says Iray shares the viewport's camera, post effects, tone mapping, colour LUT and colour management. The probe measures which of tone mapping (render C), the colour LUT (D) and a post effect (E, Vignette) change the saved image.",
+      "status": "not_required",
+      "answer": "Fixed pipeline (decision 038): post effects, colour profile and display SSS off, applied and read back; tone mapping does not apply to a colour-managed project (set_tone_mapping raises).",
       "evidence": [
         {
-          "source": "A-HELP-IRAY",
-          "sha256": "ec502a0ac21b089b3dd6b00d192f0ea9b900f8d57b68f52011cbc5af5f7f4ac2"
+          "source": "probe:probe.json",
+          "sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3"
         },
         {
-          "source": "A-HELP-GUIDE post-processing",
-          "sha256": "c0a5e5919902a37aacbfd0404d9b1d1b9d67048543dc848e6143a24ed6d2741b"
+          "source": "probe:panel/v2/display-settings",
+          "sha256": "8ab62f2b276a1e440e7c6811f38fd2d8f3567be065bde516e6965fb072a49458"
         }
-      ]
+      ],
+      "details": {
+        "pinned": {
+          "Display Settings/Activate Post Effects": false,
+          "Display Settings/Activate Color Profile": false,
+          "Display Settings/Activate Subsurface Scattering": false
+        }
+      }
     },
     "default_mdl_parameters": {
-      "status": "pending_probe",
-      "answer": "Names documented (Emissive Intensity, Refraction, IOR, Scattering, Absorption, Absorption Color), per material instance, not in either API. The probe records their defaults on a new project and whether they persist.",
+      "status": "not_required",
+      "answer": "Fixed pipeline (decision 038): the material is the default shader instance of a new project, left at Painter's defaults (panel image); its parameters are not a variable.",
       "evidence": [
         {
-          "source": "A-HELP-VIEWER",
-          "sha256": "a73231c61002c96b50fbbe483608b63c4f5ec16067b100e1284883979d9c420a"
+          "source": "probe:panel/defaults/shader-settings",
+          "sha256": "9e934960aaf7b568c4163c6f97245ec7cd6af15e099ca32f11ad3c9b1288a534"
+        },
+        {
+          "source": "probe:panel/height/shader-settings",
+          "sha256": "9e934960aaf7b568c4163c6f97245ec7cd6af15e099ca32f11ad3c9b1288a534"
         }
-      ]
+      ],
+      "details": {
+        "pinned": "Painter's default shader instance"
+      }
     },
     "denoiser": {
-      "status": "pending_probe",
-      "answer": "No denoiser control is documented. The probe tests the 2-sample render I against the 64-sample render A: pixel-independent residual means no denoiser.",
+      "status": "confirmed_by_probe",
+      "answer": "no denoiser acts on the saved render (lag-1 correlation 0.047, residual sd 0.0908); the Renderer Settings panel has no denoiser control (panel image).",
       "evidence": [
         {
-          "source": "A-HELP-IRAYSET",
-          "sha256": "41023bb8bd49a131d042f729ddb4ce67594dfecb4072daf673039de4c08a7c0b"
+          "source": "probe:render/A",
+          "sha256": "4d4fa7d149807f92639df1387d9b5e1a43e5fc9a164994740290ed42c28e35f9"
+        },
+        {
+          "source": "probe:render/I",
+          "sha256": "6d125c4e7495ab82cc4ae08ba345fb0e781fa7ae4734f9d1fefe9ec72442f78f"
+        },
+        {
+          "source": "probe:panel/defaults/iray-settings",
+          "sha256": "105a81c6aabd904ee2701581f3aee291a03ef24501015fb76eaa7d0bc074a442"
         }
-      ]
+      ],
+      "details": {
+        "correlation": 0.04682842446848588,
+        "residual_sd": 0.09084856082379394
+      }
     },
     "random_seed": {
-      "status": "pending_probe",
-      "answer": "The seed is neither documented nor exposed by either API, so it is uncontrolled. The probe measures whether two renders of the same state in one session are bit-identical; session-separated repeatability is measured by the references (07 §4).",
+      "status": "uncontrolled",
+      "answer": "Iray's seed is neither documented nor settable. Two renders of the same state in one session are not bit-identical ({'max_abs': 0.0025635156786450453, 'mean_abs': 9.703678272000532e-07, 'differing': 5173, 'pixels': 1440000}). Session-separated repeatability is measured by the references (07 §4 step 1a).",
       "evidence": [
         {
-          "source": "A-PYDOC objects.inv",
-          "sha256": "e7d6388ff97f20ff09b0c31a8dabbb536eb418eab7146e9845278a1ff1426522"
+          "source": "probe:render/A",
+          "sha256": "4d4fa7d149807f92639df1387d9b5e1a43e5fc9a164994740290ed42c28e35f9"
+        },
+        {
+          "source": "probe:render/B",
+          "sha256": "0ab853313bee38ce370fd1d27f27205819d71f003b63105fb0b52f9b9ee086ad"
         }
-      ]
+      ],
+      "details": {
+        "bit_identical_same_session": false,
+        "repeat": {
+          "max_abs": 0.0025635156786450453,
+          "mean_abs": 9.703678272000532e-07,
+          "differing": 5173,
+          "pixels": 1440000
+        }
+      }
     },
     "save_render": {
-      "status": "pending_probe",
-      "answer": "The help page says only that Save Render exports the current render, even unfinished. The probe records the file types offered, measures the saved PNG (and OpenEXR when offered) and compares Linear and ACES renders to see whether the display transform is baked in.",
+      "status": "confirmed_by_probe",
+      "answer": "Save Render offers 'BMP (*.bmp), EXR (*.exr), HDR (*.hdr), J2K (*.j2k *.j2c), JNG (*.jng), JP2 (*.jp2), JPEG (*.jpg *.jif *.jpeg *.jpe), PGM (*.pgm), PNG (*.png), PSD (*.psd *.psb), TARGA (*.tga *.targa), TIFF (*.tif *.tiff), WebP (*.webp)'; other dialog options: 'none'. PNG: 16-bit, 4 channels, colour chunk: none; its background in 8-bit codes [89, 89, 89] equals the standard's display value 89,89,89 (linear 0.1 through Default - sRGB): the display transform is baked in. OpenEXR: float, 32-bit, 4 channels.",
       "evidence": [
         {
-          "source": "A-HELP-IRAYSET",
-          "sha256": "41023bb8bd49a131d042f729ddb4ce67594dfecb4072daf673039de4c08a7c0b"
+          "source": "probe:render/A",
+          "sha256": "4d4fa7d149807f92639df1387d9b5e1a43e5fc9a164994740290ed42c28e35f9"
+        },
+        {
+          "source": "probe:render/A_exr",
+          "sha256": "ad4a98e4c953a1876f96fc3239316faf36fd2b3a9d7b96a3d23400df193c38a8"
         }
-      ]
+      ],
+      "details": {
+        "png": {
+          "bits_per_channel": 16,
+          "channels": 4,
+          "colour_chunk": null,
+          "background": [
+            89,
+            89,
+            89
+          ],
+          "display_referred": true
+        },
+        "exr": {
+          "sample_type": "float",
+          "bits_per_channel": 32,
+          "channels": 4
+        }
+      }
     },
     "stale_frame": {
-      "status": "pending_probe",
-      "answer": "The probe saves right after a settings change (F) and after convergence (G) and compares both with the previous frame (A).",
+      "status": "confirmed_by_probe",
+      "answer": "Save Render right after a camera change (Status 'Done') saved a frame of the new settings, not the previous frame.",
       "evidence": [
         {
-          "source": "A-HELP-IRAYSET",
-          "sha256": "41023bb8bd49a131d042f729ddb4ce67594dfecb4072daf673039de4c08a7c0b"
+          "source": "probe:render/A",
+          "sha256": "4d4fa7d149807f92639df1387d9b5e1a43e5fc9a164994740290ed42c28e35f9"
+        },
+        {
+          "source": "probe:render/F",
+          "sha256": "c99e2dfcbbeab0ef88e1df2860cf9ef9f21a07fc62fdec2b57b816d5abf9cdb1"
+        },
+        {
+          "source": "probe:render/G",
+          "sha256": "6dce03b8c17febd1899b181adec112c6ab44f86c0ce3a27af3cd1dae42517ef2"
+        },
+        {
+          "source": "probe:probe.json",
+          "sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3"
         }
-      ]
+      ],
+      "details": {
+        "outcome": "current_frame",
+        "to_previous": {
+          "max_abs": 0.8063477531090257,
+          "mean_abs": 0.015110200391224127,
+          "differing": 209307,
+          "pixels": 1440000
+        },
+        "to_converged": {
+          "max_abs": 0.805783169298848,
+          "mean_abs": 0.011064973339097929,
+          "differing": 197893,
+          "pixels": 1440000
+        }
+      }
     },
     "height": {
-      "status": "pending_probe",
-      "answer": "Not documented. The probe renders the sphere with a stripe height map (J): a moved outline means displacement, shading changes inside an unchanged outline mean bump.",
+      "status": "confirmed_by_probe",
+      "answer": "With the shader at Painter's defaults (panel image), Iray applies a painted height as bump (shading changes inside an unchanged outline); outline pixels changed: 0.",
       "evidence": [
         {
-          "source": "A-HELP-VIEWER",
-          "sha256": "a73231c61002c96b50fbbe483608b63c4f5ec16067b100e1284883979d9c420a"
+          "source": "probe:render/A",
+          "sha256": "4d4fa7d149807f92639df1387d9b5e1a43e5fc9a164994740290ed42c28e35f9"
+        },
+        {
+          "source": "probe:render/J",
+          "sha256": "19b853fcc5f39f97bea8f372e7aaec61eafd8dc04eacd1a422bbf06a86050cc5"
+        },
+        {
+          "source": "probe:panel/height/shader-settings",
+          "sha256": "9e934960aaf7b568c4163c6f97245ec7cd6af15e099ca32f11ad3c9b1288a534"
         }
-      ]
+      ],
+      "details": {
+        "outline_changed": 0,
+        "interior_shading_changed": true
+      }
     },
     "camera_projection": {
-      "status": "pending_probe",
-      "answer": "python-doc documents position, Euler rotation in degrees and field of view in scene space, but not the axis conventions or the Euler order. The probe checks the unrotated projection (A) and finds the Euler order from a rotated camera (H).",
+      "status": "confirmed_by_probe",
+      "answer": "Unrotated camera: 0 silhouette mismatches. Rotated camera [-15.0, 25.0, 10.0]: Euler orders without mismatch ['ZYX'] (scores {'XYZ': 204444, 'XZY': 115063, 'YXZ': 153040, 'YZX': 133983, 'ZXY': 48636, 'ZYX': 0}).",
       "evidence": [
         {
-          "source": "A-PYDOC display.html",
-          "sha256": "488d5c6a3c66826ea5f52a401d663213dd1272fd7ccc73be9570c4771eeea42c"
+          "source": "probe:render/A",
+          "sha256": "4d4fa7d149807f92639df1387d9b5e1a43e5fc9a164994740290ed42c28e35f9"
+        },
+        {
+          "source": "probe:render/H",
+          "sha256": "6b5c15fa4e46d53adfb80cfb48627c0433ce04dcd011380072c241fa8a6c451c"
+        },
+        {
+          "source": "probe:probe.json",
+          "sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3"
+        }
+      ],
+      "details": {
+        "unrotated_mismatches": 0,
+        "order_scores": {
+          "XYZ": 204444,
+          "XZY": 115063,
+          "YXZ": 153040,
+          "YZX": 133983,
+          "ZXY": 48636,
+          "ZYX": 0
+        },
+        "confirmed_orders": [
+          "ZYX"
+        ],
+        "background_uniform": true
+      }
+    },
+    "pixel_route": {
+      "status": "confirmed_by_probe",
+      "answer": "Save Render (PNG, display-referred, at the override resolution). The live view of the viewport is [1523, 1174] pixels for a 1200x1200 render: it is scaled, so an external observation is not 1:1 at this size.",
+      "evidence": [
+        {
+          "source": "probe:render/A",
+          "sha256": "4d4fa7d149807f92639df1387d9b5e1a43e5fc9a164994740290ed42c28e35f9"
+        },
+        {
+          "source": "probe:render/F",
+          "sha256": "c99e2dfcbbeab0ef88e1df2860cf9ef9f21a07fc62fdec2b57b816d5abf9cdb1"
+        },
+        {
+          "source": "probe:render/G",
+          "sha256": "6dce03b8c17febd1899b181adec112c6ab44f86c0ce3a27af3cd1dae42517ef2"
+        },
+        {
+          "source": "probe:view/V",
+          "sha256": "1e8d0229f4abad9ad74abb3b56e0c09942a7f3a27b644e5d609eea7107ed17b5"
+        }
+      ],
+      "details": {
+        "route": "save_render",
+        "live_view": [
+          1523,
+          1174
+        ],
+        "live_view_one_to_one": false
+      }
+    }
+  },
+  "uncontrolled": [
+    "random_seed"
+  ],
+  "probe": {
+    "probe_json_sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3",
+    "painter_build": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "session_id": "3051381f14704ed6b9df75f7cb811f91",
+    "finished_at": "2026-10-11T09:47:05.456654+00:00"
+  },
+  "presets": {
+    "ref_match": {
+      "applied_and_verified": true,
+      "background": [
+        141,
+        142,
+        148
+      ],
+      "readback": {
+        "Display Settings/Clear color value": "8D8E94",
+        "Display Settings/Environment Rotation": "180",
+        "Display Settings/Environment map color space": "Linear",
+        "Display Settings/Dome": "Infinite sphere"
+      },
+      "environment_url": "resource://session/TOS-RefMatch-Skeletal-Mage?version=9448e92f252b3abe147ef955a8b41e3ac86b18d1.image",
+      "evidence": [
+        {
+          "source": "probe:render/R",
+          "sha256": "bd5bbf7ec2bce57ee22a14011a56c007b5e0d7885741580b1ebe69eab153ce35"
+        },
+        {
+          "source": "probe:panel/ref_match/display-settings",
+          "sha256": "0791890d9192a4e9caa898ba1fbb80dc51795f2154db8f4cdced2274cca7f4d7"
+        },
+        {
+          "source": "probe:probe.json",
+          "sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3"
         }
       ]
     },
-    "pixel_route": {
-      "status": "pending_probe",
-      "answer": "Save Render is the route unless the probe finds it unusable (stale frame, unknown encoding, wrong resolution or silhouette); then the external 1:1 observation fallback is needed.",
+    "base_color": {
+      "applied_and_verified": true,
+      "readback": {
+        "Display Settings/Environment Opacity": 0.0,
+        "Display Settings/Environment Blur": 0.0,
+        "Display Settings/Shadows": false,
+        "Display Settings/View mode": "Base color"
+      },
+      "live_view": [
+        1063,
+        1174
+      ],
       "evidence": [
         {
-          "source": "A-HELP-IRAYSET",
-          "sha256": "41023bb8bd49a131d042f729ddb4ce67594dfecb4072daf673039de4c08a7c0b"
+          "source": "probe:view/BC",
+          "sha256": "e66c6447d139b8bc34187575c45c2a5c92dfa2bf7b1ecaeab66d5727c9dd612d"
+        },
+        {
+          "source": "probe:panel/base_color/display-settings",
+          "sha256": "fc2b04cca6633249e35df2232b7184863fb1ac5efc2946f433d3ae1423782a15"
+        },
+        {
+          "source": "probe:probe.json",
+          "sha256": "78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3"
         }
       ]
     }
-  },
-  "uncontrolled": []
+  }
 }
 ```
 <!-- answers:end -->
 
-Two documentation findings settle rows on their own:
+Findings behind the answers (probe run `20261011T094244968281Z-3051381f1470`, `probe.json` `78a155f58093c815507ca82f511e5adfcc2dadbd4e3cb573de18e325ea82bbb3`):
 
-- **Python and JavaScript API scan.** The python-doc inventory has 625 objects, and its only render symbols are camera, environment, colour LUT and tone mapping. The javascript-doc `alg.*` namespaces add environment and colour LUT only. Neither API exposes Iray samples, time limits, caustics, fireflies, resolution override, convergence status, denoiser, seed, viewer/dome/ground settings, MDL parameters, post effects or Save Render. All of those are therefore operator-applied and operator-read, or `uncontrolled`. `alg.ui.clickButton` needs internal widget names, which are not documented, so it is not used.
-- **Colour management.** The help page states that the display transform of a colour-managed project is chosen per monitor and is not saved with the project. The analytic fixtures use Legacy colour management, where the display transform is the documented tone mapping.
+- **APIs.** Painter's Python and JavaScript APIs expose camera, environment, colour LUT and tone mapping only (python-doc inventory scan, 625 objects). Everything else in the fixed pipeline is reached through the panels by the UI operator.
+- **Colour management.** A project created through `project.create` while `OCIO` names Painter's substance config is OCIO-managed. In that mode `display.set_tone_mapping` raises, so the instruction sequence has no tone-mapping step. The viewport's display-transform selector shows Default - sRGB in a fresh session. It is in neither API nor the UI Automation tree.
+- **Save Render.** It offers BMP, EXR, HDR, J2K, JNG, JP2, JPEG, PGM, PNG, PSD, TGA, TIFF and WebP, with no other options.
+  - PNG: 16-bit RGBA, no colour chunk, written at exactly 1200x1200. The background reads 89,89,89 in 8-bit codes, so the image is display-referred.
+  - EXR: float32 RGBA and display-referred too. Its background is 0.349, and the PNG equals the EXR clamped to [0, 1] and quantised, within one 16-bit code. So no scene-linear image is available.
+- **Iray state.**
+  - Min = Max Sample = 256 converges in about 1 s at 1200x1200 on the RTX 4090.
+  - Min Sample overrides Max Time: with Max Time 1 s at 8000x8000, Iray ran 256 iterations in 90 s and then read Done.
+  - Raising the sample count continues the accumulation instead of restarting it.
+- **Stale frame.** A save made right after a camera change held a frame of the new settings, not of the previous one. The frame was unfinished: its mean difference from the converged frame was 0.011. That is why the readiness gate and the fence are required.
+- **Seed and denoiser.** Two renders of one state in one session are not bit-identical: max 0.0026 of full scale, 5173 of 1,440,000 pixels differ. The 2-sample residual is white noise (lag-1 correlation 0.047), so no denoiser acts. The panel has no denoiser control.
+- **Height.** With the shader at Painter's defaults (displacement enabled, scale 0), a painted height changes shading inside an unchanged outline: it is applied as bump.
+- **Camera.** The unrotated silhouette matches the projection with 0 mismatches. The rotated camera identifies the Euler order `ZYX`: the Z rotation applies first, then Y, then X, which is `Rx·Ry·Rz` as the Assets3D standard states. The other orders had 48,636 to 204,444 mismatches.
+- **Live view.** The viewport was 1523x1174 pixels for a 1200x1200 render. The live view is therefore scaled, and the display-transform overlay is drawn inside it.
+- **Presets.**
+  - `ref_match`: the session-resource HDRI, clear colour `8D8E94` and rotation 180 were applied and read back. The render's background read 141,142,148.
+  - `base_color`: environment opacity 0, blur 0, shadows off and view mode Base color were applied in Edition mode. Painter disables the lighting controls in Iray mode and in the Base color view, so the view mode is set last.
 
 ## 2. The procedure `iray-capture/1` (07 §2.2 steps 1–7)
 
-**Settings sheet.** The sheet is the reference's public manifest (`golden-public.json`, `applied_settings`):
+**Painter.** Start Painter with `--enable-remote-scripting` and `OCIO` naming `<Painter>\resources\ocio\substance\config.ocio`, with no project open and under the Assets3D Painter lock. Each reference needs a fresh Painter session; the display transform is not saved and is checked as Painter's fresh-session default.
 
-- Operator settings are named `<panel>/<setting>` with `applied_by: operator_settings_sheet`. Required: `Iray Settings/Min Sample` = `Max Sample` = S, `Max Time` (unit `s`, `min` or `h`), `Width` and `Height` (square).
-- Recorder settings with `applied_by: recorder_api`:
+**Settings sheet.** The sheet is the reference's public manifest (`golden-public.json`, `applied_settings`). The qualification job is `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/tier3/render-procedure/qualification-sphere.json`.
+
+- **Operator settings** are named `<panel>/<setting>` with `applied_by: operator_settings_sheet`. These are the v2 values that act on Iray:
+  - `Iray Settings/` Min Sample = Max Sample = 256, Max Time 3600 s, Caustic Sampler off, Firefly Filter off, Override viewport resolution on, Width = Height = 1200;
+  - `Display Settings/` View mode Material, Override environment map color space on, Environment map color space Linear, Environment Exposure 0, Environment Rotation 0, Environment Alignment World, Dome Infinite sphere, Clear color on, Clear color value `595959`, Ground off, Activate Post Effects off, Activate Color Profile off, Activate Subsurface Scattering off.
+- **Viewport-only values.** Environment opacity 0, blur 0 and shadows off act only on the realtime viewport, and Painter disables them in Iray mode. They belong to the `base_color` diagnostic, not to an Iray sheet.
+- **Recorder settings** (`applied_by: recorder_api`):
   - `capture.procedure` = `iray-capture/1`;
   - `capture.route` = `save_render`;
-  - `capture.encoding`, required when the saved file states no encoding;
-  - `capture.camera_rotation_order`, required when the camera rotation is not zero; its value is the Euler order the probe confirmed.
-- `uncontrolled_settings` lists every row this report marks `uncontrolled`.
+  - `capture.encoding` = `display_referred`;
+  - `capture.bits_per_channel` = 16;
+  - `capture.background_srgb8` = `89,89,89`;
+  - `capture.display_transform` = `Default - sRGB`;
+  - `capture.camera_rotation_order` = `ZYX`, required when the camera rotation is not zero.
+- `uncontrolled_settings` lists `random_seed`.
+- **Environment.** The instruction sequence names Studio White Soft by its resource URL (`set_environment_resource` with `resource_url`). The installed EXR hashes `c2bb3294099b130bfa0f4bdae677efac544ba97ad3afd579a2563333e748c2c3`, the hash the standard names. The `ref_match` preset imports its HDRI as a session resource (`resource.import_session_resource`), and the recorder verifies the file against the standard's hash `77eeed8de580113581d50258e0ab3dd055aa29fa7d5ab614f2599ce036e0841d`.
 
-The recorder refuses a sheet that lacks the procedure version or names another route. Example: `parity/manifests/tier3/render-procedure/qualification-sphere.json`.
+**Steps.**
 
-1. **Documented state.** The recorder (`python -m tools.parity.recorder iray <manifest> --condition separate_session`) creates the throwaway project from the authored inputs and applies the documented settings: camera, environment, tone mapping. It reads back every documented render setting plus `project.get_scene_bounding_box()`, projects the expected silhouette from the read-back camera, and switches to Iray mode (`ui.UIMode.Visualisation`). The readback is part of the reference key.
-2. **Operator form.** For each sheet setting, the operator applies it in the panel and types the value the panel shows. Any value that differs from the sheet refuses the reference. The operator also gives one screenshot of each panel. Entries and images are private outputs (`operator_recorded_settings`, `settings_panel_evidence`).
-3. **Readiness gate.** Min Sample = Max Sample = S, and Max Time well above the time S samples take. Because neither API exposes readiness, the operator reads the Iray information section. The capture is refused unless Status reads `Done`, Iterations equals S (k·S for the k run) and Rendering time is below Max Time.
-4. **Pixels.** The route is Save Render at the override resolution, saved to the path the recorder names. The format and encoding are those the probe confirms (`save_render`, `pixel_route`). If the probe finds Save Render unusable, the route becomes external 1:1 observation of the displayed frame, overlays excluded, recorded as display-referred 8-bit. That route needs its own implementation and procedure version before use, and the recorder refuses it today.
-5. **Current-frame verification.** The recorder writes a fence file after the readiness report, then asks for Save Render. A capture is accepted only if all of the following hold; otherwise the reference is refused and nothing is staged:
-   - the file is the only file of a fresh directory;
-   - it was written after the fence (same filesystem clock);
-   - it has the override resolution;
-   - its silhouette matches the fixture projected from the read-back camera.
+1. **Documented state.** Run `python -m tools.parity.recorder iray <manifest> --condition separate_session --operator ui --operator-id <id>`. The recorder:
+   - creates the throwaway project from the authored inputs;
+   - applies the camera and the environment;
+   - reads back every documented render setting, the colour-management mode and `project.get_scene_bounding_box()`;
+   - projects the expected silhouette from the read-back camera;
+   - switches to Iray mode.
+2. **Operator form.** The UI operator applies each sheet setting and reads the widget back after commit. A value that differs refuses the reference. It keeps an image of each panel and of the display-transform selector as private evidence (`operator_recorded_settings`, `settings_panel_evidence`). `--operator console` lets a person do the same at the console.
+3. **Readiness gate.** The operator reads Iray's information section once Status reads Done with every iteration run, on two reads 3 s apart. The capture is refused unless Status is `Done`, Iterations equals S (k·S for the k run) and Rendering time is below Max Time.
+4. **Pixels.** Save Render writes a 16-bit PNG into a fresh directory at the path the recorder names (decision 039).
+5. **Current-frame verification.** The recorder writes a fence file before Save Render. The capture is accepted only if all of the following hold; otherwise the reference is refused and nothing is staged:
+   - the file is the only file of the directory and was written after the fence;
+   - it is 1200x1200 and 16-bit;
+   - its silhouette matches the fixture projected from the read-back camera (one uniform background value, no object pixel holding it, a 2-pixel band not judged, Painter's scene bounding box equal to the mesh file's);
+   - its background reads `capture.background_srgb8` in 8-bit codes. This canary catches a wrong display transform, a wrong clear colour or a wrong frame.
+6. **Repeats.** Each reference is recorded in two separate Painter sessions and once at k·S with **k = 4** (`--condition k_times_samples --k 4`). The reference key must be identical across all three, or assembly is refused. Raising the samples continues Iray's accumulation, so the k·S reference is recorded in its own session like the others.
+7. **Storage.** The recorder writes the run to the private oracle inbox, and `python -m tools.parity.store record <manifest> --run <run>` admits it (`parity/STORE.md`). The repository receives only the public manifest with SHA-256 hashes, and `python -m tools.parity.guard` must pass.
 
-   The projection lives in `tools/parity/render_procedure/projection.py`. The image background must be one value, no object pixel may hold that value, and a 2-pixel band around the outline is not judged. Painter's scene bounding box must equal the mesh file's, otherwise the fixture was moved or rescaled.
-6. **Repeats.** Each reference is recorded in two separate Painter sessions (`separate_session`, a restart in between) and once at k·S with **k = 4** (`--condition k_times_samples --k 4`). The reference key must be identical across all three, or assembly is refused. With k = 4, the k·S image has half the Monte-Carlo standard deviation of the S image, so the S-versus-4S difference estimates Iray's error at S within a factor √(5/4) (07 §4 step 1b).
-7. **Storage.** The recorder writes the run to the private oracle inbox, and `python -m tools.parity.store record <manifest> --run <run>` admits it into the store (`parity/STORE.md`). The repository receives only the public manifest with SHA-256 hashes, and `python -m tools.parity.guard` must pass.
+**How the UI operator works** (`painter_ui.py`, decision 029):
 
-## 3. Probe session (answers the `pending_probe` rows)
+- **Reading.** It runs out of process. It reads Painter's widgets through Microsoft UI Automation, where each automation id is the Qt object-name path.
+- **Acting.** It uses real input. To set a field it double-clicks it, replaces the text and presses Enter. It clicks toggles, group boxes and combo-box items, and types the clear colour's hex value in the colour picker. UI Automation's Toggle and SetValue patterns change Painter 12.1.5's widgets without applying the setting, and SetFocus does not reliably reach its fields, so neither is used.
+- **Save Render.** The native Save Render dialog is driven through UI Automation patterns (file type, name, Save).
+- **Images.** Panel images and the live view are taken with `PrintWindow`.
+- **Map from sheet names to widgets.** Iray Settings → the Renderer Settings dock (`irayParametersView`); Viewer and MDL Settings → Display Settings (`displaySettings`). The table `CONTROLS` names each widget.
+- **Safety.** A prompt or widget it does not know stops the run. Painter is brought to the foreground before every mouse or keyboard action.
 
-`python -m tools.parity.recorder iray-probe` runs one operator-assisted Painter session (`tools/parity/recorder/iray_probe.py`). It stages the sphere and the sky-patch environment from `parity/fixtures/render-procedure/`, plus two probe-only inputs it generates: an all-magenta colour-profile LUT and a stripe height map.
+## 3. Probe session
 
-The probe sheet: S = 64 samples, 256×256 override resolution, Max Time 10 min, Caustic Sampler and Firefly Filter off, Infinite Sphere dome, exposure 0, rotation 0, Linear tone mapping. The probe saves twelve renders with Save Render, each checked against its own fence:
+Run `python -m tools.parity.recorder iray-probe --operator ui --ref-match-hdri <TOS-RefMatch-Skeletal-Mage.exr>` (`tools/parity/recorder/iray_probe.py`). It runs the fixed pipeline on the authored sphere (`parity/fixtures/render-procedure/sphere.obj`) at 1200x1200 and 256 samples. Every render is checked against its own fence:
 
 | Render | What it answers |
 |---|---|
-| A, B | Same state, saved twice in one session: repeatability (`random_seed`) |
-| A, C (PNG, and EXR when offered) | Linear vs ACES tone mapping: format, bit depth, display transform baked in (`save_render`) |
-| D | All-magenta colour-profile LUT (`colour_lut`) |
-| E | Vignette post effect (`display_settings`) |
-| F, G | Rotation 90: F saved at once, G once Done (`stale_frame`) |
+| defaults, v2 sheet | Panel images of Painter's defaults; every v2 value applied and read back (`iray_settings`, `viewer_mdl_settings`, `display_settings`, `colour_lut`, `default_mdl_parameters`) |
+| A (PNG and EXR), live view V | Format, bit depth, display-referred output, live-view size (`save_render`, `display_view_transform`, `pixel_route`) |
+| A, B | Same state saved twice in one session (`random_seed`) |
+| F, G | Field of view 41: F saved at once, G once Done (`stale_frame`) |
 | H | Rotated camera: Euler order of `display.Camera.rotation` (`camera_projection`) |
 | I | 2 samples: residual correlation against A (`denoiser`) |
-| J | Stripe height map (`height`) |
+| J | Stripe height map in a fill layer, shader at its defaults (`height`) |
+| R | `ref_match`: session HDRI, clear colour 141,142,148, rotation 180 |
+| BC | `base_color`: Edition mode, Base color view, live view |
 
-It also records:
+The decision rules are in `tools/parity/render_procedure/analysis.py`. Evidence goes to `UZP_ORACLE_WORK\iray-probe\<run>\`, outside the repository, with `probe.json` listing every file by SHA-256 and the UI operator's action log. Probe outputs are not goldens and are not admitted to the store. Only their hashes and numbers enter this report, through `answers --merge`.
 
-- the default-MDL parameters (`default_mdl_parameters`);
-- a persistence form: distinct values are applied, the project is saved, closed and reopened, then a new project is created, and the panels are read each time (`iray_settings`, `viewer_mdl_settings`).
+## 4. Qualification run (task item 3.1)
 
-The decision rules are in `tools/parity/render_procedure/analysis.py`. Evidence goes to `UZP_ORACLE_WORK\iray-probe\<run>\`, outside the repository, with `probe.json` listing every file by SHA-256. Probe outputs are not goldens and are not admitted to the store. They stay on the owner's machine, and only their hashes enter this report through `answers --merge`.
+The run was `python -m tools.parity.recorder iray parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/tier3/render-procedure/qualification-sphere.json --condition separate_session --operator ui`, in a fresh Painter session on 2026-10-11. It passed: the reference was staged with `current_frame_verified`.
 
-## 4. Qualification run
+- Staged record `iray-staging/tier3__render-procedure__qualification-sphere/s-2e84a21a97c3/staged.json` (`3d9ef1c6fc0b59014e2d9c0d6668f055e8cde16e4a7382b8fabcf894e71d271f`).
+- Render: Save Render 16-bit RGBA PNG, 1200x1200, display-referred, SHA-256 `63f1394ada0966781e3252c1b935b4de26d7f5789d9e0db144c58d5adab74121`.
+- Convergence: Done, 256 of 256 iterations in 1 s against Max Time 3600 s.
+- Evidence: panel images of Iray Settings, Display Settings and the viewport display-transform selector.
+- Key: colour management `ocio`; environment `resource://starter_assets/Studio White Soft?version=022c26ec30cd5575037b74f697993c1d73f52865.image`; `uncontrolled_settings` `random_seed`.
 
-The qualification run follows the probe in the same Painter session (no project open):
+The run only stages. The golden needs the other two references of step 6 (task `phase0.7_render-reference-captures`).
 
-```
-python -m tools.parity.recorder iray parity/manifests/tier3/render-procedure/qualification-sphere.json --condition separate_session
-```
+Live readiness refusals, same session, private files under `UZP_ORACLE_WORK\iray-readiness-refusal\20261011T095439Z\`:
 
-It runs steps 1–5 end to end on the analytic sphere at 1200×1200 with S = 256. It passes when the reference is staged with `current_frame_verified`. The run only stages; it does not admit, and the golden needs the two further references of step 6 (task `phase0.7_render-reference-captures`).
+- `refusal-rendering.json` (`28ee48a971f80af4280fa1c5a151d4f4285109cd7c5ec4bcd7062c44c44cc3ff`): the gate read Status `Rendering` with Iterations 1 of 300 right after a camera change, and refused the capture.
+- `refusal.json` (`b83f876a35dba9d0f6c1c2aca5e16bd35dd246929ad08dbc2e61f5c0746f4a8a`): with Max Time 1 s, Iray ran 256 iterations in 90 s. The gate refused because the rendering time was not below Max Time.
 
-The readiness refusal (Status not Done, Iterations below S, time at Max Time) and the current-frame refusals are covered by the fake-Painter tests:
+The fake-Painter tests cover the remaining refusals:
 
-- `tests/parity/recorder/test_iray.py`: stale file, shifted frame, render from another camera, moved fixture, unconfirmed Euler order;
-- `tests/parity/recorder/test_iray_probe.py`.
+- `tests/parity/recorder/test_iray.py`: stale file, shifted frame, render from another camera, moved fixture, unconfirmed Euler order, wrong background, wrong bit depth;
+- `tests/parity/recorder/test_iray_probe.py`;
+- `tests/parity/recorder/test_painter_ui.py`.
 
 ## 5. Decisions and assumptions
 
-- **JavaScript API.** It is consulted only through its admitted documentation (A-JSDOC; coordinator ruling of 2026-10-10 on the shipped `python-doc` and `javascript-doc` HTML). It adds nothing for Iray. The Assets3D render adapter and Painter's undocumented UI objects are not used.
-- **Camera conventions.** Y-up, the camera looks along local −Z, and the field of view spans the square image; these are hypotheses until the probe confirms them. Rotations other than zero need the confirmed Euler order in the sheet. Only Perspective cameras and square renders are qualified.
-- **Probe fixtures.** The probe uses authored fixtures only (Apache-2.0, generated by `tools/parity/render_procedure/fixtures.py`). No Adobe environment, LUT or material is used.
+- **JavaScript API.** It is consulted only through its admitted documentation (A-JSDOC; coordinator ruling of 2026-10-10 on the shipped `python-doc` and `javascript-doc` HTML), and it adds nothing for Iray. The Assets3D render adapter and Painter's in-process Qt objects are not used (decision 039).
+- **Pixel route** (decision 039; model panel AGREE x2, PARTLY x1). The route is Save Render. The external live view is not 1:1 at the owner's window size and carries the selector overlay.
+- **Display transform** (decision 039; model panel AGREE x1, PARTLY x1, DISAGREE x1). It cannot be set or read through any interface. Its identity is verified by three pieces of evidence, not read: a fresh session, the selector image of every capture, and the background canary. The canary checks one neutral level, linear 0.1.
+- **Camera conventions.** Y-up; the camera looks along local −Z; the field of view spans the square image; the Euler order is `ZYX`. Only Perspective cameras and square renders are qualified.
+- **Fixtures.** The probe uses UzmiGames-authored fixtures (Apache-2.0, `tools/parity/render_procedure/fixtures.py`) and the two environments the standard names. Studio White Soft is a Painter starter asset that is only referenced by URL on the owner's machine and never copied. The ref_match HDRI is Assets3D's own file.
+- **Residual risks** (not probed, outside the fixed pipeline's use):
+  - Stale-frame behaviour was measured for a camera change only. The procedure makes every change before the readiness gate.
+  - The canary would not catch a different display transform that maps linear 0.1 to 89.
 - **Where the answers live.** The answers sit in this Markdown file because the repository guard rejects JSON data under `parity/` without a schema rule (`parity/GUARD.md` §2).

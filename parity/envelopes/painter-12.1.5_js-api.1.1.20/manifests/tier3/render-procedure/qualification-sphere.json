@@ -1,0 +1,241 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier3/render-procedure/qualification-sphere",
+  "tier": "3",
+  "domain": "tier3/render-procedure/qualification",
+  "description": "Qualification job of the Iray capture procedure iray-capture/1 for the fixed render pipeline (decision 038; task phase0.6_render-reference-procedure, 07-preview-and-render-parity.md section 2.2): the authored sphere under the Assets3D render comparison standard v2 (Studio White Soft starter environment named by its resource URL, OCIO colour management with Painter's substance config, Default - sRGB display transform, infinite sphere, clear colour background 89,89,89, no post effects), default material, camera on +Z looking at the origin, captured with Save Render as a 16-bit PNG at 1200x1200 and 256 samples. A procedure candidate, not an admitted render golden.",
+  "inputs": [
+    {
+      "input_id": "sphere",
+      "kind": "mesh",
+      "path": "parity/fixtures/render-procedure/sphere.obj",
+      "sha256": "037ae3ce625732e6a2e8f3873f7ff5ce76c58a78a9c14b66581a3bad9dd2f26c",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "sphere"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.display.Camera.projection_type",
+        "args": {
+          "value": "Perspective"
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.display.Camera.position",
+        "args": {
+          "value": [
+            0.0,
+            0.0,
+            60.0
+          ]
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.display.Camera.rotation",
+        "args": {
+          "value": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.display.Camera.field_of_view",
+        "args": {
+          "value": 40.0
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.display.Camera.aperture",
+        "args": {
+          "value": 0.0
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.display.set_environment_resource",
+        "args": {
+          "resource_url": "resource://starter_assets/Studio White Soft?version=022c26ec30cd5575037b74f697993c1d73f52865.image"
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "Iray Settings/Min Sample",
+      "value": 256,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Iray Settings/Max Sample",
+      "value": 256,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Iray Settings/Max Time",
+      "value": 3600,
+      "applied_by": "operator_settings_sheet",
+      "unit": "s"
+    },
+    {
+      "name": "Iray Settings/Caustic Sampler",
+      "value": false,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Iray Settings/Firefly Filter",
+      "value": false,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Iray Settings/Override viewport resolution",
+      "value": true,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Iray Settings/Width",
+      "value": 1200,
+      "applied_by": "operator_settings_sheet",
+      "unit": "px"
+    },
+    {
+      "name": "Iray Settings/Height",
+      "value": 1200,
+      "applied_by": "operator_settings_sheet",
+      "unit": "px"
+    },
+    {
+      "name": "Display Settings/View mode",
+      "value": "Material",
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Override environment map color space",
+      "value": true,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Environment map color space",
+      "value": "Linear",
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Environment Exposure",
+      "value": 0.0,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Environment Rotation",
+      "value": 0.0,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Environment Alignment",
+      "value": "World",
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Dome",
+      "value": "Infinite sphere",
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Clear color",
+      "value": true,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Clear color value",
+      "value": "595959",
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Ground",
+      "value": false,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Activate Post Effects",
+      "value": false,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Activate Color Profile",
+      "value": false,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "Display Settings/Activate Subsurface Scattering",
+      "value": false,
+      "applied_by": "operator_settings_sheet"
+    },
+    {
+      "name": "capture.procedure",
+      "value": "iray-capture/1",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "capture.route",
+      "value": "save_render",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "capture.encoding",
+      "value": "display_referred",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "capture.bits_per_channel",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "capture.background_srgb8",
+      "value": "89,89,89",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "capture.display_transform",
+      "value": "Default - sRGB",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "capture.camera_rotation_order",
+      "value": "ZYX",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "uncontrolled_settings": [
+    "random_seed"
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

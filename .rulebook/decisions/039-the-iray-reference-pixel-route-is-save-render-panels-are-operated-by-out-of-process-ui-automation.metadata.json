@@ -1,0 +1,11 @@
+{
+  "id": 39,
+  "slug": "the-iray-reference-pixel-route-is-save-render-panels-are-operated-by-out-of-process-ui-automation",
+  "title": "The Iray reference pixel route is Save Render; panels are operated by out-of-process UI automation",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase0.6_render-reference-procedure"
+  ],
+  "supersededBy": null
+}
