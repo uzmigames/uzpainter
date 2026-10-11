@@ -1,0 +1,13 @@
+{
+  "id": 52,
+  "slug": "iray-s-run-to-run-difference-is-rounding-level-except-on-zero-component-facets-the-k-render-nests-the-s-render",
+  "title": "Iray's run-to-run difference is rounding-level except on facets with a zero normal component; the k*S render nests the S render",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase0.8_render-reference-fits",
+    "phase0.7_render-reference-captures",
+    "phase3.6_path-tracer-tier3-report"
+  ],
+  "supersededBy": null
+}
