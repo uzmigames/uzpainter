@@ -66,11 +66,11 @@ It reproduces every RGB32F, L32F and RGB16 map of the four sets. With ab = 1 it 
 
 | Step | Command | Result |
 |---|---|---|
-| Type-check | `python -m mypy` | no issues (215 files) |
+| Type-check | `python -m mypy` | no issues (235 files after merging main) |
 | Lint | `python -m ruff check .`, `python -m ruff format --check` (touched files) | clean |
 | Build | `zig build evaluator-tests` | exit 0, no warning |
 | Unit cases | `arith`, `order`, `profile`, `templates`, `cache`, `admission`, `sources`, `masks` (CPU); `gpu-vs-cpu`, `masks-gpu-vs-cpu` (DX12) | all passed |
-| Tests | `python -m pytest tests/evaluator` | 273 passed on the branch before merging main (store and DX12 adapter present, nothing skipped) |
+| Tests | `python -m pytest tests/evaluator`, `python -m pytest tests/parity` | 273 passed before and after merging main (store and DX12 adapter present, nothing skipped); parity 830 passed, 1 failure outside this task (`iray.json` entry `display-encoding` without residuals, main commit `592da3f`) |
 
 ## Open items
 

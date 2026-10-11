@@ -17,7 +17,7 @@
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
 - [x] 5.2 Write tests covering the new behavior
-- [x] 5.3 Run tests and confirm they pass (tests/evaluator 265 passed after merging main; tests/parity 696 passed)
+- [x] 5.3 Run tests and confirm they pass (second round, after merging main: tests/evaluator 273 passed; tests/parity 830 passed, 1 failure outside this task: `iray.json` entry `display-encoding` has no residual, from main commit 592da3f)
 
 ## Status (2026-10-11)
 - First round (decision 044): the float32 order was not identified; the sRGB8 binary16 coverage and plain 32-bit float uniform colours shipped as profile `painter-12.1-isolated-half-alpha`. q1 answered: keep the divergence, record the diagnostic golden.
