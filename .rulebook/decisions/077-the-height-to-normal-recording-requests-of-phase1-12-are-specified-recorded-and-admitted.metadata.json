@@ -1,0 +1,11 @@
+{
+  "id": 77,
+  "slug": "the-height-to-normal-recording-requests-of-phase1-12-are-specified-recorded-and-admitted",
+  "title": "The height-to-normal recording requests of phase1.12 are specified, recorded and admitted",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.12_compositor-height-normal"
+  ],
+  "supersededBy": null
+}

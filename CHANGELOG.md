@@ -34,6 +34,19 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
   - the display encoding is sRGB of a half-float value;
   - the run-to-run spikes sit on faces with n_x = 0, a hypothesis under test;
   - report in `parity/reports/phase0/iray-noise-floor.md`.
+- Height to normal (task `phase1.12_compositor-height-normal`, decisions 064, 065; still open on recordings):
+  - The Sharp and Smooth (Sobel) methods match Painter exactly on Normal_OpenGL, Normal_DirectX and Height, CPU = GPU.
+  - The stencils read Height before its write.
+  - Results are reoriented onto the flat base and then onto the Normal channel.
+  - Normal-map imports are stored with green inverted.
+  - The method is a per-texture-set field.
+  - `parity/semantics/height-to-normal.json` was republished for 12.1.5.
+  - EXC-003 covers the save-and-reopen divergence of two plane-strength sets.
+- Mask effects closed (task `phase1.11_compositor-mask-effects`, decision 069). Normal and PassThrough groups with masks are exact. The content-effect order check moves to `phase3.2_proc-filter-families`, which now owns the Blur filter.
+- Minification sampling identified (task `phase1.9_compositor-resample-gaps`, decisions 060, 061):
+  - With the GPU's own sampler doing the fetches, Painter's side is exact on every minify, impulse and held-out map. That covers the float32 affine UV, the mips rounded ties-up, and HQ's nine-sample order.
+  - The texture unit's anisotropic probes have no closed form, so a tabulated replica is in progress.
+- Iray render-capture parent (task `phase0.9_render-reference-capture`, decision 068): the template-default material was read back under OCIO, and the qualification sphere's term (c) was measured. The P3-PATHTRACER entry gate awaits the owner's signature.
 - Profile `painter-12.1-isolated-coverage-weights` (task `phase1.10_compositor-float32-residual`, decisions 058, 059, 066). Painter's float32 source-over onto a partly covered backdrop is identified: the source weight is re-derived from the rounded coverage, `ws = fl(ao − ab)`, and the result goes through the hardware reciprocal. The profile also adds:
   - a fused read-out;
   - an unrounded uniform grey;

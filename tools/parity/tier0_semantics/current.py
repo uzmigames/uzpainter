@@ -20,7 +20,10 @@ manifests exist only under the current envelope's manifest root:
   of task `phase0.9_render-reference-capture` (decision 067), `blend-component-hue` and
   `blend-normal-opacity` (`parity/reports/phase1/compositor-blend-gaps.md` sections 3.3 and 5)
   and `coverage-srgb8-ties` (the sRGB8 coverage rule below 1/2,
-  `compositor-float32-residual.md`).
+  `compositor-float32-residual.md`); the height-to-normal recordings phase1.12 requested
+  (`compositor-height-normal.md` section 5, decision 077; the Sobel sets through the UI
+  operator); and the validation recordings for phase1.9's texture-unit replica (decisions 061,
+  078).
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ from tools.parity.tier0_semantics.corpus import (
     USER,
     Golden,
     Sequence,
+    height_normal,
     manifest,
     start,
 )
@@ -206,12 +210,13 @@ IMPULSE_CHANNELS = (
 
 def resample_minifying(name: str, source: str, plan_of_channels: tuple[Any, ...]) -> Golden:
     s = start("grid2x2")
-    plan = tuple((channel, "RGB16") for channel in USER)
+    channels = [f"User{i}" for i in range(len(plan_of_channels))]
+    plan = tuple((channel, "RGB16") for channel in channels)
     s.channels(plan)
     res = s.imports(source)
     for texture_set, (mode, wrap) in zip(MESH_SETS["grid2x2"], MINIFY_SETS, strict=True):
         below: int | None = None
-        for channel, (scale, rotation, offset) in zip(USER, plan_of_channels, strict=True):
+        for channel, (scale, rotation, offset) in zip(channels, plan_of_channels, strict=True):
             node = (
                 s.fill([channel], position="top", texture_set=texture_set)
                 if below is None
@@ -262,6 +267,135 @@ def resample_uv_impulse() -> Golden:
         "resample-uv-minify. RGB16 channels."
     )
     return golden
+
+
+# Validation recordings for the tabulated texture-unit replica of decision 061
+# (compositor-resample-gaps.md section 6, decision 078): per user channel (scale [u, v],
+# rotation in degrees, offset [u, v]) on pattern64; the footprint is scale / 4 texels. The
+# effective LOD is an integer k at scale 4 * 2^(k + 1.5) for BilinearSharp (bias -1.5) and at
+# 12 * 2^k for BilinearHQ (gradients / 3).
+SHARP_LOD_1, SHARP_LOD_2 = 4.0 * 2.0**2.5, 4.0 * 2.0**3.5
+ANISOTROPIC_CHANNELS = (
+    ([9.37, 4.41], 0.0, [0.0371, 0.0913]),
+    ([13.71, 4.93], 0.0, [0.1234, 0.0057]),
+    ([21.43, 6.17], 0.0, [0.2719, 0.6131]),
+    ([38.83, 9.07], 0.0, [0.4441, 0.0777]),
+    ([45.37, 6.11], 0.0, [0.8123, 0.5059]),
+    ([30.13, 18.07], 0.0, [0.0029, 0.3343]),
+    ([4.47, 17.29], 0.0, [0.0613, 0.9217]),
+    ([6.11, 45.37], 0.0, [0.3337, 0.1471]),
+    ([21.43, 6.17], 0.0, [0.0, 0.0]),
+    ([SHARP_LOD_1, 8.0], 0.0, [0.7213, 0.0419]),
+)
+LOD_CHANNELS = (
+    ([17.47, 17.47], 0.0, [0.3337, 0.1471]),
+    ([21.83, 21.83], 0.0, [0.0613, 0.9217]),
+    ([26.29, 26.29], 0.0, [0.8123, 0.5059]),
+    ([38.41, 38.41], 0.0, [0.0029, 0.3343]),
+    ([45.13, 45.13], 0.0, [0.2719, 0.6131]),
+    ([53.69, 53.69], 0.0, [0.1234, 0.0057]),
+    ([63.77, 63.77], 0.0, [0.0371, 0.0913]),
+    ([26.29, 26.29], 0.0, [0.0, 0.0]),
+)
+LOD_BOUNDARY_SCALES = (
+    4.0 * 2.0**1.5,
+    22.40,
+    SHARP_LOD_1,
+    22.86,
+    SHARP_LOD_2,
+    12.0,
+    23.76,
+    24.0,
+    24.24,
+    48.0,
+)
+LOD_BOUNDARY_OFFSETS = (
+    [0.4441, 0.0777],
+    [0.0913, 0.0371],
+    [0.0, 0.0],
+    [0.6131, 0.2719],
+    [0.3343, 0.0029],
+    [0.5059, 0.8123],
+    [0.9217, 0.0613],
+    [0.1471, 0.3337],
+    [0.0057, 0.1234],
+    [0.0777, 0.4441],
+)
+LOD_BOUNDARY_CHANNELS = tuple(
+    ([s, s], 0.0, o) for s, o in zip(LOD_BOUNDARY_SCALES, LOD_BOUNDARY_OFFSETS, strict=True)
+)
+ROTATION_CHANNELS = (
+    ([6.13, 4.21], 7.3, [0.0913, 0.0371]),
+    ([9.91, 5.07], 22.5, [0.0057, 0.1234]),
+    ([12.77, 6.31], 45.0, [0.6131, 0.2719]),
+    ([17.29, 5.53], 61.7, [0.3343, 0.0029]),
+    ([21.07, 8.39], 133.1, [0.5059, 0.8123]),
+    ([9.91, 5.07], 90.0, [0.0777, 0.4441]),
+    ([12.77, 6.31], 180.0, [0.9217, 0.0613]),
+    ([17.29, 5.53], 270.0, [0.1471, 0.3337]),
+    ([5.07, 9.91], 0.0, [0.0777, 0.4441]),
+    ([12.77, 6.31], 0.0, [0.9217, 0.0613]),
+)
+
+
+def resample_uv_validation(
+    name: str, source: str, plan_of_channels: tuple[Any, ...], what: str
+) -> Golden:
+    golden = resample_minifying(name, source, plan_of_channels)
+    channels = "; ".join(
+        f"{s[0]:.6g}x{s[1]:.6g}"
+        + (f" at {r:g} degrees" if r else "")
+        + f", offset {o[0]:g}/{o[1]:g}"
+        for s, r, o in plan_of_channels
+    )
+    golden.description = (
+        f"Texture-unit validation for phase1.9 (decisions 061, 078): {what}. Per user channel "
+        f"(User0-User{len(plan_of_channels) - 1}) one fill projecting the 64x64 {source} "
+        f"fixture at scale {channels}; BilinearHQ with repeat (s0), BilinearSharp with repeat "
+        "(s1), BilinearHQ without repeat (s2), BilinearSharp without repeat (s3). RGB16 channels."
+    )
+    return golden
+
+
+def validation_goldens() -> list[Golden]:
+    """Phase1.9's validation recordings for a future texture-unit replica (decision 078)."""
+    return [
+        resample_uv_validation(
+            "resample-uv-anisotropic",
+            "pattern64",
+            ANISOTROPIC_CHANNELS,
+            "anisotropic footprints (ratios 1.7 to 7.4, two with the major axis on v, one at the "
+            "Sharp LOD-1 boundary, a zero-offset twin)",
+        ),
+        resample_uv_validation(
+            "resample-uv-anisotropic-impulse",
+            "impulse64",
+            ANISOTROPIC_CHANNELS,
+            "the anisotropic plan on the impulse fixture (kernel reads)",
+        ),
+        resample_uv_validation(
+            "resample-uv-lod",
+            "pattern64",
+            LOD_CHANNELS,
+            "isotropic footprints of 4.4 to 15.9 texels at irregular steps (trilinear LOD 0.5 "
+            "to 2.5 for both biases), a zero-offset twin",
+        ),
+        resample_uv_validation(
+            "resample-uv-lod-boundaries",
+            "pattern64",
+            LOD_BOUNDARY_CHANNELS,
+            "isotropic footprints at the effective integer LODs 0, 1, 2 of BilinearSharp "
+            "(4 * 2^(k + 1.5)) and BilinearHQ (12 * 2^k), with neighbours at +-1 % around k = 1",
+        ),
+        resample_uv_validation(
+            "resample-uv-rotation",
+            "pattern64",
+            ROTATION_CHANNELS,
+            "rotated anisotropic footprints: 7.3, 22.5, 45, 61.7 and 133.1 degrees (refusal "
+            "checks), 90, 180 and 270 degrees (axis-aligned), and rotation-0 controls of the 90 "
+            "case (axes swapped) and of the 180 case, each with the same offset",
+        ),
+    ]
 
 
 # compositor-float32-residual.md recording request: per channel (name, format, L source).
@@ -517,6 +651,222 @@ def coverage_srgb8_ties() -> Golden:
     )
 
 
+# parity/reports/phase1/compositor-height-normal.md section 5 (decision 077). Per texture set:
+# (Height ramps fill, Normal fill of normal-a); the mesh normal map is bound to every set.
+MESH_MAP_SETS = ((False, False), (True, False), (False, True), (True, True))
+
+
+def height_fill(s: Sequence, res: dict[str, int], **position: Any) -> int:
+    """The authored height ramps on Height, in Normal at opacity 1."""
+    node = s.fill(["Height"], **position)
+    s.bitmap(node, "Height", res["height-ramps"])
+    s.blend(node, "Height", "Normal", 1.0)
+    return node
+
+
+def height_normal_mesh_map(normal_map_format: str) -> Golden:
+    directx = normal_map_format == "DirectX"
+    mesh = "grid2x2" if directx else "grid4x2"
+    s = start(mesh, normal_map_format=normal_map_format)
+    res = s.imports("height-ramps", "normal-a", "normal-b")
+    s.add(ps.SET_MESH_MAP, usage="Normal", resource_step=res["normal-b"])
+    sets = MESH_SETS[mesh]
+    for texture_set, (with_height, with_normal) in zip(sets, MESH_MAP_SETS * 2, strict=False):
+        below: int | None = None
+        if with_height:
+            below = height_fill(s, res, position="top", texture_set=texture_set)
+        if with_normal:
+            node = (
+                s.fill(["Normal"], position="top", texture_set=texture_set)
+                if below is None
+                else s.fill(["Normal"], above_step=below)
+            )
+            s.bitmap(node, "Normal", res["normal-a"])
+            s.blend(node, "Normal", "Normal", 1.0)
+    s.export(
+        [
+            "virtualMap/Normal_OpenGL:RGB",
+            "virtualMap/Normal_DirectX:RGB",
+            "meshMap/normal_base:RGB",
+        ],
+        floating=False,
+    )
+    s.export(["documentMap/height:L", "documentMap/normal:RGB"], floating=True)
+    variants = (
+        "s0 the mesh normal map alone, s1 with the height ramps on Height, s2 with normal-a on "
+        "Normal, s3 with both (two fills, Height below)"
+    )
+    if directx:
+        description = (
+            "Mesh normal map in the combination, DirectX project (compositor-height-normal.md "
+            "section 5 (i), decision 077): normal-b bound as the Normal mesh map of every texture "
+            f"set; {variants}; fills in Normal at opacity 1; the method Sharp (default). "
+        )
+        settings: list[dict[str, Any]] = []
+    else:
+        description = (
+            "Mesh normal map in the combination (compositor-height-normal.md section 5 (i), "
+            "decision 077): normal-b bound as the Normal mesh map of every texture set; "
+            f"{variants}; fills in Normal at opacity 1; s0-s3 with the method Sharp (default), "
+            "s4-s7 the same four with Smooth (Sobel) set through Painter's UI. "
+        )
+        settings = method_settings("sobel", sets[4:])
+    return Golden(
+        "height-normal-mesh-map" + ("-directx" if directx else ""),
+        "tier0/height-normal/combination",
+        description + "Normal_OpenGL, Normal_DirectX and the normal_base mesh map (PNG 16), "
+        "Height and Normal channels (OpenEXR 32f).",
+        mesh,
+        [mesh, "height-ramps", "normal-a", "normal-b"],
+        s,
+        settings,
+    )
+
+
+# Per texture set: (SignedAddition source on Height, opacity, Height ramps below).
+SIGNED_ADDITION_SETS: tuple[tuple[Any, float, bool], ...] = (
+    ("grey-a", 1.0, True),
+    ("grey-a", 0.5, True),
+    ((0.25, 0.25, 0.25), 1.0, True),
+    ("grey-a", 1.0, False),
+)
+
+
+def height_signed_addition() -> Golden:
+    s = start("grid4x2")
+    res = s.imports("height-ramps", "grey-a")
+    for texture_set, (source, opacity, ramps) in zip(
+        MESH_SETS["grid4x2"], SIGNED_ADDITION_SETS, strict=False
+    ):
+        position: dict[str, Any] = {"position": "top", "texture_set": texture_set}
+        if ramps:
+            position = {"above_step": height_fill(s, res, **position)}
+        node = s.fill(["Height"], **position)
+        set_source(s, node, "Height", source, res)
+        s.blend(node, "Height", "SignedAddition", opacity)
+    # One map is exported once per golden (the recorder keys outputs by texture set and map):
+    # Height as OpenEXR 32f only, which holds the stored signed value (decision 077).
+    s.export(["virtualMap/Normal_OpenGL:RGB", "virtualMap/Normal_DirectX:RGB"], floating=False)
+    s.export(["documentMap/height:L"], floating=True)
+    return Golden(
+        "height-signed-addition",
+        "tier0/height-normal/height-blend",
+        "SignedAddition on the signed Height channel (compositor-height-normal.md section 5 (ii), "
+        "decision 077): s0 the height ramps in Normal at opacity 1, above them grey A in "
+        "SignedAddition at opacity 1; s1 the same at 0.5; s2 a uniform 0.25 in SignedAddition at "
+        "1 over the ramps; s3 grey A in SignedAddition at 1 onto the empty Height; s4-s7 the "
+        "empty stack. Height (OpenEXR 32f), Normal_OpenGL and Normal_DirectX (PNG 16).",
+        "grid4x2",
+        ["grid4x2", "height-ramps", "grey-a"],
+        s,
+    )
+
+
+NORMAL_COVERAGE_COLOUR = (0.6, 0.4, 1.0)
+# Per texture set: (Normal source, opacity, mask of mask-codes); s4-s7 stay empty.
+NORMAL_COVERAGE_SETS: tuple[tuple[Any, float, bool], ...] = (
+    ("normal-a", 0.5, False),
+    ("normal-a", 0.25, False),
+    ("normal-a", 1.0, True),
+    (NORMAL_COVERAGE_COLOUR, 0.5, False),
+)
+
+
+def height_normal_channel_coverage() -> Golden:
+    s = start("grid4x2")
+    res = s.imports("height-ramps", "normal-a", "mask-codes")
+    for texture_set, (source, opacity, masked) in zip(
+        MESH_SETS["grid4x2"], NORMAL_COVERAGE_SETS, strict=False
+    ):
+        below = height_fill(s, res, position="top", texture_set=texture_set)
+        node = s.fill(["Normal"], above_step=below)
+        set_source(s, node, "Normal", source, res)
+        s.blend(node, "Normal", "Normal", opacity)
+        if masked:
+            s.add(ps.ADD_MASK, node_step=node, background="Black")
+            effect = s.add(ps.INSERT_FILL, inside_step=node, stack="Mask")
+            s.bitmap(effect, None, res["mask-codes"], effect=True)
+    height_exports(s)
+    return Golden(
+        "height-normal-channel-coverage",
+        "tier0/height-normal/combination",
+        "Normal channel under partial coverage combined with Height (compositor-height-normal.md "
+        "section 5 (iii), decision 077): the height ramps on Height (Normal, opacity 1) in every "
+        "texture set, above them a Normal fill in Normal mode: s0 normal-a at opacity 0.5, s1 at "
+        "0.25, s2 at 1 under a mask (Black background, mask fill of mask-codes), s3 a uniform "
+        "(0.6, 0.4, 1) at 0.5; s4-s7 the empty stack. "
+        "Normal_OpenGL and Normal_DirectX (PNG 16), Height and Normal channels (OpenEXR 32f).",
+        "grid4x2",
+        ["grid4x2", "height-ramps", "normal-a", "mask-codes"],
+        s,
+    )
+
+
+# Per texture set: the Normal source over the Height ramps; s2-s3 stay empty.
+IMPORT_SOURCES = ("normal-a", "normal-a-8bit")
+
+
+def normal_channel_import(normal_map_format: str) -> Golden:
+    s = start("grid2x2", normal_map_format=normal_map_format)
+    res = s.imports("height-ramps", "normal-a", "normal-a-8bit")
+    for texture_set, source in zip(MESH_SETS["grid2x2"], IMPORT_SOURCES, strict=False):
+        below = height_fill(s, res, position="top", texture_set=texture_set)
+        node = s.fill(["Normal"], above_step=below)
+        s.bitmap(node, "Normal", res[source])
+        s.blend(node, "Normal", "Normal", 1.0)
+    height_exports(s)
+    directx = normal_map_format == "DirectX"
+    return Golden(
+        "normal-channel-import" + ("-directx" if directx else ""),
+        "tier0/height-normal/import",
+        f"Normal bitmap imports on the Normal channel of a {normal_map_format} project "
+        "(compositor-height-normal.md section 5 (iv), decision 077): s0 normal-a (16 bit) over "
+        "the height ramps, s1 its 8-bit copy normal-a-8bit over the ramps, s2-s3 the empty "
+        "stack; Normal fills in Normal at opacity 1, the ramps on Height (Normal, "
+        "1). Normal_OpenGL and Normal_DirectX (PNG 16), Height and Normal channels (OpenEXR 32f).",
+        "grid2x2",
+        ["grid2x2", "height-ramps", "normal-a", "normal-a-8bit"],
+        s,
+    )
+
+
+HEIGHT_RESOLUTIONS = (512, 1024, 2048)
+SOBEL_RESOLUTION = 1024
+
+
+def height_normal_resolution(resolution: int, method: str) -> Golden:
+    base = height_normal("grid2x2", resolution)
+    sobel = method == "sobel"
+    return Golden(
+        f"height-normal-resolution-{resolution}" + ("-sobel" if sobel else ""),
+        "tier0/height-normal/resolution",
+        f"height-normal-plane-amplitudes at {resolution} px (compositor-height-normal.md section "
+        "5 (v), decision 077): its instruction sequence with only the document resolution "
+        "changed (the 256 px height ramps fill magnified by the default UV projection): s0 "
+        "opacity 1, s1 0.5, s2 0.25, s3 doubled by a second fill in LinearDodge; "
+        + (
+            "s0's method Smooth (Sobel) set through Painter's UI, s1-s3 Sharp (default). "
+            if sobel
+            else "the method Sharp (default). "
+        )
+        + "Normal_OpenGL and Normal_DirectX (PNG 16), Height and Normal channels (OpenEXR 32f).",
+        "grid2x2",
+        base.inputs,
+        base.sequence,
+        method_settings(method, MESH_SETS["grid2x2"][:1]) if sobel else [],
+    )
+
+
+def request_goldens() -> list[Golden]:
+    """The recordings phase1.12 requested (compositor-height-normal.md section 5)."""
+    corpus = [height_normal_mesh_map(f) for f in ("OpenGL", "DirectX")]
+    corpus += [height_signed_addition(), height_normal_channel_coverage()]
+    corpus += [normal_channel_import(f) for f in ("OpenGL", "DirectX")]
+    corpus += [height_normal_resolution(r, "sharp") for r in HEIGHT_RESOLUTIONS]
+    corpus.append(height_normal_resolution(SOBEL_RESOLUTION, "sobel"))
+    return corpus
+
+
 def ui_goldens() -> list[Golden]:
     corpus = [
         height_normal_mesh(mesh, method)
@@ -536,6 +886,8 @@ def api_goldens() -> list[Golden]:
         blend_component_hue(),
         blend_normal_opacity(),
         coverage_srgb8_ties(),
+        *request_goldens(),
+        *validation_goldens(),
     ]
 
 
