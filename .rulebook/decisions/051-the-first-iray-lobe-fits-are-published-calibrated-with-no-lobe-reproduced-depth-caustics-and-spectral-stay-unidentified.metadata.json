@@ -1,0 +1,13 @@
+{
+  "id": 51,
+  "slug": "the-first-iray-lobe-fits-are-published-calibrated-with-no-lobe-reproduced-depth-caustics-and-spectral-stay-unidentified",
+  "title": "The first Iray lobe fits are published `calibrated` with no lobe reproduced; depth, caustics and spectral transport stay unidentified",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase0.8_render-reference-fits",
+    "phase3.4_path-tracer-transport",
+    "phase3.5_path-tracer-materials"
+  ],
+  "supersededBy": null
+}
