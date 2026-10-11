@@ -17,9 +17,13 @@
 - [x] 3.6 Normal-convention fixture re-run: the production tangent frames reproduce the P0-NORMAL verdict on the hemisphere fixture
 
 ## 4. Acceptance
-- [ ] 4.1 All tests of this child green (hosted CPU lane; the normal-convention comparison in a local run on the owner's machine, decision 028, whose report is the evidence)
+- [x] 4.1 All tests of this child green (hosted CPU lane; the normal-convention comparison in a local run on the owner's machine, decision 028, whose report is the evidence)
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
 - [x] 5.2 Write tests covering the new behavior
 - [x] 5.3 Run tests and confirm they pass
+
+## Hosted CPU lane evidence
+
+- Run 38100063195 on commit 8e5f3bc (2026-10-11): `tests/mesh/test_mesh_certificate.py`, `test_mesh_import.py` and `test_mesh_reload.py` all passed on the hosted CPU lane (the Painter comparison skips there with oracle_unavailable; its evidence is the local run). The run's two `tests/store` failures come from a partial commit of the store task and are fixed in 4c75222.
