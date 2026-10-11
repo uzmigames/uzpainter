@@ -22,6 +22,18 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
   - mono-channel mask stacks with ordered effects, the fill and levels effects, subtraction, `Mesh` geometry masks, group masks, 16-bit mask precision, and the GPU's `exp2(g·log2 x)` pow reproduced from measured tables;
   - `mask-precision`, `levels-clamp` and `effect-order` s6 are exact on CPU and GPU (`parity/semantics/masks-levels.json`);
   - the `group-masks` s2–s3 residual waits on `phase1.10_compositor-float32-residual`.
+- Project store settle tests (task `phase1.8_project-store`, items 3.1–3.6, decision 045):
+  - `uzp-store-settle-tests` chains the `09-project-file-format.md` §7 faults on one file: kills during commit and compaction, I/O failures and blob or manifest corruption. After each fault, the full-file state must equal the snapshot taken before it.
+  - The census rerun shows tunic v10 at 6.2 % of its `.spp` size.
+  - Acceptance waits on the hosted CI lane.
+- Bilinear sampling is the recording GPU's measured linear filter (task `phase1.9_compositor-resample-gaps`, item 2.1, decision 043):
+  - weights rounded to 8 bits, texels fixed to 28 bits below the largest exponent, an exact sum, then float32 rounding with ties up;
+  - every magnifying and 1:1 value is exact, the near-tie included;
+  - minification waits on a new recording.
+- Profile `painter-12.1-isolated-half-alpha` (task `phase1.10_compositor-float32-residual`, decision 044):
+  - sRGB8 group coverage is stored through binary16, which makes the `group-masks` sRGB8 maps exact;
+  - a uniform colour on a 32-bit float channel is its plain float32 value;
+  - the one-step RGB32F/RGB16 partial-coverage residual stays a divergence until a diagnostic recording.
 - Gate G0 record and checks (task `phase0.10_gate-g0`): written, but G0 is held open until every Phase 0 task closes.
 
 ### Changed

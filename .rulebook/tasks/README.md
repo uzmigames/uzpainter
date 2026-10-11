@@ -4,6 +4,12 @@
 
 **Total**: 114 tasks | **Completed**: 0 | **In Progress**: 4 | **Pending**: 110
 
+## ❓ Awaiting operator decision (1)
+
+- phase1.10_compositor-float32-residual q1: The float32 order of Painter's source-over onto a partly covered backdrop was not identified (quantisation-thirds: 5 of 16 RGB32F/L32F values off by 2^-25..2^-24 against r1; group-masks s2-s3: 20 631 RGB32F and 57 RGB16 values off by one export step). Do you accept a register entry for this residual, or keep it a divergence until the diagnostic recording of the report is made? (recommended: Keep as divergence, record the diagnostic golden)
+
+Answer with `rulebook task answer <task-id> <question-id>` or `rulebook_task {action:"answer"}`.
+
 ## unphased
 
 | Status | Task | Progress | Description |
@@ -13,7 +19,7 @@
 | ⬚ | phase0.7_tier0-semantics-ui-cases | 0/14 | phase0.7_tier0 semantics ui cases |
 | ⬚ | phase0.8_render-reference-fits | 0/17 | phase0.8_render reference fits |
 | ⬚ | phase0.9_render-reference-capture | 0/11 | phase0.9_render reference capture |
-| ⬚ | phase1.10_compositor-float32-residual | 0/11 | phase1.10_compositor float32 residual |
+| 🚫 | phase1.10_compositor-float32-residual | 0/11 | phase1.10_compositor float32 residual ❓ 1 open question |
 | ⬚ | phase1.11_compositor-blend-gaps | 0/13 | phase1.11_compositor blend gaps |
 | 🔄 | phase1.11_compositor-mask-effects | 13/17 | phase1.11_compositor mask effects |
 | ⬚ | phase1.12_compositor-height-normal | 0/14 | phase1.12_compositor height normal |
@@ -88,7 +94,7 @@
 | ⬚ | phase3.4_smart-projections | 0/20 | phase3.4_smart projections |
 | ⬚ | phase3.4_uzengine-preset | 0/13 | phase3.4_uzengine preset |
 | ⬚ | phase3.5_embree-bakers | 0/21 | phase3.5_embree bakers |
-| ⬚ | phase3.5_path-tracer-materials | 0/16 | phase3.5_path tracer materials |
+| ⬚ | phase3.5_path-tracer-materials | 0/17 | phase3.5_path tracer materials |
 | ⬚ | phase3.5_smart-material-recipes | 0/19 | phase3.5_smart material recipes |
 | ⬚ | phase3.6_path-tracer-tier3-report | 0/17 | phase3.6_path tracer tier3 report |
 | ⬚ | phase3.6_smart-presets-projections | 0/12 | phase3.6_smart presets projections |
