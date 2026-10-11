@@ -1,0 +1,351 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "uv-sampling",
+  "description": "Fill and UV projections of bitmap sources (04 section 4, 5; task phase1.8_compositor-sources-projection): UV transform, Nearest and bilinear filters in the evaluator's arithmetic, wrap modes and island edges, with residuals of the evaluator's output against both recordings. Supersedes resampling.json for the evaluator.",
+  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "corpus": [
+    "tier0/semantics/height-normal-bevelled-cube",
+    "tier0/semantics/height-normal-sphere",
+    "tier0/semantics/resample-uv"
+  ],
+  "entries": [
+    {
+      "entry_id": "uv-nearest",
+      "subject": "UV projection with the Nearest filter (Repeat), any scale",
+      "status": "exact",
+      "formula": "Output texel (i, j) of the W x H set at u = (i + 0.5)/W, v = 1 - (j + 0.5)/H; (a, b) = ((u - 0.5) s_u, (v - 0.5) s_v); u' = (cos r a + sin r b + 0.5) - o_u, v' = (-sin r a + cos r b + 0.5) - o_v, in double; bitmap texel coordinates x = u' w - 0.5, y = (1 - v') h - 0.5 (row 0 on top, centres at integers). The texel (floor(x + 0.5) mod w, floor(y + 0.5) mod h); its value float32(c / M) stored with the channel's write rule (the code itself at equal depth).",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: UVProjectionParams (scale, rotation, offset), FilteringMode"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: UVWrappingMode (Repeat, RepeatNone, ...)"
+        },
+        {
+          "source_id": "P-PBRT",
+          "locator": "Image texture: bilinear and point (nearest) filtering, wrap modes"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "uv_pivot",
+          "value": [
+            0.5,
+            0.5
+          ],
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/resample-uv",
+          "map": "s2/user0-user7",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1572864,
+            "affected_texels": 0,
+            "texels": 524288
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/resample-uv",
+          "map": "s2/user0-user7",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1572864,
+            "affected_texels": 0,
+            "texels": 524288
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "uv-bilinear-repeat",
+      "subject": "UV projection with BilinearHQ and BilinearSharp (Repeat), magnification and 1:1",
+      "status": "calibrated",
+      "formula": "Output texel (i, j) of the W x H set at u = (i + 0.5)/W, v = 1 - (j + 0.5)/H; (a, b) = ((u - 0.5) s_u, (v - 0.5) s_v); u' = (cos r a + sin r b + 0.5) - o_u, v' = (-sin r a + cos r b + 0.5) - o_v, in double; bitmap texel coordinates x = u' w - 0.5, y = (1 - v') h - 0.5 (row 0 on top, centres at integers). Fixed point: X = floor(256 x + 0.5), x0 = X >> 8, fx = X & 255 (same for y); weights w11 = (fx fy + 127) >> 8, w10 = fx - w11, w01 = fy - w11, w00 = 256 - fx - fy + w11 on the taps (x0, y0), (x0 + 1, y0), (x0, y0 + 1), (x0 + 1, y0 + 1); texels t = float32(c / 65535); value = float32 of the exact sum of (w / 256) t (one rounding), stored with the channel's write rule. Repeat: tap indices modulo the bitmap size. BilinearHQ and BilinearSharp are identical here.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: UVProjectionParams (scale, rotation, offset), FilteringMode"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: UVWrappingMode (Repeat, RepeatNone, ...)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Texture sampling: texel coordinate fixed-point precision, filtering"
+        },
+        {
+          "source_id": "P-PBRT",
+          "locator": "Image texture: bilinear and point (nearest) filtering, wrap modes"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "subtexel_bits",
+          "value": 8,
+          "origin": "fitted",
+          "unit": "bits"
+        },
+        {
+          "name": "weight_bits",
+          "value": 8,
+          "origin": "fitted",
+          "unit": "bits"
+        },
+        {
+          "name": "uv_pivot",
+          "value": [
+            0.5,
+            0.5
+          ],
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/resample-uv",
+          "map": "s0/user0-5,7",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 7.266090029761904e-07,
+            "p99": 0,
+            "differing": 1,
+            "total": 1376256,
+            "affected_texels": 1,
+            "texels": 458752
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/resample-uv",
+          "map": "s0/user0-5,7",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 7.266090029761904e-07,
+            "p99": 0,
+            "differing": 1,
+            "total": 1376256,
+            "affected_texels": 1,
+            "texels": 458752
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/resample-uv",
+          "map": "s1/user0-5,7",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 7.266090029761904e-07,
+            "p99": 0,
+            "differing": 1,
+            "total": 1376256,
+            "affected_texels": 1,
+            "texels": 458752
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/resample-uv",
+          "map": "s1/user0-5,7",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 1,
+            "mean": 7.266090029761904e-07,
+            "p99": 0,
+            "differing": 1,
+            "total": 1376256,
+            "affected_texels": 1,
+            "texels": 458752
+          }
+        }
+      ],
+      "notes": "One value differs, by one code, in s0 and s1 user2 (scale 1.37 x 2.11), both recordings: its exact sum lies 2^-34.7 above the midpoint between two float32 values and Painter rounded it down; no fixed-point truncation of the sum (26 to 41 bits) or texel conversion variant reproduces it without breaking others. Replaces the 20-bit integer value rule of resampling.json (about 280 values per map one code off)."
+    },
+    {
+      "entry_id": "uv-bilinear-repeatnone",
+      "subject": "UV projection with BilinearHQ and RepeatNone, magnification and 1:1",
+      "status": "exact",
+      "formula": "Output texel (i, j) of the W x H set at u = (i + 0.5)/W, v = 1 - (j + 0.5)/H; (a, b) = ((u - 0.5) s_u, (v - 0.5) s_v); u' = (cos r a + sin r b + 0.5) - o_u, v' = (-sin r a + cos r b + 0.5) - o_v, in double; bitmap texel coordinates x = u' w - 0.5, y = (1 - v') h - 0.5 (row 0 on top, centres at integers). Fixed point: X = floor(256 x + 0.5), x0 = X >> 8, fx = X & 255 (same for y); weights w11 = (fx fy + 127) >> 8, w10 = fx - w11, w01 = fy - w11, w00 = 256 - fx - fy + w11 on the taps (x0, y0), (x0 + 1, y0), (x0, y0 + 1), (x0 + 1, y0 + 1); texels t = float32(c / 65535); value = float32 of the exact sum of (w / 256) t (one rounding), stored with the channel's write rule. RepeatNone: tap indices clamped to the bitmap; texels with u' or v' outside [0, 1) are not covered and keep the value below the fill (a coverage plane in the projected tile). RepeatHorizontally / RepeatVertically repeat one axis and treat the other as RepeatNone (not observed).",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: UVProjectionParams (scale, rotation, offset), FilteringMode"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: UVWrappingMode (Repeat, RepeatNone, ...)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Texture sampling: texel coordinate fixed-point precision, filtering"
+        },
+        {
+          "source_id": "P-PBRT",
+          "locator": "Image texture: bilinear and point (nearest) filtering, wrap modes"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "subtexel_bits",
+          "value": 8,
+          "origin": "fitted",
+          "unit": "bits"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/resample-uv",
+          "map": "s3/user0-5,7",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1376256,
+            "affected_texels": 0,
+            "texels": 458752
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/resample-uv",
+          "map": "s3/user0-5,7",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1376256,
+            "affected_texels": 0,
+            "texels": 458752
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "uv-bilinear-minification",
+      "subject": "BilinearHQ and BilinearSharp under minification",
+      "status": "gap",
+      "formula": "Not reproduced: Painter prefilters when one output texel spans more than one bitmap texel (resampling.json, user 6 at scale 3.3); the evaluator refuses a bilinear projection whose footprint exceeds one texel with evaluator:unsupported_source.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: UVProjectionParams (scale, rotation, offset), FilteringMode"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Texture sampling: texel coordinate fixed-point precision, filtering"
+        }
+      ],
+      "parameters": [],
+      "residuals": []
+    },
+    {
+      "entry_id": "uv-island-edges",
+      "subject": "UV projections on meshes: island edges",
+      "status": "exact",
+      "formula": "The Fill and UV projections evaluate every texel of the UV tile, inside and outside the islands. On every texel whose centre a triangle of the texture set covers (the UV raster of src/render/uv_raster.h on the imported texturing mesh) the channel equals the export; the texels outside the islands are export padding (padding infinite), not the stack's value.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: UVProjectionParams (scale, rotation, offset), FilteringMode"
+        },
+        {
+          "source_id": "A-HELP-EXPORT",
+          "locator": "Export settings: bit depth, padding"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Texture sampling: texel coordinate fixed-point precision, filtering"
+        }
+      ],
+      "parameters": [],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/height covered",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 61440,
+            "affected_texels": 0,
+            "texels": 61440
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-sphere",
+          "map": "uzp_sphere/height covered",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 61440,
+            "affected_texels": 0,
+            "texels": 61440
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/height covered",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 53336,
+            "affected_texels": 0,
+            "texels": 53336
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-bevelled-cube",
+          "map": "uzp_bevelled_cube/height covered",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 53336,
+            "affected_texels": 0,
+            "texels": 53336
+          }
+        }
+      ],
+      "notes": "Height ramps (bitmap-height-signed of colour-transfer.json) on the 32 x 16 UV sphere (61440 covered texels of 65536) and the bevelled cube atlas (53336)."
+    }
+  ]
+}

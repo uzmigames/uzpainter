@@ -5,6 +5,7 @@
 
 #include "evaluator/arith.h"
 #include "evaluator/error.h"
+#include "evaluator/projection_uv.h"
 
 namespace uzp::evaluator {
 
@@ -94,11 +95,27 @@ private:
             return EvalFail(EvalErrorKind::MissingResource,
                             "bitmap " + source.sha256 + " is not available", layer.uid);
         }
-        render::Result<TileHandle> tile = Allocate(key, m_dag.tileFormat);
+        render::Result<void> sampling = CheckSampling(source.projection, m_dag.grid.width,
+                                                      m_dag.grid.height, *image, layer.uid);
+        if (!sampling) return render::Unexpected(sampling.error());
+        // A wrap mode that can leave texels uncovered gives the content a coverage plane: the
+        // fill keeps the value below there (resampling.json, RepeatNone).
+        TileFormat format = m_dag.tileFormat;
+        format.alpha = source.projection.MayUncover();
+        render::Result<TileHandle> tile = Allocate(key, format);
         if (!tile) return render::Unexpected(tile.error());
-        render::Result<void> uploaded =
-            m_env.store.Upload(*tile, *image, m_tx * kTileSize, m_ty * kTileSize);
-        if (!uploaded) return render::Unexpected(uploaded.error());
+        ProjectOp op;
+        op.dst = *tile;
+        op.image = image;
+        op.imageKey = source.sha256;
+        op.projection = source.projection;
+        op.setWidth = m_dag.grid.width;
+        op.setHeight = m_dag.grid.height;
+        op.x0 = m_tx * kTileSize;
+        op.y0 = m_ty * kTileSize;
+        op.signedRange = source.signedRange;
+        render::Result<void> projected = m_env.store.Project(op);
+        if (!projected) return render::Unexpected(projected.error());
         ++m_stats.uploads;
         return Operand::Of(*tile);
     }

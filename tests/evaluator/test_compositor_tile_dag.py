@@ -24,7 +24,6 @@ from typing import Any
 import numpy as np
 import pytest
 
-from tools.parity.feasibility import png
 from tools.parity.fit.common import Context
 from tools.parity.fit.oracle import Golden
 from tools.parity.schemas import load_json
@@ -300,11 +299,16 @@ def raster(result: dict[str, Any], channel: str) -> np.ndarray:
     return values.astype(np.float64) if entry["format"].endswith("F") else values.astype(np.int64)
 
 
-def export16_of_constant(constant: list[float]) -> list[int]:
+def export16_of_constant(constant: list[float], channel: str) -> list[int]:
     """What a 16-bit PNG export of an empty channel's constant holds, per component: the write
     rule of the export depth, whatever the channel format (Painter's default maps are not
     quantised to the channel: the Dota 2 Specular L8 base exports 14330, off the 8-bit lattice).
-    """
+    The signed Height channel exports (h + 1) / 2 (its base 0 exports 32767)."""
+    if channel == "Height":
+        return [
+            write16(float(np.float32(np.float32(v) + np.float32(1.0)) * np.float32(0.5)))
+            for v in constant
+        ]
     return [write16(v) for v in constant]
 
 
@@ -371,7 +375,7 @@ def test_base_values_equal_the_empty_project_exports(
             components = unique[0].tolist()
             constant = entry["constant"]
             if decoded.integer:
-                exported = export16_of_constant(constant)[: len(components)]
+                exported = export16_of_constant(constant, channel)[: len(components)]
                 assert exported == components, (
                     f"{golden_stem} {map_name} {recording}: {exported} != {components}"
                 )
@@ -434,20 +438,12 @@ def test_template_channel_sets_equal_the_capture() -> None:
 
 
 def fixture_resource(name: str, workdir: Path) -> dict[str, Any]:
-    """A spec resource for the authored fixture bitmap `name` (16-bit PNG decoded to raw codes)."""
+    """A spec resource for the authored fixture bitmap `name`: its PNG bytes, decoded by the
+    evaluator's resource provider (`src/evaluator/sources.h`)."""
     data = (FIXTURES / f"{name}.png").read_bytes()
-    codes = png.decode(data)
-    sha = hashlib.sha256(data).hexdigest()
     workdir.mkdir(parents=True, exist_ok=True)
-    (workdir / f"{name}.bin").write_bytes(codes.astype("<u2").tobytes())
-    return {
-        "sha256": sha,
-        "file": f"{name}.bin",
-        "width": int(codes.shape[1]),
-        "height": int(codes.shape[0]),
-        "channels": int(codes.shape[2]),
-        "encoding": "unorm16",
-    }
+    (workdir / f"{name}.png").write_bytes(data)
+    return {"sha256": hashlib.sha256(data).hexdigest(), "png": f"{name}.png"}
 
 
 LAYER_CALLS = {
@@ -496,6 +492,7 @@ def spec_from_manifest(
                     "blending": {},
                     "sources": {},
                     "active": None,
+                    "projection": None,
                 }
                 nodes[n] = node
                 roots.insert(0, n)
@@ -513,6 +510,7 @@ def spec_from_manifest(
                     "blending": {},
                     "sources": {},
                     "active": None,
+                    "projection": None,
                 }
                 nodes[n] = node
                 if "above_step" in args:
@@ -541,6 +539,10 @@ def spec_from_manifest(
                 space = args.get("color_space", "Working")
                 source = {"uniform": list(args["color"]), "color_space": space}
             nodes[args["node_step"]]["sources"][args["channel"]] = source
+        elif call.endswith("FillLayerNode.set_projection_parameters"):
+            if owner_set(args["node_step"]) == texture_set:
+                projection = {k: v for k, v in args.items() if k != "node_step"}
+                nodes[args["node_step"]]["projection"] = {"mode": "UV", **projection}
         elif call.endswith("Node.set_blending_mode"):
             if owner_set(args["node_step"]) == texture_set:
                 blending = nodes[args["node_step"]]["blending"]
@@ -571,6 +573,8 @@ def spec_from_manifest(
             layer["sources"] = node["sources"]
             if node["active"] is not None:
                 layer["active_channels"] = node["active"]
+            if node["projection"] is not None:
+                layer["projection"] = node["projection"]
         else:
             layer["children"] = [emit(child) for child in node["children"]]
         return layer

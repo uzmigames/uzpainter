@@ -26,7 +26,7 @@ struct EvaluationStats {
     uint64_t cacheHits = 0;      ///< Node outputs served from the cache.
     uint64_t cacheMisses = 0;    ///< Node outputs computed.
     uint64_t blends = 0;         ///< Blend operations run.
-    uint64_t uploads = 0;        ///< Bitmap windows uploaded.
+    uint64_t uploads = 0;        ///< Bitmap tiles projected (bitmap content computed).
     uint64_t evictions = 0;      ///< Tiles evicted during the evaluation.
     uint64_t flushes = 0;        ///< Store flushes forced by the budget.
 };

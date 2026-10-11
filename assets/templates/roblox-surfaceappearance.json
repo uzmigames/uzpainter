@@ -64,16 +64,16 @@
       "type": "Height",
       "format": "L16F",
       "base": [
-        0.5,
-        0.5,
-        0.5
+        0.0,
+        0.0,
+        0.0
       ],
       "base_provenance": {
         "kind": "observed",
         "golden_id": "tier0/semantics/base-values-roblox-surfaceappearance",
         "record_sha256": "99551db9c120df6c19da27fe80d84a740fd5ea965f18e00a170ad9a83afd8a57",
         "map": "uzp_plane/height",
-        "note": "L16F export code 32767 = write rule of 0.5 (ties down); the EXR export of an empty Height channel is not recorded; 0.5 is the documented neutral height"
+        "note": "Height is a signed channel: its value under a layer starts at 0 (height-normal-plane-amplitudes s1, s2: a bitmap fill at opacity a stores a (2t - 1)) and its 16-bit PNG export is the write rule of (h + 1) / 2, so the empty channel's export code 32767 is h = 0; the OpenEXR export holds h (the export of h != 0 to PNG and of the empty channel to EXR are not recorded)"
       }
     },
     {

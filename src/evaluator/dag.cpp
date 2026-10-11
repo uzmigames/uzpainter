@@ -6,6 +6,7 @@
 #include "evaluator/arith.h"
 #include "evaluator/cpu_store.h"
 #include "evaluator/error.h"
+#include "evaluator/sources.h"
 #include "uzp_core/document/nodes.h"
 
 namespace uzp::evaluator {
@@ -24,15 +25,20 @@ struct Context {
     TileFormat tileFormat;
     core::ChannelFormat format;
     std::array<float, 3> base;
+    TileGrid grid;
     int depth = 0;
 };
 
 constexpr int kMaxInstanceDepth = 64;
 
+/// The seed of every subtree hash: profile, kind, channel, format and the set resolution (a tile
+/// of one resolution never serves another: the grid decides the tiles' sizes and, for projected
+/// bitmaps, their texel centres).
 Digest ContentStartHash(const Context& ctx, std::string_view what) {
     HashWriter writer;
     writer.Str(kEvaluatorProfile).Str(what).U32(static_cast<uint32_t>(ctx.channel));
     writer.U32(static_cast<uint32_t>(ctx.format));
+    writer.U32(ctx.grid.width).U32(ctx.grid.height);
     return writer.Finish();
 }
 
@@ -77,6 +83,8 @@ render::Result<std::optional<DagSource>> SourceOf(const Context& ctx, const Laye
         return EvalFail(EvalErrorKind::UnsupportedSource, "symmetry is a release gap (P3-SMART)",
                         layer.uid);
     }
+    render::Result<void> colour = CheckColourManagement(ctx.project, layer.uid);
+    if (!colour) return render::Unexpected(colour.error());
     const core::Source& source = sourceIt->second;
     DagSource result;
     HashWriter writer;
@@ -96,21 +104,22 @@ render::Result<std::optional<DagSource>> SourceOf(const Context& ctx, const Laye
                 return EvalFail(EvalErrorKind::MissingResource, "a bitmap source without a hash",
                                 layer.uid);
             }
-            const core::UVProjectionParams& uv = fill.projection.uv;
-            const core::UVTransformation& transform = uv.uv_transformation;
-            const bool identity = transform.scale_mode == core::ScaleMode::Factors &&
-                                  transform.scale[0] == 1.0 && transform.scale[1] == 1.0 &&
-                                  transform.rotation == 0.0 && transform.offset[0] == 0.0 &&
-                                  transform.offset[1] == 0.0;
-            if (!identity) {
-                return EvalFail(EvalErrorKind::UnsupportedSource,
-                                "UV transforms other than the identity are evaluated by "
-                                "phase1.8_compositor-sources-projection",
-                                layer.uid);
-            }
+            render::Result<UvProjection> projection = UvProjectionOf(fill.projection, layer.uid);
+            if (!projection) return render::Unexpected(projection.error());
             result.kind = DagSource::Kind::Bitmap;
             result.sha256 = bitmap.resource.sha256;
-            writer.Str("bitmap").Str(result.sha256).Str(bitmap.color_space);
+            result.projection = *projection;
+            result.signedRange = ctx.channel == ChannelType::Height;
+            // Bound by content hash (LAY-13): the alias and, under legacy colour management, the
+            // colour-space tag do not change the samples (sources.h).
+            writer.Str("bitmap").Str(result.sha256);
+            writer.U32(static_cast<uint32_t>(result.projection.filter));
+            writer.U32(static_cast<uint32_t>(result.projection.wrap));
+            for (const double value : {result.projection.cosR, result.projection.sinR,
+                                       result.projection.scale[0], result.projection.scale[1],
+                                       result.projection.offset[0], result.projection.offset[1]}) {
+                writer.U64(std::bit_cast<uint64_t>(value));
+            }
             break;
         }
         case core::SourceKind::vector:
@@ -295,7 +304,7 @@ render::Result<ChannelDag> BuildDag(const core::Project& project, core::Id textu
     dag.templateId = std::string(templateId);
     dag.root.owner = stack;
     dag.root.isolated = false;
-    Context ctx{project, *stackPtr, channel, dag.tileFormat, dag.format, dag.base};
+    Context ctx{project, *stackPtr, channel, dag.tileFormat, dag.format, dag.base, dag.grid};
     {
         HashWriter writer;
         writer.Sub(ContentStartHash(ctx, "root"));

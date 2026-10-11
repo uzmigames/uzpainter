@@ -34,9 +34,9 @@
 | ⬚ | phase1.26_gate-g1 | 0/14 | phase1.26_gate g1 |
 | 🔄 | phase1.6_store-save-retention | 26/27 | phase1.6_store save retention |
 | 🔄 | phase1.7_store-inspect-census | 12/13 | phase1.7_store inspect census |
-| ⬚ | phase1.8_compositor-sources-projection | 0/16 | phase1.8_compositor sources projection |
 | ⬚ | phase1.8_project-store | 0/15 | phase1.8_project store |
 | ⬚ | phase1.9_compositor-quantisation-profile | 0/12 | phase1.9_compositor quantisation profile |
+| ⬚ | phase1.9_compositor-resample-gaps | 0/11 | phase1.9_compositor resample gaps |
 | ⬚ | phase2.1_preview-display-presets | 0/16 | phase2.1_preview display presets |
 | ⬚ | phase2.1_preview-viewport-window | 0/15 | phase2.1_preview viewport window |
 | ⬚ | phase2.1_recipe-diagnostic-views | 0/17 | phase2.1_recipe diagnostic views |

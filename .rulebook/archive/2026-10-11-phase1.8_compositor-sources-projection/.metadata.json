@@ -1,0 +1,32 @@
+{
+  "status": "in-progress",
+  "createdAt": "2026-10-10T06:02:31.831Z",
+  "updatedAt": "2026-10-11T03:39:00.361Z",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "How should the two remaining resample-uv differences be handled: one bilinear value off by one code (a float32 near-tie), and bilinear minification (scale 3.3) that Painter prefilters?",
+      "status": "answered",
+      "askedAt": "2026-10-11T03:25:48.274Z",
+      "context": "Every other Tier 0 set of this task is exact on CPU and GPU (parity/reports/phase1/compositor-sources-projection.md). In resample-uv, BilinearHQ/BilinearSharp with Repeat differ in exactly one value of 1 376 256 per set (s0 and s1, User2, texel (175,18) green, |delta| 1, both recordings): the exact weighted sum of float32 texels lies 2^-34.7 above a float32 midpoint and Painter rounded down; no tested variant (sum truncation 26-41 bits, texel conversions, summation orders) fixes it without breaking hundreds of others. Separately, User6 (field A at scale 3.3, minification) under the bilinear filters is a wider prefilter Painter applies that phase0.7 could not fit (resampling.json gap); the evaluator refuses it explicitly with evaluator:unsupported_source. Decision 017 says a divergence passes only through an owner-approved exception.",
+      "options": [
+        {
+          "label": "Exception + release gap",
+          "description": "approve a versioned exception for the one near-tie value (evidence in uv-sampling.json) and list bilinear minification as a release gap of a follow-up task; archive phase1.8"
+        },
+        {
+          "label": "Keep open",
+          "description": "leave 3.3/4.1 open until a follow-up fit reproduces both; phase1.8 stays unarchived"
+        },
+        {
+          "label": "Split",
+          "description": "archive phase1.8 now and move both items into a new follow-up task (bilinear near-tie and minification prefilter)"
+        }
+      ],
+      "recommended": "Split",
+      "blocks": "3.3 Tier 0 UV filter/wrap/transform goldens and `BilinearHQ` resampling goldens exact (and 4.1)",
+      "answer": "Coordinator (2026-10-11): Split. Archive this task with the exact sets; move the two resample-uv differences (Bilinear+Repeat one-code near-tie in s0/s1 User2; Bilinear minification at scale 3.3 with Painter's pre-filter, currently refused as evaluator:unsupported_source) into a new follow-up task that stays open until both match exactly or the owner approves an exception-register entry (decision 017). Nothing is accepted as a pass here.",
+      "answeredAt": "2026-10-11T03:39:00.361Z"
+    }
+  ]
+}

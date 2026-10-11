@@ -62,10 +62,15 @@ namespace uzp::evaluator::arith {
 [[nodiscard]] double SrgbEncode(double linear);
 /// `x` rounded to `bits` significant binary digits (nearest), keeping its exponent.
 [[nodiscard]] double SignificandRound(double x, int bits);
-/// The linear operand of an sRGB8 code: float32(SignificandRound(decode(code / 255), 8)).
+/// The linear operand of an sRGB8 code (`Srgb8OperandTable`): the recording GPU's sRGB8 decode,
+/// which lies within 2^-8 relative of the IEC decode on 8 significant bits but differs from it on
+/// 29 codes (parity/semantics/colour-transfer.json).
 [[nodiscard]] float Srgb8Operand(uint32_t code);
-/// The sRGB8 code of a linear value: round(255 encode(v)), v clamped to [0, 1] (NaN to 0),
-/// decided by comparing v with the 255 decode thresholds in double precision.
+/// The sRGB8 code of a linear value: the number of thresholds of `Srgb8Thresholds` at or below v
+/// (v clamped to [0, 1], NaN to 0). This is the GPU's float-to-sRGB8 conversion Painter stores
+/// through, not round(255 encode(v)): the IEC rounding differs on 2 936 of the 65 536 16-bit
+/// operands and on 12 of the Tier 0 uniform ramp values, the thresholds on none
+/// (parity/semantics/colour-transfer.json).
 [[nodiscard]] uint32_t Srgb8Store(float v);
 
 /// The bits of the binary16 value of `v` rounded toward zero (finite values beyond the
@@ -82,8 +87,16 @@ namespace uzp::evaluator::arith {
 [[nodiscard]] float Float32Readout(float v, float base);
 
 /// Lookup tables the kernels embed or upload (their CPU twins compute the same values).
+/// Entry c: the linear value the GPU the Tier 0 goldens were recorded on (NVIDIA GeForce RTX 4090,
+/// D3D12) loads from an sRGB8 texel of code c, measured by `uzp-evaluator-tests srgb8-hardware`.
+/// Painter exports an sRGB8 channel at 16 bits as this value through the UNORM write rule, and
+/// blends sRGB8 channels on it.
 [[nodiscard]] const std::array<float, 256>& Srgb8OperandTable();
-/// Entry k >= 1: decode((k - 0.5) / 255) in double; entry 0 is unused (0).
+/// Entry k >= 1: the smallest float32 the conversion stores as code k or above (in double);
+/// entry 0 is unused (0). The values are the float-to-sRGB8 conversion of the GPU the Tier 0
+/// goldens were recorded on (NVIDIA GeForce RTX 4090, D3D12), measured by bisection over float32
+/// bit patterns (`uzp-evaluator-tests srgb8-hardware`); each lies within 0.15 code of the IEC
+/// 61966-2-1 threshold decode((k - 0.5) / 255) and has at most 11 significant mantissa bits.
 [[nodiscard]] const std::array<double, 256>& Srgb8Thresholds();
 [[nodiscard]] const std::array<float, 256>& Unorm8OperandTable();
 [[nodiscard]] const std::vector<float>& Unorm16OperandTable();

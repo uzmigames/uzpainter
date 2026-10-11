@@ -7,6 +7,7 @@
 
 #include "evaluator/arith.h"
 #include "evaluator/error.h"
+#include "evaluator/projection_uv.h"
 #include "render/image_pass.h"
 #include "render/texture_readback.h"
 
@@ -45,6 +46,7 @@ GpuTileStore::~GpuTileStore() {
     for (auto& [handle, tile] : m_tiles) m_device.DestroyTexture(tile.texture);
     for (PendingUpload& upload : m_uploads) m_device.DestroyBuffer(upload.staging);
     DestroyRetired();
+    ReleaseBitmaps();
     if (m_table16Upload.IsValid()) m_device.DestroyBuffer(m_table16Upload);
     if (m_table16.IsValid()) m_device.DestroyBuffer(m_table16);
 }
@@ -106,6 +108,51 @@ render::Result<void> GpuTileStore::EnsureTable16() {
     m_table16 = *gpu;
     m_table16Copied = false;
     return {};
+}
+
+void GpuTileStore::ReleaseBitmaps() {
+    for (auto& [key, bitmap] : m_bitmaps) {
+        if (bitmap.upload.IsValid()) m_device.DestroyBuffer(bitmap.upload);
+        m_device.DestroyBuffer(bitmap.buffer);
+    }
+    m_bitmaps.clear();
+    m_bitmapBytes = 0;
+}
+
+render::Result<uz::RHIBufferHandle> GpuTileStore::BitmapBuffer(const std::string& key,
+                                                                const DecodedImage& image) {
+    const auto it = m_bitmaps.find(key);
+    if (it != m_bitmaps.end()) return it->second.buffer;
+    const std::vector<uint32_t> words = PackBitmapCodes(image);
+    const uint64_t bytes = std::max<uint64_t>(words.size(), 1) * sizeof(uint32_t);
+    if (m_bitmapBytes + bytes > kBitmapCacheBytes && !m_bitmaps.empty()) {
+        // Empty the cache once nothing queued reads it.
+        render::Result<void> flushed = Flush();
+        if (!flushed) return render::Unexpected(flushed.error());
+        ReleaseBitmaps();
+    }
+    render::Result<uz::RHIBufferHandle> upload =
+        CreateBuffer(bytes, uz::RHIBufferUsage::CopySrc, uz::RHIMemoryType::Upload, 0,
+                     "evaluator_bitmap_upload");
+    if (!upload) return render::Unexpected(upload.error());
+    auto* mapped = static_cast<std::byte*>(m_device.Rhi().MapBuffer(*upload));
+    if (mapped == nullptr) {
+        m_device.DestroyBuffer(*upload);
+        return render::Fail(render::ErrorCode::ResourceCreationFailed, m_device.GetBackend(),
+                            "evaluator: bitmap upload buffer not mapped");
+    }
+    if (!words.empty()) std::memcpy(mapped, words.data(), words.size() * sizeof(uint32_t));
+    m_device.Rhi().UnmapBuffer(*upload);
+    render::Result<uz::RHIBufferHandle> gpu =
+        CreateBuffer(bytes, uz::RHIBufferUsage::StructuredBuffer | uz::RHIBufferUsage::CopyDst,
+                     uz::RHIMemoryType::Default, sizeof(uint32_t), "evaluator_bitmap");
+    if (!gpu) {
+        m_device.DestroyBuffer(*upload);
+        return render::Unexpected(gpu.error());
+    }
+    m_bitmaps.emplace(key, Bitmap{*upload, *gpu, bytes});
+    m_bitmapBytes += bytes;
+    return *gpu;
 }
 
 render::Result<TileHandle> GpuTileStore::Allocate(const TileFormat& format, uint32_t width,
@@ -264,21 +311,57 @@ render::Result<void> GpuTileStore::Blend(const BlendOp& op) {
     bindings.dstUav = m_device.Rhi().GetTextureUAVIndex(dst->texture);
     bindings.table16Srv = m_device.Rhi().GetBufferSRVIndex(m_table16);
 
-    PendingBlend pending;
+    PendingDispatch pending;
     pending.kernel = *kernel;
     pending.params = EncodeBlendParams(op, bindings);
     pending.groupsX = render::image_pass_detail::Groups(dst->width, 8);
     pending.groupsY = render::image_pass_detail::Groups(dst->height, 8);
     pending.dst = dst->texture;
-    if (acc != nullptr) pending.acc = acc->texture;
-    if (src != nullptr) pending.src = src->texture;
-    if (mask != nullptr) pending.mask = mask->texture;
-    m_blends.push_back(pending);
+    if (acc != nullptr) pending.inputs[0] = acc->texture;
+    if (src != nullptr) pending.inputs[1] = src->texture;
+    if (mask != nullptr) pending.inputs[2] = mask->texture;
+    m_dispatches.push_back(pending);
+    return {};
+}
+
+render::Result<void> GpuTileStore::Project(const ProjectOp& op) {
+    render::Result<void> context = RequireContext();
+    if (!context) return context;
+    const Tile* dst = Find(op.dst);
+    if (dst == nullptr || !op.image) {
+        return EvalFail(EvalErrorKind::Internal, "projection into an unknown tile or of no bitmap");
+    }
+    if (op.projection.MayUncover() && !dst->format.alpha) {
+        return EvalFail(EvalErrorKind::Internal,
+                        "a projection that may uncover texels needs a coverage plane");
+    }
+    const DecodedImage& image = *op.image;
+    const std::string key =
+        op.imageKey + (image.encoding == render::TexelEncoding::Unorm16 ? "/16" : "/8");
+    render::Result<uz::RHIBufferHandle> buffer = BitmapBuffer(key, image);
+    if (!buffer) return render::Unexpected(buffer.error());
+    render::Result<render::ComputeKernel> kernel = m_context->Kernel(ProjectKernelSource(dst->format));
+    if (!kernel) return render::Unexpected(kernel.error());
+    ProjectBindings bindings;
+    bindings.width = dst->width;
+    bindings.height = dst->height;
+    bindings.dstUav = m_device.Rhi().GetTextureUAVIndex(dst->texture);
+    bindings.imageSrv = m_device.Rhi().GetBufferSRVIndex(*buffer);
+    PendingDispatch pending;
+    pending.kernel = *kernel;
+    pending.params = EncodeProjectParams(op, bindings);
+    pending.groupsX = render::image_pass_detail::Groups(dst->width, 8);
+    pending.groupsY = render::image_pass_detail::Groups(dst->height, 8);
+    pending.dst = dst->texture;
+    m_dispatches.push_back(pending);
     return {};
 }
 
 render::Result<void> GpuTileStore::Flush() {
-    if (m_uploads.empty() && m_blends.empty() && (m_table16Copied || !m_table16.IsValid())) {
+    bool bitmapsPending = false;
+    for (const auto& [key, bitmap] : m_bitmaps) bitmapsPending = bitmapsPending || bitmap.upload.IsValid();
+    if (m_uploads.empty() && m_dispatches.empty() && !bitmapsPending &&
+        (m_table16Copied || !m_table16.IsValid())) {
         return {};
     }
     render::Result<void> context = RequireContext();
@@ -288,8 +371,8 @@ render::Result<void> GpuTileStore::Flush() {
     uz::RHIBufferHandle arenaUpload = uz::RHIBufferHandle::Invalid();
     uz::RHIBufferHandle arena = uz::RHIBufferHandle::Invalid();
     const uint64_t arenaBytes = uint64_t{kBlendParamsStride} * sizeof(uint32_t) *
-                                std::max<size_t>(m_blends.size(), 1);
-    if (!m_blends.empty()) {
+                                std::max<size_t>(m_dispatches.size(), 1);
+    if (!m_dispatches.empty()) {
         render::Result<uz::RHIBufferHandle> upload =
             CreateBuffer(arenaBytes, uz::RHIBufferUsage::CopySrc, uz::RHIMemoryType::Upload, 0,
                          "evaluator_params_upload");
@@ -301,8 +384,8 @@ render::Result<void> GpuTileStore::Flush() {
             return render::Fail(render::ErrorCode::ResourceCreationFailed, m_device.GetBackend(),
                                 "evaluator: parameter arena not mapped");
         }
-        for (size_t i = 0; i < m_blends.size(); ++i) {
-            std::memcpy(mapped + i * kBlendParamsStride * sizeof(uint32_t), m_blends[i].params.data(),
+        for (size_t i = 0; i < m_dispatches.size(); ++i) {
+            std::memcpy(mapped + i * kBlendParamsStride * sizeof(uint32_t), m_dispatches[i].params.data(),
                         kBlendParamsStride * sizeof(uint32_t));
         }
         m_device.Rhi().UnmapBuffer(arenaUpload);
@@ -335,6 +418,14 @@ render::Result<void> GpuTileStore::Flush() {
             const uz::RHIBarrierDesc toRead = Transition(arena, State::CopyDst, State::ShaderResource);
             cmd.ResourceBarrier(&toRead, 1);
         }
+        for (const auto& [key, bitmap] : m_bitmaps) {
+            if (!bitmap.upload.IsValid()) continue;
+            const uz::RHIBarrierDesc toCopy = Transition(bitmap.buffer, State::Common, State::CopyDst);
+            cmd.ResourceBarrier(&toCopy, 1);
+            cmd.CopyBuffer(bitmap.upload, 0, bitmap.buffer, 0, bitmap.bytes);
+            const uz::RHIBarrierDesc toRead = Transition(bitmap.buffer, State::CopyDst, State::ShaderResource);
+            cmd.ResourceBarrier(&toRead, 1);
+        }
         for (const PendingUpload& upload : m_uploads) {
             const uz::RHIBarrierDesc toCopy = Transition(upload.texture, State::Common, State::CopyDst);
             cmd.ResourceBarrier(&toCopy, 1);
@@ -342,23 +433,23 @@ render::Result<void> GpuTileStore::Flush() {
             const uz::RHIBarrierDesc back = Transition(upload.texture, State::CopyDst, State::Common);
             cmd.ResourceBarrier(&back, 1);
         }
-        for (size_t i = 0; i < m_blends.size(); ++i) {
-            const PendingBlend& blend = m_blends[i];
+        for (size_t i = 0; i < m_dispatches.size(); ++i) {
+            const PendingDispatch& dispatch = m_dispatches[i];
             uz::RHIBarrierDesc before[4];
             uint32_t count = 0;
-            before[count++] = Transition(blend.dst, State::Common, State::UnorderedAccess);
-            for (const uz::RHITextureHandle input : {blend.acc, blend.src, blend.mask}) {
+            before[count++] = Transition(dispatch.dst, State::Common, State::UnorderedAccess);
+            for (const uz::RHITextureHandle input : dispatch.inputs) {
                 if (Valid(input)) before[count++] = Transition(input, State::Common, State::ShaderResource);
             }
             cmd.ResourceBarrier(before, count);
-            cmd.SetPipeline(blend.kernel.pipeline);
+            cmd.SetPipeline(dispatch.kernel.pipeline);
             const uint32_t root[2] = {arenaSrv, static_cast<uint32_t>(i)};
             cmd.SetRootConstants(render::kRootConstantsParam, root, 2);
-            cmd.Dispatch(blend.groupsX, blend.groupsY, 1);
+            cmd.Dispatch(dispatch.groupsX, dispatch.groupsY, 1);
             uz::RHIBarrierDesc after[4];
             count = 0;
-            after[count++] = Transition(blend.dst, State::UnorderedAccess, State::Common);
-            for (const uz::RHITextureHandle input : {blend.acc, blend.src, blend.mask}) {
+            after[count++] = Transition(dispatch.dst, State::UnorderedAccess, State::Common);
+            for (const uz::RHITextureHandle input : dispatch.inputs) {
                 if (Valid(input)) after[count++] = Transition(input, State::ShaderResource, State::Common);
             }
             cmd.ResourceBarrier(after, count);
@@ -373,13 +464,17 @@ render::Result<void> GpuTileStore::Flush() {
         if (arena.IsValid()) m_device.DestroyBuffer(arena);
         DestroyRetired();
         if (copyTable) m_table16Copied = true;
+        for (auto& [key, bitmap] : m_bitmaps) {
+            if (bitmap.upload.IsValid()) m_device.DestroyBuffer(bitmap.upload);
+            bitmap.upload = uz::RHIBufferHandle::Invalid();
+        }
     } else {
         for (const PendingUpload& upload : m_uploads) m_retired.push_back(upload.staging);
         if (arenaUpload.IsValid()) m_retired.push_back(arenaUpload);
         if (arena.IsValid()) m_retired.push_back(arena);
     }
-    m_uploads.clear();
-    m_blends.clear();
+        m_uploads.clear();
+    m_dispatches.clear();
     return done;
 }
 

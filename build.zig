@@ -272,9 +272,12 @@ const evaluator_sources = [_][]const u8{
     "evaluator/gpu_store.cpp",
     "evaluator/hash.cpp",
     "evaluator/kernelgen.cpp",
+    "evaluator/projection_uv.cpp",
+    "evaluator/sources.cpp",
     "evaluator/templates.cpp",
 };
-const evaluator_flags = cxx_flags ++ own_warning_flags ++ [_][]const u8{"-ffp-contract=off"};
+/// spng is linked statically wherever the evaluator is (its bitmap decoder, `sources.h`).
+const evaluator_flags = cxx_flags ++ own_warning_flags ++ [_][]const u8{ "-ffp-contract=off", "-DSPNG_STATIC" };
 /// The project templates the evaluator reads (`src/evaluator/templates.h`), installed beside the
 /// executables as `bin/assets/templates/`.
 const templates_dir = "assets/templates";
@@ -1089,6 +1092,10 @@ pub fn build(b: *std.Build) void {
         .flags = &cxx_flags,
     });
     evaluator_tests_mod.linkLibrary(core_lib);
+    // The PNG decoder of bitmap sources (spng and zlib, compiled into `uzp_mesh`) and the mesh
+    // importers of the UV-raster cases.
+    evaluator_tests_mod.addIncludePath(b.path("thirdparty/spng/spng"));
+    evaluator_tests_mod.linkLibrary(mesh_lib);
     evaluator_tests_mod.linkLibrary(uzp_core_lib);
     for (system_libraries) |name| evaluator_tests_mod.linkSystemLibrary(name, .{});
     // File version resources (the DXC identity in the kernel cache key).

@@ -4,6 +4,7 @@
 #include <cstdio>
 
 #include "evaluator/arith.h"
+#include "evaluator/projection_uv.h"
 #include "render/image_pass.h"
 
 namespace uzp::evaluator {
@@ -14,6 +15,9 @@ namespace {
 #pragma clang diagnostic ignored "-Wc23-extensions"
 constexpr char kBlendHlsl[] = {
 #embed "shaders/evaluator_blend.hlsl"
+};
+constexpr char kProjectHlsl[] = {
+#embed "shaders/evaluator_project.hlsl"
 };
 #pragma clang diagnostic pop
 
@@ -103,6 +107,73 @@ std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(const BlendOp& op,
     params[kParamTable16Srv] = bindings.table16Srv;
     params[kParamMaskEncoding] = render::image_pass_detail::EncodingConstant(bindings.maskEncoding);
     return params;
+}
+
+render::KernelSource ProjectKernelSource(const TileFormat& format) {
+    render::KernelSource source;
+    source.name = "evaluator_project_" + std::to_string(format.BytesPerChannel() * 8) +
+                  (format.IsUnorm() ? (format.srgb ? "srgb" : "unorm") : "float") + "_c" +
+                  std::to_string(format.channels) + (format.alpha ? "a" : "");
+    source.hlsl = std::string(kProjectHlsl, sizeof(kProjectHlsl));
+    source.entryPoint = "main";
+    source.defines = {
+        "UZP_ENC=" + std::to_string(render::image_pass_detail::EncodingConstant(format.encoding)),
+        "UZP_CHANNELS=" + std::to_string(format.channels),
+        std::string("UZP_SRGB=") + (format.srgb ? "1" : "0"),
+        std::string("UZP_ALPHA=") + (format.alpha ? "1" : "0"),
+    };
+    source.includes = {render::image_pass_detail::CommonInclude(), TablesInclude()};
+    return source;
+}
+
+namespace {
+
+void PutDouble(std::array<uint32_t, kBlendParamsStride>& params, uint32_t offset, double value) {
+    const uint64_t bits = std::bit_cast<uint64_t>(value);
+    params[offset] = static_cast<uint32_t>(bits & 0xFFFFFFFFu);
+    params[offset + 1] = static_cast<uint32_t>(bits >> 32);
+}
+
+}  // namespace
+
+std::array<uint32_t, kBlendParamsStride> EncodeProjectParams(const ProjectOp& op,
+                                                             const ProjectBindings& bindings) {
+    std::array<uint32_t, kBlendParamsStride> params{};
+    const DecodedImage& image = *op.image;
+    params[0] = bindings.width;
+    params[1] = bindings.height;
+    params[2] = op.x0;
+    params[3] = op.y0;
+    params[4] = bindings.dstUav;
+    params[5] = bindings.imageSrv;
+    params[6] = image.width;
+    params[7] = image.height;
+    params[8] = image.channels;
+    params[9] = image.encoding == render::TexelEncoding::Unorm16 ? 1u : 0u;
+    params[10] = static_cast<uint32_t>(op.projection.filter);
+    params[11] = static_cast<uint32_t>(op.projection.wrap);
+    PutDouble(params, 12, 1.0 / op.setWidth);
+    PutDouble(params, 14, 1.0 / op.setHeight);
+    PutDouble(params, 16, op.projection.cosR);
+    PutDouble(params, 18, op.projection.sinR);
+    PutDouble(params, 20, op.projection.scale[0]);
+    PutDouble(params, 22, op.projection.scale[1]);
+    PutDouble(params, 24, op.projection.offset[0]);
+    PutDouble(params, 26, op.projection.offset[1]);
+    params[28] = op.signedRange ? 1u : 0u;
+    return params;
+}
+
+std::vector<uint32_t> PackBitmapCodes(const DecodedImage& image) {
+    const bool sixteen = image.encoding == render::TexelEncoding::Unorm16;
+    const uint32_t perWord = sixteen ? 2u : 4u;
+    const uint32_t bits = sixteen ? 16u : 8u;
+    const uint32_t mask = sixteen ? 0xFFFFu : 0xFFu;
+    std::vector<uint32_t> words((image.values.size() + perWord - 1) / perWord, 0u);
+    for (size_t k = 0; k < image.values.size(); ++k) {
+        words[k / perWord] |= (image.values[k] & mask) << ((k % perWord) * bits);
+    }
+    return words;
 }
 
 }  // namespace uzp::evaluator

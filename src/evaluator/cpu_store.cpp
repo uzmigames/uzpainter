@@ -5,6 +5,7 @@
 
 #include "evaluator/arith.h"
 #include "evaluator/error.h"
+#include "evaluator/projection_uv.h"
 
 namespace uzp::evaluator {
 
@@ -107,6 +108,35 @@ render::Result<void> CpuTileStore::Upload(TileHandle handle, const DecodedImage&
             if (stored == 4) {
                 for (uint32_t c = tile.format.channels; c < 3; ++c) out[c] = 0;
                 out[3] = StoreValue(1.0f, tile.format, 3);
+            }
+        }
+    }
+    return {};
+}
+
+render::Result<void> CpuTileStore::Project(const ProjectOp& op) {
+    const auto it = m_tiles.find(op.dst);
+    if (it == m_tiles.end() || !op.image) {
+        return EvalFail(EvalErrorKind::Internal, "projection into an unknown tile or of no bitmap");
+    }
+    Tile& tile = it->second;
+    if (op.projection.MayUncover() && !tile.format.alpha) {
+        return EvalFail(EvalErrorKind::Internal, "a projection that may uncover texels needs a coverage plane");
+    }
+    const DecodedImage& image = *op.image;
+    const uint32_t stored = tile.format.StoredChannels();
+    for (uint32_t y = 0; y < tile.height; ++y) {
+        for (uint32_t x = 0; x < tile.width; ++x) {
+            const ProjectedTexel texel =
+                ProjectTexel(op.projection, image, op.x0 + x, op.y0 + y, op.setWidth, op.setHeight);
+            uint32_t* out = &tile.values[(size_t{y} * tile.width + x) * stored];
+            for (uint32_t c = 0; c < tile.format.channels; ++c) {
+                out[c] = StoreValue(texel.covered ? RangeValue(texel.value[c], op.signedRange) : 0.0f,
+                                    tile.format, c);
+            }
+            if (stored == 4) {
+                for (uint32_t c = tile.format.channels; c < 3; ++c) out[c] = 0;
+                out[3] = StoreValue(texel.covered ? 1.0f : 0.0f, tile.format, 3);
             }
         }
     }

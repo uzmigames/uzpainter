@@ -238,7 +238,8 @@ float HalfTowardZero(float v) {
     return asfloat(sign | (magnitude & 0xFFFFE000u));
 }
 
-// round(255 encode(v)) as the largest k with v >= decode((k - 0.5) / 255), compared in double.
+// The largest k with v >= threshold k (arith.h Srgb8Thresholds: the recording GPU's float-to-sRGB8
+// conversion), compared in double.
 uint Srgb8Store(float v) {
     float c = v >= 0.0f ? v : 0.0f;
     c = c <= 1.0f ? c : 1.0f;

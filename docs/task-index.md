@@ -39,7 +39,7 @@ Every rulebook task under `.rulebook/tasks/`, one table per phase, rows ordered 
 
 ## Phase 1
 
-39 tasks, levels 1–26.
+40 tasks, levels 1–26.
 
 | Id | DAG node | Parent | Depends on (same phase) | Goal |
 |---|---|---|---|---|
@@ -63,6 +63,7 @@ Every rulebook task under `.rulebook/tasks/`, one table per phase, rows ordered 
 | `phase1.7_store-inspect-census` | (P1-STORE) | `phase1.8_project-store` | `phase1.3_document-model`, `phase1.4_store-container-operations`, `phase1.5_store-planes`, `phase1.6_store-save-retention` | Tools and agents need to read a project without opening it (no GPU, no lock), humans and archive tools need a file bundle, and the owner's Q11 budget (10 % of the matched `.spp`) can only be ratified with a census … |
 | `phase1.8_compositor-sources-projection` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.3_document-model`, `phase1.4_render-core-layer`, `phase1.5_compositor-tile-dag`, `phase1.7_mesh-loader` | Wand v1, Belt v5 and Tunic v10 are built from fill layers with uniform values per channel and bitmap BaseColor fills in final-UV space (sRGB, UV projection, scale 1, no repeat, BilinearHQ); these sources and the … |
 | `phase1.8_project-store` | P1-STORE | — | `phase1.3_document-model`, `phase1.4_store-container-operations`, `phase1.5_store-planes`, `phase1.6_store-save-retention`, `phase1.7_store-inspect-census` | UzPainter must save progress in a self-contained, portable project file far more compact than `.spp`, never lose the last committed revision, never overwrite an approved baseline, and never replay a mutation twice after … |
+| `phase1.9_compositor-resample-gaps` | (P1-COMPOSITOR) | — | `phase1.8_compositor-sources-projection` | Two Tier 0 `resample-uv` differences remain after `phase1.8_compositor-sources-projection` and were split out by the coordinator's answer to its q1 (2026-10-11): nothing here is accepted as a pass until both match … |
 | `phase1.9_compositor-quantisation-profile` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.3_document-model`, `phase1.5_compositor-tile-dag`, `phase1.8_compositor-sources-projection` | Exact equality depends on quantising at the same points as Painter and blending sRGB8 channels in the same space; the result is the evaluator profile, stored in every project and golden and versioned so old projects … |
 | `phase1.10_compositor-blend-kernels` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.4_render-core-layer`, `phase1.9_compositor-quantisation-profile` | All 32 documented `BlendingMode` members must behave exactly as in Painter, per channel, with per-channel opacity (LAY-05). |
 | `phase1.11_compositor-mask-effects` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.3_document-model`, `phase1.8_compositor-sources-projection`, `phase1.10_compositor-blend-kernels` | The approved paint standard relies on layer masks (background, bitmap fill effect, levels, subtraction), mask opacity and blend, ordered typed effects, group masks and a defined base under complementary masks (LAY-03 … |

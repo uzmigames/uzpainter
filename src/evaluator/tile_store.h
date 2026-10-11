@@ -20,6 +20,8 @@
 
 namespace uzp::evaluator {
 
+struct ProjectOp;  // projection_uv.h
+
 /// A tile of a store; 0 is no tile.
 using TileHandle = uint64_t;
 inline constexpr TileHandle kNoTile = 0;
@@ -82,13 +84,18 @@ public:
     virtual void Release(TileHandle tile) = 0;
 
     /// Copies the window of `image` at (`x0`, `y0`) the size of `tile` into `tile`, texel for
-    /// texel: samples of the tile's own encoding are copied (codes onto UNORM and sRGB8 tiles,
-    /// half values onto 16-bit float tiles, floats onto 32-bit float tiles); 16-bit codes into a
-    /// 32-bit float tile become float32(code / 65535) (parity/semantics/blend-modes.json, RGB32F
-    /// operands). Other combinations are the colour-transfer rules of
-    /// phase1.8_compositor-sources-projection and fail with `evaluator:unsupported_source`.
+    /// texel, as raw storage: samples of the tile's own encoding are copied (codes onto UNORM and
+    /// sRGB8 tiles, half values onto 16-bit float tiles, floats onto 32-bit float tiles); 16-bit
+    /// codes into a 32-bit float tile become float32(code / 65535). Any other combination fails
+    /// with `evaluator:unsupported_source`. Bitmap sources are evaluated by `Project`, which
+    /// applies the colour transfer of every channel format.
     virtual render::Result<void> Upload(TileHandle tile, const DecodedImage& image, uint32_t x0,
                                         uint32_t y0) = 0;
+
+    /// Queues the UV projection of a bitmap into `op.dst` (projection_uv.h): every texel of the
+    /// tile sampled with the projection's filter and wrap mode and stored with the channel's write
+    /// rule; uncovered texels get coverage 0 when `op.dst` has a coverage plane. `Flush` runs it.
+    virtual render::Result<void> Project(const ProjectOp& op) = 0;
 
     /// Queues one blend; `Flush` runs the queue.
     virtual render::Result<void> Blend(const BlendOp& op) = 0;

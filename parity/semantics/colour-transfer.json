@@ -1,0 +1,579 @@
+{
+  "schema": "uzpainter/parity/semantics/1",
+  "record_class": "public_semantics",
+  "semantics_id": "colour-transfer",
+  "description": "Colour transfer of fill sources (04 section 1, 4; task phase1.8_compositor-sources-projection): uniform colours and bitmaps on every channel format under legacy colour management, as the evaluator implements them, with residuals of the evaluator's output against both recordings (r1 same session, r2 after save and reopen). Supersedes the calibrated sRGB8 entries of srgb-transfer.json.",
+  "painter_build_id": "12.1.0+js-api.1.1.20",
+  "corpus": [
+    "tier0/semantics/blend-inputs",
+    "tier0/semantics/blend-order",
+    "tier0/semantics/colour-ramps-raw",
+    "tier0/semantics/colour-ramps-srgb",
+    "tier0/semantics/colour-ramps-working",
+    "tier0/semantics/group-masks",
+    "tier0/semantics/height-normal-plane-amplitudes"
+  ],
+  "entries": [
+    {
+      "entry_id": "uniform-colour-rgb16",
+      "subject": "Uniform colour stored on an RGB16 channel (legacy colour management)",
+      "status": "exact",
+      "formula": "Each component v taken as linear and stored with the 16-bit UNORM write rule: v clamped to [0, 1], truncated to 20 fractional bits, nearest code with ties down (round(v 65535) on the ramp values). The colour spaces sRGB, Working and Raw give the same codes. Exported to PNG 16 unchanged.",
+      "public_sources": [
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM, UNORM to FLOAT"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: ColorSpace of uniform colour and bitmap sources"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "fractional_bits",
+          "value": 20,
+          "origin": "fitted",
+          "unit": "bits"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/colour-ramps-srgb",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-srgb",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-working",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-working",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-raw",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-raw",
+          "map": "s0-s23/user0-user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        }
+      ],
+      "notes": "Evaluator output (src/evaluator/dag.cpp UniformOperand) against the 16-bit export; the 288 ramp values of each colour space pooled over 24 texture sets and four channels."
+    },
+    {
+      "entry_id": "uniform-colour-srgb8-store",
+      "subject": "Uniform colour stored on an sRGB8 channel (legacy colour management)",
+      "status": "exact",
+      "formula": "Each component v taken as linear and stored as the code k with the largest float32 threshold t_k <= v (t_0 = 0): the GPU's float-to-sRGB8 conversion, which differs from round(255 encode_IEC(v)) on 2936 of the 65536 16-bit operands. The thresholds are the D3D12 RGBA8_UNORM_SRGB conversions of the GPU the goldens were recorded on (NVIDIA GeForce RTX 4090), measured by `uzp-evaluator-tests srgb8-hardware` (store: the smallest float32 of each code, by bisection over clears of an sRGB render target; decode: a shader load of each code) and embedded in src/evaluator/arith.cpp; each lies within 0.15 code of decode_IEC((k - 0.5) / 255). sRGB, Working and Raw give the same codes.",
+      "public_sources": [
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 §5.2-5.3 (transfer functions)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to SRGB, SRGB to FLOAT (UNORM_SRGB)"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: ColorSpace of uniform colour and bitmap sources"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "threshold_count",
+          "value": 255,
+          "origin": "fitted"
+        },
+        {
+          "name": "threshold_mantissa_bits_max",
+          "value": 11,
+          "origin": "fitted",
+          "unit": "bits"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/colour-ramps-srgb",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-srgb",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-working",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-working",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-raw",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/colour-ramps-raw",
+          "map": "s0-s23/user4-user7",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18874368,
+            "affected_texels": 0,
+            "texels": 6291456
+          }
+        }
+      ],
+      "notes": "Compared as the 16-bit export (entry srgb8-export), so the store and export rules are checked together; replaces the calibrated IEC rounding of srgb-transfer.json (one code off on 12 ramp values)."
+    },
+    {
+      "entry_id": "srgb8-export",
+      "subject": "Export of an sRGB8 channel to a 16-bit PNG",
+      "status": "exact",
+      "formula": "export = UNORM16 write rule of d_c, d_c the linear value the GPU decodes from the sRGB8 code c (the D3D12 RGBA8_UNORM_SRGB conversions of the GPU the goldens were recorded on (NVIDIA GeForce RTX 4090), measured by `uzp-evaluator-tests srgb8-hardware` (store: the smallest float32 of each code, by bisection over clears of an sRGB render target; decode: a shader load of each code) and embedded in src/evaluator/arith.cpp); d_c lies within one unit in the 8th significant bit of decode_IEC(c / 255) rounded to 8 significant bits, and differs from it on 29 codes. The same d_c is the operand sRGB8 channels blend on.",
+      "public_sources": [
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 §5.2-5.3 (transfer functions)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to SRGB, SRGB to FLOAT (UNORM_SRGB)"
+        },
+        {
+          "source_id": "A-HELP-EXPORT",
+          "locator": "Export settings: bit depth, padding"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "decode_entries",
+          "value": 256,
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s0-s1/user2-user3",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 786432,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s0-s1/user2-user3",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 786432,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        }
+      ],
+      "notes": "Every 16-bit code of the authored fields reaches the sRGB8 channels, so all 256 storage codes are exported; replaces the calibrated 8-significant-bit IEC decode of srgb-transfer.json (max 256 export codes off)."
+    },
+    {
+      "entry_id": "bitmap-import-linear",
+      "subject": "16-bit bitmap source on RGB16, sRGB8, RGB8 and L16 channels",
+      "status": "exact",
+      "formula": "A bitmap code c of an n-bit image is taken as the linear value float32(c / (2^n - 1)) whatever the colour-space tag (untagged PNG 16 here) and stored with the channel's write rule: RGB16/L16 the code itself, RGB8 the 8-bit write rule, sRGB8 the GPU float-to-sRGB8 conversion (entry uniform-colour-srgb8-store). A grey bitmap feeds the grey channel. Bound by the SHA-256 of the file bytes, decoded once per resource.",
+      "public_sources": [
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM, UNORM to FLOAT"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to SRGB, SRGB to FLOAT (UNORM_SRGB)"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "resource: import_project_resource; layerstack: set_source"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "bitmap_bits",
+          "value": 16,
+          "origin": "authored",
+          "unit": "bits"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s0-s1/user0-user4",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1966080,
+            "affected_texels": 0,
+            "texels": 655360
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s0-s1/user6",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 131072,
+            "affected_texels": 0,
+            "texels": 131072
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s0-s1/user0-user4",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1966080,
+            "affected_texels": 0,
+            "texels": 655360
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-inputs",
+          "map": "s0-s1/user6",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 131072,
+            "affected_texels": 0,
+            "texels": 131072
+          }
+        }
+      ],
+      "notes": "Fields A and B (s0, s1) hold every 16-bit code in their blue channel. s2 (opacity 0.5) is an unstable golden (tier0-stability.md section 4) and not compared. 8-bit and sRGB-tagged bitmaps follow the same rule without a golden yet."
+    },
+    {
+      "entry_id": "srgb8-stack",
+      "subject": "Stacks on an sRGB8 channel: bitmaps, uniform colours, blends and groups",
+      "status": "exact",
+      "formula": "Every layer reads the sRGB8 channel through the GPU decode d_c (entry srgb8-export), blends in float32 with the kernels of blend-modes.json and stores through the GPU conversion (entry uniform-colour-srgb8-store), after each layer and each group child.",
+      "public_sources": [
+        {
+          "source_id": "S-SRGB",
+          "locator": "IEC 61966-2-1:1999 §5.2-5.3 (transfer functions)"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to SRGB, SRGB to FLOAT (UNORM_SRGB)"
+        },
+        {
+          "source_id": "S-W3C-BLEND",
+          "locator": "Section 5.1 (simple alpha compositing), 6 (blending)"
+        }
+      ],
+      "parameters": [],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/blend-order",
+          "map": "s0-s3/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 786432,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/blend-order",
+          "map": "s0-s3/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 786432,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s0-s1/user1",
+          "compared_against": "r1",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 393216,
+            "affected_texels": 0,
+            "texels": 131072
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/group-masks",
+          "map": "s0-s1/user1",
+          "compared_against": "r2",
+          "unit": "16-bit code value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 393216,
+            "affected_texels": 0,
+            "texels": 131072
+          }
+        }
+      ],
+      "notes": "blend-order: fields A Normal, B Subtract 0.8 and uniform C Divide 0.6 in four orders; group-masks s0 and s1: a group without masks in its default mode and in Normal."
+    },
+    {
+      "entry_id": "bitmap-height-signed",
+      "subject": "Bitmap source on the Height channel",
+      "status": "exact",
+      "formula": "On the Height channel a bitmap value t = float32(c / 65535) is stored as float32(float32(2 t) - 1), written to the channel's L16F storage toward zero; the OpenEXR export holds it unchanged. The Height channel is signed with base 0 (every template), so a fill at opacity a stores a (2 t - 1); its 16-bit PNG export is the write rule of (h + 1) / 2 (the empty channel's code 32767). A second fill in LinearDodge doubles it.",
+      "public_sources": [
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM, UNORM to FLOAT"
+        },
+        {
+          "source_id": "A-PYDOC",
+          "locator": "resource: import_project_resource; layerstack: set_source"
+        },
+        {
+          "source_id": "S-EXR",
+          "locator": "Half and float pixel types"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "scale",
+          "value": 2,
+          "origin": "fitted"
+        },
+        {
+          "name": "offset",
+          "value": -1,
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0-s3/height",
+          "compared_against": "r1",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 262144,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/height-normal-plane-amplitudes",
+          "map": "s0-s3/height",
+          "compared_against": "r2",
+          "unit": "float32 value",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 262144,
+            "affected_texels": 0,
+            "texels": 262144
+          }
+        }
+      ],
+      "notes": "s0-s2: opacity 1, 0.5, 0.25; s3: a second fill in LinearDodge. The PNG export of a non-zero Height and the EXR export of the empty channel are not recorded."
+    },
+    {
+      "entry_id": "uniform-colour-height-and-8-bit-bitmaps",
+      "subject": "Uniform colours on Height, 8-bit and sRGB-tagged bitmaps, OCIO colour management",
+      "status": "gap",
+      "formula": "Not observed. Uniform colours on Height are stored like any channel value (no remap); 8-bit and sRGB-tagged bitmaps follow bitmap-import-linear; an OCIO project fails with evaluator:unsupported_source.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "layerstack: ColorSpace of uniform colour and bitmap sources"
+        },
+        {
+          "source_id": "S-OCIO",
+          "locator": "Colour transforms"
+        }
+      ],
+      "parameters": [],
+      "residuals": []
+    }
+  ]
+}

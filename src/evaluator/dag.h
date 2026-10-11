@@ -16,12 +16,19 @@
 // mode that Painter 12.1.0's API cannot set, so a hypothesis until phase0.7_tier0-semantics-ui-
 // cases records it); an instance layer evaluates its source layer in its own position.
 //
+// Fill sources (phase1.8_compositor-sources-projection, sources.h): uniform colours and bitmaps
+// under the `Fill` and `UV` projections (projection_uv.h), in `Split` source mode; a channel
+// contributes only when it is active on the fill (toggling a channel keeps its source).
+//
 // Outside this profile (explicit `evaluator:unsupported_*` failures, the capability manifest's
 // release gaps): paint layers, content and mask effects, geometry masks, `Material` source mode,
-// procedural, vector, font and reference sources, the non-separable and normal-map blend modes.
+// procedural, vector, font and reference sources, the 3D projections, symmetry, physical-size UV
+// scale modes, bilinear minification, OCIO colour management, the non-separable and normal-map
+// blend modes.
 
 #include "evaluator/formats.h"
 #include "evaluator/hash.h"
+#include "evaluator/projection_uv.h"
 #include "evaluator/templates.h"
 #include "render/backend.h"
 
@@ -43,16 +50,20 @@ namespace uzp::evaluator {
 /// provisional): per-layer quantisation to the channel format, sRGB8 blended on linear values.
 inline constexpr std::string_view kEvaluatorProfile = "painter-12.1-layerq-linear";
 
-/// What a fill layer contributes to the channel.
+/// What a fill layer contributes to the channel (sources.h states the colour rules).
 struct DagSource {
     enum class Kind : uint8_t { Uniform, Bitmap };
     Kind kind = Kind::Uniform;
     /// Uniform: the colour as the channel stores it, read back as an operand (blend-modes.json
     /// `uniform_operand`; a grey channel takes the mean of the three components).
     std::array<float, 3> uniform{0.0f, 0.0f, 0.0f};
-    /// Bitmap: the resource hash.
+    /// Bitmap: the content hash the node binds (LAY-13: the alias plays no part) and the
+    /// projection that samples it.
     std::string sha256;
-    /// Hash of the content (source, channel, format, profile).
+    UvProjection projection;
+    /// The Height channel maps bitmap values to [-1, 1] (sources.h).
+    bool signedRange = false;
+    /// Hash of the content (source, projection, channel, format, profile).
     Digest hash{};
 };
 

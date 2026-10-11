@@ -85,16 +85,16 @@
       "type": "Height",
       "format": "L16F",
       "base": [
-        0.5,
-        0.5,
-        0.5
+        0.0,
+        0.0,
+        0.0
       ],
       "base_provenance": {
         "kind": "observed",
         "golden_id": "tier0/semantics/base-values-pbr-metallic-roughness-alpha-blend",
         "record_sha256": "c56ddb58e99ac5f472e9562f2e935198a74b9f26b3796cfe75443e9581842ce6",
         "map": "uzp_plane/height",
-        "note": "L16F export code 32767 = write rule of 0.5 (ties down); the EXR export of an empty Height channel is not recorded; 0.5 is the documented neutral height"
+        "note": "Height is a signed channel: its value under a layer starts at 0 (height-normal-plane-amplitudes s1, s2: a bitmap fill at opacity a stores a (2t - 1)) and its 16-bit PNG export is the write rule of (h + 1) / 2, so the empty channel's export code 32767 is h = 0; the OpenEXR export holds h (the export of h != 0 to PNG and of the empty channel to EXR are not recorded)"
       }
     },
     {

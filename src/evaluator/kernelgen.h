@@ -16,6 +16,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "uzp_core/types/enums.h"
 
@@ -32,7 +33,7 @@ struct BlendKernelVariant {
 /// `image_common.hlsli` and the generated `evaluator_tables.hlsli`.
 [[nodiscard]] render::KernelSource BlendKernelSource(const BlendKernelVariant& variant);
 
-/// `evaluator_tables.hlsli`: the sRGB8 operand table, the sRGB8 decode thresholds (doubles as
+/// `evaluator_tables.hlsli`: the sRGB8 operand table, the sRGB8 store thresholds (doubles as
 /// uint pairs) and the 8-bit UNORM operand table, generated from arith.h.
 [[nodiscard]] render::KernelInclude TablesInclude();
 
@@ -81,5 +82,27 @@ struct BlendBindings {
 /// The parameter block of `op` with the descriptor indices of `bindings`.
 [[nodiscard]] std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(
     const BlendOp& op, const BlendBindings& bindings);
+
+// ── UV projection (projection_uv.h) ──────────────────────────────────────────
+
+/// The HLSL of the projection kernel into tiles of `format` (`shaders/evaluator_project.hlsl`
+/// with `UZP_ENC`, `UZP_CHANNELS`, `UZP_SRGB` and `UZP_ALPHA`). Its parameter blocks share the
+/// arena and stride of the blend kernels.
+[[nodiscard]] render::KernelSource ProjectKernelSource(const TileFormat& format);
+
+struct ProjectBindings {
+    uint32_t width = 0;   ///< The tile.
+    uint32_t height = 0;
+    uint32_t dstUav = 0;
+    uint32_t imageSrv = 0;  ///< The packed bitmap codes (`PackBitmapCodes`).
+};
+
+/// The parameter block of `op` with the descriptor indices of `bindings`.
+[[nodiscard]] std::array<uint32_t, kBlendParamsStride> EncodeProjectParams(
+    const ProjectOp& op, const ProjectBindings& bindings);
+
+/// The codes of `image` in sample order, packed for the projection kernel: two 16-bit codes or
+/// four 8-bit codes per uint, low bits first.
+[[nodiscard]] std::vector<uint32_t> PackBitmapCodes(const DecodedImage& image);
 
 }  // namespace uzp::evaluator

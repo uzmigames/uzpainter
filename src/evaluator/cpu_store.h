@@ -19,6 +19,7 @@ public:
     void Release(TileHandle tile) override;
     render::Result<void> Upload(TileHandle tile, const DecodedImage& image, uint32_t x0,
                                 uint32_t y0) override;
+    render::Result<void> Project(const ProjectOp& op) override;
     render::Result<void> Blend(const BlendOp& op) override;
     render::Result<void> Flush() override { return {}; }
     render::Result<TileImage> Read(TileHandle tile) override;

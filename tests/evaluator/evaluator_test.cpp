@@ -1,6 +1,8 @@
-// Native tests of the compositor's tile DAG (rulebook task phase1.5_compositor-tile-dag,
-// src/evaluator/, docs/architecture/04-layer-stack-and-compositing.md §2, §7). Built by
-// `zig build evaluator-tests` and driven by tests/evaluator/test_compositor_tile_dag.py.
+// Native tests of the compositor (rulebook tasks phase1.5_compositor-tile-dag and
+// phase1.8_compositor-sources-projection, src/evaluator/,
+// docs/architecture/04-layer-stack-and-compositing.md §2, §4, §5, §7). Built by
+// `zig build evaluator-tests` and driven by tests/evaluator/test_compositor_tile_dag.py and
+// tests/evaluator/test_compositor_sources_projection.py.
 //
 // Usage: uzp-evaluator-tests <case> <assets-dir> [args]
 //   arith <assets>                       the scalar rules of arith.h (write rules, half toward
@@ -22,6 +24,19 @@
 //   kernel-sweep <assets> <work-dir>     every separable blend mode x channel format over dense
 //                                        value sweeps: GPU kernels equal the CPU reference bit
 //                                        for bit
+//   sources <assets>                     fill sources and UV projections on the CPU store
+//                                        (phase1.8_compositor-sources-projection): 1:1 copies on
+//                                        every format, transforms, wrap modes, LAY-13 bindings,
+//                                        explicit failures, resolution changes and the cache
+//   projection-gpu-vs-cpu <assets> <work-dir>
+//                                        random projection stacks: the projection kernel equals
+//                                        the CPU reference bit for bit
+//   srgb8-hardware <assets> <work-dir>   measures the GPU's sRGB8 decode and encode and compares
+//                                        them with the tables of arith.h
+//   tables <assets> <work-dir>           writes the sRGB8 tables of arith.h (tables.json)
+//   uv-coverage <assets> <work-dir> <mesh> <size>
+//                                        imports <mesh>, rasterises its UV tile and writes the
+//                                        texel-centre coverage (island-edge goldens)
 //
 // Output: `PASS <check>` / `FAIL <check>: <detail>` lines and `INFO` lines. Exit code 0 when
 // every check passed, 1 when one failed, 2 on a usage error, 3 on an unreadable input, 77 when the
@@ -38,9 +53,16 @@
 #include "evaluator/evaluator.h"
 #include "evaluator/gpu_store.h"
 #include "evaluator/kernelgen.h"
+#include "evaluator/projection_uv.h"
+#include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "render/capabilities.h"
 #include "render/engine_thread.h"
+#include "render/image_pass.h"
+#include "render/texture_readback.h"
+#include "render/uv_raster.h"
+#include "mesh/import_error.h"
+#include "mesh/mesh_import.h"
 #include "uzp_core/document/document.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/json.h"
@@ -428,6 +450,24 @@ bool AllEqual(const std::vector<uint32_t>& samples, uint32_t channels,
 
 // ── arith ────────────────────────────────────────────────────────────────────
 
+/// Writes the sRGB8 tables of arith.h as JSON (`<dir>/tables.json`): the float32 bits of the
+/// operand of every code and of every store threshold, for the Python golden comparisons.
+int RunTables(const fs::path& dir) {
+    core::json::Array decode;
+    for (const float value : arith::Srgb8OperandTable()) decode.push_back(static_cast<std::int64_t>(std::bit_cast<uint32_t>(value)));
+    core::json::Array thresholds;
+    for (uint32_t k = 1; k < 256; ++k) {
+        thresholds.push_back(static_cast<std::int64_t>(std::bit_cast<uint32_t>(static_cast<float>(arith::Srgb8Thresholds()[k]))));
+    }
+    core::json::Object document;
+    document["srgb8_decode_bits"] = decode;
+    document["srgb8_threshold_bits"] = thresholds;
+    std::ofstream stream(dir / "tables.json", std::ios::binary);
+    stream << core::json::WriteCanonical(document);
+    Check(static_cast<bool>(stream), "the sRGB8 tables are written");
+    return Finish();
+}
+
 int RunArith() {
     // UNORM write rule: nearest after truncation to n + 4 bits, ties down.
     Check(arith::WriteUnorm(0.5f, 16) == 32767, "0.5 writes code 32767 on 16 bits (ties down)",
@@ -589,8 +629,8 @@ int RunTemplates(const fs::path& assets) {
                   normal->base[0] == static_cast<float>(127.0 / 255.0) && normal->base[2] == 1.0f,
               "the default Normal channel is RGB16F with the flat normal float32(127/255), float32(127/255), 1");
         const TemplateChannel* height = def->Find(ChannelType::Height);
-        Check(height != nullptr && height->format == ChannelFormat::L16F && height->base[0] == 0.5f,
-              "the default Height channel is L16F with base 0.5");
+        Check(height != nullptr && height->format == ChannelFormat::L16F && height->base[0] == 0.0f,
+              "the default Height channel is L16F with base 0 (signed)");
     }
     size_t unobserved = 0;
     size_t total = 0;
@@ -874,8 +914,14 @@ int RunOrder(const fs::path& assets) {
         }
         Check(floats, "a 1:1 bitmap on RGB32F stores float32(code / 65535) composited over the base", Describe(rgb32));
         render::Result<ChannelResult> srgb = evaluate(builder, ChannelType::User2, cpu);
-        Check(!srgb && KindName(srgb.error()) == "unsupported_source",
-              "a 16-bit bitmap on an sRGB8 channel is refused explicitly (colour transfer of phase1.8)",
+        bool encoded = srgb.has_value();
+        if (srgb) {
+            const std::vector<uint32_t> samples = Samples(*srgb);
+            for (size_t i = 0; i < samples.size() && encoded; ++i) {
+                encoded = samples[i] == arith::Srgb8Store(arith::UnormOperand(image->values[i], 16));
+            }
+        }
+        Check(encoded, "a 1:1 16-bit bitmap on sRGB8 stores each code as a linear value through the sRGB8 conversion",
               Describe(srgb));
         Check(rgb16 && rgb16->stats.uploads == 1 && rgb16->stats.blends == 1,
               "the bitmap is uploaded once and blended once over the base");
@@ -1079,7 +1125,8 @@ int RunCache(const fs::path& assets) {
 
 // ── admission ────────────────────────────────────────────────────────────────
 
-/// A store that allocates nothing: bytes are counted, blends and uploads succeed, reads are zero.
+/// A store that allocates nothing: bytes are counted, blends, uploads and projections succeed,
+/// reads are zero.
 class CountingStore final : public ITileStore {
 public:
     render::Result<TileHandle> Allocate(const TileFormat& format, uint32_t width, uint32_t height) override {
@@ -1096,6 +1143,7 @@ public:
         m_tiles.erase(it);
     }
     render::Result<void> Upload(TileHandle, const DecodedImage&, uint32_t, uint32_t) override { return {}; }
+    render::Result<void> Project(const ProjectOp&) override { return {}; }
     render::Result<void> Blend(const BlendOp&) override { return {}; }
     render::Result<void> Flush() override { return {}; }
     render::Result<TileImage> Read(TileHandle tile) override {
@@ -1242,10 +1290,32 @@ int RunAdmission(const fs::path& assets) {
 
 // ── evaluate (spec driver) ───────────────────────────────────────────────────
 
+/// Resources of a spec: raw sample files by hash, then PNG bytes decoded on demand.
+class SpecResources final : public IResourceProvider {
+public:
+    SpecResources()
+        : m_decoding([this](std::string_view sha) -> std::optional<std::string> {
+              const auto it = m_png.find(std::string(sha));
+              if (it == m_png.end()) return std::nullopt;
+              return it->second;
+          }) {}
+    void Add(std::string sha256, std::shared_ptr<const DecodedImage> image) { m_raw.Add(std::move(sha256), std::move(image)); }
+    void AddPng(std::string sha256, std::string bytes) { m_png[std::move(sha256)] = std::move(bytes); }
+    std::shared_ptr<const DecodedImage> Fetch(std::string_view sha256) const override {
+        std::shared_ptr<const DecodedImage> image = m_raw.Fetch(sha256);
+        return image ? image : m_decoding.Fetch(sha256);
+    }
+
+private:
+    MapResourceProvider m_raw;
+    std::map<std::string, std::string> m_png;
+    DecodingResourceProvider m_decoding;
+};
+
 struct Spec {
     std::string templateId = std::string(kDefaultTemplateId);
     Builder builder;
-    std::shared_ptr<MapResourceProvider> resources = std::make_shared<MapResourceProvider>();
+    std::shared_ptr<SpecResources> resources = std::make_shared<SpecResources>();
     std::vector<ChannelType> outputs;
 };
 
@@ -1305,11 +1375,35 @@ core::Layer ParseLayer(Spec& spec, const core::json::Value& value) {
             } else {
                 core::BitmapSource bitmap;
                 bitmap.resource.sha256 = Str(Key(s, "bitmap"), "bitmap");
+                if (s.contains("alias")) bitmap.resource.alias = Str(s.at("alias"), "alias");
                 bitmap.color_space = s.contains("color_space") ? Str(s.at("color_space"), "color_space") : "Raw";
                 sources[type] = core::Source{bitmap};
             }
         }
         layer = spec.builder.Fill(name, sources, blending);
+        if (o.contains("projection")) {
+            const core::json::Object& p = Obj(o.at("projection"), "projection");
+            core::Projection& projection = layer.fill->projection;
+            if (p.contains("mode")) projection.mode = EnumOf<core::ProjectionMode>(Str(p.at("mode"), "mode"), "projection mode");
+            core::UVProjectionParams& uv = projection.uv;
+            if (p.contains("filtering_mode")) {
+                uv.filtering_mode = EnumOf<core::FilteringMode>(Str(p.at("filtering_mode"), "filtering_mode"), "filtering mode");
+            }
+            if (p.contains("uv_wrapping_mode")) {
+                uv.uv_wrapping_mode = EnumOf<core::UVWrapMode>(Str(p.at("uv_wrapping_mode"), "uv_wrapping_mode"), "wrap mode");
+            }
+            core::UVTransformation& t = uv.uv_transformation;
+            if (p.contains("scale_mode")) t.scale_mode = EnumOf<core::ScaleMode>(Str(p.at("scale_mode"), "scale_mode"), "scale mode");
+            if (p.contains("scale")) {
+                const core::json::Array& scale = Arr(p.at("scale"), "scale");
+                t.scale = {Num(scale.at(0), "scale u"), Num(scale.at(1), "scale v")};
+            }
+            if (p.contains("rotation")) t.rotation = Num(p.at("rotation"), "rotation");
+            if (p.contains("offset")) {
+                const core::json::Array& offset = Arr(p.at("offset"), "offset");
+                t.offset = {Num(offset.at(0), "offset u"), Num(offset.at(1), "offset v")};
+            }
+        }
         if (o.contains("active_channels")) {
             layer.fill->active_channels.clear();
             for (const core::json::Value& c : Arr(o.at("active_channels"), "active_channels")) {
@@ -1355,13 +1449,26 @@ Spec ParseSpec(const fs::path& path) {
     Spec spec{std::string(kDefaultTemplateId),
               Builder(static_cast<uint32_t>(Num(resolution.at(0), "width")),
                       static_cast<uint32_t>(Num(resolution.at(1), "height")), channels),
-              std::make_shared<MapResourceProvider>(), {}};
+              std::make_shared<SpecResources>(), {}};
     if (o.contains("template")) spec.templateId = Str(o.at("template"), "template");
+    if (o.contains("color_management")) {
+        spec.builder.project.settings.color_management.mode = Str(o.at("color_management"), "color_management");
+    }
     // Ids the spec assigns must stay below next_id: reserve a wide range first.
     if (o.contains("resources")) {
         for (const core::json::Value& entry : Arr(o.at("resources"), "resources")) {
             const core::json::Object& r = Obj(entry, "resource");
             const std::string sha = Str(Key(r, "sha256"), "sha256");
+            if (r.contains("png")) {
+                // PNG bytes, decoded by the evaluator's provider (sources.h).
+                const fs::path png = path.parent_path() / Str(r.at("png"), "png");
+                std::ifstream data(png, std::ios::binary);
+                if (!data) throw core::ManifestError("cannot read " + png.string());
+                std::string bytes((std::istreambuf_iterator<char>(data)), std::istreambuf_iterator<char>());
+                spec.builder.AddResource(sha, static_cast<std::int64_t>(bytes.size()));
+                spec.resources->AddPng(sha, std::move(bytes));
+                continue;
+            }
             const fs::path file = path.parent_path() / Str(Key(r, "file"), "file");
             auto image = std::make_shared<DecodedImage>();
             image->width = static_cast<uint32_t>(Num(Key(r, "width"), "width"));
@@ -1807,15 +1914,768 @@ int RunKernelSweep(const fs::path& assets, const fs::path& dir) {
     return Finish();
 }
 
+// ── sources (CPU) ────────────────────────────────────────────────────────────
+
+/// The stored sample a 1:1 projection of `code` (of `bits` bits) gives on a channel of `format`,
+/// as `Samples` returns it (half bits on 16-bit floats, the read-out on 32-bit floats).
+uint32_t ExpectedSample(uint32_t code, uint32_t bits, const TileFormat& format, uint32_t c, float base) {
+    const float value = arith::UnormOperand(code, bits);
+    switch (format.encoding) {
+        case render::TexelEncoding::Float16: return arith::HalfTowardZero(value);
+        case render::TexelEncoding::Float32: return std::bit_cast<uint32_t>(arith::Float32Readout(value, base));
+        default: return StoreValue(value, format, c);
+    }
+}
+
+core::Source AliasedBitmap(const std::string& sha256, const std::string& alias) {
+    core::BitmapSource source;
+    source.resource.sha256 = sha256;
+    source.resource.alias = alias;
+    source.color_space = "sRGB";
+    return core::Source{source};
+}
+
+void SetUv(core::Layer& layer, core::FilteringMode filter, core::UVWrapMode wrap, std::array<double, 2> scale,
+           double rotation, std::array<double, 2> offset) {
+    core::Projection& projection = layer.fill->projection;
+    projection.mode = core::ProjectionMode::UV;
+    projection.uv.filtering_mode = filter;
+    projection.uv.uv_wrapping_mode = wrap;
+    projection.uv.uv_transformation.scale = scale;
+    projection.uv.uv_transformation.rotation = rotation;
+    projection.uv.uv_transformation.offset = offset;
+}
+
+int RunSources(const fs::path& assets) {
+    std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
+    constexpr uint32_t kSize = 128;  // the smallest texture set resolution
+    const std::string sha16 = std::string(63, '1') + "6";
+    const std::string sha8 = std::string(63, '0') + "8";
+    const std::string shaGrey = std::string(63, '9') + "1";
+    auto provider = std::make_shared<MapResourceProvider>();
+    std::shared_ptr<DecodedImage> image16 = PatternImage(kSize, kSize, 3, render::TexelEncoding::Unorm16, 11);
+    std::shared_ptr<DecodedImage> image8 = PatternImage(kSize, kSize, 3, render::TexelEncoding::Unorm8, 12);
+    std::shared_ptr<DecodedImage> grey = PatternImage(kSize, kSize, 1, render::TexelEncoding::Unorm16, 13);
+    provider->Add(sha16, image16);
+    provider->Add(sha8, image8);
+    provider->Add(shaGrey, grey);
+    const std::vector<ChannelType> user0{ChannelType::User0};
+    auto evaluate = [&](Builder& builder, ChannelType channel, CpuEvaluator& cpu) {
+        EvaluateRequest request;
+        request.textureSet = builder.SetId();
+        request.stack = builder.StackId();
+        request.channel = channel;
+        request.resources = provider;
+        return cpu.Evaluate(builder.project, request);
+    };
+    auto single = [&](ChannelFormat format, const core::Layer& prototype, Builder& builder) {
+        (void)format;
+        builder.AddResource(sha16, 100);
+        builder.AddResource(sha8, 100);
+        builder.AddResource(shaGrey, 100);
+        builder.SetRoot({prototype});
+    };
+
+    // 1:1 copies on every channel format, from 16- and 8-bit bitmaps, with every filter.
+    for (const auto& [sha, img, bits] : {std::tuple{sha16, image16, 16u}, std::tuple{sha8, image8, 8u}, std::tuple{shaGrey, grey, 16u}}) {
+        for (const core::FilteringMode filter : {core::FilteringMode::BilinearHQ, core::FilteringMode::BilinearSharp, core::FilteringMode::Nearest}) {
+            bool all = true;
+            std::string detail;
+            for (const ChannelFormat format : kAllFormats) {
+                Builder builder(kSize, kSize, {{ChannelType::User0, format}});
+                core::Layer layer = builder.Fill("bitmap", SameSource(user0, Bitmap(sha)), Same(user0, BlendingMode::Normal, 1.0));
+                SetUv(layer, filter, core::UVWrapMode::Repeat, {1.0, 1.0}, 0.0, {0.0, 0.0});
+                single(format, layer, builder);
+                CpuEvaluator cpu(templates, kWideLimits);
+                render::Result<ChannelResult> result = evaluate(builder, ChannelType::User0, cpu);
+                if (!result) { all = false; detail = Describe(result); break; }
+                const TileFormat tf = TileFormatOf(format);
+                const std::vector<uint32_t> samples = Samples(*result);
+                for (size_t t = 0; t < size_t{kSize} * kSize && all; ++t) {
+                    for (uint32_t c = 0; c < tf.channels && all; ++c) {
+                        const uint32_t code = img->values[t * img->channels + (img->channels == 1 ? 0 : c)];
+                        if (samples[t * tf.channels + c] != ExpectedSample(code, bits, tf, c, 1.0f)) {
+                            all = false;
+                            detail = std::string(core::ToString(format)) + " texel " + std::to_string(t);
+                        }
+                    }
+                }
+            }
+            Check(all, "a 1:1 " + std::to_string(bits) + "-bit " + (img->channels == 1 ? "grey" : "colour") + " bitmap under " +
+                           std::string(core::ToString(filter)) + " stores each code as a linear value with the write rule of every channel format",
+                  detail);
+        }
+    }
+    {
+        Builder builder(kSize, kSize, {{ChannelType::User0, ChannelFormat::RGB16}});
+        core::Layer layer = builder.Fill("bitmap", SameSource(user0, Bitmap(sha16)), Same(user0, BlendingMode::Normal, 1.0));
+        layer.fill->projection.mode = core::ProjectionMode::Fill;
+        single(ChannelFormat::RGB16, layer, builder);
+        CpuEvaluator cpu(templates, kWideLimits);
+        render::Result<ChannelResult> result = evaluate(builder, ChannelType::User0, cpu);
+        Check(result && Samples(*result) == image16->values, "the Fill projection matches the bitmap to the UV tile (a 1:1 copy)", Describe(result));
+    }
+
+    // Transforms on RGB16 against direct texel arithmetic.
+    auto project = [&](core::FilteringMode filter, core::UVWrapMode wrap, std::array<double, 2> scale, double rotation,
+                       std::array<double, 2> offset, const std::string& sha) -> render::Result<ChannelResult> {
+        Builder builder(kSize, kSize, {{ChannelType::User0, ChannelFormat::RGB16}});
+        core::Layer layer = builder.Fill("bitmap", SameSource(user0, Bitmap(sha)), Same(user0, BlendingMode::Normal, 1.0));
+        SetUv(layer, filter, wrap, scale, rotation, offset);
+        single(ChannelFormat::RGB16, layer, builder);
+        if (!builder.Validate("projection")) return EvalFail(EvalErrorKind::Internal, "invalid test project");
+        CpuEvaluator cpu(templates, kWideLimits);
+        return evaluate(builder, ChannelType::User0, cpu);
+    };
+    auto at = [&](const DecodedImage& img, int64_t x, int64_t y, uint32_t c) {
+        const int64_t n = kSize;
+        return img.At(static_cast<uint32_t>(((x % n) + n) % n), static_cast<uint32_t>(((y % n) + n) % n), c);
+    };
+    for (const core::FilteringMode filter : {core::FilteringMode::Nearest, core::FilteringMode::BilinearHQ}) {
+        // An offset of three texels along +u and two along +v moves the image (v up: towards the top).
+        render::Result<ChannelResult> shifted = project(filter, core::UVWrapMode::Repeat, {1.0, 1.0}, 0.0,
+                                                        {3.0 / kSize, 2.0 / kSize}, sha16);
+        bool ok = shifted.has_value();
+        if (ok) {
+            const std::vector<uint32_t> s = Samples(*shifted);
+            for (uint32_t y = 0; y < kSize && ok; ++y) {
+                for (uint32_t x = 0; x < kSize && ok; ++x) {
+                    for (uint32_t c = 0; c < 3 && ok; ++c) {
+                        ok = s[(size_t{y} * kSize + x) * 3 + c] == at(*image16, int64_t{x} - 3, int64_t{y} + 2, c);
+                    }
+                }
+            }
+        }
+        Check(ok, std::string(core::ToString(filter)) + ": a whole-texel offset with Repeat moves the bitmap towards +u and +v, wrapping",
+              Describe(shifted));
+    }
+    {
+        // Magnification by 2 (scale 0.5) with Nearest: each bitmap texel covers a 2 x 2 block about the centre.
+        render::Result<ChannelResult> magnified = project(core::FilteringMode::Nearest, core::UVWrapMode::Repeat, {0.5, 0.5}, 0.0, {0.0, 0.0}, sha16);
+        bool ok = magnified.has_value();
+        if (ok) {
+            const std::vector<uint32_t> s = Samples(*magnified);
+            for (uint32_t y = 0; y < kSize && ok; ++y) {
+                for (uint32_t x = 0; x < kSize && ok; ++x) {
+                    ok = s[(size_t{y} * kSize + x) * 3] == image16->At(kSize / 4 + x / 2, kSize / 4 + y / 2, 0);
+                }
+            }
+        }
+        Check(ok, "Nearest at scale 0.5 magnifies the centre of the bitmap by two", Describe(magnified));
+        // Bilinear half way between two texels: (a + b) / 2 through the fixed-point weights.
+        render::Result<ChannelResult> half = project(core::FilteringMode::BilinearHQ, core::UVWrapMode::Repeat, {1.0, 1.0}, 0.0,
+                                                     {0.5 / kSize, 0.0}, sha16);
+        ok = half.has_value();
+        if (ok) {
+            const std::vector<uint32_t> s = Samples(*half);
+            for (uint32_t y = 0; y < kSize && ok; ++y) {
+                for (uint32_t x = 0; x < kSize && ok; ++x) {
+                    const double left = arith::UnormOperand(at(*image16, int64_t{x} - 1, y, 0), 16);
+                    const double right = arith::UnormOperand(at(*image16, x, y, 0), 16);
+                    const float value = static_cast<float>((128.0 * left + 128.0 * right) / 256.0);
+                    ok = s[(size_t{y} * kSize + x) * 3] == arith::WriteUnorm(value, 16);
+                }
+            }
+        }
+        Check(ok, "BilinearHQ half a texel off weighs both float texels 128/256, rounds the sum once and stores it with the write rule",
+              Describe(half));
+    }
+    {
+        // RepeatNone: the texels moved in from outside the UV square keep the value below (the base, 1.0).
+        render::Result<ChannelResult> none = project(core::FilteringMode::Nearest, core::UVWrapMode::RepeatNone, {1.0, 1.0}, 0.0,
+                                                     {4.0 / kSize, 0.0}, sha16);
+        bool ok = none.has_value();
+        if (ok) {
+            const std::vector<uint32_t> s = Samples(*none);
+            for (uint32_t y = 0; y < kSize && ok; ++y) {
+                for (uint32_t x = 0; x < kSize && ok; ++x) {
+                    for (uint32_t c = 0; c < 3 && ok; ++c) {
+                        const uint32_t expected = x < 4 ? 65535u : image16->At(x - 4, y, c);
+                        ok = s[(size_t{y} * kSize + x) * 3 + c] == expected;
+                    }
+                }
+            }
+        }
+        Check(ok, "RepeatNone leaves the texels outside the UV square to the value below the fill", Describe(none));
+        render::Result<ChannelResult> horizontal = project(core::FilteringMode::Nearest, core::UVWrapMode::RepeatHorizontally,
+                                                           {1.0, 1.0}, 0.0, {4.0 / kSize, 4.0 / kSize}, sha16);
+        ok = horizontal.has_value();
+        if (ok) {
+            const std::vector<uint32_t> s = Samples(*horizontal);
+            for (uint32_t y = 0; y < kSize && ok; ++y) {
+                for (uint32_t x = 0; x < kSize && ok; ++x) {
+                    const uint32_t expected = y >= kSize - 4 ? 65535u : at(*image16, int64_t{x} - 4, y + 4, 0);
+                    ok = s[(size_t{y} * kSize + x) * 3] == expected;
+                }
+            }
+        }
+        Check(ok, "RepeatHorizontally wraps along u and leaves the texels outside [0, 1) in v uncovered", Describe(horizontal));
+    }
+    {
+        // A 90 degree rotation with Nearest turns the bitmap a quarter turn.
+        render::Result<ChannelResult> turned = project(core::FilteringMode::Nearest, core::UVWrapMode::Repeat, {1.0, 1.0}, 90.0, {0.0, 0.0}, sha16);
+        bool ok = turned.has_value();
+        if (ok) {
+            const std::vector<uint32_t> s = Samples(*turned);
+            for (uint32_t y = 0; y < kSize && ok; ++y) {
+                for (uint32_t x = 0; x < kSize && ok; ++x) {
+                    // u' = v, v' = 1 - u: bitmap column kSize - 1 - y, row x.
+                    ok = s[(size_t{y} * kSize + x) * 3] == image16->At(kSize - 1 - y, x, 0);
+                }
+            }
+        }
+        Check(ok, "Nearest with a 90 degree rotation turns the bitmap a quarter turn about the UV centre", Describe(turned));
+    }
+
+    // Explicit failures.
+    {
+        render::Result<ChannelResult> minified = project(core::FilteringMode::BilinearHQ, core::UVWrapMode::Repeat, {3.3, 3.3}, 0.0, {0.0, 0.0}, sha16);
+        Check(!minified && KindName(minified.error()) == "unsupported_source", "bilinear minification fails with unsupported_source (release gap)",
+              Describe(minified));
+        render::Result<ChannelResult> nearest = project(core::FilteringMode::Nearest, core::UVWrapMode::Repeat, {3.3, 3.3}, 0.0, {0.0, 0.0}, sha16);
+        Check(nearest.has_value(), "Nearest evaluates at any scale", Describe(nearest));
+        Builder builder(kSize, kSize, {{ChannelType::User0, ChannelFormat::RGB16}});
+        core::Layer layer = builder.Fill("bitmap", SameSource(user0, Bitmap(sha16)), Same(user0, BlendingMode::Normal, 1.0));
+        layer.fill->projection.uv.uv_transformation.scale_mode = core::ScaleMode::MaterialPhysicalSize;
+        single(ChannelFormat::RGB16, layer, builder);
+        CpuEvaluator cpu(templates, kWideLimits);
+        render::Result<ChannelResult> physical = evaluate(builder, ChannelType::User0, cpu);
+        Check(!physical && KindName(physical.error()) == "unsupported_source", "a physical-size scale mode fails with unsupported_source",
+              Describe(physical));
+        Builder ocio(kSize, kSize, {{ChannelType::User0, ChannelFormat::RGB16}});
+        ocio.project.settings.color_management.mode = "ocio";
+        ocio.SetRoot({ocio.Fill("uniform", SameSource(user0, Uniform(0.5, 0.5, 0.5)), Same(user0, BlendingMode::Normal, 1.0))});
+        CpuEvaluator cpu2(templates, kWideLimits);
+        render::Result<ChannelResult> managed = evaluate(ocio, ChannelType::User0, cpu2);
+        Check(!managed && KindName(managed.error()) == "unsupported_source", "an OCIO colour-managed project fails with unsupported_source",
+              Describe(managed));
+        Builder odd(96, 64, {{ChannelType::User0, ChannelFormat::RGB16}});
+        odd.AddResource(sha16, 100);
+        odd.SetRoot({odd.Fill("bitmap", SameSource(user0, Bitmap(sha16)), Same(user0, BlendingMode::Normal, 1.0))});
+        CpuEvaluator cpu3(templates, kWideLimits);
+        render::Result<ChannelResult> npot = evaluate(odd, ChannelType::User0, cpu3);
+        Check(!npot && KindName(npot.error()) == "unsupported_source", "a UV projection on a non-power-of-two set fails with unsupported_source",
+              Describe(npot));
+        render::Result<DecodedImage> garbage = DecodeBitmap("not a png");
+        Check(!garbage && KindName(garbage.error()) == "unsupported_source", "bytes that are not a PNG fail to decode with unsupported_source",
+              Describe(garbage));
+        DecodingResourceProvider wrongHash([](std::string_view) -> std::optional<std::string> { return std::string("bytes"); });
+        Check(wrongHash.Fetch(std::string(64, 'a')) == nullptr, "a resource whose bytes do not hash to its key is unavailable");
+    }
+
+    // LAY-13: two fills bind different bytes under the same alias; each reads its own.
+    {
+        const std::string shaA = std::string(63, 'a') + "1";
+        const std::string shaB = std::string(63, 'b') + "2";
+        auto bound = std::make_shared<MapResourceProvider>();
+        std::shared_ptr<DecodedImage> a = PatternImage(kSize, kSize, 1, render::TexelEncoding::Unorm16, 21);
+        std::shared_ptr<DecodedImage> b = PatternImage(kSize, kSize, 1, render::TexelEncoding::Unorm16, 22);
+        for (size_t i = 0; i < a->values.size(); ++i) a->values[i] = (a->values[i] * 7 + 3) & 0xFFFF;
+        bound->Add(shaA, a);
+        bound->Add(shaB, b);
+        Builder builder(kSize, kSize, {{ChannelType::User0, ChannelFormat::L16}, {ChannelType::User1, ChannelFormat::L16}});
+        builder.AddResource(shaA, 100);
+        builder.AddResource(shaB, 100);
+        const std::vector<ChannelType> u0{ChannelType::User0};
+        const std::vector<ChannelType> u1{ChannelType::User1};
+        builder.SetRoot({builder.Fill("C07", SameSource(u0, AliasedBitmap(shaA, "M_piping")), Same(u0, BlendingMode::Normal, 1.0)),
+                         builder.Fill("F03", SameSource(u1, AliasedBitmap(shaB, "M_piping")), Same(u1, BlendingMode::Normal, 1.0))});
+        if (!builder.Validate("alias")) return Finish();
+        CpuEvaluator cpu(templates, kWideLimits);
+        auto run = [&](ChannelType channel) {
+            EvaluateRequest request;
+            request.textureSet = builder.SetId();
+            request.stack = builder.StackId();
+            request.channel = channel;
+            request.resources = bound;
+            return cpu.Evaluate(builder.project, request);
+        };
+        render::Result<ChannelResult> first = run(ChannelType::User0);
+        render::Result<ChannelResult> second = run(ChannelType::User1);
+        Check(first && second && Samples(*first) == a->values && Samples(*second) == b->values,
+              "two fills binding different bytes under the alias M_piping each evaluate to their own bytes (LAY-13)",
+              Describe(first) + " / " + Describe(second));
+    }
+
+    // The cache keys carry the set resolution: a resized set never reuses a tile of the old size.
+    {
+        Builder builder(512, 512, {{ChannelType::User0, ChannelFormat::RGB16}});
+        builder.AddResource(sha16, 100);
+        builder.SetRoot({builder.Fill("bitmap", SameSource(user0, Bitmap(sha16)), Same(user0, BlendingMode::Normal, 1.0)),
+                         builder.Fill("uniform", SameSource(user0, Uniform(0.25, 0.5, 0.75)), Same(user0, BlendingMode::Multiply, 0.5))});
+        if (!builder.Validate("resize")) return Finish();
+        CpuEvaluator cpu(templates, kWideLimits);
+        render::Result<ChannelResult> small = evaluate(builder, ChannelType::User0, cpu);
+        builder.Set().resolution.width = 1024;
+        builder.Set().resolution.height = 1024;
+        render::Result<ChannelResult> large = evaluate(builder, ChannelType::User0, cpu);
+        CpuEvaluator fresh(templates, kWideLimits);
+        render::Result<ChannelResult> reference = evaluate(builder, ChannelType::User0, fresh);
+        Check(small && large && reference && large->width == 1024 && large->height == 1024 && large->stats.cacheHits == 0 &&
+                  Samples(*large) == Samples(*reference),
+              "after a resolution change the same evaluator re-evaluates every tile at the new size (no stale cache hit)",
+              Describe(large));
+    }
+    return Finish();
+}
+
+// ── projection-gpu-vs-cpu ────────────────────────────────────────────────────
+
+int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
+    std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
+    std::mt19937 rng(1808);
+    auto unit = [&] { return std::uniform_real_distribution<double>(0.0, 1.0)(rng); };
+    const std::vector<BlendingMode> modes = SeparableModes();
+    Evaluator gpu(engine, templates);
+    size_t compared = 0;
+    size_t stacks = 0;
+    bool allEqual = true;
+    const std::vector<core::UVWrapMode> wraps{core::UVWrapMode::Repeat, core::UVWrapMode::RepeatNone,
+                                              core::UVWrapMode::RepeatHorizontally, core::UVWrapMode::RepeatVertically};
+    const std::vector<core::FilteringMode> filters{core::FilteringMode::BilinearHQ, core::FilteringMode::BilinearSharp,
+                                                   core::FilteringMode::Nearest};
+    int serial = 0;
+    for (const ChannelFormat format : kAllFormats) {
+        for (int variant = 0; variant < 4; ++variant) {
+            const uint32_t width = variant == 3 ? 2048 : 256;
+            const uint32_t height = variant == 3 ? 1024 : 256;
+            // The Height channel (signed range) on its template format.
+            const ChannelType type = format == ChannelFormat::L16F && variant % 2 == 1 ? ChannelType::Height : ChannelType::User0;
+            Builder builder(width, height, {{type, format}});
+            auto provider = std::make_shared<MapResourceProvider>();
+            const std::vector<ChannelType> channels{type};
+            std::vector<core::Layer> layers;
+            for (int i = 0; i < 3; ++i) {
+                const bool sixteen = (rng() & 1) != 0;
+                const uint32_t imageChannels = (rng() & 3) == 0 ? 1 : 3;
+                const uint32_t side = (rng() & 1) != 0 ? 64 : 256;
+                char buffer[65];
+                std::snprintf(buffer, sizeof(buffer), "%064d", ++serial);
+                const std::string sha(buffer);
+                provider->Add(sha, PatternImage(side, side, imageChannels,
+                                                sixteen ? render::TexelEncoding::Unorm16 : render::TexelEncoding::Unorm8, rng()));
+                builder.AddResource(sha, 100);
+                core::Layer layer = builder.Fill("bitmap" + std::to_string(i), SameSource(channels, Bitmap(sha)),
+                                                 Same(channels, i == 0 ? BlendingMode::Normal : modes[rng() % modes.size()], 0.3 + 0.7 * unit()));
+                const core::FilteringMode filter = filters[rng() % filters.size()];
+                // Bilinear filters only magnify: the footprint is at most one bitmap texel.
+                const double fit = static_cast<double>(std::min(width, height)) / side;
+                const double scale = filter == core::FilteringMode::Nearest ? 0.2 + 4.0 * unit() : fit * (0.3 + 0.6 * unit());
+                SetUv(layer, filter, wraps[rng() % wraps.size()], {scale, scale * (0.8 + 0.2 * unit())}, 360.0 * unit() - 180.0,
+                      {unit() - 0.5, unit() - 0.5});
+                layers.push_back(std::move(layer));
+            }
+            builder.SetRoot(layers);
+            if (!builder.Validate("projection stack")) return Finish();
+            EvaluateRequest request;
+            request.textureSet = builder.SetId();
+            request.stack = builder.StackId();
+            request.channel = type;
+            request.resources = provider;
+            CpuEvaluator cpu(templates, kWideLimits);
+            render::Result<ChannelResult> cpuResult = cpu.Evaluate(builder.project, request);
+            auto project = std::make_shared<const core::Project>(builder.project);
+            std::future<render::Result<ChannelResult>> future = gpu.Evaluate(core::Snapshot{1, project}, request);
+            render::Result<ChannelResult> gpuResult = Get(future);
+            const std::string label = std::string(core::ToString(format)) + " projection stack " + std::to_string(variant) +
+                                      (type == ChannelType::Height ? " (Height)" : "");
+            ++stacks;
+            if (!cpuResult || !gpuResult) {
+                allEqual = false;
+                Check(false, label + " evaluates on both stores", Describe(cpuResult) + " / " + Describe(gpuResult));
+                continue;
+            }
+            std::string first;
+            const std::vector<uint32_t> expected = Samples(*cpuResult);
+            const size_t mismatches = Mismatches(expected, Samples(*gpuResult), first, cpuResult->tileFormat.encoding);
+            compared += expected.size();
+            if (mismatches != 0) {
+                allEqual = false;
+                Check(false, label + ": GPU equals CPU", std::to_string(mismatches) + " mismatches; " + first);
+            }
+        }
+    }
+    Check(allEqual, "every random projection stack (filters, wrap modes, transforms, 8/16-bit grey and colour bitmaps) evaluates "
+                    "to the same bytes on the GPU and on the CPU (" + std::to_string(compared) + " samples, " +
+                    std::to_string(stacks) + " stacks over 9 formats)");
+
+    // The grid size reaches the GPU cache keys too.
+    {
+        const std::string sha = std::string(63, 'e') + "1";
+        auto provider = std::make_shared<MapResourceProvider>();
+        provider->Add(sha, PatternImage(64, 64, 3, render::TexelEncoding::Unorm16, 5));
+        Builder builder(512, 512, {{ChannelType::User0, ChannelFormat::RGB16}});
+        builder.AddResource(sha, 100);
+        const std::vector<ChannelType> channels{ChannelType::User0};
+        builder.SetRoot({builder.Fill("bitmap", SameSource(channels, Bitmap(sha)), Same(channels, BlendingMode::Normal, 1.0))});
+        EvaluateRequest request;
+        request.textureSet = builder.SetId();
+        request.stack = builder.StackId();
+        request.channel = ChannelType::User0;
+        request.resources = provider;
+        auto small = std::make_shared<const core::Project>(builder.project);
+        std::future<render::Result<ChannelResult>> f1 = gpu.Evaluate(core::Snapshot{1, small}, request);
+        render::Result<ChannelResult> r1 = Get(f1);
+        builder.Set().resolution.width = 1024;
+        builder.Set().resolution.height = 1024;
+        auto large = std::make_shared<const core::Project>(builder.project);
+        std::future<render::Result<ChannelResult>> f2 = gpu.Evaluate(core::Snapshot{2, large}, request);
+        render::Result<ChannelResult> r2 = Get(f2);
+        CpuEvaluator cpu(templates, kWideLimits);
+        render::Result<ChannelResult> reference = cpu.Evaluate(builder.project, request);
+        Check(r1 && r2 && reference && r2->width == 1024 && r2->stats.cacheHits == 0 && Samples(*r2) == Samples(*reference),
+              "GPU: after a resolution change the same evaluator re-evaluates at the new size", Describe(r2));
+    }
+    gpu.Shutdown();
+    return Finish();
+}
+
+// ── srgb8-hardware ───────────────────────────────────────────────────────────
+
+/// The codes a D3D12 clear of an RGBA8 sRGB render target stores for each value (the GPU's
+/// float-to-sRGB8 conversion).
+render::Result<std::vector<uint8_t>> ClearCodes(render::Engine& engine, const std::vector<float>& values) {
+    std::vector<uint8_t> codes(values.size());
+    auto token = std::make_shared<const int>(0);
+    constexpr uint32_t kChunk = 2048;
+    for (size_t first = 0; first < values.size(); first += kChunk) {
+        const uint32_t count = static_cast<uint32_t>(std::min<size_t>(kChunk, values.size() - first));
+        std::future<render::Result<std::vector<uint8_t>>> future = engine.Submit(
+            token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<uint8_t>> {
+                render::IDevice& device = context.Device();
+                uz::RHITextureDesc desc;
+                desc.width = 1;
+                desc.height = 1;
+                desc.format = uz::RHIFormat::RGBA8Srgb;
+                desc.usage = uz::RHITextureUsage::RenderTarget | uz::RHITextureUsage::CopySrc;
+                desc.debugName = "srgb8_clear";
+                render::Result<uz::RHITextureHandle> texture = device.CreateTexture(desc);
+                if (!texture) return render::Unexpected(texture.error());
+                uz::RHIBufferDesc bdesc;
+                bdesc.sizeBytes = uint64_t{kChunk} * 512;  // D3D12 placement alignment per copy
+                bdesc.usage = uz::RHIBufferUsage::CopyDst;
+                bdesc.memory = uz::RHIMemoryType::Readback;
+                bdesc.debugName = "srgb8_clear_readback";
+                render::Result<uz::RHIBufferHandle> buffer = device.CreateBuffer(bdesc);
+                if (!buffer) {
+                    device.DestroyTexture(*texture);
+                    return render::Unexpected(buffer.error());
+                }
+                using State = uz::RHIResourceState;
+                using render::image_pass_detail::Transition;
+                render::Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+                    for (uint32_t i = 0; i < count; ++i) {
+                        const uz::RHIBarrierDesc toTarget =
+                            Transition(*texture, i == 0 ? State::Common : State::CopySrc, State::RenderTarget);
+                        cmd.ResourceBarrier(&toTarget, 1);
+                        const float v = values[first + i];
+                        const float colour[4] = {v, v, v, 1.0f};
+                        cmd.ClearRenderTarget(*texture, colour);
+                        const uz::RHIBarrierDesc toCopy = Transition(*texture, State::RenderTarget, State::CopySrc);
+                        cmd.ResourceBarrier(&toCopy, 1);
+                        cmd.CopyTextureToBuffer(*texture, 0, *buffer, uint64_t{i} * 512, 256);
+                    }
+                    const uz::RHIBarrierDesc back = Transition(*texture, State::CopySrc, State::Common);
+                    cmd.ResourceBarrier(&back, 1);
+                });
+                std::vector<uint8_t> out(count);
+                if (done) {
+                    const auto* mapped = static_cast<const uint8_t*>(device.Rhi().MapBuffer(*buffer));
+                    for (uint32_t i = 0; i < count; ++i) out[i] = mapped[size_t{i} * 512];
+                    device.Rhi().UnmapBuffer(*buffer);
+                }
+                device.DestroyBuffer(*buffer);
+                device.DestroyTexture(*texture);
+                if (!done) return render::Unexpected(done.error());
+                return out;
+            });
+        render::Result<std::vector<uint8_t>> chunk = Get(future);
+        if (!chunk) return chunk;
+        std::copy(chunk->begin(), chunk->end(), codes.begin() + static_cast<std::ptrdiff_t>(first));
+    }
+    return codes;
+}
+
+constexpr char kDecodeHlsl[] = R"(
+cbuffer Root : register(b0) { uint g_src; uint g_dst; };
+[numthreads(64, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID) {
+    Texture2D<float4> src = ResourceDescriptorHeap[g_src];
+    RWTexture2D<float4> dst = ResourceDescriptorHeap[g_dst];
+    dst[int2(id.x, 0)] = src.Load(int3(id.x, 0, 0));
+}
+)";
+
+/// The linear value a shader loads from an RGBA8 sRGB texel of each code 0..255 (the GPU's
+/// sRGB8 decode).
+render::Result<std::vector<float>> DecodeCodes(render::Engine& engine) {
+    auto token = std::make_shared<const int>(0);
+    std::future<render::Result<std::vector<float>>> future = engine.Submit(
+        token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<float>> {
+            render::IDevice& device = context.Device();
+            uz::RHITextureDesc sdesc;
+            sdesc.width = 256;
+            sdesc.height = 1;
+            sdesc.format = uz::RHIFormat::RGBA8Srgb;
+            sdesc.usage = uz::RHITextureUsage::ShaderResource | uz::RHITextureUsage::CopyDst;
+            render::Result<uz::RHITextureHandle> src = device.CreateTexture(sdesc);
+            if (!src) return render::Unexpected(src.error());
+            uz::RHITextureDesc ddesc;
+            ddesc.width = 256;
+            ddesc.height = 1;
+            ddesc.format = uz::RHIFormat::RGBA32Float;
+            ddesc.usage = uz::RHITextureUsage::UnorderedAccess | uz::RHITextureUsage::CopySrc;
+            render::Result<uz::RHITextureHandle> dst = device.CreateTexture(ddesc);
+            uz::RHIBufferDesc bdesc;
+            bdesc.sizeBytes = 1024;
+            bdesc.usage = uz::RHIBufferUsage::CopySrc;
+            bdesc.memory = uz::RHIMemoryType::Upload;
+            render::Result<uz::RHIBufferHandle> staging = device.CreateBuffer(bdesc);
+            auto cleanup = [&] {
+                if (staging) device.DestroyBuffer(*staging);
+                if (dst) device.DestroyTexture(*dst);
+                device.DestroyTexture(*src);
+            };
+            if (!dst || !staging) {
+                cleanup();
+                return render::Unexpected(!dst ? dst.error() : staging.error());
+            }
+            auto* mapped = static_cast<uint8_t*>(device.Rhi().MapBuffer(*staging));
+            for (uint32_t c = 0; c < 256; ++c) {
+                for (uint32_t k = 0; k < 3; ++k) mapped[c * 4 + k] = static_cast<uint8_t>(c);
+                mapped[c * 4 + 3] = 255;
+            }
+            device.Rhi().UnmapBuffer(*staging);
+            render::KernelSource source;
+            source.name = "srgb8_decode";
+            source.hlsl = kDecodeHlsl;
+            render::Result<render::ComputeKernel> kernel = context.Kernel(source);
+            if (!kernel) {
+                cleanup();
+                return render::Unexpected(kernel.error());
+            }
+            using State = uz::RHIResourceState;
+            using render::image_pass_detail::Transition;
+            const uint32_t root[2] = {device.Rhi().GetTextureSRVIndex(*src), device.Rhi().GetTextureUAVIndex(*dst)};
+            render::Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+                const uz::RHIBarrierDesc toCopy = Transition(*src, State::Common, State::CopyDst);
+                cmd.ResourceBarrier(&toCopy, 1);
+                cmd.CopyBufferToTexture(*staging, 0, 1024, *src, 0, 0);
+                const uz::RHIBarrierDesc before[2] = {Transition(*src, State::CopyDst, State::ShaderResource),
+                                                      Transition(*dst, State::Common, State::UnorderedAccess)};
+                cmd.ResourceBarrier(before, 2);
+                cmd.SetPipeline(kernel->pipeline);
+                cmd.SetRootConstants(render::kRootConstantsParam, root, 2);
+                cmd.Dispatch(4, 1, 1);
+                const uz::RHIBarrierDesc after[2] = {Transition(*src, State::ShaderResource, State::Common),
+                                                     Transition(*dst, State::UnorderedAccess, State::Common)};
+                cmd.ResourceBarrier(after, 2);
+            });
+            if (!done) {
+                cleanup();
+                return render::Unexpected(done.error());
+            }
+            render::TextureReadback readback(context);
+            render::ReadbackDesc desc;
+            desc.texture = *dst;
+            desc.channels = 1;
+            render::Result<render::ReadbackId> id = readback.Request(desc);
+            render::Result<render::ReadbackImage> image =
+                id ? readback.Complete(*id) : render::Result<render::ReadbackImage>(render::Unexpected(id.error()));
+            cleanup();
+            if (!image) return render::Unexpected(image.error());
+            std::vector<float> values(256);
+            std::memcpy(values.data(), image->texels.data(), 256 * sizeof(float));
+            return values;
+        });
+    return Get(future);
+}
+
+/// Measures the GPU's sRGB8 conversions and compares them with the tables of arith.h, which were
+/// measured on the Tier 0 recording GPU (the owner's RTX 4090): the decode of every code, the
+/// smallest float32 of every code by bisection over float32 bit patterns, and the encode of every
+/// 16-bit operand and of random floats. Writes the measured tables to the work directory.
+int RunSrgb8Hardware(const fs::path& dir) {
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    const std::string adapter = engine.Capabilities().value_or(render::CapabilityReport{}).adapter;
+    Info("adapter " + adapter);
+    render::Result<std::vector<float>> decode = DecodeCodes(engine);
+    if (!decode) {
+        Check(false, "the sRGB8 decode is measured", decode.error().Describe());
+        return Finish();
+    }
+    std::ofstream decodeFile(dir / "srgb8-decode.txt");
+    bool decodeEqual = true;
+    for (uint32_t c = 0; c < 256; ++c) {
+        const uint32_t bits = std::bit_cast<uint32_t>((*decode)[c]);
+        decodeFile << c << ' ' << Hex32(bits) << '\n';
+        decodeEqual = decodeEqual && bits == std::bit_cast<uint32_t>(arith::Srgb8OperandTable()[c]);
+    }
+    Check(decodeEqual, "the GPU's sRGB8 decode equals the operand table of every code");
+
+    std::vector<uint32_t> low(256, 0u);
+    std::vector<uint32_t> high(256, std::bit_cast<uint32_t>(1.0f));
+    for (int iteration = 0; iteration < 40; ++iteration) {
+        std::vector<float> probe;
+        std::vector<uint32_t> which;
+        for (uint32_t k = 1; k < 256; ++k) {
+            if (high[k] - low[k] <= 1) continue;
+            probe.push_back(std::bit_cast<float>(low[k] + (high[k] - low[k]) / 2));
+            which.push_back(k);
+        }
+        if (probe.empty()) break;
+        render::Result<std::vector<uint8_t>> codes = ClearCodes(engine, probe);
+        if (!codes) {
+            Check(false, "the sRGB8 thresholds are measured", codes.error().Describe());
+            return Finish();
+        }
+        for (size_t i = 0; i < probe.size(); ++i) {
+            const uint32_t bits = std::bit_cast<uint32_t>(probe[i]);
+            if ((*codes)[i] >= which[i]) high[which[i]] = bits;
+            else low[which[i]] = bits;
+        }
+    }
+    std::ofstream thresholdFile(dir / "srgb8-thresholds.txt");
+    bool thresholdsEqual = true;
+    for (uint32_t k = 1; k < 256; ++k) {
+        thresholdFile << k << ' ' << Hex32(high[k]) << '\n';
+        thresholdsEqual = thresholdsEqual && static_cast<double>(std::bit_cast<float>(high[k])) == arith::Srgb8Thresholds()[k];
+    }
+    Check(thresholdsEqual, "the smallest float32 of every sRGB8 code on the GPU equals the store thresholds");
+
+    std::vector<float> values;
+    for (uint32_t c = 0; c < 65536; ++c) values.push_back(arith::UnormOperand(c, 16));
+    std::mt19937 rng(61966);
+    for (int i = 0; i < 131072; ++i) {
+        values.push_back(std::uniform_real_distribution<float>(-0.05f, 1.05f)(rng));
+    }
+    for (uint32_t k = 1; k < 256; ++k) {
+        const uint32_t bits = std::bit_cast<uint32_t>(static_cast<float>(arith::Srgb8Thresholds()[k]));
+        for (int d = -3; d <= 3; ++d) values.push_back(std::bit_cast<float>(bits + static_cast<uint32_t>(d)));
+    }
+    render::Result<std::vector<uint8_t>> codes = ClearCodes(engine, values);
+    if (!codes) {
+        Check(false, "the sRGB8 encode is measured", codes.error().Describe());
+        return Finish();
+    }
+    size_t differing = 0;
+    std::string first;
+    for (size_t i = 0; i < values.size(); ++i) {
+        if ((*codes)[i] != arith::Srgb8Store(values[i])) {
+            if (differing++ == 0) first = "value " + Hex32(std::bit_cast<uint32_t>(values[i])) + ": GPU " +
+                                          std::to_string((*codes)[i]) + ", table " + std::to_string(arith::Srgb8Store(values[i]));
+        }
+    }
+    Check(differing == 0, "the GPU's sRGB8 encode equals Srgb8Store on every 16-bit operand, " + std::to_string(131072) +
+                              " random floats and the floats next to every threshold (" + std::to_string(values.size()) + " values)",
+          std::to_string(differing) + " differ; " + first);
+    return Finish();
+}
+
+// ── uv-coverage ──────────────────────────────────────────────────────────────
+
+/// The texturing mesh of an imported file as the UV raster's corner layout (one interleaved
+/// buffer: position, normal, uv0, tangent, material, island 0), owning its bytes.
+struct MeshCorners {
+    std::vector<std::byte> bytes;
+    std::vector<uint32_t> triangles;
+    render::CornerBuffers corners;
+};
+
+MeshCorners CornersOf(const uzp::mesh::TexturingMesh& mesh) {
+    constexpr uint32_t stride = 56;
+    MeshCorners out;
+    out.bytes.resize(mesh.corners.size() * stride);
+    for (size_t c = 0; c < mesh.corners.size(); ++c) {
+        const uzp::mesh::Corner& corner = mesh.corners[c];
+        const uzp::mesh::Float3& position = mesh.positions[corner.position];
+        const float values[12] = {position.x, position.y, position.z, corner.normal.x, corner.normal.y,
+                                  corner.normal.z, corner.uv0.u, corner.uv0.v, corner.tangent[0],
+                                  corner.tangent[1], corner.tangent[2], corner.tangent[3]};
+        std::byte* at = out.bytes.data() + c * stride;
+        std::memcpy(at, values, sizeof(values));
+        const uint32_t ids[2] = {corner.material, 0};
+        std::memcpy(at + 48, ids, sizeof(ids));
+    }
+    for (const uzp::mesh::Object& object : mesh.objects) {
+        for (const uzp::mesh::Triangle& triangle : object.triangles) {
+            out.triangles.insert(out.triangles.end(), triangle.corners.begin(), triangle.corners.end());
+        }
+    }
+    render::CornerBuffers& cb = out.corners;
+    cb.buffers = {out.bytes};
+    cb.cornerCount = static_cast<uint32_t>(mesh.corners.size());
+    cb.position = {0, 0, stride};
+    cb.normal = {0, 12, stride};
+    cb.uv0 = {0, 24, stride};
+    cb.tangent = {0, 32, stride};
+    cb.materialId = {0, 48, stride};
+    cb.islandId = {0, 52, stride};
+    cb.triangles = out.triangles;
+    return out;
+}
+
+/// Imports `mesh` with the product's importer, rasterises its UV tile 1001 at `size`^2 with the
+/// render layer's UV raster and writes the texel-centre coverage (`coverage.bin`, one byte per
+/// texel, rows top first: 1 where a triangle covers the texel centre).
+int RunUvCoverage(const fs::path& dir, const fs::path& meshPath, uint32_t size) {
+    uzp::mesh::ImportResult imported = uzp::mesh::ImportMeshFile(meshPath, {});
+    MeshCorners corners = CornersOf(imported.mesh);
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    auto token = std::make_shared<const int>(0);
+    std::future<render::Result<std::vector<uint8_t>>> future = engine.Submit(
+        token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<uint8_t>> {
+            render::UvRasterRequest request;
+            request.width = size;
+            request.height = size;
+            render::Result<render::UvRasterBuffers> raster = render::RasterizeUv(context, corners.corners, request);
+            if (!raster) return render::Unexpected(raster.error());
+            render::TextureReadback readback(context);
+            render::ReadbackDesc desc;
+            desc.texture = raster->triangle;
+            render::Result<render::ReadbackId> id = readback.Request(desc);
+            render::Result<render::ReadbackImage> image =
+                id ? readback.Complete(*id) : render::Result<render::ReadbackImage>(render::Unexpected(id.error()));
+            raster->Destroy(context.Device());
+            if (!image) return render::Unexpected(image.error());
+            std::vector<uint8_t> covered(size_t{size} * size);
+            for (size_t t = 0; t < covered.size(); ++t) {
+                uint32_t triangle = 0;
+                std::memcpy(&triangle, image->texels.data() + t * sizeof(uint32_t), sizeof(uint32_t));
+                covered[t] = triangle == render::kUvRasterNoId ? 0 : 1;
+            }
+            return covered;
+        });
+    render::Result<std::vector<uint8_t>> covered = Get(future);
+    if (!covered) {
+        Check(false, "the mesh's UV tile rasterises", covered.error().Describe());
+        return Finish();
+    }
+    std::ofstream file(dir / "coverage.bin", std::ios::binary);
+    file.write(reinterpret_cast<const char*>(covered->data()), static_cast<std::streamsize>(covered->size()));
+    size_t count = 0;
+    for (const uint8_t c : *covered) count += c;
+    Info("covered texels " + std::to_string(count) + " of " + std::to_string(covered->size()));
+    Check(count > 0, "the texturing mesh rasterises into the UV tile (" + std::to_string(imported.mesh.TriangleCount()) +
+                         " triangles)");
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     const std::string_view mode = argc > 1 ? argv[1] : "";
     if (argc < 3) {
         std::fprintf(stderr,
-                     "usage: uzp-evaluator-tests arith|templates|order|cache|admission <assets-dir> | "
-                     "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu <assets-dir> <work-dir> | "
-                     "kernel-sweep <assets-dir> <work-dir>\n");
+                     "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources <assets-dir> | "
+                     "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
+                     "projection-gpu-vs-cpu|srgb8-hardware|tables <assets-dir> <work-dir> | "
+                     "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
         return 2;
     }
     const fs::path assets = argv[2];
@@ -1826,6 +2686,7 @@ int main(int argc, char** argv) {
         if (mode == "order") return RunOrder(assets);
         if (mode == "cache") return RunCache(assets);
         if (mode == "admission") return RunAdmission(assets);
+        if (mode == "sources") return RunSources(assets);
         if (mode == "evaluate") {
             if (argc < 6) {
                 std::fprintf(stderr, "usage: uzp-evaluator-tests evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu\n");
@@ -1852,6 +2713,17 @@ int main(int argc, char** argv) {
         uz::LogSuppressConsole();
         if (mode == "gpu-vs-cpu") code = RunGpuVsCpu(assets, dir);
         else if (mode == "kernel-sweep") code = RunKernelSweep(assets, dir);
+        else if (mode == "projection-gpu-vs-cpu") code = RunProjectionGpuVsCpu(assets, dir);
+        else if (mode == "srgb8-hardware") code = RunSrgb8Hardware(dir);
+        else if (mode == "tables") code = RunTables(dir);
+        else if (mode == "uv-coverage") {
+            if (argc < 6) {
+                std::fprintf(stderr, "usage: uzp-evaluator-tests uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
+                code = 2;
+            } else {
+                code = RunUvCoverage(dir, argv[4], static_cast<uint32_t>(std::stoul(argv[5])));
+            }
+        }
         else std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());
         uz::LogShutdown();
     } catch (const core::ManifestError& error) {
@@ -1862,6 +2734,9 @@ int main(int argc, char** argv) {
         return 3;
     } catch (const core::ValueError& error) {
         std::fprintf(stderr, "ValueError: %s\n", error.what());
+        return 3;
+    } catch (const uzp::mesh::ImportError& error) {
+        std::fprintf(stderr, "ImportError: %s\n", error.what());
         return 3;
     }
     return code;
