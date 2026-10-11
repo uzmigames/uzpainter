@@ -26,12 +26,15 @@ struct BlendKernelVariant {
     core::BlendingMode mode = core::BlendingMode::Normal;
     /// The destination (and backdrop) tile format; `alpha` selects the coverage plane.
     TileFormat format;
+    /// A raw blend (BlendOp::rawOutput): `format` is the operands' format (without `alpha`) and
+    /// the destination a 32-bit float tile written as it is (`UZP_RAW_OUTPUT`).
+    bool rawOutput = false;
 };
 
 /// The HLSL of the variant: `evaluator_blend.hlsl` with the defines `UZP_MODE_<Mode>`,
-/// `UZP_ENC`, `UZP_CHANNELS`, `UZP_SRGB`, `UZP_ALPHA` and `UZP_HALF_COVERAGE` (the coverage plane
+/// `UZP_ENC`, `UZP_CHANNELS`, `UZP_SRGB`, `UZP_ALPHA`, `UZP_HALF_COVERAGE` (the coverage plane
 /// written through binary16, `TileFormat::halfCoverage`: 1 always, 2 from 1/2 up,
-/// `TileFormat::halfCoverageFromHalf`), including the render layer's
+/// `TileFormat::halfCoverageFromHalf`) and `UZP_RAW_OUTPUT`, including the render layer's
 /// `image_common.hlsli` and the generated `evaluator_tables.hlsli`.
 [[nodiscard]] render::KernelSource BlendKernelSource(const BlendKernelVariant& variant);
 
@@ -152,6 +155,28 @@ struct ProjectBindings {
 /// The parameter block of `op` with the descriptor indices of `bindings`.
 [[nodiscard]] std::array<uint32_t, kBlendParamsStride> EncodeProjectParams(
     const ProjectOp& op, const ProjectBindings& bindings);
+
+// ── Virtual normal maps (height_to_normal.h, tile_store.h VirtualNormalOp) ────
+
+/// The HLSL of the virtual normal kernel (`evaluator_blend.hlsl` with `UZP_VNORMAL`): 32-bit float
+/// height and Normal-channel read-outs in, the encoded normal out (raw 32-bit float). Its
+/// parameter blocks share the arena and stride of the blend kernels.
+[[nodiscard]] render::KernelSource VirtualNormalKernelSource();
+
+struct VirtualNormalBindings {
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t dstUav = 0;
+    uint32_t table16Srv = 0;
+    /// The SRVs of the nine height tiles (all 0 when the height is constant).
+    std::array<uint32_t, 9> heightSrv{};
+    /// The SRV of the Normal channel's read-out tile (0 when it is a constant).
+    uint32_t normalSrv = 0;
+};
+
+/// The parameter block of `op` with the descriptor indices of `bindings`.
+[[nodiscard]] std::array<uint32_t, kBlendParamsStride> EncodeVirtualNormalParams(
+    const VirtualNormalOp& op, const VirtualNormalBindings& bindings);
 
 /// The codes of `image` in sample order, packed for the projection kernel: two 16-bit codes or
 /// four 8-bit codes per uint, low bits first.

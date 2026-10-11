@@ -71,6 +71,46 @@
       "approved_by": "owner",
       "approved_on": "2026-10-11",
       "notes": "Evaluator profile painter-12.1-isolated-linear equals r1 exactly on every map of s2, 1 245 184 values (parity/reports/phase1/compositor-quantisation-profile.md)."
+    },
+    {
+      "exception_id": "EXC-003",
+      "version": 1,
+      "tier": "0",
+      "domain": { "kind": "channel", "selector": "tier0/height-normal/method" },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 31 },
+        { "metric": "mean_abs_diff", "scope": "whole", "max": 2.4583 },
+        { "metric": "differing_percent", "scope": "whole", "max": 100.0 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Painter is unstable on tier0/semantics-ui/height-normal-sharp-plane-strength and tier0/semantics-ui/height-normal-sobel-plane-strength (the domain tier0/height-normal/method): after save and reopen, r2 of sets s1 (opacity 0.75) and s4 (opacity 0.1) differs from r1 on the Height export and both virtual maps (parity/reports/phase0/tier0-semantics-ui.md §3); every other map of the domain is stable. Under decision 032 r1 is the exact target and every comparison against r1 must be exact (the evaluator equals r1 on every map, parity/semantics/height-to-normal.json); this entry covers only the comparisons against r2, per map in native units (16-bit codes of the PNG exports, float values of the OpenEXR Height). Its bounds are the evaluator's published r2 residuals (entry height-normal-save-reopen-divergence): max |delta| 31 codes (Sharp s1 Normal_OpenGL), per-map mean at most 2.4583, and every value of the s4 Height differing (by at most 2^-14).",
+        "private_evidence": [
+          {
+            "sha256": "2fe57df3bd838b54ba1c3c39d9948c674260415b206a8b56ca68aa06b2c304ec",
+            "description": "private golden record of tier0/semantics-ui/height-normal-sharp-plane-strength: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          },
+          {
+            "sha256": "c427fce046ae6c0b2e751b9ba78c3e45ea0fd5adf64d8a6d48fc4a1431da20e8",
+            "description": "private golden record of tier0/semantics-ui/height-normal-sobel-plane-strength: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "Evaluator profile painter-12.1-isolated-coverage-weights equals r1 exactly on every map of both goldens (parity/reports/phase1/compositor-height-normal.md); decision 064 §5."
     }
   ]
 }

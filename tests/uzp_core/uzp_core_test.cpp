@@ -195,6 +195,7 @@ Project BuildFixture(bool reversed) {
     }
     set.bake_settings.common = json::Object{{"output_size", 2048}};
     set.bake_settings.per_baker["AO"] = json::Object{{"secondary_rays", 64}};
+    set.height_to_normal_method = HeightToNormalMethod::SmoothSobel;
 
     Stack stack;
     stack.id = fx::kStack;

@@ -1,0 +1,11 @@
+{
+  "id": 64,
+  "slug": "the-virtual-normal-maps-reorient-the-height-normal-onto-the-flat-base-then-the-normal-channel-onto-the-result-from-the-pre-write-height-read-out",
+  "title": "The virtual normal maps reorient the height normal onto the flat base, then the Normal channel onto the result, from the pre-write Height read-out",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.12_compositor-height-normal"
+  ],
+  "supersededBy": null
+}

@@ -1,6 +1,6 @@
 // Native tests of the compositor (rulebook tasks phase1.5_compositor-tile-dag,
-// phase1.8_compositor-sources-projection, phase1.9_compositor-quantisation-profile and
-// phase1.11_compositor-mask-effects,
+// phase1.8_compositor-sources-projection, phase1.9_compositor-quantisation-profile,
+// phase1.11_compositor-mask-effects and phase1.12_compositor-height-normal,
 // src/evaluator/,
 // docs/architecture/04-layer-stack-and-compositing.md §2, §4, §5, §7). Built by
 // `zig build evaluator-tests` and driven by tests/evaluator/test_compositor_tile_dag.py and
@@ -57,6 +57,14 @@
 //   trig-hardware <assets> <work-dir>    measures the GPU's sin and cos over the table domain of
 //                                        hwmath.h, writes the measured tables and compares them
 //                                        and hw::Sin/Cos with the GPU
+//   height-normal <assets>               the virtual normal maps on the CPU store (phase1.12): the
+//                                        stencils, the combination, the float32 read-out, the
+//                                        Normal-channel import, EXP-09 tags and relief rounds, the
+//                                        geometry-only pass-through and the explicit failures
+//   height-normal-gpu-vs-cpu <assets> <work-dir>
+//                                        the virtual normal kernel across tile edges, the raw
+//                                        read-out on every format and whole evaluations: GPU =
+//                                        CPU bit for bit
 //   uv-coverage <assets> <work-dir> <mesh> <size>
 //                                        imports <mesh>, rasterises its UV tile and writes the
 //                                        texel-centre coverage (island-edge goldens)
@@ -76,6 +84,7 @@
 #include "evaluator/evaluator.h"
 #include "evaluator/geometry_mask.h"
 #include "evaluator/gpu_store.h"
+#include "evaluator/height_to_normal.h"
 #include "evaluator/hwmath.h"
 #include "evaluator/kernelgen.h"
 #include "evaluator/profile.h"
@@ -1641,6 +1650,7 @@ public:
     render::Result<void> Project(const ProjectOp&) override { return {}; }
     render::Result<void> Blend(const BlendOp&) override { return {}; }
     render::Result<void> Levels(const LevelsOp&) override { return {}; }
+    render::Result<void> VirtualNormal(const VirtualNormalOp&) override { return {}; }
     render::Result<void> Flush() override { return {}; }
     render::Result<TileImage> Read(TileHandle tile) override {
         const auto& t = m_tiles.at(tile);
@@ -1813,6 +1823,8 @@ struct Spec {
     Builder builder;
     std::shared_ptr<SpecResources> resources = std::make_shared<SpecResources>();
     std::vector<ChannelType> outputs;
+    /// Virtual normal maps to evaluate (height_to_normal.h), by convention.
+    std::vector<core::NormalMapFormat> virtualOutputs;
 };
 
 const core::json::Object& Obj(const core::json::Value& v, const std::string& what) {
@@ -2035,13 +2047,21 @@ Spec ParseSpec(const fs::path& path) {
     Spec spec{std::string(kDefaultTemplateId),
               Builder(static_cast<uint32_t>(Num(resolution.at(0), "width")),
                       static_cast<uint32_t>(Num(resolution.at(1), "height")), channels),
-              std::make_shared<SpecResources>(), {}};
+              std::make_shared<SpecResources>(), {}, {}};
     if (o.contains("template")) spec.templateId = Str(o.at("template"), "template");
     if (o.contains("evaluator_profile")) {
         spec.builder.project.versions.evaluator_profile = Str(o.at("evaluator_profile"), "evaluator_profile");
     }
     if (o.contains("color_management")) {
         spec.builder.project.settings.color_management.mode = Str(o.at("color_management"), "color_management");
+    }
+    if (o.contains("normal_map_format")) {
+        spec.builder.project.settings.normal_map_format =
+            EnumOf<core::NormalMapFormat>(Str(o.at("normal_map_format"), "normal_map_format"), "normal map format");
+    }
+    if (o.contains("height_to_normal_method")) {
+        spec.builder.Set().height_to_normal_method = EnumOf<core::HeightToNormalMethod>(
+            Str(o.at("height_to_normal_method"), "height_to_normal_method"), "height to normal method");
     }
     // Ids the spec assigns must stay below next_id: reserve a wide range first.
     if (o.contains("resources")) {
@@ -2094,6 +2114,14 @@ Spec ParseSpec(const fs::path& path) {
     for (const core::json::Value& c : Arr(Key(o, "outputs"), "outputs")) {
         spec.outputs.push_back(EnumOf<ChannelType>(Str(c, "output"), "output"));
     }
+    if (o.contains("virtual_outputs")) {
+        for (const core::json::Value& c : Arr(o.at("virtual_outputs"), "virtual_outputs")) {
+            const std::string name = Str(c, "virtual output");
+            if (name == "Normal_OpenGL") spec.virtualOutputs.push_back(core::NormalMapFormat::OpenGL);
+            else if (name == "Normal_DirectX") spec.virtualOutputs.push_back(core::NormalMapFormat::DirectX);
+            else throw core::ManifestError("virtual output '" + name + "' is not Normal_OpenGL or Normal_DirectX");
+        }
+    }
     // Explicit uids may exceed the counter: lift next_id above every id.
     core::Id maxId = spec.builder.project.next_id;
     core::ForEachNode(spec.builder.project, [&](const core::NodeVisit& visit) {
@@ -2122,11 +2150,59 @@ core::json::Object StatsJson(const EvaluationStats& stats) {
     return o;
 }
 
+std::string NormalMapName(core::NormalMapFormat convention) {
+    return convention == core::NormalMapFormat::OpenGL ? "Normal_OpenGL" : "Normal_DirectX";
+}
+
+core::json::Object TagJson(const NormalTag& tag) {
+    core::json::Object o;
+    o["role"] = std::string(core::ToString(tag.role));
+    if (tag.relief) {
+        core::json::Object relief;
+        relief["revision"] = tag.relief->revision;
+        relief["height_hash"] = tag.relief->heightHash;
+        relief["method"] = std::string(core::ToString(tag.relief->method));
+        o["relief_round"] = relief;
+    } else {
+        o["relief_round"] = nullptr;
+    }
+    return o;
+}
+
+using VirtualResults = std::vector<std::pair<core::NormalMapFormat, render::Result<VirtualNormalResult>>>;
+
 /// Writes every output channel: `<channel>.bin` (full raster, native samples, little-endian) and
-/// `result.json`.
-int WriteResults(const fs::path& out, const std::vector<std::pair<ChannelType, render::Result<ChannelResult>>>& results) {
+/// `result.json`; every virtual normal map as `<map>.bin` (three float32 per texel, the encoded
+/// normal) with its EXP-09 tag.
+int WriteResults(const fs::path& out, const std::vector<std::pair<ChannelType, render::Result<ChannelResult>>>& results,
+                 const VirtualResults& virtuals = {}) {
     core::json::Object channels;
     bool ok = true;
+    for (const auto& [convention, result] : virtuals) {
+        const std::string name = NormalMapName(convention);
+        if (!result) {
+            core::json::Object entry;
+            entry["error"] = result.error().Describe();
+            channels[name] = entry;
+            Check(false, name + " evaluates", result.error().Describe());
+            ok = false;
+            continue;
+        }
+        std::vector<std::byte> raw(result->texels.size() * sizeof(float));
+        std::memcpy(raw.data(), result->texels.data(), raw.size());
+        WriteFile(out / (name + ".bin"), raw);
+        core::json::Object entry;
+        entry["format"] = "RGB32F";
+        entry["width"] = static_cast<std::int64_t>(result->width);
+        entry["height"] = static_cast<std::int64_t>(result->height);
+        entry["channels"] = std::int64_t{3};
+        entry["bytes_per_channel"] = std::int64_t{4};
+        entry["file"] = name + ".bin";
+        entry["tag"] = TagJson(result->tag);
+        entry["stats"] = StatsJson(result->stats);
+        channels[name] = entry;
+        Check(true, name + " evaluates");
+    }
     for (const auto& [channel, result] : results) {
         const std::string name(core::ToString(channel));
         if (!result) {
@@ -2186,6 +2262,7 @@ int RunEvaluate(const fs::path& assets, const fs::path& specPath, const fs::path
     std::error_code ec;
     fs::create_directories(out, ec);
     std::vector<std::pair<ChannelType, render::Result<ChannelResult>>> results;
+    VirtualResults virtuals;
     if (backend == "cpu") {
         CpuEvaluator cpu(templates, kWideLimits);
         for (const ChannelType channel : spec.outputs) {
@@ -2197,7 +2274,16 @@ int RunEvaluate(const fs::path& assets, const fs::path& specPath, const fs::path
             request.resources = spec.resources;
             results.emplace_back(channel, cpu.Evaluate(spec.builder.project, request));
         }
-        return WriteResults(out, results);
+        for (const core::NormalMapFormat convention : spec.virtualOutputs) {
+            VirtualNormalRequest request;
+            request.textureSet = spec.builder.SetId();
+            request.stack = spec.builder.StackId();
+            request.convention = convention;
+            request.templateId = spec.templateId;
+            request.resources = spec.resources;
+            virtuals.emplace_back(convention, cpu.EvaluateNormal(spec.builder.project, 1, request));
+        }
+        return WriteResults(out, results, virtuals);
     }
     render::Engine engine(TestOptions(out));
     if (NoAdapter(engine)) return kExitSkip;
@@ -2216,6 +2302,17 @@ int RunEvaluate(const fs::path& assets, const fs::path& specPath, const fs::path
                 evaluator.Evaluate(core::Snapshot{1, project}, std::move(request));
             results.emplace_back(channel, Get(future));
         }
+        for (const core::NormalMapFormat convention : spec.virtualOutputs) {
+            VirtualNormalRequest request;
+            request.textureSet = spec.builder.SetId();
+            request.stack = spec.builder.StackId();
+            request.convention = convention;
+            request.templateId = spec.templateId;
+            request.resources = spec.resources;
+            std::future<render::Result<VirtualNormalResult>> future =
+                evaluator.EvaluateNormal(core::Snapshot{1, project}, std::move(request));
+            virtuals.emplace_back(convention, Get(future));
+        }
         std::future<render::Result<CacheStats>> stats = evaluator.Stats();
         render::Result<CacheStats> cacheStats = Get(stats);
         if (cacheStats) {
@@ -2224,7 +2321,7 @@ int RunEvaluate(const fs::path& assets, const fs::path& specPath, const fs::path
         }
         evaluator.Shutdown();
     }
-    return WriteResults(out, results);
+    return WriteResults(out, results, virtuals);
 }
 
 // ── gpu-vs-cpu ───────────────────────────────────────────────────────────────
@@ -4613,15 +4710,576 @@ int RunUvCoverage(const fs::path& dir, const fs::path& meshPath, uint32_t size) 
     return Finish();
 }
 
+// ── height-normal (CPU) ──────────────────────────────────────────────────────
+
+/// A grey height image of `size` x `size` float32 samples (a ramp, a cone and flat areas) that a
+/// spec uploads to a Float32 Height tile.
+std::shared_ptr<DecodedImage> HeightCodes(uint32_t size, uint32_t seed) {
+    auto image = std::make_shared<DecodedImage>();
+    image->width = size;
+    image->height = size;
+    image->channels = 1;
+    image->encoding = render::TexelEncoding::Unorm16;
+    image->values.resize(size_t{size} * size);
+    std::mt19937 rng(seed);
+    for (uint32_t y = 0; y < size; ++y) {
+        for (uint32_t x = 0; x < size; ++x) {
+            uint32_t code = 32768;
+            if (x < size / 2) code = (x * 977u + y * 131u) % 65536u;          // ramps
+            else if (y < size / 2) code = rng() % 65536u;                     // noise
+            image->values[size_t{y} * size + x] = code;
+        }
+    }
+    return image;
+}
+
+/// An RGB normal-map image (16-bit codes, z towards +1).
+std::shared_ptr<DecodedImage> NormalCodes(uint32_t size, uint32_t seed, uint32_t bits = 16) {
+    auto image = std::make_shared<DecodedImage>();
+    image->width = size;
+    image->height = size;
+    image->channels = 3;
+    image->encoding = bits == 16 ? render::TexelEncoding::Unorm16 : render::TexelEncoding::Unorm8;
+    const uint32_t max = (1u << bits) - 1u;
+    image->values.resize(size_t{size} * size * 3);
+    std::mt19937 rng(seed);
+    for (size_t i = 0; i < size_t{size} * size; ++i) {
+        image->values[i * 3 + 0] = rng() % (max + 1);
+        image->values[i * 3 + 1] = rng() % (max + 1);
+        image->values[i * 3 + 2] = max / 2 + rng() % (max / 2 + 1);
+    }
+    return image;
+}
+
+std::array<uint32_t, 3> Codes16(const std::array<float, 3>& e) {
+    return {arith::WriteUnorm(e[0], 16), arith::WriteUnorm(e[1], 16), arith::WriteUnorm(e[2], 16)};
+}
+
+int RunHeightNormal(const fs::path& assets) {
+    using core::HeightToNormalMethod;
+    using core::NormalMapFormat;
+    std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
+
+    // ── The stencils and the combination of one texel ──
+    {
+        const HeightNeighbourhood flat{0.25f, 0.25f, 0.25f, 0.25f, 0.25f, 0.25f, 0.25f, 0.25f, 0.25f};
+        bool flatOk = true;
+        for (const HeightToNormalMethod method : {HeightToNormalMethod::Sharp, HeightToNormalMethod::SmoothSobel}) {
+            for (const NormalMapFormat convention : {NormalMapFormat::OpenGL, NormalMapFormat::DirectX}) {
+                const std::array<uint32_t, 3> codes =
+                    Codes16(VirtualNormalTexel(HeightVector(method, flat), kFlatNormalColour, convention));
+                flatOk = flatOk && codes == std::array<uint32_t, 3>{32767, 32767, 65535};
+            }
+        }
+        Check(flatOk, "a flat height and an empty Normal channel give the flat normal (32767, 32767, 65535) in both methods and conventions");
+        const HeightNeighbourhood h{1.0f, 2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f, 128.0f, 256.0f};
+        const std::array<float, 3> sharp = HeightVector(HeightToNormalMethod::Sharp, h);
+        const std::array<float, 3> sobel = HeightVector(HeightToNormalMethod::SmoothSobel, h);
+        Check(sharp == std::array<float, 3>{8.0f - 16.0f, 16.0f - 2.0f, kSharpZ},
+              "Sharp: (h(-1,0) - h(0,0), h(0,0) - h(0,-1), 0.390625)");
+        // L = (1 + 2*8) + 64 = 81, R = (4 + 2*32) + 256 = 324, T = (1 + 2*2) + 4 = 9, B = (64 + 2*128) + 256 = 576.
+        Check(sobel == std::array<float, 3>{81.0f - 324.0f, 576.0f - 9.0f, kSobelZ},
+              "Smooth (Sobel): ((1,2,1) left - right, bottom - top, 3.125)");
+        std::mt19937 rng(7);
+        std::uniform_real_distribution<float> slope(-1.5f, 1.5f);
+        std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+        bool rbEqual = true;
+        for (int i = 0; i < 4096; ++i) {
+            const std::array<float, 3> v{slope(rng), slope(rng), kSharpZ};
+            const std::array<float, 3> c{unit(rng), unit(rng), 0.5f + 0.5f * unit(rng)};
+            const std::array<float, 3> gl = VirtualNormalTexel(v, c, NormalMapFormat::OpenGL);
+            const std::array<float, 3> dx = VirtualNormalTexel(v, c, NormalMapFormat::DirectX);
+            // y is negated before the encoding: the two greens lie on either side of 1/2.
+            rbEqual = rbEqual && gl[0] == dx[0] && gl[2] == dx[2] &&
+                      ((gl[1] - 0.5f) * (dx[1] - 0.5f) < 0.0f || (gl[1] == 0.5f && dx[1] == 0.5f));
+        }
+        Check(rbEqual, "Normal_DirectX equals Normal_OpenGL in x and z and mirrors y (4096 random texels)");
+    }
+
+    // ── Projects through the CPU evaluator ──
+    const std::string heightSha(64, 'a');
+    const std::string normalSha(64, 'b');
+    const std::string meshSha(64, 'c');
+    const std::string mesh8Sha(64, 'd');
+    auto resources = std::make_shared<MapResourceProvider>();
+    resources->Add(heightSha, HeightCodes(256, 1));
+    resources->Add(normalSha, NormalCodes(256, 2));
+    resources->Add(meshSha, NormalCodes(256, 3));
+    resources->Add(mesh8Sha, NormalCodes(256, 4, 8));
+    auto makeBuilder = [&](uint32_t size) {
+        Builder b(size, size, {{ChannelType::BaseColor, ChannelFormat::sRGB8},
+                               {ChannelType::Height, ChannelFormat::L16F},
+                               {ChannelType::Normal, ChannelFormat::RGB16F}});
+        b.AddResource(heightSha, 1);
+        b.AddResource(normalSha, 1);
+        b.AddResource(meshSha, 1);
+        b.AddResource(mesh8Sha, 1);
+        return b;
+    };
+    auto request = [&](Builder& b, NormalSourceKind kind, NormalMapFormat convention) {
+        VirtualNormalRequest r;
+        r.textureSet = b.SetId();
+        r.stack = b.StackId();
+        r.kind = kind;
+        r.convention = convention;
+        r.resources = resources;
+        return r;
+    };
+    auto kindOf = [](const render::Result<VirtualNormalResult>& result) -> std::string {
+        if (result) return "ok";
+        const std::optional<EvalErrorKind> kind = EvalErrorKindOf(result.error());
+        return kind ? std::string(EvalErrorKindName(*kind)) : result.error().Describe();
+    };
+
+    Builder b = makeBuilder(256);
+    core::Layer height = b.Fill("height", {{ChannelType::Height, Bitmap(heightSha)}},
+                                {{ChannelType::Height, Blend(BlendingMode::Normal, 0.75)}});
+    core::Layer colour = b.Fill("colour", {{ChannelType::BaseColor, Uniform(0.2, 0.4, 0.6)}}, {});
+    b.SetRoot({height, colour});
+    if (!b.Validate("height-normal")) return Finish();
+    CpuEvaluator cpu(templates, kWideLimits);
+
+    // The float32 read-out before the write rule: the stored half is its value toward zero.
+    {
+        render::Result<ChannelDag> dag =
+            BuildDag(b.project, b.SetId(), b.StackId(), ChannelType::Height, *templates, kDefaultTemplateId);
+        EvalEnvironment env{cpu.store(), cpu.cache(), resources.get(), nullptr};
+        EvaluationStats stats;
+        render::Result<Operand> readout =
+            dag ? EvaluateFloat32Readout(*dag, env, 0, 0, dag->base, stats) : render::Result<Operand>(render::Unexpected(dag.error()));
+        render::Result<TileImage> raw = readout ? cpu.store().Read(readout->tile) : render::Result<TileImage>(render::Unexpected(readout.error()));
+        EvaluateRequest channel;
+        channel.textureSet = b.SetId();
+        channel.stack = b.StackId();
+        channel.channel = ChannelType::Height;
+        channel.resources = resources;
+        render::Result<ChannelResult> stored = cpu.Evaluate(b.project, channel);
+        bool ok = raw && stored && readout->kind == Operand::Kind::Tile;
+        size_t offGrid = 0;
+        if (ok) {
+            if (readout->tile != kNoTile) cpu.cache().Unpin(readout->tile);
+            const std::vector<uint32_t> samples = Samples(*stored);
+            for (size_t i = 0; i < samples.size(); ++i) {
+                float v = 0.0f;
+                std::memcpy(&v, raw->texels.data() + i * 4, 4);
+                const uint32_t code = resources->Fetch(heightSha)->values[i];
+                const float content =
+                    arith::HalfToFloat(arith::HalfTowardZero(RangeValue(arith::UnormOperand(code, 16), true)));
+                const float expected = content * 0.75f;
+                ok = ok && v == expected && samples[i] == arith::HalfTowardZero(v);
+                if (arith::HalfToFloat(arith::HalfTowardZero(v)) != v) ++offGrid;
+            }
+        }
+        Check(ok && offGrid > 0,
+              "the Height read-out before the write rule is content x half(opacity) in float32, and the stored "
+              "half is its value toward zero (" + std::to_string(offGrid) + " values off the half grid)",
+              ok ? std::string() : Describe(stored));
+    }
+
+    // Tags (EXP-09) and the relief round.
+    render::Result<VirtualNormalResult> combined =
+        cpu.EvaluateNormal(b.project, 7, request(b, NormalSourceKind::Combined, NormalMapFormat::OpenGL));
+    {
+        render::Result<ChannelDag> dag =
+            BuildDag(b.project, b.SetId(), b.StackId(), ChannelType::Height, *templates, kDefaultTemplateId);
+        const bool ok = combined && dag && combined->tag.role == core::MeshMapRole::combined && combined->tag.relief &&
+                        combined->tag.relief->revision == 7 && combined->tag.relief->heightHash == Hex(dag->readoutHash) &&
+                        combined->tag.relief->method == HeightToNormalMethod::Sharp && combined->width == 256 &&
+                        combined->texels.size() == 256u * 256u * 3u;
+        Check(ok, "a combined normal is tagged `combined` with its relief round (revision, Height read-out hash, method)",
+              kindOf(combined));
+    }
+    {
+        Builder other = b;
+        // A BaseColor edit keeps the relief; a Height edit or the method changes it.
+        other.Stack().root_layers[0].fill->sources[ChannelType::BaseColor] = Uniform(0.9, 0.1, 0.1);
+        render::Result<VirtualNormalResult> colourEdit =
+            cpu.EvaluateNormal(other.project, 8, request(other, NormalSourceKind::Combined, NormalMapFormat::OpenGL));
+        other.Stack().root_layers[1].blending[ChannelType::Height] = Blend(BlendingMode::Normal, 0.5);
+        render::Result<VirtualNormalResult> heightEdit =
+            cpu.EvaluateNormal(other.project, 9, request(other, NormalSourceKind::Combined, NormalMapFormat::OpenGL));
+        other.Set().height_to_normal_method = HeightToNormalMethod::SmoothSobel;
+        render::Result<VirtualNormalResult> methodEdit =
+            cpu.EvaluateNormal(other.project, 10, request(other, NormalSourceKind::Combined, NormalMapFormat::OpenGL));
+        const bool ok = combined && colourEdit && heightEdit && methodEdit &&
+                        colourEdit->tag.relief->heightHash == combined->tag.relief->heightHash &&
+                        colourEdit->texels == combined->texels &&
+                        heightEdit->tag.relief->heightHash != combined->tag.relief->heightHash &&
+                        methodEdit->tag.relief->method == HeightToNormalMethod::SmoothSobel &&
+                        methodEdit->texels != heightEdit->texels;
+        Check(ok, "the relief round follows the Height content and the method, not the other channels");
+    }
+    {
+        Builder empty = makeBuilder(256);
+        render::Result<VirtualNormalResult> flat =
+            cpu.EvaluateNormal(empty.project, 1, request(empty, NormalSourceKind::Combined, NormalMapFormat::DirectX));
+        Builder noHeight(256, 256, {{ChannelType::BaseColor, ChannelFormat::sRGB8}});
+        render::Result<VirtualNormalResult> none =
+            cpu.EvaluateNormal(noHeight.project, 1, request(noHeight, NormalSourceKind::Combined, NormalMapFormat::OpenGL));
+        bool ok = flat && none && none->tag.relief && none->tag.relief->heightHash.empty();
+        for (const render::Result<VirtualNormalResult>* r : {&flat, &none}) {
+            if (!*r) continue;
+            for (size_t i = 0; i < (*r)->texels.size(); i += 3) {
+                ok = ok && Codes16({(*r)->texels[i], (*r)->texels[i + 1], (*r)->texels[i + 2]}) ==
+                               std::array<uint32_t, 3>{32767, 32767, 65535};
+            }
+        }
+        Check(ok, "an empty stack and a stack without Height or Normal give the flat normal everywhere");
+    }
+
+    // The Normal channel imports a bitmap with its green codes inverted.
+    {
+        Builder n = makeBuilder(256);
+        n.SetRoot({n.Fill("normal", {{ChannelType::Normal, Bitmap(normalSha)}}, {})});
+        EvaluateRequest channel;
+        channel.textureSet = n.SetId();
+        channel.stack = n.StackId();
+        channel.channel = ChannelType::Normal;
+        channel.resources = resources;
+        render::Result<ChannelResult> result = cpu.Evaluate(n.project, channel);
+        bool ok = static_cast<bool>(result);
+        if (ok) {
+            const std::vector<uint32_t> samples = Samples(*result);
+            const DecodedImage& image = *resources->Fetch(normalSha);
+            for (size_t i = 0; i < samples.size(); ++i) {
+                const uint32_t c = i % 3;
+                const uint32_t code = c == 1 ? 65535u - image.values[i] : image.values[i];
+                ok = ok && samples[i] == arith::HalfTowardZero(arith::UnormOperand(code, 16));
+            }
+        }
+        Check(ok, "the Normal channel stores an imported normal map as (r, 65535 - g, b) / 65535, half toward zero",
+              ok ? std::string() : Describe(result));
+        Builder dx = n;
+        dx.project.settings.normal_map_format = NormalMapFormat::DirectX;
+        render::Result<ChannelResult> refused = cpu.Evaluate(dx.project, channel);
+        Check(!refused && EvalErrorKindOf(refused.error()) == EvalErrorKind::UnsupportedSource,
+              "a bitmap on the Normal channel of a DirectX project fails with unsupported_source (not recorded)");
+    }
+
+    // Explicit failures of what is not recorded.
+    {
+        Builder big = makeBuilder(512);
+        Builder meshBound = makeBuilder(256);
+        core::MeshMapBinding binding;
+        binding.resource = meshSha;
+        binding.provenance = core::ImportedProvenance{"normal.png", meshSha, core::MeshMapRole::geometry_only,
+                                                      NormalMapFormat::OpenGL, "", {}};
+        meshBound.Set().mesh_maps[core::MeshMapUsage::Normal] = binding;
+        Builder dxNormal = makeBuilder(256);
+        dxNormal.project.settings.normal_map_format = NormalMapFormat::DirectX;
+        dxNormal.SetRoot({dxNormal.Fill("n", {{ChannelType::Normal, Uniform(0.4, 0.6, 1.0)}}, {})});
+        const std::string a = kindOf(cpu.EvaluateNormal(big.project, 1, request(big, NormalSourceKind::Combined, NormalMapFormat::OpenGL)));
+        const std::string m = kindOf(cpu.EvaluateNormal(meshBound.project, 1, request(meshBound, NormalSourceKind::Combined, NormalMapFormat::OpenGL)));
+        const std::string d = kindOf(cpu.EvaluateNormal(dxNormal.project, 1, request(dxNormal, NormalSourceKind::Combined, NormalMapFormat::OpenGL)));
+        const std::string p = kindOf(cpu.EvaluateNormal(b.project, 1, request(b, NormalSourceKind::GeometryOnly, NormalMapFormat::OpenGL)));
+        Check(a == "unsupported_source" && m == "unsupported_source" && d == "unsupported_source" && p == "missing_resource",
+              "unrecorded cases fail explicitly: a 512 set, a bound Normal mesh map, a non-empty Normal channel in a "
+              "DirectX project (unsupported_source); a pass-through without a Normal mesh map (missing_resource)",
+              a + " " + m + " " + d + " " + p);
+
+        // The geometry-only pass-through: the mesh map's codes, green inverted across conventions.
+        bool ok = true;
+        for (const auto& [sha, bits] : {std::pair{meshSha, 16u}, std::pair{mesh8Sha, 8u}}) {
+            for (const NormalMapFormat own : {NormalMapFormat::OpenGL, NormalMapFormat::DirectX}) {
+                Builder pass = makeBuilder(256);
+                core::MeshMapBinding bound;
+                bound.resource = sha;
+                bound.provenance = core::ImportedProvenance{"normal.png", sha, core::MeshMapRole::geometry_only, own, "", {}};
+                pass.Set().mesh_maps[core::MeshMapUsage::Normal] = bound;
+                for (const NormalMapFormat convention : {NormalMapFormat::OpenGL, NormalMapFormat::DirectX}) {
+                    render::Result<VirtualNormalResult> r =
+                        cpu.EvaluateNormal(pass.project, 3, request(pass, NormalSourceKind::GeometryOnly, convention));
+                    ok = ok && r && r->tag.role == core::MeshMapRole::geometry_only && !r->tag.relief;
+                    if (!r) continue;
+                    const DecodedImage& image = *resources->Fetch(sha);
+                    const uint32_t max = (1u << bits) - 1u;
+                    for (size_t i = 0; i < r->texels.size(); ++i) {
+                        uint32_t code = image.values[i];
+                        if (i % 3 == 1 && own != convention) code = max - code;
+                        ok = ok && arith::WriteUnorm(r->texels[i], bits) == code;
+                    }
+                }
+            }
+        }
+        Check(ok, "the geometry-only pass-through is the Normal mesh map's codes (8 and 16 bits), green inverted "
+                  "across conventions, tagged `geometry_only` without a relief round");
+    }
+    return Finish();
+}
+
+// ── height-normal-gpu-vs-cpu ─────────────────────────────────────────────────
+
+/// A float32 image of random heights with flat runs, steps and steep slopes.
+std::shared_ptr<DecodedImage> FloatHeights(uint32_t size, uint32_t seed) {
+    auto image = std::make_shared<DecodedImage>();
+    image->width = size;
+    image->height = size;
+    image->channels = 1;
+    image->encoding = render::TexelEncoding::Float32;
+    image->values.resize(size_t{size} * size);
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<float> any(-4.0f, 4.0f);
+    for (uint32_t y = 0; y < size; ++y) {
+        for (uint32_t x = 0; x < size; ++x) {
+            float v = any(rng);
+            if ((x / 7 + y / 5) % 3 == 0) v = 0.125f * static_cast<float>((x / 9) % 4);  // flat runs and steps
+            image->values[size_t{y} * size + x] = std::bit_cast<uint32_t>(v);
+        }
+    }
+    return image;
+}
+
+std::shared_ptr<DecodedImage> FloatNormals(uint32_t size, uint32_t seed) {
+    auto image = std::make_shared<DecodedImage>();
+    image->width = size;
+    image->height = size;
+    image->channels = 3;
+    image->encoding = render::TexelEncoding::Float32;
+    image->values.resize(size_t{size} * size * 3);
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+    for (size_t i = 0; i < size_t{size} * size; ++i) {
+        image->values[i * 3 + 0] = std::bit_cast<uint32_t>(unit(rng));
+        image->values[i * 3 + 1] = std::bit_cast<uint32_t>(unit(rng));
+        image->values[i * 3 + 2] = std::bit_cast<uint32_t>(0.5f + 0.5f * unit(rng));
+    }
+    return image;
+}
+
+/// Uploads `image` into `tiles` x `tiles` tiles of `size`, runs one VirtualNormalOp per tile with
+/// wrap-around across the tile grid, and returns every result word (tile-major).
+render::Result<std::vector<uint32_t>> VirtualNormalSweep(ITileStore& store, const DecodedImage& heights,
+                                                         const DecodedImage* normals, uint32_t tiles, uint32_t size,
+                                                         core::HeightToNormalMethod method,
+                                                         core::NormalMapFormat convention) {
+    TileFormat grey;
+    grey.encoding = render::TexelEncoding::Float32;
+    grey.channels = 1;
+    TileFormat rgb = grey;
+    rgb.channels = 3;
+    std::vector<TileHandle> h(size_t{tiles} * tiles);
+    std::vector<TileHandle> n(size_t{tiles} * tiles, kNoTile);
+    for (uint32_t ty = 0; ty < tiles; ++ty) {
+        for (uint32_t tx = 0; tx < tiles; ++tx) {
+            render::Result<TileHandle> tile = store.Allocate(grey, size, size);
+            if (!tile) return render::Unexpected(tile.error());
+            render::Result<void> up = store.Upload(*tile, heights, tx * size, ty * size);
+            if (!up) return render::Unexpected(up.error());
+            h[size_t{ty} * tiles + tx] = *tile;
+            if (normals != nullptr) {
+                render::Result<TileHandle> nt = store.Allocate(rgb, size, size);
+                if (!nt) return render::Unexpected(nt.error());
+                render::Result<void> nup = store.Upload(*nt, *normals, tx * size, ty * size);
+                if (!nup) return render::Unexpected(nup.error());
+                n[size_t{ty} * tiles + tx] = *nt;
+            }
+        }
+    }
+    std::vector<uint32_t> out;
+    for (uint32_t ty = 0; ty < tiles; ++ty) {
+        for (uint32_t tx = 0; tx < tiles; ++tx) {
+            render::Result<TileHandle> dst = store.Allocate(rgb, size, size);
+            if (!dst) return render::Unexpected(dst.error());
+            VirtualNormalOp op;
+            op.dst = *dst;
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const uint32_t nx = (tx + tiles + static_cast<uint32_t>(dx + 1) - 1) % tiles;
+                    const uint32_t ny = (ty + tiles + static_cast<uint32_t>(dy + 1) - 1) % tiles;
+                    op.height[static_cast<size_t>((dy + 1) * 3 + dx + 1)] = h[size_t{ny} * tiles + nx];
+                }
+            }
+            if (normals != nullptr) op.normal = Operand::Of(n[size_t{ty} * tiles + tx]);
+            else op.normal = Operand::Constant({0.3f, 0.7f, 0.9f}, 1.0f);
+            op.method = method;
+            op.convention = convention;
+            render::Result<void> queued = store.VirtualNormal(op);
+            if (!queued) return render::Unexpected(queued.error());
+            render::Result<TileImage> image = store.Read(*dst);
+            if (!image) return render::Unexpected(image.error());
+            for (size_t i = 0; i < image->texels.size(); i += 4) {
+                uint32_t word = 0;
+                std::memcpy(&word, image->texels.data() + i, 4);
+                out.push_back(word);
+            }
+        }
+    }
+    return out;
+}
+
+/// A raw blend (the float32 read-out) of a random source with coverage over a constant base on
+/// every channel format.
+render::Result<std::vector<uint32_t>> RawReadoutSweep(ITileStore& store, ChannelFormat channelFormat, uint32_t size) {
+    TileFormat format = TileFormatOf(channelFormat, true);
+    render::Result<TileHandle> src = store.Allocate(format, size, size);
+    if (!src) return render::Unexpected(src.error());
+    // Source colours and coverage through a blend of two constants by a random mask, written with
+    // the format's rules (the shape of an isolated root composite).
+    std::shared_ptr<DecodedImage> mask = std::make_shared<DecodedImage>();
+    mask->width = size;
+    mask->height = size;
+    mask->channels = 1;
+    mask->encoding = render::TexelEncoding::Unorm16;
+    std::mt19937 rng(11);
+    for (uint32_t i = 0; i < size * size; ++i) mask->values.push_back(rng() % 65536u);
+    render::Result<TileHandle> maskTile = store.Allocate(TileFormatOf(ChannelFormat::L16), size, size);
+    if (!maskTile) return render::Unexpected(maskTile.error());
+    render::Result<void> up = store.Upload(*maskTile, *mask, 0, 0);
+    if (!up) return render::Unexpected(up.error());
+    BlendOp layer;
+    layer.dst = *src;
+    layer.acc = Operand::Constant({0.0f, 0.0f, 0.0f}, 0.0f);
+    layer.source = Operand::Constant({0.8125f, 0.3f, 0.61f}, 1.0f);
+    layer.mask = Operand::Of(*maskTile);
+    layer.mode = BlendingMode::Normal;
+    layer.opacity = 0.9f;
+    render::Result<void> queued = store.Blend(layer);
+    if (!queued) return render::Unexpected(queued.error());
+    TileFormat raw;
+    raw.encoding = render::TexelEncoding::Float32;
+    raw.channels = format.channels;
+    render::Result<TileHandle> dst = store.Allocate(raw, size, size);
+    if (!dst) return render::Unexpected(dst.error());
+    BlendOp readout;
+    readout.dst = *dst;
+    readout.acc = Operand::Constant({0.25f, 0.5f, 0.75f}, 1.0f);
+    readout.source = Operand::Of(*src);
+    readout.mode = BlendingMode::Replace;
+    readout.rawOutput = true;
+    queued = store.Blend(readout);
+    if (!queued) return render::Unexpected(queued.error());
+    render::Result<TileImage> image = store.Read(*dst);
+    if (!image) return render::Unexpected(image.error());
+    std::vector<uint32_t> out(image->texels.size() / 4);
+    std::memcpy(out.data(), image->texels.data(), out.size() * 4);
+    return out;
+}
+
+int RunHeightNormalGpuVsCpu(const fs::path& assets, const fs::path& dir) {
+    render::Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    Info("adapter " + engine.Capabilities().value_or(render::CapabilityReport{}).adapter);
+    auto token = std::make_shared<const int>(0);
+    auto onGpu = [&](auto&& body) -> render::Result<std::vector<uint32_t>> {
+        std::future<render::Result<std::vector<uint32_t>>> future = engine.Submit(
+            token, [&](render::EngineContext& context, const int&) -> render::Result<std::vector<uint32_t>> {
+                GpuTileStore gpu(context.Device());
+                gpu.BeginRequest(context);
+                render::Result<std::vector<uint32_t>> result = body(gpu);
+                render::Result<void> flushed = gpu.Flush();
+                gpu.EndRequest();
+                if (result && !flushed) return render::Unexpected(flushed.error());
+                return result;
+            });
+        return Get(future);
+    };
+
+    // The kernel over a 3 x 3 grid of 72-texel tiles (wrap-around across tile edges and the set
+    // border), with height tiles and constants, Normal tiles and constants.
+    constexpr uint32_t kTiles = 3;
+    constexpr uint32_t kSize = 72;
+    std::shared_ptr<DecodedImage> heights = FloatHeights(kTiles * kSize, 5);
+    std::shared_ptr<DecodedImage> normals = FloatNormals(kTiles * kSize, 6);
+    size_t compared = 0;
+    std::vector<std::string> failures;
+    for (const core::HeightToNormalMethod method : {core::HeightToNormalMethod::Sharp, core::HeightToNormalMethod::SmoothSobel}) {
+        for (const core::NormalMapFormat convention : {core::NormalMapFormat::OpenGL, core::NormalMapFormat::DirectX}) {
+            for (const bool withNormals : {false, true}) {
+                const std::string label = std::string(core::ToString(method)) + " " +
+                                          std::string(core::ToString(convention)) + (withNormals ? " normal tiles" : " normal constant");
+                CpuTileStore cpu;
+                render::Result<std::vector<uint32_t>> expected =
+                    VirtualNormalSweep(cpu, *heights, withNormals ? normals.get() : nullptr, kTiles, kSize, method, convention);
+                render::Result<std::vector<uint32_t>> actual = onGpu([&](GpuTileStore& gpu) {
+                    return VirtualNormalSweep(gpu, *heights, withNormals ? normals.get() : nullptr, kTiles, kSize, method, convention);
+                });
+                if (!expected || !actual) {
+                    failures.push_back(label + ": " + (expected ? Describe(actual) : Describe(expected)));
+                    continue;
+                }
+                std::string first;
+                const size_t mismatches = Mismatches(*expected, *actual, first, render::TexelEncoding::Float32);
+                compared += expected->size();
+                if (mismatches != 0) failures.push_back(label + ": " + std::to_string(mismatches) + " mismatches; " + first);
+            }
+        }
+    }
+    for (const std::string& failure : failures) Check(false, "virtual normal kernel", failure);
+    Check(failures.empty(), "the virtual normal kernel equals the CPU reference bit for bit across tile edges (" +
+                                std::to_string(compared) + " values, both methods and conventions)");
+
+    failures.clear();
+    compared = 0;
+    for (const ChannelFormat channelFormat : kAllFormats) {
+        CpuTileStore cpu;
+        render::Result<std::vector<uint32_t>> expected = RawReadoutSweep(cpu, channelFormat, 64);
+        render::Result<std::vector<uint32_t>> actual = onGpu([&](GpuTileStore& gpu) { return RawReadoutSweep(gpu, channelFormat, 64); });
+        const std::string label(core::ToString(channelFormat));
+        if (!expected || !actual) {
+            failures.push_back(label + ": " + (expected ? Describe(actual) : Describe(expected)));
+            continue;
+        }
+        std::string first;
+        const size_t mismatches = Mismatches(*expected, *actual, first, render::TexelEncoding::Float32);
+        compared += expected->size();
+        if (mismatches != 0) failures.push_back(label + ": " + std::to_string(mismatches) + " mismatches; " + first);
+    }
+    for (const std::string& failure : failures) Check(false, "raw read-out", failure);
+    Check(failures.empty(), "the float32 read-out (raw blend) equals the CPU reference bit for bit on every channel format (" +
+                                std::to_string(compared) + " values)");
+
+    // The whole evaluation: Evaluator (GPU) and CpuEvaluator give the same virtual maps.
+    std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
+    const std::string heightSha(64, 'e');
+    const std::string normalSha(64, 'f');
+    auto resources = std::make_shared<MapResourceProvider>();
+    resources->Add(heightSha, HeightCodes(256, 9));
+    resources->Add(normalSha, NormalCodes(256, 10));
+    Builder b(256, 256, {{ChannelType::Height, ChannelFormat::L16F}, {ChannelType::Normal, ChannelFormat::RGB16F}});
+    b.AddResource(heightSha, 1);
+    b.AddResource(normalSha, 1);
+    b.SetRoot({b.Fill("h", {{ChannelType::Height, Bitmap(heightSha)}}, {{ChannelType::Height, Blend(BlendingMode::Normal, 0.75)}}),
+               b.Fill("h2", {{ChannelType::Height, Bitmap(heightSha)}}, {{ChannelType::Height, Blend(BlendingMode::LinearDodge, 0.4)}}),
+               b.Fill("n", {{ChannelType::Normal, Bitmap(normalSha)}}, {{ChannelType::Normal, Blend(BlendingMode::Normal, 0.6)}})});
+    if (!b.Validate("height-normal-gpu-vs-cpu")) return Finish();
+    bool same = true;
+    std::string detail;
+    for (const core::HeightToNormalMethod method : {core::HeightToNormalMethod::Sharp, core::HeightToNormalMethod::SmoothSobel}) {
+        b.Set().height_to_normal_method = method;
+        for (const core::NormalMapFormat convention : {core::NormalMapFormat::OpenGL, core::NormalMapFormat::DirectX}) {
+            VirtualNormalRequest request;
+            request.textureSet = b.SetId();
+            request.stack = b.StackId();
+            request.convention = convention;
+            request.resources = resources;
+            CpuEvaluator cpu(templates, kWideLimits);
+            render::Result<VirtualNormalResult> expected = cpu.EvaluateNormal(b.project, 2, request);
+            Evaluator gpu(engine, templates);
+            std::future<render::Result<VirtualNormalResult>> future =
+                gpu.EvaluateNormal(core::Snapshot{2, std::make_shared<const core::Project>(b.project)}, request);
+            render::Result<VirtualNormalResult> actual = Get(future);
+            gpu.Shutdown();
+            const bool equal = expected && actual && expected->tag == actual->tag &&
+                               std::memcmp(expected->texels.data(), actual->texels.data(), expected->texels.size() * 4) == 0 &&
+                               expected->texels.size() == actual->texels.size();
+            if (!equal) detail += std::string(core::ToString(method)) + "/" + std::string(core::ToString(convention)) + " ";
+            same = same && equal;
+        }
+    }
+    Check(same, "Evaluator (GPU) and CpuEvaluator give the same virtual normal maps and tags (both methods and conventions)", detail);
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     const std::string_view mode = argc > 1 ? argv[1] : "";
     if (argc < 3) {
         std::fprintf(stderr,
-                     "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks <assets-dir> | "
+                     "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks|height-normal <assets-dir> | "
                      "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
-                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|masks-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
+                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|masks-gpu-vs-cpu|"
+                     "height-normal-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
         return 2;
     }
@@ -4636,6 +5294,7 @@ int main(int argc, char** argv) {
         if (mode == "profile") return RunProfile(assets);
         if (mode == "sources") return RunSources(assets);
         if (mode == "masks") return RunMasks(assets);
+        if (mode == "height-normal") return RunHeightNormal(assets);
         if (mode == "evaluate") {
             if (argc < 6) {
                 std::fprintf(stderr, "usage: uzp-evaluator-tests evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu\n");
@@ -4670,6 +5329,7 @@ int main(int argc, char** argv) {
         else if (mode == "pow-hardware") code = RunPowHardware(dir);
         else if (mode == "trig-hardware") code = RunTrigHardware(dir);
         else if (mode == "masks-gpu-vs-cpu") code = RunMasksGpuVsCpu(assets, dir);
+        else if (mode == "height-normal-gpu-vs-cpu") code = RunHeightNormalGpuVsCpu(assets, dir);
         else if (mode == "uv-coverage") {
             if (argc < 6) {
                 std::fprintf(stderr, "usage: uzp-evaluator-tests uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");

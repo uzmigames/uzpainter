@@ -99,6 +99,18 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             result.sha256 = bitmap.resource.sha256;
             result.projection = *projection;
             result.signedRange = !mask && ctx.channel == ChannelType::Height;
+            if (!mask && ctx.channel == ChannelType::Normal) {
+                // The Normal channel of an OpenGL project stores an imported normal map with its
+                // green codes inverted (blend-modes.json `blend-normal-channel-import`); a
+                // DirectX project's import is not recorded.
+                if (ctx.project.settings.normal_map_format != core::NormalMapFormat::OpenGL) {
+                    return EvalFail(EvalErrorKind::UnsupportedSource,
+                                    "a bitmap on the Normal channel of a DirectX project is not "
+                                    "recorded (phase1.12_compositor-height-normal recording request)",
+                                    uid);
+                }
+                result.invertGreen = true;
+            }
             // Bound by content hash (LAY-13): the alias and, under legacy colour management, the
             // colour-space tag do not change the samples (sources.h).
             writer.Str("bitmap").Str(result.sha256);

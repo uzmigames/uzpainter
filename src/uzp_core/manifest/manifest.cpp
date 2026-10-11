@@ -342,6 +342,7 @@ json::Value Write(const TextureSet& set) {
     for (const auto& [name, settings] : set.bake_settings.per_baker) per_baker[name] = settings;
     bake["per_baker"] = std::move(per_baker);
     o["bake_settings"] = std::move(bake);
+    o["height_to_normal_method"] = EnumValue(set.height_to_normal_method);
     json::Array stacks;
     for (const Stack& stack : set.stacks) {
         json::Object s = stack.extra;
@@ -729,6 +730,9 @@ TextureSet ReadTextureSet(const json::Value& value, const std::string& path) {
         set.bake_settings.per_baker[name] = AsObject(settings, b.Path("per_baker") + "." + name);
     }
     set.bake_settings.extra = b.Rest();
+    if (const json::Value* method = r.GetOptional("height_to_normal_method")) {
+        set.height_to_normal_method = AsEnum<HeightToNormalMethod>(*method, r.Path("height_to_normal_method"));
+    }
     const json::Array& stacks = r.Array("stacks");
     for (std::size_t i = 0; i < stacks.size(); ++i) {
         ObjectReader s(stacks[i], r.Path("stacks") + "[" + std::to_string(i) + "]");

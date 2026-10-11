@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import numpy as np
 
+from tools.parity.fit import hwmath
 from tools.parity.fit.normal import (
-    SCALE,
-    height_normal,
+    SHARP_Z,
+    SOBEL_Z,
+    half_toward_zero,
+    height_layers,
+    height_readout,
+    height_vector,
     normal_maps,
     unorm,
     uv_domain,
@@ -25,39 +30,78 @@ def test_unorm8_keeps_four_extra_bits_before_rounding() -> None:
     assert unorm(np.array([128 / 255, 0.5, 1.0]), 8).tolist() == [128, 127, 255]
 
 
-def test_flat_height_gives_the_flat_normal_in_both_formats() -> None:
-    maps = normal_maps(np.zeros((4, 4)))
-    for name in ("Normal_OpenGL", "Normal_DirectX"):
-        assert maps[name].shape == (4, 4, 3)
-        assert (maps[name] == np.array([32767, 32767, 65535])).all()
+def test_hardware_rsqrt_is_within_two_ulps_of_the_correct_one() -> None:
+    y = np.linspace(1.0, 4.0, 4097, dtype=np.float32)
+    correct = hwmath.rsqrt_correct(y)
+    exact = (1.0 / np.sqrt(y.astype(np.float64))).astype(np.float32)
+    assert np.all(np.abs(correct.view(np.int32) - exact.view(np.int32)) <= 1)
+    moved = hwmath.rsqrt(y).view(np.int32) - correct.view(np.int32)
+    assert set(np.unique(moved).tolist()) <= {-2, -1, 0, 1}
 
 
-def test_ramp_along_x_tilts_x_by_the_fitted_scale() -> None:
-    # Slope 75/256 per texel times k = 2.56 gives 0.75: normalize(-0.75, 0, 1) = (-0.6, 0, 0.8).
-    assert SCALE == 2.56
-    height = np.tile(np.arange(8) * 75 / 256, (8, 1))
-    nx, ny, nz = height_normal(height)
-    assert np.isclose(nx[3, 3], -0.6, atol=1e-6)
-    assert ny[3, 3] == 0.0
-    assert np.isclose(nz[3, 3], 0.8, atol=1e-6)
-    maps = normal_maps(height)
-    assert maps["Normal_OpenGL"][3, 3].tolist() == [13107, 32767, 58981]
-    assert maps["Normal_DirectX"][3, 3].tolist() == [13107, 32767, 58981]
+def test_flat_height_gives_the_flat_normal_in_both_formats_and_methods() -> None:
+    for method in ("Sharp", "SmoothSobel"):
+        maps = normal_maps(np.zeros((4, 4)), method)
+        for name in ("Normal_OpenGL", "Normal_DirectX"):
+            assert maps[name].shape == (4, 4, 3)
+            assert (maps[name] == np.array([32767, 32767, 65535])).all()
+
+
+def test_stencils_read_backward_differences_and_the_sobel_neighbourhood() -> None:
+    h = np.arange(25, dtype=np.float32).reshape(5, 5) ** 2
+    x, y, z = height_vector(h, "Sharp")
+    assert x[2, 2] == h[2, 1] - h[2, 2] and y[2, 2] == h[2, 2] - h[1, 2] and z[2, 2] == SHARP_Z
+    x, y, z = height_vector(h, "SmoothSobel")
+    left = h[1, 1] + 2 * h[2, 1] + h[3, 1]
+    right = h[1, 3] + 2 * h[2, 3] + h[3, 3]
+    top = h[1, 1] + 2 * h[1, 2] + h[1, 3]
+    bottom = h[3, 1] + 2 * h[3, 2] + h[3, 3]
+    assert x[2, 2] == left - right and y[2, 2] == bottom - top and z[2, 2] == SOBEL_Z
 
 
 def test_ramp_down_the_rows_flips_green_between_opengl_and_directx() -> None:
     # Height growing towards lower rows falls towards +v: OpenGL green up, DirectX green down.
-    height = np.tile((np.arange(8) * 75 / 256)[:, None], (1, 8))
+    height = np.tile((np.arange(8) * 75 / 256)[:, None], (1, 8)).astype(np.float32)
     maps = normal_maps(height)
-    assert maps["Normal_OpenGL"][3, 3].tolist() == [32767, 52428, 58981]
-    assert maps["Normal_DirectX"][3, 3].tolist() == [32767, 13107, 58981]
+    gl, dx = maps["Normal_OpenGL"][3, 3], maps["Normal_DirectX"][3, 3]
+    assert gl[0] == dx[0] == 32767 and gl[2] == dx[2]
+    assert gl[1] > 32767 > dx[1]
 
 
 def test_backward_difference_wraps_at_the_left_border() -> None:
     # Column 0 differences against the last column (-7 * slope): x tilts towards +x.
-    height = np.tile(np.arange(8) * 75 / 256, (8, 1))
+    height = np.tile(np.arange(8) * 75 / 256, (8, 1)).astype(np.float32)
     first = normal_maps(height)["Normal_OpenGL"][3, 0]
     assert first[0] > 32767 and first[1] == 32767
+
+
+def test_readout_keeps_the_unquantised_product_and_stacks_quantise_per_layer() -> None:
+    q = half_toward_zero(np.array([0.3, -0.7, 0.123], np.float32))
+    single = height_readout(q, [("Normal", 0.75)])
+    assert np.array_equal(single, (q * np.float32(0.75)).astype(np.float32))
+    stacked = height_readout(q, [("Normal", 1.0), ("LinearDodge", 1.0), ("LinearDodge", 1.0)])
+    assert np.array_equal(stacked, half_toward_zero(half_toward_zero(q + q) + q))
+
+
+def test_height_layers_follow_the_recorded_order() -> None:
+    steps = [
+        {"step": 3, "call": "x.layerstack.insert_fill", "args": {"texture_set": "s0"}},
+        {"step": 4, "call": "x.layerstack.insert_fill", "args": {"above_step": 3}},
+        {
+            "step": 5,
+            "call": "x.Node.set_blending_mode",
+            "args": {"node_step": 4, "blending_mode": "LinearDodge", "channel": "Height"},
+        },
+        {
+            "step": 6,
+            "call": "x.Node.set_opacity",
+            "args": {"node_step": 3, "opacity": 0.5, "channel": "Height"},
+        },
+        {"step": 7, "call": "x.layerstack.insert_fill", "args": {"texture_set": "s1"}},
+    ]
+    manifest = {"instruction_sequence": {"steps": steps}}
+    assert height_layers(manifest, "s0") == [("Normal", 0.5), ("LinearDodge", 1.0)]
+    assert height_layers(manifest, "s1") == [("Normal", 1.0)]
 
 
 def test_uv_domain_of_a_full_quad_is_the_image_minus_its_border() -> None:

@@ -274,6 +274,7 @@ const evaluator_sources = [_][]const u8{
     "evaluator/geometry_mask.cpp",
     "evaluator/gpu_store.cpp",
     "evaluator/hash.cpp",
+    "evaluator/height_to_normal.cpp",
     "evaluator/hwmath.cpp",
     "evaluator/kernelgen.cpp",
     "evaluator/profile.cpp",

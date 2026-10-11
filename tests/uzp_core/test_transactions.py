@@ -29,7 +29,7 @@ SCHEMA_PATH = REPO_ROOT / "src" / "uzp_core" / "schema" / "manifest.schema.json"
 # owner's machine (decision 028) both assert this value, so equal results on the two machines
 # are a passing test on each. Re-pinned by phase1.4_mesh-importers for decision 031 (unset tangent
 # space = PerVertex); the only byte that changed is settings.tangent_space.
-INTEGRATED_DIGEST = "ec8de0f0b16ca66f95b4da628d9d5066087435d57f70b9d68bb1b6e3db03325c"
+INTEGRATED_DIGEST = "1bbd87fb08f1bf6b778f3b3b5d4e62381279ac70a7da09414fca3fd9bbbd5ea7"
 
 NATIVE_CASES = (
     "snapshot_immutability",  # 3.1

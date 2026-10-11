@@ -7,9 +7,8 @@ Every documented `BlendingMode` as the evaluator implements it (`src/evaluator/a
 mode per texture set on eight channels of six formats at opacities 1, 0.5 and 0.25) and on the
 Normal channel (`blend-normal-channel`), against both recordings, as |delta| statistics in export
 units only (CONTRACT §6.4; nothing recorded is published). The Normal-channel stacks import the
-authored normal fields with the OpenGL green convention (r, 1 - g, b) applied to the fixture
-bytes, the import rule `blend-modes.json` records for that channel (phase1.12 owns the import).
-Run on the owner's machine:
+authored normal fields as they are: the evaluator applies the channel's import rule (r, 1 - g, b)
+that `blend-modes.json` records (phase1.12_compositor-height-normal). Run on the owner's machine:
 
     python tests/evaluator/blend_fits.py <uzp-evaluator-tests.exe> <work-dir>
 
@@ -19,7 +18,6 @@ and requires the published file to match.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import sys
@@ -42,14 +40,12 @@ from tests.evaluator import masks_fits
 from tests.evaluator.quantisation_fits import exported, unit
 from tests.evaluator.sources_fits import channel_formats, export16, pooled, srgb8_decode
 from tests.evaluator.test_compositor_tile_dag import (
-    FIXTURES,
     MANIFESTS,
     REPO_ROOT,
     evaluate,
     raster,
     spec_from_manifest,
 )
-from tools.parity.feasibility import png
 from tools.parity.fit.common import Context, document, entry, parameter, residual, source
 from tools.parity.schemas import load_json
 from tools.parity.store.store import locate
@@ -232,26 +228,6 @@ def separable_formula(mode: str) -> str:
     return text
 
 
-def flipped_normal_resources(spec: dict[str, Any], workdir: Path) -> None:
-    """Replaces the spec's normal fields by copies with the green codes inverted (65535 - g)."""
-    remap: dict[str, str] = {}
-    for resource in spec["resources"]:
-        name = resource["png"][:-4]
-        codes = png.decode((FIXTURES / f"{name}.png").read_bytes()).astype(np.int64)
-        codes[..., 1] = 65535 - codes[..., 1]
-        data = png.encode(codes.astype(np.uint16), 16)
-        (workdir / f"{name}-gl.png").write_bytes(data)
-        digest = hashlib.sha256(data).hexdigest()
-        remap[resource["sha256"]] = digest
-        resource["sha256"] = digest
-        resource["png"] = f"{name}-gl.png"
-    for layer in spec["layers"]:
-        layer["uid"] += 1000  # clear of the default template's object ids
-        for item in layer["sources"].values():
-            if "bitmap" in item:
-                item["bitmap"] = remap[item["bitmap"]]
-
-
 class Runs:
     """Evaluations of the blend sweeps (CPU store unless asked), cached per texture set."""
 
@@ -270,7 +246,8 @@ class Runs:
             if stem == NORMAL_CHANNEL:
                 spec = spec_from_manifest(manifest, texture_set, workdir, ["Normal"])
                 spec["channels"] = [{"type": "Normal", "format": "RGB16F"}]
-                flipped_normal_resources(spec, workdir)
+                for layer in spec["layers"]:
+                    layer["uid"] += 1000  # clear of the default template's object ids
             else:
                 spec = spec_from_manifest(
                     manifest, texture_set, workdir, list(channel_formats(manifest))

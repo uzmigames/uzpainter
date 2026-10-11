@@ -18,7 +18,10 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace uzp::evaluator {
@@ -63,6 +66,9 @@ struct EvalEnvironment {
     const IResourceProvider* resources = nullptr;
     /// May be null when the DAG has no geometry mask (geometry_mask.h).
     const IGeometryMaskProvider* geometry = nullptr;
+    /// Normal-channel bitmaps with their green codes inverted (the channel's import rule), by
+    /// resource hash, made once per evaluation.
+    std::unordered_map<std::string, std::shared_ptr<const DecodedImage>> greenInverted{};
 };
 
 /// Evaluates every tile of `dag`, reading each back. The root meets the base as the profile says
@@ -72,5 +78,16 @@ struct EvalEnvironment {
 /// cached.
 [[nodiscard]] render::Result<ChannelResult> EvaluateChannel(const ChannelDag& dag,
                                                             EvalEnvironment& env);
+
+/// The read-out of tile (`tx`, `ty`) before the channel's write rule (the virtual normal maps'
+/// input, height_to_normal.h): the isolated root composited over `base` in float32, a constant
+/// for an empty stack, else a raw 32-bit float tile of the channel's channel count, cached and
+/// left pinned in `env.cache` for the caller to unpin. Fails with `unsupported_source` under a
+/// profile whose root is not isolated.
+[[nodiscard]] render::Result<Operand> EvaluateFloat32Readout(const ChannelDag& dag,
+                                                             EvalEnvironment& env, uint32_t tx,
+                                                             uint32_t ty,
+                                                             const std::array<float, 3>& base,
+                                                             EvaluationStats& stats);
 
 }  // namespace uzp::evaluator

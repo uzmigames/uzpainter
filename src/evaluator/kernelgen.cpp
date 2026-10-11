@@ -99,7 +99,7 @@ render::KernelSource BlendKernelSource(const BlendKernelVariant& variant) {
                   std::to_string(variant.format.BytesPerChannel() * 8) +
                   (variant.format.IsUnorm() ? (variant.format.srgb ? "srgb" : "unorm") : "float") +
                   "_c" + std::to_string(variant.format.channels) + (variant.format.alpha ? "a" : "") +
-                  (halfCoverage ? (fromHalf ? "h2" : "h") : "");
+                  (halfCoverage ? (fromHalf ? "h2" : "h") : "") + (variant.rawOutput ? "_raw" : "");
     source.hlsl = std::string(kBlendHlsl, sizeof(kBlendHlsl));
     source.entryPoint = "main";
     source.defines = {
@@ -109,6 +109,7 @@ render::KernelSource BlendKernelSource(const BlendKernelVariant& variant) {
         std::string("UZP_SRGB=") + (variant.format.srgb ? "1" : "0"),
         std::string("UZP_ALPHA=") + (variant.format.alpha ? "1" : "0"),
         std::string("UZP_HALF_COVERAGE=") + (halfCoverage ? (fromHalf ? "2" : "1") : "0"),
+        std::string("UZP_RAW_OUTPUT=") + (variant.rawOutput ? "1" : "0"),
     };
     source.includes = {render::image_pass_detail::CommonInclude(), TablesInclude()};
     return source;
@@ -143,6 +144,44 @@ std::array<uint32_t, kBlendParamsStride> EncodeBlendParams(const BlendOp& op,
     params[kParamTable16Srv] = bindings.table16Srv;
     params[kParamMaskEncoding] = render::image_pass_detail::EncodingConstant(bindings.maskEncoding);
     params[kParamPowSrv] = bindings.powSrv;
+    return params;
+}
+
+render::KernelSource VirtualNormalKernelSource() {
+    render::KernelSource source;
+    source.name = "evaluator_virtual_normal";
+    source.hlsl = std::string(kBlendHlsl, sizeof(kBlendHlsl));
+    source.entryPoint = "main";
+    source.defines = {
+        "UZP_VNORMAL=1",
+        "UZP_MODE_Normal=1",
+        "UZP_ENC=" + std::to_string(render::image_pass_detail::EncodingConstant(render::TexelEncoding::Float32)),
+        "UZP_CHANNELS=3",
+        "UZP_SRGB=0",
+        "UZP_ALPHA=0",
+        "UZP_RAW_OUTPUT=1",
+    };
+    source.includes = {render::image_pass_detail::CommonInclude(), TablesInclude()};
+    return source;
+}
+
+std::array<uint32_t, kBlendParamsStride> EncodeVirtualNormalParams(const VirtualNormalOp& op,
+                                                                   const VirtualNormalBindings& bindings) {
+    std::array<uint32_t, kBlendParamsStride> params{};
+    params[0] = bindings.width;
+    params[1] = bindings.height;
+    uint32_t flags = 0;
+    if (op.height[4] != kNoTile) flags |= 1u;
+    if (op.normal.kind == Operand::Kind::Tile) flags |= 2u;
+    if (op.method == core::HeightToNormalMethod::SmoothSobel) flags |= 4u;
+    if (op.convention == core::NormalMapFormat::DirectX) flags |= 8u;
+    params[2] = flags;
+    params[3] = bindings.dstUav;
+    params[4] = bindings.table16Srv;
+    params[5] = std::bit_cast<uint32_t>(op.heightConstant);
+    params[6] = bindings.normalSrv;
+    for (size_t i = 0; i < 3; ++i) params[7 + i] = std::bit_cast<uint32_t>(op.normal.value[i]);
+    for (size_t i = 0; i < 9; ++i) params[10 + i] = bindings.heightSrv[i];
     return params;
 }
 

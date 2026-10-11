@@ -172,6 +172,12 @@ UZP_ENUM_TABLE(MeshMapRole, "geometry_only", "combined");
 enum class BakerBackend { embree, dx12_rt, vulkan_rt };
 UZP_ENUM_TABLE(BakerBackend, "embree", "dx12_rt", "vulkan_rt");
 
+/// A texture set's height-to-normal method (Texture Set Settings > Channels, "Height to normal
+/// method": `Sharp`, the default, and `Smooth (Sobel)`; decision 047). No documented API reads or
+/// sets it; parity/semantics/height-to-normal.json holds both stencils.
+enum class HeightToNormalMethod { Sharp, SmoothSobel };
+UZP_ENUM_TABLE(HeightToNormalMethod, "Sharp", "SmoothSobel");
+
 #undef UZP_ENUM_TABLE
 
 /// The documented node type of a layer or effect kind (the tables share their order).
