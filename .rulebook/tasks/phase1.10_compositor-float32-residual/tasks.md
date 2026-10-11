@@ -17,7 +17,7 @@
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
 - [x] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.3 Run tests and confirm they pass (tests/evaluator 265 passed after merging main; tests/parity 696 passed)
 
 ## Status (2026-10-11)
 - 2.1, 2.2, 3.1: the float32 order was not identified (decision 044, `parity/reports/phase1/compositor-float32-residual.md`); found and shipped instead as profile `painter-12.1-isolated-half-alpha`: the sRGB8 coverage written through binary16 (`group-masks` s2-s3 sRGB8 exact) and plain 32-bit float uniform colours. A diagnostic recording is specified in the report.

@@ -73,11 +73,12 @@ Over a black root the export is `g · ag` written once, lossless on the 2^-24 gr
 
 | Step | Command | Result |
 |---|---|---|
-| Type-check | `python -m mypy` | see the task's final run (report of the coordinator) |
+| Type-check | `python -m mypy` | no issues (210 files, after merging main `c3708d3`) |
 | Lint | `python -m ruff check .`, `python -m ruff format --check` (touched files) | clean |
 | Build | `zig build evaluator-tests`, `zig build painter`, `zig build uzp-store-inspect-tests` | exit 0, no warning |
 | Unit cases | `arith`, `templates`, `order`, `cache`, `admission`, `sources`, `profile`, `masks` (CPU); `gpu-vs-cpu`, `kernel-sweep`, `masks-gpu-vs-cpu`, `projection-gpu-vs-cpu` (DX12) | all passed |
-| Tests | `python -m pytest tests/evaluator` | see the task's final run |
+| Tests | `python -m pytest tests/evaluator`, `python -m pytest tests/parity` | 265 passed on the branch merged with main (264 before the merge), with the store and the DX12 adapter, nothing skipped; 696 passed (parity) |
+| Guard | `python -m tools.parity.guard` | 0 blocked |
 
 ## Open items
 
