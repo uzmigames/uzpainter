@@ -184,6 +184,15 @@ struct ChannelDag {
                                                   const TemplateLibrary& templates,
                                                   std::string_view templateId);
 
+/// The mask of layer `uid` of `frame`'s stack (at any depth; an instance's is its source's, as the
+/// channel DAGs hold it) in a node with only `uid`, `mask` and `maskStack` set: the mask does not
+/// depend on the channel, so `frame` (any channel's DAG of that stack) gives only the grid and the
+/// profile, and the hashes equal those of every channel DAG holding the layer (one cached raster).
+/// The layer's own visibility plays no part. Fails with `evaluator:not_found` when the layer is
+/// not in the stack, and with the failures of the mask's effects (`unsupported_*`).
+[[nodiscard]] render::Result<DagLayer> BuildLayerMask(const core::Project& project, const ChannelDag& frame,
+                                                      core::Id uid);
+
 /// The blending of `layer` on `channel`: its own entry, or Normal at opacity 1 when it has none.
 /// A group's entry is the blending of its composite on that channel; its `Height` entry is the
 /// per-group Height blend override of LAY-03 (the children keep their own entries), and this is

@@ -1,0 +1,11 @@
+{
+  "id": 75,
+  "slug": "diagnostics-evaluate-a-private-copy-of-the-revision-and-a-material-s-leaks-are-texels-of-its-effective-mask-where-the-full-stack-differs-from-its-solo",
+  "title": "Diagnostics evaluate a private copy of the revision, and a material's leaks are texels of its effective mask where the full stack differs from its solo",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.13_compositor-diagnostics"
+  ],
+  "supersededBy": null
+}
