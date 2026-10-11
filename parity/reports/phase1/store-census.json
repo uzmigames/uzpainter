@@ -1,0 +1,397 @@
+{
+  "candidate_budget_fraction": 0.1,
+  "date": "2026-10-11",
+  "procedure": {
+    "one_parameter_edits": 20,
+    "portable": true,
+    "raster_plane_format": "sRGB8",
+    "zstd_level": 3
+  },
+  "projects": [
+    {
+      "compaction": {
+        "collapsed_revisions": 0,
+        "file_bytes_after": 25464832,
+        "file_bytes_before": 25464832,
+        "seconds": 0.268507
+      },
+      "dependencies": {
+        "bytes": 35324928,
+        "files": 2,
+        "not_measured": [
+          "imported_masks_packed_in_blend",
+          "painter_baked_mesh_maps"
+        ]
+      },
+      "external_dependency_bytes": 0,
+      "first_save": {
+        "file_growth_bytes": 25194496,
+        "io_bytes_written": 25249377,
+        "seconds": 7.411481
+      },
+      "id": "tunic_v10",
+      "layer_insert": {
+        "file_growth_bytes": 0,
+        "io_bytes_written": 41524,
+        "seconds": 0.00831
+      },
+      "one_parameter_edits": {
+        "count": 20,
+        "file_growth_bytes": {
+          "max": 8192,
+          "mean": 2048.0,
+          "total": 40960
+        },
+        "io_bytes_written": {
+          "max": 49716,
+          "mean": 43572.0,
+          "total": 871440
+        },
+        "manifest_stored_bytes_mean": 1246,
+        "seconds": {
+          "max": 0.014443,
+          "mean": 0.009663,
+          "total": 0.193268
+        }
+      },
+      "project_bytes": 25464832,
+      "raster_plane": {
+        "create": {
+          "file_growth_bytes": 192512,
+          "io_bytes_written": 299636,
+          "seconds": 2.221196,
+          "stored_chunk_bytes": 188829
+        },
+        "edit": {
+          "file_growth_bytes": 36864,
+          "io_bytes_written": 135788,
+          "seconds": 1.631736,
+          "stored_chunk_bytes": 29113
+        },
+        "format": "sRGB8",
+        "height": 4096,
+        "width": 4096
+      },
+      "ratio_to_spp": 0.062303,
+      "reopen_seconds": 1.102725,
+      "retained_history": {
+        "blob_bytes": 17609,
+        "manifest_bytes": 28521,
+        "operation_bytes": 2614,
+        "revisions": 23,
+        "total_bytes": 48744
+      },
+      "spp_bytes": 408723056,
+      "within_candidate_budget": true
+    },
+    {
+      "compaction": {
+        "collapsed_revisions": 0,
+        "file_bytes_after": 307261440,
+        "file_bytes_before": 307261440,
+        "seconds": 3.387631
+      },
+      "dependencies": {
+        "bytes": 307122093,
+        "files": 48,
+        "not_measured": [
+          "high_poly_mesh",
+          "painter_baked_mesh_maps"
+        ]
+      },
+      "external_dependency_bytes": 0,
+      "first_save": {
+        "file_growth_bytes": 306921472,
+        "io_bytes_written": 307172961,
+        "seconds": 58.223058
+      },
+      "id": "hat_v8",
+      "layer_insert": {
+        "file_growth_bytes": 12288,
+        "io_bytes_written": 53812,
+        "seconds": 0.018721
+      },
+      "one_parameter_edits": {
+        "count": 20,
+        "file_growth_bytes": {
+          "max": 12288,
+          "mean": 4915.2,
+          "total": 98304
+        },
+        "io_bytes_written": {
+          "max": 53812,
+          "mean": 46439.2,
+          "total": 928784
+        },
+        "manifest_stored_bytes_mean": 4230,
+        "seconds": {
+          "max": 0.026426,
+          "mean": 0.020527,
+          "total": 0.410535
+        }
+      },
+      "project_bytes": 307261440,
+      "raster_plane": {
+        "create": {
+          "file_growth_bytes": 196608,
+          "io_bytes_written": 303732,
+          "seconds": 2.795154,
+          "stored_chunk_bytes": 188829
+        },
+        "edit": {
+          "file_growth_bytes": 32768,
+          "io_bytes_written": 131692,
+          "seconds": 1.866753,
+          "stored_chunk_bytes": 29113
+        },
+        "format": "sRGB8",
+        "height": 4096,
+        "width": 4096
+      },
+      "ratio_to_spp": 0.531567,
+      "reopen_seconds": 1.292949,
+      "retained_history": {
+        "blob_bytes": 17609,
+        "manifest_bytes": 97122,
+        "operation_bytes": 2650,
+        "revisions": 23,
+        "total_bytes": 117381
+      },
+      "spp_bytes": 578029285,
+      "within_candidate_budget": false
+    },
+    {
+      "compaction": {
+        "collapsed_revisions": 0,
+        "file_bytes_after": 153677824,
+        "file_bytes_before": 153677824,
+        "seconds": 2.142029
+      },
+      "dependencies": {
+        "bytes": 153201033,
+        "files": 4,
+        "not_measured": [
+          "imported_masks",
+          "high_poly_mesh",
+          "painter_baked_mesh_maps"
+        ]
+      },
+      "external_dependency_bytes": 0,
+      "first_save": {
+        "file_growth_bytes": 153395200,
+        "io_bytes_written": 153466465,
+        "seconds": 27.056802
+      },
+      "id": "body_v5",
+      "layer_insert": {
+        "file_growth_bytes": 0,
+        "io_bytes_written": 41524,
+        "seconds": 0.012395
+      },
+      "one_parameter_edits": {
+        "count": 20,
+        "file_growth_bytes": {
+          "max": 12288,
+          "mean": 2662.4,
+          "total": 53248
+        },
+        "io_bytes_written": {
+          "max": 53812,
+          "mean": 44186.4,
+          "total": 883728
+        },
+        "manifest_stored_bytes_mean": 1583,
+        "seconds": {
+          "max": 0.013084,
+          "mean": 0.01009,
+          "total": 0.201807
+        }
+      },
+      "project_bytes": 153677824,
+      "raster_plane": {
+        "create": {
+          "file_growth_bytes": 200704,
+          "io_bytes_written": 307828,
+          "seconds": 2.059921,
+          "stored_chunk_bytes": 188829
+        },
+        "edit": {
+          "file_growth_bytes": 28672,
+          "io_bytes_written": 127596,
+          "seconds": 1.716037,
+          "stored_chunk_bytes": 29113
+        },
+        "format": "sRGB8",
+        "height": 4096,
+        "width": 4096
+      },
+      "ratio_to_spp": 0.174783,
+      "reopen_seconds": 1.374548,
+      "retained_history": {
+        "blob_bytes": 17609,
+        "manifest_bytes": 36257,
+        "operation_bytes": 2644,
+        "revisions": 23,
+        "total_bytes": 56510
+      },
+      "spp_bytes": 879248615,
+      "within_candidate_budget": false
+    },
+    {
+      "compaction": {
+        "collapsed_revisions": 0,
+        "file_bytes_after": 154865664,
+        "file_bytes_before": 154865664,
+        "seconds": 1.88363
+      },
+      "dependencies": {
+        "bytes": 156016983,
+        "files": 4,
+        "not_measured": [
+          "imported_masks",
+          "high_poly_mesh",
+          "painter_baked_mesh_maps"
+        ]
+      },
+      "external_dependency_bytes": 0,
+      "first_save": {
+        "file_growth_bytes": 154587136,
+        "io_bytes_written": 154658401,
+        "seconds": 28.291082
+      },
+      "id": "body_v6",
+      "layer_insert": {
+        "file_growth_bytes": 0,
+        "io_bytes_written": 41524,
+        "seconds": 0.011745
+      },
+      "one_parameter_edits": {
+        "count": 20,
+        "file_growth_bytes": {
+          "max": 12288,
+          "mean": 2662.4,
+          "total": 53248
+        },
+        "io_bytes_written": {
+          "max": 53812,
+          "mean": 44186.4,
+          "total": 883728
+        },
+        "manifest_stored_bytes_mean": 1591,
+        "seconds": {
+          "max": 0.025157,
+          "mean": 0.013893,
+          "total": 0.277861
+        }
+      },
+      "project_bytes": 154865664,
+      "raster_plane": {
+        "create": {
+          "file_growth_bytes": 196608,
+          "io_bytes_written": 303732,
+          "seconds": 2.720805,
+          "stored_chunk_bytes": 188829
+        },
+        "edit": {
+          "file_growth_bytes": 28672,
+          "io_bytes_written": 127596,
+          "seconds": 1.640443,
+          "stored_chunk_bytes": 29113
+        },
+        "format": "sRGB8",
+        "height": 4096,
+        "width": 4096
+      },
+      "ratio_to_spp": 0.142413,
+      "reopen_seconds": 1.14481,
+      "retained_history": {
+        "blob_bytes": 17609,
+        "manifest_bytes": 36430,
+        "operation_bytes": 2644,
+        "revisions": 23,
+        "total_bytes": 56683
+      },
+      "spp_bytes": 1087438533,
+      "within_candidate_budget": false
+    },
+    {
+      "compaction": {
+        "collapsed_revisions": 0,
+        "file_bytes_after": 154648576,
+        "file_bytes_before": 154648576,
+        "seconds": 1.220224
+      },
+      "dependencies": {
+        "bytes": 155798219,
+        "files": 4,
+        "not_measured": [
+          "imported_masks",
+          "high_poly_mesh",
+          "painter_baked_mesh_maps"
+        ]
+      },
+      "external_dependency_bytes": 0,
+      "first_save": {
+        "file_growth_bytes": 154370048,
+        "io_bytes_written": 154441313,
+        "seconds": 24.220606
+      },
+      "id": "body_v6b",
+      "layer_insert": {
+        "file_growth_bytes": 0,
+        "io_bytes_written": 41524,
+        "seconds": 0.008216
+      },
+      "one_parameter_edits": {
+        "count": 20,
+        "file_growth_bytes": {
+          "max": 12288,
+          "mean": 2662.4,
+          "total": 53248
+        },
+        "io_bytes_written": {
+          "max": 53812,
+          "mean": 44186.4,
+          "total": 883728
+        },
+        "manifest_stored_bytes_mean": 1589,
+        "seconds": {
+          "max": 0.011665,
+          "mean": 0.008668,
+          "total": 0.173351
+        }
+      },
+      "project_bytes": 154648576,
+      "raster_plane": {
+        "create": {
+          "file_growth_bytes": 192512,
+          "io_bytes_written": 307836,
+          "seconds": 1.937126,
+          "stored_chunk_bytes": 188829
+        },
+        "edit": {
+          "file_growth_bytes": 32768,
+          "io_bytes_written": 131692,
+          "seconds": 1.278628,
+          "stored_chunk_bytes": 29113
+        },
+        "format": "sRGB8",
+        "height": 4096,
+        "width": 4096
+      },
+      "ratio_to_spp": 0.12991,
+      "reopen_seconds": 0.885557,
+      "retained_history": {
+        "blob_bytes": 17609,
+        "manifest_bytes": 36391,
+        "operation_bytes": 2644,
+        "revisions": 23,
+        "total_bytes": 56644
+      },
+      "spp_bytes": 1190431812,
+      "within_candidate_budget": false
+    }
+  ],
+  "schema": "uzpainter/store-census/1",
+  "task": "phase1.7_store-inspect-census"
+}

@@ -71,7 +71,10 @@ public:
     /// `StoreError(version)` for a `format_version` of another major (the file is not changed),
     /// `StoreError(not_a_project)`, and `CorruptionError` when the current manifest does not
     /// verify. Corrupt history, blobs (with `VerifyLevel::full`) and missing dependencies are
-    /// reported in `Opened::report`, not thrown.
+    /// reported in `Opened::report`, not thrown. A bundle directory (`IsBundleDirectory`) is first
+    /// imported into `BundleImportTarget(path)`, `<dir>.uzp` beside it (`ImportBundle`;
+    /// `StoreError(exists)` when that file exists), which is then opened; `ImportBundle` takes
+    /// another target.
     static Opened Open(const std::filesystem::path& path, const OpenOptions& options = {});
 
     ProjectStore(const ProjectStore&) = delete;

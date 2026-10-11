@@ -35,7 +35,10 @@
 //!   `src/store/` with SQLite and zstd); `zig build uzp-store-tests` `uzp-store-tests.exe`, its
 //!   native tests with the test-only fault hooks (`tests/store/store_test.cpp`);
 //!   `zig build uzp-store-save-tests` `uzp-store-save-tests.exe`, the save, retention, compaction
-//!   and lock tests (`tests/store/save_test.cpp`)
+//!   and lock tests (`tests/store/save_test.cpp`); `zig build uzp-store-inspect-tests`
+//!   `uzp-store-inspect-tests.exe`, the inspect, export-bundle and census tests
+//!   (`tests/store/inspect_test.cpp`); `UzPainter.exe` links the store for its `inspect`,
+//!   `export-bundle` and `store-census` commands
 //! - `zig build mesh-tests`   `uzp-mesh-tests.exe`: the mesh importers (`src/mesh/` with ufbx,
 //!   fastgltf and simdjson, the static library `uzp_mesh`, with the MikkTSpace tangents and the
 //!   certificate) and their native tests (`tests/mesh/mesh_test.cpp`), plus
@@ -326,6 +329,11 @@ const store_sources = [_][]const u8{
     "store/save.cpp",
     "store/compact.cpp",
     "store/lock.cpp",
+    "store/inspect.cpp",
+    "store/bundle_codec.cpp",
+    "store/bundle.cpp",
+    "store/census.cpp",
+    "store/cli.cpp",
 };
 /// Test-only fault hooks of the store (`src/store/fault.h`): compiled, with
 /// `-DUZP_STORE_FAULT_HOOKS=1` on every store source, into `uzp-store-tests.exe` only, never into
@@ -1005,6 +1013,35 @@ pub fn build(b: *std.Build) void {
     const store_save_tests_step = b.step("uzp-store-save-tests", "Build the native save, retention and lock tests of the project store");
     store_save_tests_step.dependOn(&b.addInstallArtifact(store_save_tests_exe, .{}).step);
     b.getInstallStep().dependOn(store_save_tests_step);
+
+    // `inspect`, `export-bundle` and the size census (phase1.7_store-inspect-census): their own
+    // test executable with the same hooked store sources; `UzPainter.exe` gets the store verbs.
+    const store_inspect_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addStoreSources(b, store_inspect_tests_mod, &store_hook_flags);
+    store_inspect_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{store_fault_source},
+        .flags = &store_hook_flags,
+    });
+    store_inspect_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/store"),
+        .files = &.{"inspect_test.cpp"},
+        .flags = &store_hook_flags,
+    });
+    store_inspect_tests_mod.linkLibrary(uzp_core_lib);
+    const store_inspect_tests_exe = b.addExecutable(.{
+        .name = "uzp-store-inspect-tests",
+        .root_module = store_inspect_tests_mod,
+    });
+    const store_inspect_tests_step = b.step("uzp-store-inspect-tests", "Build the native inspect, bundle and census tests of the project store");
+    store_inspect_tests_step.dependOn(&b.addInstallArtifact(store_inspect_tests_exe, .{}).step);
+    b.getInstallStep().dependOn(store_inspect_tests_step);
+    app_mod.linkLibrary(store_lib);
 
     // ── The compositor (phase1.5_compositor-tile-dag) ─────────────────────────────────────────
     // `src/evaluator/` joins `UzPainter.exe` (over the render layer and the document model) and

@@ -1,0 +1,71 @@
+{
+  "schema": "uzpainter/store-census-inputs/1",
+  "note": "Phase 1 census inputs (phase1.7_store-inspect-census): the dependency content of tunic v10, hat v8 and the three body versions that exists as files today, relative to the Assets3D root. Only the file size of each .spp is read. Content listed under not_measured is not available as files; phase4.1_coverage-body-v6b completes the full-content census.",
+  "projects": [
+    {
+      "id": "tunic_v10",
+      "spp": "Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/18-Tunica-v10.spp",
+      "mesh": "Creatures/Undead/Skeletal Mage/Models3D/18-Tunica/Export/18-Tunica-v10.fbx",
+      "texture_sets": [
+        {"name": "DefaultMaterial", "resolution": 4096, "mesh_maps": {}}
+      ],
+      "resources": [
+        "Creatures/Undead/Skeletal Mage/Models3D/Meshy-High-v1/18-Tunica/model.glb"
+      ],
+      "not_measured": ["imported_masks_packed_in_blend", "painter_baked_mesh_maps"]
+    },
+    {
+      "id": "hat_v8",
+      "spp": "Creatures/Undead/Skeletal Mage/Models3D/10-Chapeu/10-Chapeu-v8.spp",
+      "mesh": "Creatures/Undead/Skeletal Mage/Models3D/10-Chapeu/Export/10-Chapeu-v8.fbx",
+      "texture_sets": [
+        {
+          "name": "Hat_Surface.001",
+          "resolution": 4096,
+          "mesh_maps": {
+            "AO": "Creatures/Undead/Skeletal Mage/Models3D/10-Chapeu/Textures/10-Chapeu_AO_v8.png",
+            "Normal": "Creatures/Undead/Skeletal Mage/Models3D/10-Chapeu/Textures/10-Chapeu_Normal_OpenGL_bake_v6.png"
+          }
+        }
+      ],
+      "resources": ["_tmp/claude/chapeu-v6/paint/masks-v8d"],
+      "not_measured": ["high_poly_mesh", "painter_baked_mesh_maps"]
+    },
+    {
+      "id": "body_v5",
+      "spp": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/00-Corpo-v5.spp",
+      "mesh": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Export/00-Corpo-v5.fbx",
+      "texture_sets": [
+        {"name": "00-Corpo-Cranio", "resolution": 4096, "mesh_maps": {"Normal": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Textures/00-Corpo-Cranio_Normal_OpenGL.png"}},
+        {"name": "00-Corpo-Tronco", "resolution": 4096, "mesh_maps": {"Normal": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Textures/00-Corpo-Tronco_Normal_OpenGL.png"}},
+        {"name": "00-Corpo-Membros", "resolution": 4096, "mesh_maps": {"Normal": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Textures/00-Corpo-Membros_Normal_OpenGL.png"}}
+      ],
+      "resources": [],
+      "not_measured": ["imported_masks", "high_poly_mesh", "painter_baked_mesh_maps"]
+    },
+    {
+      "id": "body_v6",
+      "spp": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/00-Corpo-v6.spp",
+      "mesh": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Export/00-Corpo-v6.obj",
+      "texture_sets": [
+        {"name": "00-Corpo-Cranio", "resolution": 4096, "mesh_maps": {"Normal": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Textures/00-Corpo-Cranio_Normal_OpenGL_v6.png"}},
+        {"name": "00-Corpo-Tronco", "resolution": 4096, "mesh_maps": {"Normal": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Textures/00-Corpo-Tronco_Normal_OpenGL_v6.png"}},
+        {"name": "00-Corpo-Membros", "resolution": 4096, "mesh_maps": {"Normal": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Textures/00-Corpo-Membros_Normal_OpenGL_v6.png"}}
+      ],
+      "resources": [],
+      "not_measured": ["imported_masks", "high_poly_mesh", "painter_baked_mesh_maps"]
+    },
+    {
+      "id": "body_v6b",
+      "spp": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/00-Corpo-v6b.spp",
+      "mesh": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Export/00-Corpo-v6b.obj",
+      "texture_sets": [
+        {"name": "00-Corpo-Cranio", "resolution": 4096, "mesh_maps": {"Normal": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Textures/00-Corpo-Cranio_Normal_OpenGL_v6b.png"}},
+        {"name": "00-Corpo-Tronco", "resolution": 4096, "mesh_maps": {"Normal": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Textures/00-Corpo-Tronco_Normal_OpenGL_v6.png"}},
+        {"name": "00-Corpo-Membros", "resolution": 4096, "mesh_maps": {"Normal": "Creatures/Undead/Skeletal Mage/Models3D/00-Corpo/Textures/00-Corpo-Membros_Normal_OpenGL_v6.png"}}
+      ],
+      "resources": [],
+      "not_measured": ["imported_masks", "high_poly_mesh", "painter_baked_mesh_maps"]
+    }
+  ]
+}

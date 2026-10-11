@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "store/blobs.h"
+#include "store/bundle.h"
 #include "uzp_core/manifest/manifest.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
@@ -96,6 +97,11 @@ std::unique_ptr<ProjectStore> ProjectStore::Create(const std::filesystem::path& 
 }
 
 ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const OpenOptions& options) {
+    if (IsBundleDirectory(path)) {
+        const std::filesystem::path target = BundleImportTarget(path);
+        ImportBundle(path, target);
+        return Open(target, options);
+    }
     ProjectLock lock = ProjectLock::Acquire(path);
     RemoveTemporaryFiles(path);  // left by a worker killed during compact
     Container container = Container::Open(path);

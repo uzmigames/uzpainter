@@ -10,7 +10,9 @@ Checks the content of files, never only their names or signatures:
   samples under `parity/schema/samples/private/` are exempt, and they have their own rule.
 - `public-schema`: every JSON data file under `parity/` (by `.json` name or by content) must
   validate against the public schema its path assigns (`PATH_RULES`); a JSON file under
-  `parity/` that no rule covers is rejected.
+  `parity/` that no rule covers is rejected. The store's size census
+  (`parity/reports/<phase>/store-census.json`) is checked by a rule of its own: numbers, with
+  text only in its identifier fields.
 """
 
 from __future__ import annotations
@@ -272,6 +274,43 @@ def _fixture(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     ]
 
 
+STORE_CENSUS_SCHEMA = "uzpainter/store-census/1"
+# The only places a store census report may hold text: identifiers, never paths or content.
+_CENSUS_TEXT_KEYS = frozenset({"schema", "task", "date", "id", "format", "raster_plane_format"})
+_CENSUS_LIST_TEXT_KEYS = frozenset({"not_measured"})
+_CENSUS_TEXT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$")
+
+
+def _census_text(node: Any, key: str, where: str) -> Iterator[str]:
+    if isinstance(node, dict):
+        for name, value in node.items():
+            yield from _census_text(value, name, f"{where}/{name}" if where else name)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            item_key = key if key in _CENSUS_LIST_TEXT_KEYS else f"{key}[]"
+            yield from _census_text(value, item_key, f"{where}/{index}")
+    elif isinstance(node, str):
+        if key not in _CENSUS_TEXT_KEYS | _CENSUS_LIST_TEXT_KEYS:
+            yield f"{where}: text outside the identifier fields (numbers only)"
+        elif not _CENSUS_TEXT.match(node) or (key != "schema" and "/" in node):
+            yield f"{where}: {node!r} is not an identifier"
+
+
+def _store_census(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    """The store's size census (`src/store/census.h`): numbers and identifiers only."""
+    if not isinstance(document, dict) or document.get("schema") != STORE_CENSUS_SCHEMA:
+        return [f"schema is not {STORE_CENSUS_SCHEMA}"]
+    projects = document.get("projects")
+    if not isinstance(projects, list) or not projects:
+        return ["projects is not a non-empty list"]
+    problems = [
+        f"projects/{i}: not an object with an id"
+        for i, p in enumerate(projects)
+        if not isinstance(p, dict) or not isinstance(p.get("id"), str)
+    ]
+    return problems + list(_census_text(document, "", ""))
+
+
 _Rule = Callable[[str, Any, bytes, _Context], list[str]]
 
 # First match wins: (path pattern, schema it assigns, check).
@@ -297,6 +336,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
     (re.compile(r"^parity/manifests/.+$"), "golden-public.json", _public_manifest),
     (re.compile(r"^parity/semantics/[^/]+$"), "semantics.json", _semantics),
     (re.compile(r"^parity/fixtures/.+$"), "authored input of a manifest", _fixture),
+    (
+        re.compile(r"^parity/reports/[^/]+/store-census\.json$"),
+        "store census report (numbers only)",
+        _store_census,
+    ),
 )
 
 

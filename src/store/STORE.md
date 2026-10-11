@@ -1,7 +1,8 @@
 # Project store: container, blobs, raster planes, the mutation commit and saving (`src/store/`)
 
-Tasks `phase1.4_store-container-operations`, `phase1.5_store-planes` and
-`phase1.6_store-save-retention` (children of P1-STORE, `phase1.8_project-store`).
+Tasks `phase1.4_store-container-operations`, `phase1.5_store-planes`,
+`phase1.6_store-save-retention` and `phase1.7_store-inspect-census` (children of P1-STORE,
+`phase1.8_project-store`).
 Implements the container of D8 (decision 010) in `docs/architecture/09-project-file-format.md`
 §1, §2, §4 and §5, the durability contract of D1 (`02-runtime-topology.md` §3, §5: the operation
 record is committed atomically with its revision; every commit is the autosave) and the
@@ -9,8 +10,8 @@ idempotency record of ARC-02. The document model it stores is `src/uzp_core/` (`
 `TRANSACTIONS.md`). The raster planes of §8 implement 09 §1 "Authoritative raster planes" and the
 paint planes of `04-layer-stack-and-compositing.md` §1. `save()`, named and protected
 checkpoints, retention, revert, `compact`, `save_as`, `save_as_copy` and the lock sidecar (§9)
-implement 09 §4 with owner answer Q11 (decision 024); `uzpainter inspect` and the census are
-`phase1.7_store-inspect-census`.
+implement 09 §4 with owner answer Q11 (decision 024); `uzpainter inspect`, `export-bundle` with
+the bundle import and the size census (§10, §11) implement 09 §3 and §6.
 
 ## 1. Layout
 
@@ -28,11 +29,16 @@ implement 09 §4 with owner answer Q11 (decision 024); `uzpainter inspect` and t
 | `compact.h` | Retention (`ComputeRetention`), reachability, `CollapseAndCollect`, `VacuumInto`, `RenameFile` (§9) |
 | `lock.h` | The lock sidecar `<file>.uzp.lock` (`ProjectLock`, §9) |
 | `fault.h` | Test-only fault hooks (§6) |
+| `inspect.h` | `Inspect` (the report of `uzpainter inspect`), `WriteIndented`, `ReadSnapshot` (§10) |
+| `bundle.h` | `ExportBundle`, `ImportBundle`, `IsBundleDirectory` (§10) |
+| `bundle_codec.h` | PNG and OpenEXR at a plane's native precision, inflate, CRC-32, the ZIP writer (§10) |
+| `census.h` | The size census: inputs, the scripted sequence, the report (§11); the inputs of the Phase 1 run are `census_inputs.json` |
+| `cli.h` | The verbs `inspect`, `export-bundle` and `store-census` of `UzPainter.exe` (§10, §11) |
 
 `zig build uzp-store` builds `uzp_store.lib` from these sources, the SQLite amalgamation
 (`thirdparty/sqlite/`, public domain, 3.54.0) and zstd (`thirdparty/zstd/`, BSD-3-Clause branch,
 v1.5.7), both vendored with `tools/vendoring/thirdparty.py`; it links `uzp_core.lib` and nothing
-else: no render layer, no GPU.
+else: no render layer, no GPU. `UzPainter.exe` links it for the verbs of `cli.h`.
 
 ## 2. Container
 
@@ -191,6 +197,22 @@ uzp-store-save-tests`, `tests/store/save_test.cpp`, the same hooked store source
 | `portability` | after `close`, `compact` and `save_as` no `-wal`/`-shm`/`-journal`; the header says rollback journal; a copied `.uzp` opens from another folder |
 | `lock_sidecar` | the sidecar holds this pid; a second open in the same process and an open while a child worker holds it are refused naming the pid; `close` removes it; a lock left by a killed worker, one with a reused pid (other start time) and an unreadable one are replaced; a closed store refuses calls |
 
+`python -m pytest tests/store/test_store_inspect.py` builds `uzp-store-inspect-tests.exe` (`zig
+build uzp-store-inspect-tests`, `tests/store/inspect_test.cpp`) and runs:
+
+| Case | Checks |
+|---|---|
+| `inspect_fields` | every field of 09 §6 on a fixture (versions, profiles, settings, texture sets and channels, the layer tree with resource and plane bindings, mesh maps with provenance, the resource table, checkpoints, sizes, the recipe digest reported unavailable); `--revision`; the CLI prints the same report, usage errors exit 2 |
+| `inspect_while_locked` | a child process holds the project (lock sidecar, open connection): `inspect` and `inspect --verify` complete, the lock stays the child's, the file bytes are unchanged |
+| `inspect_external_dependencies` | a non-portable project: project-file bytes and external dependency bytes listed separately; a removed target is counted missing and fails `--verify` |
+| `verify_failures` | `inspect --verify` exits 1 on a broken plane binding (`chunk_root mismatch`, with the plane and its node), on a missing resource blob (`blob … missing`, with the binding node) and on a missing chunk blob |
+| `bundle_round_trip` | `export-bundle` to a directory and to a ZIP; `ProjectStore::Open` of the bundle directory: equal manifest digest, plane pixels and resource bytes, `--verify` clean, further commits work; an older revision; a damaged plane file and a changed manifest are refused and leave no project |
+| `codec_formats` | every `ChannelFormat` round-trips bit-exact through PNG or OpenEXR; mismatched formats and truncated files are refused |
+| `census_sequence` | the census on a scripted sequence: bytes per edit (file growth and bytes written), reopen time, compaction time, retained-history size, ratio to the `.spp` size |
+
+The driver also checks the ZIP bundle with Python's `zipfile` and the PNG reader against PNGs that
+Python's zlib compressed (fixed and dynamic Huffman blocks, every scanline filter).
+
 No GPU is used; the cases run on the hosted CPU lane.
 
 ## 8. Raster planes
@@ -321,4 +343,74 @@ time>`. While that process runs (same pid, same start time) another open is refu
 whose content is unreadable is stale and replaced. `Close` (and the store's destructor) closes the
 connection, which leaves no `-wal`/`-shm`/`-journal` companion (`journal_mode = DELETE`, re-applied
 before closing), and removes the sidecar; later calls on a closed store fail with `io`. `save_as`
-moves the lock with the project. `inspect` reads through `Container` and takes no lock.
+moves the lock with the project. `inspect` reads through `Container` and takes no lock (§10).
+
+## 10. Inspection and the export bundle
+
+Every connection waits up to 10 s (`kBusyTimeoutMs`) for another connection's SQLite file lock,
+so a worker committing and a reader inspecting never fail on each other.
+
+**`uzpainter inspect <file.uzp> [--revision N] [--verify]`** (`Inspect`, `UzPainter.exe inspect`)
+prints indented JSON: `project` (uuid, portable, created, horizon), `revision` (the described
+revision, the current one, kind, name, parent, `manifest_sha256`) and `revisions`, `versions`
+(manifest and file `format_version`, `app_version`, `painter_reference`), `profiles`
+(`evaluator_profile`, `compat_profile`), `settings`, `mesh`, `texture_sets` (UV tiles, channels
+per stack, the layer tree with each node's `bindings.resources` (JSON path and SHA-256) and
+`bindings.planes` (plane id, channel, bound `version_id` and `chunk_root`, format, size, UDIM), and
+`mesh_maps` with their provenance), `resources` (one row per name: SHA-256, bytes, stored bytes,
+MIME, usage, colour space, origin and `storage` = `embedded`, `locator` or `missing`),
+`checkpoints`, `sizes` (`file_bytes`, then the parts of the file — `manifests`, `resources`,
+`plane_chunks`, `operations`, `cache` — and, listed separately, `external_dependencies`: the
+locator targets of a non-portable project with their bytes and the missing count) and
+`recipe_digest`, reported as `{available: false, reason}` until `dump_recipe` exists
+(`phase2.2_recipe-and-diagnostics`). It opens the file read-only (`Container::OpenReadOnly`)
+inside one read transaction: no lock sidecar, no GPU, nothing written; a file a killed worker left
+with a hot journal is refused (`io`) rather than rolled back by a reader. `--verify` runs
+`CheckIntegrity` at `VerifyLevel::full` — every rule of 09 §1: foreign keys, every manifest
+against its `manifest_sha256`, operation rows, locators, every resource a stored manifest lists
+present in `blob` (or located), the plane rules of §8 with the bytes of every bound chunk,
+`quick_check` and the SHA-256 of every blob — on a consistent snapshot (`ReadSnapshot`: SQLite
+online backup into a temporary file, the source's read lock held only while the pages are copied),
+adds `verify {ok, corrupt, missing, collectable}` and exits 1 when it is not `ok`.
+
+**`uzpainter export-bundle <file.uzp> <dir|file.zip> [--revision N]`** (`ExportBundle`) writes
+one revision as files from a snapshot (no lock, no GPU): `manifest.json` (the canonical manifest
+byte for byte), `res/<sha256>.<ext>` (resources, original bytes), `meshmaps/<set>_<usage>.<ext>`
+(mesh-map resources), `planes/<plane_id>.png|.exr` (PNG for 8/16-bit formats, uncompressed
+scanline OpenEXR for half/float formats, texels unmodified; `bundle_codec.h`) and `bundle.json`
+(`uzpainter/bundle/1`: uuid, revision, `manifest_sha256`, the resource and plane index with each
+plane's row and binding). Everything is verified on the way out. A name ending in `.zip` gives a
+ZIP of the same paths (stored entries, ZIP64 when needed). The bundle is written to
+`<target>.partial` and renamed when complete.
+
+**Bundle import.** `ProjectStore::Open` of a directory holding `bundle.json` imports it into
+`<dir>.uzp` beside it (`ImportBundle`; `exists` when that file exists) and opens that: the same
+project uuid, one revision with the bundle's number (`kind = checkpoint`) whose manifest is
+`manifest.json` byte for byte (checked against `manifest_sha256` and its canonical form), every
+resource embedded (each file checked against its SHA-256), every plane rebuilt with the version id
+its manifest binds (`InsertPlaneVersion`) and checked against the bound `chunk_root`. A bundle that
+does not verify is refused and leaves no file.
+
+## 11. The size census (owner Q11)
+
+`census.h` instruments the store on the dependency content of a project (09 §3, §7) and writes a
+report of numbers and identifiers only (`uzpainter/store-census/1`; the repository guard checks
+it, `parity/GUARD.md` §2). Per project, in a work folder: `Create` a portable project embedding
+the mesh, the mesh maps bound per texture set and further resources (deduplicated by SHA-256) and
+`save()` (**first save**); a fill layer, then N **one-parameter edits** (the layer's BaseColor
+opacity; file growth and bytes written per edit as mean, max and total, with the stored manifest
+size); a **raster plane** of the first set's resolution (sRGB8) and an **edit** inside chunk
+(0, 0) (stored chunk bytes of each); `save()`, close and **reopen** (timed); **compact** (timed,
+bytes before and after); the **retained history** (revisions besides the current one, their
+manifests, the blobs only they reach and the operation rows); **project bytes** (the compacted
+file) and **external dependency bytes** (0: portable). "Bytes written" is the process's write
+transfer count (`GetProcessIoCounters`), so the rollback journal counts. The matched `.spp` is
+measured by its file size only; the report gives `ratio_to_spp` and whether it is within the 10 %
+candidate budget.
+
+`UzPainter.exe store-census --inputs src/store/census_inputs.json --assets-root <Assets3D> --work
+<dir> --out parity/reports/phase1/store-census.json` produced the Phase 1 report on tunic v10,
+hat v8 and body v5/v6/v6b. The inputs list the dependency files that exist today; what is not
+available as files (masks packed into a `.blend`, masks and high-poly meshes removed from `_tmp`,
+maps Painter baked internally) is named under `not_measured`, so these ratios cover the measured
+dependencies, not the full content; `phase4.1_coverage-body-v6b` completes the census.

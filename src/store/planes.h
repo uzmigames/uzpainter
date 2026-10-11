@@ -192,6 +192,13 @@ VersionRef StagePlaneContent(Container& container, PendingPlanes& pending, core:
 /// it (`created_revision = snapshot.revision`). Throws `StoreError(conflict)` otherwise.
 void WritePlaneRows(Container& container, const PendingPlanes& pending, const core::Snapshot& snapshot);
 
+/// Writes `image` as the stored version `version_id` of plane `row` with `created_revision`
+/// (inserting the plane row when absent, chunk blobs only for chunks the store lacks), outside
+/// the mutation commit: the bundle import (`bundle.h`) rebuilds a project's planes with the
+/// version ids its manifest binds. Call it inside a write transaction, before
+/// `checkpoint('current')` names a revision at or above `created_revision`. Returns the version.
+VersionRef InsertPlaneVersion(Container& container, const PlaneRow& row, std::int64_t version_id,
+                              std::int64_t created_revision, const PlaneImage& image);
 /// The `plane` row of `plane_id`, if any.
 std::optional<PlaneRow> ReadPlaneRow(Container& container, core::Id plane_id);
 /// The chunk rows of a stored version, sorted.

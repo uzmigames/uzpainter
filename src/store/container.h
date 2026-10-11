@@ -7,6 +7,8 @@
 // Files at rest use `journal_mode = DELETE` with `synchronous = FULL`: SQLite's rollback journal
 // keeps a file at either the previous or the new state when a commit is interrupted
 // (https://www.sqlite.org/atomiccommit.html). Foreign keys are enforced on every connection.
+// Every connection waits up to `kBusyTimeoutMs` for another connection's file lock (a worker's
+// commit while `uzpainter inspect` reads, and the reverse) instead of failing at once.
 // This file creates `meta`, `revision`, `blob`, `blob_meta`, `operation`, `cache`, `checkpoint`,
 // `locator` (the `{path, sha256}` locators of a non-portable project, 09 §2) and the raster-plane
 // tables `plane`, `plane_version` and `plane_chunk` (`planes.h`).
@@ -22,6 +24,9 @@ struct sqlite3;
 struct sqlite3_stmt;
 
 namespace uzp::store {
+
+/// How long a connection waits for another connection's SQLite file lock.
+inline constexpr int kBusyTimeoutMs = 10000;
 
 /// Every error of the project store. `code()` names the class; the message starts with its
 /// spelling (`CodeName`) and says what failed.
@@ -102,6 +107,13 @@ public:
     /// Opens an existing container read-write. Only connection settings are applied
     /// (`foreign_keys`, `synchronous`); nothing is written (`EnsureDeleteJournal` does that).
     static Container Open(const std::filesystem::path& path);
+    /// Opens an existing container read-only (`uzpainter inspect`): the connection never writes
+    /// to the file, so a file left with a hot journal by a killed worker is refused
+    /// (`StoreError(io)`) instead of being rolled back.
+    static Container OpenReadOnly(const std::filesystem::path& path);
+    /// Copies the database pages of `source` into the new file `target` (SQLite online backup):
+    /// a consistent snapshot that keeps `source`'s read lock only while the pages are copied.
+    static void Snapshot(Container& source, const std::filesystem::path& target);
 
     Container(Container&& other) noexcept;
     Container& operator=(Container&& other) noexcept;
@@ -142,7 +154,7 @@ public:
 
 private:
     Container(sqlite3* db, std::filesystem::path path) : db_(db), path_(std::move(path)) {}
-    static sqlite3* OpenHandle(const std::filesystem::path& path, bool create);
+    static sqlite3* OpenHandle(const std::filesystem::path& path, bool create, bool read_only = false);
     void Close() noexcept;
 
     sqlite3* db_ = nullptr;

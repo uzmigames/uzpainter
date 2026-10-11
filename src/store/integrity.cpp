@@ -1,5 +1,6 @@
 #include "store/integrity.h"
 
+#include <set>
 #include <utility>
 
 #include "store/blobs.h"
@@ -156,6 +157,36 @@ IntegrityReport CheckIntegrity(Container& container, const Value& current_manife
             if (!hash || *hash != sha256) {
                 report.missing.push_back(
                     MissingDependency{sha256, path, hash ? "changed" : "absent", NodesBinding(current_manifest, sha256)});
+            }
+        }
+    }
+    {
+        // Every resource a manifest lists is embedded in `blob` (or, in a non-portable project,
+        // held by a locator): the current manifest, and with `full` every stored revision's.
+        std::vector<std::pair<std::string, Value>> manifests{{"current", current_manifest}};
+        if (level == VerifyLevel::full) {
+            Statement q(container, "SELECT revision, manifest FROM revision ORDER BY revision");
+            while (q.Step()) {
+                try {
+                    manifests.emplace_back(std::to_string(q.Int(0)), core::json::Parse(Decompress(q.Blob(1))));
+                } catch (const std::exception&) {
+                    // reported as a corrupt manifest above
+                }
+            }
+        }
+        std::set<std::string, std::less<>> reported;
+        for (const auto& [revision, manifest] : manifests) {
+            const auto* object = std::get_if<Object>(&manifest.data);
+            const auto resources = object ? object->find("resources") : Object::const_iterator{};
+            if (object == nullptr || resources == object->end() || !resources->second.IsObject()) continue;
+            for (const auto& [sha256, entries] : std::get<Object>(resources->second.data)) {
+                if (reported.count(sha256) != 0 || HasBlob(container, sha256) || FindLocator(container, sha256)) continue;
+                reported.insert(sha256);
+                report.corrupt.push_back(CorruptItem{
+                    "blob", sha256,
+                    "missing: " + (revision == "current" ? std::string("the current manifest") : "the manifest of revision " + revision) +
+                        " lists resource " + sha256 + ", which is neither stored nor located",
+                    NodesBinding(current_manifest, sha256)});
             }
         }
     }

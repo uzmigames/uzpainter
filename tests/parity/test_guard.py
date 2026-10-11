@@ -328,6 +328,59 @@ def test_repository_parity_data_passes_including_synthetic_private_samples() -> 
     assert run_guard(REPO_ROOT, snapshot, None) == []
 
 
+CENSUS_PATH = "parity/reports/phase1/store-census.json"
+
+
+def _census() -> dict[str, Any]:
+    return {
+        "schema": "uzpainter/store-census/1",
+        "task": "phase1.7_store-inspect-census",
+        "date": "2026-10-10",
+        "candidate_budget_fraction": 0.1,
+        "procedure": {"one_parameter_edits": 20, "raster_plane_format": "sRGB8"},
+        "projects": [
+            {
+                "id": "tunic_v10",
+                "spp_bytes": 408723056,
+                "dependencies": {
+                    "files": 2,
+                    "bytes": 35324928,
+                    "not_measured": ["painter_baked_mesh_maps"],
+                },
+                "raster_plane": {"format": "sRGB8", "width": 4096},
+                "ratio_to_spp": 0.09,
+                "within_candidate_budget": True,
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("change", "allowed"),
+    [
+        (lambda c: c, True),
+        (lambda c: {**c, "schema": "uzpainter/store-census/2"}, False),
+        (lambda c: {**c, "projects": []}, False),
+        (lambda c: {**c, "projects": [{"spp_bytes": 1}]}, False),
+        (lambda c: {**c, "source": "E:/Assets3D/18-Tunica-v10.spp"}, False),
+        (lambda c: {**c, "projects": [{**c["projects"][0], "id": "../tunic"}]}, False),
+        (lambda c: {**c, "projects": [{**c["projects"][0], "note": "free text"}]}, False),
+    ],
+)
+def test_store_census_report_holds_numbers_and_identifiers_only(
+    repo: Path, change: Any, allowed: bool
+) -> None:
+    put(repo, CENSUS_PATH, json.dumps(change(_census())).encode())
+    assert blocked(repo, None) == ({} if allowed else {CENSUS_PATH: {"public-schema"}})
+
+
+def test_repository_store_census_report_passes() -> None:
+    assert (REPO_ROOT / CENSUS_PATH).is_file()
+    snapshot = worktree_snapshot(REPO_ROOT, [CENSUS_PATH])
+    assert snapshot.checked == (CENSUS_PATH,)
+    assert run_guard(REPO_ROOT, snapshot, None) == []
+
+
 # --- 3.4 CI ----------------------------------------------------------------------------------
 
 

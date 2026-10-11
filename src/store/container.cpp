@@ -181,20 +181,21 @@ std::string Statement::Blob(int column) const {
 
 // ── Container ─────────────────────────────────────────────────────────────────────────────────
 
-sqlite3* Container::OpenHandle(const std::filesystem::path& path, bool create) {
+sqlite3* Container::OpenHandle(const std::filesystem::path& path, bool create, bool read_only) {
     const char* vfs = nullptr;
 #if defined(UZP_STORE_FAULT_HOOKS)
     vfs = fault::VfsName();
 #endif
     sqlite3* db = nullptr;
-    const int flags = SQLITE_OPEN_READWRITE | (create ? SQLITE_OPEN_CREATE : 0) | SQLITE_OPEN_FULLMUTEX |
-                      SQLITE_OPEN_EXRESCODE;
+    const int flags = (read_only ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE) | (create ? SQLITE_OPEN_CREATE : 0) |
+                      SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_EXRESCODE;
     const int rc = sqlite3_open_v2(Utf8(path).c_str(), &db, flags, vfs);
     if (rc != SQLITE_OK) {
         const std::string message = db ? sqlite3_errmsg(db) : sqlite3_errstr(rc);
         sqlite3_close(db);
         throw StoreError(CodeOf(rc), "cannot open " + Utf8(path) + ": " + message);
     }
+    sqlite3_busy_timeout(db, kBusyTimeoutMs);
     return db;
 }
 
@@ -215,6 +216,29 @@ Container Container::Open(const std::filesystem::path& path) {
     container.Exec("PRAGMA synchronous = FULL");
     container.Exec("PRAGMA foreign_keys = ON");
     return container;
+}
+
+Container Container::OpenReadOnly(const std::filesystem::path& path) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) throw StoreError(StoreError::Code::io, Utf8(path) + " is not a file");
+    Container container(OpenHandle(path, false, true), path);
+    container.Exec("PRAGMA foreign_keys = ON");
+    return container;
+}
+
+void Container::Snapshot(Container& source, const std::filesystem::path& target) {
+    std::error_code ec;
+    if (std::filesystem::exists(target, ec)) throw StoreError(StoreError::Code::exists, Utf8(target) + " already exists");
+    Container copy(OpenHandle(target, true), target);
+    sqlite3_backup* backup = sqlite3_backup_init(copy.handle(), "main", source.handle(), "main");
+    if (backup == nullptr) copy.Fail(sqlite3_errcode(copy.handle()), "backup of " + Utf8(source.path()));
+    const int step = sqlite3_backup_step(backup, -1);
+    const int finish = sqlite3_backup_finish(backup);
+    if (step != SQLITE_DONE) {
+        throw StoreError(CodeOf(step), "snapshot of " + Utf8(source.path()) + ": " + sqlite3_errstr(step));
+    }
+    if (finish != SQLITE_OK) copy.Fail(finish, "backup of " + Utf8(source.path()));
+    copy.Exec("PRAGMA journal_mode = DELETE");
 }
 
 Container::Container(Container&& other) noexcept

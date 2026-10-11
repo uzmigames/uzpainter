@@ -631,6 +631,58 @@ void WritePlaneRows(Container& container, const PendingPlanes& pending, const co
 #endif
 }
 
+VersionRef InsertPlaneVersion(Container& container, const PlaneRow& row, std::int64_t version_id,
+                              std::int64_t created_revision, const PlaneImage& image) {
+    if (image.width != row.width || image.height != row.height || image.format != row.format ||
+        image.texels.size() != static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) *
+                                   TexelBytes(image.format)) {
+        throw core::ValueError("plane " + std::to_string(row.plane_id) + ": the image does not match the plane row");
+    }
+    if (!ReadPlaneRow(container, row.plane_id)) {
+        Statement q(container,
+                    "INSERT INTO plane (plane_id, set_id, stack_id, channel, tile_u, tile_v, format, width, height, "
+                    "chunk_size, created_revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        q.Bind(1, static_cast<std::int64_t>(row.plane_id))
+            .Bind(2, static_cast<std::int64_t>(row.set_id))
+            .Bind(3, static_cast<std::int64_t>(row.stack_id));
+        if (row.channel) {
+            q.Bind(4, core::ToString(*row.channel));
+        } else {
+            q.BindNull(4);
+        }
+        q.Bind(5, std::int64_t{row.tile_u})
+            .Bind(6, std::int64_t{row.tile_v})
+            .Bind(7, core::ToString(row.format))
+            .Bind(8, std::int64_t{row.width})
+            .Bind(9, std::int64_t{row.height})
+            .Bind(10, std::int64_t{row.chunk_size})
+            .Bind(11, created_revision)
+            .Run();
+    }
+    std::vector<ChunkRow> chunks;
+    for (int x = 0; x < row.chunks_x(); ++x) {
+        for (int y = 0; y < row.chunks_y(); ++y) {
+            const std::string chunk = ChunkBytesOf(row, image.texels, x, y);
+            if (AllZero(chunk)) continue;  // an empty chunk has no row
+            chunks.push_back(ChunkRow{x, y, PutBlob(container, chunk, kChunkMime)});
+        }
+    }
+    const VersionRef ref{version_id, ChunkRoot(chunks)};
+    Statement version(container,
+                      "INSERT INTO plane_version (version_id, plane_id, created_revision, chunk_root) VALUES (?, ?, ?, ?)");
+    version.Bind(1, version_id)
+        .Bind(2, static_cast<std::int64_t>(row.plane_id))
+        .Bind(3, created_revision)
+        .Bind(4, ref.chunk_root)
+        .Run();
+    Statement insert_chunk(container, "INSERT INTO plane_chunk (version_id, chunk_x, chunk_y, sha256) VALUES (?, ?, ?, ?)");
+    for (const ChunkRow& chunk : chunks) {
+        insert_chunk.Reset();
+        insert_chunk.Bind(1, version_id).Bind(2, std::int64_t{chunk.x}).Bind(3, std::int64_t{chunk.y}).Bind(4, chunk.sha256).Run();
+    }
+    return ref;
+}
+
 PlaneImage ReadPlaneIn(Container& container, const PendingPlanes& pending, const core::Project& project, Id plane_id) {
     const std::optional<Bound> bound = FindBinding(core::ProjectToJson(project), plane_id);
     if (!bound) throw StoreError(StoreError::Code::missing_resource, "the project binds no plane " + std::to_string(plane_id));
