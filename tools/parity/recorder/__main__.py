@@ -32,6 +32,8 @@ needs the condition (`iray.reference_needed`), it starts a fresh Painter process
 reference and stops Painter, so every reference has its own session (procedure `iray-capture/1`
 step 6). A refused reference is reported and the series goes on; the exit status is 2 when any
 was refused. `--session-file` gives the files that session-environment steps name by SHA-256.
+`--condition same_session` records the two renders of one session that the stability probe of
+decision 062 needs (`iray.SAME_SESSION`).
 
 Painter must already run with `--enable-remote-scripting` and no project open (or `--launch`).
 Records go to `UZP_ORACLE_INBOX` (default `%LOCALAPPDATA%\UzPainter\oracle-inbox`), working files to
@@ -55,6 +57,7 @@ from tools.parity.recorder.defaults import (
 )
 from tools.parity.recorder.iray import (
     K_TIMES_SAMPLES,
+    SAME_SESSION,
     SEPARATE_SESSION,
     ConsoleOperator,
     Operator,
@@ -95,7 +98,9 @@ def parse(argv: Sequence[str]) -> argparse.Namespace:
     iray.add_argument("--launch", action="store_true", help="a fresh Painter per reference")
     iray.add_argument("--painter-exe", type=Path, default=None, help="Painter executable")
     iray.add_argument("--session-file", type=Path, action="append", default=[])
-    iray.add_argument("--condition", choices=[SEPARATE_SESSION, K_TIMES_SAMPLES], required=True)
+    iray.add_argument(
+        "--condition", choices=[SEPARATE_SESSION, K_TIMES_SAMPLES, SAME_SESSION], required=True
+    )
     iray.add_argument("--k", type=int)
     iray.add_argument("--operator", choices=["console", "ui"], default="console")
     check = commands.add_parser("check")

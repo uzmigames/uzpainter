@@ -133,12 +133,10 @@ def sensitivity(
     folder = work / "spectral"
     rgb_path, spectral_path = folder / f"rgb-{tag}.npy", folder / f"spectral-{tag}.npy"
     texels = downsample(environment(golden.preset, 0.0).texels)
-    round_trip = 0.0
-    if not spectral_path.is_file():
-        folder.mkdir(parents=True, exist_ok=True)
-        effective, round_trip = spectral_environment(texels, (rho[0], rho[1], rho[2]))
-        np.save(rgb_path, texels)
-        np.save(spectral_path, effective)
+    folder.mkdir(parents=True, exist_ok=True)
+    effective, round_trip = spectral_environment(texels, (rho[0], rho[1], rho[2]))
+    np.save(rgb_path, texels)
+    np.save(spectral_path, effective)
     mask = ref.regions["interior"]
     images = (ref.s[0].astype(np.float64), ref.s[1].astype(np.float64), ref.k.astype(np.float64))
     sample = fit.sample_pixels(name, mask, images)

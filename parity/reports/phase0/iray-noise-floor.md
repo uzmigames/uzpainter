@@ -2,11 +2,11 @@
 
 Task `phase0.8_render-reference-fits` (child of `phase0.9_render-reference-capture`, P0-FEAS-RENDER in `docs/dag.md`). It measures the noise floor of Tier 3 render parity, (a) Iray's run-to-run difference, (b) Iray's Monte-Carlo error at S and (c) UzPainter's error at S (`docs/architecture/07-preview-and-render-parity.md` §4 step 1), publishes the first clean-room lobe fits with their residuals (`parity/semantics/iray.json`), records the transport evidence and the ray-tracing probes of the owner's GPU. Decisions 038 (fixed pipeline), 042 (open-pbr scope), 046 (the reference set) and 050-052 apply. This report holds numbers and hashes only; Painter's renders stay in the private store, and the prototype's renders stay in the work folder on the owner's machine.
 
-**Status (2026-10-11).** Noise floor measured: (a) and (b) for the 22 fixture goldens of decision 046, (c) for the feasibility prototype. First clean-room lobe fits published in `parity/semantics/iray.json`, all `calibrated`. **No lobe is reproduced:** on held-out pixels the chosen model sits 4 to 930 codes (up to 1.4% of full scale) from Iray's k*S renders, far outside the noise floor (§4). The ray-tracing probes of the owner's RTX 4090 pass (§8). Open: the cause of the face-confined run-to-run difference, provisional until the capture request of §9 returns; the shipped tracer's term (c) (phase3.6); the lobe structure (phase3.5).
+**Status (2026-10-11).** Noise floor measured: (a) and (b) for the 22 fixture goldens of decision 046, (c) for the feasibility prototype. First clean-room lobe fits published in `parity/semantics/iray.json`, all `calibrated`. **No lobe is reproduced:** on held-out pixels the chosen model sits 4 to 930 codes (up to 1.4% of full scale) from Iray's k*S renders, far outside the noise floor (§4). The ray-tracing probes of the owner's RTX 4090 pass (§8). The face-confined run-to-run difference is measured by decision 052's capture request (§9, decision 062): it needs a facet normal component of exactly zero, it is redrawn by every render, also within one session, and it depends on the environment's rotation; decision 052 is amended accordingly. Open: the mechanism of that class (a discriminating test for phase3.6), the shipped tracer's term (c) (phase3.6), the lobe structure (phase3.5), and term (c) of the qualification sphere (§1).
 
 ## 1. Scope (decision 050)
 
-- **References.** The 22 fixture goldens of decision 046 (`iray-references.md`), each with two `separate_session` S renders (256 samples) and one `k_times_samples` render (k = 4), Save Render 16-bit display-referred PNG at 1200 x 1200, OCIO Default - sRGB. The qualification sphere is left out: its material is the template default, which no fixture table records.
+- **References.** The 22 fixture goldens of decision 046 (`iray-references.md`), each with two `separate_session` S renders (256 samples) and one `k_times_samples` render (k = 4), Save Render 16-bit display-referred PNG at 1200 x 1200, OCIO Default - sRGB. The qualification sphere is left out of terms (c) and the fits: its material is the template default, which has not been read back, so the prototype has no scene for it; its (a) and (b) are in `iray-references.md` §4. Its (c) stays open in task `phase0.9_render-reference-capture` item 3.2 (decision 063).
 - **Prototype.** `tools/parity/render_fits/` is a CPU program written from the 07 §3.1 sources: path tracing with next-event estimation and multiple importance sampling (power heuristic), piecewise-constant environment importance sampling, Russian roulette after three vertices, at most eight vertices, Owen-scrambled Sobol (Burley 2020) under a fixed seed, each pixel summing its samples in index order. It is not shipped and is never Tier 3 evidence. It renders the fixtures as Painter stores them: sRGB8 base colour, L8 metalness and roughness, the committed meshes and bitmaps, the camera of decision 046 and the pipeline's two environments read by SHA-256 on the owner's machine.
 - **Term (c).** Measured on the prototype. Phase3.6 item 2.3 measures the shipped `painter_iray`'s (c) with the same statistics (`noise.pair_statistics`).
 - **Units.** 16-bit display codes of the reference encoding (one 8-bit code is 257 codes; 1e-4 of full scale is 6.55 codes), RGB samples, per region: `interior` (object pixels), `edge` (the 2-pixel band around the projected outline), `background`.
@@ -17,7 +17,7 @@ Task `phase0.8_render-reference-fits` (child of `phase0.9_render-reference-captu
 
 **Run-to-run (a), the rounding class.** In 19 goldens the two sessions differ only in scattered samples, and 79% to 100% of those differ by exactly one binary16 step of the linear value (table below; one step is about 9 codes at 18% grey). They are spatially white and zero-mean, and the same-session repeat of the procedure probe shows the same count. Iray is therefore not bit-repeatable, at the level of floating-point rounding; the mechanism (accumulation order or otherwise) is not identified.
 
-**Run-to-run (a), the face-confined class.** In three goldens the difference is broad (up to 36 binary16 steps) and confined to whole flat faces: the tilted plane (96.5% of its pixels) and the bevelled cube's top face in `cube-mid-grey` (86%) and `cube-saturated--ref-match-000` (90%). The other five visible cube faces stay at the rounding level, and in `cube-saturated--ref-match-180` the top face does too (0.1%). The two affected facets are exactly those whose normal has an x component of exactly zero: the plane n = (0, 0.77, 0.64) and the cube's top n = (0, 0.91, 0.42); every unaffected face has a nonzero x component. Within the plane, rms(a)^2 / 2 rms(b)^2 = 0.126: about an eighth of the S render's noise is drawn afresh in each render. Decision 052 records a hypothesis, not an explanation: a sampling frame that depends on the sign of an exactly-zero normal component, so that renders draw mirrored sample sets whose values differ only where the environment is asymmetric about that mirror. Branching on a degenerate value or other state-dependent sampling remain alternatives. The capture request of §9 tests it. Until it returns, (a) of these three goldens is provisional and reported per face below; it stays out of the floor because (b) already contains each S render's own noise, and any bound on these faces must respect the per-face (a).
+**Run-to-run (a), the face-confined class.** In three goldens the difference is broad (up to 36 binary16 steps) and confined to whole flat faces: the tilted plane (96.5% of its pixels) and the bevelled cube's top face in `cube-mid-grey` (86%) and `cube-saturated--ref-match-000` (90%). The other five visible cube faces stay at the rounding level, and in `cube-saturated--ref-match-180` the top face does too (0.1%). The two affected facets are exactly those whose normal has an x component of exactly zero: the plane n = (0, 0.77, 0.64) and the cube's top n = (0, 0.91, 0.42); every unaffected face has a nonzero x component. Within the plane, rms(a)^2 / 2 rms(b)^2 = 0.126: about an eighth of the S render's noise is drawn afresh in each render. Decision 052 recorded a hypothesis: a sampling frame that depends on the sign of an exactly-zero normal component, so that renders draw mirrored sample sets. The capture request of §9 (decision 062, amendment of decision 052) confirmed the trigger in the tested conditions (turning the meshes by one degree removes the class on every facet) and contradicted the two-set mechanism (six renders of the plane give six mutually decorrelated renders, two of them in one session); the class also depends on the environment's rotation (0 affected, 180 not, on the same facet). The per-face (a) below is therefore Iray's own render-to-render variability on these facets, measured, not provisional; (b) of these goldens contains the realised difference between two separate renders, and phase3.6 states how its bounds combine the per-face (a) with (b) without counting it twice.
 
 **Nested samples.** On all 13 goldens whose interior is noise-dominated (sigma_K^2 / sigma_S^2 below 0.3), rms(S - K) matches sqrt(sigma_S^2 - sigma_K^2) from the renders' own high-pass noise, not sqrt(sigma_S^2 + sigma_K^2): the k*S render continues the S render's sample sequence. The measured ratio sigma_K^2 / sigma_S^2 is 0.13 to 0.19 for this one pair of sample counts, below the 1/k = 0.25 of independent samples. It is recorded as measured, not as a convergence law, and bounds derived from (b) are not rescaled by 1/k (decision 052). The S-render sigma of decision 046 (a range) is replaced by the nested reading and the high-pass sigma_S per golden.
 
@@ -349,7 +349,7 @@ Item 2.5 (decision 051). On the fixed pipeline's fixtures no light-carrying path
 |---|---|---|---|---|---|---|---|
 | `base-saturated` | 0.6038 / 0.0331 / 0.0103 | 0.092 | -1.2 / -112.8 / -29.3 | 505 | +580 | +532 | 4.4e-16 |
 | `cube-saturated--ref-match-000` | 0.6038 / 0.0331 / 0.0103 | 0.000 | +0.0 / +0.0 / +0.0 | 0 | +528 | +528 | 5.6e-17 |
-| `cube-saturated--ref-match-180` | 0.6038 / 0.0331 / 0.0103 | 0.000 | +0.0 / +0.0 / +0.0 | 0 | +928 | +928 | 1.4e-17 |
+| `cube-saturated--ref-match-180` | 0.6038 / 0.0331 / 0.0103 | 0.000 | +0.0 / +0.0 / +0.0 | 0 | +928 | +928 | 5.6e-17 |
 <!-- transport:end -->
 
 ## 6. Defect detection (item 3.2)
@@ -396,20 +396,171 @@ Each defect is rendered at 256 samples on the golden's 256 x 256 crop and compar
 
 The fresh run agrees with `toolchain-probes.md` of 2026-10-10 (same adapter and drivers): DXR Tier 1.2 (at least Tier 1.1 is required), Shader Model 6.9, inline ray queries supported on DX12; `VK_KHR_acceleration_structure`, `VK_KHR_deferred_host_operations` and `VK_KHR_ray_query` exposed with the `accelerationStructure` and `rayQuery` features on Vulkan. The executable was built from commit `9e2c6381a4943eaa51f1c0b5c41c0a9be307bf69` (SHA-256 `83c3ac942b506674236400deba1f32882b9d7824d5f1ecf367110b49de96d6b4`).
 
-## 9. Open items
+## 9. Capture request of decision 052 and the reproducibility probe (decision 062)
 
-1. **Cause of the face-confined run-to-run difference** (owner: the coordinator; 18 references, about 45 minutes of Painter time; decision 052). Capture request, all under procedure `iray-capture/1`, S = 256, no k*S render needed:
-   - `plane-mid-grey` and `cube-mid-grey` turned by +1 degree and by -1 degree about +Y (no visible facet with a zero x component), two `separate_session` references each (8). The hypothesis predicts (a) at the rounding level for all four.
-   - `plane-mid-grey` twice more in separate sessions, and twice in one Painter session (Save Render after each Done, no relaunch) (4): is the decorrelation in every pair, and per session or per render?
-   - `cube-saturated--ref-match-180` twice more in separate sessions (2): is the 180-degree view immune, or was the pair a coincidence?
-   - `plane-mid-grey` under `ref_match` at rotation 0 and at 180, two `separate_session` references each (4): this varies the environment's symmetry about the mirror on the same facet and tests the mechanism, not only the trigger.
-   The new fixtures are rows of the reference table (`tools/parity/render_procedure/references.py`) with their manifests; `stability.face_regions` and `stability.half_steps` measure them.
+Task `phase0.9_render-reference-capture` recorded decision 052's capture request on 2026-10-11 (Painter `12.1.5+js-api.1.1.20`, RTX 4090, UI operator under the Assets3D Painter lock): 18 S renders of nine stability goldens (`parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/phase0/iray-stability/`), procedure `iray-capture/1`, S = 256, no k*S render, none refused. They are stability evidence, not admitted goldens (decision 062): each render, its panel images and its environment record are in the private store under the golden's manifest, and the staged recording (session, condition, convergence, golden key) stays in the private work folder with its SHA-256 below. The repeats of `plane-mid-grey` and `cube-saturated--ref-match-180` have the same golden key as their admitted parents, so all renders of one scene are compared with each other. The same-session pair is two renders of one project in one Painter process: after the first Save Render the recorder nudged the field of view by one degree and put it back through the documented API (Iray restarts), checked that the read-back render state equals the first, and saved again after Done (`--condition same_session`).
+
+Each pair is classified per facet, with the rule fixed before the analysis (`tools/parity/render_fits/probe.py`, decision 062): `rounding` when under 5% of the facet's pixels differ and at least 70% of the differing samples differ by one binary16 step, `decorrelated` above 50%, `identical` when nothing differs, else `indeterminate`. A pair takes its worst facet's class. Renders joined by rounding or identical pairs form one class.
+
+**Findings (decision 052 amended).**
+
+- **Trigger, confirmed in the tested conditions.** Turned by +1 or -1 degree about +Y (facet normal x components of +-0.011 on the plane and +-0.007 on the cube top instead of exactly zero), the plane and the cube are at the rounding level on all 14 facets: 0.1% to 4.4% of pixels differ, rms 0.2 to 1.2 codes, at most 5 binary16 steps. Unturned, the plane's facet differs on 83% to 98% of its pixels. The exact zero is necessary in these conditions; it is not sufficient (next points).
+- **Two mirrored sample sets: contradicted.** Six S renders of the unturned `plane-mid-grey` (two admitted, two new sessions, two in one session and one project) give 15 decorrelated pairs and six classes; a choice between two sample sets would give at most two. The same-session pair is decorrelated like the others (94% of pixels, rms 69 codes). The component is redrawn by every render, not per session or per process. Under the model rms(a)^2 = 2 sigma_r^2, with sigma_r^2 the redrawn variance and rms(b)^2 about the S render's variance at that facet, rms(a)^2 / (2 rms(b)^2) = 0.08 to 0.15: about a tenth of the facet's per-render variance is redrawn, in a way the other facets never show.
+- **The environment's rotation matters; its asymmetry does not explain it.** On the same plane facet, `ref_match` at rotation 0 is decorrelated (74% of pixels, rms 56 codes) and at rotation 180 at the rounding level (0.15%, rms 0.3); `cube-saturated--ref-match-180` stays at the rounding level in four renders (six pairs) on every facet, including its top face with an exactly-zero x component. Cosine-weighted asymmetry of the environment around the facet normal does not separate the views: about the x mirror 0.44 (rotation 0) against 0.38 (180) on the plane, 0.44 against 0.41 on the cube top; about a half-turn around the normal 0.65 against 1.67 and 1.61 against 1.83 (Studio White Soft: 1.76 and 1.84). A refined hypothesis is recorded, not adopted: the exact zero has to survive into the frame in which the environment is sampled; a rotation of 0 is the identity, while 180 degrees in floating point leaves sin(pi) != 0 and so a tiny nonzero component. It predicts the rounding level at rotation 360 (the lighting of rotation 0) and the face-confined class at any rotation whose sine and cosine are exact; if Painter folds 360 to 0, the test is void. It is phase3.6's discriminating test; Phase 0 needs no mechanism.
+- **Consequence for the floor.** The face-confined (a) of `plane-mid-grey`, `cube-mid-grey` and `cube-saturated--ref-match-000` (§2) is final as measured Iray variability, scoped to facets with an exactly-zero normal x component under environment rotation 0. Phase3.6 builds Tier 3 bounds on such facets from the per-face (a) and (b) with an explicit rule that does not count the redrawn component twice, flags facets with exactly-zero normal components in production meshes as a risk indicator (axis-aligned faces are common; y-zero and z-zero facets are not measured yet and are measured before a bound uses them), and UzPainter's tracer does not imitate the class.
+
+<!-- probe-captures:begin -->
+| Golden | Condition | Recording | Recorded (UTC) | Render SHA-256 | Staged recording SHA-256 | Key equals parent |
+|---|---|---|---|---|---|---|
+| `plane-mid-grey--yaw-p1` | separate_session | `s-1b3d741cd776` | 2026-10-11T17:23:01Z | `d6122b7be1c113e291c3de6441b2aacdb780a446be406ef16d05b51a1ee93a37` | `4a05c275f6203f4406509735d0fde77fefa4aeaae43d1f628762aa1edac7a5ef` | - |
+| `plane-mid-grey--yaw-p1` | separate_session | `s-c8fc3e3280f8` | 2026-10-11T17:40:49Z | `6bb59809d86a4feb29cfc773a24191fac8fa42901f51a19edf987e3703b187d4` | `69c4cc8caf1c8f2a67e75aaaf2102a9af878f3eeb87b2b1fc796413319529c89` | - |
+| `plane-mid-grey--yaw-m1` | separate_session | `s-2cbdb1151e0f` | 2026-10-11T17:43:08Z | `a7336f1456f7ff2523741f90295e8962da3ed7b9a610cef5df650e2ba4d704f8` | `befd9d735ac01ca95b332de2e1ae5a771f9aca404d0e3246c2e722564dc96449` | - |
+| `plane-mid-grey--yaw-m1` | separate_session | `s-91891ebf6e6f` | 2026-10-11T17:25:16Z | `1fde8b69effccf86f106571ac0325f5bce468375e6a823d3b5a4c4545c6469a2` | `16a8f82a12eae6b165ba1ec87f1d557a0056b03b64fde8339384071d666884e8` | - |
+| `cube-mid-grey--yaw-p1` | separate_session | `s-37f32074b925` | 2026-10-11T17:27:25Z | `a049f68107cf886c3cee17490dcc1bb1e849e31d2bb20049fe55293148b50bbc` | `1aefae1f2c52df65056fe6d2e560f2d8e8b16b3d1d5dbcc0e581c92f5c074f07` | - |
+| `cube-mid-grey--yaw-p1` | separate_session | `s-9d00f137d4d8` | 2026-10-11T17:45:23Z | `b48a75aca83858fa54a9f2cd394bd7c9f425064d6d38a7c44b626214168f832f` | `20f15a8ee90bfb46422cc3ea4f1e43ea18d342efcb943eb64ef4a3ee912e1f14` | - |
+| `cube-mid-grey--yaw-m1` | separate_session | `s-259541b89909` | 2026-10-11T17:47:31Z | `343052a4e5764aa391e724fd573eec17a635350495655c06263dd0a1c7952cb4` | `efbcfd1c5a53bcdb2c64ab8594e110f1c223517b054c93ea76be5105ae457032` | - |
+| `cube-mid-grey--yaw-m1` | separate_session | `s-42800adbf279` | 2026-10-11T17:29:39Z | `a39d6639f7fb0b747238469977af36bdd0c22166092f841310b7bc22d627136d` | `110156e0a4fe7569f61605b7688df9c444e2dab81ba450497afb2418c5f21b1e` | - |
+| `plane-mid-grey--repeat` | separate_session | `s-997be74d325e` | 2026-10-11T17:31:54Z | `a8e24e5df9e0748568d819ff5b090d1f6b63733224c2e3a6eac6252a8caa0654` | `26552bf64c0a5d547a45f114357242704709eda5becd54ee3c078f6205bc6594` | yes |
+| `plane-mid-grey--repeat` | separate_session | `s-fb3dd854d1ef` | 2026-10-11T17:49:53Z | `e50b4c21185d2723beb38583d60860ae3b4d0c1569046f4e42e30f446f6acd2c` | `f7a046d765e0f86cc2f659db8cbd86caeaa238d8fcc20c648629855d424aa394` | yes |
+| `plane-mid-grey--same-session` | same_session | `s-b4e5b62fa06f-1` | 2026-10-11T17:20:45Z | `b7117f1909e4efa4d34a9e93e6f603c328ce4aef2d51f0af223754aab0d99e34` | `84d308523c930e7614e22db921dfbb87f54f58bb559b9954a96d61b0e3590799` | yes |
+| `plane-mid-grey--same-session` | same_session | `s-b4e5b62fa06f-2` | 2026-10-11T17:20:45Z | `a1ab8cff1de934e25608064af632654b0f79fa98b8657436aea1075689633f17` | `01d7b3d4c0cc2c4068f468e0562ae969e62d8c8d9aa113678d885c74dd5190a2` | yes |
+| `cube-saturated--ref-match-180--repeat` | separate_session | `s-63e625348e62` | 2026-10-11T17:34:11Z | `92794f90581775e6065d224708888ef7e3ac485d78da8ed77bfbc648ae1bd150` | `3da37d827aebbb5f29663a7ab9ddd836b53b5ffa69ba8065c4ad2df79b4d2869` | yes |
+| `cube-saturated--ref-match-180--repeat` | separate_session | `s-9d8f042cdcab` | 2026-10-11T17:52:08Z | `1773f7c7c6d8f0d503d9e392b609be03174faa8d76d89eb30bd39975de1e2ccd` | `d473eadabd721262d146890b71179c89442e4d8c59965763b00b64cee96ae079` | yes |
+| `plane-mid-grey--ref-match-000` | separate_session | `s-a5a1eca01450` | 2026-10-11T17:54:23Z | `223b969c42ba98fca2cc27c95e14c226bfe4cbcdffa5a63e424addb573ecf8a8` | `0817e70756c86980a995aa42e6480a7e95ef4b3c05d96fa0bb298d32d23d919b` | - |
+| `plane-mid-grey--ref-match-000` | separate_session | `s-ceecb3bb6ae8` | 2026-10-11T17:36:25Z | `326393757320a9d7ce6c66d6d1d30a63fb2b23fae9527b363175254ce7e54dbc` | `889da789a8bce1ae8aacdd914f2b143a9329dae9134978995271c2418b8349fd` | - |
+| `plane-mid-grey--ref-match-180` | separate_session | `s-025087d6c0f3` | 2026-10-11T17:38:37Z | `1a1ca6eab0baf746ab6eb96ae14dbc831502107147ea5f43773d4cb4976a8bef` | `99dcfddb178f10a3ef52c71dfaeafdfa506c97453b5be357bd804ccc2e1f288f` | - |
+| `plane-mid-grey--ref-match-180` | separate_session | `s-1d1057b64140` | 2026-10-11T17:56:27Z | `3f4f50cccd953af73c0f415f5d8c82b73d5d34406d4460e11119b39c3054a2e8` | `396d0e602f728cb34085679f34de90e445b0a8bd2b61b200e1fd9c6daae61f74` | - |
+<!-- probe-captures:end -->
+
+<!-- probe-faces:begin -->
+| Golden | Facet | Pixels | (a) differing fraction | (a) rms | Max steps | One-step fraction | Facet class | Pair class |
+|---|---|---|---|---|---|---|---|---|
+| `plane-mid-grey--yaw-p1` | face n=(+0.01, +0.77, +0.64) | 286404 | 0.0121 | 1.0 | 5 | 0.98 | rounding | rounding |
+| `plane-mid-grey--yaw-m1` | face n=(-0.01, +0.77, +0.64) | 286404 | 0.0032 | 0.5 | 4 | 0.99 | rounding | rounding |
+| `cube-mid-grey--yaw-p1` | face n=(-0.81, -0.24, +0.53) | 45593 | 0.0100 | 0.8 | 3 | 0.95 | rounding | rounding |
+| `cube-mid-grey--yaw-p1` | face n=(-0.57, +0.47, +0.68) | 12762 | 0.0071 | 0.6 | 4 | 0.95 | rounding | rounding |
+| `cube-mid-grey--yaw-p1` | face n=(-0.16, -0.42, +0.90) | 20207 | 0.0147 | 0.7 | 3 | 0.94 | rounding | rounding |
+| `cube-mid-grey--yaw-p1` | face n=(+0.01, +0.91, +0.42) | 31701 | 0.0026 | 0.4 | 3 | 0.91 | rounding | rounding |
+| `cube-mid-grey--yaw-p1` | face n=(+0.42, +0.40, +0.82) | 17400 | 0.0012 | 0.3 | 1 | 1.00 | rounding | rounding |
+| `cube-mid-grey--yaw-p1` | face n=(+0.59, -0.35, +0.73) | 73335 | 0.0037 | 0.6 | 2 | 0.97 | rounding | rounding |
+| `cube-mid-grey--yaw-m1` | face n=(-0.83, -0.24, +0.51) | 41966 | 0.0230 | 1.2 | 5 | 0.94 | rounding | rounding |
+| `cube-mid-grey--yaw-m1` | face n=(-0.59, +0.47, +0.66) | 12156 | 0.0088 | 0.6 | 2 | 0.96 | rounding | rounding |
+| `cube-mid-grey--yaw-m1` | face n=(-0.19, -0.42, +0.89) | 19992 | 0.0436 | 1.2 | 3 | 0.96 | rounding | rounding |
+| `cube-mid-grey--yaw-m1` | face n=(-0.01, +0.91, +0.42) | 31704 | 0.0033 | 0.4 | 3 | 0.92 | rounding | rounding |
+| `cube-mid-grey--yaw-m1` | face n=(+0.39, +0.40, +0.83) | 17895 | 0.0010 | 0.2 | 1 | 1.00 | rounding | rounding |
+| `cube-mid-grey--yaw-m1` | face n=(+0.56, -0.35, +0.75) | 76788 | 0.0092 | 0.9 | 3 | 0.97 | rounding | rounding |
+| `plane-mid-grey--repeat` | face n=(+0.00, +0.77, +0.64) | 286384 | 0.9500 | 53.9 | 30 | 0.32 | decorrelated | decorrelated |
+| `plane-mid-grey--same-session` | face n=(+0.00, +0.77, +0.64) | 286384 | 0.9391 | 68.9 | 36 | 0.29 | decorrelated | decorrelated |
+| `cube-saturated--ref-match-180--repeat` | face n=(-0.82, -0.24, +0.52) | 43778 | 0.0044 | 0.1 | 4 | 0.81 | rounding | rounding |
+| `cube-saturated--ref-match-180--repeat` | face n=(-0.58, +0.47, +0.67) | 12460 | 0.0013 | 0.1 | 2 | 0.90 | rounding | rounding |
+| `cube-saturated--ref-match-180--repeat` | face n=(-0.17, -0.42, +0.89) | 20115 | 0.0055 | 0.1 | 2 | 0.93 | rounding | rounding |
+| `cube-saturated--ref-match-180--repeat` | face n=(+0.00, +0.91, +0.42) | 31713 | 0.0008 | 0.3 | 2 | 0.93 | rounding | rounding |
+| `cube-saturated--ref-match-180--repeat` | face n=(+0.41, +0.40, +0.82) | 17652 | 0.0010 | 0.1 | 1 | 1.00 | rounding | rounding |
+| `cube-saturated--ref-match-180--repeat` | face n=(+0.57, -0.35, +0.74) | 74997 | 0.0076 | 0.2 | 11 | 0.87 | rounding | rounding |
+| `plane-mid-grey--ref-match-000` | face n=(+0.00, +0.77, +0.64) | 286384 | 0.7393 | 56.2 | 31 | 0.32 | decorrelated | decorrelated |
+| `plane-mid-grey--ref-match-180` | face n=(+0.00, +0.77, +0.64) | 286384 | 0.0015 | 0.3 | 6 | 0.95 | rounding | rounding |
+<!-- probe-faces:end -->
+
+<!-- probe-clusters:begin -->
+`plane-mid-grey`: 6 S renders, one golden key: yes; classes: {`s-997be74d325e`}; {`s-fb3dd854d1ef`}; {`s-b4e5b62fa06f-1`}; {`s-b4e5b62fa06f-2`}; {`s-491ff293d70d`}; {`s-d501717ac5e1`}; consistent with a binary choice: no.
+
+| Render | Render | Same session | Pixel identical | (a) differing fraction (worst facet) | (a) rms | Max steps | One-step fraction | Class |
+|---|---|---|---|---|---|---|---|---|
+| `plane-mid-grey/s-491ff293d70d` | `s-d501717ac5e1` | no | no | 0.9648 | 67.2 | 36 | 0.28 | decorrelated |
+| `plane-mid-grey/s-491ff293d70d` | `s-997be74d325e` | no | no | 0.9713 | 69.1 | 36 | 0.26 | decorrelated |
+| `plane-mid-grey/s-491ff293d70d` | `s-fb3dd854d1ef` | no | no | 0.9757 | 68.8 | 36 | 0.24 | decorrelated |
+| `plane-mid-grey/s-491ff293d70d` | `s-b4e5b62fa06f-1` | no | no | 0.9769 | 68.0 | 41 | 0.23 | decorrelated |
+| `plane-mid-grey/s-491ff293d70d` | `s-b4e5b62fa06f-2` | no | no | 0.9691 | 67.1 | 38 | 0.27 | decorrelated |
+| `plane-mid-grey/s-d501717ac5e1` | `s-997be74d325e` | no | no | 0.9072 | 71.5 | 43 | 0.33 | decorrelated |
+| `plane-mid-grey/s-d501717ac5e1` | `s-fb3dd854d1ef` | no | no | 0.9374 | 71.1 | 41 | 0.31 | decorrelated |
+| `plane-mid-grey/s-d501717ac5e1` | `s-b4e5b62fa06f-1` | no | no | 0.9466 | 66.6 | 38 | 0.30 | decorrelated |
+| `plane-mid-grey/s-d501717ac5e1` | `s-b4e5b62fa06f-2` | no | no | 0.8271 | 67.1 | 40 | 0.32 | decorrelated |
+| `plane-mid-grey--repeat/s-997be74d325e` | `s-fb3dd854d1ef` | no | no | 0.9500 | 53.9 | 30 | 0.32 | decorrelated |
+| `plane-mid-grey--repeat/s-997be74d325e` | `s-b4e5b62fa06f-1` | no | no | 0.9238 | 67.8 | 35 | 0.31 | decorrelated |
+| `plane-mid-grey--repeat/s-997be74d325e` | `s-b4e5b62fa06f-2` | no | no | 0.9135 | 56.8 | 31 | 0.33 | decorrelated |
+| `plane-mid-grey--repeat/s-fb3dd854d1ef` | `s-b4e5b62fa06f-1` | no | no | 0.9710 | 71.2 | 34 | 0.25 | decorrelated |
+| `plane-mid-grey--repeat/s-fb3dd854d1ef` | `s-b4e5b62fa06f-2` | no | no | 0.9467 | 56.8 | 28 | 0.31 | decorrelated |
+| `plane-mid-grey--same-session/s-b4e5b62fa06f-1` | `s-b4e5b62fa06f-2` | yes | no | 0.9391 | 68.9 | 36 | 0.29 | decorrelated |
+
+`cube-saturated--ref-match-180`: 4 S renders, one golden key: yes; classes: {`s-70a22a52d53d`, `s-ea62cf781dbd`, `s-63e625348e62`, `s-9d8f042cdcab`}; consistent with a binary choice: yes.
+
+| Render | Render | Same session | Pixel identical | (a) differing fraction (worst facet) | (a) rms | Max steps | One-step fraction | Class |
+|---|---|---|---|---|---|---|---|---|
+| `cube-saturated--ref-match-180/s-70a22a52d53d` | `s-ea62cf781dbd` | no | no | 0.0098 | 0.2 | 7 | 0.86 | rounding |
+| `cube-saturated--ref-match-180/s-70a22a52d53d` | `s-63e625348e62` | no | no | 0.0087 | 0.2 | 11 | 0.87 | rounding |
+| `cube-saturated--ref-match-180/s-70a22a52d53d` | `s-9d8f042cdcab` | no | no | 0.0048 | 0.1 | 7 | 0.87 | rounding |
+| `cube-saturated--ref-match-180/s-ea62cf781dbd` | `s-63e625348e62` | no | no | 0.0099 | 0.2 | 11 | 0.87 | rounding |
+| `cube-saturated--ref-match-180/s-ea62cf781dbd` | `s-9d8f042cdcab` | no | no | 0.0097 | 0.2 | 5 | 0.86 | rounding |
+| `cube-saturated--ref-match-180--repeat/s-63e625348e62` | `s-9d8f042cdcab` | no | no | 0.0076 | 0.2 | 11 | 0.87 | rounding |
+<!-- probe-clusters:end -->
+
+### Reproducibility probe (decision 033)
+
+The probe decision 033 adds to P0-FEAS-RENDER: "one trivial Iray scene captured repeatedly, with pixel equality, per-setting observability and the measured variance published". The scene is `plane-mid-grey` (one planar facet set, one constant material, Studio White Soft): six S renders (two admitted in separate sessions, two `plane-mid-grey--repeat` in separate sessions, two `plane-mid-grey--same-session` in one session) and its admitted k*S render. Per requirement:
+
+- **Captured repeatedly**: six S renders in five Painter processes over about five and a half hours, each with its provenance (condition, session, time, file SHA-256) below; the k*S render is the admitted one (provenance in `iray-references.md`).
+- **Pixel equality**: 0 of 15 pairs byte-identical, 0 of 15 pixel-identical after decoding the 16-bit RGB codes; every pair is decorrelated on the facet with the exactly-zero normal component (table above).
+- **Per-setting observability**: how each setting is set and read back on every capture, and how many of the six captures confirm the sheet's value (the admitted renders' panel read-backs come from their golden records). The seed is `uncontrolled`: neither settable nor observable. No denoiser control exists, and the procedure probe measured the 2-sample residual as white noise (lag-1 correlation 0.047), so no denoiser acts (`iray-capture-procedure.md`, row `denoiser`).
+- **Variance**: per render the high-pass sigma of the interior (green channel, a white-noise estimator that includes the facet's slight shading gradient) and (b) against the k*S render; per pair (a) in the table above.
+
+The probe publishes these numbers; it requires no pixel equality (decisions 017, 033) and does not by itself open P3-PATHTRACER.
+
+<!-- reproducibility:begin -->
+Scene `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/phase0/iray-references/plane-mid-grey.json`. k*S render `plane-mid-grey/k-34d2b0b1234c` (`abec8e5e52fe9c7b01a6d9560430fd72d228764610f028e8a36fa37fa6df3da8`, high-pass sigma 53.6 codes). Of 15 pairs of S renders, 0 are byte-identical and 0 pixel-identical.
+
+| Render | Condition | Recorded (UTC) | Render SHA-256 | Rendering time (s) | High-pass sigma | (b) rms vs k*S | (b) mean signed |
+|---|---|---|---|---|---|---|---|
+| `plane-mid-grey/s-491ff293d70d` | separate_session | 2026-10-11T12:20:51Z | `7a9a2c36a0cdbf33aa7e4c46297a1cfd9472cceea2a547ca9f15729771c88f4e` | 1 | 139.7 | 133.7 | -0.30 |
+| `plane-mid-grey/s-d501717ac5e1` | separate_session | 2026-10-11T13:10:42Z | `65d0a3de0a547aa5c6e4deaffe1f45ee341697e97134c29a1daff968109fe71b` | 1 | 139.5 | 132.2 | -0.32 |
+| `plane-mid-grey--repeat/s-997be74d325e` | separate_session | 2026-10-11T17:31:54Z | `a8e24e5df9e0748568d819ff5b090d1f6b63733224c2e3a6eac6252a8caa0654` | 1 | 139.9 | 134.5 | -0.35 |
+| `plane-mid-grey--repeat/s-fb3dd854d1ef` | separate_session | 2026-10-11T17:49:53Z | `e50b4c21185d2723beb38583d60860ae3b4d0c1569046f4e42e30f446f6acd2c` | 1 | 140.1 | 134.7 | -0.29 |
+| `plane-mid-grey--same-session/s-b4e5b62fa06f-1` | same_session | 2026-10-11T17:20:45Z | `b7117f1909e4efa4d34a9e93e6f603c328ce4aef2d51f0af223754aab0d99e34` | 1 | 140.3 | 134.8 | -0.21 |
+| `plane-mid-grey--same-session/s-b4e5b62fa06f-2` | same_session | 2026-10-11T17:20:45Z | `a1ab8cff1de934e25608064af632654b0f79fa98b8657436aea1075689633f17` | 1 | 139.2 | 133.4 | -0.33 |
+<!-- reproducibility:end -->
+
+<!-- observability:begin -->
+| Setting | Value | Set by | Read back on each capture | Captures confirming | Procedure row | Row status (phase0.6) |
+|---|---|---|---|---|---|---|
+| Iray Settings/Min Sample | 256 | UI automation (decision 029) | widget value after commit | 6/6 | `iray_settings` | `confirmed_by_probe` |
+| Iray Settings/Max Sample | 256 | UI automation (decision 029) | widget value after commit | 6/6 | `iray_settings` | `confirmed_by_probe` |
+| Iray Settings/Max Time | 3600 | UI automation (decision 029) | widget value after commit | 6/6 | `iray_settings` | `confirmed_by_probe` |
+| Iray Settings/Caustic Sampler | False | UI automation (decision 029) | widget value after commit | 6/6 | `iray_settings` | `confirmed_by_probe` |
+| Iray Settings/Firefly Filter | False | UI automation (decision 029) | widget value after commit | 6/6 | `iray_settings` | `confirmed_by_probe` |
+| Iray Settings/Override viewport resolution | True | UI automation (decision 029) | widget value after commit | 6/6 | `iray_settings` | `confirmed_by_probe` |
+| Iray Settings/Width | 1200 | UI automation (decision 029) | widget value after commit | 6/6 | `iray_settings` | `confirmed_by_probe` |
+| Iray Settings/Height | 1200 | UI automation (decision 029) | widget value after commit | 6/6 | `iray_settings` | `confirmed_by_probe` |
+| Display Settings/View mode | Material | UI automation (decision 029) | widget value after commit | 6/6 | `display_settings` | `not_required` |
+| Display Settings/Override environment map color space | True | UI automation (decision 029) | widget value after commit | 6/6 | `viewer_mdl_settings` | `confirmed_by_probe` |
+| Display Settings/Environment map color space | Linear | UI automation (decision 029) | widget value after commit | 6/6 | `viewer_mdl_settings` | `confirmed_by_probe` |
+| Display Settings/Environment Exposure | 0.0 | UI automation (decision 029) | widget value after commit | 6/6 | `viewer_mdl_settings` | `confirmed_by_probe` |
+| Display Settings/Environment Rotation | 0.0 | UI automation (decision 029) | widget value after commit | 6/6 | `viewer_mdl_settings` | `confirmed_by_probe` |
+| Display Settings/Environment Alignment | World | UI automation (decision 029) | widget value after commit | 6/6 | `viewer_mdl_settings` | `confirmed_by_probe` |
+| Display Settings/Dome | Infinite sphere | UI automation (decision 029) | widget value after commit | 6/6 | `viewer_mdl_settings` | `confirmed_by_probe` |
+| Display Settings/Clear color | True | UI automation (decision 029) | widget value after commit | 6/6 | `viewer_mdl_settings` | `confirmed_by_probe` |
+| Display Settings/Clear color value | 595959 | UI automation (decision 029) | widget value after commit | 6/6 | `viewer_mdl_settings` | `confirmed_by_probe` |
+| Display Settings/Ground | False | UI automation (decision 029) | widget value after commit | 6/6 | `viewer_mdl_settings` | `confirmed_by_probe` |
+| Display Settings/Activate Post Effects | False | UI automation (decision 029) | widget value after commit | 6/6 | `display_settings` | `not_required` |
+| Display Settings/Activate Color Profile | False | UI automation (decision 029) | widget value after commit | 6/6 | `display_settings` | `not_required` |
+| Display Settings/Activate Subsurface Scattering | False | UI automation (decision 029) | widget value after commit | 6/6 | `display_settings` | `not_required` |
+| camera, environment resource (render_state) |  | documented Python API | documented API read-back in the golden key | 6/6 | `camera_projection` | `confirmed_by_probe` |
+| display transform Default - sRGB |  | Painter's fresh-session default | selector image and background canary | 6/6 | `display_view_transform` | `confirmed_by_probe` |
+| convergence (Status, Iterations, Rendering time) |  | Min = Max Sample | Renderer Settings labels | 6/6 | `readiness` | `confirmed_by_probe` |
+| Save Render 16-bit PNG at 1200 x 1200 |  | Save Render | decoded file | 6/6 | `save_render` | `confirmed_by_probe` |
+| denoiser |  | no control | not observable (no denoiser acts) | - | `denoiser` | `confirmed_by_probe` |
+| random seed |  | not settable | not observable | - | `random_seed` | `uncontrolled` |
+<!-- observability:end -->
+
+## 10. Open items
+
+1. **Mechanism of the face-confined run-to-run class** (owner: phase3.6). Decision 052's capture request answered the trigger and the session question (§9). Discriminating test of the refined hypothesis: `plane-mid-grey` under `ref_match` at rotation 360 (and, if Painter keeps them, rotations whose sine and cosine are exact, such as 90 degrees), two separate-session S renders each; prediction: rounding level at 360. Also one facet with an exactly-zero y and one with an exactly-zero z normal component, before any Tier 3 bound relies on them.
 2. **The shipped tracer's term (c)** (owner: phase3.6 item 2.3): `noise.pair_statistics` on `painter_iray` renders at two seeds and k*S, as §3 does for the prototype.
 3. **The dielectric lobe and the view-dependent diffuse residual** (owner: phase3.5): the first fits leave biases of hundreds of codes (§4).
+4. **Term (c) of the qualification sphere** (owner: `phase0.9_render-reference-capture` item 3.2): read back the template-default material of an OCIO project (empty-stack BaseColor, BaseMetalness and SpecularRoughness) as a hashed private record, then measure the prototype's (c) on the sphere as §3 does.
 
-## 10. Commands
+## 11. Commands
 
 - `python -m tools.parity.render_fits measure --work <dir>` reads the store, renders the prototype (cached under `<dir>/renders`) and writes `<dir>/results.json`.
 - `python -m tools.parity.render_fits write --work <dir> --selftest-report <dir>/run/selftest-report.json` writes `parity/semantics/iray.json` and the generated blocks of this report.
 - `UzPainter.exe selftest --out-dir <dir>/run` records the probes of §8.
+- `python -m tools.parity.render_procedure stability-admit` stores the staged captures of the stability goldens; `python -m tools.parity.render_fits probe --work <dir>` writes §9's blocks (decision 062).
 - `python -m tools.parity.guard` checks that no render, crop or difference map is in the repository.

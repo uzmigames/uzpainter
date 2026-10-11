@@ -1,0 +1,11 @@
+{
+  "id": 53,
+  "slug": "the-normal-map-opacity-rotation-uses-the-recording-gpu-s-glsl-arcsine-and-measured-sine-and-cosine-tables",
+  "title": "The normal-map opacity rotation uses the recording GPU's GLSL arcsine and measured sine and cosine tables",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.11_compositor-blend-gaps"
+  ],
+  "supersededBy": null
+}

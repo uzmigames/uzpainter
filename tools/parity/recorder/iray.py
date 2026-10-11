@@ -20,6 +20,13 @@ Painter session:
    references (different Painter processes) and one `k_times_samples` reference with identical
    keys are staged, the private record and the public manifest are written to the inbox.
 
+The `same_session` condition (stability probe of decision 052's capture request, decision 062)
+records two S renders of one project in one Painter session: after the first Save Render the
+recorder nudges the camera's field of view and puts it back through the documented API, which
+restarts Iray (the procedure probe's same-session repeat), requires the read-back render state
+to equal the first, and repeats steps 3 and 4. Such a golden never completes: it is stability
+evidence, not an admitted reference.
+
 The sheet names the procedure version (`capture.procedure`, `PROCEDURE_VERSION`) and the pixel
 route (`capture.route`); the qualified procedure and its answers are
 `parity/reports/phase0/iray-capture-procedure.md` (task `phase0.6_render-reference-procedure`).
@@ -85,6 +92,9 @@ TIME_UNITS = {"s": 1.0, "min": 60.0, "h": 3600.0}
 PANEL_IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 SEPARATE_SESSION = "separate_session"
 K_TIMES_SAMPLES = "k_times_samples"
+SAME_SESSION = "same_session"
+SAME_SESSION_RENDERS = 2
+NUDGE_DEGREES = 1.0  # field-of-view nudge that restarts Iray (procedure probe step B)
 
 
 class Operator(Protocol):
@@ -432,7 +442,25 @@ def reference_needed(job: Job, condition: str, work: Path) -> bool:
             if s.recording["condition"] == SEPARATE_SESSION
         }
         return len(sessions) < 2
-    return not any(s.recording["condition"] == K_TIMES_SAMPLES for s in staged)
+    return not any(s.recording["condition"] == condition for s in staged)
+
+
+def restart_render(session: PainterSession, render_state: dict[str, Any]) -> None:
+    """Nudge the field of view and put it back (documented camera API); Iray restarts. The
+    render state read back afterwards must equal the first (read before the switch to
+    Visualisation, so the mode is compared separately), or the second render is refused."""
+    field_of_view = render_state["camera.field_of_view"]
+    for value in (field_of_view + NUDGE_DEGREES, field_of_view):
+        session.call("apply_step", step=0, call=ps.CAMERA + "field_of_view", args={"value": value})
+    restored = session.call("render_state")
+    restored["scene_bounding_box"] = session.call("scene_bounding_box")
+    mode = restored.pop("ui_mode", None)
+    first = {name: value for name, value in render_state.items() if name != "ui_mode"}
+    if restored != first or mode != "Visualisation":
+        raise RecorderError(
+            "the render state after the same-session restart differs from the first render's: "
+            "second render refused"
+        )
 
 
 def record_iray_reference(
@@ -464,14 +492,16 @@ def record_iray_reference(
         raise RecorderError("a Tier 3 job captures with Save Render, not texture exports")
     sheet = settings_sheet(job)
     mesh_id = mesh_input(job)
-    if condition == SEPARATE_SESSION:
+    if condition in (SEPARATE_SESSION, SAME_SESSION):
         samples = sheet.samples
     elif condition == K_TIMES_SAMPLES:
         if k is None or k <= 1:
             raise RecorderError("the k_times_samples reference needs an integer k > 1")
         samples = k * sheet.samples
     else:
-        raise RecorderError(f"condition must be {SEPARATE_SESSION} or {K_TIMES_SAMPLES}")
+        raise RecorderError(
+            f"condition must be {SEPARATE_SESSION}, {K_TIMES_SAMPLES} or {SAME_SESSION}"
+        )
     identity = session.connect()
     if sheet.display_transform is not None and identity.colour_management.get("mode") != "ocio":
         close_quietly(session)
@@ -487,6 +517,8 @@ def record_iray_reference(
                 "this Painter session already recorded a reference of this golden: restart "
                 "Painter (references are recorded in separate sessions)"
             )
+        if condition == SAME_SESSION and prior.recording["condition"] == SAME_SESSION:
+            raise RecorderError("this golden already holds its same-session renders")
     directory = ensure_outside_repository(work) / "iray" / job.golden_id.replace("/", "__")
     directory = directory / run_name(identity.session_id, now())
     staged_inputs = stage_inputs(job, directory / "inputs")
@@ -502,8 +534,14 @@ def record_iray_reference(
         if switched["mode"] != "Visualisation":
             raise RecorderError(f"Painter stayed in {switched['mode']} mode")
         operator_outputs, evidence, images = operator_form(operator, sheet, samples, directory)
-        converged = convergence(operator, sheet, samples)
-        reference, render_file = capture_render(operator, sheet, directory, silhouette)
+        renders = [convergence(operator, sheet, samples)]
+        captures = [capture_render(operator, sheet, directory, silhouette)]
+        if condition == SAME_SESSION:
+            for index in range(2, SAME_SESSION_RENDERS + 1):
+                restart_render(session, render_state)
+                renders.append(convergence(operator, sheet, samples))
+                repeat = directory / f"render-{index}"
+                captures.append(capture_render(operator, sheet, repeat, silhouette))
     finally:
         close_quietly(session)
     key = {
@@ -523,35 +561,40 @@ def record_iray_reference(
         "render_state": render_state,
     }
     prefix = "k" if condition == K_TIMES_SAMPLES else "s"
-    recording_id = f"{prefix}-{slug(identity.session_id)[:12]}"
-    recording = {
-        "recording_id": recording_id,
-        "condition": condition,
-        "session_id": identity.session_id,
-        "recorded_at": now().isoformat(),
-        "outputs": [
-            {
-                "output_id": "render/reference",
-                "kind": "iray_reference",
-                **reference,
-                "samples": samples,
-                "convergence": converged,
-                "capture_route": "save_render",
-                "settings_sheet_sha256": sheet.sha256,
-                "operator_settings_output_id": "operator/settings",
-                "current_frame_verified": True,
-                "uncontrolled_settings": list(job.manifest.get("uncontrolled_settings", [])),
-            },
-            *operator_outputs,
-            *evidence,
-        ],
-    }
     environment = (
         None
         if identity.environment is None
         else {**identity.environment, "operator_id": operator_id}
     )
-    stage(golden_dir / recording_id, key, recording, [render_file, *images], environment)
+    for index, (converged, (reference, render_file)) in enumerate(
+        zip(renders, captures, strict=True), start=1
+    ):
+        recording_id = f"{prefix}-{slug(identity.session_id)[:12]}"
+        if condition == SAME_SESSION:
+            recording_id += f"-{index}"
+        recording = {
+            "recording_id": recording_id,
+            "condition": condition,
+            "session_id": identity.session_id,
+            "recorded_at": now().isoformat(),
+            "outputs": [
+                {
+                    "output_id": "render/reference",
+                    "kind": "iray_reference",
+                    **reference,
+                    "samples": samples,
+                    "convergence": converged,
+                    "capture_route": "save_render",
+                    "settings_sheet_sha256": sheet.sha256,
+                    "operator_settings_output_id": "operator/settings",
+                    "current_frame_verified": True,
+                    "uncontrolled_settings": list(job.manifest.get("uncontrolled_settings", [])),
+                },
+                *operator_outputs,
+                *evidence,
+            ],
+        }
+        stage(golden_dir / recording_id, key, recording, [render_file, *images], environment)
     staged = load_staged(golden_dir)
     if not complete(staged):
         return None

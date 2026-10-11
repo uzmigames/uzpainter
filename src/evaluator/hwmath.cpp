@@ -35,9 +35,28 @@ constexpr unsigned char kExp2PosTable[] = {
 constexpr unsigned char kExp2NegTable[] = {
 #embed "tables/hw-ex2-neg.zlib"
 };
+constexpr unsigned char kSinTable[] = {
+#embed "tables/hw-sin.zlib"
+};
+constexpr unsigned char kCosTable[] = {
+#embed "tables/hw-cos.zlib"
+};
 #pragma clang diagnostic pop
 
 constexpr uint32_t kExponentMask = 0x7F800000u;
+constexpr uint32_t kTurnsPerRadian = 0x3E22F983u;  // float32(1 / (2 pi))
+constexpr float kHalfPiF = 1.57079632679489661923f;
+constexpr float kAsinC0 = 1.666701424e-1f;
+constexpr float kAsinC1 = 7.484657646e-2f;
+constexpr float kAsinC2 = 4.675685871e-2f;
+constexpr float kAsinC3 = 1.816697683e-2f;
+constexpr float kAsinC4 = 5.175137819e-2f;
+
+/// x y + z: the exact product (exact in double) plus z rounded to double, then to float32 (the
+/// evaluator's Fma, arith.h; equal to the single rounding on every normal result it is used for).
+float FusedMulAdd(float x, float y, float z) {
+    return static_cast<float>(static_cast<double>(x) * static_cast<double>(y) + static_cast<double>(z));
+}
 constexpr uint32_t kOne = 0x3F800000u;
 constexpr uint32_t kQuietNaN = 0x7FC00000u;
 
@@ -194,13 +213,15 @@ std::span<const unsigned char> Compressed(Table table) {
         case Table::Log2Lo: return {kLog2LoTable, sizeof(kLog2LoTable)};
         case Table::Exp2Pos: return {kExp2PosTable, sizeof(kExp2PosTable)};
         case Table::Exp2Neg: return {kExp2NegTable, sizeof(kExp2NegTable)};
+        case Table::Sin: return {kSinTable, sizeof(kSinTable)};
+        case Table::Cos: return {kCosTable, sizeof(kCosTable)};
     }
     return {};
 }
 
 const std::vector<uint32_t>& Values(Table table) {
-    static std::once_flag once[4];
-    static std::vector<uint32_t> values[4];
+    static std::once_flag once[6];
+    static std::vector<uint32_t> values[6];
     const size_t i = static_cast<size_t>(table);
     std::call_once(once[i], [&] { values[i] = InflateValues(table); });
     return values[i];
@@ -259,6 +280,36 @@ float Exp2(float y) {
 float Pow(float x, float g) {
     const float product = g * Log2(x);
     return Exp2(product);
+}
+
+uint32_t TrigIndex(float x) {
+    // x c is exact in double (24 + 24 significant bits); the turn is truncated to float32.
+    const float u = TowardZero(static_cast<double>(x) * static_cast<double>(std::bit_cast<float>(kTurnsPerRadian)));
+    return static_cast<uint32_t>(u * 33554432.0f);  // u 2^25 is exact; truncation floors it
+}
+
+float Sin(float x) { return std::bit_cast<float>(Values(Table::Sin)[TrigIndex(x)]); }
+
+float Cos(float x) { return std::bit_cast<float>(Values(Table::Cos)[TrigIndex(x)]); }
+
+float Asin(float x) {
+    const uint32_t bits = std::bit_cast<uint32_t>(x);
+    const uint32_t magnitude = bits & 0x7FFFFFFFu;
+    if (magnitude > kOne) return std::bit_cast<float>(kQuietNaN);  // |x| > 1 and NaN
+    if (magnitude < 0x00800000u) return 0.0f;                     // zeros and subnormals: +0
+    const float t = std::bit_cast<float>(magnitude);
+    const bool upper = t > 0.57f;
+    const float a = upper ? Sqrt(FusedMulAdd(-0.5f, t, 0.5f)) : t;
+    const float s = a * a;
+    float r = kAsinC4;
+    r = FusedMulAdd(r, s, kAsinC3);
+    r = FusedMulAdd(r, s, kAsinC2);
+    r = FusedMulAdd(r, s, kAsinC1);
+    r = FusedMulAdd(r, s, kAsinC0);
+    r = r * s;
+    const float p = FusedMulAdd(r, a, a);
+    const float result = upper ? FusedMulAdd(-2.0f, p, kHalfPiF) : p;
+    return (bits & 0x80000000u) ? -result : result;
 }
 
 }  // namespace uzp::evaluator::hw

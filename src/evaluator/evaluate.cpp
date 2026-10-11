@@ -300,7 +300,11 @@ private:
         return Operand::Of(*dst);
     }
 
-    render::Result<Operand> EvaluateList(const DagList& list, Operand start) {
+    static bool SameTile(const Operand& a, const Operand& b) {
+        return a.kind == Operand::Kind::Tile && b.kind == Operand::Kind::Tile && a.tile == b.tile;
+    }
+
+    render::Result<Operand> EvaluateList(const DagList& list, const Operand& start) {
         Operand acc = start;
         TileFormat format = m_dag.tileFormat;
         format.alpha = list.isolated;
@@ -321,9 +325,13 @@ private:
         for (size_t i = first; i < list.layers.size(); ++i) {
             const DagLayer& layer = list.layers[i];
             const CacheKey key{list.owner, CacheKind::Prefix, layer.prefixHash, m_tx, m_ty};
+            // A PassThrough group's children start from this accumulator (kept pinned: the
+            // group composite reads it again); any other group from a transparent start.
             render::Result<Operand> source =
-                layer.group ? EvaluateList(*layer.group, Operand::Constant({0.0f, 0.0f, 0.0f}, 0.0f))
-                            : ContentOf(layer);
+                !layer.group ? ContentOf(layer)
+                : layer.group->fromBackdrop
+                    ? EvaluateList(*layer.group, acc)
+                    : EvaluateList(*layer.group, Operand::Constant({0.0f, 0.0f, 0.0f}, 0.0f));
             if (!source) return source;
             render::Result<Operand> mask = MaskOf(layer);
             if (!mask) return mask;
@@ -339,7 +347,7 @@ private:
             render::Result<void> queued = m_env.store.Blend(op);
             if (!queued) return render::Unexpected(queued.error());
             ++m_stats.blends;
-            Defer(acc);
+            if (!list.fromBackdrop || !SameTile(acc, start)) Defer(acc);
             Defer(*source);
             Defer(*mask);
             acc = Operand::Of(*dst);

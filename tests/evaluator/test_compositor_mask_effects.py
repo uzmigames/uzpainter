@@ -64,7 +64,7 @@ def test_masks_and_effects_on_the_cpu(evaluator_tests: Path) -> None:
         "two fills under complementary masks leave exactly the template base uncovered "
         "(no default bleed)",
         "filter, generator and anchor effects fail with unsupported_node",
-        "a PassThrough group with a mask raster fails with unsupported_node",
+        "a PassThrough group with a mask raster evaluates",
     } <= passed
 
 

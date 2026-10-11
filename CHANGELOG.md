@@ -22,6 +22,19 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
   - mono-channel mask stacks with ordered effects, the fill and levels effects, subtraction, `Mesh` geometry masks, group masks, 16-bit mask precision, and the GPU's `exp2(g·log2 x)` pow reproduced from measured tables;
   - `mask-precision`, `levels-clamp` and `effect-order` s6 are exact on CPU and GPU (`parity/semantics/masks-levels.json`);
   - the `group-masks` s2–s3 residual waits on `phase1.10_compositor-float32-residual`.
+- Iray reference captures (task `phase0.7_render-reference-captures`, decision 046): 23 goldens under the fixed pipeline, each with two 256-sample references from separate sessions plus one at 4×256, admitted to the private store. Noise terms are measured. Iray's sample sequence repeats across sessions. The default shader's displacement and tessellation defaults are read back under OCIO.
+- Tier 0 UI-set goldens (task `phase0.7_tier0-semantics-ui-cases`, decisions 047–048):
+  - height→normal goldens for both methods (Sharp, Sobel), which are set per texture set; Painter has no strength control, so the sweep varies height amplitude instead;
+  - group `Passthrough` goldens with and without masks; the runtime enum is `Passthrough`, not the documented `PassThrough`;
+  - a recorder operator step for settings that can only be set through the UI;
+  - the minification, impulse and group-coverage diagnostic recordings for phase1.9 and phase1.10.
+- Render reference fits (task `phase0.8_render-reference-fits`, decisions 050–052):
+  - a CPU path-tracing prototype that never ships (`tools/parity/render_fits/`) and first `parity/semantics/iray.json` fits;
+  - the metal lobe is within about 0.3 %; no lobe is reproduced within Iray's noise yet;
+  - the display encoding is sRGB of a half-float value;
+  - the run-to-run spikes sit on faces with n_x = 0, a hypothesis under test;
+  - report in `parity/reports/phase0/iray-noise-floor.md`.
+- Minification through Painter's Vulkan anisotropic sampler identified (task `phase1.9_compositor-resample-gaps`, decision 056). The UV transform now applies offset before scale and rotation. Minification stays refused until a bit-exact model exists.
 - Project store settle tests (task `phase1.8_project-store`, items 3.1–3.6, decision 045):
   - `uzp-store-settle-tests` chains the `09-project-file-format.md` §7 faults on one file: kills during commit and compaction, I/O failures and blob or manifest corruption. After each fault, the full-file state must equal the snapshot taken before it.
   - The census rerun shows tunic v10 at 6.2 % of its `.spp` size.
