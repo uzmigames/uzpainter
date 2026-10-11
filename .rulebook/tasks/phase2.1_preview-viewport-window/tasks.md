@@ -4,7 +4,7 @@
 ## 2. Implementation
 - [ ] 2.1 Environment precomputation for split-sum IBL (prefiltered radiance, BRDF lookup) and SH irradiance from the project environment
 - [ ] 2.2 Forward `painter_viewport` pass with GGX/Smith/Schlick/Burley lobes, the project's material parameters and MikkTSpace normal mapping
-- [ ] 2.3 Display transform shared with captures: Legacy `Linear`, Legacy `ACES`, OCIO with pinned config and view; explicit error for unsupported configurations
+- [ ] 2.3 Display transform shared with captures: OCIO with Painter's substance config pinned by hash and the view `Default - sRGB`; Legacy `Linear` and Legacy `ACES` pinned out by decision 038 (decision 042); explicit error for unsupported configurations
 - [ ] 2.4 Preview thread reading the double-buffered last evaluation without blocking the engine thread
 - [ ] 2.5 Preview window (`--preview <file.uzp>` and attached mode): read-only, orbit camera only, low frame rate, `painter_iray` panel stating the mode is unavailable until a capture exists
 - [ ] 2.6 Viewport regression goldens on UzmiGames-authored sphere, plane and bevelled-cube fixtures, keyed by build, adapter and driver
@@ -13,7 +13,7 @@
 - [ ] 3.1 Viewport regression goldens exact for a fixed build, adapter and driver, run locally on the owner's machine (decision 028); the local run report is the evidence
 - [ ] 3.2 Preview-thread stall hook: evaluation and export complete with unchanged results and no wait on the preview thread
 - [ ] 3.3 Window opened, minimised, resized and closed during evaluation: no effect on evaluation results or revision order
-- [ ] 3.4 Unsupported display configuration (including ACE mode) fails before rendering
+- [ ] 3.4 Unsupported display configuration (Legacy `Linear`, Legacy `ACES`, ACE mode, another OCIO view) fails before rendering with an error naming decision 038
 
 ## 4. Acceptance
 - [ ] 4.1 Every §3 test green; results attached to `phase2.3_realtime-preview`

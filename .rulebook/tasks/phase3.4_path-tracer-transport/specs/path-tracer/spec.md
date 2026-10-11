@@ -35,20 +35,25 @@ When a client requests `capture` with `mode=painter_iray`
 Then the call MUST fail with `PathTracerUnavailable` naming the backend and missing items, and no image MUST be written
 
 ### Requirement: Transport Headless Capture And Receipt
-`display.capture` with `mode=painter_iray` SHALL wait for evaluation of the current revision and all uploads, render offscreen into an RGBA32F accumulation without a window, apply the project's display transform, read back through `TextureReadback`, write PNG and linear EXR, and write a receipt `{revision, evaluator_profile, render_state_digest, mode, backend, adapter, driver, samples, seed, camera, size, display_configuration, hashes}`.
+`display.capture` with `mode=painter_iray` SHALL wait for evaluation of the current revision and all uploads, render offscreen into an RGBA32F accumulation without a window, apply the pinned display transform, read back through `TextureReadback`, write the parity artefact in the encoding of Painter's Save Render (a 16-bit RGBA display-referred PNG and a display-referred float32 EXR at the standard's 1200x1200; any other size MUST be rejected), MAY write the linear accumulation as an EXR labelled diagnostic that is never compared, and write a receipt `{revision, evaluator_profile, render_state_digest, mode, backend, adapter, driver, samples, seed, camera, size, display_configuration, hashes}`.
 
 #### Scenario: Capture with no window
 Given a worker started without `--preview`
 When `capture` runs with `mode=painter_iray`, a camera, a size, `samples` and `seed`
-Then the PNG, the EXR and a receipt with every listed field MUST be written and no window MUST be created
+Then the 16-bit display-referred PNG, the display-referred EXR and a receipt with every listed field MUST be written and no window MUST be created
 
 ### Requirement: Transport Display Configuration Preserved
-The display transform SHALL preserve the project's colour-management mode: Legacy `Linear` (linear to sRGB per IEC 61966-2-1, values above 1 clamped) or `ACES`, or OCIO with the project's pinned config and recorded view; an unsupported configuration, including ACE mode until qualified, MUST fail before rendering.
+The display transform SHALL be the one configuration of the fixed pipeline (decision 038): OCIO with Painter's substance config, pinned by hash, and the view `Default - sRGB`. Legacy `Linear` and `ACES` tone mapping are pinned out by decision 038, and every other configuration, including Legacy projects, ACE mode and other OCIO views, MUST fail before rendering.
 
 #### Scenario: ACE-mode project
 Given a project created in ACE colour-management mode
 When a `painter_iray` capture is requested
 Then it MUST fail with an explicit unsupported-configuration error before any rendering work
+
+#### Scenario: Legacy project
+Given a project created without OCIO colour management (Legacy mode)
+When a `painter_iray` capture is requested
+Then it MUST fail with an explicit unsupported-configuration error naming decision 038 before any rendering work
 
 ### Requirement: Transport Environment Identity
 Environments SHALL be resolved by SHA-256 from the project with exposure, rotation and dome from the display preset, and a missing environment MUST be an explicit error, never a substitute.
