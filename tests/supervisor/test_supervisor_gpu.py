@@ -98,13 +98,20 @@ def test_device_fault_fails_the_job_and_relaunches_on_the_same_backend(
     session, revision = dx12_session(painter, tmp_path, sessions, *args)
     old = session.status()["worker_pid"]
     assert session.call("test_fault", {"fault": fault})["result"] == {"armed": fault}
-    error = session.call("evaluate_channel", {"channel": "BaseColor"})["error"]
-    assert error["code"] == code and error["details"]["backend"] == "dx12"
+    failed = session.call("evaluate_channel", {"channel": "BaseColor"})
+    assert "error" in failed, failed
+    error = failed["error"]
+    assert error["code"] == code and error["details"]["backend"] == "dx12", error
+    if code == "device_removed":
+        # The device's own removal reason (a DXGI_ERROR_* HRESULT), not a creation symptom.
+        assert "(0x887A" in error["details"]["reason"], error
     inspected = session.call("project_inspect")
-    assert inspected["result"]["revision"] == revision
+    assert "result" in inspected and inspected["result"]["revision"] == revision, inspected
     status = session.status()
+    assert status["recoveries"], status
     recovery = status["recoveries"][-1]
-    assert recovery["cause"] == "device_fault" and recovery["fault_code"] == code
-    assert recovery["old_pid"] == old and recovery["recovery_ms"] > 0
-    assert status["gpu_backend"] == "dx12" and status["gpu_status"] == "ready"
-    assert "result" in session.call("evaluate_channel", {"channel": "BaseColor"})
+    assert recovery["cause"] == "device_fault" and recovery["fault_code"] == code, recovery
+    assert recovery["old_pid"] == old and recovery["recovery_ms"] > 0, recovery
+    assert status["gpu_backend"] == "dx12" and status["gpu_status"] == "ready", status
+    evaluated = session.call("evaluate_channel", {"channel": "BaseColor"})
+    assert "result" in evaluated, evaluated

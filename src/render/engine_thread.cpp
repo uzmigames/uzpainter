@@ -136,13 +136,19 @@ void Engine::RunJob(Job& job) {
     try {
         job.run(context);
     } catch (const std::exception& e) {
-        job.fail(Error{ErrorCode::RequestFailed, m_device->GetBackend(),
-                       std::string("the request threw: ") + e.what()});
+        job.fail(RequestError(Error{ErrorCode::RequestFailed, m_device->GetBackend(),
+                                    std::string("the request threw: ") + e.what()}));
     } catch (...) {
-        job.fail(Error{ErrorCode::RequestFailed, m_device->GetBackend(),
-                       "the request threw a non-standard exception"});
+        job.fail(RequestError(Error{ErrorCode::RequestFailed, m_device->GetBackend(),
+                                    "the request threw a non-standard exception"}));
     }
     if (!m_fatal) m_fatal = m_device->CheckRemoved();
+}
+
+Error Engine::RequestError(Error error) const {
+    if (m_fatal) return *m_fatal;
+    if (std::optional<Error> removed = m_device->CheckRemoved()) return std::move(*removed);
+    return error;
 }
 
 Result<void> Engine::WaitFor(uint64_t value, Deadline deadline) {

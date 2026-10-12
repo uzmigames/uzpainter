@@ -117,6 +117,9 @@ private:
     void RunJob(Job& job);
     void Teardown();
     Result<void> WaitFor(uint64_t value, Deadline deadline);
+    /// What a failed request reports (02 §5): the fatal fault it already hit (a wait's `timeout`
+    /// or `device_removed`), else the removal of the device, else `error` itself.
+    Error RequestError(Error error) const;
     Result<ComputeKernel> KernelFor(const KernelSource& source);
 
     EngineOptions m_options;
@@ -154,9 +157,13 @@ auto Engine::Submit(std::shared_ptr<const Snapshot> snapshot, Work work)
         return future;
     }
     Job job;
-    job.run = [promise, snapshot = std::move(snapshot),
+    job.run = [this, promise, snapshot = std::move(snapshot),
                work = std::move(work)](EngineContext& context) mutable {
-        promise->set_value(work(context, *snapshot));
+        R result = work(context, *snapshot);
+        // A creation or map call on a removed device fails with its own code: the request
+        // reports the device fault instead, so the caller sees the cause, not its symptom.
+        if (!result) result = Unexpected(RequestError(std::move(result.error())));
+        promise->set_value(std::move(result));
     };
     job.fail = [promise](const Error& error) { promise->set_value(Unexpected(error)); };
     Enqueue(std::move(job));

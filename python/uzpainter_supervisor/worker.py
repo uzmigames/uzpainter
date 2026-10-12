@@ -415,9 +415,14 @@ class Supervisor:
             await self._ready.wait()
             generation = self._current
             assert generation is not None
-            if not generation.pipe_lost.is_set() and generation.process.returncode is None:
+            if (
+                not generation.pipe_lost.is_set()
+                and generation.process.returncode is None
+                and generation.last_fault_code is None
+            ):
                 break
-            # The worker is known to be gone, so the call was not sent: hold it for the relaunch.
+            # The worker is known to be gone, or replied `device_removed` / `timeout` and exits
+            # right after that reply (02 §5), so the call was not sent: hold it for the relaunch.
             await generation.replaced.wait()
         return await self._post(generation, frame)
 
