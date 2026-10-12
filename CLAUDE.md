@@ -57,3 +57,27 @@ See `.rulebook/specs/orchestration.md`.
   `/clear` is free — state lives in `.rulebook/`.
 
 <!-- RULEBOOK:END -->
+
+## Test time budget (owner override, 2026-10-12 — wins over "Commands" above)
+Tests had eaten most of the wall clock: agents spent 60–80% of their time waiting
+on runs, and four GPU suites ran at once and slowed each other down.
+- **Agents run only the tests their change touches**: the changed test files, narrowed
+  with `-k` or node ids to the cases that change touches, plus ruff/mypy on touched
+  files. They never run the whole `tests/evaluator`, `union_run.py` or bare `pytest`.
+- **If the change does not touch GPU or native code, do not run GPU tests.** Docs,
+  manifests, recorder, export Python and rulebook changes never run `tests/evaluator`.
+- **Only one GPU run at a time on the machine** (`tests/evaluator`, `union_run`,
+  native cases). Before starting one, check for a running
+  `pytest tests/evaluator` or `union_run` process. If one is running, do other work
+  (lint, type-check, docs) and start yours after it ends.
+- **Run each test command once.** Never re-run a set that already passed. After a fix,
+  re-run only the tests that failed, by node id.
+- **Run long commands with `run_in_background` and wait for the completion notice.**
+  Never poll with `sleep` or `until grep` loops.
+- **The full suite is the coordinator's job, once per merge batch**, in a worktree,
+  with no other GPU run going. Task archive and merge need only the affected tests,
+  not the full gate. The full gate runs once before the owner pushes.
+- **A branch whose affected tests passed is merged without being re-verified.**
+- **Subagents do not spawn subagents that run tests.**
+- **A single test command expected to take more than 10 minutes** belongs to the
+  coordinator's batch, not to an agent.
