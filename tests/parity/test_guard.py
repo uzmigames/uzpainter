@@ -319,6 +319,37 @@ def test_a_json_fixture_declared_by_an_envelope_manifest_passes(repo: Path) -> N
     assert blocked(repo, None) == {"parity/fixtures/tier0/stray.json": {"public-schema"}}
 
 
+RECORD_REF = {
+    "record_id": "golden-record",
+    "kind": "private_oracle_record",
+    "sha256": "0" * 64,
+    "size_bytes": 1,
+}
+
+
+def test_a_requested_golden_declares_its_fixture_and_names_no_record(repo: Path) -> None:
+    """A requested golden (prepared before its Painter session) is a public manifest with no
+    private record under the envelope's `requests/`; its authored inputs count as declared."""
+    recipe = b'{"exportPresets": [], "exportList": [{"rootPath": "s1"}]}\n'
+    manifest = load_json(AUTHORED_EXPECTATION)
+    manifest["inputs"].append(
+        {
+            "input_id": "probe",
+            "kind": "recipe_json",
+            "path": "parity/fixtures/tier0/requested-config.json",
+            "sha256": hashlib.sha256(recipe).hexdigest(),
+            "provenance": {"origin": "uzmigames_authored", "licence": "Apache-2.0"},
+        }
+    )
+    requests = "parity/envelopes/painter-12.1.5_js-api.1.1.20/requests/tier0"
+    requested = {**manifest, "private_records": []}
+    put(repo, f"{requests}/requested.json", json.dumps(requested).encode())
+    put(repo, "parity/fixtures/tier0/requested-config.json", recipe)
+    recorded = {**manifest, "private_records": [RECORD_REF]}
+    put(repo, f"{requests}/recorded.json", json.dumps(recorded).encode())
+    assert blocked(repo, None) == {f"{requests}/recorded.json": {"public-schema"}}
+
+
 def test_declared_json_fixture_passes_and_undeclared_one_is_blocked(repo: Path) -> None:
     fixture = b'{"description": "two uniform fills, authored"}\n'
     manifest = load_json(AUTHORED_EXPECTATION)

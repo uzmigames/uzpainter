@@ -1,0 +1,9 @@
+{
+  "defaultExportPreset": "resource://starter_assets/Blender (Principled BSDF)",
+  "exportList": [
+    {
+      "rootPath": "uzp_bevelled_cube"
+    }
+  ],
+  "exportShaderParams": false
+}

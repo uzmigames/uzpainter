@@ -106,11 +106,16 @@
             "environment",
             "resource",
             "fixture_description",
-            "recipe_json"
+            "recipe_json",
+            "pipeline_script"
           ],
-          "description": "recipe_json is a UzmiGames-authored recipe only; a recipe dumped or extracted from a Painter project is a private record, never a public input."
+          "description": "recipe_json is a UzmiGames-authored recipe only; a recipe dumped or extracted from a Painter project is a private record, never a public input. pipeline_script is a UzmiGames pipeline script run byte-unchanged under the uzmigames_pipeline_scripts interface."
         },
         "path": { "$ref": "#/$defs/repo_path" },
+        "assets3d_path": {
+          "description": "Location, relative to the UzmiGames asset repository (Assets3D), of an input kept outside this repository: named here by SHA-256 only, never distributed; the recorder resolves it under the Assets3D root it is given and refuses a hash mismatch (decision 099).",
+          "$ref": "#/$defs/repo_path"
+        },
         "sha256": { "$ref": "#/$defs/sha256" },
         "provenance": {
           "type": "object",
@@ -118,12 +123,25 @@
           "required": ["origin", "licence"],
           "properties": {
             "origin": { "enum": ["uzmigames_authored", "cc0_public"] },
-            "licence": { "enum": ["Apache-2.0", "CC0-1.0"] },
+            "licence": {
+              "description": "LicenseRef-UzmiGames-Assets3D: a UzmiGames asset of the Assets3D repository, never distributed with UzPainter (only with assets3d_path, never with path).",
+              "enum": ["Apache-2.0", "CC0-1.0", "LicenseRef-UzmiGames-Assets3D"]
+            },
             "source_id": { "$ref": "#/$defs/public_source_id" },
             "note": { "$ref": "#/$defs/text" }
           }
         }
-      }
+      },
+      "not": { "required": ["path", "assets3d_path"] },
+      "if": {
+        "properties": {
+          "provenance": {
+            "properties": { "licence": { "const": "LicenseRef-UzmiGames-Assets3D" } }
+          }
+        }
+      },
+      "then": { "required": ["assets3d_path"] },
+      "else": { "not": { "required": ["assets3d_path"] } }
     },
     "instruction_sequence": {
       "type": "object",
@@ -132,8 +150,8 @@
       "properties": {
         "author": { "const": "UzmiGames" },
         "interface": {
-          "description": "Painter's documented Python API (A-PYDOC); the community MCP bridge is never an interface.",
-          "const": "substance_painter_documented_python_api"
+          "description": "Painter's documented Python API (A-PYDOC): each step is one documented substance_painter call; or UzmiGames pipeline scripts run byte-unchanged, pinned by SHA-256, through Painter's documented remote control: each step is one script run (call uzmigames.pipeline.run_script); the scripts are UzmiGames code calling Painter's public Python API, pinned rather than checked symbol by symbol (a Tier 1 rebuild, decision 099). The community MCP bridge is never an interface.",
+          "enum": ["substance_painter_documented_python_api", "uzmigames_pipeline_scripts"]
         },
         "steps": {
           "type": "array",
@@ -144,9 +162,8 @@
             "properties": {
               "step": { "type": "integer", "minimum": 1 },
               "call": {
-                "description": "A documented symbol, e.g. substance_painter.export.export_project_textures.",
-                "type": "string",
-                "pattern": "^substance_painter(\\.[A-Za-z_][A-Za-z0-9_]*)+$"
+                "description": "A documented symbol, e.g. substance_painter.export.export_project_textures; under the uzmigames_pipeline_scripts interface, uzmigames.pipeline.run_script.",
+                "type": "string"
               },
               "args": {
                 "description": "Authored arguments: short scalars or short lists of scalars (inputs are referenced by input_id). No nested objects.",
@@ -157,6 +174,17 @@
               }
             }
           }
+        }
+      },
+      "if": { "properties": { "interface": { "const": "uzmigames_pipeline_scripts" } } },
+      "then": {
+        "properties": {
+          "steps": { "items": { "properties": { "call": { "const": "uzmigames.pipeline.run_script" } } } }
+        }
+      },
+      "else": {
+        "properties": {
+          "steps": { "items": { "properties": { "call": { "pattern": "^substance_painter(\\.[A-Za-z_][A-Za-z0-9_]*)+$" } } } }
         }
       }
     },

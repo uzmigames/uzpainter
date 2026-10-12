@@ -1,0 +1,73 @@
+{
+  "defaultExportPreset": "uzp_recorder",
+  "exportList": [
+    {
+      "rootPath": "uzp_bevelled_cube"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "bitDepth": "16",
+        "dilationDistance": 2,
+        "dithering": false,
+        "fileFormat": "png",
+        "paddingAlgorithm": "transparent"
+      }
+    }
+  ],
+  "exportPresets": [
+    {
+      "maps": [
+        {
+          "channels": [
+            {
+              "destChannel": "L",
+              "srcChannel": "L",
+              "srcMapName": "specularroughness",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "A",
+              "srcChannel": "L",
+              "srcMapName": "opacity",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "$textureSet_la"
+        },
+        {
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapName": "user0",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapName": "user0",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapName": "user0",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "A",
+              "srcChannel": "L",
+              "srcMapName": "opacity",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "$textureSet_rgba"
+        }
+      ],
+      "name": "uzp_recorder"
+    }
+  ],
+  "exportShaderParams": false
+}

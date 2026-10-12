@@ -32,7 +32,7 @@ A job is the golden's public manifest (`golden-public.json`) with `private_recor
 | `substance_painter.layerstack.FillLayerNode.set_source` | `node_step`, `channel`, and either `color` [r, g, b] with optional `color_space` (`sRGB`, `Working`, `Raw`) or `resource` (a `resource://` URL, `resource.ResourceID.from_url`) or `resource_step`, an imported bitmap, with optional `color_space` (`sRGB`, `Working`, `Raw`; set by the documented `SourceBitmap.set_color_space`, decision 087); the readback records a uniform colour, a bitmap's colour space, or every `properties.Property` of a substance source (`value`, `widget_type`, `label`) |
 | `substance_painter.layerstack.Node.set_blending_mode` | `node_step`, `blending_mode`, `channel` |
 | `substance_painter.layerstack.Node.set_opacity` | `node_step`, `opacity`, `channel` |
-| `substance_painter.textureset.set_resolutions` | `width`, `height` (all texture sets) |
+| `substance_painter.textureset.set_resolutions` | `width`, `height` (may differ, e.g. 256 × 128); optional `texture_set`: only that set (`TextureSet.from_name`), else every texture set. Each set's resolution is in the template capture of both recordings |
 | `substance_painter.display.Camera.<property>` | `value` (`projection_type`, `position`, `rotation`, `field_of_view`, `focal_length`, `focus_distance`, `aperture`, `orthographic_height`) |
 | `substance_painter.display.set_environment_resource` | `environment` (input id, imported with `resource.import_project_resource`) |
 | `substance_painter.display.set_tone_mapping` | `function` (`Linear`, `ACES`) |
@@ -46,6 +46,11 @@ A job is the golden's public manifest (`golden-public.json`) with `private_recor
 | `substance_painter.baking.bake_async` | optional `texture_set`, else every texture set in turn; readback `get_mesh_map_resource` of every usage enabled at bake time |
 | `substance_painter.export.export_project_textures` (capture) | `maps` (`<mapType>/<name>:<RGB|RGBA|L>`, e.g. `documentMap/basecolor:RGB`, `meshMap/normal_base:RGB`), `bit_depth`, `padding`; optional `file_format` (png), `dithering`, `dilation`, `size_log2`. A map name holding a `/` (`1/ior`) is written as `_over_` (`$textureSet_1_over_ior`), so Painter writes no sub-folder |
 | `substance_painter.export.list_project_textures` (export probe, decision 087) | `config`: the input id of an authored `recipe_json` input holding a documented `json_config` without `exportPath` |
+| `substance_painter.export.list_predefined_export_presets` (capture) | none; records each preset's `name` and `url` |
+| `substance_painter.export.list_resource_export_presets` (capture) | none; records each preset's `resource_id` (`url`, `context`, `name`, `version`) |
+| `substance_painter.export.PredefinedExportPreset.list_output_maps` (capture) | `texture_set` (its stack is passed); optional `preset` (a name): that preset only, else every preset Painter lists; recorded by preset name with its `url` and `output_maps` (or what that preset's call raised) |
+| `substance_painter.export.ResourceExportPreset.list_output_maps` (capture) | `preset` (a `resource://` URL; `ResourceExportPreset(ResourceID.from_url(preset))`, no stack) |
+| `substance_painter.source.SourceBitmap.list_available_color_spaces` (capture) | `node_step` (an `insert_fill` step), `channel` (`null` for a fill effect in a mask stack); records the available colour spaces and `get_color_space()`, each as `{class, name}` (`GenericColorSpace`, `LegacyColorSpace`, `DataColorSpace`, `NormalColorSpace` or `str`) |
 | `substance_painter.baking.BakingParameters.common` (capture, §8) | none |
 | `substance_painter.baking.BakingParameters.baker` (capture, §8) | `usage` (a `textureset.MeshMapUsage` member name) |
 | `substance_painter.baking.BakingParameters.get_curvature_method`, `.get_enabled_bakers`, `.is_textureset_enabled` (captures, §8) | none |
@@ -67,6 +72,8 @@ Enum arguments accept only the documented member names listed in `painter_side.p
 
 **Export probes (decision 087).** A probe's configuration is an authored `recipe_json` input (hash-checked like every input). The recorder gives it a fresh `exportPath` per probe and recording and calls `list_project_textures`, recording the returned files relative to that directory (a path outside it as `../...`, never read) or the raised error (`probe/s<n>/list`). When the dry run succeeds it writes a fence, calls `export_project_textures` and records the status, message and files, or the raised error, together with the directory content and its difference from the reported files (`probe/s<n>/export`); every file present becomes a blob (`probe/s<n>/<file>`). A difference is an observation, not a refusal; a file older than the fence, or a link, still refuses the golden.
 
+**Captures (recordings R5-R7, decision 100).** The export-preset captures and the bitmap colour-space capture are read, like export probes, after the state steps in both recordings, in step order with the export steps and probes. Each is a private `api_readback`, `presets/s<n>` or `color-spaces/s<n>`. What Painter raises (an unknown preset, an invalid stack, a source that is not a bitmap) is recorded as `raised` and does not refuse the golden. Malformed arguments refuse the golden before Painter is touched. A texture golden may consist of captures and probes alone.
+
 **Storage format** is measured from the file: PNG IHDR and colour chunks, and the OpenEXR channel list. If the file states no encoding, the encoding comes from the source channel's documented storage (`textureset.ChannelFormat`: `sRGB8` is sRGB, the others are linear), and `export_settings.encoding_basis` says which applies. A `meshMap` export that states no encoding is linear with basis `baked_mesh_map`: a baked mesh map stores data, not colour. A converted virtual map (Diffuse, Specular, Glossiness, Glossiness2, Unity4Diff, Unity4Gloss, reflection, 1/ior, f0, View_2D) and an export probe's file derive from no single channel: when the file states no encoding the record says `undetermined` (basis `converted_virtual_map` or `export_probe`) and makes no colour-space claim (decision 087).
 
 **Operator step (UI-set values; decisions 029, 047; `texture_sheet.py`).** Some Tier 0 cases depend on values that only Painter's UI can set. Their manifest names each value in `applied_settings` with `applied_by: operator_settings_sheet`, one entry per target:
@@ -75,7 +82,7 @@ Enum arguments accept only the documented member names listed in `painter_side.p
 - `Layers/Blending mode (step <n>, <channel>)`, the node inserted by step n, in one channel (e.g. `Passthrough`, which the documented API cannot set: the python-doc's `BlendingMode.PassThrough` does not exist at runtime);
 - `Texture Set List/Name (<texture set>)`, the texture set imported under that name, renamed to the value (letters, digits, `_`) with a double click on its row's name in the Texture Set List: the documented API cannot rename a texture set (decision 093). The name is also read through the documented `TextureSet.name` and `original_name` (a string at runtime in 12.1.5), before `r1` and after the reopen.
 
-`record --operator ui` (or `console`) applies them after the state steps and before `r1`. The recorder makes the target visible through the documented `textureset.set_active_stack` and asks the operator to set the value and enter what the widget then shows. A layer's mode is also read through `Node.get_blending_mode`. Any value other than the sheet's refuses the golden before anything is written. After the reopen the operator reads the values again and changes nothing. Both recordings carry the entries (`operator_recorded_settings`) and one panel image per target (`settings_panel_evidence`), all private. A golden with sheet entries is refused without `--operator`. The envelope refresh, stability study and canary record such goldens with the UI operator. The UI operator (`painter_ui.py`) brings a tabbed dock forward by UI Automation tab selection, which only navigates. It sets values with real clicks, and before each click it checks that the point belongs to Painter's own window or to the menu Painter opened. Painter must be visible on screen. Texture goldens run with Legacy colour management (no `OCIO`), like the corpus. A manifest that names `OCIO` in `applied_settings` (`applied_by: environment_variable`, the configuration's path under Painter's directory) is refused unless the session runs that configuration; the read-back of the qualification sphere's template-default material is the one such golden (decision 068).
+`record --operator ui` (or `console`) applies them after the state steps and before `r1`. The recorder makes the target visible through the documented `textureset.set_active_stack` and asks the operator to set the value and enter what the widget then shows. A layer's mode is also read through `Node.get_blending_mode`. Any value other than the sheet's refuses the golden before anything is written. After the reopen the operator reads the values again and changes nothing. Both recordings carry the entries (`operator_recorded_settings`) and one panel image per target (`settings_panel_evidence`), all private. A golden with sheet entries is refused without `--operator`. The envelope refresh, stability study and canary record such goldens with the UI operator. The UI operator (`painter_ui.py`) brings a tabbed dock forward by UI Automation tab selection, which only navigates. It sets values with real clicks, and before each click it checks that the point belongs to Painter's own window or to the menu Painter opened. Painter must be visible on screen. Texture goldens run with Legacy colour management (no `OCIO`), like the corpus. A manifest that names `OCIO` in `applied_settings` (`applied_by: environment_variable`, the configuration's path under Painter's directory) is refused unless the session runs that configuration; the read-back of the qualification sphere's template-default material was the first such golden (decision 068). Conversely, a manifest that names no `OCIO` is recorded only in a Legacy session (no `OCIO`, no `PAINTER_ACE_CONFIG`); any other session is refused with a request to restart Painter without them (decision 099).
 
 **Baking jobs** (`phase0.9_normal-convention-fixture`). Bake steps are state steps, applied once before `r1`; a `BakingParameters.set` or `set_enabled_bakers` step after the last `bake_async` is refused. Each `set` step sets one parameter with one documented `BakingParameters.set` call per texture set. The high-poly mesh is an input of the manifest (`parameter: "HipolyMesh"`, `input: <input id>`): the recorder stages it and passes `file:///` followed by the staged file's POSIX path, the form of the documented `QUrl.fromLocalFile(...).toString()` example. A path holding a character that a URL would percent-encode, such as a space, refuses the golden. For `bake_async`, `painter_side.py` connects a handler for `event.BakingProcessEnded` to the documented dispatcher, launches the bake and returns. The host then polls the `baking_state` operation (which launches the next texture set when one ends) for up to 1800 s, and waits for readiness. A status other than `Success`, or no end in time, refuses the golden. The handler is disconnected when the bake ends or the project closes. `key.effective_defaults.bakes` records, per bake step, the status of each texture set and the bakers enabled at bake time. Painter's bake backend cannot be read or fixed through the documented API, so `key.bake_backend` stays `null` and the public manifest lists it in `uncontrolled_settings`.
 
@@ -174,6 +181,57 @@ Admission: `python -m tools.parity.store record parity/manifests/tier0/api-probe
 
 **First recording (2026-10-10, owner's machine, Painter `12.1.0+js-api.1.1.20`, under the shared Painter lock).** All nine probes were recorded in one Painter session and admitted with `python -m tools.parity.store record --run`. `python -m tools.parity.store verify parity/manifests/tier0/api-probes` and the whole-store `verify` both exit 0. Readbacks are equal across the recordings, except values that depend on the condition: the resource context of the reopened project instance, and the file path, project name and mesh-map resource context after a save. The `mask-stack` BaseColor export differs between `same_session` and `after_save_reopen` (4608 of 196608 values). Two runs reproduced the same pair of hashes. Its stability classification belongs to `phase0.7_tier0-stability-fits`.
 
+**Observed probe goldens (R10, `requests/tier0/api-probes/phase1-*`; tests `test_api_probes_phase1.py`).** A probe golden whose step 2 is `event.Dispatcher.connect` is *observed*. Its new edit calls, applied once or with `probe: true` in both recordings, are:
+`layerstack.delete_node` (`node_step`), `resource.update_layer_stack_resource` (`resource_step`, `new_resource_step`), `project.save_as` / `save_as_copy` (`work_file`, `mode`), `project.save` (`mode`), `project.reload_mesh` (`mesh` or `work_file`), `project.execute_when_not_busy`, `resource.reload_modified_resources_async` (`filter`, `resource_steps`, optional `rewrite_input` + `with_input`), `application.enable_engine_computations` (`enable`), `application.disable_engine_computations` (a `set_source` inside the context), and `export_project_textures` with `probe: true`. Its new getters are `Node.uid`, `get_node_by_uid`, `all_texture_sets`, `project.is_busy`, `engine_computations_status` and `is_reload_modified_resources_running`.
+
+After every later step the recorder records:
+
+- `s<n>/events`: the events dispatched since the previous step, each with the readiness state and `during_step` when it was dispatched inside the call;
+- `s<n>/states`: `probe_state` polls (is_open, in_edition, busy, engine_computations), taken until the step's asynchronous calls have answered and then three more times.
+
+Asynchronous calls are `reload_mesh` and `execute_when_not_busy`, whose callbacks are logged as events, and `reload_modified_resources_async`, which is pending while `is_reload_modified_resources_running()`. A call still pending after 600 s is recorded as `s<n>/pending`; the recording is not refused. `wait: false` folds a step's events into the next step's record.
+
+Other rules:
+
+- The host resolves `work_file` to a file in the recording's private `work-files` directory and lists those file names after every save step (`s<n>/files`).
+- The host overwrites the staged input `rewrite_input` with `with_input` just before a resource reload.
+- An `export_project_textures` with `probe: true` records Painter's result or error, then the files present once the step settled, with their SHA-256.
+- Painter is never blocked in a loop: handlers connect through `event.DISPATCHER` and the host polls. At the end, `probe_finish` re-enables engine computations a probe disabled and disconnects the events.
+- No documented getter reads the project's normal map format back.
+
+## 9a. Pipeline-script goldens (Tier 1, decision 099)
+
+Code: `tools/parity/recorder/script_run.py` (host) and `painter_scripts.py` (inside Painter, loaded like `painter_probes.py`); tests: `tests/parity/recorder/test_script_run.py`.
+
+`python -m tools.parity.recorder record-script <manifest.json> --assets-root <Assets3D> [--launch]` records a golden whose instruction sequence uses the `uzmigames_pipeline_scripts` interface.
+
+- **What a step is.** Each step runs one UzmiGames pipeline script (`uzmigames.pipeline.run_script`), byte-unchanged and pinned by SHA-256. It runs through the recorder's own remote control (`POST /run.json`), never through the community MCP bridge.
+- **Inputs.** They live in the Assets3D repository and are named only by `assets3d_path` and SHA-256.
+- **Checks before Painter is touched.** Every input is hash-checked under `--assets-root`. The job is refused on any missing file, any mismatch, or any step it does not know (create, `sync`, export, in that order).
+- **Session.** Painter must run under the OCIO configuration the manifest names, with no project open.
+
+**Adaptations.** There are two, and only these:
+
+1. **Repointed arguments.** The inputs are copied into the private work directory. Each Painter-side script runs in a fresh namespace whose `open` maps exactly its one hard-coded arguments path to a copy of the arguments. In that copy:
+   - `mesh`, `normal` and `ao` name the staged copies;
+   - `dst` names a project in the work directory;
+   - `out` names a fresh export directory;
+   - every other key is unchanged.
+2. **Transport swap for `sync`.** The layer-stack `sync` command runs host-side from its pinned bytes, with `__file__` set to its real path. Only its `execute(code)` is replaced by the recorder's remote control, under the same contract, so the code it sends to Painter is its own.
+
+**Recordings.**
+- `r1` (same session): create, sync, export.
+- `r1-repeat` (same session): export again.
+- `r2`: close, reopen the saved work project, export again.
+
+Each export is verified like a texture export: fence, fresh empty directory, and exactly the files the script reports. Each script's `result` is recorded as a private readback under `uzmigames.pipeline.run_script`.
+
+**Admission and regeneration.**
+- Admit with `python -m tools.parity.store record <manifests/…/wand-v1.json> --run <run>`.
+- Regenerate the requested manifest with `python -m tools.parity.recorder.script_run manifest --assets-root <Assets3D> --out <path>`.
+
+The scripts' own Painter calls are pinned, not checked symbol by symbol. `delete_node`, which the sync code uses, is probed by R10.
+
 ## 10. Oracle envelope: rolling refresh, stability study, canary
 
 Task `phase0.9_oracle-envelope`, decisions 034 (envelope, study, canary) and 037 (rolling oracle). Code: `tools/parity/envelope/` and `tools/parity/recorder/{environment,launcher}.py`; tests: `tests/parity/test_oracle_envelope.py` (fake Painter only); report: `parity/reports/phase0/oracle-envelope.md` (generated, numbers and hashes only).
@@ -208,3 +266,66 @@ Analysis (`python -m tools.parity.envelope study-analyse <study dir>` re-runs it
 ### 10.4 Back-fill
 
 `python -m tools.parity.envelope backfill parity/manifests [--known gpu_model=... --known driver_version=... --known os_build=...] [--dry-run]` writes an environment record with `basis: backfilled` for every golden recorded before the record existed, and appends only its `oracle-environment` reference to the manifest. The Painter build comes from the manifest, the colour-configuration hash from the record's colour-management readback when it names no configuration file; everything else is `unknown` unless stated with `--known`. Outputs are never touched.
+
+## 11. Requested goldens and the Phase 1 recording runbook (decisions 099, 100)
+
+**Requested goldens.** A golden prepared before the Painter session that records it is a *request*: a public manifest under the current envelope's `parity/envelopes/<envelope>/requests/`, with the same relative path it will have under `manifests/` and `private_records` empty (the guard allows nothing else there). The recorder records from the request path. `python -m tools.parity.store record <the same path under manifests/> --run <run>` then creates the admitted manifest from the run, and the request file is deleted. The Tier 0 requests are generated by `tools/parity/tier0_semantics/recording_requests.py` (`python -m tools.parity.tier0_semantics write`); on admission a golden moves from `requested_goldens` to `current.api_goldens`. Requests are never under `manifests/`, so the gate, the refresh, the canary and the store verify never see an unrecorded golden.
+
+**Phase 1 batch (decision 100).** Two Painter sessions, Legacy first. The coordinator agent that owns Painter holds the Assets3D Painter lock, drives Painter through the recorder (and the UI operator where a manifest needs one; none of this batch does), and admits each run. Every Tier 0 golden records `r1` and `r2`; most repeat each export step in the session. In PowerShell from the repository root:
+
+```powershell
+$req = "parity/envelopes/painter-12.1.5_js-api.1.1.20/requests"
+$man = "parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests"
+$exe = "C:\Program Files\Adobe\Adobe Substance 3D Painter\Adobe Substance 3D Painter.exe"
+```
+
+### 11.1 Session L (Legacy colour management)
+
+1. Close Painter. In a shell with **no** `OCIO` and no `PAINTER_ACE_CONFIG` (`Remove-Item Env:OCIO, Env:PAINTER_ACE_CONFIG -ErrorAction SilentlyContinue`), start `& $exe --enable-remote-scripting` and wait until no project is open.
+2. `python -m tools.parity.envelope check` must exit 0. Exit 3 means an unseen build: run `python -m tools.parity.recorder refresh` first, and regenerate the requests under the new envelope before recording.
+3. Tier 0 export goldens, in this order (largest first, so a refusal shows early):
+
+   ```powershell
+   $legacy = "export-bit-depth", "export-padding", "export-padding-bevelled-cube",
+     "export-padding-sphere", "export-padding-seam-256", "export-padding-seam-field-256",
+     "export-padding-seam-1024", "export-padding-seam-field-1024", "export-alpha-layouts",
+     "export-resize", "export-dither", "export-presets-legacy", "export-ocio-encode-legacy"
+   foreach ($g in $legacy) {
+     python -m tools.parity.recorder record "$req/tier0/semantics/$g.json"
+   }
+   ```
+
+   Each command prints `recorded: <run directory>`. A refused golden writes nothing; the command says why. Note the refusal and go on with the next golden.
+4. R10 API probes (Legacy): record each probe, the engine-computations probe last. Its export request with engine computations disabled may never return; if Painter hangs, stop it and restart. The other goldens are already safe, and the hang is itself the observation to report:
+
+   ```powershell
+   $probes = "phase1-delete-node", "phase1-resource-update", "phase1-save-modes",
+     "phase1-create-settings", "phase1-reload-mesh", "phase1-reload-resources",
+     "phase1-execute-when-not-busy", "phase1-engine-computations"
+   foreach ($g in $probes) {
+     python -m tools.parity.recorder.probes record "$req/tier0/api-probes/$g.json"
+   }
+   ```
+5. Admit each run: `python -m tools.parity.store record "$man/<family>/<name>.json" --run <run directory>`. Then `python -m tools.parity.store verify $man/tier0`.
+
+### 11.2 Session O (OCIO)
+
+1. Close Painter. Set `$env:OCIO = "C:\Program Files\Adobe\Adobe Substance 3D Painter\resources\ocio\substance\config.ocio"` and start `& $exe --enable-remote-scripting` from that shell. The recorder refuses an OCIO golden in a Legacy session and a Legacy golden in an OCIO session.
+2. `python -m tools.parity.recorder record "$req/tier0/semantics/export-ocio-encode.json"`, then `export-presets-ocio.json`.
+3. R9, the Wand v1 Tier 1 golden, last (the longest): with the Assets3D lock held (the recorder only reads Assets3D):
+
+   ```powershell
+   python -m tools.parity.recorder record-script "$req/phase1/tier1/wand-v1.json" --assets-root E:\UzmiGames\Assets3D
+   ```
+
+   It records `r1` (create, sync, export), `r1-repeat` (export again in the same session) and `r2` (reopen the saved work project, export again). Admit it to `$man/phase1/tier1/wand-v1.json`.
+4. Admit as in 11.1 step 5.
+
+### 11.3 After the sessions
+
+- For each admitted Tier 0 golden, move its function call from `recording_requests.requested_goldens` to `current.api_goldens` and delete its request file. `python -m tools.parity.tier0_semantics check` must pass.
+- Admitted probe and Tier 1 manifests move the same way: delete the request file once the store has written the manifest under `manifests/`.
+- Keep a refused golden's request and record the refusal and its cause in the batch report. A state step Painter refuses (for example an `add_channel` of a channel the default project already has) refuses the whole golden; fix the request under a new name. A recorded golden is immutable.
+- Run `python -m pytest tests/parity/test_tier0_gate.py tests/parity/test_tier0_semantics_ui.py tests/parity/test_recording_requests.py tests/parity/recorder/test_api_probes.py`.
+- Regenerate `parity/reports/phase0/tier0-stability.md` as earlier batches did.
+- Commit the manifests (hashes only) with a decision that records the batch.

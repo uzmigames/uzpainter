@@ -1,0 +1,50 @@
+{
+  "defaultExportPreset": "uzp_recorder",
+  "exportList": [
+    {
+      "rootPath": "s3"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "bitDepth": "8",
+        "dithering": false,
+        "fileFormat": "png",
+        "paddingAlgorithm": "infinite",
+        "sizeLog2": 14
+      }
+    }
+  ],
+  "exportPresets": [
+    {
+      "maps": [
+        {
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapName": "basecolor",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapName": "basecolor",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapName": "basecolor",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "$textureSet_basecolor"
+        }
+      ],
+      "name": "uzp_recorder"
+    }
+  ],
+  "exportShaderParams": false
+}

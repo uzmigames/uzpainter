@@ -1,0 +1,149 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-create-settings",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-create-settings",
+  "description": "API probe (R10): project.create with Settings(normal_map_format=DirectX, default_texture_resolution=512, import_cameras=True); the texture set resolution and the texture sets read back (no documented getter reads the normal map format back), with the events and the BaseColor export.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "DirectX",
+          "default_texture_resolution": 512,
+          "import_cameras": true
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "LayerStacksModelDataChanged",
+            "BusyStatusChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 3,
+          "channels": [
+            "BaseColor"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.8,
+            0.2,
+            0.1
+          ],
+          "color_space": "sRGB"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 3,
+          "name": "uzp fill A"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.textureset.TextureSet.get_resolution"
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.textureset.all_texture_sets"
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "DirectX",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 512,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.file_format",
+      "value": "png",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

@@ -1,0 +1,491 @@
+"""Pipeline-script Tier 1 goldens (decision 099; recording R9): job parsing, the `open` redirect,
+the sync transport swap and the r1 / r1-repeat / r2 recordings, against a fake Painter and a
+temporary stand-in asset repository whose small scripts mirror the shape of the real ones."""
+
+from __future__ import annotations
+
+import base64
+import copy
+import hashlib
+import json
+import subprocess
+import sys
+import types
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from tools.parity.recorder import script_run
+from tools.parity.recorder import session as session_module
+from tools.parity.recorder.script_run import (
+    ASSETS3D_LICENCE,
+    PAINTER_SCRIPTS,
+    RUN_SCRIPT,
+    ScriptSession,
+    load_script_job,
+    record_script_golden,
+    script_job_from_manifest,
+    wand_manifest,
+)
+from tools.parity.recorder.session import RecorderError
+from tools.parity.schemas import REPO_ROOT, Schema, load_json, record_problems, validation_errors
+
+BUILD = "12.1.5+js-api.1.1.20"
+OCIO = r"C:\Program Files\Adobe\Adobe Substance 3D Painter\resources\ocio\substance\config.ocio"
+WAND = "_tmp/claude/varinha11-v1"
+REAL_ASSETS = Path(r"E:\UzmiGames\Assets3D")
+COMMITTED = (
+    REPO_ROOT / "parity/envelopes/painter-12.1.5_js-api.1.1.20/requests/phase1/tier1/wand-v1.json"
+)
+PINNED_MARK = "pinned-stand-in-7f3a"
+
+CREATE = '''"""Stand-in of painter_create.py: a new project from the args' mesh, saved to dst."""
+import json
+import substance_painter.project as project, substance_painter.textureset as ts
+A = json.loads(open(r"__ARGS__", encoding="utf-8").read())
+st = project.Settings(normal_map_format=project.NormalMapFormat.OpenGL,
+                      default_texture_resolution=256, import_cameras=False)
+project.create(mesh_file_path=A["mesh"], settings=st)
+maps = {usage: len(open(path, "rb").read())
+        for usage, path in (("Normal", A["normal"]), ("AO", A["ao"]))}
+project.save_as(A["dst"], project.ProjectSaveMode.Full)
+result = {"file": project.file_path(), "sets": [x.name() for x in ts.all_texture_sets()],
+          "maps": maps, "name": A["name"]}
+'''
+
+LAYER_STACK = '''"""Stand-in of painter_layer_stack.py: sync builds Painter code and executes it."""
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+from pathlib import Path
+
+ROOT = next(p for p in Path(__file__).resolve().parents if (p / 'AGENTS.md').exists())
+CLIENT = ROOT / "Pipeline/mcp/painter_mcp_client.py"
+MCP_PYTHON = ROOT / "Tools/SubstancePainterMCP/.venv/Scripts/python.exe"
+
+SYNC_CODE = r\'\'\'
+import json
+import substance_painter.project as project
+S = json.loads(r"""__STACK__""")
+MASKS = json.loads(r"""__MASKS__""")
+sizes = {name: len(open(m["path"], "rb").read()) for name, m in MASKS.items()}
+result = {"project": project.file_path(), "layers": [L["id"] for L in S["layers"]],
+          "imported": sorted(MASKS), "hidden": [], "group_height_blend": {},
+          "resources": {k: "resource://fake/" + k for k in MASKS}, "sizes": sizes,
+          "mark": "__MARK__"}
+\'\'\'
+
+
+def execute(code):
+    command = [str(MCP_PYTHON), str(CLIENT), "execute_python", code]
+    run = subprocess.run(command, capture_output=True, text=True)
+    return json.loads(run.stdout)["data"]
+
+
+def sync(a):
+    stack = json.loads(Path(a.stack).read_text(encoding="utf-8"))
+    masks_dir = Path(a.masks).resolve()
+    state_path = Path(a.state)
+    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    names = sorted({x["mask"] for x in stack["layers"] + stack["groups"] if x.get("mask")})
+    names = sorted(set(names) | {x["base_tex"] for x in stack["layers"] if x.get("base_tex")})
+    masks = {}
+    for name in names:
+        path = masks_dir / (name + ".png")
+        sha = hashlib.sha1(path.read_bytes()).hexdigest()
+        masks[name] = {"sha": sha, "path": path.as_posix(), "url": None}
+    code = SYNC_CODE.replace("__STACK__", json.dumps(stack)).replace("__MASKS__", json.dumps(masks))
+    data = execute(code)
+    for name, url in data["resources"].items():
+        state[name] = {"sha": masks[name]["sha"], "url": url}
+    state_path.write_text(json.dumps(state, indent=1), encoding="utf-8")
+    print("SYNC_DONE", json.dumps({"project": data["project"], "layers": len(data["layers"])}))
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command", required=True)
+    s = sub.add_parser("sync")
+    s.add_argument("--stack", required=True)
+    s.add_argument("--masks", required=True)
+    s.add_argument("--state", required=True)
+    args = parser.parse_args()
+    {"sync": sync}[args.command](args)
+
+
+if __name__ == "__main__":
+    main()
+'''.replace("__MARK__", PINNED_MARK)
+
+EXPORT = '''"""Stand-in of painter_export.py: save the open project, export its maps (PNG16)."""
+import json, os
+import substance_painter.project as project, substance_painter.export as ex
+import substance_painter.textureset as ts
+A = json.loads(open(r"__ARGS__", encoding="utf-8").read())
+project.save_as(project.file_path(), project.ProjectSaveMode.Full)
+os.makedirs(A["out"], exist_ok=True)
+P = A["prefix"]
+doc = lambda name, src: {"fileName": f"{P}_{name}", "channels": [
+    {"destChannel": c, "srcChannel": c, "srcMapType": "documentMap", "srcMapName": src}
+    for c in ("RGB" if name == "BaseColor" else "L")]}
+cfg = {"exportShaderParams": False, "exportPath": A["out"], "defaultExportPreset": "v6",
+       "exportPresets": [{"name": "v6", "maps": [doc("BaseColor", "basecolor"),
+                                                 doc("Height", "height")]}],
+       "exportList": [{"rootPath": s.name()} for s in ts.all_texture_sets()],
+       "exportParameters": [{"parameters": {"fileFormat": "png", "bitDepth": "16", "sizeLog2": 11,
+                                            "paddingAlgorithm": "infinite", "dithering": False}}]}
+r = ex.export_project_textures(cfg)
+result = {"status": str(r.status), "message": r.message,
+          "files": {str(k): v for k, v in r.textures.items()}, "saved": project.file_path()}
+'''
+
+MESH = "mtllib 11-Varinha-Madeira-v1_low.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nf 1 2 3\n"
+STACK = {
+    "title": "stand-in stack",
+    "groups": [{"key": "outer", "name": "Outer", "mask": None}],
+    "layers": [
+        {"id": "C01", "group": "outer", "name": "Wood", "mask": "M_wood", "base_tex": "T_base"},
+        {"id": "C02", "group": "outer", "name": "Iron", "mask": "M_iron", "base": [0.5, 0.5, 0.5]},
+    ],
+}
+
+
+def write(path: Path, data: bytes | str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    path.write_bytes(data)
+
+
+def make_assets(root: Path) -> Path:
+    """A stand-in Assets3D at the real layout (the manifest generator's paths)."""
+    write(root / "AGENTS.md", "stand-in asset repository\n")
+    win = str(root)
+    create_args = str(root / WAND / "painter_create_args.json")
+    export_args = str(root / WAND / "painter_export_args.json")
+    scripts = root / "Pipeline/retopology/wand11-v1"
+    write(scripts / "painter_create.py", CREATE.replace("__ARGS__", create_args))
+    write(scripts / "painter_export.py", EXPORT.replace("__ARGS__", export_args))
+    write(root / "Pipeline/painting/painter_layer_stack.py", LAYER_STACK)
+    paint = root / WAND / "paint"
+    write(paint / "11-Varinha-Madeira-v1_low.obj", MESH)
+    write(paint / "11-Varinha-Madeira-v1_low.mtl", "newmtl 11-Varinha-Madeira\n")
+    write(root / WAND / "bake/11-Varinha-Madeira_Normal_OpenGL_v1.png", b"normal")
+    write(paint / "11-Varinha-Madeira_AO_v1.png", b"ao")
+    for name in ("M_wood", "M_iron", "T_base"):
+        write(paint / "masks" / f"{name}.png", name.encode("ascii"))
+    write(paint / "stack-wand.json", json.dumps(STACK))
+    windows = win.replace("/", "\\")
+    write(
+        Path(create_args),
+        json.dumps(
+            {
+                "mesh": windows + r"\_tmp\claude\varinha11-v1\paint\11-Varinha-Madeira-v1_low.obj",
+                "normal": windows
+                + r"\_tmp\claude\varinha11-v1\bake\11-Varinha-Madeira_Normal_OpenGL_v1.png",
+                "ao": windows + r"\_tmp\claude\varinha11-v1\paint\11-Varinha-Madeira_AO_v1.png",
+                "dst": windows + r"\Models3D\11-Varinha-Madeira\11-Varinha-Madeira-v1.spp",
+                "name": "11-Varinha-Madeira",
+            }
+        ),
+    )
+    write(
+        Path(export_args),
+        json.dumps({"out": windows + r"\_tmp\claude\varinha11-v1\paint\tex-r2", "prefix": "W_v1"}),
+    )
+    return root
+
+
+def tree_state(root: Path) -> dict[str, str]:
+    return {
+        p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in sorted(root.rglob("*"))
+        if p.is_file()
+    }
+
+
+@pytest.fixture
+def assets(tmp_path: Path) -> Path:
+    return make_assets(tmp_path / "assets3d")
+
+
+@pytest.fixture
+def manifest(assets: Path) -> dict[str, Any]:
+    return wand_manifest(assets)
+
+
+@pytest.fixture
+def painter(fake: types.ModuleType, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, ScriptSession]:
+    """A fake Painter 12.1.5 started under Painter's substance OCIO configuration."""
+    monkeypatch.setattr(session_module, "envelope_builds", lambda: frozenset({BUILD}))
+    monkeypatch.setenv("OCIO", OCIO)
+    monkeypatch.delenv("PAINTER_ACE_CONFIG", raising=False)
+    world = fake.FakeWorld()
+    world.version, world.version_info = "12.1.5", (12, 1, 5)
+    return world, ScriptSession(fake.LocalTransport(world), sleep=lambda seconds: None)
+
+
+def record(
+    painter: tuple[Any, ScriptSession], manifest: dict[str, Any], assets: Path, tmp_path: Path
+) -> Path:
+    job = script_job_from_manifest(manifest, assets)
+    return record_script_golden(painter[1], job, tmp_path / "work", tmp_path / "inbox")
+
+
+# --- job parsing -----------------------------------------------------------------------------
+
+
+def test_manifest_names_every_input_by_hash_and_assets3d_path(manifest: dict[str, Any]) -> None:
+    assert validation_errors(manifest, Schema.GOLDEN_PUBLIC) == []
+    assert manifest["instruction_sequence"]["interface"] == "uzmigames_pipeline_scripts"
+    assert {s["call"] for s in manifest["instruction_sequence"]["steps"]} == {RUN_SCRIPT}
+    for item in manifest["inputs"]:
+        assert "path" not in item and item["assets3d_path"]
+        assert item["provenance"] == {"origin": "uzmigames_authored", "licence": ASSETS3D_LICENCE}
+    sync = manifest["instruction_sequence"]["steps"][1]["args"]
+    assert sync["mask_files"] == ["M_iron.png", "M_wood.png", "T_base.png"]
+
+
+def test_job_refuses_a_hash_mismatch(assets: Path, manifest: dict[str, Any]) -> None:
+    (assets / WAND / "paint/masks/M_wood.png").write_bytes(b"changed")
+    with pytest.raises(RecorderError, match="mask-m_wood: sha256"):
+        script_job_from_manifest(manifest, assets)
+
+
+def test_job_refuses_a_script_whose_bytes_differ_from_the_pin(
+    assets: Path, manifest: dict[str, Any]
+) -> None:
+    path = assets / "Pipeline/painting/painter_layer_stack.py"
+    path.write_bytes(path.read_bytes() + b"\n")
+    with pytest.raises(RecorderError, match="painter-layer-stack-py: sha256"):
+        script_job_from_manifest(manifest, assets)
+
+
+def test_job_refuses_a_missing_input(assets: Path, manifest: dict[str, Any]) -> None:
+    (assets / WAND / "paint/11-Varinha-Madeira-v1_low.mtl").unlink()
+    with pytest.raises(RecorderError, match="does not exist"):
+        script_job_from_manifest(manifest, assets)
+
+
+def test_job_refuses_an_unknown_call(assets: Path, manifest: dict[str, Any]) -> None:
+    changed = copy.deepcopy(manifest)
+    changed["instruction_sequence"]["steps"][2]["call"] = "uzmigames.pipeline.other"
+    assert validation_errors(changed, Schema.GOLDEN_PUBLIC)
+    with pytest.raises(RecorderError, match=r"is not uzmigames\.pipeline\.run_script"):
+        script_job_from_manifest(changed, assets)
+
+
+def test_job_refuses_unknown_step_arguments(assets: Path, manifest: dict[str, Any]) -> None:
+    changed = copy.deepcopy(manifest)
+    changed["instruction_sequence"]["steps"][2]["args"]["extra"] = 1
+    with pytest.raises(RecorderError, match="no create, sync or export"):
+        script_job_from_manifest(changed, assets)
+
+
+def test_job_refuses_masks_the_stack_does_not_reference(
+    assets: Path, manifest: dict[str, Any]
+) -> None:
+    changed = copy.deepcopy(manifest)
+    args = changed["instruction_sequence"]["steps"][1]["args"]
+    args["masks"], args["mask_files"] = args["masks"][:2], args["mask_files"][:2]
+    with pytest.raises(RecorderError, match="references the bitmaps"):
+        script_job_from_manifest(changed, assets)
+
+
+def test_job_refuses_an_args_file_naming_another_mesh(
+    assets: Path, manifest: dict[str, Any]
+) -> None:
+    args_file = assets / WAND / "painter_create_args.json"
+    arguments = json.loads(args_file.read_text(encoding="utf-8"))
+    arguments["mesh"] = r"E:\elsewhere\other.obj"
+    args_file.write_text(json.dumps(arguments), encoding="utf-8")
+    changed = wand_manifest_unchecked(manifest, assets)
+    with pytest.raises(RecorderError, match="`mesh` names"):
+        script_job_from_manifest(changed, assets)
+
+
+def wand_manifest_unchecked(manifest: dict[str, Any], assets: Path) -> dict[str, Any]:
+    """The manifest with every hash re-pinned to the files now under `assets`."""
+    changed = copy.deepcopy(manifest)
+    for item in changed["inputs"]:
+        item["sha256"] = hashlib.sha256((assets / item["assets3d_path"]).read_bytes()).hexdigest()
+    return changed
+
+
+# --- Painter side: the open redirect ---------------------------------------------------------
+
+
+def painter_scripts_namespace() -> dict[str, Any]:
+    namespace: dict[str, Any] = {"OPERATIONS": {}}
+    exec(compile(PAINTER_SCRIPTS.read_bytes(), str(PAINTER_SCRIPTS), "exec"), namespace)
+    return namespace
+
+
+def test_open_redirect_maps_only_the_one_hard_coded_path(tmp_path: Path) -> None:
+    hard = tmp_path / "assets" / "painter_create_args.json"
+    other = tmp_path / "assets" / "other_args.json"
+    repointed = tmp_path / "work" / "painter_create_args.json"
+    for path, text in ((hard, "original"), (other, "other"), (repointed, "repointed")):
+        write(path, text)
+    namespace = painter_scripts_namespace()
+    assert set(namespace["OPERATIONS"]) == {"run_script"}
+    open_file = namespace["redirected_open"](str(hard), str(repointed))
+    with open_file(str(hard), encoding="utf-8") as stream:
+        assert stream.read() == "repointed"
+    with open_file(str(hard).upper().replace("\\", "/"), encoding="utf-8") as stream:
+        assert stream.read() == ("repointed" if sys.platform == "win32" else "original")
+    with open_file(hard.with_name("painter_create_args.json.bak"), "w") as stream:
+        stream.write("x")
+    with open_file(str(other), encoding="utf-8") as stream:
+        assert stream.read() == "other"
+    assert hard.read_text(encoding="utf-8") == "original"
+
+
+def test_run_script_refuses_bytes_that_differ_from_their_hash(tmp_path: Path) -> None:
+    namespace = painter_scripts_namespace()
+    source = b"result = {'ok': True}\n"
+    args = {
+        "source": base64.b64encode(source).decode("ascii"),
+        "sha256": hashlib.sha256(source).hexdigest(),
+        "file_name": "s.py",
+        "args_path": None,
+        "args_copy": None,
+    }
+    assert namespace["run_script"](args) == {"result": {"ok": True}}
+    with pytest.raises(ValueError, match="pinned SHA-256"):
+        namespace["run_script"]({**args, "sha256": "0" * 64})
+    nothing = base64.b64encode(b"x = 1\n").decode("ascii")
+    with pytest.raises(RuntimeError, match="no `result`"):
+        namespace["run_script"](
+            {**args, "source": nothing, "sha256": hashlib.sha256(b"x = 1\n").hexdigest()}
+        )
+
+
+# --- recordings --------------------------------------------------------------------------------
+
+
+def test_records_r1_repeat_and_r2_without_writing_under_the_assets_root(
+    painter: tuple[Any, ScriptSession],
+    manifest: dict[str, Any],
+    assets: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = tree_state(assets)
+
+    def no_subprocess(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("the sync command must not start the MCP client")
+
+    monkeypatch.setattr(subprocess, "run", no_subprocess)
+    decoy = types.ModuleType("painter_layer_stack")
+    monkeypatch.setitem(sys.modules, "painter_layer_stack", decoy)
+    run = record(painter, manifest, assets, tmp_path)
+
+    assert tree_state(assets) == before
+    assert not [name for name in sys.modules if "mcp" in name.lower()]
+    data = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    assert record_problems(data) == []
+    recordings = {r["recording_id"]: r for r in data["recordings"]}
+    assert {k: r["condition"] for k, r in recordings.items()} == {
+        "r1": "same_session",
+        "r1-repeat": "same_session",
+        "r2": "after_save_reopen",
+    }
+    for recording in recordings.values():
+        maps = sorted(o["map"] for o in recording["outputs"] if o["kind"] == "exported_map")
+        assert maps == ["W_v1_BaseColor", "W_v1_Height"]
+    readbacks = {
+        (rid, o["output_id"]): o["value"]
+        for rid, r in recordings.items()
+        for o in r["outputs"]
+        if o["kind"] == "api_readback"
+    }
+    assert {o for o in readbacks} == {
+        ("r1", "script/s1"),
+        ("r1", "script/s2"),
+        ("r1", "script/s3"),
+        ("r1-repeat", "script/s3"),
+        ("r2", "script/s3"),
+    }
+    work = tmp_path / "work"
+    created = readbacks[("r1", "script/s1")]
+    assert Path(created["file"]).is_relative_to(work)  # dst repointed into the work directory
+    assert created["name"] == "11-Varinha-Madeira"  # other keys unchanged
+    synced = readbacks[("r1", "script/s2")]
+    assert synced["mark"] == PINNED_MARK  # the pinned bytes ran, not the decoy module
+    assert synced["imported"] == ["M_iron", "M_wood", "T_base"]
+    exports = {rid: readbacks[(rid, "script/s3")] for rid in ("r1", "r1-repeat", "r2")}
+    outs = {
+        rid: {Path(f).parent for files in v["files"].values() for f in files}
+        for rid, v in exports.items()
+    }
+    assert len({p for paths in outs.values() for p in paths}) == 3  # a fresh directory each
+    assert all(p.is_relative_to(work) for paths in outs.values() for p in paths)
+    state = next(work.rglob("sync-state.json"))
+    assert sorted(json.loads(state.read_text(encoding="utf-8"))) == ["M_iron", "M_wood", "T_base"]
+    published = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    assert validation_errors(published, Schema.GOLDEN_PUBLIC) == []
+    assert data["key"]["project_settings"]["colour_management"]["mode"] == "ocio"
+
+
+def test_refuses_without_the_ocio_configuration(
+    painter: tuple[Any, ScriptSession],
+    manifest: dict[str, Any],
+    assets: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OCIO")
+    with pytest.raises(RecorderError, match="start Painter with OCIO"):
+        record(painter, manifest, assets, tmp_path)
+    assert not painter[0].project_open and not (tmp_path / "work").exists()
+
+
+def test_refuses_when_a_project_is_already_open(
+    painter: tuple[Any, ScriptSession], manifest: dict[str, Any], assets: Path, tmp_path: Path
+) -> None:
+    painter[0].project_open = True
+    with pytest.raises(RecorderError, match="already open"):
+        record(painter, manifest, assets, tmp_path)
+
+
+def test_command_records_from_a_manifest_file(
+    painter: tuple[Any, ScriptSession],
+    manifest: dict[str, Any],
+    assets: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tools.parity.recorder import __main__ as cli
+
+    path = tmp_path / "wand-v1.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setenv("UZP_ORACLE_WORK", str(tmp_path / "work"))
+    monkeypatch.setenv("UZP_ORACLE_INBOX", str(tmp_path / "inbox"))
+    monkeypatch.setattr(cli, "ScriptSession", lambda *args, **kwargs: painter[1])
+    assert cli.main(["record-script", str(path), "--assets-root", str(assets)]) == 0
+    assert len(list((tmp_path / "inbox").rglob("READY"))) == 1
+    (assets / WAND / "paint/masks/T_base.png").write_bytes(b"changed")
+    assert cli.main(["record-script", str(path), "--assets-root", str(assets)]) == 2
+
+
+def test_manifest_command_writes_the_generated_manifest(assets: Path, tmp_path: Path) -> None:
+    out = tmp_path / "out" / "wand-v1.json"
+    assert script_run.main(["manifest", "--assets-root", str(assets), "--out", str(out)]) == 0
+    assert load_script_job(out, assets).golden_id == "phase1/tier1/wand-v1"
+
+
+# --- the committed manifest against the real asset repository --------------------------------
+
+
+def test_committed_manifest_matches_the_real_assets() -> None:
+    if not (REAL_ASSETS / "AGENTS.md").is_file():
+        pytest.skip(f"the UzmiGames asset repository is not at {REAL_ASSETS}")
+    committed = load_json(COMMITTED)
+    assert validation_errors(committed, Schema.GOLDEN_PUBLIC) == []
+    assert committed == wand_manifest(REAL_ASSETS)
+    job = load_script_job(COMMITTED, REAL_ASSETS)
+    assert job.sync.args["command"] == "sync"
