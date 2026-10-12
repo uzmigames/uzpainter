@@ -19,6 +19,16 @@ DAG gate: rebuild-from-dump equality on wand — the wand v1 project dumped, reb
 ## Child results
 - `phase2.1_recipe-diagnostic-views` (decision 136): `uzpainter.diagnostics` (`isolate`, `contribution`, `material_views`, `region_stats`, `snapshot_layer_tree`, `diff_snapshots`) and the worker's five MCP Diagnostics tools. Its §3 tests are green on CPU: `tests/python/test_pyapi_diagnostics.py` (4 cases) and `tests/supervisor/test_worker_diagnostics.py` (1 case). Each view equals the OpenEXR 32f export of its `diagnosticMap` source. Its prerequisite item 1.1 (`phase1.25_pilot-wand` accepted) is still open. Item 3.2 here runs the same calls on the wand.
 
+## Parent harness (decision 142)
+- Scenario `tests/parity/recipe/wand_v1/runner.py`, tests `test_wand_recipe.py`. Report `tools/parity/recipe_rebuild.py` with schema `parity/schema/recipe-rebuild-report.json` and its guard rule.
+- The gate compares UzPainter with itself, so it reads no Painter golden. It skips a comparison only on UzPainter's explicit refusal, and the skip names that refusal.
+- Measured on 2026-10-12 with the R9-pinned scripts:
+  - the rebuilt wand has the original's digest;
+  - `isolate` restores state;
+  - the wand's export is refused on both sides (phase1.25 item 2.7);
+  - `material_views` is refused (8-bit sRGB `T_base`, phase1.15_compositor-colour-fits item 2.2).
+- Every wand test waits on the R9 re-pin of the drifted Assets3D `painter_layer_stack.py` (decision 144).
+
 ## Impact
 - Affected specs: `recipe`
 - Affected code: recipe dump, rebuild, diagnostics, export receipts

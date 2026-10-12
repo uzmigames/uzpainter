@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:uzpainter:parity:schema:recipe-rebuild-report:1",
+  "title": "UzPainter rebuild-from-dump report",
+  "description": "The P2-RECIPE gate evidence (phase2.2_recipe-and-diagnostics; docs/architecture/03-project-model.md §7): a project built through the pipeline is dumped, rebuilt into a new project from the dump and its stored resources, and both are exported with the same configuration. UzPainter is compared with itself; no oracle data is involved. Numbers, hashes and file names only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "golden_id", "manifest_sha256", "run", "resources", "original", "rebuilt", "equality"],
+  "properties": {
+    "schema": { "const": "uzpainter/parity/recipe-rebuild-report/1" },
+    "golden_id": {
+      "description": "The job the original project was built from: a golden's id, the request or the admitted manifest.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$"
+    },
+    "manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uzpainter_build_hash", "compat_profile", "app_version"],
+      "properties": {
+        "uzpainter_build_hash": { "$ref": "#/$defs/sha256" },
+        "compat_profile": { "$ref": "#/$defs/token" },
+        "app_version": { "$ref": "#/$defs/token" }
+      }
+    },
+    "resources": {
+      "description": "The SHA-256 of every resource the dump stores, sorted.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/sha256" }
+    },
+    "original": { "$ref": "#/$defs/side" },
+    "rebuilt": { "$ref": "#/$defs/side" },
+    "equality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digests_equal", "files", "differing", "missing", "extra", "outcome"],
+      "properties": {
+        "digests_equal": { "type": "boolean" },
+        "files": {
+          "description": "identical: both sides wrote the same file names with the same bytes; different: they did not; not_exported: an export was refused.",
+          "enum": ["identical", "different", "not_exported"]
+        },
+        "differing": { "$ref": "#/$defs/names" },
+        "missing": { "description": "Written by the original only.", "$ref": "#/$defs/names" },
+        "extra": { "description": "Written by the rebuilt project only.", "$ref": "#/$defs/names" },
+        "outcome": {
+          "description": "pass: equal digests and identical files; export_refused: equal digests and both exports refused before writing; fail: anything else.",
+          "enum": ["pass", "export_refused", "fail"]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "token": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$" },
+    "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,127}$" },
+    "names": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/name" } },
+    "side": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recipe_digest", "revision", "export"],
+      "properties": {
+        "recipe_digest": { "$ref": "#/$defs/sha256" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "export": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "files"],
+              "properties": {
+                "status": { "const": "written" },
+                "files": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "sha256", "bytes"],
+                    "properties": {
+                      "name": { "$ref": "#/$defs/name" },
+                      "sha256": { "$ref": "#/$defs/sha256" },
+                      "bytes": { "type": "integer", "minimum": 1 }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "refusal"],
+              "properties": {
+                "status": { "const": "refused" },
+                "refusal": {
+                  "description": "The class of UzPainter's refusal before writing (NotYetSupported).",
+                  "$ref": "#/$defs/token"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
