@@ -23,6 +23,7 @@ Why a boundary: the vendored DX12 command list aborts the process after repeated
 - Large payloads never travel inline. Images, maps and dumps are written under an allowlisted root and referenced by path + SHA-256; a capture additionally returns a downscaled PNG as an MCP image block built by the supervisor from the file.
 - Protocol version, backend and Python policy are part of the handshake; a mismatch with what the supervisor requested is a fatal supervisor error, never a silent fallback.
 - Implementation (phase2.1): `src/supervisor/SUPERVISOR.md`, with the worker's Phase 2.1 tool vocabulary, the GPU operation set and the Debug-only fault hooks of decision 120.
+- Implementation (phase2.2): the admission of §3 (lease, ledger, keys, reconciliation, busy state, receipts) in `src/supervisor/SUPERVISOR.md`, decisions 138 and 139.
 
 ## 3. Command admission and the mutation lease
 

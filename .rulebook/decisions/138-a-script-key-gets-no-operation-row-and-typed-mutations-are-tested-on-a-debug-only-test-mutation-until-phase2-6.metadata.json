@@ -1,0 +1,13 @@
+{
+  "id": 138,
+  "slug": "a-script-key-gets-no-operation-row-and-typed-mutations-are-tested-on-a-debug-only-test-mutation-until-phase2-6",
+  "title": "A script's key gets no operation row, and typed mutations are tested on a Debug-only test_mutation until phase2.6",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.2_supervisor-admission-ledger",
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.4_supervisor-worker"
+  ],
+  "supersededBy": null
+}
