@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "uzpainter/environment-provenance/1",
+  "title": "Provenance record of a shipped display environment",
+  "description": "assets/environments/<name>.provenance.json (docs/architecture/07-preview-and-render-parity.md §7, docs/licensing-and-clean-room.md §6, decision 132). A shipped environment is a CC0 file from an approved public source, shipped under a UzPainter name with its bytes unmodified; Adobe environments are never shipped.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "asset", "file", "sha256", "bytes", "version", "author", "licence", "date", "reviewer", "source", "image", "modifications", "transitive", "privateRecords", "parity"],
+  "properties": {
+    "schema": {"const": "uzpainter/environment-provenance/1"},
+    "asset": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "description": "The environment's UzPainter name: the file stem."},
+    "file": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*\\.exr$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 of the shipped bytes: the environment's identity in a project and a preset."},
+    "bytes": {"type": "integer", "minimum": 1},
+    "version": {"type": "integer", "minimum": 1},
+    "author": {"type": "string", "minLength": 1},
+    "licence": {"const": "CC0-1.0"},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "reviewer": {
+      "description": "The reviewer who accepted the record (licensing §6); null until the owner reviews it.",
+      "type": ["string", "null"]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approved_source", "page", "download", "upstream_name", "resolution", "md5", "retrieved"],
+      "properties": {
+        "approved_source": {"const": "X-POLYHAVEN", "description": "The entry of docs/approved-sources.md."},
+        "page": {"type": "string", "pattern": "^https://polyhaven\\.com/a/[a-z0-9_]+$"},
+        "download": {"type": "string", "pattern": "^https://dl\\.polyhaven\\.org/"},
+        "upstream_name": {"type": "string", "minLength": 1},
+        "resolution": {"type": "string", "minLength": 1},
+        "md5": {"type": "string", "pattern": "^[0-9a-f]{32}$", "description": "The checksum the source's API publishes for the file."},
+        "retrieved": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "projection", "width", "height"],
+      "properties": {
+        "format": {"const": "OpenEXR"},
+        "projection": {"const": "equirectangular"},
+        "width": {"type": "integer", "minimum": 2},
+        "height": {"type": "integer", "minimum": 1}
+      }
+    },
+    "modifications": {"const": "none", "description": "The upstream bytes are shipped unmodified."},
+    "transitive": {
+      "description": "Resources the file depends on, each with its own record: none for an image.",
+      "type": "array",
+      "maxItems": 0
+    },
+    "privateRecords": {
+      "description": "Private oracle records that verify the asset (SHA-256 only, never their content).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["golden_id", "record_sha256"],
+        "properties": {
+          "golden_id": {"type": "string", "minLength": 1},
+          "record_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "parity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "notes", "tests"],
+      "properties": {
+        "role": {
+          "description": "non-parity-preview: the environment of neither standard preset, so a state lit by it reports parity false (decision 132).",
+          "enum": ["non-parity-preview"]
+        },
+        "notes": {"type": "string", "minLength": 1},
+        "tests": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

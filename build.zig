@@ -200,6 +200,7 @@ const pyapi_sources = [_][]const u8{
     "python/bind_color.cpp",
     "python/bind_core.cpp",
     "python/bind_diagnostics.cpp",
+    "python/bind_display.cpp",
     "python/bind_export.cpp",
     "python/bind_layerstack.cpp",
     "python/bind_misc.cpp",
@@ -209,6 +210,7 @@ const pyapi_sources = [_][]const u8{
     "python/capabilities.cpp",
     "python/diagnostics.cpp",
     "python/dispatcher.cpp",
+    "python/display.cpp",
     "python/errors.cpp",
     "python/jobs.cpp",
     "python/recipe.cpp",
@@ -365,6 +367,9 @@ const templates_dir = "assets/templates";
 /// The shipped export presets and their provenance records (`src/export/preset_aliases.h`),
 /// installed beside the executables as `bin/assets/export-presets/`.
 const export_presets_dir = "assets/export-presets";
+/// The shipped CC0 display environments and their provenance records (`src/python/display.h`,
+/// decision 132), installed beside the executables as `bin/assets/environments/`.
+const environments_dir = "assets/environments";
 /// The mesh importers (`src/mesh/`, `docs/architecture/12-mesh-import.md`), relative to `src/`,
 /// compiled with `uzp_core_flags` into `uzp_mesh.lib`.
 const mesh_sources = [_][]const u8{
@@ -1201,6 +1206,12 @@ pub fn build(b: *std.Build) void {
         .install_subdir = "assets/export-presets",
     });
     painter_step.dependOn(&install_export_presets.step);
+    const install_environments = b.addInstallDirectory(.{
+        .source_dir = b.path(environments_dir),
+        .install_dir = .bin,
+        .install_subdir = "assets/environments",
+    });
+    painter_step.dependOn(&install_environments.step);
 
     const evaluator_tests_mod = b.createModule(.{
         .target = target,
@@ -1377,6 +1388,7 @@ pub fn build(b: *std.Build) void {
     }).step);
     pyapi_tests_step.dependOn(&install_templates.step);
     pyapi_tests_step.dependOn(&install_export_presets.step);
+    pyapi_tests_step.dependOn(&install_environments.step);
     // `uzpainter.capabilities` reads the manifest beside the executable, as in `zig build painter`.
     pyapi_tests_step.dependOn(capabilities_step);
     b.getInstallStep().dependOn(pyapi_tests_step);

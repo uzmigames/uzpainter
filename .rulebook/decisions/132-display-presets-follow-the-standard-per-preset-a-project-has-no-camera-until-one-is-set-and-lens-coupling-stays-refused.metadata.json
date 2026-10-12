@@ -1,0 +1,13 @@
+{
+  "id": 132,
+  "slug": "display-presets-follow-the-standard-per-preset-a-project-has-no-camera-until-one-is-set-and-lens-coupling-stays-refused",
+  "title": "display presets follow the standard per preset; a project has no camera until one is set, and the Painter lens coupling stays refused",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.1_preview-display-presets",
+    "phase2.3_realtime-preview",
+    "phase2.2_preview-capture"
+  ],
+  "supersededBy": null
+}

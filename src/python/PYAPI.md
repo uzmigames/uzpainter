@@ -71,7 +71,29 @@ Module and class names follow Painter's documented API wherever a Painter symbol
   - Each result names its source (decision 076) and the revision it read. A map is `{width, height, components, values}`, with `values` the float32 little-endian bytes, rows top first.
   - A view reading a channel whose template base is inferred is refused by the export's guard (decision 126). The three single views raise `NotYetSupported`. `material_views` lists such a view in `refused` and returns the others.
   - `snapshot_layer_tree()` returns the layer tree of the committed revision (`uzp_core/document/layer_tree.h`). `diff_snapshots(before, after)` returns the nodes and stacks added, removed and modified, each change as a JSON pointer with its values.
-- **Later phases.** `baking` (phase3.5), `render`, `render.shader`, `render.display` and `display` (phase2.3) are importable. Every call raises `NotYetSupported` naming the owner before anything changes.
+- **Display** (`display.{h,cpp}`, `bind_display.cpp`; task phase2.1_preview-display-presets, decisions 038, 042 and 132). Only the fixed render pipeline exists: every setter accepts the pipeline's values and raises `UnsupportedInUzPainter` naming the setting, the accepted values and decision 038 for anything else, before any change. Each setter is one transaction and returns a `Result`.
+  - `display`:
+    - `get/set_environment_resource`: a project resource imported with `Usage.ENVIRONMENT`. `resource.import_project_resource` stores an OpenEXR equirectangular map as its unmodified bytes under its SHA-256; another file raises `ValueError`. A resource that is not an environment raises `ResourceNotFoundError`.
+    - `get/set_color_lut_resource`: None only. Importing a `COLOR_LUT` is refused too.
+    - `get/set_tone_mapping`: always raise, `RuntimeError` on a colour-managed project and `UnsupportedInUzPainter` on a Legacy one.
+    - `ToneMappingFunction`, `CameraProjectionType`.
+    - `Camera(_camera_id)` and `Camera.get_default_camera()`, with Painter's eight properties. A project has no camera until one is set; until then, reading or setting a property raises `NotYetSupported` (recording R-132-A). `field_of_view` and `focal_length` are set only in a whole record (R-132-B), and `aperture` accepts 0 only.
+    - `camera()`, `set_camera(record)`, `camera_to_blender(record)`, `camera_from_blender(record)`: the standard's coordinate contract. Position maps `(x, y, z) → (x, −z, y)`, and the rotation `B @ Rx @ Ry @ Rz` becomes Blender's XYZ Euler angles on the canonical branch. Lens values pass unchanged.
+  - `render.display`:
+    - `state()`: the preset's fields, `parity` (the environment is the active preset's standard one) and the shader.
+    - `preset()` and `presets()`: presets as `uzpainter/display-preset/1` JSON. The standard has two, `common` (the v2 block) and `ref_match` (v3).
+    - `apply_preset(preset)`: validates the whole preset, then commits once. An environment the project does not store raises `ResourceNotFoundError`, with no substitute.
+    - `set_exposure`, `set_opacity`, `set_blur`: 0 only. `set_rotation`, `set_shadows`, `set_background` (sRGB8): the active preset's values only.
+    - A new project starts on `common` with no environment.
+  - `render.shader`: `parameters()` and `set_parameters(dict)`. These are the default `open-pbr` instance's settings, read back under OCIO, under UzPainter's identifiers:
+    - `diffuse_roughness_enabled`, `anisotropy_enabled`, `specular_ior` (IOR), `specular_color_enabled`, and `transmission_enabled`, `subsurface_enabled`, `coat_enabled`, `fuzz_enabled`, `thin_film_enabled` (each section's enable);
+    - `emission_luminance`;
+    - `displacement_enabled`, `displacement_source_channel`, `displacement_scale_unit`, `displacement_scale`;
+    - `tessellation_mode`, `tessellation_subdivisions`;
+    - `alpha_test_enabled`, `alpha_blending_enabled`, `double_sided`.
+
+    `set_parameters` accepts these at their default values only.
+- **Later phases.** `baking` (phase3.5) and `render.capture` (phase2.3) are importable. Every call raises `NotYetSupported` naming the owner before anything changes.
 - **`capabilities`.** `profile()` (`"painter-12.1-api-0.3.7"`), `manifest()` (the shipped `capabilities.json`) and `entry(symbol, context="any")` (§7).
 - **Top level.** `Result`, `last_result()`, `Transaction(name)`.
 
@@ -113,6 +135,7 @@ The result's `returned["sync"]` lists the groups, layers, imported and skipped i
 - LAY-01;
 - `AttributeError`, stale handles, `__slots__`;
 - every later-phase call raising `NotYetSupported` with an unchanged revision;
+- `test_display_presets.py`: the preset round trip and the standard's values, the missing environment, the camera conversion, the refusals outside the fixed pipeline, tone mapping on an OCIO project, the facade's `display` symbols and the shipped environments' provenance (decision 132);
 - failed calls, a script raising after two calls (its report names revision 3), raising and clean `Transaction`s, results;
 - a waiting thread's `StaleRevisionError`;
 - LAY-06 ambiguity, repeats and save/reopen;
