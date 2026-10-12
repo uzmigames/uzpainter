@@ -52,8 +52,8 @@
 //!   (`tests/mesh/reload_test.cpp`)
 //!
 //! - `zig build pyapi-tests` `uzp-pyapi-tests.exe`, the script runner of the native Python API
-//!   tests (`src/python/`, `tests/python/`) with the embedded CPython, `assets/templates/` and
-//!   `assets/export-presets/` beside it
+//!   tests (`src/python/`, `tests/python/`; the host of `UzPainter.exe run`) with the embedded
+//!   CPython, `assets/templates/`, `assets/export-presets/` and `capabilities.json` beside it
 //!
 //! Every include and library path is inside this repository. Windows system headers and import
 //! libraries come from the MinGW-w64 files bundled with the pinned Zig release; nothing refers
@@ -205,9 +205,11 @@ const pyapi_sources = [_][]const u8{
     "python/bind_project.cpp",
     "python/bind_resource.cpp",
     "python/bind_textureset.cpp",
+    "python/capabilities.cpp",
     "python/dispatcher.cpp",
     "python/errors.cpp",
     "python/jobs.cpp",
+    "python/run.cpp",
     "python/script.cpp",
     "python/session.cpp",
     "python/stack_sync.cpp",
@@ -1288,9 +1290,10 @@ pub fn build(b: *std.Build) void {
 
     // ── The native Python API (phase1.19_pyapi-native-module) ─────────────────────────────────
     // `uzp-pyapi-tests.exe <script.py>` runs one script in the embedded interpreter with the
-    // `uzpainter` module and prints its report (`tests/python/pyapi_runner.cpp`). It is installed
-    // with the embeddable CPython package, `assets/templates/` and `assets/export-presets/` beside
-    // it, as `UzPainter.exe` is; it evaluates on the CPU only.
+    // `uzpainter` module and prints its report (`tests/python/pyapi_runner.cpp`, the host of
+    // `UzPainter.exe run`). It is installed with the embeddable CPython package, `assets/templates/`,
+    // `assets/export-presets/` and `capabilities.json` beside it, as `UzPainter.exe` is; it
+    // evaluates on the CPU only.
     const pyapi_tests_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
@@ -1352,6 +1355,8 @@ pub fn build(b: *std.Build) void {
     }).step);
     pyapi_tests_step.dependOn(&install_templates.step);
     pyapi_tests_step.dependOn(&install_export_presets.step);
+    // `uzpainter.capabilities` reads the manifest beside the executable, as in `zig build painter`.
+    pyapi_tests_step.dependOn(capabilities_step);
     b.getInstallStep().dependOn(pyapi_tests_step);
 }
 

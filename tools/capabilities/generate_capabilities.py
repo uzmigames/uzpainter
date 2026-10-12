@@ -13,6 +13,8 @@ Generation fails, naming the entry, when:
   of the current oracle envelope (`parity/envelopes/registry.json`, decision 037), or has no
   `since` version;
 - a `desktop-only-omitted` entry has no `justification`;
+- a `pending-evidence` entry (implemented, no Tier 0 evidence yet; decision 112) has no notes
+  naming the task that owns its evidence (`phase<N>.<M>_<name>`);
 - a Painter entry cites no python-doc anchor of the symbol (or its owner) in `evidence`, or an
   addition cites no architecture section that exists;
 - a symbol or context names a brush stroke (out of scope, decision 019);
@@ -43,7 +45,7 @@ COMPOSITOR_PATH = TOOL_DIR / "compositor-capabilities.json"
 REGISTRY = Path("parity") / "envelopes" / "registry.json"
 
 SCHEMA_ID = "uzpainter/capabilities/1"
-STATUSES = ("supported", "desktop-only-omitted", "release-gap")
+STATUSES = ("supported", "desktop-only-omitted", "release-gap", "pending-evidence")
 PAINTER_ROOTS = ("substance_painter", "substance_painter_plugins")
 NATIVE_ROOT = "uzpainter"
 
@@ -246,6 +248,8 @@ class Builder:
                 raise fail("a desktop-only-omitted entry requires its justification")
         elif justification is not None:
             raise fail(f"justification belongs to desktop-only-omitted entries, not {status}")
+        if status == "pending-evidence" and (notes is None or not OWNER_TASK.search(notes)):
+            raise fail("a pending-evidence entry names the task that owns its evidence in notes")
 
         if origin == "compositor":
             if not COMPOSITOR_CONTEXT.match(context):

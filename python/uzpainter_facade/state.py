@@ -9,6 +9,7 @@ are cleared whenever a project is created, opened or closed; none is saved.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import functools
 from collections.abc import Callable, Iterator
 from typing import Any
@@ -19,6 +20,17 @@ import uzpainter
 # from which Painter's resource version `<sha1>.image` is rebuilt after save and reopen.
 RESOURCE_METADATA = "uzpainter.facade"
 RESOURCE_KEY = "resource_sha1"
+
+
+@dataclasses.dataclass
+class RenameRun:
+    """Consecutive `set_name` calls on one node with no other edit between them: Painter merges
+    them into one edit, which is none once the name is back to where the run started."""
+
+    uid: int
+    start_name: str
+    unsaved_before: bool  # needs_saving() before the run's first rename
+    revision: int  # the native revision after the run's last rename
 
 
 class Session:
@@ -36,6 +48,10 @@ class Session:
         # then reports the project as needing saving (`textureset-project-readback` s12 after
         # reopen: re-binding the same mesh map), where the native store sees no new revision.
         self.dirty = False
+        # The native revision at which the project is as saved although the store counts
+        # revisions since the save: a rename run that ended on its start name (`set_name`).
+        self.clean_revision: int | None = None
+        self.rename_run: RenameRun | None = None
         self.selection: dict[tuple[int, int], list[int]] = {}
         self.selection_type: dict[int, Any] = {}
         self.ui_mode: Any = None
@@ -47,12 +63,27 @@ class Session:
         self.projects += 1
         self.reset()
 
+    def saved(self) -> None:
+        """The project was saved: nothing is left to save."""
+        self.dirty = False
+        self.clean_revision = None
+        self.rename_run = None
+
     def context(self) -> str:
         """Painter's resource context of the current project: `project<N>`."""
         return f"project{max(self.projects, 0)}"
 
 
 SESSION = Session()
+
+
+def unsaved() -> bool:
+    """Painter's `project.needs_saving()`: an edit call since the last save, or a native revision
+    since it that no merged rename run brought back to the saved state."""
+    if SESSION.dirty:
+        return True
+    project = uzpainter.project
+    return bool(project.needs_saving()) and project.revision() != SESSION.clean_revision
 
 
 def edits[F: Callable[..., Any]](function: F) -> F:
@@ -62,6 +93,7 @@ def edits[F: Callable[..., Any]](function: F) -> F:
     def call(*args: Any, **kwargs: Any) -> Any:
         result = function(*args, **kwargs)
         SESSION.dirty = True
+        SESSION.rename_run = None
         return result
 
     return call  # type: ignore[return-value]

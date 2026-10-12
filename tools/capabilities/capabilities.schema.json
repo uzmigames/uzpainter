@@ -30,7 +30,7 @@
           "pattern": "^[a-z0-9][a-z0-9_.:-]*$",
           "not": { "pattern": "[Ss][Tt][Rr][Oo][Kk][Ee]" }
         },
-        "status": { "enum": ["supported", "desktop-only-omitted", "release-gap"] },
+        "status": { "enum": ["supported", "desktop-only-omitted", "release-gap", "pending-evidence"] },
         "since": {
           "description": "UzPainter version that first supports the entry; null unless supported.",
           "type": ["string", "null"],
@@ -58,6 +58,10 @@
         {
           "if": { "properties": { "status": { "const": "desktop-only-omitted" } } },
           "then": { "properties": { "notes": { "type": "string" } } }
+        },
+        {
+          "if": { "properties": { "status": { "const": "pending-evidence" } } },
+          "then": { "properties": { "notes": { "type": "string" }, "tier_evidence": { "maxItems": 0 } } }
         },
         {
           "if": { "properties": { "symbol": { "pattern": "^substance_painter" } } },

@@ -36,6 +36,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from tests.python.capability_trace import SOURCE, check_trace, exercised
 from tests.python.conftest import REPO_ROOT, Run
 from tools.parity.fit.decode import decode
 from tools.parity.recorder.probes import INPUT_ARGS, PAINTER_PROBES, probe_job_from_manifest
@@ -79,6 +80,10 @@ BASECOLOR_EXPORT = (
     "R-090, not fitted (phase1.25_pilot-wand item 2.6, decision 103)"
 )
 EXPORTS = {"uzp_plane/basecolor": BASECOLOR_EXPORT}
+UID_VALUE = (
+    "a uid's value is Painter's own allocation, not part of the instruction sequence; the "
+    "identity outputs compare what a uid resolves to"
+)
 REOPEN = "found_by lists the nodes of the refused steps"
 
 
@@ -125,6 +130,9 @@ EXCLUDED: dict[str, dict[str, str]] = {
         "identity/reopen": REOPEN,
         "uzp_plane/basecolor": BASECOLOR_EXPORT,
     },
+    "phase1-create-settings": EXPORTS,
+    "phase1-delete-node": {**EXPORTS, **excluded(UID_VALUE, "s17/uid")},
+    "phase1-resource-update": {**EXPORTS, **excluded(UID_VALUE, "s14/uid", "s15/uid")},
     "insert-positions": {
         **excluded(
             CONTENT_FILL,
@@ -164,6 +172,9 @@ EXCLUDED: dict[str, dict[str, str]] = {
 REPLAY = """
 import base64
 PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
+TRACE = {"__name__": "uzp_capability_trace"}
+exec(compile(PAYLOAD["trace"], "capability_trace.py", "exec"), TRACE)
+TRACE["start"]()
 recorder = {"__name__": "uzp_recorder"}
 with open(PAYLOAD["painter_side"], encoding="utf-8") as source:
     exec(compile(source.read(), "painter_side.py", "exec"), recorder)
@@ -189,14 +200,17 @@ def output_id(step):
 
 
 def run_step(step):
+    TRACE["mark"](output_id(step))
     return call("probe_step", step=step["step"], call=step["call"], args=step["args"],
                 resolved=step["resolved"])
 
 
 def record(condition, first, uids):
+    TRACE["mark"]("template/texture-sets")
     outputs = {"template/texture-sets": {"value": call("template_capture")}}
     outputs.update(first)
     for step, uid in sorted(uids.items(), key=lambda item: int(item[0])):
+        TRACE["mark"](f"identity/s{step}")
         value = call("probe_identity", node_step=int(step), recorded_uid=uid)
         outputs[f"identity/s{step}"] = {"value": value}
     for step in PAYLOAD["probes"]:
@@ -207,6 +221,7 @@ def record(condition, first, uids):
         # Each map is exported on its own, so a map the export engine refuses (a release gap)
         # does not hide the others; Painter's configuration differs only by the map list.
         for name, config in export_step[condition].items():
+            TRACE["mark"]("export/" + name)
             try:
                 result = sp.export.export_project_textures(config)
             except Exception as error:
@@ -216,7 +231,9 @@ def record(condition, first, uids):
     return {"outputs": outputs, "files": files}
 
 
+TRACE["mark"]("bookkeeping")
 call("probe_reset")
+TRACE["mark"]("setup")
 create = PAYLOAD["create"]
 call("apply_step", step=create["step"], call=create["call"], args=create["args"],
      resolved=create["resolved"])
@@ -228,17 +245,23 @@ for step in PAYLOAD["state"]:
         defaults["inserted"][str(step["step"])] = outcome["defaults"]
     key, out = readback(output_id(step), outcome)
     first[key] = out
+TRACE["mark"]("bookkeeping")
 uids = {step: int(where["uid"]) for step, where in call("probe_locations").items()}
 same_session = record("same_session", first, uids)
+TRACE["mark"]("bookkeeping")
 locations = call("probe_locations")
+TRACE["mark"]("setup")
 os.makedirs(os.path.dirname(PAYLOAD["save_to"]), exist_ok=True)
 call("save_as", path=PAYLOAD["save_to"])
 call("close_project")
 call("open_project", path=PAYLOAD["save_to"])
+TRACE["mark"]("identity/reopen")
 found = call("probe_rebind", locations=locations)
 after = record("after_save_reopen", {"identity/reopen": {"value": found}}, uids)
+TRACE["mark"]("setup")
 call("close_project")
-result = {"defaults": defaults, "same_session": same_session, "after_save_reopen": after}
+result = {"defaults": defaults, "same_session": same_session, "after_save_reopen": after,
+          "trace": TRACE["stop"]()}
 """
 
 
@@ -304,6 +327,7 @@ def replay(facade: Run, probe: str, work: Path) -> tuple[dict[str, Any], dict[st
         "probes": [step_payload(s, staged) for s in job.probe_steps],
         "exports": exports,
         "save_to": (work / "project" / "probe.spp").as_posix(),
+        "trace": SOURCE,
     }
     encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
     report = facade(REPLAY.replace("__PAYLOAD__", encoded))
@@ -415,7 +439,11 @@ def compare(probe: str, facade: Run, work: Path) -> list[str]:
     differences: list[str] = []
     for condition in CONDITIONS:
         ours = normalised(replayed[condition]["outputs"])
-        theirs = expected[condition]
+        theirs = {
+            k: v
+            for k, v in expected[condition].items()
+            if probe not in R10_PROBES or not k.endswith(("/events", "/states"))
+        }
         for output_id, value in ours.items():
             if output_id.endswith("/get_root_layer_nodes"):
                 value = {**value, "value": without_default_layer(value["value"])}
@@ -443,6 +471,9 @@ def compare(probe: str, facade: Run, work: Path) -> list[str]:
     recorded |= {f"defaults/s{step}" for step in inserted}
     for output_id in excluded:
         assert output_id in recorded, f"{probe}: the excluded output {output_id} is not recorded"
+    if not differences:
+        golden_id = f"tier0/api-probes/{probe}"
+        check_trace(f"facade/{probe}", golden_id, exercised(replayed["trace"], excluded))
     return differences
 
 
@@ -455,6 +486,9 @@ QUIRK_PROBES = (
     "insert-positions",
 )
 READBACK_PROBES = ("fill-layer-readback", "textureset-project-readback")
+# The R10 probes of the project, layer and resource operations (decision 100): their readbacks,
+# events aside (test_pyapi_lifecycle_tier0.py compares the observed ones), and exported maps.
+R10_PROBES = ("phase1-create-settings", "phase1-delete-node", "phase1-resource-update")
 
 
 @pytest.mark.parametrize("probe", QUIRK_PROBES)
@@ -473,6 +507,14 @@ def test_facade_shaped_readbacks_equal_painter(facade: Run, tmp_path: Path, prob
     assert differences == [], "\n".join(differences)
 
 
+@pytest.mark.parametrize("probe", R10_PROBES)
+def test_facade_r10_probe_equals_painter(facade: Run, tmp_path: Path, probe: str) -> None:
+    """phase1.22 item 2.5: create settings, delete_node and update_layer_stack_resource, compared
+    like the readback probes so their entries cite Tier 0 evidence (decision 112)."""
+    differences = compare(probe, facade, tmp_path)
+    assert differences == [], "\n".join(differences)
+
+
 # ── Colour rules: the readbacks of R5's Legacy twin (items 3.6, 3.7) ──────────────────────────
 
 SEMANTICS = API_PROBES.parent / "semantics"
@@ -487,6 +529,9 @@ COLOUR_EXCLUDED = {
 TEXTURE_REPLAY = """
 import base64
 PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
+TRACE = {"__name__": "uzp_capability_trace"}
+exec(compile(PAYLOAD["trace"], "capability_trace.py", "exec"), TRACE)
+TRACE["start"]()
 recorder = {"__name__": "uzp_recorder"}
 with open(PAYLOAD["painter_side"], encoding="utf-8") as source:
     exec(compile(source.read(), "painter_side.py", "exec"), recorder)
@@ -506,9 +551,12 @@ def outcome(spec):
 
 
 def record():
+    TRACE["mark"]("template/texture-sets")
     outputs = {"template/texture-sets": {"value": call("template_capture")}}
     for spec in PAYLOAD["readbacks"]:
+        TRACE["mark"](spec["output_id"])
         outputs[spec["output_id"]] = outcome(spec)
+    TRACE["mark"]("setup")
     return outputs
 
 
@@ -516,7 +564,9 @@ for step in PAYLOAD["state"]:
     call("apply_step", step=step["step"], call=step["call"], args=step["args"],
          resolved=step["resolved"])
 same_session = record()
+TRACE["mark"]("bookkeeping")
 locations = call("node_locations")
+TRACE["mark"]("setup")
 os.makedirs(os.path.dirname(PAYLOAD["save_to"]), exist_ok=True)
 call("save_as", path=PAYLOAD["save_to"])
 call("close_project")
@@ -524,7 +574,7 @@ call("open_project", path=PAYLOAD["save_to"])
 call("rebind_nodes", locations=locations)
 after = record()
 call("close_project")
-result = {"same_session": same_session, "after_save_reopen": after}
+result = {"same_session": same_session, "after_save_reopen": after, "trace": TRACE["stop"]()}
 """
 
 
@@ -574,6 +624,7 @@ def test_colour_rule_readbacks_equal_painter(facade: Run, tmp_path: Path) -> Non
         ],
         "readbacks": readbacks,
         "save_to": (tmp_path / "project" / "probe.spp").as_posix(),
+        "trace": SOURCE,
     }
     encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
     report = facade(TEXTURE_REPLAY.replace("__PAYLOAD__", encoded))
@@ -594,3 +645,5 @@ def test_colour_rule_readbacks_equal_painter(facade: Run, tmp_path: Path) -> Non
                 differences.append(f"{condition} {output_id}: {ours[output_id]} != {painter}")
     assert differences == [], "\n".join(differences)
     assert compared == 2 * (len(readbacks) + 1 - len(COLOUR_EXCLUDED))
+    symbols = exercised(report["result"]["trace"], COLOUR_EXCLUDED)
+    check_trace(f"facade/{COLOUR_GOLDEN}", f"tier0/semantics/{COLOUR_GOLDEN}", symbols)

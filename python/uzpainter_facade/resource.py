@@ -197,13 +197,13 @@ def list_project_resources() -> list[ResourceID]:
 
 @edits
 def update_layer_stack_resource(old_resource_id: Any, new_resource: Any) -> list[Any]:
-    """Replace a resource in the layer stack; returns the nodes that changed."""
-    from uzpainter_facade.nodes import wrap
-
+    """Replace a resource in the layer stacks and mesh maps; returns the identifiers of the
+    resources replaced, as Painter documents and returns them (`phase1-resource-update` s12: the
+    identifier given, once, when a binding used it)."""
     changed = uzpainter.resource.update_layer_stack_resource(
         to_native(old_resource_id), to_native(new_resource)
     )
-    return [wrap(node) for node in changed]
+    return [old_resource_id] if changed else []
 
 
 def show_resources_in_ui(resources: Any) -> None:

@@ -1,14 +1,18 @@
 // UzPainter.exe entry point (docs/architecture/01-overview.md, command line). Phase 0 provides the
 // `selftest` command (docs/architecture/13-engine-integration.md §4.2); the project store adds
 // `inspect`, `export-bundle` and `store-census` (src/store/cli.h), the export of a project and
-// its publication's recovery `export` (src/export/cli.h); the other commands are added by their
-// phases.
+// its publication's recovery `export` (src/export/cli.h), the Python API the script host `run`
+// (src/python/run.h) and `capabilities` (src/python/capabilities.h); the other commands are added
+// by their phases.
 
 #include "export/cli.h"
+#include "python/capabilities.h"
+#include "python/run.h"
 #include "selftest/harness.h"
 #include "store/cli.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -23,11 +27,23 @@ int main(int argc, char** argv) {
     if (!args.empty() && uzp::exporter::IsExportCommand(args.front())) {
         return uzp::exporter::RunExportCommand(args, stdout, stderr);
     }
+    if (!args.empty() && uzp::python::IsRunCommand(args.front())) {
+        const int status = uzp::python::RunRunCommand(args, stdout, stderr);
+        // The interpreter is not finalized: its worker threads may still wait for jobs.
+        std::fflush(stdout);
+        std::fflush(stderr);
+        std::_Exit(status);
+    }
+    if (!args.empty() && uzp::python::IsCapabilitiesCommand(args.front())) {
+        return uzp::python::RunCapabilitiesCommand(args, stdout, stderr);
+    }
     std::fprintf(stderr, "usage: UzPainter.exe selftest [--out-dir <dir>] [--report <file>] "
                          "[--no-gpu]\n"
                          "       UzPainter.exe inspect | export-bundle | store-census ... (src/store/cli.h)\n"
                          "       UzPainter.exe export <file.uzp> --config <config.json> --app-version <version> "
                          "--build <id>\n"
-                         "       UzPainter.exe export --recover <exportPath> [--fixed-names <dir>]...\n");
+                         "       UzPainter.exe export --recover <exportPath> [--fixed-names <dir>]...\n"
+                         "       UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan]\n"
+                         "       UzPainter.exe capabilities\n");
     return uzp::selftest::kExitUsage;
 }

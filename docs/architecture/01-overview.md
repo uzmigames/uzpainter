@@ -56,7 +56,7 @@ UzPainter.exe --worker --pipe <name> --gpu-backend dx12|vulkan [--allow-python]
     worker: document + render core; talks only to its supervisor
 UzPainter.exe run <script.py> [args]
     single process: worker role hosting a Python script (substance_painter facade available)
-UzPainter.exe inspect <file.uzp> | export ... | bake ... | capture ... | selftest | export-bundle ... | assets list [--parity]
+UzPainter.exe inspect <file.uzp> | export ... | bake ... | capture ... | selftest | export-bundle ... | assets list [--parity] | capabilities
     CLI verbs, single process; prefixed JSON lines on stdout (`UZP_JSON:{...}`), exit codes 0/1/2/3
 UzPainter.exe --preview <file.uzp>
     read-only window following a project (optional; also attachable to a running worker)

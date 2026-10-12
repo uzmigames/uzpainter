@@ -5,11 +5,13 @@
 // (`uzp-pyapi-tests.exe`) call it.
 //
 // The script runs as `__main__` with `sys.argv = [script, *args]`; its standard output and error
-// are captured. The value it assigns to `result` is returned as JSON. An uncaught exception is a
-// structured failure: its class, message and traceback. In both cases the report names the last
-// revision the script committed and every committed call result, so a script that raises after
-// earlier calls reports what it kept (those calls stay committed); a native `Transaction` left
-// open is rolled back.
+// are captured until the event dispatcher has drained after it returned, so the events and
+// callbacks of operations it started (10-python-api.md §4) are part of the run: their output and
+// commits are in the report. The value it assigns to `result` is returned as JSON. An uncaught
+// exception is a structured failure: its class, message and traceback. In both cases the report
+// names the last revision the script committed and every committed call result, so a script that
+// raises after earlier calls reports what it kept (those calls stay committed); a native
+// `Transaction` left open is rolled back.
 
 #include <filesystem>
 #include <string>

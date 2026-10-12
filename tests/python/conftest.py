@@ -78,6 +78,8 @@ def raises(call, *args, **kwargs):
 """
 
 Run = Callable[[str], dict[str, Any]]
+# The prefix of the report line of `UzPainter.exe run` and uzp-pyapi-tests.exe (src/python/run.h).
+JSON_PREFIX = "UZP_JSON:"
 
 
 @pytest.fixture(scope="session")
@@ -117,9 +119,9 @@ def runner(exe: Path, work: Path, prelude: str) -> Run:
             timeout=600,
             check=False,
         )
-        lines = [line for line in process.stdout.splitlines() if line.startswith("{")]
+        lines = [line for line in process.stdout.splitlines() if line.startswith(JSON_PREFIX)]
         assert lines, f"exit {process.returncode}: {process.stdout}\n{process.stderr}"
-        report: dict[str, Any] = json.loads(lines[-1])
+        report: dict[str, Any] = json.loads(lines[-1][len(JSON_PREFIX) :])
         assert process.returncode == (0 if report["status"] == "ok" else 1)
         return report
 

@@ -267,6 +267,15 @@ void BindResource(py::module_& m) {
                        const std::string to = ResolveResource(edit.project(), new_resource);
                        nodes.clear();
                        for (core::TextureSet& set : edit.project().texture_sets) {
+                           // Painter also replaces a mesh map's resource; how is unrecorded
+                           // (recording P22-A, decision 112): refused before any change.
+                           for (const auto& [usage, binding] : set.mesh_maps) {
+                               if (binding.resource == from) {
+                                   throw core::NotYetSupported(
+                                       "resource.update_layer_stack_resource: replacing the resource of a mesh map "
+                                       "is a release gap until recording P22-A (phase1.24_python-api-facade)");
+                               }
+                           }
                            for (core::Stack& stack : set.stacks) Rebind(stack.root_layers, from, to, nodes);
                        }
                    });

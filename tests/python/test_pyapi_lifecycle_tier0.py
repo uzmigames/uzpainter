@@ -34,6 +34,7 @@ from typing import Any
 
 import pytest
 
+from tests.python.capability_trace import SOURCE, check_trace, exercised
 from tests.python.conftest import Run
 from tests.python.test_pyapi_facade_tier0 import (
     API_PROBES,
@@ -43,6 +44,8 @@ from tests.python.test_pyapi_facade_tier0 import (
 )
 from tools.parity.recorder.probes import INPUT_ARGS, PAINTER_PROBES
 
+# Project-state readbacks of the observed probes, compared with the events (phase1-save-modes).
+READBACK_CALLS = ("substance_painter.project.file_path", "substance_painter.project.needs_saving")
 ASYNC_CALLS = (
     "substance_painter.project.reload_mesh",
     "substance_painter.resource.reload_modified_resources_async",
@@ -69,6 +72,9 @@ EXCLUDED: dict[str, dict[str, dict[str, str]]] = {
 LOADER = """
 import base64, shutil
 PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
+TRACE = {"__name__": "uzp_capability_trace"}
+exec(compile(PAYLOAD["trace"], "capability_trace.py", "exec"), TRACE)
+TRACE["start"]()
 recorder = {"__name__": "uzp_recorder"}
 with open(PAYLOAD["painter_side"], encoding="utf-8") as source:
     exec(compile(source.read(), "painter_side.py", "exec"), recorder)
@@ -150,6 +156,11 @@ call("events_disconnect")
 result = recordings
 """
 
+# Appended to every replay: its result with the capability trace (decision 112).
+TRACED = """
+result = {"result": result, "trace": TRACE["stop"]()}
+"""
+
 OBSERVED = """
 import time
 
@@ -160,31 +171,46 @@ def run(step, work):
     resolved = dict(step["resolved"])
     if "work_file" in step["args"]:
         resolved["work_file"] = work + "/" + step["args"]["work_file"]
-    call("probe_step", step=step["step"], call=step["call"], args=step["args"], resolved=resolved)
+    TRACE["mark"](f"s{step['step']}/events")
+    outcome = call("probe_step", step=step["step"], call=step["call"], args=step["args"],
+                   resolved=resolved)
     settle()
-    return call("events_take")["events"]
+    events = call("events_take")["events"]
+    TRACE["mark"]("setup")
+    return events, outcome
 
 
 def record(steps, work):
     os.makedirs(work, exist_ok=True)
-    return {f"s{step['step']}/events": run(step, work) for step in steps}
+    out = {}
+    for step in steps:
+        events, outcome = run(step, work)
+        out[f"s{step['step']}/events"] = events
+        if step["call"] in PAYLOAD["readbacks"]:
+            out[f"s{step['step']}/{step['call'].rsplit('.', 1)[1]}"] = outcome.get("value")
+    return out
 
 
+TRACE["mark"]("bookkeeping")
 call("probe_reset")
+TRACE["mark"]("setup")
 create = PAYLOAD["create"]
 call("apply_step", **create)
 call("probe_step", step=2, call=PAYLOAD["connect"]["call"], args=PAYLOAD["connect"]["args"],
      resolved={})
 call("events_take")
 first = record(PAYLOAD["first"], PAYLOAD["work"] + "/r1")
+TRACE["mark"]("bookkeeping")
 locations = call("probe_locations")
 call("events_take")
+TRACE["mark"]("setup")
 call("save_as", path=PAYLOAD["work"] + "/project/probe.spp")
 call("close_project")
 call("open_project", path=PAYLOAD["work"] + "/project/probe.spp")
 call("probe_rebind", locations=locations)
 call("events_take")
 second = record(PAYLOAD["second"], PAYLOAD["work"] + "/r2")
+TRACE["mark"]("bookkeeping")
 call("probe_finish")
 call("close_project")
 result = {"same_session": first, "after_save_reopen": second}
@@ -225,16 +251,19 @@ def step_payload(step: dict[str, Any], staged: dict[str, Path]) -> dict[str, Any
     return out
 
 
-def run(facade: Run, body: str, payload: dict[str, Any]) -> Any:
+def run(facade: Run, body: str, payload: dict[str, Any]) -> tuple[Any, dict[str, list[str]]]:
+    """The replay's result and its capability trace (decision 112)."""
     payload = {
         **payload,
         "painter_side": PAINTER_SIDE.as_posix(),
         "painter_probes": PAINTER_PROBES.as_posix(),
+        "trace": SOURCE,
     }
     encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
-    report = facade(LOADER.replace("__PAYLOAD__", encoded) + body)
+    script = LOADER.replace("__PAYLOAD__", encoded) + body + TRACED
+    report = facade(script)
     assert report["status"] == "ok", report.get("error", {}).get("traceback", report)
-    return report["result"]
+    return report["result"]["result"], report["result"]["trace"]
 
 
 def test_lifecycle_events_equal_painter(facade: Run, tmp_path: Path) -> None:
@@ -250,7 +279,7 @@ def test_lifecycle_events_equal_painter(facade: Run, tmp_path: Path) -> None:
         "events": steps[0]["args"]["events"],
         "work": (tmp_path / "work").as_posix(),
     }
-    ours = run(facade, LIFECYCLE, payload)
+    ours, trace = run(facade, LIFECYCLE, payload)
     theirs = [
         {o["output_id"]: o["value"] for o in recording["outputs"]}
         for recording in golden["recordings"]
@@ -258,10 +287,15 @@ def test_lifecycle_events_equal_painter(facade: Run, tmp_path: Path) -> None:
     assert len(theirs) == len(ours) == 4
     for index, (painter, facade_outputs) in enumerate(zip(theirs, ours, strict=True)):
         assert facade_outputs == painter, f"recording r{index + 1}"
+    golden_id = "tier0/api-probes/lifecycle-events"
+    check_trace("facade-events/lifecycle-events", golden_id, exercised(trace))
 
 
 OBSERVED_PROBES = {
     # probe: the steps compared in the first recording (a prefix of the probe's steps)
+    "phase1-create-settings": None,
+    "phase1-delete-node": None,
+    "phase1-resource-update": None,
     "phase1-save-modes": None,
     "phase1-reload-mesh": None,
     "phase1-reload-resources": None,
@@ -294,7 +328,8 @@ def test_observed_probe_events_equal_painter(facade: Run, tmp_path: Path, probe:
         outputs = {
             o["output_id"]: {"value": o["value"]}
             for o in recording["outputs"]
-            if o["output_id"].endswith("/events") and o["output_id"] != "start/events"
+            if (o["output_id"].endswith("/events") and o["output_id"] != "start/events")
+            or o["output_id"].endswith(tuple("/" + c.rsplit(".", 1)[1] for c in READBACK_CALLS))
         }
         expected[recording["condition"]] = normalised(outputs)
     second_steps = {int(key[1:].split("/")[0]) for key in expected["after_save_reopen"]}
@@ -304,8 +339,9 @@ def test_observed_probe_events_equal_painter(facade: Run, tmp_path: Path, probe:
         "first": replayed,
         "second": [s for s in replayed if s["step"] in second_steps],
         "work": (tmp_path / "work").as_posix(),
+        "readbacks": READBACK_CALLS,
     }
-    ours = run(facade, OBSERVED, payload)
+    ours, trace = run(facade, OBSERVED, payload)
     asynchronous = {f"s{s['step']}/events" for s in steps if s["call"] in ASYNC_CALLS}
     differences: list[str] = []
     for condition in ("same_session", "after_save_reopen"):
@@ -324,3 +360,5 @@ def test_observed_probe_events_equal_painter(facade: Run, tmp_path: Path, probe:
             if value != painter:
                 differences.append(f"{condition} {output_id}: facade {value!r} != {painter!r}")
     assert differences == [], "\n".join(differences)
+    skipped = {o.split("/")[0] + "/events" for c in EXCLUDED.get(probe, {}).values() for o in c}
+    check_trace(f"facade-events/{probe}", f"tier0/api-probes/{probe}", exercised(trace, skipped))
