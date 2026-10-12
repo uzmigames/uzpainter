@@ -1,0 +1,13 @@
+{
+  "id": 97,
+  "slug": "exports-publish-generations-with-receipts-and-the-assets3d-block-follows-manifest-schema-v2",
+  "title": "Exports publish generations with receipts, and the Assets3D block follows manifest schema v2",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.17_export-publication-receipts",
+    "phase1.18_export-engine",
+    "phase1.23_pyapi-pipeline-adapter"
+  ],
+  "supersededBy": null
+}
