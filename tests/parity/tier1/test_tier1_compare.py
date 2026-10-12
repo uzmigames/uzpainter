@@ -23,11 +23,14 @@ from tools.parity.guard.guard import Snapshot, run_guard
 from tools.parity.schemas import REPO_ROOT, Schema, is_valid, load_json, validation_errors
 from tools.parity.store.store import OracleStore
 from tools.parity.tier1.compare import (
+    FLIP_VERSION,
+    FLIP_WHEEL_SHA256,
     CandidateRun,
     RunIdentity,
     Subject,
     compare,
     file_storage_format,
+    flip_available,
     material_regions,
     write_report,
 )
@@ -242,6 +245,25 @@ def test_a_map_only_another_recording_holds_makes_the_golden_unstable(
     assert report["oracle_stability"]["status"] == "unstable"
     assert report["equality_to_painter"]["outcome"] == "blocked"
     assert report["equality_to_painter"]["structural"] == []
+
+
+@pytest.mark.skipif(not flip_available(), reason="flip-evaluator 1.7 is not installed")
+def test_flip_is_reported_as_a_diagnostic_with_its_pinned_tool(tmp_path: Path) -> None:
+    """Mean FLIP rides next to the numbers (0 for equal maps, above 0 for a divergence) and
+    names the pinned tool; the outcome is the contract's alone."""
+    resolved, store = stable_golden(tmp_path)
+    changed = maps()
+    changed[BASE][:, :, 0] = 65535
+    runs = (candidate(tmp_path / "a", changed), candidate(tmp_path / "b", changed))
+    report = report_of(resolved, store, runs)
+    assert report["flip_tool"] == {"version": FLIP_VERSION, "sha256": FLIP_WHEEL_SHA256}
+    entries = by_id(report["equality_to_painter"]["maps"])
+    assert entries[f"{SET}/{BASE}"]["flip_mean"] > 0
+    assert entries[f"{SET}/{ROUGH}"]["flip_mean"] == 0
+    assert report["equality_to_painter"]["outcome"] == "fail"
+    equal = report_of(resolved, store, (candidate(tmp_path / "c", maps()),) * 2)
+    assert equal["equality_to_painter"]["outcome"] == "pass"
+    assert all(m["flip_mean"] == 0 for m in equal["equality_to_painter"]["maps"])
 
 
 # --- oracle_unavailable (3.4) -------------------------------------------------------------------

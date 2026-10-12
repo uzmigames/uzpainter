@@ -38,7 +38,11 @@ counts. A texel is unnormalised when its length differs from 1 by more than roun
 to the stored values can produce: sqrt(3)/max for integer codes (n = 2c/max - 1), sqrt(3)·eps of
 the stored type for float maps. A differing integer map's |Δ| image (a PNG at its stored depth)
 goes into the private store only, so the guard's store-hash rule blocks it, and the report names
-its SHA-256. FLIP is not computed: no pinned NVlabs/flip exists in this repository.
+its SHA-256. Mean FLIP (NVIDIA's `flip-evaluator`, pinned at 1.7 by the dependency inventory,
+`docs/licensing-and-clean-room.md` §3) is reported for each compared integer map of the equality
+result, LDR on the stored codes scaled to [0, 1] (a grey map repeated to three channels, alpha
+dropped), with the tool's identity in `flip_tool`. It is a diagnostic only: it never enters a
+verdict. Without the pinned package (hosted runners), or for float maps, it is omitted.
 
 Nothing here writes into the repository except `write_report`: decoded values stay in memory, and
 the report holds numbers and hashes only.
@@ -47,6 +51,7 @@ the report holds numbers and hashes only.
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import math
 import tempfile
@@ -85,6 +90,8 @@ MISSING_FROM_CANDIDATE = "missing_from_candidate"
 MISSING_FROM_ORACLE = "missing_from_oracle"
 FORMAT_DIFFERS = "storage_format_differs"
 SHAPE_DIFFERS = "shape_differs"
+FLIP_PACKAGE, FLIP_VERSION = "flip-evaluator", "1.7"
+FLIP_WHEEL_SHA256 = "2081f715ea8190a5f58bc578b0cccd36a9a3f3cf78ad13fe6f86e5a75615bda7"
 # What must be the same for a recorded golden to be the job the runs executed.
 SAME_JOB = ("golden_id", "tier", "domain", "inputs", "instruction_sequence", "applied_settings")
 
@@ -212,6 +219,32 @@ def normal_diagnostics(oracle: Decoded, candidate: Decoded) -> dict[str, float]:
     }
 
 
+def flip_available() -> bool:
+    """The pinned FLIP package is installed (the owner's machine; decision 050)."""
+    try:
+        return importlib.metadata.version(FLIP_PACKAGE) == FLIP_VERSION
+    except importlib.metadata.PackageNotFoundError:
+        return False
+
+
+def _flip_rgb(decoded: Decoded) -> npt.NDArray[np.float32]:
+    values: npt.NDArray[np.float32] = (decoded.values / decoded.maximum_code).astype(np.float32)
+    return np.repeat(values[..., :1], 3, axis=2) if values.shape[2] < 3 else values[..., :3]
+
+
+def flip_mean(oracle: Decoded, candidate: Decoded) -> float | None:
+    """Mean FLIP error (LDR) of the candidate against the oracle; diagnostic only. None for float
+    maps or without the pinned package."""
+    if not (oracle.integer and candidate.integer) or not flip_available():
+        return None
+    import flip_evaluator
+
+    _, mean, _ = flip_evaluator.evaluate(
+        _flip_rgb(oracle), _flip_rgb(candidate), "LDR", applyMagma=False, computeMeanError=True
+    )
+    return float(mean)
+
+
 def store_difference_map(
     store: OracleStore | None, oracle: Decoded, candidate: Decoded
 ) -> str | None:
@@ -236,6 +269,7 @@ def map_entry(
     regions: Mapping[str, Diagnostics],
     normal: Mapping[str, float] | None = None,
     difference_map: str | None = None,
+    flip: float | None = None,
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "output_id": output_id,
@@ -252,6 +286,8 @@ def map_entry(
         }
     if difference_map is not None:
         entry["private_difference_map_sha256"] = difference_map
+    if flip is not None:
+        entry["flip_mean"] = flip
     return entry
 
 
@@ -412,7 +448,10 @@ def equality(
         difference_map = (
             store_difference_map(store, oracle, candidate) if whole.differing_count else None
         )
-        entries.append(map_entry(_name(key), recorded, whole, regions, normal, difference_map))
+        flip = flip_mean(oracle, candidate)
+        entries.append(
+            map_entry(_name(key), recorded, whole, regions, normal, difference_map, flip)
+        )
     outcome = _outcome(verdicts, structural, resolved.stale, oracle_unpaired)
     relied = sorted({pair for v in verdicts for pair in v.exceptions_relied_on})
     return {
@@ -489,6 +528,8 @@ def compare(
     report["equality_to_painter"] = equality(
         subject, resolved, golden, stable, bool(unpaired), runs[0], store, register_entries
     )
+    if any("flip_mean" in m for m in report["equality_to_painter"]["maps"]):
+        report["flip_tool"] = {"version": FLIP_VERSION, "sha256": FLIP_WHEEL_SHA256}
     return report
 
 

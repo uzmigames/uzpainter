@@ -78,7 +78,10 @@ Every condition the panel raised is adopted; see the Decision. The Codex audit t
        - Non-finite texels are counted.
        - Unnormalised texels are counted: beyond sqrt(3)/max for codes, sqrt(3)·eps for floats.
      - For a differing integer map, its |Δ| PNG goes only into the private store, and the report names its SHA-256.
-     - FLIP is not computed, because no pinned NVlabs/flip exists in this repository.
+     - Mean FLIP comes from the pinned `flip-evaluator` 1.7 (decision 050; wheel SHA-256 in the dependency inventory). It is computed for each compared integer map of the equality result: LDR on the stored codes scaled to [0, 1], a grey map repeated to three channels, alpha dropped. The report names the tool in `flip_tool`.
+       - It is a diagnostic only and never enters a verdict.
+       - It is omitted without the pinned package (hosted runners) and for float maps.
+       - A first draft omitted FLIP. The Codex scope review pointed to the pinned package, so it was added.
 4. **Schema: `comparison-report.json` gains three things.**
    - `equality_to_painter.structural`: a list of `{output_id, reason}` with an enumerated reason.
    - A rule that no `pass` lists a structural difference, with or without exception entries.
