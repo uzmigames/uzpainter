@@ -219,6 +219,15 @@ void BindProject(py::module_& m) {
         const std::optional<std::filesystem::path> path = Session::Get().FilePath();
         return path ? py::object(py::str(Utf8(*path))) : py::none();
     });
+    m.def(
+        "absolute_file_path",
+        []() -> py::object {
+            const std::shared_ptr<OpenProject> project = Session::Get().Current();
+            if (!project->untitled_dir.empty()) return py::none();
+            return py::str(Utf8(project->project_source));
+        },
+        "The project file as an absolute path, resolved against the working directory when `open` or "
+        "`save_as` named it (decision 118); None while untitled.");
     m.def("name", [] {
         // A project never saved is named "Untitled", as Painter names it (textureset-project-readback,
         // both recordings; the `$project` export wildcard reads the same name).

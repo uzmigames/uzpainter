@@ -626,6 +626,49 @@ def test_an_export_names_relative_sources_against_the_directory_they_were_named_
     assert files["mesh"]["path"] == "_tmp/claude/varinha11-v1/paint/11-Varinha-Madeira-v1_low.obj"
 
 
+SAVED_RELATIVE = """
+import os
+import substance_painter.project as p
+p.close()
+os.chdir(__PAINT__)
+p.create("11-Varinha-Madeira-v1_low.obj")
+p.save_as("relative.spp")
+os.chdir(__ELSEWHERE__)
+result = str(p.get_uuid())
+"""
+
+CARRIED = """
+import uzpainter
+import substance_painter.project as p
+result = {"uuid": str(p.get_uuid()), "path": uzpainter.project.absolute_file_path()}
+"""
+
+
+def test_a_project_saved_under_a_relative_path_is_reopened_where_it_was_saved(
+    created: Wand, adapter_env: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decision 118 (Codex audit): a call changes directory, saves the project under a relative
+    path and moves on; the next call, run from another directory that holds another project of
+    the same name, reopens exactly the project the first call saved."""
+    paint = created.root / "_tmp" / "claude" / "varinha11-v1" / "paint"
+    first, second, elsewhere = tmp_path / "first", tmp_path / "second", tmp_path / "elsewhere"
+    for folder in (first, second, elsewhere):
+        folder.mkdir()
+    shutil.copyfile(created.argument("create", "dst"), second / "relative.spp")  # the homonym
+    monkeypatch.chdir(first)
+    code = SAVED_RELATIVE.replace("__PAINT__", repr(str(paint))).replace(
+        "__ELSEWHERE__", repr(str(elsewhere))
+    )
+    reply, status = client.execute_python(code)
+    assert status == client.OK, reply["error"]
+    saved = paint / "relative.spp"
+    assert reply["session"]["project"] == str(saved)
+    monkeypatch.chdir(second)
+    carried, status = client.execute_python(CARRIED)
+    assert status == client.OK, carried["error"]
+    assert carried["data"] == {"uuid": reply["data"], "path": str(saved)}
+
+
 RELATIVE_REOPEN = (
     """
 import os
