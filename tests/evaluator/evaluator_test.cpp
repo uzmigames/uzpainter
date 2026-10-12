@@ -6753,7 +6753,7 @@ std::vector<ExcludedFeature> ExcludedFeatures() {
     procedural.ref.asset = "uzasset://generator/dirt@1";
     source("a procedural source", "phase3.3_procedural-families", core::Source{procedural});
     source("an anchor reference source", "phase4.1_nodes-instances-anchors", core::Source{core::ReferenceSource{}});
-    features.push_back({"OCIO colour management", "phase1.14_compositor-core", ChannelType::User0,
+    features.push_back({"OCIO colour management", "phase1.15_compositor-colour-fits", ChannelType::User0,
                         [](core::Project& p, core::Id) { p.settings.color_management.mode = "ocio"; }});
     const auto content = [&](EffectKind kind, const std::string& owner) {
         features.push_back({std::string(core::ToString(kind)) + " effect in a content stack", owner, ChannelType::User0,
@@ -6826,11 +6826,11 @@ std::vector<ExcludedFeature> ExcludedFeatures() {
                             geometry.inclusion_list = false;
                             geometry.items = {"other"};
                         }});
-    features.push_back({"an sRGB bitmap on an RGB16 channel", "phase1.14_compositor-core", ChannelType::User0,
+    features.push_back({"an sRGB bitmap on an RGB16 channel", "phase1.15_compositor-colour-fits", ChannelType::User0,
                         [](core::Project& p, core::Id fill) {
                             FillOf(p, fill).sources[ChannelType::User0] = Bitmap(std::string(64, 'd'), "sRGB");
                         }});
-    features.push_back({"a bitmap in the Working colour space", "phase1.14_compositor-core", ChannelType::User0,
+    features.push_back({"a bitmap in the Working colour space", "phase1.15_compositor-colour-fits", ChannelType::User0,
                         [](core::Project& p, core::Id fill) {
                             FillOf(p, fill).sources[ChannelType::User0] = Bitmap(std::string(64, 'e'), "Working");
                         }});
