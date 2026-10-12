@@ -104,7 +104,7 @@ def reencode_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
     store = locate()
     assert store is not None
     paths: dict[str, Path] = {}
-    goldens_of: dict[str, set[str]] = defaultdict(set)
+    goldens_of: dict[str, set[tuple[str, str]]] = defaultdict(set)
     for golden in _envelope_goldens():
         for recording in golden.recordings.values():
             for output in recording.outputs.values():
@@ -112,7 +112,7 @@ def reencode_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
                     continue
                 sha = str(output["blob"]["sha256"])
                 paths.setdefault(sha, _blob_path(store, golden, output["blob"]))
-                goldens_of[sha].add(golden.golden_id)
+                goldens_of[sha].add((golden.golden_id, recording.recording_id))
     tmp.mkdir(parents=True, exist_ok=True)
     listing = tmp / "reencode.txt"
     shas = sorted(paths)
@@ -124,16 +124,16 @@ def reencode_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
         "identical": defaultdict(int),
         "differing": [],
     }
-    per_golden: dict[tuple[str, str], list[bool]] = defaultdict(list)
+    per_golden: dict[tuple[str, str, str], list[bool]] = defaultdict(list)
     for sha, line in zip(shas, lines, strict=True):
         result = json.loads(line)
         fmt = str(result["format"])
         report["files"][fmt] += 1
         report["identical"][fmt] += int(result["equal"])
         if not result["equal"]:
-            report["differing"].append(f"{sorted(goldens_of[sha])[0]} {fmt} {sha[:12]}")
-        for golden_id in goldens_of[sha]:
-            per_golden[(golden_id, fmt)].append(bool(result["equal"]))
+            report["differing"].append(f"{sorted(goldens_of[sha])[0][0]} {fmt} {sha[:12]}")
+        for golden_id, recording_id in goldens_of[sha]:
+            per_golden[(golden_id, fmt, recording_id)].append(bool(result["equal"]))
     report["per_golden"] = {k: (len(v), sum(v)) for k, v in sorted(per_golden.items())}
     return report
 
@@ -297,25 +297,27 @@ GAP_FORMULA = (
 )
 
 
-def _byte_residual(golden_id: str, fmt: str, files: int, identical: int) -> dict[str, Any]:
-    """A golden's re-encoded files of one format as a residual counted in files: 1 for a file
-    whose bytes differ, 0 for an identical one."""
+def _byte_residual(
+    golden_id: str, fmt: str, recording: str, files: int, identical: int
+) -> dict[str, Any]:
+    """The re-encoded files of one format of a golden's recording as a residual counted in files:
+    1 for a file whose bytes differ, 0 for an identical one."""
     differs = np.zeros((1, files), np.int64)
     differs[0, identical:] = 1
     diff = difference(np.zeros((1, files), np.int64), differs)
-    return residual(golden_id, f"{fmt} files re-encoded", "r1+r2", "file (bytes identical)", diff)
+    return residual(golden_id, f"{fmt} files re-encoded", recording, "file (bytes identical)", diff)
 
 
 def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, Any]:
     """The `export-processing.json` document of the two reports."""
     png = [
-        _byte_residual(g, "png", n, k)
-        for (g, fmt), (n, k) in reencoded["per_golden"].items()
+        _byte_residual(g, "png", rec, n, k)
+        for (g, fmt, rec), (n, k) in reencoded["per_golden"].items()
         if fmt == "png"
     ]
     exr = [
-        _byte_residual(g, "exr", n, k)
-        for (g, fmt), (n, k) in reencoded["per_golden"].items()
+        _byte_residual(g, "exr", rec, n, k)
+        for (g, fmt, rec), (n, k) in reencoded["per_golden"].items()
         if fmt == "exr"
     ]
     written16 = [
@@ -435,7 +437,7 @@ def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, An
             entry(entry_id, subject, GAP_FORMULA, [PYDOC, HELP], [], [], notes, gap=True)
         )
     corpus = sorted(
-        {g for g, _ in reencoded["per_golden"]} | {f"tier0/{n}" for n in EXPORT_GOLDENS}
+        {g for g, _, _ in reencoded["per_golden"]} | {f"tier0/{n}" for n in EXPORT_GOLDENS}
     )
     return document(
         "export-processing",

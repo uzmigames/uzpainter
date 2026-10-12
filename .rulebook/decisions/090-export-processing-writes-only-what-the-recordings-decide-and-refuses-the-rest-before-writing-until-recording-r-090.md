@@ -62,7 +62,7 @@ The model panel was consulted twice under the owner's delegation (cx/gpt-6-astra
    The writers already encode RGBA, and 8-bit PNG, byte-identically to Painter.
 4. **The partial `infinite` fit** is published in `parity/semantics/export-processing.json` as a `gap` with its numbers. Its reference implementation stays in private scratch.
 5. **Recording R-090** (`parity/reports/phase1/export-processing-encoders.md` §5) specifies one probe per open behaviour. The seam probe isolates the ring, and the sphere pole wedge is included.
-6. **Items stay open** until R-090 is recorded and fitted: 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4 and 4.1.
+6. **Scope split** (the speed rules of 2026-10-12, decision 069's pattern). Items 2.2-2.6, 3.1-3.4 and 4.1 of phase1.16 are checked for what is exact. The refused remainder moves to `phase1.18_export-engine` item 6.1, which fits it from R-090. Nothing refused is claimed as supported.
 
 ## Alternatives Considered
 
