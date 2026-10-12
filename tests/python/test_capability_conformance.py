@@ -239,7 +239,10 @@ def recipes() -> dict[Any, tuple[str, str]]:
         (
             "substance_painter.export.export_project_textures",
             "export",
-            "project.create(PLANE, template_file_path='templates/Unreal Engine.spt')",
+            # The facade maps a shipped template by its file name; the file must exist and is
+            # never read (decision 116).
+            "open(WORK + '/Unreal Engine.spt', 'wb').close()\n"
+            "project.create(PLANE, template_file_path=WORK + '/Unreal Engine.spt')",
         ),
         (
             "uzpainter.export.export_project_textures",
