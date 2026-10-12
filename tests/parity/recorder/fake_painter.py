@@ -135,6 +135,20 @@ class ProjectSaveMode(enum.Enum):
     Incremental = 2
 
 
+# Top-level keys of the documented `json_config`; the fake refuses any other, as a stand-in for
+# Painter's ValueError on an invalid configuration.
+DOCUMENTED_EXPORT_KEYS = frozenset(
+    {
+        "exportPath",
+        "exportShaderParams",
+        "defaultExportPreset",
+        "exportPresets",
+        "exportList",
+        "exportParameters",
+    }
+)
+
+
 class ExportStatus(enum.Enum):
     Success = 0
     Cancelled = 1
@@ -223,6 +237,22 @@ class Color:
             )
             return (r, g, b)
         return self.values
+
+
+class SourceBitmap:
+    """An image source of one channel of a fake layer; its colour space lives on the layer."""
+
+    def __init__(self, layer: Layer, channel: ChannelType, resource_id: Any) -> None:
+        self.layer, self.channel, self.resource_id = layer, channel, resource_id
+
+    def get_color_space(self) -> GenericColorSpace:
+        return self.layer.bitmaps[self.channel]
+
+    def set_color_space(self, space: GenericColorSpace) -> None:
+        self.layer.bitmaps[self.channel] = space
+
+    def list_available_color_spaces(self) -> list[GenericColorSpace]:
+        return [GenericColorSpace.sRGB, GenericColorSpace.Raw]
 
 
 class SourceUniformColor:
@@ -354,6 +384,8 @@ class Layer:
     channels: set[ChannelType]
     sources: dict[ChannelType, Color] = field(default_factory=dict)
     substances: dict[ChannelType, str] = field(default_factory=dict)
+    # Bitmap sources (an image resource) by channel: their colour space.
+    bitmaps: dict[ChannelType, GenericColorSpace] = field(default_factory=dict)
     blending: dict[ChannelType, BlendingMode] = field(default_factory=dict)
     opacity: dict[ChannelType, float] = field(default_factory=dict)
 
@@ -434,6 +466,7 @@ class FakeWorld:
                     "channels": sorted(c.name for c in layer.channels),
                     "sources": {c.name: list(v.working) for c, v in layer.sources.items()},
                     "substances": {c.name: url for c, url in layer.substances.items()},
+                    "bitmaps": {c.name: space.name for c, space in layer.bitmaps.items()},
                     "blending": {c.name: m.name for c, m in layer.blending.items()},
                     "opacity": {c.name: o for c, o in layer.opacity.items()},
                 }
@@ -453,6 +486,7 @@ class FakeWorld:
                     for c, v in item["sources"].items()
                 },
                 substances={ChannelType[c]: url for c, url in item["substances"].items()},
+                bitmaps={ChannelType[c]: GenericColorSpace[v] for c, v in item["bitmaps"].items()},
                 blending={ChannelType[c]: BlendingMode[m] for c, m in item["blending"].items()},
                 opacity={ChannelType[c]: o for c, o in item["opacity"].items()},
             )
@@ -659,6 +693,10 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             if isinstance(source, ResourceID):
                 self.layer.substances[channel] = source.url()
                 self.layer.sources.pop(channel, None)
+                if source.image:
+                    self.layer.bitmaps[channel] = GenericColorSpace.sRGB
+                    return SourceBitmap(self.layer, channel, source)
+                self.layer.bitmaps.pop(channel, None)
                 return SourceSubstance(source.url())
             self.layer.sources[channel] = source
             self.layer.substances.pop(channel, None)
@@ -666,6 +704,9 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
 
         def get_source(self, channel: ChannelType) -> Any:
             self.require(channel)
+            if channel in self.layer.bitmaps:
+                url = self.layer.substances[channel]
+                return SourceBitmap(self.layer, channel, ResourceID.from_url(url))
             if channel in self.layer.substances:
                 return SourceSubstance(self.layer.substances[channel])
             return SourceUniformColor(self.layer.sources.get(channel, Color(0.0, 0.0, 0.0)))
@@ -741,8 +782,27 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         message: str
         textures: dict[tuple[str, str], list[str]]
 
+    def check_config(config: dict[str, Any]) -> None:
+        unknown = sorted(set(config) - DOCUMENTED_EXPORT_KEYS)
+        if unknown:
+            raise ValueError(f"Invalid export configuration: unknown key {unknown[0]!r}")
+
+    def list_project_textures(config: dict[str, Any]) -> dict[tuple[str, str], list[str]]:
+        world.require_open()
+        check_config(config)
+        out_dir = Path(config["exportPath"])
+        listed: dict[tuple[str, str], list[str]] = {}
+        for entry in config["exportList"]:
+            for preset_map in config["exportPresets"][0]["maps"]:
+                name = preset_map["fileName"].replace("$textureSet", entry["rootPath"])
+                listed.setdefault((entry["rootPath"], ""), []).append(
+                    (out_dir / f"{name}.png").as_posix()
+                )
+        return listed
+
     def export_project_textures(config: dict[str, Any]) -> TextureExportResult:
         world.require_open()
+        check_config(config)
         out_dir = Path(config["exportPath"])
         written: dict[tuple[str, str], list[str]] = {}
         for entry in config["exportList"]:
@@ -752,7 +812,10 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
                 path = out_dir / f"{name}.png"
                 source = preset_map["channels"][0]["srcMapName"]
                 width, height = world.resolution[0] // 64 or 1, world.resolution[1] // 64 or 1
-                if preset_map["channels"][0]["srcMapType"] == "meshMap":
+                if preset_map["channels"][0]["srcMapType"] == "virtualMap":
+                    # A converted virtual map: a flat grey with no encoding chunk.
+                    write_png(path, width, height, [(32768, 32768, 32768)] * (width * height))
+                elif preset_map["channels"][0]["srcMapType"] == "meshMap":
                     # A baked mesh map: written only once baked, with no encoding chunk.
                     if MESH_MAP_EXPORTS[source] not in world.baked_maps:
                         continue
@@ -772,6 +835,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         "substance_painter.export",
         ExportStatus=ExportStatus,
         export_project_textures=export_project_textures,
+        list_project_textures=list_project_textures,
     )
 
     class Camera:
@@ -794,13 +858,14 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
     class ResourceID:
         name: str
         context: str = "project0"
+        image: bool = False
 
         @staticmethod
         def from_url(url: str) -> ResourceID:
             if not url.startswith("resource://"):
                 raise ValueError(f"not a resource URL: {url}")
             context, _, name = url[len("resource://") :].partition("/")
-            return ResourceID(name, context)
+            return ResourceID(name, context, name.endswith(".image"))
 
         def url(self) -> str:
             return f"resource://{self.context}/{self.name}"
@@ -848,7 +913,11 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         Usage=Usage,
         ResourceID=ResourceID,
         Shelves=Shelves,
-        import_project_resource=lambda path, usage: Resource(ResourceID(Path(path).stem)),
+        import_project_resource=lambda path, usage: Resource(
+            ResourceID(Path(path).stem + ".image", image=True)
+            if usage == Usage.TEXTURE
+            else ResourceID(Path(path).stem)
+        ),
         import_session_resource=lambda path, usage: Resource(
             ResourceID(Path(path).stem, "session")
         ),
@@ -950,6 +1019,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             "substance_painter.source",
             SourceUniformColor=SourceUniformColor,
             SourceSubstance=SourceSubstance,
+            SourceBitmap=SourceBitmap,
         ),
         "substance_painter.textureset": textureset,
         "substance_painter.ui": ui,

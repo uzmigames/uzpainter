@@ -44,6 +44,9 @@ SYNTHETIC_GOLDEN_PREFIX = "samples/"
 SYNTHETIC_BUILD_ID = "synthetic-sample-build"
 SYNTHETIC_DIR = "parity/schema/samples/private/"
 MANIFEST_DIR = "parity/manifests/"
+# A promoted envelope's manifests (decision 037): goldens first recorded under a later Painter
+# build exist only there, and their authored inputs are declared there (decision 087).
+ENVELOPE_MANIFEST = re.compile(r"^parity/envelopes/[^/]+/manifests/")
 FIXTURE_DIR = "parity/fixtures/"
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -267,12 +270,13 @@ def _register(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]
 
 def _fixture(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     """A JSON fixture (fixture description, authored recipe) is public only as an authored
-    input that a valid manifest under `parity/manifests/` names by this path and SHA-256."""
+    input that a valid manifest under `parity/manifests/` or an envelope's manifests names by
+    this path and SHA-256."""
     if (path, hashlib.sha256(data).hexdigest()) in ctx.declared_inputs():
         return []
     return [
-        "no valid public manifest under parity/manifests/ declares this file (path and SHA-256) "
-        "as an authored input"
+        "no valid public manifest under parity/manifests/ or an envelope's manifests declares "
+        "this file (path and SHA-256) as an authored input"
     ]
 
 
@@ -376,7 +380,7 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
 def _declared_inputs(snapshot: Snapshot) -> frozenset[tuple[str, str]]:
     declared: set[tuple[str, str]] = set()
     for path in snapshot.paths:
-        if not path.startswith(MANIFEST_DIR):
+        if not path.startswith(MANIFEST_DIR) and not ENVELOPE_MANIFEST.match(path):
             continue
         try:
             document = parse_json(path, snapshot.read(path))
