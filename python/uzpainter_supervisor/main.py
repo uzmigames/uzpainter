@@ -140,6 +140,7 @@ def parse_args(argv: list[str], hooks_compiled: bool) -> argparse.Namespace:
     parser.add_argument("--crash-dir", type=Path)
     parser.add_argument("--ledger", type=Path)
     parser.add_argument("--test-faults", action="store_true")
+    parser.add_argument("--preview", action="store_true")
     args = parser.parse_args(argv)
     if args.gpu_deadline_ms is not None and not 1 <= args.gpu_deadline_ms <= 86_400_000:
         raise _UsageError("--gpu-deadline-ms must be between 1 and 86400000")
@@ -176,6 +177,7 @@ def main(argv: list[str], exe: str, build: str, protocol: str, hooks_compiled: b
         output_root=(args.output_root or base / "outputs").resolve(),
         crash_root=(args.crash_dir or base / "crashes").resolve(),
         test_faults=args.test_faults,
+        preview=args.preview,
         protocol=protocol,
     )
     log.info("build %s, backend %s, python %s", build, config.gpu_backend, config.allow_python)
