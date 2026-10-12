@@ -33,4 +33,4 @@ The native session already holds the right value. Since phase1.24, `Session::Ope
 - `tests/adapters/assets3d/test_adapter_units.py`: host tests of both audit cases, with and without a same-named file, and of a relative session file being refused.
 - `tests/adapters/assets3d/test_pipeline_adapter.py`: a native two-call regression. The first call changes directory and saves under a relative path. The second, run from another directory that holds a same-named project, must reopen the saved project, same UUID and same path.
 - Docs: `adapters/assets3d/MIGRATIONS.md` M4, `src/python/PYAPI.md`, `docs/architecture/10-python-api.md` §7.
-- phase1.24's report §5 lists the carry as open, owned by phase1.24, until the native regression passes.
+- phase1.24's report §5 lists the carry as fixed: the native regression passed at fbfbf97 on 2026-10-12 (fix 1c09894).

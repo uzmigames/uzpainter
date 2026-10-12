@@ -94,10 +94,10 @@ The adapter regressions export a project, then each of the following, and requir
 - **Item 1.1.** `phase1.18_export-engine` is not accepted: it waits on phase1.14_compositor-core and phase1.15_export-plan-compiler. `phase1.8_project-store` is not accepted: it waits on phase1.6_store-save-retention and phase1.7_store-inspect-census. Every child's code is on main.
 - **Item 3.1.** Owner question q1 (`.rulebook/tasks/phase1.24_python-api-facade/.metadata.json`): may UzPainter ship Painter's label text for Dota 2's User0-User3? Decision 117 leaves it to the owner.
 - **Recordings named** (owner action): P23-A, `save_as` onto an existing `.spp` (decision 113); P24-A, a template path that is missing or is not a template (decision 116); P22-B, one api-probe calling every Painter symbol marked `pending-evidence` (decision 112).
-- **The adapter's session carry: open, owner phase1.24 (decision 118).** The runner stored `project.file_path()`, as given, as the next call's project. A script that changed directory and then saved under a relative path carried a path that the next process resolved in the client's directory. The call failed, or another project of the same name was reopened (Codex audit, P2).
+- **The adapter's session carry: fixed (decision 118; commits 1c09894, fbfbf97).** The runner stored `project.file_path()`, as given, as the next call's project. A script that changed directory and then saved under a relative path carried a path that the next process resolved in the client's directory. The call failed, or another project of the same name was reopened (Codex audit, P2).
   - The fix: the runner now carries `uzpainter.project.absolute_file_path()`, the path `open` or `save_as` resolved when it ran, and refuses a session file that names a relative path.
   - The host tests pass (`tests/adapters/assets3d/test_adapter_units.py`).
-  - Open until the native two-call regression passes on a build: `test_a_project_saved_under_a_relative_path_is_reopened_where_it_was_saved` in `tests/adapters/assets3d/test_pipeline_adapter.py`.
+  - Verified natively on 2026-10-12: `test_a_project_saved_under_a_relative_path_is_reopened_where_it_was_saved` (`tests/adapters/assets3d/test_pipeline_adapter.py`) passed at fbfbf97, on `UzPainter.exe` SHA-256 `f7cf93233b44faf00e2be309691ba3fb44238e2551d5c08ceeb14cde01bfdcff`. Its first call changes directory and saves under a relative path. The second call, run from a directory that holds a same-named copy of another project, reopens the saved project: same UUID, same absolute path.
 
 ## 6. Reproduce
 
