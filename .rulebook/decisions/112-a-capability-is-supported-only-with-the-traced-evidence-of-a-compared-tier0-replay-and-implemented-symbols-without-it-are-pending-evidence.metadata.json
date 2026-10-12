@@ -1,0 +1,17 @@
+{
+  "id": 112,
+  "slug": "a-capability-is-supported-only-with-the-traced-evidence-of-a-compared-tier0-replay-and-implemented-symbols-without-it-are-pending-evidence",
+  "title": "A capability is supported only with the traced evidence of a compared Tier 0 replay, and implemented symbols without it are pending-evidence",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.22_pyapi-cli-capabilities",
+    "phase1.24_python-api-facade",
+    "phase1.2_docmodel-capability-manifest",
+    "phase1.14_compositor-core",
+    "phase1.19_pyapi-native-module",
+    "phase1.20_pyapi-facade",
+    "phase1.21_pyapi-dispatcher-lifecycle"
+  ],
+  "supersededBy": null
+}

@@ -167,8 +167,9 @@ def test_every_entry_validates_against_the_schema(manifest: dict[str, Any]) -> N
 def test_schema_rejects_an_unsupported_claim(manifest: dict[str, Any]) -> None:
     validator = Draft202012Validator(load(SCHEMA_PATH))
     bad = copy.deepcopy(manifest)
-    bad["entries"][0]["status"] = "supported"
-    bad["entries"][0]["since"] = "0.1.0"
+    entry = next(e for e in bad["entries"] if not e["tier_evidence"])
+    entry["status"] = "supported"
+    entry["since"] = "0.1.0"
     assert not validator.is_valid(bad)
 
 
@@ -184,7 +185,7 @@ def test_compat_profile_is_the_document_model_profile(manifest: dict[str, Any]) 
 def test_supported_entry_without_tier_evidence_fails_naming_it(tmp_path: Path) -> None:
     inventory = load(INVENTORY_PATH)
     entry = inventory_entry(inventory, "substance_painter.layerstack.Node.set_opacity")
-    entry.update(status="supported", since="0.1.0")
+    entry.update(status="supported", since="0.1.0", tier_evidence=[])
     message = generation_error(tmp_path, inventory)
     assert "substance_painter.layerstack.Node.set_opacity" in message
     assert "tier_evidence" in message
@@ -207,6 +208,16 @@ def test_supported_entry_naming_an_unknown_golden_fails(tmp_path: Path) -> None:
     entry = inventory_entry(inventory, "substance_painter.layerstack.Node.set_opacity")
     entry.update(status="supported", since="0.1.0", tier_evidence=["tier0/api-probes/missing"])
     assert "names no Tier 0 public manifest" in generation_error(tmp_path, inventory)
+
+
+def test_pending_evidence_entry_without_owner_fails_naming_it(tmp_path: Path) -> None:
+    """Decision 112: an implemented symbol without Tier 0 evidence names who settles it."""
+    inventory = load(INVENTORY_PATH)
+    entry = next(e for e in inventory["entries"] if e["status"] == "pending-evidence")
+    entry["notes"] = "Implemented, without Tier 0 evidence yet."
+    message = generation_error(tmp_path, inventory)
+    assert entry["symbol"] in message
+    assert "owns its evidence" in message
 
 
 def test_desktop_only_entry_without_justification_fails_naming_it(tmp_path: Path) -> None:
@@ -392,7 +403,8 @@ def compositor_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
 
 def test_compositor_registers_every_phase1_kind(manifest: dict[str, Any]) -> None:
     """2.8: every node kind, source, projection, sampling mode and blend mode has a compositor
-    entry (supported with Tier 0 evidence, or a release gap), and the API context stays a gap."""
+    entry (supported with Tier 0 evidence, or a release gap); the API context is supported only
+    with Tier 0 evidence of its own (phase1.22, decision 112)."""
     entries = compositor_entries(manifest)
     symbols = {e["symbol"] for e in entries}
     assert symbols >= COMPOSITOR_NODES
@@ -403,9 +415,10 @@ def test_compositor_registers_every_phase1_kind(manifest: dict[str, Any]) -> Non
         }
         assert len(members) == count, prefix
         assert members <= symbols, sorted(members - symbols)
-    status = {(e["symbol"], e["context"]): e["status"] for e in manifest["entries"]}
+    api = {e["symbol"]: e for e in manifest["entries"] if e["context"] == "any"}
     for symbol in symbols:
-        assert status.get((symbol, "any")) != "supported", symbol
+        entry = api.get(symbol)
+        assert entry is None or entry["status"] != "supported" or entry["tier_evidence"], symbol
 
 
 def test_compositor_entries_state_evidence_or_owner(manifest: dict[str, Any]) -> None:

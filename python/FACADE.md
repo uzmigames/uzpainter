@@ -48,7 +48,9 @@ Each quirk comes from a Tier 0 api-probe and is compared exactly by `test_pyapi_
   - A second mask raises `ValueError`. `affected_channel` in a mask stack raises `ValueError`.
 - **Insertion rules.** `ValueError` with Painter's messages: substack of a non-group, a layer in a content or mask stack, an effect at the top or above a layer, a layer above an effect, compare-mask and colour-selection effects outside a mask stack, an effect's content stack, and the mask of a layer that has none.
 - **Saving.** A save drops the content effects of groups, which Painter does not keep through save and reopen.
-- **`needs_saving()`.** It is also true after any edit call since the last save, including one that changed nothing: Painter reports the re-binding of the same mesh map as unsaved.
+- **`needs_saving()`.** It is also true after any edit call since the last save, including one that changed nothing: Painter reports the re-binding of the same mesh map as unsaved. Consecutive `set_name` calls on one node, with no other edit between them, are one edit, as Painter records them (`phase1-save-modes` s15-s17 after save and reopen). A run that ends on the name it started from leaves the project as saved as it was before the run (decision 111 §6).
+- **Stale nodes.** `get_node_by_uid` of a deleted node raises Painter's `ValueError("This node is not valid")` (`phase1-delete-node`).
+- **`update_layer_stack_resource`** returns the identifiers it replaced, as documented and recorded (`phase1-resource-update`). Replacing a resource bound as a mesh map raises `NotYetSupported` until recording P22-A (decision 111 §7).
 - **Inert state** (10 §3). Selection, selection type and UI mode live in `state.SESSION`, per open project, and are never saved.
   - `set_selected_nodes` and `set_selection_type` raise `RuntimeError` inside a `ScopedModification`, and `ValueError` for a node outside the active texture set.
   - Collapsed groups and the active stack are native state.

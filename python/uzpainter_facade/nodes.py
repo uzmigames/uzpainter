@@ -39,7 +39,7 @@ from typing import Any
 import uzpainter
 
 from uzpainter_facade import colour, event, levels, resource
-from uzpainter_facade.state import SESSION, edits, one_transaction
+from uzpainter_facade.state import SESSION, RenameRun, edits, one_transaction, unsaved
 from uzpainter_facade.textureset import Stack, TextureSet, native_of
 
 
@@ -315,10 +315,23 @@ class Node:
     def get_name(self) -> str:
         return str(self._native().get_name())
 
-    @edits
     @structural
     def set_name(self, name: str) -> None:
-        self._native().set_name(name)
+        # Painter merges consecutive renames of one node into one edit: a run that ends on the
+        # name it started from leaves the project as saved as it was before the run
+        # (`phase1-save-modes` s15-s17 after save and reopen, decision 111).
+        native = self._native()
+        run = SESSION.rename_run
+        if run is None or run.uid != self._uid or run.revision != uzpainter.project.revision():
+            run = RenameRun(self._uid, str(native.get_name()), unsaved(), 0)
+        native.set_name(name)
+        run.revision = int(uzpainter.project.revision())
+        SESSION.rename_run = run
+        if name == run.start_name and not run.unsaved_before:
+            SESSION.dirty = False
+            SESSION.clean_revision = run.revision
+        else:
+            SESSION.dirty = True
 
     def is_in_mask_stack(self) -> bool:
         return bool(self._native().is_in_mask_stack())
@@ -913,8 +926,17 @@ def get_root_layer_nodes(stack: Any) -> list[Any]:
     return [wrap(native) for native in _ls.get_root_layer_nodes(native_of(stack))]
 
 
+# Painter's error for a uid that names no node, a deleted one included (`phase1-delete-node`
+# s19-s21, both recordings).
+INVALID_NODE = "This node is not valid"
+
+
 def get_node_by_uid(node_id: int) -> Any:
-    return wrap(_ls.get_node_by_uid(node_id))
+    try:
+        native = _ls.get_node_by_uid(node_id)
+    except ValueError as error:
+        raise ValueError(INVALID_NODE) from error
+    return wrap(native)
 
 
 def stack_order(stack: Any) -> list[int]:

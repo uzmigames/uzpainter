@@ -1,0 +1,16 @@
+{
+  "id": 111,
+  "slug": "uzpainter-exe-run-hosts-a-script-in-one-process-with-one-json-report-line-and-exit-codes-0-to-3",
+  "title": "UzPainter.exe run hosts a script in one process with one JSON report line and exit codes 0 to 3",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.22_pyapi-cli-capabilities",
+    "phase1.23_pyapi-pipeline-adapter",
+    "phase1.24_python-api-facade",
+    "phase2.1_supervisor-ipc-worker",
+    "phase2.2_preview-capture",
+    "phase1.21_pyapi-dispatcher-lifecycle"
+  ],
+  "supersededBy": null
+}

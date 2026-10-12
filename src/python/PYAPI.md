@@ -1,6 +1,6 @@
 # The native Python API (`src/python/`)
 
-Task `phase1.19_pyapi-native-module` (child of `phase1.24_python-api-facade`, P1-PYAPI). Implements the native `uzpainter` module of `docs/architecture/10-python-api.md` §1, §5 and §7 under decisions 082, 085, 105 and 106. Task `phase1.21_pyapi-dispatcher-lifecycle` (decisions 109 and 110) adds the dispatcher thread, the engine-computation state, the mesh reload and the resource queries of §6. Tests: `tests/python/` (`zig build pyapi-tests`, `python -m pytest tests/python`). Local run report: `parity/reports/phase1/pyapi-native-module.md`.
+Task `phase1.19_pyapi-native-module` (child of `phase1.24_python-api-facade`, P1-PYAPI). Implements the native `uzpainter` module of `docs/architecture/10-python-api.md` §1, §5 and §7 under decisions 082, 085, 105 and 106. Task `phase1.21_pyapi-dispatcher-lifecycle` (decisions 109 and 110) adds the dispatcher thread, the engine-computation state, the mesh reload and the resource queries of §6. Task `phase1.22_pyapi-cli-capabilities` (decisions 111 and 112) adds the `run` host and `uzpainter.capabilities` (§7). Tests: `tests/python/` (`zig build pyapi-tests`, `python -m pytest tests/python`). Local run report: `parity/reports/phase1/pyapi-native-module.md`.
 
 ## 1. Shape
 
@@ -13,10 +13,12 @@ Task `phase1.19_pyapi-native-module` (child of `phase1.24_python-api-facade`, P1
 | `jobs.{h,cpp}` | Worker jobs: one worker thread, `Job.wait` / `cancel`, `BusyError` checks; paused while engine computations are disabled. |
 | `dispatcher.{h,cpp}` | The Python dispatcher thread of `02-runtime-topology.md` §4 (§6 below). |
 | `stack_sync.{h,cpp}` | The `sync_stack` composite (LAY-07), `RemoveNode`, `ImportResource`. |
-| `script.{h,cpp}` | `RunScript`: a script file as `__main__`, its `result`, output, error, and the revisions it committed. |
+| `script.{h,cpp}` | `RunScript`: a script file as `__main__`, its `result`, output (captured until the dispatcher drained), error, and the revisions it committed. |
+| `run.{h,cpp}` | `UzPainter.exe run` (§7): the arguments, the interpreter, `RunScript`, one `UZP_JSON:` report line, the exit status. |
+| `capabilities.{h,cpp}` | `UzPainter.exe capabilities` and `uzpainter.capabilities` (§7). |
 | `bindings.h`, `bind_*.cpp` | The modules: `bind_core` (`Result`, `last_result`, `Transaction`), `bind_color`, `bind_textureset`, `bind_resource`, `bind_layerstack` (with `source` and `levels`), `bind_project`, `bind_export` (with `jobs`), `bind_misc` (`logging`, `application`, `properties` and the later-phase modules). |
 
-`UzPainter.exe` links all of it statically, with the mesh importers. `uzp-pyapi-tests.exe` (`tests/python/pyapi_runner.cpp`) is the test runner: it runs one script, prints the `RunScript` report, then drains the dispatcher (§6) before the process ends. It is installed beside the embeddable package, `assets/templates/` and `assets/export-presets/`. The `UzPainter.exe run` verb is phase1.22.
+`UzPainter.exe` links all of it statically, with the mesh importers. `uzp-pyapi-tests.exe` (`tests/python/pyapi_runner.cpp`) is the test runner: the `run` host of §7 without the rest of `UzPainter.exe`. It is installed beside the embeddable package, `assets/templates/`, `assets/export-presets/` and `capabilities.json`.
 
 ## 2. Modules
 
@@ -54,6 +56,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 - **Engine computations (`application`).** `enable_engine_computations(enable)`, `engine_computations_status()` and the context manager `disable_engine_computations()`. While computations are disabled the job worker starts no queued job: an export is deferred, not dropped, and `jobs.busy()` names it until it ran.
 - **`event`.** The dispatcher thread (§6): `post(task)`, `flush()`, `drain()`, `hold()` / `release()`, `on_dispatcher_thread()` and `dispatcher_thread_id()`.
 - **Later phases.** `baking` (phase3.5), `render`, `render.shader`, `render.display`, `display` (phase2.3) and `diagnostics` (phase2.2) are importable. Every call raises `NotYetSupported` naming the owner before anything changes.
+- **`capabilities`.** `profile()` (`"painter-12.1-api-0.3.7"`), `manifest()` (the shipped `capabilities.json`) and `entry(symbol, context="any")` (§7).
 - **Top level.** `Result`, `last_result()`, `Transaction(name)`.
 
 ## 3. Mutation contract (10 §5)
@@ -112,3 +115,16 @@ The result's `returned["sync"]` lists the groups, layers, imported and skipped i
 - **Lifetime.** The thread starts with the first task and lives as long as the process.
 
 Tests: `tests/python/test_pyapi_dispatcher.py` (every lane) and `tests/python/test_pyapi_lifecycle_tier0.py` (owner's machine). Local run report: `parity/reports/phase1/pyapi-dispatcher-lifecycle.md`.
+
+## 7. The `run` host and the capability manifest (phase1.22)
+
+`UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [-- args...]` (`run.{h,cpp}`, decision 111):
+
+- **Arguments.** `--gpu-backend` anywhere before `--` is the process's backend (dx12 by default). It is never passed to the script; what follows `--` is passed as given.
+- **Run.** The host starts the interpreter and runs the script with `RunScript`. Its output stays captured until the dispatcher has drained, so the events and callbacks of operations it started are part of the run. It then prints one line `UZP_JSON:{status, result, stdout, stderr, error?, last_committed_revision, committed, gpu_backend}` and closes a project left open. The process ends without finalizing the interpreter.
+- **Exit status.** 0 when the script ran to its end with a JSON `result`; 1 for a structured failure; 2 for a usage error (message on stderr, no JSON line); 3 when the interpreter did not start (`{"status": "host_error"}`).
+- **GPU.** No Phase 1 Python call uses the GPU, so no device is created. The GPU calls are release gaps and refuse first; the first GPU call of phase2 creates the device and reports `gpu_backend_unavailable`.
+
+`UzPainter.exe capabilities` (`capabilities.{h,cpp}`) prints `capabilities.json`, installed beside the executable, as one `UZP_JSON:` line. A missing or unreadable file is exit status 3. `uzpainter.capabilities` reads the same file.
+
+Tests: `tests/python/test_pyapi_cli.py` (`UzPainter.exe` of a fresh `zig build painter`) and `tests/python/test_capability_conformance.py` (decision 112).

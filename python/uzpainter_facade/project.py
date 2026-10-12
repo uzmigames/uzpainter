@@ -37,7 +37,7 @@ from typing import Any
 import uzpainter
 
 from uzpainter_facade import colour, event, host, nodes
-from uzpainter_facade.state import SESSION
+from uzpainter_facade.state import SESSION, unsaved
 
 MODULE = "substance_painter.project"
 _p = uzpainter.project
@@ -228,7 +228,7 @@ def save(mode: Any = ProjectSaveMode.Incremental) -> None:
     event.emit_sync(event.ProjectAboutToSave(str(path)))
     nodes.drop_group_content_effects()
     _p.save(mode)
-    SESSION.dirty = False
+    SESSION.saved()
     event.emit_sync(event.ProjectSaved())
 
 
@@ -238,7 +238,7 @@ def save_as(project_file_path: str, mode: Any = ProjectSaveMode.Incremental) -> 
     event.emit_sync(event.ProjectAboutToSave(project_file_path))
     nodes.drop_group_content_effects()
     _p.save_as(project_file_path, mode)
-    SESSION.dirty = False
+    SESSION.saved()
     event.emit_sync(event.ProjectSaved())
 
 
@@ -252,7 +252,7 @@ def save_as_copy(backup_file_path: str, mode: Any = ProjectSaveMode.Incremental)
 
 
 def needs_saving() -> bool:
-    return bool(_p.needs_saving()) or SESSION.dirty
+    return unsaved()
 
 
 def file_path() -> str | None:
@@ -363,6 +363,7 @@ def _reload(path: str, import_cameras: bool, callback: Callable[[ReloadMeshStatu
             try:
                 _p.reload_mesh(path, import_cameras=import_cameras)
                 SESSION.dirty = True
+                SESSION.rename_run = None
             except Exception as error:  # reported through the status, as Painter
                 print(f"[ERROR] reload_mesh: {type(error).__name__}: {error}", file=sys.stderr)
                 status = ReloadMeshStatus.ERROR

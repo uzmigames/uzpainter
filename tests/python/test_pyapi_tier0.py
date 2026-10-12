@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 
+from tests.python.capability_trace import check_trace, exercised, traced
 from tests.python.conftest import REPO_ROOT, Run
 from tools.parity.store.store import locate
 
@@ -258,9 +259,11 @@ def test_fill_layer_readback_equals_painter(run: Run) -> None:
         roots = condition["s46/get_root_layer_nodes"]
         assert roots[-1] == PAINTER_DEFAULT_LAYER
         condition["s46/get_root_layer_nodes"] = roots[:-1]
-    native = ok(run(FILL_LAYER_READBACK))
+    native, trace = ok(run(traced(FILL_LAYER_READBACK)))
     assert len(native["same_session"]) == len(native["after_save_reopen"]) == 23
     assert compare(native, golden) == []
+    golden_id = "tier0/api-probes/fill-layer-readback"
+    check_trace("native/fill-layer-readback", golden_id, exercised(trace))
 
 
 def test_textureset_project_readback_equals_painter(run: Run, tmp_path: Path) -> None:
@@ -278,5 +281,7 @@ def test_textureset_project_readback_equals_painter(run: Run, tmp_path: Path) ->
         condition["s13/file_path"] = (
             path if "is_none" in path else {"stem": Path(path["file_name"]).stem}
         )
-    native = ok(run(TEXTURESET_PROJECT_READBACK))
+    native, trace = ok(run(traced(TEXTURESET_PROJECT_READBACK)))
     assert compare(native, golden) == []
+    golden_id = "tier0/api-probes/textureset-project-readback"
+    check_trace("native/textureset-project-readback", golden_id, exercised(trace))
