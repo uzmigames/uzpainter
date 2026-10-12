@@ -47,7 +47,9 @@ from tools.parity.fit.decode import decode
 from tools.parity.fit.oracle import Golden, load
 from tools.parity.fit.stats import difference
 from tools.parity.recorder.job import Step, export_step
+from tools.parity.schemas import REGISTER_PATH, load_json
 from tools.parity.store.store import OracleStore, Status, locate
+from tools.parity.verdict import Comparison, evaluate
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PUBLISHED = REPO_ROOT / "parity" / "semantics" / "export-processing.json"
@@ -409,8 +411,6 @@ def export_goldens(exe: Path, tmp: Path, runs: int = 1) -> dict[str, Any]:
 # export-bit-depth: the document-map steps of r1 (PNG 8, PNG 16, OpenEXR 16f, OpenEXR 32f).
 SRGB8_STEPS = (353, 355, 357, 359)
 SRGB8_CHANNELS = ("BaseColor", "Specular", "Emissive")
-# The evaluator's refusal of an sRGB bitmap other than a 16-bit colour image (sources.h).
-GREY_SRGB_BITMAP = "an sRGB bitmap is recorded as a 16-bit colour image only"
 
 
 def _f32(value: float) -> float:
@@ -457,9 +457,7 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
     channels over their linear template constants) rebuilt per texture set on the grid mesh and
     written by `WriteExport` at PNG 8, PNG 16, OpenEXR 16f and OpenEXR 32f: compared byte for
     byte with Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032). Returns the
-    counts, the differing files, and the sets the evaluator refuses before writing because their
-    bitmap is a grey image in the sRGB space (`GREY_SRGB_BITMAP`,
-    phase1.15_compositor-colour-fits)."""
+    counts and the differing files or refusals."""
     needs_store()
     root = manifest_root(current_envelope()) / "tier0" / "semantics"
     golden = load(locate(), root / "export-bit-depth.json")
@@ -470,7 +468,6 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
         "comparisons": 0,
         "identical": 0,
         "problems": [],
-        "grey_bitmap_sets": set(),
     }
     for texture_set in sorted({k.split("/")[0] for k in golden.maps("r1")}):
         spec_dir = tmp / texture_set / "spec"
@@ -497,9 +494,6 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
             ]
             result = write_export(exe, spec, spec_dir, config, tmp / texture_set / f"run{step}")
             where = f"{texture_set} step {step}"
-            if "error" in result and GREY_SRGB_BITMAP in result["message"]:
-                report["grey_bitmap_sets"].add(texture_set)
-                continue
             if "error" in result:
                 report["problems"].append(f"{where}: {result['error']}: {result['message']}")
                 continue
@@ -510,6 +504,93 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
                 report["files"] += 1
                 for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
                     if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
+                        continue
+                    report["comparisons"] += 1
+                    if written["sha256"] == theirs.get(rel):
+                        report["identical"] += 1
+                    else:
+                        report["problems"].append(f"{where}: {rel} differs from {recording}")
+    return report
+
+
+# export-ocio-encode-legacy: the authored 8-bit sRGB ramp at 1:1 on BaseColor in the sRGB space
+# (s3), in Raw (s4) and in the sRGB space inside a group masked by grey A (s5), exported at PNG 16,
+# PNG 8 and OpenEXR 32f (sources.h).
+SRGB8_BITMAP_SETS = ("s3", "s4", "s5")
+SRGB8_BITMAP_STEPS = (46, 47, 48)
+
+
+def srgb8_bitmap_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """export-ocio-encode-legacy's BaseColor of `SRGB8_BITMAP_SETS` rebuilt per texture set on the
+    grid mesh and written by `WriteExport` at each step of `SRGB8_BITMAP_STEPS`: compared byte for
+    byte with Painter's files of r1, and of r2 wherever r2 equals r1. Painter is unstable on s5
+    (decision 032): r1 is its exact target, and a file whose r2 differs from r1 is judged against
+    r2 through the exception register (`tools/parity/verdict.py`), its outcome and the entries
+    relied on listed in `register`. Returns the counts and the differing files or refusals."""
+    needs_store()
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    golden = load(locate(), root / "export-ocio-encode-legacy.json")
+    sequence = golden.manifest["instruction_sequence"]
+    by_step = {s["step"]: s for s in sequence["steps"]}
+    # The colour-space listings are readbacks: the stack does not depend on them.
+    built = [s for s in sequence["steps"] if not s["call"].endswith("list_available_color_spaces")]
+    manifest = dict(golden.manifest, instruction_sequence=dict(sequence, steps=built))
+    entries = load_json(REGISTER_PATH)["entries"]
+    report: dict[str, Any] = {
+        "files": 0,
+        "comparisons": 0,
+        "identical": 0,
+        "register": [],
+        "problems": [],
+    }
+    for texture_set in SRGB8_BITMAP_SETS:
+        spec_dir = tmp / texture_set / "spec"
+        spec = export_spec(manifest, texture_set, spec_dir)
+        spec["mesh"] = str(_mesh_of(manifest))
+        for step in SRGB8_BITMAP_STEPS:
+            raw = by_step[step]
+            out_dir = tmp / texture_set / f"out{step}"
+            config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                out_dir, [texture_set]
+            )
+            preset = config["exportPresets"][0]
+            preset["maps"] = [m for m in preset["maps"] if m["fileName"].endswith("_basecolor")]
+            result = write_export(exe, spec, spec_dir, config, tmp / texture_set / f"run{step}")
+            where = f"{texture_set} step {step}"
+            if "error" in result:
+                report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                continue
+            theirs_r1 = _painter_files(golden, "r1", step, texture_set)
+            theirs_r2 = _painter_files(golden, "r2", step, texture_set)
+            for written in result["written"]:
+                rel = written["relativePath"]
+                report["files"] += 1
+                for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
+                    if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
+                        ours = decode(Path(written["path"]).read_bytes()).values
+                        key = f"{texture_set}/basecolor/step{step}"
+                        verdicts = [
+                            evaluate(
+                                Comparison(
+                                    "0",
+                                    str(golden.manifest["domain"]),
+                                    golden.map(r, key).values.reshape(ours.shape),
+                                    ours,
+                                    oracle_stable=False,
+                                    exact_target=r == "r1",
+                                ),
+                                entries,
+                            )
+                            for r in ("r1", "r2")
+                        ]
+                        report["register"].append(
+                            (
+                                where,
+                                rel,
+                                [v.outcome.value for v in verdicts],
+                                sorted({e for v in verdicts for e in v.exceptions_relied_on}),
+                            )
+                        )
                         continue
                     report["comparisons"] += 1
                     if written["sha256"] == theirs.get(rel):

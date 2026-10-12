@@ -1,0 +1,14 @@
+{
+  "id": 140,
+  "slug": "long-tools-run-as-native-jobs-on-the-worker-with-a-commit-point-and-a-receipt-that-says-where-they-stopped",
+  "title": "Long tools run as native jobs on the worker, with a commit point and a receipt that says where they stopped",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.3_supervisor-jobs",
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.8_mcp-server",
+    "phase2.4_supervisor-worker"
+  ],
+  "supersededBy": null
+}

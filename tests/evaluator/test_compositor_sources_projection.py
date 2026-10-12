@@ -80,7 +80,12 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "on an sRGB8 channel the double-precision and the GPU's float32 sRGB decode store the "
         "same code for each of the 65 536 16-bit codes",
         "a 16-bit colour sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code",
-        "an sRGB bitmap on a channel that is not sRGB8, 8-bit or grey, or resampled, and a bitmap "
+        "the sRGB decode of each 8-bit code stores the code itself (double precision and the GPU's "
+        "float32)",
+        "an 8-bit colour sRGB bitmap at 1:1 stores each code as its sRGB8 code",
+        "a 16-bit grey sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code on "
+        "the three channels",
+        "an sRGB bitmap on a channel that is not sRGB8, 8-bit grey, or resampled, and a bitmap "
         "in the Working colour space fail with unsupported_source",
     } <= passed
 

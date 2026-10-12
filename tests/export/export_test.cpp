@@ -321,11 +321,64 @@ std::map<ChannelType, core::Blending> ParseBlending(const json::Object& o) {
     return blending;
 }
 
+/// A spec projection {"mode"?, "filtering_mode"?, "uv_wrapping_mode"?, "scale_mode"?, "scale"?,
+/// "rotation"?, "offset"?} (as uzp-evaluator-tests reads it).
+void ParseProjection(const json::Object& p, core::Projection& projection) {
+    if (p.contains("mode")) projection.mode = EnumOf<core::ProjectionMode>(Str(p.at("mode"), "mode"), "projection mode");
+    core::UVProjectionParams& uv = projection.uv;
+    if (p.contains("filtering_mode")) {
+        uv.filtering_mode = EnumOf<core::FilteringMode>(Str(p.at("filtering_mode"), "filtering_mode"), "filtering mode");
+    }
+    if (p.contains("uv_wrapping_mode")) {
+        uv.uv_wrapping_mode = EnumOf<core::UVWrapMode>(Str(p.at("uv_wrapping_mode"), "uv_wrapping_mode"), "wrap mode");
+    }
+    core::UVTransformation& t = uv.uv_transformation;
+    if (p.contains("scale_mode")) t.scale_mode = EnumOf<core::ScaleMode>(Str(p.at("scale_mode"), "scale_mode"), "scale mode");
+    if (p.contains("scale")) {
+        const json::Array& scale = Arr(p.at("scale"), "scale");
+        t.scale = {Num(scale.at(0), "scale u"), Num(scale.at(1), "scale v")};
+    }
+    if (p.contains("rotation")) t.rotation = Num(p.at("rotation"), "rotation");
+    if (p.contains("offset")) {
+        const json::Array& offset = Arr(p.at("offset"), "offset");
+        t.offset = {Num(offset.at(0), "offset u"), Num(offset.at(1), "offset v")};
+    }
+}
+
+/// A spec mask {"background", "effects"?: [mask fill effect {"kind": "fill", "uid"?, "source"?,
+/// "mode"?, "opacity"?, "projection"?}], top first} (as uzp-evaluator-tests reads it); other mask
+/// effects are not modelled here.
+core::Mask ParseMask(const json::Object& m, core::Project& project) {
+    core::Mask mask;
+    mask.background = EnumOf<core::MaskBackground>(Str(Key(m, "background"), "background"), "background");
+    if (!m.contains("effects")) return mask;
+    for (const json::Value& value : Arr(m.at("effects"), "mask.effects")) {
+        const json::Object& e = Obj(value, "mask effect");
+        if (Str(Key(e, "kind"), "effect.kind") != "fill") {
+            throw core::ManifestError("mask effects other than fill are not modelled by the export tests");
+        }
+        core::Effect effect;
+        effect.uid = e.contains("uid") ? static_cast<core::Id>(Num(e.at("uid"), "uid")) : project.AllocateId();
+        effect.name = "fill";
+        effect.kind = core::EffectKind::fill;
+        core::FillContent fill;
+        if (e.contains("projection")) ParseProjection(Obj(e.at("projection"), "projection"), fill.projection);
+        if (e.contains("source")) fill.mono_source = ParseSource(Obj(e.at("source"), "source"));
+        core::Blending blending;
+        if (e.contains("mode")) blending.mode = EnumOf<core::BlendingMode>(Str(e.at("mode"), "mode"), "mode");
+        if (e.contains("opacity")) blending.opacity = Num(e.at("opacity"), "opacity");
+        effect.mono_blending = blending;
+        effect.fill = std::move(fill);
+        mask.effects.push_back(std::move(effect));
+    }
+    return mask;
+}
+
 core::Layer ParseLayer(const json::Value& value, core::Project& project) {
     const json::Object& o = Obj(value, "layer");
     const std::string kind = Str(Key(o, "kind"), "layer.kind");
-    if (o.contains("mask") || o.contains("effects")) {
-        throw core::ManifestError("masks and effects are not modelled by the export tests (phase1.11's tests cover them)");
+    if (o.contains("effects")) {
+        throw core::ManifestError("content effects are not modelled by the export tests (phase1.11's tests cover them)");
     }
     core::Layer layer;
     layer.uid = o.contains("uid") ? static_cast<core::Id>(Num(o.at("uid"), "uid")) : project.AllocateId();
@@ -347,7 +400,7 @@ core::Layer ParseLayer(const json::Value& value, core::Project& project) {
                 fill.active_channels.insert(EnumOf<ChannelType>(Str(c, "active channel"), "active channel"));
             }
         }
-        if (o.contains("projection")) throw core::ManifestError("projections are not modelled by the export tests");
+        if (o.contains("projection")) ParseProjection(Obj(o.at("projection"), "projection"), fill.projection);
         layer.fill = std::move(fill);
     } else if (kind == "group") {
         layer.kind = core::LayerKind::group;
@@ -357,6 +410,7 @@ core::Layer ParseLayer(const json::Value& value, core::Project& project) {
     } else {
         throw core::ManifestError("layer kind '" + kind + "' is not modelled by the export tests");
     }
+    if (o.contains("mask")) layer.mask = ParseMask(Obj(o.at("mask"), "mask"), project);
     return layer;
 }
 

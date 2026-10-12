@@ -1,0 +1,12 @@
+{
+  "id": 145,
+  "slug": "8-bit-colour-and-16-bit-grey-srgb-bitmaps-at-1-1-on-srgb8-channels-are-fitted-and-the-other-srgb-bitmap-uses-wait-for-one-recording",
+  "title": "8-bit colour and 16-bit grey sRGB bitmaps at 1:1 on sRGB8 channels are fitted, and the other sRGB bitmap uses wait for one recording",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

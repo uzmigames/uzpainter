@@ -19,6 +19,7 @@ Root: `UZP_PARITY_STORE` when set, else `%LOCALAPPDATA%\UzPainter\parity-store`.
 | `index.json` | `{"schema": "uzpainter/parity/store-index/1", "sha256": [...]}`: the sorted SHA-256 of every stored blob. The repository guard (`phase0.4_oracle-store-guard`, `parity/GUARD.md`) matches files against it; it is the only part of the store a hosted job may ever receive |
 | `blobs/<aa>/<sha256>` | The bytes, named by their SHA-256 (`<aa>` = its first two hex digits), read-only |
 | `corpora/<Painter build id>/<golden id>/<record id>.json` | Write-once entry `{"schema": "uzpainter/parity/store-entry/1", painter_build_id, golden_id, record_id, kind, sha256, size_bytes, file_name}`, read-only |
+| `inputs/<sha256>.json` | Write-once entry `{"schema": "uzpainter/parity/store-input/1", sha256, size_bytes, path}` of an authored input a public manifest pins by hash (its bytes in `blobs/`), read-only. A pipeline-script job resolves an input here when its file at the pinned path is gone or changed (decision 144) |
 
 The Painter build id is the manifest's `software.painter.build_id` and must match `^[A-Za-z0-9][A-Za-z0-9._+-]*$` to name a directory. A record id is unique per (Painter build, golden).
 
@@ -31,6 +32,7 @@ Phase 0 prototype of `uzpainter parity`: run `python -m tools.parity.store [--st
 | `init` | Creates the layout at the store root (owner's machine, once; idempotent; refuses a non-empty folder that is not a store) |
 | `record <manifest> --record-id ID --kind KIND --file FILE` | Owner's machine only. Stores one recorded file and appends `{record_id, kind, sha256, size_bytes}` to the manifest's `private_records` (`golden-public.json`). A `private_oracle_record` file must pass `record_problems` and belong to the manifest's golden and Painter build |
 | `record <manifest> --run DIR` | Owner's machine only. Ingests one recorder run from the oracle inbox (§4); creates the manifest from the run's, or merges its `private_records` into the existing one |
+| `input FILE --path PATH` | Owner's machine only. Stores an authored input under its SHA-256, with an entry naming the path a manifest pins it at (`PATH`, e.g. its `assets3d_path`) |
 | `fetch <manifest> --out DIR` | Copies every blob the manifest names to `DIR/<record id><suffix>` and re-hashes the copy |
 | `verify [PATH ...]` | Re-hashes in the store every blob the given manifests (or every `*.json` under a directory) name. Without a path: whole-store integrity (index, blobs and entries agree; every blob hashes to its name) |
 

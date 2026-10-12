@@ -13,9 +13,13 @@ Checks the content of files, never only their names or signatures:
   `parity/` that no rule covers is rejected. The envelope registry and every envelope's
   manifests (`parity/envelopes/`) and the oracle-envelope results
   (`parity/reports/<phase>/oracle-envelope*.json`) have rules of their own; so do a golden's
-  comparison reports (`parity/reports/<phase>/tier<tier>-*.json`). The store's size
+  comparison reports (`parity/reports/<phase>/tier<tier>-*.json`) and the rebuild-from-dump
+  reports (`parity/reports/<phase>/recipe-rebuild-*.json`). The store's size
   census (`parity/reports/<phase>/store-census.json`) is checked by a rule of its own: numbers, with
   text only in its identifier fields.
+  The supervisor's settling report (`parity/reports/<phase>/supervisor-settling.json`) is checked
+  against its own schema (`tools/parity/settling/report.py`): numbers, identifiers, dates and
+  SHA-256 digests.
 """
 
 from __future__ import annotations
@@ -270,6 +274,10 @@ def _report_sample(path: str, document: Any, data: bytes, ctx: _Context) -> list
     return validation_errors(document, Schema.COMPARISON_REPORT)
 
 
+def _recipe_rebuild_report(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    return validation_errors(document, Schema.RECIPE_REBUILD_REPORT)
+
+
 def _semantics(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     return validation_errors(document, Schema.SEMANTICS)
 
@@ -341,6 +349,12 @@ def _oracle_envelope_result(path: str, document: Any, data: bytes, ctx: _Context
     return result_problems(document)
 
 
+def _supervisor_settling(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.settling.report import report_problems
+
+    return report_problems(document)
+
+
 _Rule = Callable[[str, Any, bytes, _Context], list[str]]
 
 # First match wins: (path pattern, schema it assigns, check).
@@ -389,12 +403,22 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         "comparison-report.json (a golden's comparison report)",
         _report_sample,
     ),
+    (
+        re.compile(r"^parity/reports/[^/]+/recipe-rebuild-[^/]+\.json$"),
+        "recipe-rebuild-report.json (a rebuild-from-dump report)",
+        _recipe_rebuild_report,
+    ),
     (re.compile(r"^parity/semantics/[^/]+$"), "semantics.json", _semantics),
     (re.compile(r"^parity/fixtures/.+$"), "authored input of a manifest", _fixture),
     (
         re.compile(r"^parity/reports/[^/]+/store-census\.json$"),
         "store census report (numbers only)",
         _store_census,
+    ),
+    (
+        re.compile(r"^parity/reports/[^/]+/supervisor-settling\.json$"),
+        "supervisor settling report (numbers, identifiers and hashes only)",
+        _supervisor_settling,
     ),
 )
 

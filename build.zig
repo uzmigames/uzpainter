@@ -455,8 +455,8 @@ const store_sources = [_][]const u8{
     "store/cli.cpp",
 };
 /// Test-only fault hooks of the store (`src/store/fault.h`): compiled, with
-/// `-DUZP_STORE_FAULT_HOOKS=1` on every store source, into `uzp-store-tests.exe` only, never into
-/// `uzp_store.lib`.
+/// `-DUZP_STORE_FAULT_HOOKS=1` on every store source, into the store's test executables and a Debug
+/// `UzPainter.exe` (decision 151), never into `uzp_store.lib`.
 const store_fault_source = "store/fault.cpp";
 const store_thirdparty_include_dirs = [_][]const u8{ "thirdparty/sqlite", "thirdparty/zstd/lib" };
 /// The SQLite amalgamation with the options recorded in `thirdparty/sqlite/ORIGIN.md`.
@@ -556,6 +556,9 @@ pub fn build(b: *std.Build) void {
         .whitelist = &.{.{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu }},
     });
     const optimize = b.standardOptimizeOption(.{});
+    // Sources that `#embed` a file carry its bytes in their cache key (`EmbedInputs`).
+    var embed_inputs: EmbedInputs = .{ .b = b };
+    defer embed_inputs.check();
 
     // ── uzrendercore: the vendored render core as a static library ──────────────────────────
 
@@ -664,11 +667,7 @@ pub fn build(b: *std.Build) void {
         .files = &app_sources,
         .flags = &(cxx_flags ++ [_][]const u8{"-DSPNG_STATIC"} ++ app_defines),
     });
-    app_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &render_sources,
-        .flags = &(cxx_flags ++ own_warning_flags),
-    });
+    embed_inputs.add(app_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
     app_mod.addCSourceFiles(.{
         .root = b.path(core_root),
         .files = &.{agility_export_source},
@@ -786,11 +785,7 @@ pub fn build(b: *std.Build) void {
         },
         .flags = &(cxx_flags ++ own_warning_flags),
     });
-    render_tests_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &render_sources,
-        .flags = &(cxx_flags ++ own_warning_flags),
-    });
+    embed_inputs.add(render_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
     render_tests_mod.addCSourceFiles(.{
         .root = b.path(core_root),
         .files = &.{agility_export_source},
@@ -1192,17 +1187,21 @@ pub fn build(b: *std.Build) void {
     const store_settle_tests_step = b.step("uzp-store-settle-tests", "Build the native settling-evidence tests of the project store (09 §7)");
     store_settle_tests_step.dependOn(&b.addInstallArtifact(store_settle_tests_exe, .{}).step);
     b.getInstallStep().dependOn(store_settle_tests_step);
-    app_mod.linkLibrary(store_lib);
+    // A Debug `UzPainter.exe` compiles the store with its test-only fault hooks, so the worker's
+    // `test_fault` can end the worker inside a save (decision 151); every other build links the
+    // hook-free library.
+    if (optimize == .Debug) {
+        addStoreSources(b, app_mod, &store_hook_flags);
+        app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{store_fault_source}, .flags = &store_hook_flags });
+    } else {
+        app_mod.linkLibrary(store_lib);
+    }
 
     // ── The compositor (phase1.5_compositor-tile-dag) ─────────────────────────────────────────
     // `src/evaluator/` joins `UzPainter.exe` (over the render layer and the document model) and
     // gets its own test executable; both carry `assets/templates/` beside them.
 
-    app_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &evaluator_sources,
-        .flags = &evaluator_flags,
-    });
+    embed_inputs.add(app_mod, "src", &evaluator_sources, &evaluator_flags);
     app_mod.addCSourceFiles(.{
         .root = b.path("src"),
         .files = &export_sources,
@@ -1216,12 +1215,13 @@ pub fn build(b: *std.Build) void {
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
     // The supervisor and worker roles (phase2.1). The worker's test-only fault hooks exist in a
     // Debug build only: ReleaseFast, ReleaseSafe and ReleaseSmall contain none of their code and
-    // refuse `--test-faults` (decision 120).
-    const worker_hook_flags: []const []const u8 = if (optimize == .Debug) &.{"-DUZP_WORKER_FAULT_HOOKS=1"} else &.{};
+    // refuse `--test-faults` (decision 120). They reach the store's hooks to end the worker inside
+    // a save (decision 151).
+    const worker_hook_flags: []const []const u8 = if (optimize == .Debug) &.{ "-DUZP_WORKER_FAULT_HOOKS=1", "-DUZP_STORE_FAULT_HOOKS=1" } else &.{};
     const supervisor_flags = std.mem.concat(b.allocator, []const u8, &.{ &pyapi_flags, worker_hook_flags }) catch @panic("OOM");
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &supervisor_sources, .flags = supervisor_flags });
     // The preview viewport and window (phase2.1_preview-viewport-window).
-    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &(preview_sources ++ preview_host_sources), .flags = &pyapi_flags });
+    embed_inputs.add(app_mod, "src", &(preview_sources ++ preview_host_sources), &pyapi_flags);
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_scene_sources, .flags = &pyapi_flags });
     app_mod.linkLibrary(mesh_lib);
     const install_templates = b.addInstallDirectory(.{
@@ -1256,16 +1256,8 @@ pub fn build(b: *std.Build) void {
         .files = &.{"evaluator_test.cpp"},
         .flags = &evaluator_flags,
     });
-    evaluator_tests_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &evaluator_sources,
-        .flags = &evaluator_flags,
-    });
-    evaluator_tests_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &render_sources,
-        .flags = &(cxx_flags ++ own_warning_flags),
-    });
+    embed_inputs.add(evaluator_tests_mod, "src", &evaluator_sources, &evaluator_flags);
+    embed_inputs.add(evaluator_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
     evaluator_tests_mod.addCSourceFiles(.{
         .root = b.path(core_root),
         .files = &.{agility_export_source},
@@ -1316,16 +1308,8 @@ pub fn build(b: *std.Build) void {
         .flags = &export_hook_flags,
     });
     export_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
-    export_tests_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &evaluator_sources,
-        .flags = &evaluator_flags,
-    });
-    export_tests_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &render_sources,
-        .flags = &(cxx_flags ++ own_warning_flags),
-    });
+    embed_inputs.add(export_tests_mod, "src", &evaluator_sources, &evaluator_flags);
+    embed_inputs.add(export_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
     export_tests_mod.addCSourceFiles(.{
         .root = b.path(core_root),
         .files = &.{agility_export_source},
@@ -1373,7 +1357,7 @@ pub fn build(b: *std.Build) void {
     });
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
     // The capture (`python/capture.cpp`) builds the preview's scene and pass.
-    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_sources, .flags = &evaluator_flags });
+    embed_inputs.add(pyapi_tests_mod, "src", &preview_sources, &evaluator_flags);
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_scene_sources, .flags = &pyapi_flags });
     pyapi_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
@@ -1382,12 +1366,8 @@ pub fn build(b: *std.Build) void {
     });
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &export_sources, .flags = &evaluator_flags });
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
-    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &evaluator_sources, .flags = &evaluator_flags });
-    pyapi_tests_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &render_sources,
-        .flags = &(cxx_flags ++ own_warning_flags),
-    });
+    embed_inputs.add(pyapi_tests_mod, "src", &evaluator_sources, &evaluator_flags);
+    embed_inputs.add(pyapi_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
     pyapi_tests_mod.addCSourceFiles(.{
         .root = b.path(core_root),
         .files = &.{agility_export_source},
@@ -1444,13 +1424,9 @@ pub fn build(b: *std.Build) void {
         .files = &.{"preview_test.cpp"},
         .flags = &evaluator_flags,
     });
-    preview_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_sources, .flags = &evaluator_flags });
+    embed_inputs.add(preview_tests_mod, "src", &preview_sources, &evaluator_flags);
     preview_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
-    preview_tests_mod.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &render_sources,
-        .flags = &(cxx_flags ++ own_warning_flags),
-    });
+    embed_inputs.add(preview_tests_mod, "src", &render_sources, &(cxx_flags ++ own_warning_flags));
     preview_tests_mod.addCSourceFiles(.{
         .root = b.path(core_root),
         .files = &.{agility_export_source},
@@ -1479,6 +1455,128 @@ fn addStoreSources(b: *std.Build, mod: *std.Build.Module, flags: []const []const
     mod.addCSourceFiles(.{ .root = b.path("thirdparty/sqlite"), .files = &.{"sqlite3.c"}, .flags = &sqlite_flags });
     mod.addCSourceFiles(.{ .root = b.path("thirdparty/zstd/lib"), .files = &zstd_sources, .flags = &zstd_flags });
 }
+
+/// The files a source pulls in with `#embed`, as inputs of its object's cache key (decision 147).
+///
+/// Zig 0.15.2 learns an object's `#embed` targets, like its headers, from the compiler's
+/// dependency file and hashes them after the compile (`Cache.addDepFilePost`). A target saved
+/// while a build compiles its embedder is recorded with its new hash beside an object built from
+/// the old bytes, and every later build reuses that object until the embedder itself changes
+/// (decision 041's race, here on the shaders and tables edited during GPU iteration). So `add`
+/// compiles each source that embeds a file on its own, with `-DUZP_EMBED_DIGEST=<hex>`: a SHA-256
+/// over its targets' names and bytes, read when the build is configured, before any compile. New
+/// bytes always select a new cache key. The targets come from the sources (quoted `#embed`
+/// lines, resolved beside the embedding file as the compiler resolves them); `check` fails the
+/// build when a C or C++ file under `src/` or `tests/` embeds a file without going through `add`.
+const EmbedInputs = struct {
+    b: *std.Build,
+    /// The digest flag of each source passed to `add` (build-root relative, `/` separators);
+    /// null when it embeds nothing.
+    scanned: std.StringHashMapUnmanaged(?[]const u8) = .empty,
+
+    const digest_define = "UZP_EMBED_DIGEST";
+    const max_bytes = 256 * 1024 * 1024;
+    const c_extensions = [_][]const u8{ ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl", ".ipp" };
+
+    /// `mod.addCSourceFiles` of `files` under `root` (build-root relative), except that each file
+    /// with an `#embed` is added alone with its digest define appended to `flags`.
+    fn add(self: *EmbedInputs, mod: *std.Build.Module, root: []const u8, files: []const []const u8, flags: []const []const u8) void {
+        const b = self.b;
+        var plain: std.ArrayList([]const u8) = .empty;
+        for (files) |file| {
+            const rel = b.fmt("{s}/{s}", .{ root, file });
+            const gop = self.scanned.getOrPut(b.allocator, rel) catch @panic("OOM");
+            if (!gop.found_existing) gop.value_ptr.* = digestFlag(b, rel);
+            if (gop.value_ptr.*) |flag| {
+                const with_digest = std.mem.concat(b.allocator, []const u8, &.{ flags, &.{flag} }) catch @panic("OOM");
+                mod.addCSourceFile(.{ .file = b.path(rel), .flags = with_digest });
+            } else {
+                plain.append(b.allocator, file) catch @panic("OOM");
+            }
+        }
+        if (plain.items.len != 0) mod.addCSourceFiles(.{ .root = b.path(root), .files = plain.items, .flags = flags });
+    }
+
+    /// Fails the build when a C or C++ file under `src/` or `tests/` embeds a file but was not
+    /// passed to `add`: its targets would not be part of any cache key.
+    fn check(self: *EmbedInputs) void {
+        const b = self.b;
+        for ([_][]const u8{ "src", "tests" }) |top| {
+            var dir = b.build_root.handle.openDir(top, .{ .iterate = true }) catch |err| switch (err) {
+                error.FileNotFound => continue,
+                else => std.process.fatal("cannot open {s}/: {s}", .{ top, @errorName(err) }),
+            };
+            defer dir.close();
+            var walker = dir.walk(b.allocator) catch @panic("OOM");
+            defer walker.deinit();
+            while (walker.next() catch |err| std.process.fatal("cannot walk {s}/: {s}", .{ top, @errorName(err) })) |entry| {
+                if (entry.kind != .file) continue;
+                const extension = std.fs.path.extension(entry.basename);
+                const is_c = for (c_extensions) |known| {
+                    if (std.mem.eql(u8, extension, known)) break true;
+                } else false;
+                if (!is_c) continue;
+                const rel = b.fmt("{s}/{s}", .{ top, entry.path });
+                std.mem.replaceScalar(u8, rel, '\\', '/');
+                if (self.scanned.contains(rel)) continue;
+                var lines = std.mem.splitScalar(u8, readSource(b, rel), '\n');
+                while (lines.next()) |line| {
+                    if (embedTarget(rel, line) != null) std.process.fatal(
+                        "{s} uses #embed but is not compiled through EmbedInputs.add in build.zig, so its embedded files are not part of its cache key (decision 147)",
+                        .{rel},
+                    );
+                }
+            }
+        }
+    }
+
+    /// `-DUZP_EMBED_DIGEST=<hex>` over the `#embed` targets of `rel`, or null when it has none.
+    fn digestFlag(b: *std.Build, rel: []const u8) ?[]const u8 {
+        const Sha256 = std.crypto.hash.sha2.Sha256;
+        const dir = std.fs.path.dirname(rel) orelse ".";
+        var hasher = Sha256.init(.{});
+        var embeds = false;
+        var lines = std.mem.splitScalar(u8, readSource(b, rel), '\n');
+        while (lines.next()) |line| {
+            const target = embedTarget(rel, line) orelse continue;
+            const target_rel = b.fmt("{s}/{s}", .{ dir, target });
+            const bytes = b.build_root.handle.readFileAlloc(b.allocator, target_rel, max_bytes) catch |err|
+                std.process.fatal("{s}: cannot read the #embed target {s}: {s}", .{ rel, target_rel, @errorName(err) });
+            var digest: [Sha256.digest_length]u8 = undefined;
+            Sha256.hash(bytes, &digest, .{});
+            hasher.update(target);
+            hasher.update(&.{0});
+            hasher.update(&digest);
+            embeds = true;
+        }
+        if (!embeds) return null;
+        var digest: [Sha256.digest_length]u8 = undefined;
+        hasher.final(&digest);
+        return b.fmt("-D{s}={s}", .{ digest_define, std.fmt.bytesToHex(digest[0..16], .lower) });
+    }
+
+    fn readSource(b: *std.Build, rel: []const u8) []const u8 {
+        return b.build_root.handle.readFileAlloc(b.allocator, rel, max_bytes) catch |err|
+            std.process.fatal("cannot read {s}: {s}", .{ rel, @errorName(err) });
+    }
+
+    /// The file name of an `#embed` directive line, or null when the line is not one. A directive
+    /// whose target is not a quoted file name (`<...>`, a macro) fails the build: its file could
+    /// not be found here.
+    fn embedTarget(source: []const u8, line: []const u8) ?[]const u8 {
+        var rest = std.mem.trimLeft(u8, line, " \t");
+        if (!std.mem.startsWith(u8, rest, "#")) return null;
+        rest = std.mem.trimLeft(u8, rest[1..], " \t");
+        if (!std.mem.startsWith(u8, rest, "embed")) return null;
+        rest = rest["embed".len..];
+        if (rest.len == 0 or std.mem.indexOfScalar(u8, " \t\"<", rest[0]) == null) return null;
+        rest = std.mem.trimLeft(u8, rest, " \t");
+        if (rest.len > 1 and rest[0] == '"') {
+            if (std.mem.indexOfScalar(u8, rest[1..], '"')) |end| return rest[1..][0..end];
+        }
+        std.process.fatal("{s}: only an #embed of a quoted file name is supported: {s}", .{ source, std.mem.trimRight(u8, line, "\r") });
+    }
+};
 
 /// Installs every wheel of a folder into `<prefix>/bin/<subdir>` the way an installer lays out a
 /// wheel: its archive unpacked as is. The pinned wheels have no installation scheme besides

@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -40,6 +41,7 @@
 #include "python/display.h"
 #include "python/errors.h"
 #include "python/interpreter.h"
+#include "python/jobs.h"
 #include "python/script.h"
 #include "python/session.h"
 #include "render/backend.h"
@@ -209,6 +211,42 @@ struct Tool {
     bool gpu_gate = true;
 };
 
+/// The long job the command thread runs, and the cancellations the pipe's reader thread received
+/// (`worker/cancel`, answered by the reader thread at once, decision 140). A cancel for a job that
+/// has not started yet is kept, and the job stops at its first checkpoint.
+class JobControl {
+public:
+    /// The reader thread: asks job `job_id` to stop. "running" when it runs now, else "pending".
+    std::string Cancel(const std::string& job_id) {
+        std::lock_guard lock(m_mutex);
+        if (m_job && m_id == job_id) {
+            m_job->Cancel();
+            return "running";
+        }
+        m_pending.insert(job_id);
+        return "pending";
+    }
+    /// The command thread: job `job_id` started as `job`.
+    void Begin(const std::string& job_id, std::shared_ptr<python::Job> job) {
+        std::lock_guard lock(m_mutex);
+        if (m_pending.erase(job_id) != 0) job->Cancel();
+        m_id = job_id;
+        m_job = std::move(job);
+    }
+    /// The command thread: the job ended.
+    void End() {
+        std::lock_guard lock(m_mutex);
+        m_id.clear();
+        m_job.reset();
+    }
+
+private:
+    std::mutex m_mutex;
+    std::string m_id;
+    std::shared_ptr<python::Job> m_job;
+    std::set<std::string, std::less<>> m_pending;
+};
+
 json::Object Schema(json::Object properties, json::Array required) {
     return {{"type", "object"},
             {"properties", std::move(properties)},
@@ -307,8 +345,16 @@ std::optional<CallError> AdmissionRefusal(const core::AdmissionDecision& decisio
 
 class Worker {
 public:
-    Worker(const Options& options, render::Engine& engine, preview::PreviewFeed* feed, preview::PreviewHost* host)
-        : m_options(options), m_engine(engine), m_previewFeed(feed), m_previewHost(host) {
+    using Emit = std::function<void(const json::Object& frame)>;
+
+    Worker(const Options& options, render::Engine& engine, JobControl& jobs, Emit emit, preview::PreviewFeed* feed,
+           preview::PreviewHost* host)
+        : m_options(options),
+          m_engine(engine),
+          m_jobs(jobs),
+          m_emit(std::move(emit)),
+          m_previewFeed(feed),
+          m_previewHost(host) {
         DefineTools();
     }
 
@@ -320,15 +366,21 @@ public:
 
 private:
     using Handler = std::function<json::Object(const json::Object& arguments)>;
+    /// A long tool's handler: the job body of its arguments (checked before the job starts).
+    using JobHandler = std::function<python::JobBody(const json::Object& arguments)>;
 
     void DefineTools();
     json::Object Call(const json::Value& id, const json::Object& request);
+    json::Object Execute(const json::Value& id, const json::Object& request, const Tool& tool,
+                         const json::Object& arguments);
+    json::Object RunJob(const json::Object& request, const Tool& tool, python::JobBody body);
     json::Object Reopen(const json::Value& id, const json::Object& request);
     json::Object Operations(const json::Value& id, const json::Object& request);
     json::Object ListTools() const;
     std::optional<std::int64_t> CommittedRevision() const;
 
-    json::Object ProjectOpen(const json::Object& arguments);
+    python::JobBody ProjectOpen(const json::Object& arguments);
+    python::JobBody Export(const json::Object& arguments);
     json::Object ProjectClose(const json::Object& arguments);
     json::Object ProjectSave(const json::Object& arguments);
     json::Object ProjectInspect(const json::Object& arguments);
@@ -355,14 +407,27 @@ private:
 #if defined(UZP_WORKER_FAULT_HOOKS)
     json::Object TestFault(const json::Object& arguments);
     json::Object TestMutation(const json::Object& arguments);
+    python::JobBody TestJob(const json::Object& arguments);
 #endif
 
     [[noreturn]] void FailRender(const render::Error& error);
 
     const Options& m_options;
     render::Engine& m_engine;
+    JobControl& m_jobs;
+    const Emit m_emit;
     std::vector<Tool> m_tools;
     std::map<std::string, Handler, std::less<>> m_handlers;
+    /// A long tool: it runs as a job (`RunJob`), reports progress and can be cancelled. Its commit
+    /// point is "revision" (a project revision with its operation row), "publication" (an export
+    /// generation), or none (it commits nothing).
+    struct LongTool {
+        JobHandler handler;
+        std::optional<std::string> commit_point;
+    };
+    std::map<std::string, LongTool, std::less<>> m_job_handlers;
+    /// The receipt of the long job the call being handled ran (the reply's `job`).
+    std::optional<json::Object> m_job_receipt;
     std::unique_ptr<evaluator::Evaluator> m_evaluator;
     std::uint64_t m_payloads = 0;
     /// The attached preview (`--preview`): every evaluation is published to it, never waited for.
@@ -377,9 +442,25 @@ void Worker::DefineTools() {
         m_handlers.emplace(tool.name, std::move(handler));
         m_tools.push_back(std::move(tool));
     };
-    add({"project_open", "Opens a project file in the worker (one project at a time).",
-         Schema({{"path", StringProperty("The .uzp file.")}}, {"path"}), false, false},
-        [this](const json::Object& a) { return ProjectOpen(a); });
+    const auto add_job = [this](Tool tool, std::optional<std::string> commit_point, JobHandler handler) {
+        m_job_handlers.emplace(tool.name, LongTool{std::move(handler), std::move(commit_point)});
+        m_tools.push_back(std::move(tool));
+    };
+    add_job({"project_open", "Opens a project file in the worker (one project at a time; a long job).",
+             Schema({{"path", StringProperty("The .uzp file.")}}, {"path"}), false, false},
+            std::nullopt, [this](const json::Object& a) { return ProjectOpen(a); });
+    add_job({"export",
+             "Exports the current revision with Painter's json_config: a new generation under its exportPath with "
+             "its receipt, then the fixed-name folders (a long job; phase2.6 adds presets and overrides).",
+             Schema({{"config", json::Object{{"type", json::Array{"object", "string"}},
+                                             {"description", "Painter's json_config, as an object or JSON text."}}},
+                     {"fixed_names",
+                      json::Object{{"type", "array"},
+                                   {"items", json::Object{{"type", "string"}}},
+                                   {"description", "Folders that receive the generation's files under fixed names."}}}},
+                    {"config"}),
+             false, false},
+            "publication", [this](const json::Object& a) { return Export(a); });
     add({"project_close", "Closes the open project.", Schema({}, {}), false, false},
         [this](const json::Object& a) { return ProjectClose(a); });
     add({"project_save", "Names a checkpoint of the current revision (save; `full` also compacts).",
@@ -508,7 +589,8 @@ void Worker::DefineTools() {
     }
 #if defined(UZP_WORKER_FAULT_HOOKS)
     if (m_options.test_faults) {
-        json::Array faults{"kill", "abort", "seh", "remove_device", "gpu_stall", "kill_before_reply"};
+        json::Array faults{"kill", "abort", "seh", "remove_device", "gpu_stall", "kill_before_reply",
+                           "kill_during_save", "kill_during_compaction"};
         if (m_previewHost) {
             faults.push_back("preview_stall");
             faults.push_back("preview_resume");
@@ -527,6 +609,20 @@ void Worker::DefineTools() {
                     {"name"}),
              true, false},
             [this](const json::Object& a) { return TestMutation(a); });
+        // A long typed mutation (`steps` cancellable steps of `step_ms`, one fill layer committed
+        // with its operation row at step `commit_at`): the job path of the long typed tools, tested
+        // before phase2.6 delivers them (decision 140).
+        const auto integer = [](const char* description) {
+            return json::Object{{"type", "integer"}, {"minimum", 0}, {"description", description}};
+        };
+        add_job({"test_job", "Test-only long typed mutation (Debug builds under --test-faults).",
+                 Schema({{"name", StringProperty("The fill layer's name.")},
+                         {"steps", integer("The number of steps (at least 1).")},
+                         {"step_ms", integer("Milliseconds per step.")},
+                         {"commit_at", integer("The step that commits the layer; none commits nothing.")}},
+                        {"name", "steps"}),
+                 true, false},
+                "revision", [this](const json::Object& a) { return TestJob(a); });
     }
 #endif
 }
@@ -534,11 +630,17 @@ void Worker::DefineTools() {
 json::Object Worker::ListTools() const {
     json::Array tools;
     for (const Tool& tool : m_tools) {
+        const auto long_tool = m_job_handlers.find(tool.name);
+        const bool long_job = long_tool != m_job_handlers.end();
         tools.push_back(json::Object{{"name", tool.name},
                                      {"description", tool.description},
                                      {"inputSchema", tool.input_schema},
                                      {"mutating", tool.mutating},
-                                     {"gpu", tool.gpu}});
+                                     {"gpu", tool.gpu},
+                                     {"long", long_job},
+                                     {"commit_point", long_job && long_tool->second.commit_point
+                                                          ? json::Value(*long_tool->second.commit_point)
+                                                          : json::Value(nullptr)}});
     }
     return {{"tools", std::move(tools)}};
 }
@@ -624,8 +726,19 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
                                            {"reason", unavailable->reason}});
         }
     }
+    m_job_receipt.reset();
+    json::Object reply = Execute(id, request, *tool, arguments);
+    if (m_job_receipt) reply["job"] = std::move(*m_job_receipt);
+    return reply;
+}
+
+json::Object Worker::Execute(const json::Value& id, const json::Object& request, const Tool& tool,
+                             const json::Object& arguments) {
     try {
-        json::Object result = m_handlers.at(*name)(arguments);
+        const auto long_tool = m_job_handlers.find(tool.name);
+        json::Object result = long_tool != m_job_handlers.end()
+                                  ? RunJob(request, tool, long_tool->second.handler(arguments))
+                                  : m_handlers.at(tool.name)(arguments);
         json::Object reply = ResultReply(id, std::move(result), CommittedRevision());
         if (m_mutation) {
             reply["admission"] = "executed";
@@ -652,6 +765,44 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
     } catch (const std::exception& error) {
         return ErrorReply(id, "call_failed", error.what(), json::Object{{"type", "RuntimeError"}});
     }
+}
+
+/// A long job: `body` runs on the native job pool (`uzpainter.jobs`) while this thread waits for it;
+/// its progress and its commit point go to the supervisor as `job_progress` events, and a
+/// `worker/cancel` asks it to stop at its next checkpoint. The job's id is the request's `job_id`
+/// (the supervisor's), or the native one. The reply carries the job's receipt (`job`); a job that
+/// was cancelled is the error `cancelled {job_id, stopped, committed, committed_revision}` (the
+/// project's revision afterwards), one that failed is its error.
+json::Object Worker::RunJob(const json::Object& request, const Tool& tool, python::JobBody body) {
+    const std::string requested = StringField(request, "job_id").value_or("");
+    const std::shared_ptr<python::Job> job = python::JobEngine::Get().Start(
+        tool.name, std::move(body), [this, requested](const python::Job& running) {
+            const std::optional<json::Object> committed = running.committed();
+            m_emit(json::Object{{"event", "job_progress"},
+                                {"job_id", requested.empty() ? running.id() : requested},
+                                {"progress", running.progress()},
+                                {"message", running.message()},
+                                {"committed", committed ? json::Value(*committed) : json::Value(nullptr)}});
+        });
+    const std::string job_id = requested.empty() ? job->id() : requested;
+    m_jobs.Begin(job_id, job);
+    job->Wait(std::nullopt);
+    m_jobs.End();
+    json::Object receipt = job->Receipt();
+    receipt["id"] = job_id;
+    m_job_receipt = receipt;
+    if (job->status() == python::JobStatus::cancelled) {
+        const bool committed = !receipt.at("committed").IsNull();
+        throw CallError{"cancelled",
+                        committed ? "the job was cancelled after its commit point: what it committed stays committed"
+                                  : "the job was cancelled before its commit point: it committed nothing",
+                        json::Object{{"job_id", job_id},
+                                     {"stopped", receipt.at("stopped")},
+                                     {"committed", receipt.at("committed")},
+                                     {"committed_revision", CommittedRevision() ? json::Value(*CommittedRevision())
+                                                                                : json::Value(nullptr)}}};
+    }
+    return job->Result();  // rethrows the error that failed it
 }
 
 /// `worker/operations {after}`: what the supervisor reconciles its ledger from after a restart
@@ -719,12 +870,34 @@ void Worker::FailRender(const render::Error& error) {
     throw CallError{std::string(render::ErrorCodeName(error.code)), error.Describe(), std::move(details)};
 }
 
-json::Object Worker::ProjectOpen(const json::Object& arguments) {
+python::JobBody Worker::ProjectOpen(const json::Object& arguments) {
     const std::optional<std::string> path = StringField(arguments, "path");
     if (!path) throw CallError{"invalid_arguments", "project_open needs a path", {}};
-    python::Session& session = python::Session::Get();
-    session.Open(python::PathFromUtf8(*path));
-    return {{"path", DurableStore(*session.Current())}, {"revision", session.Revision()}};
+    return [path = *path](python::JobContext& context) {
+        context.SetProgress(0.0, "opening " + path);
+        context.Checkpoint();
+        python::Session& session = python::Session::Get();
+        session.Open(python::PathFromUtf8(path));
+        return json::Object{{"path", DurableStore(*session.Current())}, {"revision", session.Revision()}};
+    };
+}
+
+python::JobBody Worker::Export(const json::Object& arguments) {
+    const json::Value* config = Field(arguments, "config");
+    if (!config || !(config->IsObject() || config->IsString())) {
+        throw CallError{"invalid_arguments", "export needs config (Painter's json_config, an object or JSON text)", {}};
+    }
+    std::vector<std::string> fixed_names;
+    if (const json::Value* given = Field(arguments, "fixed_names"); given && !given->IsNull()) {
+        if (!given->IsArray()) throw CallError{"invalid_arguments", "fixed_names must be a list of folders", {}};
+        for (const json::Value& folder : std::get<json::Array>(given->data)) {
+            if (!folder.IsString()) throw CallError{"invalid_arguments", "fixed_names must be a list of folders", {}};
+            fixed_names.push_back(std::get<std::string>(folder.data));
+        }
+    }
+    std::string text = config->IsString() ? std::get<std::string>(config->data)
+                                          : json::WriteCanonical(std::get<json::Object>(config->data));
+    return python::ExportJob(std::move(text), std::move(fixed_names));
 }
 
 json::Object Worker::ProjectClose(const json::Object&) {
@@ -735,6 +908,9 @@ json::Object Worker::ProjectClose(const json::Object&) {
 json::Object Worker::ProjectSave(const json::Object& arguments) {
     const std::string mode = StringField(arguments, "mode").value_or("incremental");
     if (mode != "incremental" && mode != "full") throw CallError{"invalid_arguments", "mode must be incremental or full", {}};
+#if defined(UZP_WORKER_FAULT_HOOKS)
+    const fault::SaveFaultScope save_fault;  // `kill_during_save` / `kill_during_compaction` act here only
+#endif
     const core::Checkpoints saved =
         python::Session::Get().Save(mode == "full" ? store::SaveMode::full : store::SaveMode::incremental);
     json::Object result{{"current", saved.current}};
@@ -1193,6 +1369,53 @@ json::Object Worker::TestMutation(const json::Object& arguments) {
     }
     return result.ToJson();
 }
+
+python::JobBody Worker::TestJob(const json::Object& arguments) {
+    const std::optional<std::string> layer = StringField(arguments, "name");
+    const auto count = [&](std::string_view key) -> std::optional<std::int64_t> {
+        const json::Value* value = Field(arguments, key);
+        if (!value || value->IsNull()) return std::nullopt;
+        if (!value->IsInt() || std::get<std::int64_t>(value->data) < 0) {
+            throw CallError{"invalid_arguments", "test_job: " + std::string(key) + " must be a whole number", {}};
+        }
+        return std::get<std::int64_t>(value->data);
+    };
+    const std::optional<std::int64_t> steps = count("steps");
+    const std::int64_t step_ms = count("step_ms").value_or(0);
+    const std::optional<std::int64_t> commit_at = count("commit_at");
+    if (!layer || !steps || *steps < 1 || (commit_at && *commit_at >= *steps)) {
+        throw CallError{"invalid_arguments", "test_job needs a name, steps >= 1 and commit_at below steps", {}};
+    }
+    const std::shared_ptr<python::OpenProject> open = python::Session::Get().Current();
+    return [mutation = *m_mutation, layer = *layer, steps = *steps, step_ms, commit_at, set = open->active_set,
+            stack = open->active_stack](python::JobContext& context) {
+        python::Session& session = python::Session::Get();
+        json::Value outcome = nullptr;
+        for (std::int64_t step = 0; step < steps; ++step) {
+            context.Checkpoint();
+            if (commit_at == step) {
+                const core::RequestOutcome submitted = session.Submit(mutation, [&](core::Edit& edit) {
+                    edit.Insert(core::InsertPosition::FromStack(set, stack), core::NodeType::FillLayer, layer);
+                });
+                if (std::optional<CallError> refusal = AdmissionRefusal(submitted.decision, mutation.idempotency_key)) {
+                    throw *refusal;
+                }
+                const core::TransactionResult& result = *submitted.result;
+                if (result.status == core::ResultStatus::failed) {
+                    throw CallError{"call_failed", result.error, json::Object{{"type", result.error_type}}};
+                }
+                outcome = result.ToJson();
+                context.Commit({{"revision", result.revision}});
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(step_ms));
+            context.SetProgress(static_cast<double>(step + 1) / static_cast<double>(steps),
+                                "step " + std::to_string(step + 1) + " of " + std::to_string(steps));
+        }
+        if (outcome.IsObject()) return std::get<json::Object>(outcome.data);  // the operation row's outcome
+        context.NoOp();
+        return json::Object{{"status", "no_op"}, {"revision", session.Revision()}};
+    };
+}
 #endif
 
 // ── The request loop ───────────────────────────────────────────────────────────────────────────
@@ -1220,6 +1443,18 @@ private:
     std::condition_variable m_ready;
     std::deque<json::Object> m_frames;
 };
+
+/// The reply to `worker/cancel {job_id}`: `{job_id, acknowledged: true, state}` (JobControl::Cancel).
+json::Object CancelReply(const json::Object& frame, JobControl& jobs) {
+    const json::Value* id = Field(frame, "id");
+    if (!id || !id->IsString() || std::get<std::string>(id->data).empty()) {
+        return ErrorReply(nullptr, "invalid_request", "a request needs a non-empty string id");
+    }
+    const std::optional<std::string> job_id = StringField(frame, "job_id");
+    if (!job_id || job_id->empty()) return ErrorReply(*id, "invalid_request", "worker/cancel needs job_id (string)");
+    return ResultReply(*id, {{"job_id", *job_id}, {"acknowledged", true}, {"state", jobs.Cancel(*job_id)}},
+                       std::nullopt);
+}
 
 }  // namespace
 
@@ -1292,8 +1527,9 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
     if (!pipe->Write(EncodeFrame(handshake))) Exit(kWorkerExitSupervisorGone);
 
     Inbox inbox;
+    JobControl jobs;
     PipeServer* reader_pipe = pipe.get();
-    std::thread([reader_pipe, &inbox] {
+    std::thread([reader_pipe, &inbox, &jobs] {
         FrameDecoder decoder;
         for (;;) {
             const std::optional<std::string> bytes = reader_pipe->Read();
@@ -1302,7 +1538,14 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
             for (const std::string& message : decoded.errors) {
                 reader_pipe->Write(EncodeFrame(ErrorReply(nullptr, "invalid_frame", message)));
             }
-            for (json::Object& frame : decoded.frames) inbox.Push(std::move(frame));
+            for (json::Object& frame : decoded.frames) {
+                // `worker/cancel {job_id}` is answered here, while the command thread runs the job.
+                if (StringField(frame, "method") == "worker/cancel") {
+                    reader_pipe->Write(EncodeFrame(CancelReply(frame, jobs)));
+                } else {
+                    inbox.Push(std::move(frame));
+                }
+            }
         }
     }).detach();
 
@@ -1326,7 +1569,12 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
     }
     // `painter_viewport` captures (also those of `run_python`) render on the worker's engine.
     python::SetCaptureGpu(options.backend, &engine);
-    Worker worker(options, engine, preview_feed.get(), preview_host.get());
+    Worker worker(
+        options, engine, jobs,
+        [reader_pipe](const json::Object& frame) {
+            if (!reader_pipe->Write(EncodeFrame(frame))) Exit(kWorkerExitSupervisorGone);
+        },
+        preview_feed.get(), preview_host.get());
     // The interpreter's thread holds the GIL only while Python runs (`run_python`).
     pybind11::gil_scoped_release release;
     for (;;) {

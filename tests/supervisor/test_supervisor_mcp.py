@@ -19,6 +19,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from tests.supervisor.conftest import (
+    BACKEND,
     INSERT_FILL,
     PLANE,
     Mcp,
@@ -29,7 +30,7 @@ from tests.supervisor.conftest import (
     wait_until_gone,
 )
 
-BASE = ("--gpu-backend", "vulkan", "--allow-python", "--test-faults")
+BASE = ("--gpu-backend", BACKEND, "--allow-python", "--test-faults")
 
 
 def opened_session(
@@ -39,7 +40,9 @@ def opened_session(
     project = make_project(painter, tmp_path)
     session = Mcp(painter, tmp_path, *BASE, env=env)
     sessions.append(session)
-    revision = session.call("project_open", {"path": str(project)})["result"]["revision"]
+    revision = session.call("project_open", {"path": str(project), "wait": True})["result"][
+        "revision"
+    ]
     reply = session.call(
         "run_python", {"code": INSERT_FILL, "idempotency_key": "k-1", "expected_revision": revision}
     )
@@ -74,6 +77,11 @@ def test_tools_are_forwarded_and_stdout_carries_protocol_frames_only(
         "shader_set",
         "camera_get",
         "camera_set",
+        "export",
+        "job_status",
+        "job_result",
+        "job_cancel",
+        "job_list",
     }
     assert tools["project_open"]["inputSchema"]["required"] == ["path"]
     assert tools["isolate_layer"]["inputSchema"]["required"] == ["uid", "channels", "path"]
@@ -169,6 +177,7 @@ def recovery_after(session: Mcp, count: int) -> dict[str, Any]:
     return recovery
 
 
+@pytest.mark.settling("worker_killed_from_outside")
 def test_worker_killed_from_outside(painter: Path, tmp_path: Path, sessions: list[Mcp]) -> None:
     """2.8, 3.2: TerminateProcess on the worker leaves the session alive; the next call is held
     until the relaunched worker has reopened the project at its last committed revision."""
@@ -194,11 +203,17 @@ def test_worker_killed_from_outside(painter: Path, tmp_path: Path, sessions: lis
     assert recovery["revision"] == revision and recovery["recovery_ms"] > 0
     after = session.status()
     assert after["generation"] == before["generation"] + 1
-    assert (after["gpu_backend"], after["python"]) == ("vulkan", "allowed")
+    assert (after["gpu_backend"], after["python"]) == (BACKEND, "allowed")
     assert session.stdout_is_protocol_only()
 
 
-@pytest.mark.parametrize(("fault", "cause"), [("abort", "abort"), ("seh", "native_fault")])
+@pytest.mark.parametrize(
+    ("fault", "cause"),
+    [
+        pytest.param("abort", "abort", marks=pytest.mark.settling("native_abort")),
+        pytest.param("seh", "native_fault", marks=pytest.mark.settling("native_access_violation")),
+    ],
+)
 def test_native_fault_writes_a_minidump_and_relaunches(
     painter: Path, tmp_path: Path, sessions: list[Mcp], fault: str, cause: str
 ) -> None:
@@ -374,7 +389,7 @@ def test_lost_reply_after_opening_a_bundle_directory_recovers_its_imported_file(
     assert exported.returncode == 0, exported.stdout + exported.stderr
     session = Mcp(painter, tmp_path, *BASE)
     sessions.append(session)
-    opened = session.call("project_open", {"path": str(bundle)})["result"]
+    opened = session.call("project_open", {"path": str(bundle), "wait": True})["result"]
     imported = tmp_path / "bundle.uzp"
     assert Path(opened["path"]) == imported
     revision = opened["revision"]

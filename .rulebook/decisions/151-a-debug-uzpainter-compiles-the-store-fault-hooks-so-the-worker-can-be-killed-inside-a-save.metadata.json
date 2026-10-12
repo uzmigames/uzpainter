@@ -1,0 +1,13 @@
+{
+  "id": 151,
+  "slug": "a-debug-uzpainter-compiles-the-store-fault-hooks-so-the-worker-can-be-killed-inside-a-save",
+  "title": "A Debug UzPainter compiles the store fault hooks, so the worker can be killed inside a save",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.4_supervisor-worker",
+    "phase2.1_supervisor-ipc-worker",
+    "phase1.8_project-store"
+  ],
+  "supersededBy": null
+}

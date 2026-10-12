@@ -1,0 +1,15 @@
+{
+  "id": 142,
+  "slug": "the-wand-rebuild-gate-compares-uzpainter-with-itself-takes-its-resources-from-export-bundle-and-skips-only-on-an-explicit-refusal",
+  "title": "The wand rebuild gate compares UzPainter with itself, takes its resources from export-bundle, and skips only on an explicit refusal",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.2_recipe-and-diagnostics",
+    "phase2.1_recipe-dump-manifest-blocks",
+    "phase2.1_recipe-diagnostic-views",
+    "phase1.25_pilot-wand",
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

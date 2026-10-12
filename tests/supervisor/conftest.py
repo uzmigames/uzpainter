@@ -8,11 +8,20 @@ compiled in, decision 120) into a temporary prefix per test session. Two clients
   lines and checking that every line on stdout is a protocol frame;
 - `Pipe`: the test process acting as a worker's supervisor. The worker accepts only the process
   whose id its pipe name carries, so the test names the pipe after its own process id.
+
+Settling evidence (task phase2.4_supervisor-worker, decision 150): a test that settles a case of
+`docs/architecture/02-runtime-topology.md` §7 carries `@pytest.mark.settling(<case>, ...)`. With
+`UZP_SETTLING_REPORT=<path>` the run merges each tagged test's result, run time and the
+recoveries its supervisors reported, and the overhead measurements, into that report
+(`tools/parity/settling/report.py`). `UZP_SUPERVISOR_BACKEND` (default `vulkan`) is the backend
+the tagged MCP tests start their supervisors on.
 """
 
 from __future__ import annotations
 
 import ctypes
+import datetime
+import hashlib
 import itertools
 import json
 import os
@@ -28,10 +37,13 @@ from typing import IO, Any
 
 import pytest
 
+from tools.parity.settling import report as settling_report
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLANE = REPO_ROOT / "parity" / "fixtures" / "meshes" / "plane.obj"
 JSON_PREFIX = "UZP_JSON:"
 NO_GPU = os.environ.get("UZP_NO_GPU") == "1"
+BACKEND = os.environ.get("UZP_SUPERVISOR_BACKEND", "vulkan")
 
 _pipe_numbers = itertools.count(int(time.time()) % 100000 * 1000)
 
@@ -54,7 +66,9 @@ def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
         check=False,
     )
     assert build.returncode == 0, build.stdout + build.stderr
-    return prefix / "bin" / "UzPainter.exe"
+    exe = prefix / "bin" / "UzPainter.exe"
+    _settled.exe_sha256 = hashlib.sha256(exe.read_bytes()).hexdigest()
+    return exe
 
 
 def pid_alive(pid: int) -> bool:
@@ -89,12 +103,12 @@ def kill_pid(pid: int) -> None:
         ctypes.windll.kernel32.CloseHandle(handle)
 
 
-def run_script(painter: Path, tmp_path: Path, body: str) -> Any:
-    """`UzPainter.exe run` of `body` (single process); the script's `result`."""
+def run_script(painter: Path, tmp_path: Path, body: str, backend: str = "vulkan") -> Any:
+    """`UzPainter.exe run` of `body` (single process) on `backend`; the script's `result`."""
     path = tmp_path / f"script-{next(_pipe_numbers)}.py"
     path.write_text(textwrap.dedent(body), encoding="utf-8")
     process = subprocess.run(
-        [str(painter), "run", str(path), "--gpu-backend", "vulkan"],
+        [str(painter), "run", str(path), "--gpu-backend", backend],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -256,6 +270,8 @@ class Mcp:
         threading.Thread(target=self._read, daemon=True).start()
         self._ids = itertools.count(1)
         self._replies: dict[int, dict[str, Any]] = {}
+        self.notifications: list[dict[str, Any]] = []  # in arrival order
+        self.last_status: dict[str, Any] | None = None  # the last `supervisor_status` result
         if initialize:
             self.request(
                 "initialize",
@@ -313,6 +329,8 @@ class Mcp:
             message = json.loads(line)
             assert message.get("jsonrpc") == "2.0", line
             if "id" not in message or "method" in message:  # a notification or server request
+                if "id" not in message:
+                    self.notifications.append(message)
                 continue
             assert "error" not in message, message
             result = message["result"]
@@ -321,12 +339,18 @@ class Mcp:
                 return result
             self._replies[message["id"]] = result
 
-    def call(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    def call(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """The structured content of a tool call: `{result, committed_revision?, receipt}` or
-        `{error, receipt}`."""
-        return self.content(
-            self.request("tools/call", {"name": name, "arguments": arguments or {}})
-        )
+        `{error, receipt}`; `meta` is the request's `_meta` (a progress token)."""
+        params: dict[str, Any] = {"name": name, "arguments": arguments or {}}
+        if meta is not None:
+            params["_meta"] = meta
+        return self.content(self.request("tools/call", params))
 
     @staticmethod
     def content(result: dict[str, Any]) -> dict[str, Any]:
@@ -338,6 +362,7 @@ class Mcp:
     def status(self) -> dict[str, Any]:
         result = self.call("supervisor_status")["result"]
         assert isinstance(result, dict)
+        self.last_status = result
         return result
 
     def stdout_is_protocol_only(self) -> bool:
@@ -366,8 +391,104 @@ def pipes(painter: Path, tmp_path: Path) -> Iterator[list[Pipe]]:
 
 
 @pytest.fixture
-def sessions() -> Iterator[list[Mcp]]:
+def sessions(request: pytest.FixtureRequest) -> Iterator[list[Mcp]]:
     opened: list[Mcp] = []
     yield opened
     for session in opened:
         session.close()
+    _settled.statuses.setdefault(request.node.nodeid, []).extend(
+        session.last_status for session in opened if session.last_status is not None
+    )
+
+
+# --- settling evidence (decision 150) --------------------------------------------------------
+
+
+class _Settled:
+    """What this run settled: per tagged test, its outcome and its sessions' last statuses."""
+
+    def __init__(self) -> None:
+        self.exe_sha256: str | None = None
+        self.calls: dict[str, tuple[tuple[str, ...], str, float]] = {}
+        self.statuses: dict[str, list[dict[str, Any]]] = {}
+        self.metrics: dict[str, dict[str, float]] = {}
+        self.overhead: list[dict[str, Any]] = []
+
+
+_settled = _Settled()
+
+
+class Settling:
+    """A tagged test's handle on the report: numbers it measured itself."""
+
+    def __init__(self, nodeid: str) -> None:
+        self._nodeid = nodeid
+
+    def metric(self, name: str, value: float) -> None:
+        _settled.metrics.setdefault(self._nodeid, {})[name] = round(value, 3)
+
+    def overhead(self, entry: dict[str, Any]) -> None:
+        _settled.overhead.append(entry)
+
+    @staticmethod
+    def stamp() -> dict[str, str]:
+        assert _settled.exe_sha256 is not None
+        return {"date": datetime.date.today().isoformat(), "exe_sha256": _settled.exe_sha256}
+
+
+@pytest.fixture
+def settling(request: pytest.FixtureRequest) -> Settling:
+    return Settling(request.node.nodeid)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers", "settling(*cases): the test settles these 02 §7 cases (decision 150)"
+    )
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Any:
+    report = yield
+    marker = item.get_closest_marker("settling")
+    if marker is not None and report.when == "call":
+        _settled.calls[item.nodeid] = (tuple(marker.args), report.outcome, report.duration)
+    return report
+
+
+def _case_entries() -> list[dict[str, Any]]:
+    entries = []
+    for nodeid, (cases, outcome, seconds) in _settled.calls.items():
+        if outcome == "skipped":
+            continue
+        statuses = _settled.statuses.get(nodeid, [])
+        recoveries = [
+            {
+                "cause": settling_report.identifier(recovery["cause"]),
+                "recovery_ms": round(float(recovery["recovery_ms"]), 3),
+                "attempts": int(recovery.get("attempts", 1)),
+            }
+            for status in statuses
+            for recovery in status["recoveries"]
+        ]
+        for case in cases:
+            entry: dict[str, Any] = {
+                "id": case,
+                "backend": statuses[-1]["gpu_backend"] if statuses else BACKEND,
+                "result": "pass" if outcome == "passed" else "fail",
+                "seconds": round(seconds, 3),
+                "recoveries": recoveries,
+                **Settling.stamp(),
+            }
+            if statuses:
+                entry["gpu_status"] = statuses[-1]["gpu_status"]
+            if nodeid in _settled.metrics:
+                entry["metrics"] = _settled.metrics[nodeid]
+            entries.append(entry)
+    return entries
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    target = os.environ.get("UZP_SETTLING_REPORT")
+    if target and (_settled.calls or _settled.overhead):
+        settling_report.write(Path(target), _case_entries(), _settled.overhead)

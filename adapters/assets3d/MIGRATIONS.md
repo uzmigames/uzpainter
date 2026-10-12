@@ -2,23 +2,28 @@
 
 The UzmiGames adapter that lets the Assets3D pipeline scripts drive UzPainter byte-unchanged. Task `phase1.23_pyapi-pipeline-adapter`, decision 113. Architecture: `docs/architecture/10-python-api.md` §2 and §6.
 
-It is not part of the `substance_painter` facade. The facade holds Painter's documented symbols only. Every adaptation of how the pipeline reaches Painter is listed here, one entry per adapted call. The scripts themselves are never edited. The wand fixture pins them by SHA-256 (`tests/adapters/assets3d/wand.py`, from the R9 request manifest of decision 099):
+It is not part of the `substance_painter` facade. The facade holds Painter's documented symbols only. Every adaptation of how the pipeline reaches Painter is listed here, one entry per adapted call. The scripts themselves are never edited. The wand fixture pins them by SHA-256 (`tests/adapters/assets3d/wand.py`, from the R9 request manifest of decision 099, re-pinned to Assets3D `9a718b9` by decision 144):
 
 | Script | SHA-256 |
 |---|---|
 | `Pipeline/retopology/wand11-v1/painter_create.py` | `6820831ccd59b66314eaab5a010607f7f55d720e6d2e628aadf9d44a6018535f` |
-| `Pipeline/painting/painter_layer_stack.py` | `cc3037413a89c687ffb2d6b340ce1ad5a1351ad4924d7911c876eeb13d29eebc` |
+| `Pipeline/painting/painter_layer_stack.py` | `bf7006e256198879e5108b415439fb64d7e50b82d49afc58d2febaf3891ef62d` |
+| `Pipeline/qa/route_check.py` (imported by the layer-stack script) | `d2024ead911d86527e4702fb74cccc7ddeeeebe425c86ee61cfd8f094f87dbc8` |
 | `Pipeline/retopology/wand11-v1/painter_export.py` | `777ac278c7ce376bd8652bdd8400f0e5e5e1bef561262ccb7c22a9ac1c95c468` |
 
 ## Use
 
-Every Painter call of the pipeline goes through `painter_layer_stack.py`. The host-side change is one command prefix; the arguments and every absolute path stay as they are:
+The pipeline reaches Painter through `painter_layer_stack.py` or, for a call with no project open yet, through the MCP client directly. The host-side change is one command prefix; the arguments and every absolute path stay as they are:
 
 ```sh
-# before: "$MCP" "$LS" run painter_create.py      (the MCP venv's python)
-python E:/UzmiGames/UzPainter/adapters/assets3d/layer_stack.py "$LS" run painter_create.py
+# before: "$MCP" "$CLIENT" execute_python ARGS.json   (painter_create.py's code; the MCP venv's python)
+python E:/UzmiGames/UzPainter/adapters/assets3d/client.py execute_python ARGS.json
+# before: "$MCP" "$LS" run painter_export.py
+python E:/UzmiGames/UzPainter/adapters/assets3d/layer_stack.py "$LS" run painter_export.py
 python E:/UzmiGames/UzPainter/adapters/assets3d/layer_stack.py "$LS" sync --stack S.json --masks DIR --state STATE.json
 ```
+
+Since Assets3D `9a718b9` every layer-stack command (`run` included) first runs its route guard (M8), which needs a saved project open, so `painter_create.py` goes through the client.
 
 Any Python 3.13 runs it; the script needs only the standard library. Environment: `UZPAINTER_EXE` (else `UzPainter.exe` on PATH), and optionally `UZP_ASSETS3D_SESSION` (the session file, default `%LOCALAPPDATA%/UzPainter/assets3d-adapter/session.json`) and `UZP_ASSETS3D_ROOT` (default: the script's own root). `--pin FILE=SHA256` (repeatable, before the script path) refuses the call when a file's bytes differ.
 
@@ -84,6 +89,12 @@ Any Python 3.13 runs it; the script needs only the standard library. Environment
 - **UzPainter, the wand fixture only:** the runner's namespace `open` maps exactly the paths given in `UZP_ASSETS3D_OPEN_REDIRECTS` (JSON `{path: copy}`) to their copies. This is decision 099's adaptation (a). The fixture's copies name a mirror of the Assets3D tree in its work directory, so nothing is written under Assets3D.
   - The reply's `redirects` lists every redirect applied, so none is silent.
   - The pipeline never sets the variable, and with it unset `open` is the builtin.
+
+### M8. The layer-stack script's route guard (Assets3D `9a718b9`, decision 144)
+
+- **Painter:** before each command, `route_guard` sends its own probe `GUARD_CODE` through the script's `execute()`: the open project's `file_path()`, the texture set of the active (or named) stack and its root group names. It then calls `route_check.locate()` on the project path. Outside a new-layout character (`Creatures/<Family>/<Name>/Project/`, a folder beside `Concept/`) the verdict is `legacy` and the command runs with no attempt token. Inside one, the production runner (`Pipeline/production/run.py`) must have the piece's paint stage open and the project must be the copy in its attempt folder; the command then passes that attempt's token to the MCP client as `UZ_ROUTE_TOKEN`. No saved project open: the probe fails, or the guard exits `ROUTE BLOCKED`.
+- **UzPainter:** the probe is an ordinary `execute()` call (M1), served by the facade's documented calls, and `route_check` is the script's own import. Nothing is adapted. The wand fixture runs the scripts from their staged, pinned copies, so the import is the pinned `route_check.py` (`--pin` covers it).
+- **Difference:** Assets3D's MCP client has its own guard since `9a718b9`: code that changes a project of a new-layout character is refused unless `UZ_ROUTE_TOKEN` carries the open attempt's token. `client.py` ignores `UZ_ROUTE_TOKEN` and has no such check. For a project outside the new layout (every fixture here, and the Skeletal Mage), both pass. A new-layout character through the adapter is not guarded by the client; owner decision pending (decision 144).
 
 ## Not adapted (UzPainter differs; owners named)
 

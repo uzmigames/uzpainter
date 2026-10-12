@@ -21,6 +21,7 @@ from tools.parity.store.store import (
     StoreError,
     default_root,
     locate,
+    sha256_file,
 )
 
 RECORD_KINDS: list[str] = load_schema(Schema.GOLDEN_PUBLIC)["$defs"]["private_record_ref"][
@@ -43,6 +44,11 @@ def _parser() -> argparse.ArgumentParser:
     record.add_argument("--record-id", help="record id of a single file")
     record.add_argument("--kind", choices=RECORD_KINDS, help="kind of the single file")
     record.add_argument("--file", type=Path, help="the recorded file")
+    stored_input = commands.add_parser(
+        "input", help="store an authored input a manifest pins by hash (owner's machine only)"
+    )
+    stored_input.add_argument("file", type=Path)
+    stored_input.add_argument("--path", required=True, help="the path the manifest pins it at")
     fetch_parser = commands.add_parser("fetch", help="copy the blobs a manifest names")
     fetch_parser.add_argument("manifest", type=Path)
     fetch_parser.add_argument(
@@ -95,6 +101,13 @@ def _run(args: argparse.Namespace) -> int:
         else:
             raise StoreError("pass either --run DIR or all of --record-id, --kind and --file")
         print(f"{args.manifest.as_posix()}: {len(updated['private_records'])} private record(s)")
+        return 0
+    if args.command == "input":
+        if found is None:
+            raise StoreError("no initialised store on this machine; `input` runs only there")
+        sha256, _ = sha256_file(args.file)
+        size = found.add_input(args.file, sha256, args.path)
+        print(f"{sha256}  {size}  {args.path}")
         return 0
     if args.command == "fetch":
         results = fetch(found, load_manifest(args.manifest), args.out)

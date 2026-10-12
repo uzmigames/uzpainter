@@ -31,7 +31,9 @@ def dx12_session(painter: Path, tmp_path: Path, sessions: list[Mcp], *args: str)
     status = session.status()
     if status["gpu_status"] != "ready":
         pytest.skip("no DX12 device on this machine")
-    revision = session.call("project_open", {"path": str(project)})["result"]["revision"]
+    revision = session.call("project_open", {"path": str(project), "wait": True})["result"][
+        "revision"
+    ]
     return session, revision
 
 
@@ -85,8 +87,15 @@ def test_evaluation_returns_its_payload_by_path_and_hash(
 @pytest.mark.parametrize(
     ("fault", "code", "args"),
     [
-        ("remove_device", "device_removed", ()),
-        ("gpu_stall", "timeout", ("--gpu-deadline-ms", "3000")),
+        pytest.param(
+            "remove_device", "device_removed", (), marks=pytest.mark.settling("device_lost")
+        ),
+        pytest.param(
+            "gpu_stall",
+            "timeout",
+            ("--gpu-deadline-ms", "3000"),
+            marks=pytest.mark.settling("gpu_stall"),
+        ),
     ],
 )
 def test_device_fault_fails_the_job_and_relaunches_on_the_same_backend(

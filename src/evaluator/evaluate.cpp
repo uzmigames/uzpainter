@@ -29,21 +29,34 @@ render::Result<std::shared_ptr<const DecodedImage>> GreenInverted(const DecodedI
     return std::shared_ptr<const DecodedImage>(std::move(inverted));
 }
 
-/// An sRGB bitmap as an sRGB8 channel stores it (sources.h): every 16-bit code c becomes the
-/// sRGB8 code of the sRGB decode of float32(c / 65535), an 8-bit image the size of the bitmap.
-/// Only a 16-bit colour bitmap is recorded.
+/// An sRGB bitmap as an sRGB8 channel stores it (sources.h), an 8-bit colour image the size of
+/// the bitmap: every 16-bit code c becomes the sRGB8 code of the sRGB decode of float32(c / 65535),
+/// every 8-bit code is its own sRGB8 code, and a grey bitmap feeds the three channels. A 16-bit
+/// colour or grey and an 8-bit colour bitmap are recorded; an 8-bit grey one is not.
 render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedImage& image, core::Id node) {
-    if (image.channels != 3 || image.encoding != render::TexelEncoding::Unorm16) {
+    const bool sixteen = image.encoding == render::TexelEncoding::Unorm16;
+    const bool recorded = image.channels == 3 ? sixteen || image.encoding == render::TexelEncoding::Unorm8
+                                              : image.channels == 1 && sixteen;
+    if (!recorded) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "an sRGB bitmap is recorded as a 16-bit colour image only "
+                        "an sRGB bitmap is recorded as a 16-bit colour or grey or an 8-bit colour image only "
                         "(phase1.15_compositor-colour-fits)",
                         node);
     }
-    auto decoded = std::make_shared<DecodedImage>(image);
+    auto decoded = std::make_shared<DecodedImage>();
+    decoded->width = image.width;
+    decoded->height = image.height;
+    decoded->channels = 3;
     decoded->encoding = render::TexelEncoding::Unorm8;
-    for (uint32_t& value : decoded->values) {
-        const double x = arith::UnormOperand(value, 16);
-        value = arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x)));
+    const size_t texels = size_t{image.width} * image.height;
+    decoded->values.resize(texels * 3);
+    for (size_t t = 0; t < texels; ++t) {
+        for (uint32_t c = 0; c < 3; ++c) {
+            const uint32_t code = image.values[t * image.channels + (image.channels == 1 ? 0 : c)];
+            decoded->values[t * 3 + c] =
+                sixteen ? arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(arith::UnormOperand(code, 16))))
+                        : code;
+        }
     }
     return std::shared_ptr<const DecodedImage>(std::move(decoded));
 }

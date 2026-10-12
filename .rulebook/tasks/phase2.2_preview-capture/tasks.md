@@ -64,6 +64,6 @@
   - ruff and mypy --strict on every touched Python file; `zig build painter pyapi-tests preview-tests` with -Werror.
 - 3.6: the shim is tested through `UzPainter.exe run runner.py`. The capture the pipeline's `capture` subcommand makes (its CAPTURE_CODE) writes a 64 x 48 PNG and its receipt on the OCIO fixture.
   - `test_capture_on_the_legacy_wand_is_the_unsupported_configuration` runs the pipeline's own subcommand on the Legacy wand, where the expected refusal is `UnsupportedInUzPainter unsupported_configuration`.
-  - It could not run here: every wand-based adapter test errors at setup. Assets3D's `Pipeline/painting/painter_layer_stack.py` now hashes `3744a8ca...`, not the R9 request manifest's pin. This comes from Assets3D's reorganisation and is not caused by this task. Re-pinning (or restoring the script) is for the owner or coordinator.
+  - After the merge of main (Wand R9 re-pin 261c912, decision 144: inputs resolved by hash from the private store), `tests/preview/test_preview_capture.py` and `tests/adapters/assets3d/test_pipeline_adapter.py` passed 27 of 27, the Legacy-wand subcommand test among them (exit 0, 2026-10-12).
   - The subcommand's success path on a painted project is the decision-148 scope split (phase1.15, phase1.18).
 - 4.1: results attached to `phase2.3_realtime-preview` (its notes).
