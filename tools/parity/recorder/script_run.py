@@ -15,7 +15,10 @@ repository (Assets3D), named by SHA-256 and `assets3d_path` only. The job is thr
    the project and exports its maps into `out`.
 
 Every script runs from its pinned bytes, read once and hashed; nothing is ever imported from
-another copy. Two adaptations, both by the recorder, are the only changes to how the scripts run:
+another copy. An input resolves at its `assets3d_path` when the file there holds the pinned bytes,
+else from the private store by its hash (`tools.parity.store`, `input` command): Assets3D's `_tmp`
+is volatile, and a pin must outlive it (decision 144). Two adaptations, both by the recorder, are
+the only changes to how the scripts run:
 
 a. **Repointed arguments.** The inputs are hash-checked under `--assets-root` and copied into the
    private work directory. Each Painter-side script runs in a fresh namespace whose `open` maps
@@ -23,9 +26,14 @@ a. **Repointed arguments.** The inputs are hash-checked under `--assets-root` an
    arguments file in which `mesh`, `normal` and `ao` name the staged copies, `dst` a project in
    the work directory and `out` a fresh export directory; every other key is unchanged
    (`painter_scripts.py`).
-b. **Transport swap.** The sync script's own `execute(code)` is replaced by the recorder's remote
-   control with the same contract (run the code in Painter, return the `result` it assigns), so
-   the Painter-side code the script builds is the script's own.
+b. **Transport swap.** The sync script's own `execute(code, token=None)` is replaced by the
+   recorder's remote control with the same contract (run the code in Painter, return the `result`
+   it assigns), so the Painter-side code the script builds is the script's own. Its route guard
+   (Assets3D `9a718b9`, decision 144) sends its own probe (`GUARD_CODE`) through the same function
+   before the sync; the modules the script imports from Assets3D (`route_check`) are pinned
+   inputs named by the sync step's `imports` and loaded from their pinned bytes for the run. The
+   project lies in the private work directory, outside a production character's folder, so the
+   guard passes without an attempt token; any other verdict is refused.
 
 Recordings: `r1` (`same_session`: create, sync, export), `r1-repeat` (`same_session`: export again
 into a fresh directory) and `r2` (`after_save_reopen`: close, reopen the saved project, export
@@ -43,6 +51,7 @@ import base64
 import json
 import shutil
 import sys
+import types
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -66,6 +75,7 @@ from tools.parity.recorder.texture import (
     utc_now,
 )
 from tools.parity.schemas import Schema, load_json, validation_errors
+from tools.parity.store.store import OracleStore, Status, locate
 
 INTERFACE = "uzmigames_pipeline_scripts"
 RUN_SCRIPT = "uzmigames.pipeline.run_script"
@@ -81,7 +91,7 @@ CREATE_INPUTS = {
     "normal": ("image",),
     "ao": ("image",),
 }
-SYNC_ARGS = frozenset({"script", "command", "stack", "masks", "mask_files"})
+SYNC_ARGS = frozenset({"script", "command", "stack", "masks", "mask_files", "imports"})
 EXPORT_INPUTS = {"script": ("pipeline_script",), "args_file": ("recipe_json",)}
 MASK_KINDS = ("mask", "image")
 SYNC_COMMAND = "sync"
@@ -110,6 +120,11 @@ class PinnedInput:
     def name(self) -> str:
         return PurePosixPath(self.assets3d_path).name
 
+    @property
+    def module(self) -> str:
+        """The module name an import of this file uses: its file stem."""
+        return PurePosixPath(self.assets3d_path).stem
+
 
 @dataclass(frozen=True)
 class ScriptStep:
@@ -118,6 +133,7 @@ class ScriptStep:
     script: PinnedInput
     hard_coded_args: str | None = None  # the arguments path as written in the script
     arguments: dict[str, Any] | None = None  # the authored arguments file
+    imports: tuple[PinnedInput, ...] = ()  # pinned modules the sync script imports
 
 
 @dataclass(frozen=True)
@@ -142,19 +158,35 @@ def tail_matches(path: str, assets3d_path: str) -> bool:
     return written.endswith("/" + assets3d_path.lower())
 
 
-def pinned_inputs(manifest: dict[str, Any], assets_root: Path) -> dict[str, PinnedInput]:
+def input_file(item: dict[str, Any], assets_root: Path, store: OracleStore | None) -> Path:
+    """The file holding an input's pinned bytes: its Assets3D path when the file there matches the
+    pin, else the private store's blob of that hash; refused when neither holds them."""
+    file: Path = assets_root / item["assets3d_path"]
+    found = sha256_file(file) if file.is_file() else None
+    if found == item["sha256"]:
+        return file
+    stored = store.resolve(item["input_id"], item["sha256"]) if store is not None else None
+    if stored is not None and stored.status is Status.AVAILABLE and stored.path is not None:
+        return stored.path
+    state = "does not exist" if found is None else f"has sha256 {found}, not the pinned one"
+    raise RecorderError(
+        f"input {item['input_id']}: {file} {state}, and the private store holds no blob "
+        f"{item['sha256']} ({stored.reason if stored is not None else 'no private store here'})"
+    )
+
+
+def pinned_inputs(
+    manifest: dict[str, Any], assets_root: Path, store: OracleStore | None
+) -> dict[str, PinnedInput]:
     inputs: dict[str, PinnedInput] = {}
     for item in manifest["inputs"]:
         where = f"input {item['input_id']}"
         if "assets3d_path" not in item or item["provenance"]["licence"] != ASSETS3D_LICENCE:
             raise RecorderError(f"{where}: a pipeline-script job names Assets3D inputs only")
-        file = assets_root / item["assets3d_path"]
-        if not file.is_file():
-            raise RecorderError(f"{where}: {file} does not exist")
+        file = input_file(item, assets_root, store)
         data = file.read_bytes() if item["kind"] == "pipeline_script" else None
-        actual = sha256_bytes(data) if data is not None else sha256_file(file)
-        if actual != item["sha256"]:
-            raise RecorderError(f"{where}: sha256 {actual} of {file} differs from the manifest")
+        if data is not None and sha256_bytes(data) != item["sha256"]:
+            raise RecorderError(f"{where}: {file} changed while it was read")
         inputs[item["input_id"]] = PinnedInput(
             item["input_id"], item["kind"], item["assets3d_path"], item["sha256"], file, data
         )
@@ -188,6 +220,18 @@ def hard_coded_args_path(script: PinnedInput, arguments: PinnedInput, step: int)
             f"{arguments.assets3d_path} in exactly one string literal (found {sorted(found)})"
         )
     return found.pop()
+
+
+def imported_modules(script: PinnedInput) -> set[str]:
+    """Top-level module names the script's `import` and `from ... import` statements name."""
+    assert script.data is not None
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(script.data, filename=script.name)):
+        if isinstance(node, ast.Import):
+            names |= {alias.name.split(".")[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            names.add(node.module.split(".")[0])
+    return names
 
 
 def arguments_file(file: PinnedInput, keys: frozenset[str], step: int) -> dict[str, Any]:
@@ -244,7 +288,15 @@ def script_step(raw: dict[str, Any], inputs: dict[str, PinnedInput]) -> tuple[st
                 f"step {step}: the stack references the bitmaps {sorted(referenced)}, not the "
                 f"masks given {sorted(names)}"
             )
-        return "sync", ScriptStep(step, args, script)
+        if not isinstance(args["imports"], list):
+            raise RecorderError(f"step {step}: `imports` must be a list of pipeline-script inputs")
+        modules = tuple(
+            input_of(inputs, step, "imports", m, ("pipeline_script",)) for m in args["imports"]
+        )
+        missing = {m.module for m in modules} - imported_modules(script)
+        if missing:
+            raise RecorderError(f"step {step}: {script.name} imports no module {sorted(missing)}")
+        return "sync", ScriptStep(step, args, script, imports=modules)
     raise RecorderError(f"step {step}: arguments {sorted(args)} are no create, sync or export")
 
 
@@ -254,14 +306,17 @@ def stack_bitmaps(stack: dict[str, Any]) -> set[str]:
     return names | {x["base_tex"] for x in stack["layers"] if x.get("base_tex")}
 
 
-def script_job_from_manifest(manifest: dict[str, Any], assets_root: Path) -> ScriptJob:
-    """The job of a pipeline-script manifest; refused before Painter is touched on any missing
-    input, hash mismatch or step the recorder does not know."""
+def script_job_from_manifest(
+    manifest: dict[str, Any], assets_root: Path, store: OracleStore | None = None
+) -> ScriptJob:
+    """The job of a pipeline-script manifest; refused before Painter is touched on any input
+    neither Assets3D nor the private store (`store`, default: this machine's) holds, or any step
+    the recorder does not know."""
     if manifest["instruction_sequence"]["interface"] != INTERFACE:
         raise RecorderError(f"{manifest['golden_id']}: the interface is not {INTERFACE}")
     if manifest["tier"] != "1":
         raise RecorderError(f"{manifest['golden_id']}: pipeline-script goldens are Tier 1")
-    inputs = pinned_inputs(manifest, assets_root.resolve())
+    inputs = pinned_inputs(manifest, assets_root.resolve(), store or locate())
     steps = manifest["instruction_sequence"]["steps"]
     if [s["step"] for s in steps] != list(range(1, len(steps) + 1)):
         raise RecorderError("instruction steps must be numbered 1..n in order")
@@ -271,12 +326,12 @@ def script_job_from_manifest(manifest: dict[str, Any], assets_root: Path) -> Scr
     return ScriptJob(manifest, inputs, roles[0][1], roles[1][1], roles[2][1])
 
 
-def load_script_job(path: Path, assets_root: Path) -> ScriptJob:
+def load_script_job(path: Path, assets_root: Path, store: OracleStore | None = None) -> ScriptJob:
     manifest = load_json(path)
     problems = validation_errors(manifest, Schema.GOLDEN_PUBLIC)
     if problems:
         raise RecorderError(f"{path}: not a valid public manifest: {problems}")
-    return script_job_from_manifest(manifest, assets_root)
+    return script_job_from_manifest(manifest, assets_root, store)
 
 
 def extension_code(source: str) -> str:
@@ -317,9 +372,19 @@ def run_in_painter(
     return reply["result"]
 
 
+STAGED_ROOT_MARKER = "AGENTS.md"  # the file the pipeline scripts find their Assets3D root by
+
+
 def stage_inputs(job: ScriptJob, root: Path) -> dict[str, Path]:
     """Copy every input to `root/<assets3d_path>` (file names and folders kept) and check each
-    copy's hash: Painter reads only these copies, never the asset repository."""
+    copy's hash: Painter reads only these copies, never the asset repository. A root marker makes
+    a script run from its staged copy find `root` as its Assets3D root, so what it imports from
+    there is the staged, pinned copy."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / STAGED_ROOT_MARKER).write_text(
+        "Staged copy of pinned Assets3D inputs (UzPainter recorder; decision 144).\n",
+        encoding="utf-8",
+    )
     staged: dict[str, Path] = {}
     for item in job.inputs.values():
         target = root / item.assets3d_path
@@ -372,26 +437,63 @@ def run_create(
     return result, project
 
 
+def pinned_module(item: PinnedInput, file: Path) -> types.ModuleType:
+    """The module an import of `item` gives, executed from its pinned bytes as `file`."""
+    assert item.data is not None
+    module = types.ModuleType(item.module)
+    module.__file__ = str(file)
+    exec(compile(item.data, str(file), "exec", dont_inherit=True), module.__dict__)
+    return module
+
+
 def run_sync(
     session: PainterSession, job: ScriptJob, staged: dict[str, Path], directory: Path
 ) -> Any:
-    """Run the sync command line host-side from the pinned bytes, its `execute` swapped for the
-    recorder's remote control (same contract: run the code, return its `result`)."""
-    step = job.sync
+    """Run the sync command line host-side from the pinned bytes, with the script's Assets3D
+    imports loaded from their pinned bytes; `sys.path` and `sys.modules` are restored after."""
+    saved_path = list(sys.path)
+    saved_modules = {item.module: sys.modules.get(item.module) for item in job.sync.imports}
+    try:
+        for item in job.sync.imports:
+            sys.modules[item.module] = pinned_module(item, staged[item.input_id])
+        return sync_command(session, job.sync, staged, directory)
+    finally:
+        sys.path[:] = saved_path
+        for name, module in saved_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+
+def sync_command(
+    session: PainterSession, step: ScriptStep, staged: dict[str, Path], directory: Path
+) -> Any:
+    """The sync command line, its `execute` swapped for the recorder's remote control (same
+    contract: run the code, return its `result`). The script's route guard sends its probe through
+    it first; a verdict other than "outside the production layout" (no attempt token) is
+    refused. The script runs as its staged copy, so its Assets3D root is the staged mirror."""
     script = step.script
     assert script.data is not None
-    namespace: dict[str, Any] = {
-        "__name__": "uzp_pipeline_layer_stack",
-        "__file__": str(script.file),
-    }
-    exec(compile(script.data, str(script.file), "exec", dont_inherit=True), namespace)
+    file = staged[script.input_id]
+    namespace: dict[str, Any] = {"__name__": "uzp_pipeline_layer_stack", "__file__": str(file)}
+    exec(compile(script.data, str(file), "exec", dont_inherit=True), namespace)
     if not callable(namespace.get("execute")) or not callable(namespace.get("main")):
         raise RecorderError(f"{script.name} defines no `execute(code)` and `main()` to run")
-    results: list[Any] = []
+    if not isinstance(namespace.get("GUARD_CODE"), str):
+        raise RecorderError(f"{script.name} defines no route guard probe `GUARD_CODE`")
+    guard = namespace["GUARD_CODE"].replace("__TS__", repr(None))  # no --texture-set is given
+    calls: list[tuple[str, Any]] = []
 
-    def execute(code: str) -> Any:
+    def execute(code: str, token: str | None = None) -> Any:
+        if token is not None:
+            raise RecorderError(
+                f"{script.name}'s route guard placed the project in a production character's "
+                "paint attempt (it returned an attempt token): the recorder runs the wand only "
+                "outside the production layout"
+            )
         value = run_in_painter(session, code.encode("utf-8"), f"{script.name} {SYNC_COMMAND}")
-        results.append(value)
+        calls.append((code, value))
         return value
 
     namespace["execute"] = execute
@@ -413,12 +515,17 @@ def run_sync(
     sys.argv = argv
     try:
         namespace["main"]()
+    except SystemExit as exit:
+        raise RecorderError(f"{script.name} {SYNC_COMMAND} exited: {exit.code}") from exit
     finally:
         sys.argv = saved_argv
-    if len(results) != 1:
-        raise RecorderError(f"{script.name} sync ran {len(results)} Painter calls, not one")
+    if len(calls) != 2 or calls[0][0] != guard:
+        raise RecorderError(
+            f"{script.name} sync ran {len(calls)} Painter calls, not its route guard's probe "
+            "and then one sync"
+        )
     session.wait_ready()
-    return results[0]
+    return calls[1][1]
 
 
 def texture_set_of(key: str) -> str:
@@ -590,6 +697,7 @@ WAND_SCRIPTS = "Pipeline/retopology/wand11-v1"
 WAND_INPUTS: tuple[tuple[str, str, str], ...] = (
     ("painter-create-py", "pipeline_script", f"{WAND_SCRIPTS}/painter_create.py"),
     ("painter-layer-stack-py", "pipeline_script", "Pipeline/painting/painter_layer_stack.py"),
+    ("route-check-py", "pipeline_script", "Pipeline/qa/route_check.py"),
     ("painter-export-py", "pipeline_script", f"{WAND_SCRIPTS}/painter_export.py"),
     ("painter-create-args", "recipe_json", f"{WAND}/painter_create_args.json"),
     ("painter-export-args", "recipe_json", f"{WAND}/painter_export_args.json"),
@@ -631,7 +739,12 @@ WAND_DESCRIPTION = (
     "that path to a copy of the arguments in which mesh, normal, ao, dst and out name the staged "
     "copies and the work directory, every other key unchanged; (2) the sync command's own "
     "remote-execution function is replaced by the recorder's remote control with the same "
-    "contract, so the Painter-side code the script builds is its own. Recordings: r1 (same "
+    "contract, so the Painter-side code the script builds is its own. Its route guard (Assets3D "
+    "9a718b9; decision 144) sends its own probe through that function before the sync and "
+    "imports locate from Pipeline/qa/route_check.py, pinned here and loaded from its pinned "
+    "bytes; the project lies in the private work directory, outside a production character's "
+    "folder, so the guard passes with no attempt token, and any other verdict is refused. "
+    "Recordings: r1 (same "
     "session: create, sync, export), r1-repeat (same session, export again) and r2 (after save, "
     "close and reopen, export again). Recorded on Painter 12.1.5 (the current envelope; "
     "phase1.25's text says 12.1.0)."
@@ -695,6 +808,7 @@ def wand_manifest(assets_root: Path) -> dict[str, Any]:
                         "stack": "wand-stack",
                         "masks": [m["input_id"] for m in masks],
                         "mask_files": [f"{name}.png" for name in bitmaps],
+                        "imports": ["route-check-py"],
                     },
                 },
                 {

@@ -1,0 +1,12 @@
+{
+  "id": 144,
+  "slug": "r9-follows-the-owner-s-committed-pipeline-its-route-guard-runs-unadapted-and-its-pinned-inputs-outlive-assets3d-tmp-in-the-private-store",
+  "title": "R9 follows the owner's committed pipeline, its route guard runs unadapted, and its pinned inputs outlive Assets3D _tmp in the private store",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.23_pyapi-pipeline-adapter"
+  ],
+  "supersededBy": null
+}

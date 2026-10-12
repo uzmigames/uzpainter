@@ -119,6 +119,32 @@ def test_store_layout_is_content_addressed_and_write_once(
     assert store.check() == []
 
 
+def test_an_input_is_stored_by_hash_with_its_pinned_path(
+    store: OracleStore, authored: Path
+) -> None:
+    """Decision 144: an authored input a manifest pins resolves from the store by its hash."""
+    digest = sha256(AUTHORED)
+    assert cli(store, "input", authored, "--path", "_tmp/claude/mask.pgm") == 0
+    assert cli(store, "input", authored, "--path", "_tmp/claude/mask.pgm") == 0  # idempotent
+    entry = load_json(store.root / "inputs" / f"{digest}.json")
+    assert entry == {
+        "schema": "uzpainter/parity/store-input/1",
+        "sha256": digest,
+        "size_bytes": len(AUTHORED),
+        "path": "_tmp/claude/mask.pgm",
+    }
+    resolution = store.resolve("mask", digest)
+    assert resolution.status is Status.AVAILABLE and resolution.path is not None
+    assert resolution.path.read_bytes() == AUTHORED
+    assert store.index() == {digest} and store.check() == []
+    os.chmod(resolution.path, stat.S_IREAD | stat.S_IWRITE)
+    resolution.path.unlink()
+    store.root.joinpath("index.json").write_text(
+        json.dumps({"schema": "uzpainter/parity/store-index/1", "sha256": []}), encoding="utf-8"
+    )
+    assert any("names a missing blob" in problem for problem in store.check())
+
+
 def test_init_is_idempotent_and_refuses_foreign_or_repository_folders(tmp_path: Path) -> None:
     root = tmp_path / "store"
     OracleStore.init(root)
