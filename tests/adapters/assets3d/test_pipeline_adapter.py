@@ -670,6 +670,59 @@ def test_a_project_saved_under_a_relative_path_is_reopened_where_it_was_saved(
     assert Path(carried["data"]["path"]) == saved
 
 
+OPENED_BUNDLE = """
+import os
+import uzpainter
+import substance_painter.project as p
+p.close()
+os.chdir(__PARENT__)
+p.open("bundle")
+os.chdir(__ELSEWHERE__)
+result = {"uuid": str(p.get_uuid()), "path": uzpainter.project.absolute_file_path()}
+"""
+
+
+def test_a_project_opened_from_a_bundle_directory_is_reopened_from_its_store_file(
+    created: Wand, adapter_env: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decision 118 (Codex audit): a call opens a bundle directory by a relative path, which imports
+    it into the adjacent `bundle.uzp`; the next call, from another directory, reopens that store
+    file (importing the directory again would fail: the `.uzp` exists)."""
+    parent, first, second, elsewhere = (
+        tmp_path / name for name in ("bundles", "first", "second", "elsewhere")
+    )
+    for folder in (parent, first, second, elsewhere):
+        folder.mkdir()
+    exported = subprocess.run(
+        [
+            created.env["UZPAINTER_EXE"],
+            "export-bundle",
+            str(created.argument("create", "dst")),
+            str(parent / "bundle"),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    assert exported.returncode == 0, exported.stdout + exported.stderr
+    monkeypatch.chdir(first)
+    code = OPENED_BUNDLE.replace("__PARENT__", repr(str(parent))).replace(
+        "__ELSEWHERE__", repr(str(elsewhere))
+    )
+    reply, status = client.execute_python(code)
+    assert status == client.OK, reply["error"]
+    store = parent / "bundle.uzp"
+    assert Path(reply["data"]["path"]) == store
+    assert Path(reply["session"]["project"]) == store  # native paths use `/` (generic form)
+    monkeypatch.chdir(second)
+    carried, status = client.execute_python(CARRIED)
+    assert status == client.OK, carried["error"]
+    assert carried["data"]["uuid"] == reply["data"]["uuid"]
+    assert Path(carried["data"]["path"]) == store
+
+
 RELATIVE_REOPEN = (
     """
 import os

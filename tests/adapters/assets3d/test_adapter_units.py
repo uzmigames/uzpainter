@@ -407,3 +407,29 @@ def test_a_session_naming_a_relative_path_is_emptied_before_anything_opens(
         runner.restore_session(session_file)
     assert opened == []
     assert json.loads(session_file.read_text(encoding="utf-8")) == {}
+
+
+def test_a_project_opened_from_a_bundle_is_carried_as_its_store_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decision 118 (Codex audit): a bundle directory opens as the `.uzp` it is imported into, and
+    importing it again fails because that file exists. The session carries what the native
+    `absolute_file_path()` names, the store file, so the next call reopens it instead of
+    re-importing the directory."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "bundle.json").write_text("{}", encoding="utf-8")
+    store = tmp_path / "bundle.uzp"
+    store.write_text("imported project", encoding="utf-8")
+    opened: list[Path] = []
+    fake_session_modules(monkeypatch, "bundle.uzp", str(store), opened)
+    monkeypatch.chdir(tmp_path)
+    carried = runner.session_left_open()
+    assert carried is not None and carried["project"] == str(store)
+    session_file = tmp_path / "session.json"
+    session_file.write_text(json.dumps(carried), encoding="utf-8")
+    client_dir = tmp_path / "client"
+    client_dir.mkdir()
+    monkeypatch.chdir(client_dir)
+    assert runner.restore_session(session_file) == carried
+    assert opened == [store]

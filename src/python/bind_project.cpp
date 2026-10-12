@@ -226,8 +226,9 @@ void BindProject(py::module_& m) {
             if (!project->untitled_dir.empty()) return py::none();
             return py::str(Utf8(project->project_source));
         },
-        "The project file as an absolute path, resolved against the working directory when `open` or "
-        "`save_as` named it (decision 118); None while untitled.");
+        "The project's store file as an absolute path, resolved against the working directory when `open` "
+        "or `save_as` ran (a bundle directory: the `.uzp` it was imported into; decision 118); None while "
+        "untitled.");
     m.def("name", [] {
         // A project never saved is named "Untitled", as Painter names it (textureset-project-readback,
         // both recordings; the `$project` export wildcard reads the same name).

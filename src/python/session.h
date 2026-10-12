@@ -74,11 +74,12 @@ struct OpenProject {
     std::filesystem::path untitled_dir;
     /// The mesh file the project was created from (`last_imported_mesh_path`).
     std::string mesh_path;
-    /// The project file as an absolute path, resolved against the working directory when the
-    /// call that named it ran (an export job names its project with it, and
+    /// The file the store reads and writes, as an absolute path resolved against the working
+    /// directory when `open` or `save_as` ran: a bundle directory opens as the `.uzp` it was
+    /// imported into, and this names that file. An export job names its project with it, and
     /// `project.absolute_file_path()` returns it, so a later change of directory or of project does
-    /// not move it). Empty while untitled. The mesh's source is the document's own
-    /// `MeshReference::source`.
+    /// not move it and reopening it reopens the project (decision 118). Empty while untitled. The
+    /// mesh's source is the document's own `MeshReference::source`.
     std::filesystem::path project_source;
     /// The default `(texture set, stack)` address (`textureset.get/set_active_stack`).
     core::Id active_set = core::kNoId;

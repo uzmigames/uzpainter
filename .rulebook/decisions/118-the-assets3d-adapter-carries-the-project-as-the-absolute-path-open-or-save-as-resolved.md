@@ -17,7 +17,7 @@ The native session already holds the right value. Since phase1.24, `Session::Ope
 
 ## Decision
 
-1. **`uzpainter.project.absolute_file_path()`**, a UzPainter-only native function, returns `project_source`, or None while the project is untitled. `file_path()` is unchanged: it still returns the path as the call named it.
+1. **`uzpainter.project.absolute_file_path()`**, a UzPainter-only native function, returns `project_source`, or None while the project is untitled. `project_source` is the store's own file, `absolute(store->path())`, taken right after `open` or `save_as`. A bundle directory opens as the `.uzp` it is imported into, and reopening the directory would fail because that file exists, so the durable identity is the `.uzp`. No caller needs the directory itself, so no separate provenance field is kept. `file_path()` is unchanged: it still returns the path as the call named it.
 2. **The runner carries `absolute_file_path()`** as the session's `project`. It never resolves `file_path()` under the directory the script ends in.
 3. **A session file that names a relative path** fails the call before anything opens, and the session is emptied. Such a file was written before this decision, and resolving it under the client's directory is the bug itself.
 4. The capability manifest lists the function as `pending-evidence` (decision 112). It is UzPainter-only, as `template()` is (decision 115 §4).
@@ -33,4 +33,4 @@ The native session already holds the right value. Since phase1.24, `Session::Ope
 - `tests/adapters/assets3d/test_adapter_units.py`: host tests of both audit cases, with and without a same-named file, and of a relative session file being refused.
 - `tests/adapters/assets3d/test_pipeline_adapter.py`: a native two-call regression. The first call changes directory and saves under a relative path. The second, run from another directory that holds a same-named project, must reopen the saved project, same UUID and same path.
 - Docs: `adapters/assets3d/MIGRATIONS.md` M4, `src/python/PYAPI.md`, `docs/architecture/10-python-api.md` §7.
-- phase1.24's report §5 lists the carry as fixed: the native regression passed at fbfbf97 on 2026-10-12 (fix 1c09894).
+- phase1.24's report §5 lists the carry as open until the bundle regression passes. The relative-path regression passed at fbfbf97 on 2026-10-12 (fix 1c09894).
