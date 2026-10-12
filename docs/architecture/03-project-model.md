@@ -8,8 +8,11 @@ Implements D3 (document part) and parts of D8/D9 (`05-resolution.md`). Requireme
 Project
 ├── settings: normal_map_format (OpenGL|DirectX), tangent_space (PerVertex|PerFragment), workflow (Default|UVTile),
 │             default_resolution, mesh_unit_scale, color_management {mode, config_hash, working_space, io_rules},
-│             import_cameras, auto_unwrap (release gap: recorded, rejected at import)
-├── mesh: resource ref (original bytes), import report, texturing mesh derived data (not stored; re-derived)
+│             import_cameras, auto_unwrap (release gap: recorded, rejected at import),
+│             template (the template id the stacks were created from and whose base values every evaluation
+│             reads; absent = "default"; decision 116)
+├── mesh: resource ref (original bytes), import report, source (the absolute path the last create or reload
+│         imported it from; optional), texturing mesh derived data (not stored; re-derived)
 ├── texture_sets[]: TextureSet { id, name, original_name, description, material_id, resolution,
 │     uv_tiles[] (Default workflow: the single tile 1001), mesh_maps{usage → MeshMapBinding},
 │     bake_settings {common, detail, per_baker}, height_to_normal_method (Sharp | SmoothSobel; absent = Sharp,

@@ -264,3 +264,56 @@ def test_one_call_at_a_time_holds_the_session(tmp_path: Path) -> None:
         assert (tmp_path / "s" / "session.json.lock").is_file()
     with client.session_lock(session):  # released
         pass
+
+
+@pytest.mark.parametrize("final_project", ["original", "different", "closed"])
+def test_an_export_keeps_the_sources_it_was_started_from(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, final_project: str
+) -> None:
+    """Each export's manifest names the project and mesh the export was started from (the
+    publication's `project_path` and `mesh_path`), whatever project is open when the run ends:
+    the same one, another one, or none."""
+    from types import SimpleNamespace
+
+    root = tmp_path / "assets"
+    generation = root / "exports" / "generations" / "000001"
+    generation.mkdir(parents=True)
+    receipt = {
+        "manifest_export": {"sources": ["project", "mesh"], "outputs": []},
+        "manifest_files": {
+            "project": {"path": "A.spp", "sha256": "hash-of-A"},
+            "mesh": {"path": "A.obj", "sha256": "hash-of-A-mesh"},
+        },
+    }
+    receipt_file = generation / "receipt.json"
+    receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+    publication = {
+        "fixed_names": [],
+        "receipt": str(receipt_file),
+        "directory": str(generation),
+        "generation": "000001",
+        "receipt_sha256": "receipt-hash",
+        "plan_hash": "plan-hash",
+        "revision": 1,
+        "project_path": str(root / "A.spp"),
+        "mesh_path": str(root / "A.obj"),
+    }
+    current = "B" if final_project == "different" else "A"
+    host = SimpleNamespace(
+        jobs=SimpleNamespace(
+            list=lambda: [
+                SimpleNamespace(kind="export", status="succeeded", wait=lambda: publication)
+            ]
+        ),
+        project=SimpleNamespace(
+            is_open=lambda: final_project != "closed",
+            file_path=lambda: root / f"{current}.spp",
+            last_imported_mesh_path=lambda: root / f"{current}.obj",
+        ),
+    )
+    monkeypatch.setenv(runner.ROOT_ENV, str(root))
+    (result,) = runner.exports_of_run(host)
+    assert result["manifest"] is not None, result["manifest_unavailable"]
+    files = result["manifest"]["manifest_files"]
+    assert files["project"] == {"path": "A.spp", "sha256": "hash-of-A"}
+    assert files["mesh"] == {"path": "A.obj", "sha256": "hash-of-A-mesh"}

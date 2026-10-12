@@ -66,8 +66,16 @@ NATIVE_MESH_MAP = (
 CLOSED = "project.close()"
 
 
-def export_call(file_format: str) -> str:
-    """An export of the Height map in `file_format`."""
+def export_call(
+    file_format: str,
+    map_name: str = "height",
+    bit_depth: str = "8",
+    module: str = "export",
+    components: str = "L",
+) -> str:
+    """An export of the document map `map_name` (its `components`, L or RGB) in `file_format` at
+    `bit_depth`, every parameter the export requires given (`src/export/EXPORT.md`), through the
+    facade's `export` (or `module`, with its own texture set listing)."""
     config = {
         "exportShaderParams": False,
         "defaultExportPreset": "p",
@@ -76,25 +84,36 @@ def export_call(file_format: str) -> str:
                 "name": "p",
                 "maps": [
                     {
-                        "fileName": "$textureSet_height",
+                        "fileName": f"$textureSet_{map_name}",
                         "channels": [
                             {
-                                "destChannel": "L",
-                                "srcChannel": "L",
+                                "destChannel": c,
+                                "srcChannel": c,
                                 "srcMapType": "documentMap",
-                                "srcMapName": "height",
+                                "srcMapName": map_name,
                             }
+                            for c in components
                         ],
                     }
                 ],
             }
         ],
-        "exportParameters": [{"parameters": {"fileFormat": file_format, "bitDepth": "8"}}],
+        "exportParameters": [
+            {
+                "parameters": {
+                    "fileFormat": file_format,
+                    "bitDepth": bit_depth,
+                    "dithering": False,
+                    "paddingAlgorithm": "passthrough",
+                }
+            }
+        ],
     }
+    sets = "ts" if module == "export" else "uzpainter.textureset"
     return (
-        f"export.export_project_textures(dict(json.loads({json.dumps(config)!r}), "
+        f"{module}.export_project_textures(dict(json.loads({json.dumps(config)!r}), "
         "exportPath=WORK + '/export', "
-        "exportList=[{'rootPath': t.name()} for t in ts.all_texture_sets()]))"
+        f"exportList=[{{'rootPath': t.name()}} for t in {sets}.all_texture_sets()]))"
     )
 
 
@@ -214,6 +233,16 @@ def recipes() -> dict[Any, tuple[str, str]]:
             "",
             export_call(file_format),
         )
+    # The 16-bit export of an sRGB8 material channel (decision 103, R-090): refused before writing
+    # until phase1.25_pilot-wand item 2.6 fits it.
+    for symbol, module in (
+        ("substance_painter.export.export_project_textures", "export"),
+        ("uzpainter.export.export_project_textures", "uzpainter.export"),
+    ):
+        r[(symbol, "srgb8-material-channels")] = (
+            "",
+            export_call("png", "basecolor", "16", module, "RGB"),
+        )
     r[("substance_painter.resource.update_layer_stack_resource", "mesh-map")] = (
         MESH_MAP,
         "resource.update_layer_stack_resource(r.identifier(), r2)",
@@ -236,6 +265,8 @@ nls = uzpainter.layerstack
 PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
 REFUSALS = {"release-gap": uzpainter.NotYetSupported,
             "desktop-only-omitted": uzpainter.UnsupportedInUzPainter}
+# Contexts whose refusal must name what settles it.
+NAMED = {"srgb8-material-channels": "R-090"}
 
 
 def resolve(symbol):
@@ -306,6 +337,8 @@ def check(symbol, context, status, recipe):
         after = uzpainter.project.revision() if project.is_open() else None
         if after != before:
             return f"refused after a change: revision {before} -> {after}"
+        if NAMED.get(context, "") not in str(error):
+            return f"refused without naming {NAMED[context]}: {error}"
         return "refused"
     except BaseException as error:
         return f"raised {type(error).__name__}: {error}"

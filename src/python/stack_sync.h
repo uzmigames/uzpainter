@@ -15,12 +15,15 @@
 // Groups and the layers of a group are listed bottom to top. Each layer is a fill layer whose
 // active channels are exactly the channels it names (BaseColor; SpecularRoughness for `rough`,
 // BaseMetalness for `metal`, SpecularWeight for `spec`, Height for `height`): `base` an sRGB
-// uniform colour, `base_tex` the image `<name>` as an sRGB bitmap in UV projection (BilinearHQ,
-// no repeat, unit scale, no rotation or offset), the others Raw uniform values; `op` is the
+// uniform colour, stored as the facade stores it (its float32 working value on an sRGB8
+// BaseColor), `base_tex` the image `<name>` as an sRGB bitmap in UV projection (BilinearHQ, no
+// repeat, unit scale, no rotation or offset), the others uniform values as given; `op` is the
 // BaseColor opacity (1 when absent). A `mask` adds a black mask holding one fill effect whose
-// source is the image `<mask name>` in UV projection. `replace_height` blends the group's Height
-// as Normal. Unknown keys are ignored, as the pipeline script ignores them; the JSON is read, never
-// changed.
+// source is the image `<mask name>` (Data colour space) in UV projection. Every node starts with
+// Painter's insert defaults (`ApplyDefaultBlending`, `ApplyDefaultSources`), as the script's
+// inserted nodes do, so Height adds unless `replace_height` blends the group's Height as Normal;
+// the result is the document the script builds (decision 115). Unknown keys are ignored, as the
+// pipeline script ignores them; the JSON is read, never changed.
 //
 // In one transaction: every image the stack names is imported (bytes already stored are noted as
 // skipped), the root group is built detached and attached at the top of the stack in one step
@@ -31,6 +34,7 @@
 // changes.
 
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -45,6 +49,17 @@ namespace uzp::python {
 /// Removes the layer or effect `uid` (with its subtree) from `project`; `ValueError` when there is
 /// no such node.
 void RemoveNode(core::Project& project, core::Id uid);
+
+/// Painter's per-channel blending of a new fill, fill effect or group in a content stack (the
+/// effective defaults of every inserted node in the Tier 0 api-probes; decision 115): Height blends
+/// LinearDodge and Normal NormalMapDetail where the stack has the channel; every other channel
+/// keeps the default `core::Blending`, Normal at opacity 1.
+void ApplyDefaultBlending(core::ChannelBlending& blending, const std::map<core::ChannelType, core::Channel>& channels);
+
+/// The sources Painter's new fill in a content stack holds, its active channels empty (decision
+/// 115): BaseColor uniform 0.8 and Height 0, working-space values, where the stack has the
+/// channel. Painter's default of every other channel is unrecorded (recording P20-A): no source.
+void ApplyDefaultSources(core::FillContent& fill, const std::map<core::ChannelType, core::Channel>& channels);
 
 /// The bytes of the image `<name>` (a PNG), or nullopt when it cannot be read.
 using ImageReader = std::function<std::optional<std::string>(const std::string& name)>;

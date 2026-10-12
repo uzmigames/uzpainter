@@ -106,6 +106,28 @@ SETTING_GAPS = {
 }
 
 
+def template_id(template_file_path: str) -> str:
+    """The installed template that reproduces the Painter template `template_file_path` names
+    (decision 116): the one whose shipped file has that file name, exactly. The file must exist;
+    UzPainter never reads it. Any other template raises `NotYetSupported` before anything
+    changes: a custom template's content is not something UzPainter can know."""
+    name = template_file_path.replace("\\", "/").rsplit("/", 1)[-1]
+    for installed in _p.templates():
+        shipped = installed["painter_template"]
+        if shipped is not None and shipped.rsplit("/", 1)[-1] == name:
+            if not os.path.isfile(template_file_path):
+                raise uzpainter.NotYetSupported(
+                    f"create(template_file_path={template_file_path!r}): the file does not exist, "
+                    "and what Painter does then is unrecorded (recording P24-A, decision 116)"
+                )
+            return str(installed["id"])
+    raise uzpainter.NotYetSupported(
+        f"create(template_file_path={template_file_path!r}): only the project templates shipped "
+        "with Painter 12.1 are reproduced, by file name; a custom template is a release gap "
+        "(decision 116)"
+    )
+
+
 def create(
     mesh_file_path: str,
     mesh_map_file_paths: list[str] | None = None,
@@ -119,12 +141,7 @@ def create(
             "name to a texture set and usage is unrecorded (recording P21-A, decision 110); "
             "import the maps and bind them with TextureSet.set_mesh_map_resource"
         )
-    if template_file_path is not None:
-        raise uzpainter.NotYetSupported(
-            "create(template_file_path=...) is a release gap: a project does not record its "
-            "template, so exports would use the default template's base values "
-            "(phase1.24_python-api-facade, decision 110)"
-        )
+    template = None if template_file_path is None else template_id(template_file_path)
     settings = settings or Settings()
     for name, owner in SETTING_GAPS.items():
         if getattr(settings, name) is not None:
@@ -138,6 +155,7 @@ def create(
         default_texture_resolution=settings.default_texture_resolution,
         mesh_unit_scale=settings.mesh_unit_scale,
         import_cameras=settings.import_cameras,
+        template=template,
     )
     with host.busy_section():
         _p.create(mesh_file_path, native)

@@ -106,6 +106,14 @@ def colour_managed(native_node: Any, channel: Any) -> bool:
     return bool(stack.get_channel(channel).format() == uzpainter.textureset.ChannelFormat.sRGB8)
 
 
+def decodes_colour(native_node: Any, channel: Any) -> bool:
+    """Whether Painter decodes an sRGB uniform colour set on `channel` to the working space: a
+    colour-managed channel other than a user channel. A user channel takes a uniform colour as
+    given whatever its space, sRGB8 or not: its readback and its export are the value set
+    (`colour-ramps-srgb`, `-working`, `-raw`; decision 115)."""
+    return colour_managed(native_node, channel) and not str(channel.name).startswith("User")
+
+
 # ── Projection parameters (Painter's dataclasses) ────────────────────────────────────────────
 
 
@@ -190,7 +198,7 @@ class SourceUniformColor:
 
     @edits
     def set_color(self, color: Any) -> None:
-        managed = colour_managed(_ls.get_node_by_uid(self._node), self._channel)
+        managed = decodes_colour(_ls.get_node_by_uid(self._node), self._channel)
         self._native().set_color(colour.stored_color(color, managed))
 
     def __repr__(self) -> str:
@@ -494,7 +502,7 @@ class _Fill(Node):
                 native.active_channels = set(native.active_channels) | {channeltype}
             if isinstance(source, colour.Color):
                 native.set_source(
-                    channeltype, colour.stored_color(source, colour_managed(native, channeltype))
+                    channeltype, colour.stored_color(source, decodes_colour(native, channeltype))
                 )
             elif isinstance(source, (resource.ResourceID, resource.Resource)):
                 identifier = (
@@ -802,21 +810,11 @@ def check_position(position: Any, kind: Kind, mask_only: str | None = None) -> s
     return "root" if parent is None else "Substack"
 
 
-# Painter's blending of a new layer or content effect, per channel (the effective defaults of
-# every inserted fill, fill effect and group in the Tier 0 api-probes): Height adds, Normal
-# combines as a detail map, every other channel of the template blends Normal at opacity 1.
-DEFAULT_BLENDING = {"Height": "LinearDodge", "Normal": "NormalMapDetail"}
-
-
-def set_default_blending(native: Any) -> None:
-    """Painter's per-channel default blending on a new node of a content stack."""
-    stack = native.get_stack()
-    for name, mode in DEFAULT_BLENDING.items():
-        channel = getattr(ChannelType, name)
-        if stack.has_channel(channel):
-            native.set_blending_mode(getattr(_ls.BlendingMode, mode), channel)
-
-
+# The native inserts give a new node Painter's effective defaults (decision 115): per-channel
+# blending of a fill, fill effect or group in a content stack (Height LinearDodge, Normal
+# NormalMapDetail), a fill's recorded default sources (DEFAULT_SOURCES) with its active channels
+# empty, and the names "Fill", "Folder", "Levels - Base color" (a content-stack levels effect,
+# affecting BaseColor) and "Compare mask".
 def insert(
     call: str, position: Any, kind: Kind, mask_only: str | None = None, name: str | None = None
 ) -> Any:
@@ -828,18 +826,8 @@ def insert(
 @edits
 @structural
 def insert_fill(position: Any) -> Any:
-    stack = check_position(position, Kind.EITHER)
-    with one_transaction("layerstack.insert_fill"):
-        native = _ls.insert_fill(position._native(), None)
-        if stack != "Mask":
-            set_default_blending(native)
-            # A new fill already holds Painter's recorded default sources (DEFAULT_SOURCES); its
-            # active channels stay empty, as Painter inserts it.
-            for name in DEFAULT_SOURCES:
-                channel = getattr(ChannelType, name)
-                if native.get_stack().has_channel(channel):
-                    reset_to_default(native, channel)
-    return wrap(native)
+    node, _ = insert("insert_fill", position, Kind.EITHER)
+    return node
 
 
 @edits
@@ -851,29 +839,19 @@ def insert_paint(position: Any) -> Any:
 @edits
 @structural
 def insert_group(position: Any) -> Any:
-    check_position(position, Kind.LAYER)
-    with one_transaction("layerstack.insert_group"):
-        native = _ls.insert_group(position._native(), None)
-        set_default_blending(native)
-    return wrap(native)
+    node, _ = insert("insert_group", position, Kind.LAYER)
+    return node
 
 
 @edits
 def insert_levels_effect(position: Any) -> Any:
-    stack = check_position(position, Kind.EFFECT)
-    if stack != "Content":
-        return wrap(_ls.insert_levels_effect(position._native(), None))
-    # In a content stack Painter names the effect after the channel it affects, BaseColor
-    # ("Levels - Base color", `insert-positions` s9).
-    with one_transaction("layerstack.insert_levels_effect"):
-        native = _ls.insert_levels_effect(position._native(), "Levels - Base color")
-        native.affected_channel = ChannelType.BaseColor
-    return wrap(native)
+    node, _ = insert("insert_levels_effect", position, Kind.EFFECT)
+    return node
 
 
 @edits
 def insert_compare_mask_effect(position: Any) -> Any:
-    node, _ = insert("insert_compare_mask_effect", position, Kind.EFFECT, "compare", "Compare mask")
+    node, _ = insert("insert_compare_mask_effect", position, Kind.EFFECT, "compare")
     return node
 
 

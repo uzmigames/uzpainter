@@ -11,7 +11,10 @@
 // generation's files under their fixed names (`CopyFixedNames`; `exportPath` itself gives Painter's
 // flat layout). `export.export_project_textures` is the synchronous convenience: start, then wait
 // with the GIL released. A refusal (`ValueError`, `NotYetSupported`) happens before anything is
-// written; an evaluation failure raises the class of decision 082.
+// written; an evaluation failure raises the class of decision 082. The job's result names the
+// project file and the imported mesh the export was started from (`project_path`, `mesh_path`),
+// absolute, as resolved when the call that named each one ran (None when there is none), so a
+// later switch of project or of working directory does not move its sources.
 
 #include <memory>
 
@@ -64,9 +67,13 @@ core::json::Object WrittenJson(const exporter::WrittenFile& file) {
 
 /// The export job of `snapshot` (see above).
 JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot, std::string config,
-                   std::string project_path, std::vector<std::string> fixed_names) {
+                   std::string project_path, std::string project_source, std::vector<std::string> fixed_names) {
+    // The export's own sources, absolute, read when it is queued: the mesh from the exported
+    // revision itself. A project written before the mesh source was recorded has none (None).
+    std::string mesh_source = snapshot.project->mesh ? snapshot.project->mesh->source : std::string();
     return [project = std::move(project), snapshot = std::move(snapshot), config = std::move(config),
-            project_path = std::move(project_path), fixed_names = std::move(fixed_names)](JobContext& context) {
+            project_path = std::move(project_path), project_source = std::move(project_source),
+            mesh_source = std::move(mesh_source), fixed_names = std::move(fixed_names)](JobContext& context) {
         const core::Project& p = *snapshot.project;
         const exporter::ExportPlan plan = exporter::CompilePlan(p, config, exporter::PlanContext{project_path});
         exporter::CheckExportable(plan);
@@ -77,6 +84,7 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
         auto templates = std::make_shared<const evaluator::TemplateLibrary>(
             evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory()));
         exporter::SourceInputs inputs;
+        inputs.templateId = p.settings.template_id;
         inputs.resources = std::make_shared<evaluator::DecodingResourceProvider>(
             [store](std::string_view sha256) -> std::optional<std::string> {
                 try {
@@ -118,7 +126,11 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
                                   {"files", std::move(files)},
                                   {"fixed_names", std::move(copies)},
                                   {"generation", published->generation},
+                                  {"mesh_path", mesh_source.empty() ? core::json::Value(nullptr)
+                                                                    : core::json::Value(mesh_source)},
                                   {"plan_hash", plan.hash},
+                                  {"project_path", project_source.empty() ? core::json::Value(nullptr)
+                                                                          : core::json::Value(project_source)},
                                   {"receipt", exporter::Utf8String(published->receipt)},
                                   {"receipt_sha256", published->receiptSha256},
                                   {"revision", snapshot.revision}};
@@ -147,8 +159,9 @@ JobHandle StartExport(const py::object& config, const std::vector<std::string>& 
     }
     const std::shared_ptr<OpenProject> project = Session::Get().Current();
     core::Snapshot snapshot = project->document->snapshot();
+    std::string source = project->untitled_dir.empty() ? exporter::Utf8String(project->project_source) : std::string();
     return {JobEngine::Get().Start("export", ExportBody(project, std::move(snapshot), ConfigText(config), ProjectPath(),
-                                                        fixed_names))};
+                                                        std::move(source), fixed_names))};
 }
 
 }  // namespace

@@ -118,6 +118,13 @@ ProjectTemplate ParseTemplate(const Value& document, std::string_view path) {
         if (!it->second.IsString()) Fail(std::string(path) + ".painter_template", "expected a string");
         result.painterTemplate = std::get<std::string>(it->second.data);
     }
+    if (const auto it = object.find("default_resolution"); it != object.end()) {
+        const std::string resolutionPath = std::string(path) + ".default_resolution";
+        if (!it->second.IsInt()) Fail(resolutionPath, "expected an integer");
+        const std::int64_t size = std::get<std::int64_t>(it->second.data);
+        if (size < 1 || (size & (size - 1)) != 0 || size > 8192) Fail(resolutionPath, "expected a power of two up to 8192");
+        result.defaultResolution = static_cast<int>(size);
+    }
     if (const auto it = object.find("provenance"); it != object.end()) {
         result.provenance = Object(it->second, std::string(path) + ".provenance");
     }

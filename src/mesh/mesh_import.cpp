@@ -288,7 +288,7 @@ void RecordMeshResource(core::Edit& edit, const ImportResult& result, const Mesh
         meta.imported_at = source.imported_at;
         entries.push_back(std::move(meta));
     }
-    project.mesh = core::MeshReference{result.sha256, result.report, {}};
+    project.mesh = core::MeshReference{result.sha256, result.report, {}, source.origin};
 }
 
 void CreateTextureSets(core::Edit& edit, const ImportResult& result, const MeshSource& source,

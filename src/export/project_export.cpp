@@ -48,6 +48,7 @@ render::Result<Publication> ExportProject(const ProjectExportRequest& request) {
         request.templates.empty() ? evaluator::TemplateLibrary::DefaultDirectory() : request.templates));
     evaluator::CpuEvaluator cpu(templates, HostLimits());
     SourceInputs inputs;
+    inputs.templateId = project.settings.template_id;  // the base values the project records
     // A resource the file cannot give (absent, corrupt) is missing to the evaluator, which fails the
     // export with `evaluator:missing_resource` before anything is written.
     inputs.resources = std::make_shared<evaluator::DecodingResourceProvider>(

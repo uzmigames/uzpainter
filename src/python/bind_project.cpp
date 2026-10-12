@@ -8,8 +8,9 @@
 //
 // `reload_mesh(path)` is one transaction (`mesh/reload.h`): the current mesh is re-derived from its
 // stored bytes, the new file is imported and the texture sets are matched by material; the new
-// mesh's bytes are stored with the commit. Texture sets the reload adds get the default template's
-// channels, as `create` gives them. A refused reload commits nothing and raises its typed error.
+// mesh's bytes are stored with the commit. Texture sets the reload adds get the channels of the
+// project's template, as `create` gives them. A refused reload commits nothing and raises its typed
+// error.
 
 #include <filesystem>
 #include <fstream>
@@ -54,8 +55,10 @@ CallResult ReloadMesh(const std::string& mesh_file_path, std::optional<bool> imp
 
     const evaluator::TemplateLibrary templates =
         evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
-    const evaluator::ProjectTemplate* fresh = templates.Find(evaluator::kDefaultTemplateId);
-    if (fresh == nullptr) throw ApiError("RuntimeError", "the default project template is not installed");
+    // Texture sets the reload adds start from the project's template.
+    const std::string template_id = project->document->snapshot().project->settings.template_id;
+    const evaluator::ProjectTemplate* fresh = templates.Find(template_id);
+    if (fresh == nullptr) throw ApiError("RuntimeError", "the project template '" + template_id + "' is not installed");
     mesh::ReloadSettings settings;
     settings.import.mesh_unit_scale = project->document->snapshot().project->settings.mesh_unit_scale;
     settings.material_mapping = material_mapping;
@@ -63,7 +66,7 @@ CallResult ReloadMesh(const std::string& mesh_file_path, std::optional<bool> imp
 
     store::ProjectStore* store = project->store.get();
     const mesh::ResourceReader read = [store](const std::string& sha256) { return store->ReadResource(sha256); };
-    const mesh::MeshSource source{Utf8(path), NowUtc()};
+    const mesh::MeshSource source{Utf8(std::filesystem::absolute(path)), NowUtc()};
     core::json::Object arguments{{"mesh", Utf8(path.filename())}};
     if (import_cameras) arguments["import_cameras"] = *import_cameras;
     CallResult result = Mutate("project.reload_mesh", std::move(arguments), [&](core::Edit& edit) {
@@ -100,19 +103,48 @@ void BindProject(py::module_& m) {
     settings
         .def(py::init([](std::optional<core::NormalMapFormat> normal_map_format, std::optional<core::TangentSpace> tangent,
                          std::optional<core::ProjectWorkflow> workflow, std::optional<int> resolution,
-                         std::optional<double> mesh_unit_scale, std::optional<bool> import_cameras) {
-                 return CreateSettings{normal_map_format, tangent, workflow, resolution, mesh_unit_scale, import_cameras};
+                         std::optional<double> mesh_unit_scale, std::optional<bool> import_cameras,
+                         std::optional<std::string> template_id) {
+                 return CreateSettings{normal_map_format, tangent,        workflow,   resolution,
+                                       mesh_unit_scale,   import_cameras, template_id};
              }),
              py::arg("normal_map_format") = py::none(), py::arg("tangent_space_mode") = py::none(),
              py::arg("project_workflow") = py::none(), py::arg("default_texture_resolution") = py::none(),
-             py::arg("mesh_unit_scale") = py::none(), py::arg("import_cameras") = py::none())
+             py::arg("mesh_unit_scale") = py::none(), py::arg("import_cameras") = py::none(),
+             py::arg("template") = py::none())
         .def_readwrite("normal_map_format", &CreateSettings::normal_map_format)
         .def_readwrite("tangent_space_mode", &CreateSettings::tangent_space)
         .def_readwrite("project_workflow", &CreateSettings::workflow)
         .def_readwrite("default_texture_resolution", &CreateSettings::default_texture_resolution)
         .def_readwrite("mesh_unit_scale", &CreateSettings::mesh_unit_scale)
-        .def_readwrite("import_cameras", &CreateSettings::import_cameras);
+        .def_readwrite("import_cameras", &CreateSettings::import_cameras)
+        .def_readwrite("template", &CreateSettings::template_id,
+                       "The id of an installed project template (`templates()`); None creates the project with "
+                       "no template (\"default\"). The project records it: its base values are the backdrop of "
+                       "every evaluation and export (decision 116).");
     SealClass(settings);
+
+    m.def(
+        "templates",
+        [] {
+            const evaluator::TemplateLibrary library =
+                evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
+            py::list out;
+            for (const std::string& id : library.Ids()) {
+                const evaluator::ProjectTemplate* t = library.Find(id);
+                if (t == nullptr || t->channelDefaults) continue;
+                py::dict entry;
+                entry["id"] = t->id;
+                entry["name"] = t->name;
+                entry["painter_template"] = t->painterTemplate ? py::object(py::str(*t->painterTemplate)) : py::none();
+                out.append(std::move(entry));
+            }
+            return out;
+        },
+        "The installed project templates: [{id, name, painter_template}], `painter_template` naming the shipped "
+        "Painter file a template reproduces (None for \"default\").");
+    m.def("template", [] { return Session::Get().Current()->document->snapshot().project->settings.template_id; },
+          "The id of the template the open project was created from.");
 
     m.def(
         "create",

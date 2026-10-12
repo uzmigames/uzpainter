@@ -550,20 +550,29 @@ def outcome(spec):
                                           "message": str(error)}}
 
 
-def record():
+def record(condition):
     TRACE["mark"]("template/texture-sets")
     outputs = {"template/texture-sets": {"value": call("template_capture")}}
     for spec in PAYLOAD["readbacks"]:
         TRACE["mark"](spec["output_id"])
         outputs[spec["output_id"]] = outcome(spec)
+    files = {}
+    for name, config in PAYLOAD["exports"].get(condition, {}).items():
+        TRACE["mark"]("export/" + name)
+        try:
+            exported = sp.export.export_project_textures(config)
+        except Exception as error:
+            files[name] = {"raised": type(error).__name__ + ": " + str(error)}
+            continue
+        files[name] = sorted(f for fs in exported.textures.values() for f in fs)
     TRACE["mark"]("setup")
-    return outputs
+    return {"outputs": outputs, "files": files}
 
 
 for step in PAYLOAD["state"]:
     call("apply_step", step=step["step"], call=step["call"], args=step["args"],
          resolved=step["resolved"])
-same_session = record()
+same_session = record("same_session")
 TRACE["mark"]("bookkeeping")
 locations = call("node_locations")
 TRACE["mark"]("setup")
@@ -572,32 +581,32 @@ call("save_as", path=PAYLOAD["save_to"])
 call("close_project")
 call("open_project", path=PAYLOAD["save_to"])
 call("rebind_nodes", locations=locations)
-after = record()
+after = record("after_save_reopen")
 call("close_project")
 result = {"same_session": same_session, "after_save_reopen": after, "trace": TRACE["stop"]()}
 """
 
 
-def test_colour_rule_readbacks_equal_painter(facade: Run, tmp_path: Path) -> None:
-    """Items 3.6 and 3.7: a uniform colour as sRGB, without a space (sRGB on BaseColor, Raw on the
-    data channels) and as Raw, read back in the working space; bitmap colour spaces and the lists
-    Painter offers on BaseColor and in a mask (`export-ocio-encode-legacy` readbacks and colour-
-    space captures, both recordings). Its exported maps are compositor fits outside this task
-    (decision 107)."""
+def texture_replay(
+    facade: Run, name: str, work: Path, exports: bool
+) -> tuple[dict[str, Any], dict[str, Any], Any, list[dict[str, Any]]]:
+    """The facade's replay of the semantics golden `name` with the recorder's own Painter-side
+    code: its readbacks and, with `exports`, its exported maps (each export step as Painter ran it),
+    both recordings. Returns the replay, the golden record, the job and the readback specs."""
     from tools.parity.recorder.job import API_CAPTURES, job_from_manifest
     from tools.parity.recorder.job import INPUT_ARGS as JOB_INPUTS
     from tools.parity.recorder.texture import output_safe
 
-    manifest = json.loads((SEMANTICS / f"{COLOUR_GOLDEN}.json").read_text(encoding="utf-8"))
+    manifest = json.loads((SEMANTICS / f"{name}.json").read_text(encoding="utf-8"))
     store = locate()
     if store is None:
         pytest.skip("no private oracle store on this machine (hosted lane, decision 028)")
     record = next(r for r in manifest["private_records"] if r["record_id"] == "golden-record")
     data = store.load(record["sha256"])
-    assert data is not None, f"{COLOUR_GOLDEN}: the golden record is not in the private store"
+    assert data is not None, f"{name}: the golden record is not in the private store"
     golden = json.loads(data)
     job = job_from_manifest(manifest)
-    staged = stage(job, tmp_path / "inputs")
+    staged = stage(job, work / "inputs")
 
     def resolved(step: Any) -> dict[str, str]:
         key = JOB_INPUTS.get(step.call)
@@ -616,6 +625,23 @@ def test_colour_rule_readbacks_equal_painter(facade: Run, tmp_path: Path) -> Non
         }
         for capture in job.api_captures
     ]
+    configs: dict[str, dict[str, Any]] = {}
+    if exports:
+        template = next(
+            o["values"]
+            for o in golden["recordings"][0]["outputs"]
+            if o["kind"] == "template_capture"
+        )
+        roots = [ts if not st else f"{ts}/{st}" for ts, st in export_roots(template)]
+        configs = {
+            condition: {
+                str(export.step): export.config(
+                    work / condition / f"export-step{export.step}", roots
+                )
+                for export in job.exports
+            }
+            for condition in CONDITIONS
+        }
     payload = {
         "painter_side": PAINTER_SIDE.as_posix(),
         "state": [
@@ -623,17 +649,37 @@ def test_colour_rule_readbacks_equal_painter(facade: Run, tmp_path: Path) -> Non
             for s in job.state_steps
         ],
         "readbacks": readbacks,
-        "save_to": (tmp_path / "project" / "probe.spp").as_posix(),
+        "exports": configs,
+        "save_to": (work / "project" / "probe.spp").as_posix(),
         "trace": SOURCE,
     }
     encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
     report = facade(TEXTURE_REPLAY.replace("__PAYLOAD__", encoded))
     assert report["status"] == "ok", report.get("error", {}).get("traceback", report)
+    replayed: dict[str, Any] = report["result"]
+    for condition in CONDITIONS:  # each export step wrote all its maps: index them by map
+        files = replayed[condition]["files"]
+        replayed[condition]["files"] = {
+            f"{export.step}/{out.name}": files[str(export.step)]
+            for export in job.exports
+            for out in export.maps
+            if str(export.step) in files
+        }
+    return replayed, golden, job, readbacks
+
+
+def test_colour_rule_readbacks_equal_painter(facade: Run, tmp_path: Path) -> None:
+    """Items 3.6 and 3.7: a uniform colour as sRGB, without a space (sRGB on BaseColor, Raw on the
+    data channels) and as Raw, read back in the working space; bitmap colour spaces and the lists
+    Painter offers on BaseColor and in a mask (`export-ocio-encode-legacy` readbacks and colour-
+    space captures, both recordings). Its exported maps are compositor fits outside this task
+    (decision 107)."""
+    replayed, golden, _, readbacks = texture_replay(facade, COLOUR_GOLDEN, tmp_path, False)
     expected = golden_outputs(golden)
     differences = []
     compared = 0
     for condition in CONDITIONS:
-        ours = normalised(report["result"][condition])
+        ours = normalised(replayed[condition]["outputs"])
         for output_id, painter in expected[condition].items():
             if output_id not in ours:
                 continue  # the export probes and exported maps: compositor and export fits
@@ -645,5 +691,149 @@ def test_colour_rule_readbacks_equal_painter(facade: Run, tmp_path: Path) -> Non
                 differences.append(f"{condition} {output_id}: {ours[output_id]} != {painter}")
     assert differences == [], "\n".join(differences)
     assert compared == 2 * (len(readbacks) + 1 - len(COLOUR_EXCLUDED))
-    symbols = exercised(report["result"]["trace"], COLOUR_EXCLUDED)
+    symbols = exercised(replayed["trace"], COLOUR_EXCLUDED)
     check_trace(f"facade/{COLOUR_GOLDEN}", f"tier0/semantics/{COLOUR_GOLDEN}", symbols)
+
+
+# ── Uniform colours composite as given (decision 115) ─────────────────────────────────────────
+
+RAMPS = ("colour-ramps-srgb", "colour-ramps-working", "colour-ramps-raw")
+
+
+@pytest.mark.parametrize("golden_name", RAMPS)
+def test_uniform_colour_ramps_export_as_painter(
+    facade: Run, tmp_path: Path, golden_name: str
+) -> None:
+    """Decision 115: the colour ramps of the documented spaces sRGB, Working and Raw (288 values
+    on RGB16 and sRGB8 user channels over 24 texture sets) replayed through the facade with the
+    recorder's own code: every exported map equals Painter's on every texel, both recordings,
+    because the facade stores a colour as given and Painter composites it as given; every
+    `get_source` readback (the working value) equals Painter's."""
+    replayed, golden, job, readbacks = texture_replay(facade, golden_name, tmp_path, True)
+    expected = golden_outputs(golden)
+    differences = []
+    for condition in CONDITIONS:
+        ours = normalised(replayed[condition]["outputs"])
+        for output_id, painter in expected[condition].items():
+            if output_id in ours and ours[output_id] != painter:
+                differences.append(f"{condition} {output_id}: {ours[output_id]} != {painter}")
+    differences += map_differences(golden, replayed, job, tmp_path)
+    assert differences == [], "\n".join(differences[:40])
+    maps = sum(1 for r in golden["recordings"] for o in r["outputs"] if o["kind"] == "exported_map")
+    assert maps == 2 * 24 * 8 and len(readbacks) == 216
+    check_trace(
+        f"facade/{golden_name}", f"tier0/semantics/{golden_name}", exercised(replayed["trace"])
+    )
+
+
+# ── Project templates (decision 116) ────────────────────────────────────────────────────────────
+
+TEMPLATES = API_PROBES.parent / "defaults-templates" / "project-templates.json"
+# The channels whose label Painter's template sets: the labels are Painter's own text, which
+# UzPainter does not ship (clean room, decision 116); they read back "" and change no texture.
+LABELS = {("templates/Dota 2.spt", f"User{i}") for i in range(4)}
+
+TEMPLATE_REPLAY = """
+import base64
+PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
+TRACE = {"__name__": "uzp_capability_trace"}
+exec(compile(PAYLOAD["trace"], "capability_trace.py", "exec"), TRACE)
+TRACE["start"]()
+recorder = {"__name__": "uzp_recorder"}
+with open(PAYLOAD["painter_side"], encoding="utf-8") as source:
+    exec(compile(source.read(), "painter_side.py", "exec"), recorder)
+# The shelf the recorder finds the shipped templates in: a folder of empty files with the shipped
+# names (UzPainter never reads a template file; Painter's shelf is a recording P21-D gap).
+recorder["application_shelf_root"] = lambda: PAYLOAD["shelf"]
+OPERATIONS = recorder["OPERATIONS"]
+
+
+def call(operation, **kwargs):
+    return OPERATIONS[operation](kwargs)
+
+
+out = {"same_session": {}, "after_save_reopen": {}}
+for step in PAYLOAD["steps"]:
+    output_id = PAYLOAD["output_ids"][str(step["step"])]
+    TRACE["mark"](output_id)
+    call("apply_step", step=step["step"], call=step["call"], args=step["args"],
+         resolved={"mesh": PAYLOAD["mesh"]})
+    out["same_session"][output_id] = {"template": step["args"]["template"], "accepted": True,
+                                      **call("template_capture")}
+    TRACE["mark"]("setup")
+    path = PAYLOAD["work"] + "/template-" + str(step["step"]) + ".spp"
+    call("save_as", path=path)
+    call("close_project")
+    call("open_project", path=path)
+    TRACE["mark"](output_id)
+    out["after_save_reopen"][output_id] = {"template": step["args"]["template"], "accepted": True,
+                                           **call("template_capture")}
+    TRACE["mark"]("setup")
+    call("close_project")
+result = {**out, "trace": TRACE["stop"]()}
+"""
+
+
+def test_project_templates_equal_painter(facade: Run, tmp_path: Path) -> None:
+    """Decision 116: every project template shipped with Painter 12.1, created through the facade
+    by the recorder's own `project.create(template_file_path=...)` code, gives Painter's texture
+    sets, stacks, channels and formats, as created and after save and reopen
+    (`defaults-templates/project-templates`, both recordings)."""
+    from tools.parity.recorder.defaults import template_output_id
+    from tools.parity.recorder.job import job_from_manifest
+
+    manifest = json.loads(TEMPLATES.read_text(encoding="utf-8"))
+    store = locate()
+    if store is None:
+        pytest.skip("no private oracle store on this machine (hosted lane, decision 028)")
+    record = next(r for r in manifest["private_records"] if r["record_id"] == "golden-record")
+    data = store.load(record["sha256"])
+    assert data is not None, "project-templates: the golden record is not in the private store"
+    golden = json.loads(data)
+    job = job_from_manifest(manifest)
+    staged = stage(job, tmp_path / "inputs")
+    shelf = tmp_path / "shelf"
+    steps = list(job.state_steps)  # one project.create per shipped template
+    for step in steps:
+        empty = shelf.joinpath(*str(step.args["template"]).split("/"))
+        empty.parent.mkdir(parents=True, exist_ok=True)
+        empty.write_bytes(b"")
+    payload: dict[str, Any] = {
+        "painter_side": PAINTER_SIDE.as_posix(),
+        "steps": [{"step": s.step, "call": s.call, "args": s.args} for s in steps],
+        "output_ids": {str(s.step): template_output_id(str(s.args["template"])) for s in steps},
+        "mesh": staged["plane"].as_posix(),
+        "shelf": shelf.as_posix(),
+        "work": tmp_path.as_posix(),
+        "trace": SOURCE,
+    }
+    encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+    report = facade(TEMPLATE_REPLAY.replace("__PAYLOAD__", encoded))
+    assert report["status"] == "ok", report.get("error", {}).get("traceback", report)
+    replayed = report["result"]
+    differences = []
+    labelled = set()
+    compared = 0
+    for recording in golden["recordings"]:
+        ours = replayed[recording["condition"]]
+        for o in recording["outputs"]:
+            if o["output_id"] not in payload["output_ids"].values():
+                continue  # the shelf enumeration: Painter's shelf is a named gap (P21-D)
+            compared += 1
+            painter = json.loads(json.dumps(o["values"]))
+            for stacks in painter["texture_sets"].values():
+                for channels in stacks["stacks"].values():
+                    for name, channel in channels.items():
+                        if channel["label"]:  # Painter's own text, not shipped (LABELS)
+                            labelled.add((o["values"]["template"], name))
+                            channel["label"] = ""
+            if ours.get(o["output_id"]) != painter:
+                differences.append(f"{recording['condition']} {o['output_id']} differs")
+    assert differences == [], "\n".join(differences)
+    assert compared == 2 * 26
+    assert labelled == LABELS
+    check_trace(
+        "facade/project-templates",
+        "tier0/defaults-templates/project-templates",
+        exercised(replayed["trace"]),
+    )

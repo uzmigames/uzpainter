@@ -39,8 +39,8 @@ Each quirk comes from a Tier 0 api-probe and is compared exactly by `test_pyapi_
   - A channel whose default is unrecorded loses its native source. Reading it, or exporting a fill that has it active, raises `NotYetSupported`.
   - `set_source` on an inactive channel activates it without a reset.
   - The native API keeps the sources (LAY-01). Both behaviours are tested side by side.
-- **New nodes.** A new fill holds the recorded default sources, and its active channels are empty. A new fill, fill effect or group blends Height with `LinearDodge` and Normal with `NormalMapDetail`.
-- **Default names.** "Fill" and "Folder". A content-stack levels effect is "Levels - Base color" and affects BaseColor. A compare mask is "Compare mask".
+- **New nodes.** A new fill holds the recorded default sources, and its active channels are empty. A new fill, fill effect or group blends Height with `LinearDodge` and Normal with `NormalMapDetail`. The native inserts give these defaults themselves (decision 115); the facade adds nothing.
+- **Default names.** "Fill" and "Folder". A content-stack levels effect is "Levels - Base color" and affects BaseColor. A compare mask is "Compare mask". These are the native defaults too.
 - **Context errors** (Painter's classes and messages):
   - A content fill given None raises `EditionContextException` "Only valid in mono channel context".
   - A mask fill given a channel raises "Channel 0 isn't valid in this context". Its `active_channels` raises "Only valid in multi channel context", and its `source_mode` is None.
@@ -61,6 +61,7 @@ Each quirk comes from a Tier 0 api-probe and is compared exactly by `test_pyapi_
 - **Profile.** Painter's Legacy mode is the one pinned profile: linear working space with sRGB I/O. The facade checks the declared configuration when it opens a project and before every export. Any other mode raises `NotYetSupported` before anything is evaluated.
 - **Uniform colours.** A colour without a space is sRGB on an sRGB8 channel and Raw elsewhere.
   - Uniform colours are stored as float32 working-space values. The sRGB decode runs in float32: `((f32(v) + 0.055f) / 1.055f) ^ 2.4f`.
+  - Only an sRGB8 channel that is not a user channel decodes (`nodes.decodes_colour`). Any other channel takes a uniform colour as given, whatever its space: Painter reads back and exports the value set on a user channel, RGB16 or sRGB8 (decision 115; the three `colour-ramps-*` goldens replay through the facade exactly, `test_pyapi_facade_tier0.py`).
   - That formula is exact on 6 of the 7 recorded components. The 7th (70/255) is 2 ulp off: it is decision 107's named residual.
   - `Color` offers `convert`, `value`, `sRGB` and `working`. The four colour-space enums are the documented ones.
 - **Bitmaps.** A bitmap takes Painter's recorded default space on bind:
@@ -94,7 +95,7 @@ These raise `UnsupportedInUzPainter(symbol, reason, alternative)`:
 ## 8. Not here
 
 - `create(mesh_map_file_paths=...)`: Painter's binding of a map file name to a texture set and usage is unrecorded (recording P21-A, decision 110).
-- `create(template_file_path=...)`: a project does not record its template, so exports would use the default template's base values (phase1.24_python-api-facade, decision 110).
+- `create(template_file_path=...)` with a template not shipped with Painter 12.1: a custom template's content is a release gap. A shipped template is mapped by its file name to the installed template, which the project records (decision 116); a missing file raises `NotYetSupported` naming recording P24-A.
 - `Settings.default_save_path` and `export_path`: no documented call reads them back and what an export without `exportPath` writes is unrecorded (recording P21-B).
 
 ## 9. Painter's asynchronous host (phase1.21; decisions 109 and 110)
