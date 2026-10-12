@@ -162,18 +162,45 @@ void GpuTileStore::ReleaseBitmaps() {
     m_bitmapBytes = 0;
 }
 
-render::Result<uz::RHIBufferHandle> GpuTileStore::BitmapBuffer(const std::string& key,
-                                                                const DecodedImage& image) {
-    const auto it = m_bitmaps.find(key);
-    if (it != m_bitmaps.end()) return it->second.buffer;
-    const std::vector<uint32_t> words = PackBitmapCodes(image);
-    const uint64_t bytes = std::max<uint64_t>(words.size(), 1) * sizeof(uint32_t);
-    if (m_bitmapBytes + bytes > kBitmapCacheBytes && !m_bitmaps.empty()) {
+render::Result<GpuTileStore::ProjectBuffers> GpuTileStore::ProjectionBuffers(const std::string& key,
+                                                                             const DecodedImage& image,
+                                                                             bool minified) {
+    const std::string chainKey = key + "/chain";
+    const std::string tablesKey = "texture-unit-tables";
+    std::vector<std::pair<const std::string*, std::vector<uint32_t>>> needed;
+    const auto missing = [&]() {
+        needed.clear();
+        if (!m_bitmaps.contains(key)) needed.emplace_back(&key, PackBitmapCodes(image));
+        if (minified && !m_bitmaps.contains(chainKey)) needed.emplace_back(&chainKey, ChainWords(BitmapChain(image)));
+        if (minified && !m_bitmaps.contains(tablesKey)) needed.emplace_back(&tablesKey, TextureUnitWords());
+        uint64_t bytes = 0;
+        for (const auto& [name, words] : needed) bytes += std::max<uint64_t>(words.size(), 1) * sizeof(uint32_t);
+        return bytes;
+    };
+    if (m_bitmapBytes + missing() > kBitmapCacheBytes && !m_bitmaps.empty()) {
         // Empty the cache once nothing queued reads it.
         render::Result<void> flushed = Flush();
         if (!flushed) return render::Unexpected(flushed.error());
         ReleaseBitmaps();
+        (void)missing();
     }
+    for (const auto& [name, words] : needed) {
+        render::Result<uz::RHIBufferHandle> made = CachedWords(*name, words, "evaluator_bitmap");
+        if (!made) return render::Unexpected(made.error());
+    }
+    ProjectBuffers buffers;
+    buffers.codes = m_bitmaps.at(key).buffer;
+    if (minified) {
+        buffers.chain = m_bitmaps.at(chainKey).buffer;
+        buffers.tables = m_bitmaps.at(tablesKey).buffer;
+    }
+    return buffers;
+}
+
+render::Result<uz::RHIBufferHandle> GpuTileStore::CachedWords(const std::string& key,
+                                                              const std::vector<uint32_t>& words,
+                                                              const char* name) {
+    const uint64_t bytes = std::max<uint64_t>(words.size(), 1) * sizeof(uint32_t);
     render::Result<uz::RHIBufferHandle> upload =
         CreateBuffer(bytes, uz::RHIBufferUsage::CopySrc, uz::RHIMemoryType::Upload, 0,
                      "evaluator_bitmap_upload");
@@ -188,7 +215,7 @@ render::Result<uz::RHIBufferHandle> GpuTileStore::BitmapBuffer(const std::string
     m_device.Rhi().UnmapBuffer(*upload);
     render::Result<uz::RHIBufferHandle> gpu =
         CreateBuffer(bytes, uz::RHIBufferUsage::StructuredBuffer | uz::RHIBufferUsage::CopyDst,
-                     uz::RHIMemoryType::Default, sizeof(uint32_t), "evaluator_bitmap");
+                     uz::RHIMemoryType::Default, sizeof(uint32_t), name);
     if (!gpu) {
         m_device.DestroyBuffer(*upload);
         return render::Unexpected(gpu.error());
@@ -486,15 +513,20 @@ render::Result<void> GpuTileStore::Project(const ProjectOp& op) {
     const DecodedImage& image = *op.image;
     const std::string key =
         op.imageKey + (image.encoding == render::TexelEncoding::Unorm16 ? "/16" : "/8");
-    render::Result<uz::RHIBufferHandle> buffer = BitmapBuffer(key, image);
-    if (!buffer) return render::Unexpected(buffer.error());
+    const bool minified = Minifies(op.projection, op.setWidth, op.setHeight, image);
+    render::Result<ProjectBuffers> buffers = ProjectionBuffers(key, image, minified);
+    if (!buffers) return render::Unexpected(buffers.error());
     render::Result<render::ComputeKernel> kernel = m_context->Kernel(ProjectKernelSource(dst->format));
     if (!kernel) return render::Unexpected(kernel.error());
     ProjectBindings bindings;
     bindings.width = dst->width;
     bindings.height = dst->height;
     bindings.dstUav = m_device.Rhi().GetTextureUAVIndex(dst->texture);
-    bindings.imageSrv = m_device.Rhi().GetBufferSRVIndex(*buffer);
+    bindings.imageSrv = m_device.Rhi().GetBufferSRVIndex(buffers->codes);
+    if (minified) {
+        bindings.chainSrv = m_device.Rhi().GetBufferSRVIndex(buffers->chain);
+        bindings.tablesSrv = m_device.Rhi().GetBufferSRVIndex(buffers->tables);
+    }
     PendingDispatch pending;
     pending.kernel = *kernel;
     pending.params = EncodeProjectParams(op, bindings);

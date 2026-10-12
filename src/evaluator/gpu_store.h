@@ -6,7 +6,9 @@
 // submission, in queue order: the parameter blocks of the queued dispatches are written to one
 // arena buffer, copied to the GPU and read by the kernels through the descriptor heap. Bitmaps
 // sampled by projections are kept in VRAM as packed code buffers keyed by (resource hash,
-// encoding), uploaded once and reused across tiles and requests up to `kBitmapCacheBytes`.
+// encoding), uploaded once and reused across tiles and requests up to `kBitmapCacheBytes`; a
+// minified bitmap adds its float32 mip chain and the texture unit's tables (texture_unit.h) to
+// the same cache.
 //
 // Owned and used by the engine thread (evaluator.h); each request hands its `EngineContext` to
 // `BeginRequest`, and the context must stay set while operations are queued or flushed.
@@ -99,8 +101,19 @@ private:
     render::Result<uz::RHIBufferHandle> CreateBuffer(uint64_t bytes, uz::RHIBufferUsage usage,
                                                      uz::RHIMemoryType memory, uint32_t stride,
                                                      const char* name);
-    /// The VRAM buffer of `image` under `key`, created (and queued for copying) when absent.
-    render::Result<uz::RHIBufferHandle> BitmapBuffer(const std::string& key, const DecodedImage& image);
+    /// The VRAM buffers of a projection: the packed codes of `image` under `key`, and for a
+    /// minified bitmap its mip chain and the texture-unit tables; created (and queued for
+    /// copying) when absent. The cache is emptied first when the missing ones would overflow it.
+    struct ProjectBuffers {
+        uz::RHIBufferHandle codes = uz::RHIBufferHandle::Invalid();
+        uz::RHIBufferHandle chain = uz::RHIBufferHandle::Invalid();
+        uz::RHIBufferHandle tables = uz::RHIBufferHandle::Invalid();
+    };
+    render::Result<ProjectBuffers> ProjectionBuffers(const std::string& key, const DecodedImage& image,
+                                                     bool minified);
+    /// The cached buffer of `words` under `key` (no eviction).
+    render::Result<uz::RHIBufferHandle> CachedWords(const std::string& key, const std::vector<uint32_t>& words,
+                                                    const char* name);
     void ReleaseBitmaps();
     void DestroyRetired();
 

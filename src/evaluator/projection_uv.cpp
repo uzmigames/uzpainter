@@ -13,6 +13,17 @@ namespace uzp::evaluator {
 namespace {
 
 constexpr int64_t kSubtexel = 256;  // 8-bit sub-texel fixed point
+constexpr int kSharpBias = -384;     // BilinearSharp's LOD bias, -1.5 in 1/256
+
+/// BilinearHQ's nine samples in summation order: offsets in thirds of the fine derivatives and
+/// weights in sixteenths; the last step reads the centre again (decision 060).
+struct HqStep {
+    int dx;
+    int dy;
+    int weight;
+};
+constexpr std::array<HqStep, 9> kHqOrder{{{0, 0, 4}, {1, 0, 2}, {-1, 0, 2}, {0, -1, 2}, {0, 1, 2},
+                                          {1, -1, 1}, {-1, -1, 1}, {-1, 1, 1}, {0, 0, 1}}};
 
 int64_t Address(int64_t index, uint32_t extent, bool repeat) {
     const int64_t n = extent;
@@ -55,6 +66,7 @@ render::Result<UvProjection> UvProjectionOf(const core::Projection& projection, 
     const double radians = transform.rotation * (std::numbers::pi / 180.0);
     result.cosR = std::cos(radians);
     result.sinR = std::sin(radians);
+    result.rotation = transform.rotation;
     result.scale = transform.scale;
     result.offset = transform.offset;
     return result;
@@ -90,20 +102,68 @@ render::Result<void> CheckSampling(const UvProjection& projection, uint32_t setW
         return EvalFail(EvalErrorKind::UnsupportedSource,
                         "bitmap sources are 8- or 16-bit images", node);
     }
-    if (projection.filter != core::FilteringMode::Nearest) {
-        const double footprint =
-            Footprint(projection, setWidth, setHeight, image.width, image.height);
-        if (footprint > 1.0 + 1e-9) {
+    if (Minifies(projection, setWidth, setHeight, image)) {
+        const std::string what = std::string(core::ToString(projection.filter)) + " minification (" +
+                                 std::to_string(Footprint(projection, setWidth, setHeight, image.width,
+                                                          image.height)) +
+                                 " bitmap texels per texel)";
+        if (std::fmod(projection.rotation, 90.0) != 0.0) {
             return EvalFail(EvalErrorKind::UnsupportedSource,
-                            std::string(core::ToString(projection.filter)) +
-                                " minification (" + std::to_string(footprint) +
-                                " bitmap texels per texel) is a release gap: Painter samples it "
-                                "with the GPU's anisotropic texture unit, not modelled bit for "
-                                "bit (decision 056)",
+                            what + " at a rotation of " + std::to_string(projection.rotation) +
+                                " degrees is a release gap: the texture unit's rotated footprints are "
+                                "not modelled (decisions 061, 084)",
+                            node);
+        }
+        if (image.width != image.height || !IsPowerOfTwo(image.width) || setWidth != setHeight ||
+            (projection.wrap != core::UVWrapMode::Repeat && projection.wrap != core::UVWrapMode::RepeatNone)) {
+            return EvalFail(EvalErrorKind::UnsupportedSource,
+                            what + " needs a square power-of-two bitmap, a square set and Repeat or "
+                                   "RepeatNone: the mip chain, the gradients and the addressing are "
+                                   "measured there only (decision 084)",
                             node);
         }
     }
     return {};
+}
+
+bool Minifies(const UvProjection& projection, uint32_t setWidth, uint32_t setHeight,
+              const DecodedImage& image) {
+    return projection.filter != core::FilteringMode::Nearest &&
+           Footprint(projection, setWidth, setHeight, image.width, image.height) > 1.0 + 1e-9;
+}
+
+tu::Chain BitmapChain(const DecodedImage& image) {
+    const uint32_t bits = image.encoding == render::TexelEncoding::Unorm8 ? 8u : 16u;
+    std::vector<float> level0(size_t{image.width} * image.height * 3);
+    for (uint32_t row = 0; row < image.height; ++row) {
+        const uint32_t y = image.height - 1 - row;  // the GPU's rows go bottom up
+        for (uint32_t x = 0; x < image.width; ++x) {
+            for (uint32_t c = 0; c < 3; ++c) {
+                level0[(size_t{row} * image.width + x) * 3 + c] = arith::UnormOperand(Code(image, x, y, c), bits);
+            }
+        }
+    }
+    return tu::BuildChain(image.width, std::move(level0));
+}
+
+std::array<float, 6> PainterMatrix(const UvProjection& p) {
+    // The rotation in float32: the angle float32(degrees) float32(pi / 180), its cosine and sine
+    // rounded to float32; the linear part S R in float32 products (decision 084).
+    const float theta = static_cast<float>(p.rotation) * static_cast<float>(std::numbers::pi / 180.0);
+    const float c = static_cast<float>(std::cos(static_cast<double>(theta)));
+    const float s = static_cast<float>(std::sin(static_cast<double>(theta)));
+    const float su = static_cast<float>(p.scale[0]);
+    const float sv = static_cast<float>(p.scale[1]);
+    const float m00 = su * c;
+    const float m01 = su * s;
+    const float m10 = -sv * s;
+    const float m11 = sv * c;
+    // The translation S R (-1/2 - o) + 1/2 in float32 operations.
+    const float tx = -0.5f - static_cast<float>(p.offset[0]);
+    const float ty = -0.5f - static_cast<float>(p.offset[1]);
+    const float m02 = (m00 * tx + m01 * ty) + 0.5f;
+    const float m12 = (m10 * tx + m11 * ty) + 0.5f;
+    return {m00, m01, m02, m10, m11, m12};
 }
 
 float BilinearFilter(const std::array<uint32_t, 4>& weights, const std::array<float, 4>& texels) {
@@ -130,8 +190,74 @@ float BilinearFilter(const std::array<uint32_t, 4>& weights, const std::array<fl
         std::ldexp(static_cast<double>(significand), shift + exponent - kFilterOperandBits - 8));
 }
 
+namespace {
+
+/// Painter's float32 (u', v') of set texel (i, j) (decision 060).
+std::array<float, 2> PainterPoint(const std::array<float, 6>& m, uint32_t i, uint32_t j, uint32_t setWidth,
+                                  uint32_t setHeight) {
+    const float u = static_cast<float>((i + 0.5) / setWidth);
+    const float v = static_cast<float>(1.0 - (j + 0.5) / setHeight);
+    const float pu = m[1] * v;
+    const float pv = m[4] * v;
+    return {std::fma(m[0], u, pu) + m[2], std::fma(m[3], u, pv) + m[5]};
+}
+
+/// BilinearSharp and BilinearHQ through the texture unit (projection_uv.h).
+std::array<float, 3> Minified(const UvProjection& p, const tu::Chain& chain, uint32_t i, uint32_t j,
+                              uint32_t setWidth, uint32_t setHeight, bool repeat) {
+    const std::array<float, 6> m = PainterMatrix(p);
+    const std::array<float, 2> uv = PainterPoint(m, i, j, setWidth, setHeight);
+    // The gradients: the matrix columns per texel of the (square) set, v counted upwards.
+    const float texel = static_cast<float>(1.0 / setWidth);
+    const std::array<float, 2> ddx{m[0] * texel, m[3] * texel};
+    const std::array<float, 2> ddy{m[1] * texel, m[4] * texel};
+    if (p.filter == core::FilteringMode::BilinearSharp) {
+        return tu::Sample(chain, uv[0], uv[1], ddx, ddy, kSharpBias, repeat, repeat);
+    }
+    // BilinearHQ: the fine derivatives in the 2 x 2 quad of (i, j).
+    const std::array<float, 2> x0 = PainterPoint(m, i & ~1u, j, setWidth, setHeight);
+    const std::array<float, 2> x1 = PainterPoint(m, i | 1u, j, setWidth, setHeight);
+    const std::array<float, 2> y0 = PainterPoint(m, i, j & ~1u, setWidth, setHeight);
+    const std::array<float, 2> y1 = PainterPoint(m, i, j | 1u, setWidth, setHeight);
+    const float dux = x1[0] - x0[0];
+    const float dvx = x1[1] - x0[1];
+    const float duy = y1[0] - y0[0];
+    const float dvy = y1[1] - y0[1];
+    const float third = static_cast<float>(1.0 / 3.0);
+    const std::array<float, 2> hqDdx{third * ddx[0], third * ddx[1]};
+    const std::array<float, 2> hqDdy{third * ddy[0], third * ddy[1]};
+    std::array<float, 3> acc{0.0f, 0.0f, 0.0f};
+    for (const HqStep& step : kHqOrder) {
+        const float sx = static_cast<float>(step.dx) * third;
+        const float sy = static_cast<float>(step.dy) * third;
+        const float pu = (uv[0] + sx * dux) + sy * duy;
+        const float pv = (uv[1] + sx * dvx) + sy * dvy;
+        const std::array<float, 3> sample = tu::Sample(chain, pu, pv, hqDdx, hqDdy, 0, repeat, repeat);
+        const float weight = static_cast<float>(step.weight) / 16.0f;
+        for (uint32_t c = 0; c < 3; ++c) acc[c] = acc[c] + weight * sample[c];
+    }
+    const std::array<float, 3> base = tu::SampleLevel0(chain, uv[0], uv[1], repeat, repeat);
+    const float lengthX = std::sqrt(dux * dux + dvx * dvx);
+    const float lengthY = std::sqrt(duy * duy + dvy * dvy);
+    const float width = static_cast<float>(chain.size);
+    const float alpha = std::fmin(std::fmax(std::fmin(lengthX, lengthY) * width - 1.0f, 0.0f), 1.0f);
+    std::array<float, 3> value{};
+    for (uint32_t c = 0; c < 3; ++c) value[c] = std::fma(base[c], 1.0f - alpha, acc[c] * alpha);
+    return value;
+}
+
+}  // namespace
+
 ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, uint32_t i,
-                            uint32_t j, uint32_t setWidth, uint32_t setHeight) {
+                            uint32_t j, uint32_t setWidth, uint32_t setHeight, const tu::Chain* chain) {
+    if (chain != nullptr && p.filter != core::FilteringMode::Nearest) {
+        const bool repeat = p.wrap == core::UVWrapMode::Repeat;
+        const std::array<float, 2> uv = PainterPoint(PainterMatrix(p), i, j, setWidth, setHeight);
+        ProjectedTexel result;
+        result.covered = repeat || (uv[0] >= 0.0f && uv[0] < 1.0f && uv[1] >= 0.0f && uv[1] < 1.0f);
+        if (result.covered) result.value = Minified(p, *chain, i, j, setWidth, setHeight, repeat);
+        return result;
+    }
     // Power-of-two resolutions: multiplying by the inverse is the exact division.
     const double invWidth = 1.0 / setWidth;
     const double invHeight = 1.0 / setHeight;

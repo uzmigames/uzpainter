@@ -9,8 +9,8 @@
 // (`unsupported_*`, whose API class is also `NotYetSupported`, `ErrorClassName`) and the ones it
 // evaluates without a Tier 0 golden (instance layers, `Mesh` geometry masks, the one-axis wrap
 // modes, content-stack fill effects, mask-stack levels, SignedAddition and uniform colours on
-// Height). Refusals that need decoded bitmaps or the virtual normal maps (bilinear minification,
-// height-to-normal resolutions) are raised by the evaluation request, with the same class, before
+// Height). Refusals that need decoded bitmaps or the virtual normal maps (bilinear minification
+// outside the texture unit's measured domain, height-to-normal resolutions) are raised by the evaluation request, with the same class, before
 // any tile is allocated.
 
 #include <optional>

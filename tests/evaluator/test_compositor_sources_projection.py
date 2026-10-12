@@ -35,7 +35,6 @@ from tools.parity.schemas import load_json
 
 RAMP_SETS = 24
 RESAMPLE_SETS = {"s0": "BilinearHQ", "s1": "BilinearSharp", "s2": "Nearest", "s3": "BilinearHQ"}
-MINIFYING_USER = 6  # field A at scale 3.3: bilinear minification, a release gap
 
 
 # ── Native cases ─────────────────────────────────────────────────────────────
@@ -63,7 +62,11 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "RepeatNone leaves the texels outside the UV square to the value below the fill",
         "RepeatHorizontally wraps along u and leaves the texels outside [0, 1) in v uncovered",
         "Nearest with a 90 degree rotation turns the bitmap a quarter turn about the UV centre",
-        "bilinear minification fails with unsupported_source (release gap)",
+        "bilinear minification at rotations 0, 90, 180 and 270 evaluates through the texture unit",
+        "bilinear minification at a rotation that is not a multiple of 90 degrees fails with "
+        "unsupported_source (release gap)",
+        "bilinear minification of a bitmap that is not square fails with unsupported_source "
+        "(release gap)",
         "Nearest evaluates at any scale",
         "a physical-size scale mode fails with unsupported_source",
         "an OCIO colour-managed project fails with unsupported_source",
@@ -91,6 +94,7 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
     filter, wrap mode, transform, 8/16-bit grey and colour bitmap, nine formats, two tiles)."""
     passed, _ = run_case(evaluator_tests, "projection-gpu-vs-cpu", str(tmp_path), needs_gpu=True)
     assert any(p.startswith("every random projection stack") for p in passed)
+    assert any(p.startswith("every random minifying projection stack") for p in passed)
     assert (
         "GPU: after a resolution change the same evaluator re-evaluates at the new size" in passed
     )
@@ -247,18 +251,17 @@ def test_bitmap_import_equals_the_golden(
 def test_uv_projection_equals_the_golden(
     evaluator_tests: Path, tmp_path: Path, texture_set: str, backend: str
 ) -> None:
-    """2.4, 3.3: `resample-uv`: the 64 x 64 pattern and the 256 x 256 field A UV-projected at
+    """2.4, 3.1, 3.3: `resample-uv`: the 64 x 64 pattern and the 256 x 256 field A UV-projected at
     scales 1, 0.73, 1.37 x 2.11, rotation 30, offsets (0.123, 0.456) and half a texel, with
     `BilinearHQ`/`Repeat` (s0), `BilinearSharp` (s1), `Nearest` (s2) and `BilinearHQ`/
     `RepeatNone` (s3), on RGB16. Equal value for value, the near-tie of s0 and s1 user2 (texel
     (175, 18), green: the GPU's linear filter keeps 28 bits below the largest texel's exponent,
-    which puts it below the float32 midpoint) included. User6 (scale 3.3) minifies: exact under
-    `Nearest`; refused under the bilinear filters (a release gap, the `sources` case)."""
+    which puts it below the float32 midpoint) included. User6 (scale 3.3, held out of every fit)
+    minifies: through the texture unit under the bilinear filters (decision 084)."""
     ctx = needs_store()
     golden = ctx.golden("semantics/resample-uv")
     manifest = load_json(MANIFESTS / "semantics" / "resample-uv.json")
-    filter_name = RESAMPLE_SETS[texture_set]
-    users = [u for u in range(8) if filter_name == "Nearest" or u != MINIFYING_USER]
+    users = list(range(8))
     spec = spec_from_manifest(manifest, texture_set, tmp_path, [f"User{u}" for u in users])
     result = evaluate(evaluator_tests, spec, tmp_path, backend)
     for user in users:
@@ -271,6 +274,55 @@ def test_uv_projection_equals_the_golden(
             differing = np.argwhere(ours != theirs)
             assert len(differing) == 0, (
                 f"{texture_set}/user{user} {recording}: {len(differing)} differing values"
+            )
+
+
+# The minifying goldens of decisions 048 and 078 (pattern64 and impulse64 on 256 x 256 sets):
+# sets s0 BilinearHQ/Repeat, s1 BilinearSharp/Repeat, s2 BilinearHQ/RepeatNone, s3
+# BilinearSharp/RepeatNone; per golden the users whose rotation is not a multiple of 90 degrees
+# (refused: the texture unit's rotated footprints are not modelled, decision 084).
+MINIFYING = {
+    "resample-uv-minify": (8, {7}),
+    "resample-uv-impulse": (8, set()),
+    "resample-uv-anisotropic": (10, set()),
+    "resample-uv-anisotropic-impulse": (10, set()),
+    "resample-uv-lod": (8, set()),
+    "resample-uv-lod-boundaries": (10, set()),
+    "resample-uv-rotation": (10, {0, 1, 2, 3, 4}),
+}
+
+
+@pytest.mark.parametrize("backend", backends())
+@pytest.mark.parametrize("texture_set", ["s0", "s1", "s2", "s3"])
+@pytest.mark.parametrize("stem", sorted(MINIFYING))
+def test_minification_equals_the_golden(
+    evaluator_tests: Path, tmp_path: Path, stem: str, texture_set: str, backend: str
+) -> None:
+    """2.2, 2.3, 3.1, 4.1: bilinear minification through the recording GPU's texture unit
+    (texture_unit.h) with Painter's float32 UV, BilinearSharp's bias and BilinearHQ's nine samples
+    (decisions 060, 083, 084): `resample-uv-minify` and `-impulse` (isotropic footprints of 1.28 to
+    4.15 texels, one anisotropic, offsets), and the validation goldens of decision 078, held out of
+    every fit (anisotropic ratios 1.7 to 7.4 on both axes, isotropic LODs 0.5 to 2.5 and their
+    integer boundaries for both biases, rotations by 90, 180 and 270 degrees and their rotation-0
+    controls), every user channel of an axis-aligned footprint equal to both recordings, value
+    for value. The other rotations are refused (the `sources` case)."""
+    ctx = needs_store()
+    users, refused = MINIFYING[stem]
+    golden = ctx.golden(f"semantics/{stem}")
+    manifest = load_json(ctx.manifests / "semantics" / f"{stem}.json")
+    compared = [u for u in range(users) if u not in refused]
+    spec = spec_from_manifest(manifest, texture_set, tmp_path, [f"User{u}" for u in compared])
+    result = evaluate(evaluator_tests, spec, tmp_path, backend)
+    for user in compared:
+        ours = raster(result, f"User{user}")
+        for recording in ("r1", "r2"):
+            map_name = f"{texture_set}/user{user}"
+            theirs = golden.map(recording, map_name).values.astype(np.int64).reshape(ours.shape)
+            observe(golden, map_name, recording, "16-bit code value", ours, theirs)
+            differing = int(np.count_nonzero(ours != theirs))
+            worst = int(np.abs(ours - theirs).max()) if differing else 0
+            assert differing == 0, (
+                f"{stem} {map_name} {recording}: {differing} differing values, max |delta| {worst}"
             )
 
 

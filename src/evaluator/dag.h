@@ -37,7 +37,7 @@
 // colour-selection and anchor effects (P4-NODES), `UVTile` geometry masks, content effects on a
 // group, `Material` source mode, procedural, vector,
 // font and reference sources, the 3D projections, symmetry, physical-size UV scale modes,
-// bilinear minification, OCIO colour management.
+// bilinear minification outside the texture unit's domain (texture_unit.h), OCIO colour management.
 
 #include "evaluator/arith.h"
 #include "evaluator/formats.h"

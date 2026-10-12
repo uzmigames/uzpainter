@@ -283,6 +283,7 @@ const evaluator_sources = [_][]const u8{
     "evaluator/sources.cpp",
     "evaluator/support.cpp",
     "evaluator/templates.cpp",
+    "evaluator/texture_unit.cpp",
 };
 /// spng is linked statically wherever the evaluator is (its bitmap decoder, `sources.h`).
 const evaluator_flags = cxx_flags ++ own_warning_flags ++ [_][]const u8{ "-ffp-contract=off", "-DSPNG_STATIC" };

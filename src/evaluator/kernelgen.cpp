@@ -1,5 +1,6 @@
 #include "evaluator/kernelgen.h"
 
+#include <algorithm>
 #include <bit>
 #include <cstdio>
 
@@ -279,7 +280,31 @@ std::array<uint32_t, kBlendParamsStride> EncodeProjectParams(const ProjectOp& op
     PutDouble(params, 24, op.projection.offset[0]);
     PutDouble(params, 26, op.projection.offset[1]);
     params[28] = op.signedRange ? 1u : 0u;
+    params[29] = bindings.chainSrv;
+    params[30] = bindings.tablesSrv;
+    if (bindings.chainSrv != 0) {
+        // Minification reads Painter's float32 matrix in place of the double transform.
+        const std::array<float, 6> m = PainterMatrix(op.projection);
+        for (uint32_t k = 0; k < 6; ++k) params[16 + k] = std::bit_cast<uint32_t>(m[k]);
+    }
     return params;
+}
+
+std::vector<uint32_t> ChainWords(const tu::Chain& chain) {
+    std::vector<uint32_t> words(chain.texels.size());
+    for (size_t i = 0; i < words.size(); ++i) words[i] = std::bit_cast<uint32_t>(chain.texels[i]);
+    return words;
+}
+
+std::vector<uint32_t> TextureUnitWords() {
+    const std::vector<uint16_t>& lod = tu::LodTable();
+    const std::vector<uint32_t>& geometry = tu::GeometryTable();
+    std::vector<uint32_t> words(lod.size() / 2 + geometry.size());
+    for (size_t i = 0; i < lod.size() / 2; ++i) {
+        words[i] = uint32_t{lod[2 * i]} | (uint32_t{lod[2 * i + 1]} << 16);
+    }
+    std::copy(geometry.begin(), geometry.end(), words.begin() + static_cast<std::ptrdiff_t>(lod.size() / 2));
+    return words;
 }
 
 std::vector<uint32_t> PackBitmapCodes(const DecodedImage& image) {

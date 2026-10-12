@@ -129,10 +129,17 @@ render::Result<void> CpuTileStore::Project(const ProjectOp& op) {
     }
     const DecodedImage& image = *op.image;
     const uint32_t stored = tile.format.StoredChannels();
+    const tu::Chain* chain = nullptr;
+    if (Minifies(op.projection, op.setWidth, op.setHeight, image)) {
+        std::shared_ptr<const tu::Chain>& made =
+            m_chains[op.imageKey + (image.encoding == render::TexelEncoding::Unorm16 ? "/16" : "/8")];
+        if (!made) made = std::make_shared<const tu::Chain>(BitmapChain(image));
+        chain = made.get();
+    }
     for (uint32_t y = 0; y < tile.height; ++y) {
         for (uint32_t x = 0; x < tile.width; ++x) {
-            const ProjectedTexel texel =
-                ProjectTexel(op.projection, image, op.x0 + x, op.y0 + y, op.setWidth, op.setHeight);
+            const ProjectedTexel texel = ProjectTexel(op.projection, image, op.x0 + x, op.y0 + y,
+                                                      op.setWidth, op.setHeight, chain);
             uint32_t* out = &tile.values[(size_t{y} * tile.width + x) * stored];
             for (uint32_t c = 0; c < tile.format.channels; ++c) {
                 out[c] = StoreValue(texel.covered ? RangeValue(texel.value[c], op.signedRange) : 0.0f,
