@@ -6,9 +6,9 @@
 // in the embedded interpreter, with `uzpainter` and `substance_painter` importable.
 //
 // `--gpu-backend <name>` is the process's backend wherever it appears among the arguments before
-// `--` (it is not passed to the script; everything after `--` is, as given); dx12 by default. No
-// Phase 1 Python operation uses the GPU, so the host creates no device: the backend is checked and
-// reported (`gpu_backend`); the first GPU operation creates it (decision 111).
+// `--` (it is not passed to the script; everything after `--` is, as given); dx12 by default. The
+// host creates no device: the backend is checked and reported (`gpu_backend`); the first GPU
+// operation, a `painter_viewport` capture, creates one for its own use (decisions 111, 148).
 //
 // Output: one line `UZP_JSON:{...}` on `out`, the report of `RunScript` (script.h) with
 // `gpu_backend`: the value assigned to `result`, the script's captured stdout and stderr (with

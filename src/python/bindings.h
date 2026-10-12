@@ -158,5 +158,7 @@ void BindMisc(py::module_& m);          // logging, application, properties, lat
 void BindDiagnostics(py::module_& m);   // diagnostics (called by BindMisc)
 /// `uzpainter.display`, `uzpainter.render.display`, `uzpainter.render.shader` (display.h).
 void BindDisplay(py::module_& display, py::module_& render_display, py::module_& shader);
+/// `uzpainter.render.capture` (capture.h).
+void BindCapture(py::module_& render);
 
 }  // namespace uzp::python

@@ -54,6 +54,10 @@ class UnsupportedProcedural(NotYetSupported):
     """Procedural content this build does not evaluate."""
 
 
+class PathTracerUnavailable(NotYetSupported):
+    """The capture mode painter_iray: unavailable until the path tracer passes (P3-PATHTRACER)."""
+
+
 class BusyError(RuntimeError):
     """A job is running; the operation would interfere with it."""
 

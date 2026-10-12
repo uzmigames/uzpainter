@@ -213,6 +213,7 @@ const pyapi_sources = [_][]const u8{
     "python/bind_resource.cpp",
     "python/bind_textureset.cpp",
     "python/capabilities.cpp",
+    "python/capture.cpp",
     "python/diagnostics.cpp",
     "python/dispatcher.cpp",
     "python/display.cpp",
@@ -260,6 +261,12 @@ const preview_sources = [_][]const u8{
     "preview/display_transform.cpp",
     "preview/environment.cpp",
     "preview/viewport.cpp",
+};
+/// The viewport scene of a published frame (`src/preview/scene.cpp`), relative to `src/`: shared
+/// by the preview window and the `painter_viewport` capture (`python/capture.cpp`), so compiled
+/// into `UzPainter.exe` and into `uzp-pyapi-tests.exe`.
+const preview_scene_sources = [_][]const u8{
+    "preview/scene.cpp",
 };
 /// The preview window, its thread and `UzPainter.exe --preview` (`src/preview/`), relative to
 /// `src/`: `UzPainter.exe` only (they read the evaluator and the session).
@@ -1215,6 +1222,7 @@ pub fn build(b: *std.Build) void {
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &supervisor_sources, .flags = supervisor_flags });
     // The preview viewport and window (phase2.1_preview-viewport-window).
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &(preview_sources ++ preview_host_sources), .flags = &pyapi_flags });
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_scene_sources, .flags = &pyapi_flags });
     app_mod.linkLibrary(mesh_lib);
     const install_templates = b.addInstallDirectory(.{
         .source_dir = b.path(templates_dir),
@@ -1364,6 +1372,9 @@ pub fn build(b: *std.Build) void {
         .flags = &pyapi_flags,
     });
     pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
+    // The capture (`python/capture.cpp`) builds the preview's scene and pass.
+    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_sources, .flags = &evaluator_flags });
+    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_scene_sources, .flags = &pyapi_flags });
     pyapi_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
         .files = &.{ "python/interpreter.cpp", "python/uzpainter_module.cpp" },

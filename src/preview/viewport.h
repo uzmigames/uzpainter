@@ -77,6 +77,21 @@ struct OrbitCamera {
 /// bounding sphere with a 10 % margin at a 40-degree field of view.
 [[nodiscard]] OrbitCamera FitCamera(const mesh::TexturingMesh& mesh);
 
+/// A perspective camera as its eye and orthonormal basis (right, up, forward), its vertical field
+/// of view, and the distance along `forward` at or below which a corner counts as behind the eye
+/// (triangle binning only). Captures pass Painter's camera records this way (python/capture.h).
+struct CameraPose {
+    std::array<double, 3> eye{0.0, 0.0, 0.0};
+    std::array<double, 3> right{1.0, 0.0, 0.0};
+    std::array<double, 3> up{0.0, 1.0, 0.0};
+    std::array<double, 3> forward{0.0, 0.0, -1.0};
+    double fovDegrees = 40.0;
+    double nearPlane = 1e-6;
+};
+
+/// The pose of an orbit camera (its near distance is `distance * 1e-6`).
+[[nodiscard]] CameraPose PoseOf(const OrbitCamera& camera);
+
 /// The intensity scale of parity/semantics/iray.json `environment-mapping` (fitted once).
 inline constexpr float kEnvironmentIntensityScale = 1.01919f;
 
@@ -107,18 +122,26 @@ struct ViewportImage {
 inline constexpr uint32_t kMaxViewportSide = 8192;
 
 /// The scene checked without the GPU: the display configuration (the `unsupported_configuration`
-/// error naming decision 038), the mesh, the lighting, the size and every material map. Errors are
-/// `request_failed` with the reason.
+/// error naming decision 038), the mesh, the lighting, the camera, the size and every material
+/// map. Errors are `request_failed` with the reason.
 [[nodiscard]] render::Result<void> ValidateViewport(const ViewportScene& scene, const OrbitCamera& camera,
+                                                    uint32_t width, uint32_t height, render::Backend backend);
+[[nodiscard]] render::Result<void> ValidateViewport(const ViewportScene& scene, const CameraPose& camera,
                                                     uint32_t width, uint32_t height, render::Backend backend);
 
 /// Renders `scene` from `camera` at `width` x `height` inside one engine request; an unsupported
 /// display configuration fails before any GPU work.
 [[nodiscard]] render::Result<ViewportImage> RenderViewport(render::EngineContext& context, const ViewportScene& scene,
                                                            const OrbitCamera& camera, uint32_t width, uint32_t height);
+[[nodiscard]] render::Result<ViewportImage> RenderViewport(render::EngineContext& context, const ViewportScene& scene,
+                                                           const CameraPose& camera, uint32_t width, uint32_t height);
 
 /// XXH64 of the viewport kernel's cache key for the device's bytecode format: the "build" part of
 /// a regression golden's key (it covers the HLSL, the defines, the compile flags and DXC).
 [[nodiscard]] uint64_t ViewportKernelKey(render::KernelTarget target, std::string_view compilerVersion);
+
+/// The user-mode driver version of the DXGI adapter `adapterIndex` (high-performance order) as
+/// `a.b.c.d`, or "unknown": the "driver" part of a golden's key and of a capture receipt.
+[[nodiscard]] std::string DriverVersion(uint32_t adapterIndex);
 
 }  // namespace uzp::preview

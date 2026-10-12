@@ -93,7 +93,12 @@ Module and class names follow Painter's documented API wherever a Painter symbol
     - `alpha_test_enabled`, `alpha_blending_enabled`, `double_sided`.
 
     `set_parameters` accepts these at their default values only.
-- **Later phases.** `baking` (phase3.5) and `render.capture` (phase2.3) are importable. Every call raises `NotYetSupported` naming the owner before anything changes.
+- **Capture** (`capture.{h,cpp}`, bound in `bind_display.cpp`; task phase2.2_preview-capture, decision 148). `render.capture(path, mode, camera=None, size=None, samples=None, seed=None, preset=None, stack=None)` captures the committed revision and returns the receipt (`capture-receipt.schema.json`), which is also written as `<stem>.receipt.json`. Nothing commits.
+  - `painter_viewport` is the preview pass rendered offscreen (needs `size`).
+  - `base_color`, `channel:<name>` and `mask:<uid>` are texture-space files equal to the export.
+  - `painter_iray` raises `PathTracerUnavailable`, a `NotYetSupported`, before anything else.
+  - See `src/preview/PREVIEW.md`.
+- **Later phases.** `baking` (phase3.5) is importable. Every call raises `NotYetSupported` naming the owner before anything changes.
 - **`capabilities`.** `profile()` (`"painter-12.1-api-0.3.7"`), `manifest()` (the shipped `capabilities.json`) and `entry(symbol, context="any")` (§7).
 - **Top level.** `Result`, `last_result()`, `Transaction(name)`.
 

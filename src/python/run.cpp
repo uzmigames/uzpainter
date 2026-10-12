@@ -8,6 +8,7 @@
 
 #include <pybind11/embed.h>
 
+#include "python/capture.h"
 #include "python/interpreter.h"
 #include "python/script.h"
 #include "python/session.h"
@@ -59,6 +60,8 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
         return kRunUsage;
     }
     const std::string backend_name(render::BackendName(backend.value_or(render::Backend::Dx12)));
+    // The first GPU operation (a painter_viewport capture) creates its device on this backend.
+    SetCaptureGpu(backend.value_or(render::Backend::Dx12), nullptr);
 
     const std::string error = Start();
     if (!error.empty()) {

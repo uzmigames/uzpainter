@@ -29,9 +29,7 @@
 
 #include "log.h"
 
-#include <dxgi1_6.h>
 #include <windows.h>
-#include <wrl/client.h>
 
 #include <atomic>
 #include <bit>
@@ -400,21 +398,6 @@ int RunViewportUnsupported(const fs::path& dir) {
               std::string(name) + " fails before rendering (no submission) naming decision 038", reason);
     }
     return Finish();
-}
-
-std::string DriverVersion(uint32_t adapterIndex) {
-    Microsoft::WRL::ComPtr<IDXGIFactory6> factory;
-    if (FAILED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)))) return "unknown";
-    Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
-    if (FAILED(factory->EnumAdapterByGpuPreference(adapterIndex, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
-                                                   IID_PPV_ARGS(&adapter)))) {
-        return "unknown";
-    }
-    LARGE_INTEGER umd{};
-    if (FAILED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umd))) return "unknown";
-    const uint64_t v = static_cast<uint64_t>(umd.QuadPart);
-    return std::to_string(v >> 48) + "." + std::to_string((v >> 32) & 0xFFFF) + "." + std::to_string((v >> 16) & 0xFFFF) +
-           "." + std::to_string(v & 0xFFFF);
 }
 
 std::string Hex64(uint64_t value) {

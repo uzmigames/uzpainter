@@ -29,6 +29,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <map>
 #include <memory>
@@ -36,6 +37,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 
@@ -50,6 +52,10 @@ enum class MaterialSlot : uint8_t { BaseColor, Metalness, Roughness, Normal };
 /// The slot an evaluated channel feeds: BaseColor; BaseMetalness or Metallic; SpecularRoughness or
 /// Roughness; Normal. Empty for every other channel.
 [[nodiscard]] std::optional<MaterialSlot> SlotOf(core::ChannelType channel);
+
+/// The channel of `stack` that feeds `slot`: the OpenPBR name, else the legacy one; none for
+/// `Normal` (the combined virtual map feeds it) and for a slot the stack has no channel for.
+[[nodiscard]] std::optional<core::ChannelType> ChannelFor(const core::Stack& stack, MaterialSlot slot);
 
 using EvaluatedMap =
     std::variant<std::shared_ptr<const evaluator::ChannelResult>, std::shared_ptr<const evaluator::VirtualNormalResult>>;
@@ -152,5 +158,16 @@ private:
 /// The viewport inputs of `frame`: its texture sets' maps in mesh material order (texture set i is
 /// material i), with the defaults of `MaterialInputs` where a slot was never evaluated.
 [[nodiscard]] std::vector<MaterialInputs> MaterialsOf(const PreviewFrame& frame);
+
+/// The decoded environments' lighting by SHA-256, kept by a caller across frames.
+using LightingCache = std::unordered_map<std::string, std::shared_ptr<const EnvironmentLighting>>;
+
+/// The viewport scene of `frame` (scene.cpp): the display state of the display presets (its view,
+/// its config pin and the active preset's clear colour; `python::display::PresetOf`), the mesh,
+/// the environment's lighting (from `cache`, decoded and precomputed on first use), the material
+/// maps and the environment's rotation and exposure. Otherwise the message that replaces the
+/// image: the `unsupported_configuration` error (decision 134), no mesh, a missing environment or
+/// none named (RES-03), an environment that does not decode.
+[[nodiscard]] std::expected<ViewportScene, std::string> SceneOf(const PreviewFrame& frame, LightingCache& cache);
 
 }  // namespace uzp::preview
