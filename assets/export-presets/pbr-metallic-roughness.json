@@ -1,0 +1,84 @@
+{
+  "name": "pbr-metallic-roughness",
+  "maps": [
+    {
+      "fileName": "$textureSet_BaseColor",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        }
+      ]
+    },
+    {
+      "fileName": "$textureSet_Roughness",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "roughness"
+        }
+      ]
+    },
+    {
+      "fileName": "$textureSet_Metallic",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "metallic"
+        }
+      ]
+    },
+    {
+      "fileName": "$textureSet_Normal",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_OpenGL"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_OpenGL"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_OpenGL"
+        }
+      ]
+    },
+    {
+      "fileName": "$textureSet_Height",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "height"
+        }
+      ]
+    }
+  ]
+}

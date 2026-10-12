@@ -50,6 +50,12 @@ Shipped as UzmiGames-authored JSON presets in `assets/export-presets/`, written 
 
 Presets, by the Painter name they answer to (resolved through the compatibility alias table, so `defaultExportPreset` keeps working): `PBR Metallic Roughness`, `Blender (Principled BSDF)` (the pipeline's preset), `Unreal Engine (Packed)`, `Mesh Maps`, `glTF PBR Metal Roughness`. UzmiGames' own pipeline presets, whose provenance is the pipeline script: the Assets3D inline five-map preset (`A3D\Pipeline\retopology\staff-v10\painter_export.py`) and its hat v8 variant that adds SpecularWeight (`hat-v6\painter_export_v8.py`). The UzEngine preset below. Further presets are added on the same evidence and provenance rule.
 
+Implemented in `src/export/preset_aliases.{h,cpp}` and `assets/export-presets/` (`phase1.17_export-presets`, decision 095; `src/export/EXPORT.md` §5):
+
+- `assets3d-inline-five-map` is the pipeline's inline preset. Its export is refused while BaseColor's sRGB encoding is not fitted (R-090).
+- `pbr-metallic-roughness` and `blender-principled-bsdf` answer to their Painter names and `resource://starter_assets/` URLs through the alias table. They are refused until recording R-095 confirms their layouts.
+- Full output parity is `phase1.18_export-engine` item 6.2.
+
 ### Unreal Engine (Packed)
 
 `$mesh_$textureSet_BaseColor` RGB=basecolor A=opacity; `_OcclusionRoughnessMetallic` R=`AO_Mixed` G=roughness B=metallic (linear); `_Normal` = `Normal_DirectX`; `_Emissive`. This layout is stated as behaviour and ships only once the preset's provenance record confirms it. Target UE 5.6 (owner Q10): default encoding PNG/TGA 8-bit; optional DDS BC7 (BaseColor, ORM, Emissive) and BC5 (Normal). UE 5.6 documents DDS 2D import; BC pass-through through cooking is not documented (`technology-options/05-review-response.md` finding 13), so "already compressed" means compact interchange until the Unreal consumer fixture (§5.1) proves otherwise. SpecularWeight is exported as a separate `_SpecularWeight` map when the channel exists and reported in the receipt as a **consumer gap**: the stated mapping `Specular = 0.5 × SpecularWeight` (hat v8 report) belongs to the consumer's material and is not executed by the export.

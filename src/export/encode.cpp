@@ -12,6 +12,9 @@ namespace uzp::exporter {
 namespace {
 
 constexpr std::string_view kNotFitted = "phase1.16_export-processing-encoders, decision 090";
+/// The sRGB8 material channels (BaseColor): recorded by R-090, fitted by phase1.18 item 6.1.
+constexpr std::string_view kSrgb8NotFitted =
+    "recording R-090 and its fit, decision 090; phase1.18_export-engine item 6.1";
 
 [[noreturn]] void Refuse(const PlannedFile& file, const std::string& what, std::string_view owner) {
     throw core::NotYetSupported("export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
@@ -81,7 +84,7 @@ void CheckProcessing(const core::Project& project, const PlannedFile& file) {
             Refuse(file,
                    "the export encoding of the sRGB8 channel " + name +
                        " (sRGB-encoded samples, export-valued template constants) is recorded but not fitted",
-                   kNotFitted);
+                   kSrgb8NotFitted);
         }
     }
 }

@@ -1,0 +1,12 @@
+{
+  "id": 96,
+  "slug": "export-preset-output-parity-is-split-to-recording-r-095-and-phase1-18-item-6-2-deferred-not-passed",
+  "title": "Export preset output parity is split to recording R-095 and phase1.18 item 6.2: deferred, not passed",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.17_export-presets",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}
