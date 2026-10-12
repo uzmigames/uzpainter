@@ -12,9 +12,11 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from tests.supervisor.conftest import Mcp, make_project
+import pytest
 
-BASE = ("--gpu-backend", "vulkan", "--allow-python", "--test-faults")
+from tests.supervisor.conftest import BACKEND, Mcp, make_project
+
+BASE = ("--gpu-backend", BACKEND, "--allow-python", "--test-faults")
 
 
 def opened(
@@ -53,6 +55,7 @@ def ledger_rows(ledger: Path, sql: str, *params: Any) -> list[tuple[Any, ...]]:
         db.close()
 
 
+@pytest.mark.settling("commit_then_die_retry")
 def test_lost_acknowledgement_returns_the_stored_outcome(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:
@@ -91,6 +94,7 @@ def test_lost_acknowledgement_returns_the_stored_outcome(
     assert session.status()["acknowledged_revision"] == revision + 1
 
 
+@pytest.mark.settling("replay_inside_window", "replay_beyond_retention_lost_ledger")
 def test_a_replay_beyond_retention_with_a_lost_ledger_never_mutates(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:

@@ -17,6 +17,9 @@ Checks the content of files, never only their names or signatures:
   reports (`parity/reports/<phase>/recipe-rebuild-*.json`). The store's size
   census (`parity/reports/<phase>/store-census.json`) is checked by a rule of its own: numbers, with
   text only in its identifier fields.
+  The supervisor's settling report (`parity/reports/<phase>/supervisor-settling.json`) is checked
+  against its own schema (`tools/parity/settling/report.py`): numbers, identifiers, dates and
+  SHA-256 digests.
 """
 
 from __future__ import annotations
@@ -346,6 +349,12 @@ def _oracle_envelope_result(path: str, document: Any, data: bytes, ctx: _Context
     return result_problems(document)
 
 
+def _supervisor_settling(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.settling.report import report_problems
+
+    return report_problems(document)
+
+
 _Rule = Callable[[str, Any, bytes, _Context], list[str]]
 
 # First match wins: (path pattern, schema it assigns, check).
@@ -405,6 +414,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         re.compile(r"^parity/reports/[^/]+/store-census\.json$"),
         "store census report (numbers only)",
         _store_census,
+    ),
+    (
+        re.compile(r"^parity/reports/[^/]+/supervisor-settling\.json$"),
+        "supervisor settling report (numbers, identifiers and hashes only)",
+        _supervisor_settling,
     ),
 )
 

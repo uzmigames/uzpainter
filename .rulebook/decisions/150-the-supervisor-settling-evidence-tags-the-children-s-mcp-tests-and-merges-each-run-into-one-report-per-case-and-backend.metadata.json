@@ -1,0 +1,16 @@
+{
+  "id": 150,
+  "slug": "the-supervisor-settling-evidence-tags-the-children-s-mcp-tests-and-merges-each-run-into-one-report-per-case-and-backend",
+  "title": "The supervisor settling evidence tags the children's MCP tests and merges each run into one report per case and backend",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.4_supervisor-worker",
+    "phase2.1_supervisor-ipc-worker",
+    "phase2.2_supervisor-admission-ledger",
+    "phase2.3_supervisor-jobs",
+    "phase3.1_vulkan-compute-parity",
+    "phase2.5_mcp-transport-registry"
+  ],
+  "supersededBy": null
+}

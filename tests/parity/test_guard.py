@@ -30,6 +30,8 @@ from tools.parity.guard.guard import (
     worktree_snapshot,
 )
 from tools.parity.schemas import REPO_ROOT, SCHEMA_DIR, Schema, load_json, validation_errors
+from tools.parity.settling.report import merge as settling_merge
+from tools.parity.settling.report import report_problems as settling_problems
 from tools.parity.store.store import STORE_ENV, OracleStore, sha256_file
 
 DATA = Path(__file__).parent / "guard_data"
@@ -430,6 +432,104 @@ def test_repository_store_census_report_passes() -> None:
     assert (REPO_ROOT / CENSUS_PATH).is_file()
     snapshot = worktree_snapshot(REPO_ROOT, [CENSUS_PATH])
     assert snapshot.checked == (CENSUS_PATH,)
+    assert run_guard(REPO_ROOT, snapshot, None) == []
+
+
+SETTLING_PATH = "parity/reports/phase2/supervisor-settling.json"
+SHA = "ab" * 32
+
+
+def _settling() -> dict[str, Any]:
+    case = {
+        "id": "commit_then_die_retry",
+        "backend": "vulkan",
+        "result": "pass",
+        "seconds": 4.2,
+        "gpu_status": "unavailable",
+        "recoveries": [{"cause": "terminated", "recovery_ms": 812.5, "attempts": 1}],
+        "date": "2026-10-12",
+        "exe_sha256": SHA,
+    }
+    overhead = {
+        "backend": "vulkan",
+        "snippet": "read",
+        "calls": 50,
+        "mcp_median_ms": 9.1,
+        "run_median_ms": 0.2,
+        "overhead_median_ms": 8.9,
+        "overhead_p90_ms": 11.0,
+        "overhead_max_ms": 14.0,
+        "date": "2026-10-12",
+        "exe_sha256": SHA,
+    }
+    return settling_merge(None, [case], [overhead])
+
+
+@pytest.mark.parametrize(
+    ("change", "allowed"),
+    [
+        (lambda c: c, True),
+        (lambda c: {**c, "schema": "uzpainter/supervisor-settling/2"}, False),
+        (lambda c: {**c, "source": "E:/Assets3D/18-Tunica-v10.spp"}, False),
+        (lambda c: {**c, "cases": [{**c["cases"][0], "note": "free text"}]}, False),
+        (lambda c: {**c, "cases": [{**c["cases"][0], "id": "made_up_case"}]}, False),
+        (lambda c: {**c, "cases": [{**c["cases"][0], "exe_sha256": "C:/build/x.exe"}]}, False),
+        (lambda c: {**c, "cases": [c["cases"][0], c["cases"][0]]}, False),
+        (
+            lambda c: {
+                **c,
+                "cases": [{**c["cases"][0], "id": "gpu_backend_unavailable", "backend": "dx12"}],
+            },
+            False,
+        ),
+        (
+            lambda c: {
+                **c,
+                "cases": [
+                    {
+                        **c["cases"][0],
+                        "recoveries": [{"cause": "E:/x", "recovery_ms": 1, "attempts": 1}],
+                    }
+                ],
+            },
+            False,
+        ),
+    ],
+)
+def test_supervisor_settling_report_holds_numbers_identifiers_and_hashes_only(
+    repo: Path, change: Any, allowed: bool
+) -> None:
+    """phase2.4_supervisor-worker item 2.3 (decision 150)."""
+    put(repo, SETTLING_PATH, json.dumps(change(_settling())).encode())
+    assert blocked(repo, None) == ({} if allowed else {SETTLING_PATH: {"public-schema"}})
+
+
+def test_settling_merge_keeps_other_backends_and_lists_what_has_not_run() -> None:
+    """A run replaces only its own cases and backend; a device case on Vulkan stays pending under
+    decision 121 and any other missing case is `not_run`, never a pass."""
+    first = _settling()
+    (passed,) = [case for case in first["cases"] if case["result"] == "pass"]
+    gpu = {**passed, "id": "gpu_stall", "backend": "dx12", "gpu_status": "ready"}
+    merged = settling_merge(first, [gpu], [])
+    by_key = {(case["id"], case["backend"]): case for case in merged["cases"]}
+    assert by_key[("commit_then_die_retry", "vulkan")]["result"] == "pass"
+    assert by_key[("gpu_stall", "dx12")]["result"] == "pass"
+    assert by_key[("gpu_stall", "vulkan")] == {
+        "id": "gpu_stall",
+        "backend": "vulkan",
+        "result": "pending",
+        "decision": 121,
+    }
+    assert by_key[("commit_then_die_retry", "dx12")]["result"] == "not_run"
+    assert ("gpu_backend_unavailable", "dx12") not in by_key
+    assert merged["overhead"] == first["overhead"]
+    assert settling_problems(merged) == []
+
+
+def test_repository_supervisor_settling_report_passes() -> None:
+    assert (REPO_ROOT / SETTLING_PATH).is_file()
+    snapshot = worktree_snapshot(REPO_ROOT, [SETTLING_PATH])
+    assert snapshot.checked == (SETTLING_PATH,)
     assert run_guard(REPO_ROOT, snapshot, None) == []
 
 

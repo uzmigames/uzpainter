@@ -537,7 +537,8 @@ void Worker::DefineTools() {
     }
 #if defined(UZP_WORKER_FAULT_HOOKS)
     if (m_options.test_faults) {
-        json::Array faults{"kill", "abort", "seh", "remove_device", "gpu_stall", "kill_before_reply"};
+        json::Array faults{"kill", "abort", "seh", "remove_device", "gpu_stall", "kill_before_reply",
+                           "kill_during_save", "kill_during_compaction"};
         if (m_previewHost) {
             faults.push_back("preview_stall");
             faults.push_back("preview_resume");
@@ -855,6 +856,9 @@ json::Object Worker::ProjectClose(const json::Object&) {
 json::Object Worker::ProjectSave(const json::Object& arguments) {
     const std::string mode = StringField(arguments, "mode").value_or("incremental");
     if (mode != "incremental" && mode != "full") throw CallError{"invalid_arguments", "mode must be incremental or full", {}};
+#if defined(UZP_WORKER_FAULT_HOOKS)
+    const fault::SaveFaultScope save_fault;  // `kill_during_save` / `kill_during_compaction` act here only
+#endif
     const core::Checkpoints saved =
         python::Session::Get().Save(mode == "full" ? store::SaveMode::full : store::SaveMode::incremental);
     json::Object result{{"current", saved.current}};

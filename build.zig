@@ -448,8 +448,8 @@ const store_sources = [_][]const u8{
     "store/cli.cpp",
 };
 /// Test-only fault hooks of the store (`src/store/fault.h`): compiled, with
-/// `-DUZP_STORE_FAULT_HOOKS=1` on every store source, into `uzp-store-tests.exe` only, never into
-/// `uzp_store.lib`.
+/// `-DUZP_STORE_FAULT_HOOKS=1` on every store source, into the store's test executables and a Debug
+/// `UzPainter.exe` (decision 151), never into `uzp_store.lib`.
 const store_fault_source = "store/fault.cpp";
 const store_thirdparty_include_dirs = [_][]const u8{ "thirdparty/sqlite", "thirdparty/zstd/lib" };
 /// The SQLite amalgamation with the options recorded in `thirdparty/sqlite/ORIGIN.md`.
@@ -1180,7 +1180,15 @@ pub fn build(b: *std.Build) void {
     const store_settle_tests_step = b.step("uzp-store-settle-tests", "Build the native settling-evidence tests of the project store (09 §7)");
     store_settle_tests_step.dependOn(&b.addInstallArtifact(store_settle_tests_exe, .{}).step);
     b.getInstallStep().dependOn(store_settle_tests_step);
-    app_mod.linkLibrary(store_lib);
+    // A Debug `UzPainter.exe` compiles the store with its test-only fault hooks, so the worker's
+    // `test_fault` can end the worker inside a save (decision 151); every other build links the
+    // hook-free library.
+    if (optimize == .Debug) {
+        addStoreSources(b, app_mod, &store_hook_flags);
+        app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{store_fault_source}, .flags = &store_hook_flags });
+    } else {
+        app_mod.linkLibrary(store_lib);
+    }
 
     // ── The compositor (phase1.5_compositor-tile-dag) ─────────────────────────────────────────
     // `src/evaluator/` joins `UzPainter.exe` (over the render layer and the document model) and
@@ -1200,8 +1208,9 @@ pub fn build(b: *std.Build) void {
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
     // The supervisor and worker roles (phase2.1). The worker's test-only fault hooks exist in a
     // Debug build only: ReleaseFast, ReleaseSafe and ReleaseSmall contain none of their code and
-    // refuse `--test-faults` (decision 120).
-    const worker_hook_flags: []const []const u8 = if (optimize == .Debug) &.{"-DUZP_WORKER_FAULT_HOOKS=1"} else &.{};
+    // refuse `--test-faults` (decision 120). They reach the store's hooks to end the worker inside
+    // a save (decision 151).
+    const worker_hook_flags: []const []const u8 = if (optimize == .Debug) &.{ "-DUZP_WORKER_FAULT_HOOKS=1", "-DUZP_STORE_FAULT_HOOKS=1" } else &.{};
     const supervisor_flags = std.mem.concat(b.allocator, []const u8, &.{ &pyapi_flags, worker_hook_flags }) catch @panic("OOM");
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &supervisor_sources, .flags = supervisor_flags });
     // The preview viewport and window (phase2.1_preview-viewport-window).
