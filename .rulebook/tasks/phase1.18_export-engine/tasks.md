@@ -1,8 +1,8 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.14_compositor-core
+- [x] 1.1 Prerequisites accepted: phase1.14_compositor-core (archived 2026-10-12)
 
 ## 2. Children (each accepted before this parent closes)
-- [ ] 2.1 `phase1.15_export-plan-compiler` accepted
+- [x] 2.1 `phase1.15_export-plan-compiler` accepted (archived 2026-10-12; AO_Mixed is the scope split of decision 131)
 - [x] 2.2 `phase1.16_export-processing-encoders` accepted (archived 2026-10-12)
 - [x] 2.3 `phase1.17_export-presets` accepted (archived 2026-10-12)
 - [x] 2.4 `phase1.17_export-publication-receipts` accepted (archived 2026-10-12)
@@ -27,6 +27,6 @@
 Notes (2026-10-12, decisions 103 and 104):
 - 3.1: the Tier 0 export evidence of the implemented subset (re-encoding, written goldens, processing from Painter's own values, dry runs and probes) is `parity/reports/phase1/export-engine.md`; AO_Mixed and the converted virtual maps stay refused before writing (decisions 092, 131; AO_Mixed's fit is `phase3.2_unreal-ue56-packed-preset` item 2.10).
 - 3.2: `tests/export/test_export_engine.py` through `UzPainter.exe export` (decision 104); 3.3: phase1.17's interruption suite (`tests/export/test_export_publication.py`) over the same `PublishExport`.
-- 4.1: checked for the implemented subset; the parent still waits on 1.1 and 2.1 (phase1.14 and phase1.15 not accepted).
+- 4.1: checked for the implemented subset; 1.1 and 2.1 are accepted (phase1.14 and phase1.15 archived 2026-10-12).
 - 6.1: scope split (decision 103). Shipped exact: the PNG writer's five-filter rule for 8-bit grey, OpenEXR 16f and A,Y, PNG 8 values, signed Height in PNG, L+A and RGB+A with the opaque alpha dropped, dithering at PNG 16, sRGB8 User channels in OpenEXR, the AO, Curvature and Position mesh maps. Refused before writing with named owners: sRGB8 material channels and `infinite` on islands -> `phase1.25_pilot-wand` items 2.6, 2.7; dithering at PNG 8 and in OpenEXR, resize, the dilation paddings -> `phase3.2_unreal-ue56-packed-preset` item 2.9.
 - 6.2: scope split to `phase3.3_unreal-gltf-presets` item 3.5 (R-095 not recorded: `export-presets-legacy` crashed Painter); the two presets stay refused while `unconfirmed`.

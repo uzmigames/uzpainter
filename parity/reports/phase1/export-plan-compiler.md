@@ -11,7 +11,7 @@ Child of `phase1.18_export-engine` (P1-EXPORT; `docs/architecture/08-export.md` 
 - `AO_Mixed` is not exact: its best model misses r1 at 31 values of recording R-086a (decision 092).
 - Nine converted maps are fitted exactly on recording R-086b. They stay release gaps until the evaluator gives channel coverage and recording R-092 covers other templates. View_2D is a render, not an operator (decision 092).
 
-Item 3.5 is closed on UzPainter's own written files, and items 3.6 and 4.1 as a scope split (decision 131). Item 1.1 waits on the prerequisite (§5).
+Item 3.5 is closed on UzPainter's own written files, and items 3.6 and 4.1 as a scope split (decision 131). Item 1.1 is accepted: phase1.14 is archived (§5).
 
 ## Run record
 
@@ -204,9 +204,9 @@ One project per probe group, on `grid2x2` (texture sets s0-s3), OpenGL, 256 px. 
   - Twin golden `virtual-maps-converted-float`: the same maps as OpenEXR 32f.
 - **Recorder change needed:** `OutputMap.file_name` must replace the `/` of `1/ior`, for example with `$textureSet_1_over_ior`. Otherwise Painter writes a sub-folder.
 
-## 5. Items left open and closed
+## 5. Items closed after the first run
 
-- **1.1** Prerequisite `phase1.14_compositor-core` is merged. Its child `phase1.12_compositor-height-normal` is archived (2026-10-11); phase1.14 and its child phase1.13 are closing on `wt/close-compositor`. phase1.12 changed the virtual normal maps' set-size and Normal-mesh-map limits. The plan defers those limits to the evaluator, so nothing in `src/export/` needs to change for them (decision 085).
+- **1.1** Closed. Prerequisite `phase1.14_compositor-core` and its children `phase1.12_compositor-height-normal` and `phase1.13_compositor-diagnostics` are archived. The plan defers the virtual normal maps' set-size and Normal-mesh-map limits to the evaluator, so nothing in `src/export/` needs to change for them (decision 085).
 - **3.5** Closed. Painter's side is proven (§2). UzPainter's side (decision 085) is proven by the phase1.16 writers and the phase1.17 receipts:
   - `WriteExport` writes exactly the dry run's files, with the sizes and SHA-256 it reports, in two processes (`test_written_files_equal_the_dry_run_in_two_processes`, CPU, 1 passed on 2026-10-12);
   - it does so on all 40 export steps (80 files) of phase1.16's Tier 0 goldens (`parity/reports/phase1/export-processing-encoders.md`);
