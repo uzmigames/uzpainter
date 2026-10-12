@@ -20,11 +20,13 @@ struct Channel {
 };
 constexpr Channel kGrey[] = {{"Y", 0}};
 constexpr Channel kRgb[] = {{"B", 2}, {"G", 1}, {"R", 0}};
+constexpr Channel kRgba[] = {{"A", 3}, {"B", 2}, {"G", 1}, {"R", 0}};
 
 std::span<const Channel> ChannelsOf(uint32_t channels) {
     if (channels == 1) return kGrey;
     if (channels == 3) return kRgb;
-    throw std::invalid_argument("exr: only grey and RGB are written (decision 090)");
+    if (channels == 4) return kRgba;
+    throw std::invalid_argument("exr: only grey, RGB and RGBA are written (decision 090)");
 }
 
 [[noreturn]] void Fail(std::string_view what, const char* err) {
@@ -96,7 +98,7 @@ ExrImage DecodeExr(std::string_view file) {
     for (size_t c = 0; c < channels.size(); ++c) {
         if (std::strcmp(header.channels[c].name, channels[c].name) != 0 ||
             header.pixel_types[c] != TINYEXR_PIXELTYPE_FLOAT) {
-            throw std::runtime_error("exr: the channels are not FLOAT Y or B, G, R");
+            throw std::runtime_error("exr: the channels are not FLOAT Y; B, G, R; or A, B, G, R");
         }
     }
     EXRImage exr;

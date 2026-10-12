@@ -101,7 +101,7 @@ def synthetic_exr_bits(width: int, height: int, channels: int) -> np.ndarray:
 def test_encoders_round_trip_and_repeat_across_processes(
     export_tests: Path, tmp_path: Path
 ) -> None:
-    """3.5, 3.6: PNG16 (grey, RGB) and OpenEXR 32f (grey, RGB) images of ramps, runs, noise and
+    """3.5, 3.6: PNG 16 and 8 and OpenEXR 32f images (grey, RGB, RGBA) of ramps, runs, noise and
     special floats (signed zero, subnormal, maximum, infinities, NaN payloads), at 1x1 and odd
     sizes: decoded back they equal the encoded values bit for bit (spng and tinyexr in the
     process; independently the repository's own PNG decoder, and OpenEXR's when installed),
@@ -110,7 +110,7 @@ def test_encoders_round_trip_and_repeat_across_processes(
 
     first = run(export_tests, "roundtrip", str(tmp_path / "a"))
     second = run(export_tests, "roundtrip", str(tmp_path / "b"))
-    assert len(first) == 8
+    assert len(first) == 15
     assert [r["sha256"] for r in first] == [r["sha256"] for r in second]
     try:
         import OpenEXR
@@ -124,11 +124,15 @@ def test_encoders_round_trip_and_repeat_across_processes(
         w, h, c = (int(x) for x in result["name"].split("-")[1].split(".")[0].split("x"))
         if result["format"] == "png":
             decoded = png.decode(data).reshape(h, w, c).astype(np.int64)
-            assert np.array_equal(decoded, synthetic_png(w, h, c))
+            expected = synthetic_png(w, h, c)
+            if result["name"].endswith("-8.png"):
+                assert png.chunks(data)[0][1][8] == 8
+                expected = expected & 0xFF
+            assert np.array_equal(decoded, expected)
         elif OpenEXR is not None:
             with OpenEXR.File(str(tmp_path / "a" / result["name"]), separate_channels=True) as exr:
                 planes = exr.channels()
-                names = ["Y"] if c == 1 else ["R", "G", "B"]
+                names = ["Y"] if c == 1 else ["R", "G", "B", "A"][:c]
                 assert sorted(planes) == sorted(names)
                 got = np.stack([np.asarray(planes[n].pixels) for n in names], axis=-1)
             assert got.dtype == np.float32
@@ -157,8 +161,9 @@ def ramp_png(path: Path) -> str:
 
 
 def spec(tmp: Path, mesh: Path | None = GRID, name: str = "s0") -> Path:
-    """A texture set `name` (the mesh material it covers) of the grid mesh: BaseColor sRGB8,
-    Height L16F and SpecularRoughness L16 filled from a ramp bitmap."""
+    """A texture set `name` (the mesh material it covers) of the grid mesh: User0 sRGB8, BaseColor
+    sRGB8, Height L16F and SpecularRoughness L16 filled from a ramp bitmap, and an empty Normal
+    RGB16F."""
     tmp.mkdir(parents=True, exist_ok=True)
     sha = ramp_png(tmp / "ramp.png")
     bitmap = {"bitmap": sha, "color_space": "Raw"}
@@ -166,15 +171,22 @@ def spec(tmp: Path, mesh: Path | None = GRID, name: str = "s0") -> Path:
         "name": name,
         "resolution": [256, 256],
         "channels": [
+            {"type": "User0", "format": "sRGB8"},
             {"type": "BaseColor", "format": "sRGB8"},
             {"type": "Height", "format": "L16F"},
             {"type": "SpecularRoughness", "format": "L16"},
+            {"type": "Normal", "format": "RGB16F"},
         ],
         "resources": [{"sha256": sha, "png": "ramp.png"}],
         "layers": [
             {
                 "kind": "fill",
-                "sources": {"BaseColor": bitmap, "Height": bitmap, "SpecularRoughness": bitmap},
+                "sources": {
+                    "User0": bitmap,
+                    "BaseColor": bitmap,
+                    "Height": bitmap,
+                    "SpecularRoughness": bitmap,
+                },
             }
         ],
     }
@@ -191,8 +203,8 @@ def chan(dest: str, kind: str, name: str) -> dict[str, str]:
 def config(
     out: Path, rules: list[dict[str, Any]] | None = None, root: str = "s0", **params: Any
 ) -> dict[str, Any]:
-    """BaseColor (RGB), Roughness (L) and Height (L) of `root`; Height as OpenEXR 32f by a
-    rule."""
+    """User0 (RGB, an sRGB8 channel), Roughness (L) and Height (L) of `root`; Height as OpenEXR 32f
+    by a rule."""
     return {
         "exportShaderParams": False,
         "exportPath": out.as_posix(),
@@ -202,8 +214,8 @@ def config(
                 "name": "p",
                 "maps": [
                     {
-                        "fileName": "$textureSet_BaseColor",
-                        "channels": [chan(c, "documentMap", "basecolor") for c in "RGB"],
+                        "fileName": "$textureSet_User0",
+                        "channels": [chan(c, "documentMap", "user0") for c in "RGB"],
                     },
                     {
                         "fileName": "maps/$textureSet_Roughness",
@@ -264,8 +276,8 @@ def test_written_files_equal_the_dry_run_in_two_processes(
             == sorted(on_disk)
             == [
                 "maps/s0_Roughness.png",
-                "s0_BaseColor.png",
                 "s0_Height.exr",
+                "s0_User0.png",
             ]
         )
         for rel, data in on_disk.items():
@@ -327,28 +339,79 @@ def test_unrecorded_processing_is_refused_before_writing(
 
 
 def test_alpha_layouts_are_refused_before_writing(export_tests: Path, tmp_path: Path) -> None:
-    """2.5 (decision 090): an RGB+A map (alpha from a defaultMap) is refused, naming R-090."""
+    """2.5 (decision 090): an RGB+A map (alpha from a defaultMap) is refused before writing; the
+    layout is recorded (R-085 P6, P7) but its alpha sources are not resolved by the plan yet."""
     out = tmp_path / "out"
     cfg = config(out)
     cfg["exportPresets"][0]["maps"][0]["channels"].append(chan("A", "defaultMap", "white"))
     result = export(export_tests, spec(tmp_path / "spec"), cfg, tmp_path / "run")
     assert result.get("error") == "NotYetSupported", result
-    assert "RGBA layout" in result["message"] and "R-090" in result["message"]
+    assert "RGB+A layout" in result["message"] and "decision 090" in result["message"]
     assert files_under(out) == {}
 
 
-def test_padding_needs_complete_coverage_or_a_mesh(export_tests: Path, tmp_path: Path) -> None:
-    """2.2 (decision 090): on the sphere, whose UV islands leave texels uncovered, `infinite` and
-    `passthrough` padding are refused naming R-090; without a texturing mesh the export fails
-    before writing; nothing is written either way."""
-    for padding in ("infinite", "passthrough"):
-        out = tmp_path / padding
-        cfg = config(out, root="uzp_sphere", paddingAlgorithm=padding)
-        sphere = spec(tmp_path / "sphere", SPHERE, "uzp_sphere")
-        result = export(export_tests, sphere, cfg, tmp_path / f"run-{padding}")
-        assert result.get("error") == "NotYetSupported", result
-        assert "do not cover the whole tile" in result["message"] and "R-090" in result["message"]
-        assert files_under(out) == {}
+@pytest.mark.parametrize(
+    ("map_name", "file_format", "expected"),
+    [
+        ("basecolor", "png", "the export encoding of the sRGB8 channel BaseColor"),
+        ("user0", "exr", "the sRGB8 channel User0 in OpenEXR is not recorded"),
+    ],
+)
+def test_unfitted_srgb8_exports_are_refused(
+    export_tests: Path, tmp_path: Path, map_name: str, file_format: str, expected: str
+) -> None:
+    """2.5 (decision 090): an sRGB8 material channel (BaseColor: sRGB-encoded samples, recorded
+    but not fitted) and an sRGB8 channel in OpenEXR (not recorded) are refused before writing."""
+    out = tmp_path / "out"
+    cfg = config(out)
+    channels = cfg["exportPresets"][0]["maps"][0]["channels"]
+    for c in channels:
+        c["srcMapName"] = map_name
+    cfg["exportParameters"][0]["parameters"]["fileFormat"] = file_format
+    cfg["exportParameters"][0]["parameters"]["bitDepth"] = "16" if file_format == "png" else "32f"
+    result = export(export_tests, spec(tmp_path / "spec"), cfg, tmp_path / "run")
+    assert result.get("error") == "NotYetSupported", result
+    assert expected in result["message"] and "decision 090" in result["message"], result["message"]
+    assert files_under(out) == {}
+
+
+def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
+    """2.2 (decision 090): on the sphere, whose UV islands leave texels uncovered:
+    - `infinite` padding is refused naming R-090, nothing written;
+    - `passthrough` writes every texel's evaluated value (the L16 roughness holds the ramp's codes
+      inside and outside the islands);
+    - a virtualMap source with `passthrough` is refused (not recorded outside the islands);
+    - without a texturing mesh the export fails before writing."""
+    from tools.parity.feasibility import png
+
+    sphere = spec(tmp_path / "sphere", SPHERE, "uzp_sphere")
+    out = tmp_path / "infinite"
+    result = export(export_tests, sphere, config(out, root="uzp_sphere"), tmp_path / "run-infinite")
+    assert result.get("error") == "NotYetSupported", result
+    assert "do not cover the whole tile" in result["message"] and "R-090" in result["message"]
+    assert files_under(out) == {}
+
+    out = tmp_path / "passthrough"
+    cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
+    result = export(export_tests, sphere, cfg, tmp_path / "run-passthrough")
+    assert "error" not in result, result
+    rough = png.decode((out / "maps" / "uzp_sphere_Roughness.png").read_bytes()).astype(np.int64)
+    assert np.array_equal(rough.reshape(256, 256), ramp_codes())
+
+    out = tmp_path / "virtual"
+    cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
+    cfg["exportPresets"][0]["maps"] = [
+        {
+            "fileName": "$textureSet_n",
+            "channels": [chan(c, "virtualMap", "Normal_OpenGL") for c in "RGB"],
+        }
+    ]
+    cfg["exportParameters"] = cfg["exportParameters"][:1]
+    result = export(export_tests, sphere, cfg, tmp_path / "run-virtual")
+    assert result.get("error") == "NotYetSupported", result
+    assert "virtualMap source outside the UV islands" in result["message"]
+    assert files_under(out) == {}
+
     out = tmp_path / "no-mesh"
     result = export(export_tests, spec(tmp_path / "bare", None), config(out), tmp_path / "run-bare")
     assert result.get("error") == "Failure" and "no texturing mesh" in result["message"], result

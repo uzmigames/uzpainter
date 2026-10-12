@@ -114,16 +114,19 @@ std::string Deflate(const std::vector<uint8_t>& data) {
 
 std::string EncodePng(const PngImage& image) {
     if (image.width == 0 || image.height == 0) throw std::invalid_argument("png: empty image");
-    if (image.channels != 1 && image.channels != 3) {
-        throw std::invalid_argument("png: only grey and RGB are written (decision 090)");
+    if (image.channels != 1 && image.channels != 3 && image.channels != 4) {
+        throw std::invalid_argument("png: only grey, RGB and RGBA are written (decision 090)");
     }
-    if (image.bitDepth != 16) throw std::invalid_argument("png: only 16 bits per sample are written (decision 090)");
+    if (image.bitDepth != 8 && image.bitDepth != 16) {
+        throw std::invalid_argument("png: only 8 and 16 bits per sample are written");
+    }
     const size_t samplesPerRow = size_t{image.width} * image.channels;
     if (image.samples.size() != samplesPerRow * image.height) {
         throw std::invalid_argument("png: the sample count does not match the image size");
     }
-    const size_t bpp = size_t{image.channels} * 2;
-    const size_t stride = samplesPerRow * 2;
+    const size_t bytesPerSample = image.bitDepth / 8;
+    const size_t bpp = size_t{image.channels} * bytesPerSample;
+    const size_t stride = samplesPerRow * bytesPerSample;
     std::vector<uint8_t> raw(stride);
     std::vector<uint8_t> above(stride, 0);
     std::vector<uint8_t> sub(stride);
@@ -133,8 +136,13 @@ std::string EncodePng(const PngImage& image) {
     for (uint32_t y = 0; y < image.height; ++y) {
         const uint16_t* samples = image.samples.data() + size_t{y} * samplesPerRow;
         for (size_t i = 0; i < samplesPerRow; ++i) {
-            raw[2 * i] = static_cast<uint8_t>(samples[i] >> 8);
-            raw[2 * i + 1] = static_cast<uint8_t>(samples[i] & 0xFF);
+            if (image.bitDepth == 8) {
+                if (samples[i] > 0xFF) throw std::invalid_argument("png: an 8-bit sample above 255");
+                raw[i] = static_cast<uint8_t>(samples[i]);
+            } else {
+                raw[2 * i] = static_cast<uint8_t>(samples[i] >> 8);
+                raw[2 * i + 1] = static_cast<uint8_t>(samples[i] & 0xFF);
+            }
         }
         FilterRow(raw.data(), above.data(), stride, bpp, sub, paeth, filtered);
         std::swap(raw, above);
@@ -146,7 +154,7 @@ std::string EncodePng(const PngImage& image) {
     PutU32(ihdr, image.width);
     PutU32(ihdr, image.height);
     ihdr.push_back(static_cast<char>(image.bitDepth));
-    ihdr.push_back(static_cast<char>(image.channels == 1 ? 0 : 2));  // colour type: grey, RGB
+    ihdr.push_back(static_cast<char>(image.channels == 1 ? 0 : image.channels == 3 ? 2 : 6));  // grey/RGB/RGBA
     ihdr.push_back(0);                                               // deflate
     ihdr.push_back(0);                                               // adaptive filtering
     ihdr.push_back(0);                                               // not interlaced

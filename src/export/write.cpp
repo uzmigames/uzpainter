@@ -55,8 +55,7 @@ render::Result<std::vector<WrittenFile>> WriteExport(const core::Project& projec
     for (const PlannedFile& file : plan.files) {
         const core::TextureSet* set = SetOf(project, file.textureSetId);
         if (set == nullptr) return ExportFail("the texture set of " + file.relativePath + " is not in the project");
-        CheckProcessing(file, static_cast<uint32_t>(set->resolution.width),
-                        static_cast<uint32_t>(set->resolution.height));
+        CheckProcessing(project, file);
         if (file.layout == FileLayout::Statistics) continue;
         if (!coverages.contains(set->id)) {
             std::optional<Coverage> coverage = CoverageOf(*set, inputs);

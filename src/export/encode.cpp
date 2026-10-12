@@ -11,20 +11,50 @@ namespace uzp::exporter {
 
 namespace {
 
-[[noreturn]] void Unrecorded(const PlannedFile& file, const std::string& what) {
+constexpr std::string_view kNotFitted = "phase1.16_export-processing-encoders, decision 090";
+
+[[noreturn]] void Refuse(const PlannedFile& file, const std::string& what, std::string_view owner) {
     throw core::NotYetSupported("export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
-                                "): " + what + " is not recorded (" + std::string(kProcessingRecording) + ")");
+                                "): " + what + " (" + std::string(owner) + ")");
 }
 
-uint32_t ComponentsOf(FileLayout layout) { return layout == FileLayout::L ? 1 : 3; }
+[[noreturn]] void Unrecorded(const PlannedFile& file, const std::string& what) {
+    Refuse(file, what + " is not recorded", kProcessingRecording);
+}
+
+const core::TextureSet& SetOf(const core::Project& project, const PlannedFile& file) {
+    for (const core::TextureSet& set : project.texture_sets) {
+        if (set.id == file.textureSetId) return set;
+    }
+    throw std::invalid_argument("export: the texture set of " + file.relativePath + " is not in the project");
+}
+
+/// The stack channel of `source` when it is an sRGB8 documentMap channel of `file`'s stack.
+std::optional<core::ChannelType> Srgb8Channel(const core::TextureSet& set, const PlannedFile& file,
+                                              const PlannedSource& source) {
+    if (source.type != SourceType::documentMap || !source.channel) return std::nullopt;
+    for (const core::Stack& stack : set.stacks) {
+        if (stack.id != file.stackId) continue;
+        const auto it = stack.channels.find(*source.channel);
+        if (it != stack.channels.end() && it->second.format == core::ChannelFormat::sRGB8) return *source.channel;
+    }
+    return std::nullopt;
+}
+
+bool IsUserChannel(core::ChannelType type) { return core::ToString(type).starts_with("User"); }
 
 }  // namespace
 
-void CheckProcessing(const PlannedFile& file, uint32_t setWidth, uint32_t setHeight) {
+void CheckProcessing(const core::Project& project, const PlannedFile& file) {
     if (file.layout == FileLayout::Statistics) return;
+    const core::TextureSet& set = SetOf(project, file);
     const ResolvedParameters& p = *file.parameters;
-    if (file.layout != FileLayout::L && file.layout != FileLayout::RGB) {
-        Unrecorded(file, "the " + std::string(FileLayoutName(file.layout)) + " layout (an alpha channel)");
+    if (file.layout == FileLayout::LA) Unrecorded(file, "the L+A layout (grey and alpha)");
+    if (file.layout == FileLayout::RGBA) {
+        Refuse(file,
+               "the RGB+A layout is recorded (R-085 P6, P7: an alpha of 1 everywhere is dropped) but its alpha "
+               "sources are not resolved by the plan yet",
+               kNotFitted);
     }
     if (p.fileFormat == FileFormat::png && p.bitDepth != BitDepth::u16) {
         Unrecorded(file, "PNG at " + std::string(BitDepthName(p.bitDepth)) + " bits");
@@ -33,12 +63,26 @@ void CheckProcessing(const PlannedFile& file, uint32_t setWidth, uint32_t setHei
         Unrecorded(file, "OpenEXR at " + std::string(BitDepthName(p.bitDepth)));
     }
     if (p.dithering) Unrecorded(file, "dithering");
-    if (file.width != setWidth || file.height != setHeight) {
-        Unrecorded(file, "resizing " + std::to_string(setWidth) + "x" + std::to_string(setHeight) + " to " +
+    const auto width = static_cast<uint32_t>(set.resolution.width);
+    const auto height = static_cast<uint32_t>(set.resolution.height);
+    if (file.width != width || file.height != height) {
+        Unrecorded(file, "resizing " + std::to_string(width) + "x" + std::to_string(height) + " to " +
                              std::to_string(file.width) + "x" + std::to_string(file.height) + " (sizeLog2)");
     }
     if (p.paddingAlgorithm != Padding::infinite && p.paddingAlgorithm != Padding::passthrough) {
         Unrecorded(file, "the padding \"" + std::string(PaddingName(p.paddingAlgorithm)) + "\" with dilationDistance");
+    }
+    for (const PlannedChannel& channel : file.channels) {
+        const std::optional<core::ChannelType> srgb8 = Srgb8Channel(set, file, channel.source);
+        if (!srgb8) continue;
+        const std::string name(core::ToString(*srgb8));
+        if (p.fileFormat == FileFormat::exr) Unrecorded(file, "the sRGB8 channel " + name + " in OpenEXR");
+        if (!IsUserChannel(*srgb8)) {
+            Refuse(file,
+                   "the export encoding of the sRGB8 channel " + name +
+                       " (sRGB-encoded samples, export-valued template constants) is recorded but not fitted",
+                   kNotFitted);
+        }
     }
 }
 
@@ -47,8 +91,9 @@ std::string EncodeFile(const PlannedFile& file, const FileRaster& raster) {
         if (!raster.statistics) throw std::invalid_argument("export: a statistics file without statistics");
         return *raster.statistics;
     }
-    const uint32_t components = ComponentsOf(file.layout);
-    if (raster.width != file.width || raster.height != file.height || raster.channels != components ||
+    const uint32_t components = file.layout == FileLayout::L ? 1 : 3;
+    if ((file.layout != FileLayout::L && file.layout != FileLayout::RGB) || raster.width != file.width ||
+        raster.height != file.height || raster.channels != components ||
         raster.values.size() != size_t{raster.width} * raster.height * components) {
         throw std::invalid_argument("export: the raster of " + file.relativePath + " does not match its size and layout");
     }

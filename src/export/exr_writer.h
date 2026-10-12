@@ -10,11 +10,11 @@
 // a single-part scanline image, version field 2; the attributes channels, compression (PIZ),
 // dataWindow and displayWindow (0, 0, width - 1, height - 1), lineOrder (increasing y),
 // pixelAspectRatio 1, screenWindowCenter (0, 0) and screenWindowWidth 1, in that order; FLOAT
-// samples; a grey image has the one channel `Y`, an RGB image the channels `B`, `G`, `R`
-// (alphabetical, as OpenEXR lists them).
+// samples; a grey image has the one channel `Y`, an RGB image the channels `B`, `G`, `R`, an RGBA
+// image `A`, `B`, `G`, `R` (alphabetical, as OpenEXR lists them).
 //
-// Only the recorded layouts are written: 32-bit float, grey or RGB (decision 090; half floats and
-// the alpha layouts wait for recording R-090). The output depends on nothing but the image.
+// The recorded layouts are written: 32-bit float, grey, RGB or RGBA (decision 090; half floats and
+// grey and alpha L+A wait for recording R-090). The output depends on nothing but the image.
 
 #include <cstdint>
 #include <string>
@@ -24,11 +24,11 @@
 namespace uzp::exporter {
 
 /// float32 samples of one image, rows top first, `channels` interleaved samples per pixel
-/// (L, or R, G, B).
+/// (L; R, G, B; or R, G, B, A).
 struct ExrImage {
     uint32_t width = 0;
     uint32_t height = 0;
-    /// 1 (grey) or 3 (RGB).
+    /// 1 (grey), 3 (RGB) or 4 (RGBA).
     uint32_t channels = 0;
     std::vector<float> values;
 };
@@ -38,8 +38,9 @@ struct ExrImage {
 /// fails.
 [[nodiscard]] std::string EncodeExr(const ExrImage& image);
 
-/// Reads back a file EncodeExr writes (a FLOAT scanline image of channel `Y` or `B`, `G`, `R`):
-/// its values in the layout of ExrImage. Throws std::runtime_error for any other file.
+/// Reads back a file EncodeExr writes (a FLOAT scanline image of channel `Y`, of `B`, `G`, `R` or
+/// of `A`, `B`, `G`, `R`): its values in the layout of ExrImage. Throws std::runtime_error for any
+/// other file.
 [[nodiscard]] ExrImage DecodeExr(std::string_view file);
 
 }  // namespace uzp::exporter

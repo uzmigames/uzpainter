@@ -459,22 +459,32 @@ int RunExport(const fs::path& templatesDir, const fs::path& specPath, const fs::
     return 0;
 }
 
-/// A 16-bit grey or RGB PNG decoded at native depth with spng.
+/// An 8- or 16-bit grey, RGB or RGBA PNG decoded at native depth with spng.
 exporter::PngImage DecodePng(const std::string& data) {
     std::unique_ptr<spng_ctx, decltype(&spng_ctx_free)> ctx(spng_ctx_new(0), &spng_ctx_free);
     spng_ihdr ihdr{};
     size_t size = 0;
     if (spng_set_png_buffer(ctx.get(), data.data(), data.size()) != 0 || spng_get_ihdr(ctx.get(), &ihdr) != 0 ||
-        ihdr.bit_depth != 16 ||
-        (ihdr.color_type != SPNG_COLOR_TYPE_GRAYSCALE && ihdr.color_type != SPNG_COLOR_TYPE_TRUECOLOR) ||
+        (ihdr.bit_depth != 8 && ihdr.bit_depth != 16) ||
+        (ihdr.color_type != SPNG_COLOR_TYPE_GRAYSCALE && ihdr.color_type != SPNG_COLOR_TYPE_TRUECOLOR &&
+         ihdr.color_type != SPNG_COLOR_TYPE_TRUECOLOR_ALPHA) ||
         spng_decoded_image_size(ctx.get(), SPNG_FMT_PNG, &size) != 0) {
-        throw core::ManifestError("not a 16-bit grey or RGB PNG");
+        throw core::ManifestError("not an 8- or 16-bit grey, RGB or RGBA PNG");
     }
-    exporter::PngImage image{ihdr.width, ihdr.height, ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE ? 1u : 3u, 16, {}};
-    image.samples.resize(size / 2);
-    // SPNG_FMT_PNG: the file's layout with 16-bit samples in host byte order.
-    if (spng_decode_image(ctx.get(), image.samples.data(), size, SPNG_FMT_PNG, 0) != 0) {
+    const uint32_t channels = ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE ? 1u
+                              : ihdr.color_type == SPNG_COLOR_TYPE_TRUECOLOR ? 3u
+                                                                             : 4u;
+    exporter::PngImage image{ihdr.width, ihdr.height, channels, ihdr.bit_depth, {}};
+    // SPNG_FMT_PNG: the file's layout, 16-bit samples in host byte order.
+    std::vector<uint8_t> bytes(size);
+    if (spng_decode_image(ctx.get(), bytes.data(), size, SPNG_FMT_PNG, 0) != 0) {
         throw core::ManifestError("spng could not decode the PNG");
+    }
+    if (ihdr.bit_depth == 8) {
+        image.samples.assign(bytes.begin(), bytes.end());
+    } else {
+        image.samples.resize(size / 2);
+        std::memcpy(image.samples.data(), bytes.data(), size);
     }
     return image;
 }
@@ -557,15 +567,23 @@ int RunRoundtrip(const fs::path& out) {
                                                        {"sha256", core::Sha256Hex(a)}})
                   << "\n";
     };
-    const std::array<std::array<uint32_t, 3>, 4> sizes{{{1, 1, 1}, {257, 33, 3}, {64, 64, 1}, {300, 70, 3}}};
+    const std::array<std::array<uint32_t, 3>, 5> sizes{
+        {{1, 1, 1}, {257, 33, 3}, {64, 64, 1}, {300, 70, 3}, {33, 17, 4}}};
     for (const auto& [w, h, c] : sizes) {
         const std::string suffix = std::to_string(w) + "x" + std::to_string(h) + "x" + std::to_string(c);
-        const exporter::PngImage png = SyntheticPng(w, h, c);
-        const std::string pngBytes = exporter::EncodePng(png);
-        const exporter::PngImage back = DecodePng(pngBytes);
-        emit("synthetic-" + suffix + ".png", "png",
-             back.width == w && back.height == h && back.channels == c && back.samples == png.samples, pngBytes,
-             exporter::EncodePng(png));
+        for (const uint32_t bits : {16u, 8u}) {
+            exporter::PngImage png = SyntheticPng(w, h, c);
+            png.bitDepth = bits;
+            if (bits == 8) {
+                for (uint16_t& sample : png.samples) sample &= 0xFF;
+            }
+            const std::string pngBytes = exporter::EncodePng(png);
+            const exporter::PngImage back = DecodePng(pngBytes);
+            emit("synthetic-" + suffix + (bits == 8 ? "-8" : "") + ".png", "png",
+                 back.width == w && back.height == h && back.channels == c && back.bitDepth == bits &&
+                     back.samples == png.samples,
+                 pngBytes, exporter::EncodePng(png));
+        }
         const exporter::ExrImage exr = SyntheticExr(w, h, c);
         const std::string exrBytes = exporter::EncodeExr(exr);
         const exporter::ExrImage exrBack = exporter::DecodeExr(exrBytes);

@@ -4,18 +4,24 @@
 // decision 090): what a file holds outside the UV islands of its texture set.
 //
 // The coverage is the texture set's texel-centre UV coverage (evaluator/geometry_mask.h: a texel
-// is covered when its centre lies inside or on a triangle of the set's material). Inside it the
-// file holds the evaluated values; the evaluator fills the whole UV tile, so a texel outside it
-// holds the stack's value there until padding replaces it.
+// is covered when its centre lies inside or on a triangle of the set's material). The evaluator
+// fills the whole UV tile, so every texel of a raster holds the stack's value there.
 //
-// - Complete coverage (every texel covered, as on the grid meshes of the Tier 0 corpus): the
-//   padding changes nothing, for `infinite` and `passthrough` alike; this is what the recordings
-//   show (the exported files equal the evaluated values on every texel).
-// - Incomplete coverage: Painter's `infinite` padding is not the nearest covered texel (on the
-//   bevelled cube of tier0/semantics/height-normal-bevelled-cube it differs at 12040 of the 12200
-//   uncovered texels); it follows the mesh across UV seams. Until that operator is fitted, and
-//   `passthrough` characterised, both are refused with `core::NotYetSupported` naming recording
-//   R-090 (decision 090).
+// - Complete coverage (every texel covered, as on the grid meshes of the Tier 0 corpus): padding
+//   changes nothing, for `infinite` and `passthrough` alike. The written files equal Painter's
+//   byte for byte (parity/semantics/export-processing.json).
+// - `passthrough` with incomplete coverage: no padding operation; every texel keeps its evaluated
+//   value. Inside the islands Painter's r1 and r2 agree. Outside them Painter's own exports of
+//   layer content differ between r1 and r2 at up to every uncovered texel (session state), so
+//   they have no exact target (decision 032). A file reading a meshMap or virtualMap source is
+//   refused: what Painter writes outside the islands of an imported mesh map is not recorded
+//   (R-090).
+// - `infinite` with incomplete coverage: refused with `core::NotYetSupported` naming R-090. The
+//   fit of tier0 height-normal-bevelled-cube and -sphere found an 8-neighbour copy dilation
+//   (each uncovered texel copies its first covered neighbour: right, left, up, down, then the
+//   diagonals; x wraps, y does not). It is exact on the bevelled cube's virtual normals, but not
+//   on the spheres' poles. For a document channel it also needs a one-texel ring around each
+//   island whose values blend across the UV seam with weights not identified yet.
 
 #include <cstdint>
 #include <vector>
@@ -40,7 +46,7 @@ struct Coverage {
 void CheckPadding(const PlannedFile& file, const Coverage& coverage);
 
 /// Applies `file`'s padding to `raster` (the file's evaluated values) over `coverage`, after
-/// CheckPadding (which it repeats).
+/// CheckPadding (which it repeats). Every admitted case keeps the evaluated values (see above).
 void ApplyPadding(const PlannedFile& file, FileRaster& raster, const Coverage& coverage);
 
 }  // namespace uzp::exporter

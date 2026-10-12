@@ -332,7 +332,8 @@ def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, An
         entry(
             "png-encoding",
             "PNG files: chunks, row filters and compression of Painter's PNG export",
-            "Signature; IHDR (16 bits, grey or RGB, not interlaced); pHYs 2835 x 2835 per metre; "
+            "Signature; IHDR (8 or 16 bits; grey, RGB or RGBA; not interlaced); pHYs 2835 x 2835 "
+            "per metre; "
             "IDAT chunks of 8192 bytes (the last shorter) holding one zlib stream (level 6, window "
             "bits 15, memory level 8, strategy Z_FILTERED) of the filtered rows; IEND. Each row "
             "takes, among None, Sub and Paeth only, the filter whose bytes have the smallest sum "
@@ -354,8 +355,9 @@ def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, An
             "OpenEXR files: header, channels and PIZ compression of Painter's OpenEXR export",
             "Single-part scanline file, version 2; attributes channels, compression (PIZ), "
             "dataWindow, displayWindow, lineOrder (increasing y), pixelAspectRatio 1, "
-            "screenWindowCenter (0, 0), screenWindowWidth 1; FLOAT channels Y (grey) or B, G, R; "
-            "PIZ as OpenEXR writes it, its Huffman heap breaking frequency ties by symbol "
+            "screenWindowCenter (0, 0), screenWindowWidth 1; FLOAT channels Y (grey), B, G, R "
+            "(RGB) or A, B, G, R (RGBA); PIZ as OpenEXR writes it, its Huffman heap breaking "
+            "frequency ties by symbol "
             "(tinyexr with that local change, src/export/exr_writer.h, decision 089).",
             [EXR, LIBS],
             [
@@ -396,10 +398,16 @@ def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, An
     ]
     gaps = {
         "padding-islands": (
-            "Padding infinite and passthrough outside the UV islands of a texture set that does "
-            "not cover the tile",
+            "Padding infinite outside the UV islands of a texture set that does not cover the tile",
             "Not the nearest covered texel: on tier0/semantics/height-normal-bevelled-cube "
-            "(Height) 12040 of the 12200 uncovered texels differ from it.",
+            "(Height) 12040 of the 12200 uncovered texels differ from it. Partial fit (decision "
+            "090): an 8-neighbour copy dilation (first covered neighbour: right, left, up, down, "
+            "then the diagonals; x wraps, y does not) is exact on the bevelled cube's virtual "
+            "normals (12200 gutter texels) and misses 32 to 44 texels per sphere normal map at "
+            "the poles; a document channel's one-texel ring around each island blends across the "
+            "UV seam with unidentified weights (2344 ring texels on the cube, 2152 on the sphere). "
+            "Passthrough on such sets is written as no operation: Painter's r1 and r2 agree "
+            "inside the islands and differ outside them at up to every uncovered texel.",
         ),
         "padding-dilation": (
             "Padding color, transparent and diffusion with dilationDistance",
@@ -409,7 +417,18 @@ def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, An
         "dithering": ("Dithering on", None),
         "png-8": ("PNG at 8 bits per sample", None),
         "exr-16f": ("OpenEXR at 16-bit half float", None),
-        "alpha-layouts": ("The L+A and RGB+A layouts (an alpha channel) in PNG and OpenEXR", None),
+        "alpha-layouts": (
+            "The L+A and RGB+A layouts (an alpha channel) in PNG and OpenEXR",
+            "RGB+A is recorded (R-085 P6, P7: an alpha of 1 everywhere is dropped) and its files "
+            "re-encode byte for byte; it is written once the plan resolves its alpha sources.",
+        ),
+        "srgb8-material-channels": (
+            "sRGB8 material channels (BaseColor and the other material colours) in PNG and any "
+            "sRGB8 channel in OpenEXR",
+            "sRGB8 User channels are exported linear (their decoded operand); BaseColor is "
+            "exported sRGB-encoded and the evaluator's template constants of material colours are "
+            "already export values: recorded, not fitted here.",
+        ),
     }
     for entry_id, (subject, notes) in gaps.items():
         entries.append(

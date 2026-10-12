@@ -9,6 +9,15 @@
 
 namespace uzp::exporter {
 
+namespace {
+
+[[noreturn]] void Unfitted(const PlannedFile& file, const std::string& what) {
+    throw core::NotYetSupported("export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
+                                "): " + what + " (" + std::string(kProcessingRecording) + ")");
+}
+
+}  // namespace
+
 bool Coverage::Complete() const {
     return std::all_of(covered.begin(), covered.end(), [](uint8_t c) { return c != 0; });
 }
@@ -20,12 +29,20 @@ void CheckPadding(const PlannedFile& file, const Coverage& coverage) {
         throw std::invalid_argument("export: the coverage of " + file.relativePath + " does not have its size");
     }
     if (coverage.Complete()) return;
-    throw core::NotYetSupported(
-        "export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath + "): the padding \"" +
-        std::string(PaddingName(file.parameters->paddingAlgorithm)) +
-        "\" on a texture set whose UV islands do not cover the whole tile is not fitted: Painter's padding follows "
-        "the mesh across UV seams (" +
-        std::string(kProcessingRecording) + ")");
+    const std::string_view padding = PaddingName(file.parameters->paddingAlgorithm);
+    if (file.parameters->paddingAlgorithm != Padding::passthrough) {
+        Unfitted(file, "the padding \"" + std::string(padding) +
+                           "\" on a texture set whose UV islands do not cover the whole tile is not fitted: Painter's "
+                           "gutter is not the nearest covered texel, and its ring around each island blends across "
+                           "the UV seams");
+    }
+    for (const PlannedChannel& channel : file.channels) {
+        const SourceType type = channel.source.type;
+        if (type == SourceType::meshMap || type == SourceType::virtualMap) {
+            Unfitted(file, "the padding \"passthrough\" of a " + std::string(SourceTypeName(type)) +
+                               " source outside the UV islands is not recorded");
+        }
+    }
 }
 
 void ApplyPadding(const PlannedFile& file, FileRaster& raster, const Coverage& coverage) {
@@ -33,7 +50,7 @@ void ApplyPadding(const PlannedFile& file, FileRaster& raster, const Coverage& c
     if (raster.width != coverage.width || raster.height != coverage.height) {
         throw std::invalid_argument("export: the raster of " + file.relativePath + " does not have its size");
     }
-    // Complete coverage: every texel holds its evaluated value, for `infinite` and `passthrough`.
+    // Every admitted case keeps the evaluated values: complete coverage, or `passthrough`.
 }
 
 }  // namespace uzp::exporter
