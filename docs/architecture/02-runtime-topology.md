@@ -22,6 +22,7 @@ Why a boundary: the vendored DX12 command list aborts the process after repeated
 - Vocabulary: the same JSON shapes as the MCP tool calls. Request `{"id":"<uuid>","method":"tools/call","name":"<tool>","arguments":{…},"idempotency_key":"<uuid>","expected_revision":<int>}` (both required on a mutating request; `expected_revision` is the call's original base revision, §3); reply `{"id":…,"result":{…},"committed_revision":<int>}` or `{"id":…,"error":{"code":"<string>","message":…,"details":{…}}}`; notifications `{"job_id":…,"status":…,"progress":0..1,"message":…}` and `{"event":"revision","revision":<int>}`.
 - Large payloads never travel inline. Images, maps and dumps are written under an allowlisted root and referenced by path + SHA-256; a capture additionally returns a downscaled PNG as an MCP image block built by the supervisor from the file.
 - Protocol version, backend and Python policy are part of the handshake; a mismatch with what the supervisor requested is a fatal supervisor error, never a silent fallback.
+- Implementation (phase2.1): `src/supervisor/SUPERVISOR.md`, with the worker's Phase 2.1 tool vocabulary, the GPU operation set and the Debug-only fault hooks of decision 120.
 
 ## 3. Command admission and the mutation lease
 

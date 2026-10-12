@@ -2,14 +2,16 @@
 // `selftest` command (docs/architecture/13-engine-integration.md §4.2); the project store adds
 // `inspect`, `export-bundle` and `store-census` (src/store/cli.h), the export of a project and
 // its publication's recovery `export` (src/export/cli.h), the Python API the script host `run`
-// (src/python/run.h) and `capabilities` (src/python/capabilities.h); the other commands are added
-// by their phases.
+// (src/python/run.h) and `capabilities` (src/python/capabilities.h), the supervisor and worker
+// roles `--mcp` and `--worker` (src/supervisor/); the other commands are added by their phases.
 
 #include "export/cli.h"
 #include "python/capabilities.h"
 #include "python/run.h"
 #include "selftest/harness.h"
 #include "store/cli.h"
+#include "supervisor/supervisor.h"
+#include "supervisor/worker.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -18,6 +20,18 @@
 
 int main(int argc, char** argv) {
     const std::vector<std::string> args(argv + (argc > 0 ? 1 : 0), argv + argc);
+    if (!args.empty() && uzp::supervisor::IsWorkerCommand(args.front())) {
+        const int status = uzp::supervisor::RunWorkerCommand(args, stderr);
+        std::fflush(stderr);
+        std::_Exit(status);
+    }
+    if (!args.empty() && uzp::supervisor::IsSupervisorCommand(args.front())) {
+        const int status = uzp::supervisor::RunSupervisorCommand(args, stderr);
+        // The interpreter is not finalized: the MCP SDK's threads may still be blocked on stdin.
+        std::fflush(stdout);
+        std::fflush(stderr);
+        std::_Exit(status);
+    }
     if (!args.empty() && args.front() == "selftest") {
         return uzp::selftest::RunSelftestCommand({args.begin() + 1, args.end()});
     }
@@ -44,6 +58,10 @@ int main(int argc, char** argv) {
                          "--build <id>\n"
                          "       UzPainter.exe export --recover <exportPath> [--fixed-names <dir>]...\n"
                          "       UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan]\n"
-                         "       UzPainter.exe capabilities\n");
+                         "       UzPainter.exe capabilities\n"
+                         "       UzPainter.exe --mcp [--gpu-backend dx12|vulkan] [--allow-python] ... "
+                         "(src/supervisor/supervisor.h)\n"
+                         "       UzPainter.exe --worker --pipe <pipe> --gpu-backend dx12|vulkan ... "
+                         "(src/supervisor/worker.h)\n");
     return uzp::selftest::kExitUsage;
 }

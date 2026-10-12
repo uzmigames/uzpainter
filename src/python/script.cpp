@@ -64,7 +64,10 @@ core::json::Object RunScript(const std::filesystem::path& script, const std::vec
                 {"error", core::json::Object{{"type", "FileNotFoundError"}, {"message", "cannot read " + path}, {"traceback", ""}}}};
     }
     const std::string source{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    return RunSource(path, source, args);
+}
 
+core::json::Object RunSource(const std::string& path, const std::string& source, const std::vector<std::string>& args) {
     py::dict scope;
     py::exec(kRunner, scope);
     Session& session = Session::Get();

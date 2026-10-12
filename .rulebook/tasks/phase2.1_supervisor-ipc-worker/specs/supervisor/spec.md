@@ -34,8 +34,9 @@ A worker whose requested GPU backend cannot create a device SHALL still start an
 
 #### Scenario: Vulkan unavailable
 Given a supervisor started with `--gpu-backend vulkan` on a machine without a usable Vulkan device
-When a client requests an export and then a project save
-Then the export fails with `gpu_backend_unavailable` without committing a revision, and the save succeeds
+When a client requests a GPU evaluation (`evaluate_channel`) and then a project save
+Then the evaluation fails with `gpu_backend_unavailable` without committing a revision, and the save succeeds
+(decision 120: the GPU operations are the tools that use the device; the Phase 1 export computes on the CPU evaluator, decision 111, and joins them when it moves to the GPU evaluator)
 
 ### Requirement: Python Disabled At The Pipe
 A worker launched without `--allow-python` MUST reject the `run_python` method at the IPC boundary with `python_disabled`.
