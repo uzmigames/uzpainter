@@ -4,12 +4,12 @@
 
 ## 2. Children (each accepted before this parent closes)
 - [x] 2.1 `phase1.5_compositor-tile-dag` accepted (archived 2026-10-11)
-- [x] 2.2 `phase1.8_compositor-sources-projection` accepted (archived 2026-10-11; its follow-up `phase1.9_compositor-resample-gaps`, bilinear minification, is still open and listed as a release gap, decision 081)
+- [x] 2.2 `phase1.8_compositor-sources-projection` accepted (archived 2026-10-11; its follow-up `phase1.9_compositor-resample-gaps`, bilinear minification, archived 2026-10-12)
 - [x] 2.3 `phase1.9_compositor-quantisation-profile` accepted (archived 2026-10-11, with its follow-up `phase1.10_compositor-float32-residual`)
 - [x] 2.4 `phase1.10_compositor-blend-kernels` accepted (archived 2026-10-11; its follow-up `phase1.11_compositor-blend-gaps` archived 2026-10-11, decision 073: every blend mode exact)
 - [x] 2.5 `phase1.11_compositor-mask-effects` accepted (archived 2026-10-11)
-- [ ] 2.6 `phase1.12_compositor-height-normal` accepted
-- [ ] 2.7 `phase1.13_compositor-diagnostics` accepted
+- [x] 2.6 `phase1.12_compositor-height-normal` accepted (archived 2026-10-11, decisions 079, 080)
+- [x] 2.7 `phase1.13_compositor-diagnostics` accepted (archived 2026-10-12)
 - [x] 2.8 Register every Phase 1 node kind, source, projection and blend mode as `supported` with its Tier 0 evidence id, and every excluded one as `release-gap`, in the capability inventory of `phase1.2_docmodel-capability-manifest`
   - `tools/capabilities/compositor-capabilities.json` (decision 081): context `compositor`/`compositor:<case>`, 54 `supported` with current-envelope goldens, 42 `release-gap` naming their owner task (Blur and filter effects, minification, instances, ...); evidence resolves through the current envelope (decision 037).
 - [ ] 2.9 (decisions 108 §4 and 117, from phase1.24_python-api-facade item 3.1) Record P20-A (fill channel defaults) and P20-B (dense sRGB decode), the recordings of decision 107, then fit the facade's colour tables to them exactly: `DEFAULT_SOURCES` (`python/uzpainter_facade/nodes.py`), `default_bitmap_space`, `available_bitmap_spaces` and the float32 sRGB decode (`colour.py`)
