@@ -1,0 +1,13 @@
+{
+  "id": 131,
+  "slug": "ao-mixed-stays-refused-and-its-fit-moves-to-phase3-2-unreal-ue56-packed-preset-so-phase1-15-closes-on-the-supported-virtual-maps",
+  "title": "AO_Mixed stays refused, and its fit moves to phase3.2_unreal-ue56-packed-preset, so phase1.15 closes on the supported virtual maps",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.15_export-plan-compiler",
+    "phase1.18_export-engine",
+    "phase3.2_unreal-ue56-packed-preset"
+  ],
+  "supersededBy": null
+}

@@ -1,6 +1,6 @@
 # `phase1.15_export-plan-compiler`: local run on the owner's machine and recording requests R-085, R-086
 
-Child of `phase1.18_export-engine` (P1-EXPORT; `docs/architecture/08-export.md` §1, §2, §6; EXP-01, EXP-03, EXP-04, EXP-09, INT-13, QG-03). Under decision 028 the Tier 0 comparisons run locally against the private oracle store, and this report is their evidence. Run on 2026-10-11 on the branch `wt/phase1.15-export-plan` (base main `444406a`, current envelope `painter-12.1.5_js-api.1.1.20`). Decisions 076, 085, 086, 091 and 092; continued on `wt/phase1.15-close`. Implementation: `src/export/` (`src/export/EXPORT.md`).
+Child of `phase1.18_export-engine` (P1-EXPORT; `docs/architecture/08-export.md` §1, §2, §6; EXP-01, EXP-03, EXP-04, EXP-09, INT-13, QG-03). Under decision 028 the Tier 0 comparisons run locally against the private oracle store, and this report is their evidence. Run on 2026-10-11 on the branch `wt/phase1.15-export-plan` (base main `444406a`, current envelope `painter-12.1.5_js-api.1.1.20`). Decisions 076, 085, 086, 091, 092 and 131; continued on `wt/phase1.15-close` and `wt/close-export`. Implementation: `src/export/` (`src/export/EXPORT.md`).
 
 **Result.**
 
@@ -11,7 +11,7 @@ Child of `phase1.18_export-engine` (P1-EXPORT; `docs/architecture/08-export.md` 
 - `AO_Mixed` is not exact: its best model misses r1 at 31 values of recording R-086a (decision 092).
 - Nine converted maps are fitted exactly on recording R-086b. They stay release gaps until the evaluator gives channel coverage and recording R-092 covers other templates. View_2D is a render, not an operator (decision 092).
 
-Items 3.5, 3.6 and 4.1 stay open (§5).
+Item 3.5 is closed on UzPainter's own written files, and items 3.6 and 4.1 as a scope split (decision 131). Item 1.1 waits on the prerequisite (§5).
 
 ## Run record
 
@@ -204,8 +204,11 @@ One project per probe group, on `grid2x2` (texture sets s0-s3), OpenGL, 256 px. 
   - Twin golden `virtual-maps-converted-float`: the same maps as OpenEXR 32f.
 - **Recorder change needed:** `OutputMap.file_name` must replace the `/` of `1/ior`, for example with `$textureSet_1_over_ior`. Otherwise Painter writes a sub-folder.
 
-## 5. Items left open
+## 5. Items left open and closed
 
 - **1.1** Prerequisite `phase1.14_compositor-core` is merged, but `phase1.12_compositor-height-normal` (one of its children) is still closing on another branch. The virtual normal maps' set-size and Normal-mesh-map limits change when it lands. The plan defers those limits to the evaluator, so nothing in `src/export/` needs to change for them (decision 085).
-- **3.5** Painter's side is proven (§2). Equality between UzPainter's own dry run and its own written files needs the phase1.16 writers, and phase1.17's receipts must check it against the files actually written (decision 085).
-- **3.6, 4.1** The maps marked supported are exact (§3). AO_Mixed, which item 3.6 names, is not exact on R-086a and needs recording R-092 (decision 092). The converted maps are not marked supported, so they do not block 3.6.
+- **3.5** Closed. Painter's side is proven (§2). UzPainter's side (decision 085) is proven by the phase1.16 writers and the phase1.17 receipts:
+  - `WriteExport` writes exactly the dry run's files, with the sizes and SHA-256 it reports, in two processes (`test_written_files_equal_the_dry_run_in_two_processes`, CPU, 1 passed on 2026-10-12);
+  - it does so on all 40 export steps (80 files) of phase1.16's Tier 0 goldens (`parity/reports/phase1/export-processing-encoders.md`);
+  - the receipt lists the published files with their sizes and SHA-256 (`test_receipt_schema_and_fields`).
+- **3.6, 4.1** Closed as a scope split (decision 131). The maps marked supported are exact (§3). AO_Mixed, which item 3.6 names, stays a release gap refused before writing: its best model misses r1 at 31 values of R-086a (decision 092), and the R-092 isolation goldens (decision 093) have not identified the operator. Its exact fit is `phase3.2_unreal-ue56-packed-preset` item 2.10. The converted maps are not marked supported, so they do not block 3.6.
