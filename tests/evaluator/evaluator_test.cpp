@@ -2676,6 +2676,7 @@ int RunSources(const fs::path& assets) {
     const std::string sha16 = std::string(63, '1') + "6";
     const std::string sha8 = std::string(63, '0') + "8";
     const std::string shaGrey = std::string(63, '9') + "1";
+    const std::string shaGrey8 = std::string(63, '9') + "8";
     const std::string shaOblong = std::string(63, '7') + "2";
     auto provider = std::make_shared<MapResourceProvider>();
     std::shared_ptr<DecodedImage> image16 = PatternImage(kSize, kSize, 3, render::TexelEncoding::Unorm16, 11);
@@ -2684,6 +2685,7 @@ int RunSources(const fs::path& assets) {
     provider->Add(sha16, image16);
     provider->Add(sha8, image8);
     provider->Add(shaGrey, grey);
+    provider->Add(shaGrey8, PatternImage(kSize, kSize, 1, render::TexelEncoding::Unorm8, 15));
     provider->Add(shaOblong, PatternImage(kSize, kSize / 2, 3, render::TexelEncoding::Unorm16, 14));
     const std::vector<ChannelType> user0{ChannelType::User0};
     auto evaluate = [&](Builder& builder, ChannelType channel, CpuEvaluator& cpu) {
@@ -2699,6 +2701,7 @@ int RunSources(const fs::path& assets) {
         builder.AddResource(sha16, 100);
         builder.AddResource(sha8, 100);
         builder.AddResource(shaGrey, 100);
+        builder.AddResource(shaGrey8, 100);
         builder.AddResource(shaOblong, 100);
         builder.SetRoot({prototype});
     };
@@ -2743,7 +2746,8 @@ int RunSources(const fs::path& assets) {
         Check(result && Samples(*result) == image16->values, "the Fill projection matches the bitmap to the UV tile (a 1:1 copy)", Describe(result));
     }
 
-    // sRGB bitmaps (sources.h): decoded onto an sRGB8 channel at 1:1; every other use is refused.
+    // sRGB bitmaps (sources.h): decoded onto an sRGB8 channel at 1:1 (16-bit colour or grey, 8-bit colour); every
+    // other use is refused.
     {
         // The stored code does not depend on the decode's arithmetic: the double-precision decode and the GPU's
         // float32 one (x / 12.92 as a product, ((x + 0.055) / 1.055)^2.4 through the measured pow) agree on every code.
@@ -2779,12 +2783,41 @@ int RunSources(const fs::path& assets) {
             }
         }
         Check(ok, "a 16-bit colour sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code", Describe(decoded));
+        // An 8-bit code c is the 16-bit code 257 c: its decode stores c through either arithmetic.
+        size_t moved = 0;
+        for (uint32_t code = 0; code < 256; ++code) {
+            const float x = arith::UnormOperand(code, 8);
+            const float gpu = x <= 0.04045f ? x * static_cast<float>(1.0 / 12.92)
+                                            : hw::Pow((x + 0.055f) * static_cast<float>(1.0 / 1.055), 2.4f);
+            if (x != arith::UnormOperand(code * 257u, 16) || arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x))) != code ||
+                arith::Srgb8Store(gpu) != code) {
+                ++moved;
+            }
+        }
+        Check(moved == 0, "the sRGB decode of each 8-bit code stores the code itself (double precision and the GPU's float32)",
+              std::to_string(moved) + " differ");
+        render::Result<ChannelResult> decoded8 = srgb(ChannelFormat::sRGB8, sha8, 1.0);
+        Check(decoded8 && Samples(*decoded8) == image8->values, "an 8-bit colour sRGB bitmap at 1:1 stores each code as its sRGB8 code",
+              Describe(decoded8));
+        render::Result<ChannelResult> decodedGrey = srgb(ChannelFormat::sRGB8, shaGrey, 1.0);
+        bool greyOk = decodedGrey.has_value();
+        if (greyOk) {
+            const std::vector<uint32_t> samples = Samples(*decodedGrey);
+            greyOk = samples.size() == grey->values.size() * 3;
+            for (size_t k = 0; k < samples.size() && greyOk; ++k) {
+                const float x = arith::UnormOperand(grey->values[k / 3], 16);
+                greyOk = samples[k] == arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x)));
+            }
+        }
+        Check(greyOk, "a 16-bit grey sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code on the three channels",
+              Describe(decodedGrey));
         bool refused = true;
         std::string detail;
         for (const auto& [name, result] :
-             {std::pair{"RGB16 channel", srgb(ChannelFormat::RGB16, sha16, 1.0)}, std::pair{"8-bit bitmap", srgb(ChannelFormat::sRGB8, sha8, 1.0)},
-              std::pair{"grey bitmap", srgb(ChannelFormat::sRGB8, shaGrey, 1.0)},
-              std::pair{"Nearest at scale 0.5", srgb(ChannelFormat::sRGB8, sha16, 0.5)}}) {
+             {std::pair{"RGB16 channel", srgb(ChannelFormat::RGB16, sha16, 1.0)},
+              std::pair{"8-bit grey bitmap", srgb(ChannelFormat::sRGB8, shaGrey8, 1.0)},
+              std::pair{"Nearest at scale 0.5", srgb(ChannelFormat::sRGB8, sha16, 0.5)},
+              std::pair{"8-bit Nearest at scale 0.5", srgb(ChannelFormat::sRGB8, sha8, 0.5)}}) {
             if (result || KindName(result.error()) != "unsupported_source") {
                 refused = false;
                 detail += std::string(name) + ": " + Describe(result) + " ";
@@ -2799,7 +2832,7 @@ int RunSources(const fs::path& assets) {
             refused = false;
             detail += "Working: " + Describe(unrecorded);
         }
-        Check(refused, "an sRGB bitmap on a channel that is not sRGB8, 8-bit or grey, or resampled, and a bitmap in the Working "
+        Check(refused, "an sRGB bitmap on a channel that is not sRGB8, 8-bit grey, or resampled, and a bitmap in the Working "
                        "colour space fail with unsupported_source",
               detail);
     }

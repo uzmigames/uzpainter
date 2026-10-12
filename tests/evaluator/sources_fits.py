@@ -385,8 +385,9 @@ def colour_transfer(ev: Evaluations, decode: np.ndarray) -> dict[str, Any]:
             "management",
             "Not observed. Uniform colours on Height are stored like any channel value (no "
             "remap); 8-bit bitmaps follow bitmap-import-linear; an sRGB bitmap other than a 16-bit "
-            "colour bitmap sampled 1:1 onto an sRGB8 channel, the Working and Linear bitmap colour "
-            "spaces and an OCIO project fail with evaluator:unsupported_source.",
+            "colour or grey or an 8-bit colour bitmap sampled 1:1 onto an sRGB8 channel, the "
+            "Working and Linear bitmap colour spaces and an OCIO project fail with "
+            "evaluator:unsupported_source.",
             [PYDOC_COLOUR, source("S-OCIO", "Colour transforms")],
             [],
             [],

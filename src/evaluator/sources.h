@@ -29,11 +29,16 @@
 //   `export-probes-naming` (r1 and r2); c / M misses 195 325 of 196 608 values there. On an sRGB8
 //   channel the stored code does not depend on the decode's arithmetic: float32 orders of
 //   operations, the GPU's pow and the double-precision decode give the same code for each of the
-//   65 536 codes. Recorded only for a 16-bit colour bitmap sampled 1:1 (the bitmap the size of
-//   the set, the identity transform) onto an sRGB8 channel; any other use (another channel
-//   format or a mask, an 8-bit or grey bitmap, resampling) and the Working and Linear spaces
-//   fail with `evaluator:unsupported_source` (support.h refuses the first and last before any
-//   mutation).
+//   65 536 codes. An 8-bit code is its own sRGB8 code: the decode of float32(c / 255) (the
+//   16-bit code 257 c) stores c for each of the 256 codes, and the 8-bit sRGB ramp at 1:1 on
+//   BaseColor equals every texel of `export-ocio-encode-legacy` s3 (PNG 16, PNG 8 and OpenEXR
+//   32f, r1 and r2), where c / 255 misses 195 072 of 196 608 values. A grey bitmap feeds the
+//   three channels: 16-bit grey A at 1:1 on BaseColor equals every texel of `export-bit-depth`
+//   s7 (eight exports, r1 and r2; c / M misses 195 072). Recorded only for a 16-bit colour or
+//   grey or an 8-bit colour bitmap sampled 1:1 (the bitmap the size of the set, the identity
+//   transform) onto an sRGB8 channel; any other use (another channel format or a mask, an 8-bit
+//   grey bitmap, resampling) and the Working and Linear spaces fail with
+//   `evaluator:unsupported_source` (support.h refuses the first and last before any mutation).
 
 #include "evaluator/resources.h"
 #include "evaluator/tile_store.h"
