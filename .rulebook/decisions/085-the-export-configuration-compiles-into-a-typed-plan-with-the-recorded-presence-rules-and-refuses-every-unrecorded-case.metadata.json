@@ -1,0 +1,14 @@
+{
+  "id": 85,
+  "slug": "the-export-configuration-compiles-into-a-typed-plan-with-the-recorded-presence-rules-and-refuses-every-unrecorded-case",
+  "title": "The export configuration compiles into a typed plan with the recorded presence rules and refuses every unrecorded case",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.15_export-plan-compiler",
+    "phase1.16_export-processing-encoders",
+    "phase1.17_export-publication-receipts",
+    "phase1.19_pyapi-native-module"
+  ],
+  "supersededBy": null
+}
