@@ -49,8 +49,8 @@ cfg = {"exportShaderParams": False, "exportPath": __OUT__, "defaultExportPreset"
            "fileFormat": "png", "bitDepth": "8", "dithering": False,
            "paddingAlgorithm": "passthrough"}}]}
 r = ex.export_project_textures(cfg)
-result = {k: hashlib.sha256(open(p, "rb").read()).hexdigest()
-          for k, v in r.textures.items() for p in v}
+result = {os.path.basename(p): hashlib.sha256(open(p, "rb").read()).hexdigest()
+          for v in r.textures.values() for p in v}
 """
 
 INSERT_FILL = """
