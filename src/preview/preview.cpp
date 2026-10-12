@@ -2,9 +2,11 @@
 #define NOMINMAX
 #include "preview/preview.h"
 
+#include "evaluator/arith.h"
 #include "evaluator/diagnostics.h"
 #include "platform_window.h"
 #include "input.h"
+#include "python/display.h"
 #include "render/engine_thread.h"
 
 #include <windows.h>
@@ -190,7 +192,37 @@ void PreviewHost::Run() {
         if (sceneOf == current) return std::nullopt;
         const core::Project& project = *current->project;
         ViewportScene next;
-        next.display = ConfigurationOf(project);
+        // The display state of the display presets (src/python/display.h, decision 132): its view,
+        // its config pin and the active preset's clear colour.
+        const core::json::Object preset = python::display::PresetOf(project);
+        std::string view(kDefaultSrgbView);
+        std::string displayHash;
+        if (const auto display = preset.find("display");
+            display != preset.end() && display->second.IsObject()) {
+            const core::json::Object& d = std::get<core::json::Object>(display->second.data);
+            if (const auto it = d.find("view"); it != d.end() && it->second.IsString()) {
+                view = std::get<std::string>(it->second.data);
+            }
+            if (const auto it = d.find("config_sha256"); it != d.end() && it->second.IsString()) {
+                displayHash = std::get<std::string>(it->second.data);
+            }
+        }
+        next.display = ConfigurationOf(project, view);
+        if (next.display.mode == kOcioMode && next.display.configHash.empty()) next.display.configHash = displayHash;
+        if (const auto background = preset.find("background");
+            background != preset.end() && background->second.IsObject()) {
+            const core::json::Object& b = std::get<core::json::Object>(background->second.data);
+            if (const auto it = b.find("srgb8"); it != b.end() && it->second.IsArray() &&
+                                                 std::get<core::json::Array>(it->second.data).size() == 3) {
+                const core::json::Array& rgb = std::get<core::json::Array>(it->second.data);
+                for (size_t c = 0; c < 3; ++c) {
+                    if (rgb[c].IsInt()) {
+                        next.background[c] = static_cast<float>(
+                            evaluator::arith::SrgbDecode(static_cast<double>(std::get<std::int64_t>(rgb[c].data)) / 255.0));
+                    }
+                }
+            }
+        }
         if (std::optional<std::string> unsupported = UnsupportedConfiguration(next.display)) return unsupported;
         if (!current->mesh) return std::string("the evaluation carries no mesh (the project has none)");
         if (!current->environmentError.empty()) return current->environmentError;

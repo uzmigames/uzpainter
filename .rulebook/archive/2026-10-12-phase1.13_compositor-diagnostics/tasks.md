@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.3_document-model, phase1.11_compositor-mask-effects, phase1.12_compositor-height-normal (phase1.3 and phase1.11 archived; phase1.12 is merged on main, decisions 064, 065, 077, but stays open on recordings still to be made: a bound mesh normal map, SignedAddition on Height, resolutions other than 256. The diagnostics use only its merged code and inherit its refusals; this item closes when phase1.12 is accepted)
+- [x] 1.1 Prerequisites accepted: phase1.3_document-model, phase1.11_compositor-mask-effects, phase1.12_compositor-height-normal (all three archived: phase1.3 on 2026-10-10, phase1.11 and phase1.12 on 2026-10-11, decisions 079, 080; the diagnostics use only phase1.12's merged code and inherit its refusals)
 
 ## 2. Implementation
 - [x] 2.1 Implement `isolate(layer)` with atomic visibility restore, including on failure (`IsolateOn`: the node is hidden in a private copy of the revision, never committed; decision 075)

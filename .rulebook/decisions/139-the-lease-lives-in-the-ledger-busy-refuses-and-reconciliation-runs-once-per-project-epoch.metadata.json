@@ -1,0 +1,14 @@
+{
+  "id": 139,
+  "slug": "the-lease-lives-in-the-ledger-busy-refuses-and-reconciliation-runs-once-per-project-epoch",
+  "title": "The lease lives in the ledger, busy refuses, and reconciliation runs once per project epoch",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.2_supervisor-admission-ledger",
+    "phase2.3_supervisor-jobs",
+    "phase2.5_mcp-transport-registry",
+    "phase2.4_supervisor-worker"
+  ],
+  "supersededBy": null
+}

@@ -18,8 +18,11 @@
 //   `--allow-python`) and, in a build with the fault hooks and under `--test-faults`, `test_fault`.
 //   With `--preview` the worker hosts the preview window (src/preview/preview.h): every
 //   `evaluate_channel` result is published to it without waiting, and `preview_status` is listed.
-//   A mutating call needs `idempotency_key` and `expected_revision` (`invalid_request` otherwise)
-//   and is refused with `stale_revision {expected, current}` when the open project moved on. A GPU
+//   A mutating call needs `idempotency_key` (`invalid_request` otherwise) and is decided against
+//   the open project's `operation` rows before it runs (phase2.2, decision 138): a known key with
+//   the same request hash returns its stored outcome, with another hash `idempotency_conflict`;
+//   an unknown key without a precondition, or with one below the pruning horizon, is
+//   `outcome_unknown`, and with another revision than the current one `stale_revision`. A GPU
 //   call on a worker without a device fails with `gpu_backend_unavailable {backend, reason}`
 //   before anything runs.
 //

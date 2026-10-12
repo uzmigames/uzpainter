@@ -17,6 +17,7 @@
 #include "evaluator/templates.h"
 #include "mesh/mesh_import.h"
 #include "mesh/reload.h"
+#include "python/display.h"
 #include "python/errors.h"
 #include "python/recipe.h"
 #include "uzp_core/manifest/sha256.h"
@@ -204,6 +205,7 @@ void Session::Create(const std::filesystem::path& mesh_path, const CreateSetting
     if (settings.mesh_unit_scale) p.settings.mesh_unit_scale = *settings.mesh_unit_scale;
     if (settings.import_cameras) p.settings.import_cameras = *settings.import_cameras;
     p.settings.template_id = template_id;
+    display::InitialiseNewProject(p);
     core::Validate(p);
 
     auto project = std::make_shared<OpenProject>();
@@ -471,6 +473,18 @@ CallResult Session::Mutate(const std::string& tool, core::json::Object arguments
     CallResult result = FromResult(Settle(outcome, error));
     Record(result);
     return result;
+}
+
+core::RequestOutcome Session::Submit(core::MutationRequest request, const std::function<void(core::Edit&)>& call) {
+    if (Thread().transaction) throw ApiError("RuntimeError", "a typed tool call inside an open Transaction");
+    const std::shared_ptr<OpenProject> project = Current();
+    core::RequestOutcome outcome =
+        project->store->Submit(*project->document, std::move(request), [&call](core::Edit& edit) {
+            call(edit);
+            evaluator::RequireSupported(edit.base(), edit.project());
+        });
+    if (outcome.result) Record(FromResult(*outcome.result));
+    return outcome;
 }
 
 void Session::OpenTransaction(const std::string& name) {

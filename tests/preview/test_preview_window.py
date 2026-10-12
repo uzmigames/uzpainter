@@ -14,6 +14,7 @@ import ctypes
 import ctypes.wintypes
 import hashlib
 import json
+import shutil
 import subprocess
 import time
 from collections.abc import Callable
@@ -134,6 +135,16 @@ class Run:
         return {Path(k).name: v for k, v in exported.items()}
 
 
+def projects(painter: Path, tmp_path: Path) -> tuple[Path, Path]:
+    """Two identical copies of the plane project: one for the baseline, one for the preview run
+    (each run commits to its own copy)."""
+    made = make_project(painter, tmp_path)
+    copies = (tmp_path / "baseline.uzp", tmp_path / "preview.uzp")
+    for copy in copies:
+        shutil.copyfile(made, copy)
+    return copies
+
+
 def baseline(painter: Path, tmp_path: Path, project: Path, pipes: list[Pipe]) -> dict[str, Any]:
     """The same work in a worker without a preview."""
     pipe = Pipe(painter, tmp_path, *WORKER)
@@ -153,8 +164,8 @@ def test_stalled_preview_never_delays_evaluation_or_export(
     """2.4, 3.2: with the preview thread stalled by the test hook while it holds its frame,
     evaluation and export complete with the same bytes as without a preview; frames keep being
     published and are not taken until the stall ends."""
-    project = make_project(painter, tmp_path)
-    expected = baseline(painter, tmp_path, project, pipes)
+    baseline_project, project = projects(painter, tmp_path)
+    expected = baseline(painter, tmp_path, baseline_project, pipes)
 
     pipe = Pipe(painter, tmp_path, *WORKER, "--preview")
     pipes.append(pipe)
@@ -196,8 +207,8 @@ def test_window_lifecycle_during_evaluation_changes_nothing(
     """2.5, 3.3: the window opened, minimised, resized, restored and closed between and during
     evaluations: results and revision order are those of a worker without a preview, and the
     worker keeps serving after the window closed."""
-    project = make_project(painter, tmp_path)
-    expected = baseline(painter, tmp_path, project, pipes)
+    baseline_project, project = projects(painter, tmp_path)
+    expected = baseline(painter, tmp_path, baseline_project, pipes)
 
     pipe = Pipe(painter, tmp_path, *WORKER, "--preview")
     pipes.append(pipe)

@@ -268,4 +268,20 @@ core::RequestOutcome ProjectStore::Submit(core::Document& document, core::Mutati
     return core::Execute(document, std::move(request), call);
 }
 
+core::AdmissionDecision ProjectStore::Decide(const core::MutationRequest& request, std::int64_t fallback_revision) {
+    std::lock_guard lock(mutex_);
+    return DecideStored(container_, project_uuid_, request, fallback_revision);
+}
+
+ProjectStore::OperationLog ProjectStore::OperationsAfter(std::int64_t after) {
+    std::lock_guard lock(mutex_);
+    OperationLog log;
+    log.current_revision = ReadCurrentRevision(container_);
+    log.horizon_revision = ReadHorizon(container_);
+    for (core::OperationRecord& record : ReadOperations(container_, project_uuid_, log.unreadable)) {
+        if (record.committed_revision > after) log.records.push_back(std::move(record));
+    }
+    return log;
+}
+
 }  // namespace uzp::store

@@ -1,0 +1,16 @@
+{
+  "id": 130,
+  "slug": "the-compositor-s-recording-blocked-colour-fits-leave-phase1-14-for-a-new-task-phase1-15-compositor-colour-fits",
+  "title": "The compositor's recording-blocked colour fits leave phase1.14 for a new task, phase1.15_compositor-colour-fits",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.14_compositor-core",
+    "phase1.15_compositor-colour-fits",
+    "phase1.24_python-api-facade",
+    "phase5.2_parity-report-tiers",
+    "phase1.25_pilot-wand",
+    "phase1.26_gate-g1"
+  ],
+  "supersededBy": null
+}

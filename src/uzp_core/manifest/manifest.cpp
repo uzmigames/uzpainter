@@ -780,6 +780,10 @@ void CheckFormatVersion(const std::string& version, const std::string& path) {
 
 }  // namespace
 
+json::Value LayerToJson(const Layer& layer) { return Write(layer); }
+
+json::Value EffectToJson(const Effect& effect, bool mask) { return Write(effect, mask); }
+
 json::Value ProjectToJson(const Project& project) {
     json::Object o = project.extra;
     o["schema"] = std::string(kManifestSchema);

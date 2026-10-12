@@ -127,6 +127,7 @@ All UzPainter captures are window-independent (VIS-02, NFR-01); there is no hidd
 ## 7. Display presets and environments (VIS-04, RES-03)
 
 - A display preset is serialisable data: `{environment {sha256, exposure, rotation, dome}, background, ground, display configuration (tone mapping or OCIO view), cameras, samples, seed}`. UzPainter implements the pipeline's common comparison standard and its `ref_match` preset (`A3D\Pipeline\render\Render-Comparison-Standard.json`); presets are separate from presentation snapshots.
+- Implementation (decision 132): presets are `uzpainter/display-preset/1` JSON (`src/python/display.h`): `uzpainter.render.display.preset()`, `presets()` and `apply_preset()`, and the MCP `display_*` tools. Camera conversion follows the standard's `coordinate_contract`. Shipped environments are in `assets/environments/`, each with a record valid under `src/python/environment-provenance.schema.json`.
 - Environments are stored in the project as bytes plus SHA-256; a missing environment is an explicit error, never a substitute (RES-03). UzPainter ships CC0 environments (Poly Haven) under UzPainter names; Adobe environments are never shipped or committed and are used only on the owner's machine, by hash, as private test inputs (`docs/licensing-and-clean-room.md` §1).
 
 ## 8. Settling evidence

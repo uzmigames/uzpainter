@@ -13,7 +13,7 @@ This folder holds `painter_viewport`, the realtime preview of `docs/architecture
 
 ## Display transform (decision 134)
 
-The only supported configuration is `{mode "ocio", config SHA-256 15059d4b…, view "Default - sRGB"}`. That hash identifies Painter's substance config. The view is a render parameter, because Painter does not save it with the project. Any other configuration fails before any GPU work. The error reads `unsupported_configuration: <what differs> is pinned out of the display transform (decision 038)`. It covers Legacy with tone mapping `Linear` or `ACES`, ACE mode, another mode, OCIO without a hash or with another one, and another view.
+The only supported configuration is `{mode "ocio", config SHA-256 15059d4b…, view "Default - sRGB"}`. That hash identifies Painter's substance config; the constant is the display presets' pin (`src/python/display.h`). The project's colour-management mode decides Legacy or OCIO. The window reads the view, the config pin (when the project's colour management records no hash) and the active preset's clear colour from the display state of the display presets (`python::display::PresetOf`, decision 132). Painter itself does not save the view with the project. Any other configuration fails before any GPU work. The error reads `unsupported_configuration: <what differs> is pinned out of the display transform (decision 038)`. It covers Legacy with tone mapping `Linear` or `ACES`, ACE mode, another mode, OCIO without a hash or with another one, and another view.
 
 The transform is the calibrated model of the view (`parity/semantics/iray.json` `display-encoding`):
 

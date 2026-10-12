@@ -35,6 +35,8 @@
 #include "evaluator/templates.h"
 #include "mesh/reload.h"
 #include "preview/preview.h"
+#include "python/diagnostics.h"
+#include "python/display.h"
 #include "python/errors.h"
 #include "python/interpreter.h"
 #include "python/script.h"
@@ -45,7 +47,10 @@
 #include "supervisor/fault_hooks.h"
 #include "supervisor/ipc.h"
 #include "supervisor/pipe.h"
+#include "uzp_core/document/layer_tree.h"
+#include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/sha256.h"
+#include "uzp_core/types/errors.h"
 #include "uzp_core/types/enums.h"
 
 namespace uzp::supervisor {
@@ -209,6 +214,10 @@ json::Object Schema(json::Object properties, json::Array required) {
 
 json::Object StringProperty(const char* description) { return {{"type", "string"}, {"description", description}}; }
 
+json::Object UidProperty(const char* description) {
+    return {{"type", "integer"}, {"minimum", 1}, {"description", description}};
+}
+
 const json::Value* Field(const json::Object& object, std::string_view key) {
     const auto it = object.find(key);
     return it == object.end() ? nullptr : &it->second;
@@ -226,17 +235,49 @@ std::string DurableStore(const python::OpenProject& open) {
     return python::Utf8(open.untitled_dir.empty() ? open.project_source : std::filesystem::absolute(open.store->path()));
 }
 
-/// `{"event": "revision", "revision", "project", "untitled"}`: the open project's revision and
-/// durable store (null, null and false when none is open).
+/// `{"event": "revision", "revision", "project", "project_uuid", "untitled"}`: the open project's
+/// revision, durable store and UUID (the scope of its idempotency keys); null, null, null and
+/// false when none is open.
 json::Object RevisionEvent() {
     python::Session& session = python::Session::Get();
-    json::Object event{{"event", "revision"}, {"revision", nullptr}, {"project", nullptr}, {"untitled", false}};
+    json::Object event{{"event", "revision"},
+                       {"revision", nullptr},
+                       {"project", nullptr},
+                       {"project_uuid", nullptr},
+                       {"untitled", false}};
     if (const std::shared_ptr<python::OpenProject> open = session.IsOpen() ? session.Current() : nullptr) {
         event["revision"] = open->document->revision();
         event["project"] = DurableStore(*open);
+        event["project_uuid"] = open->store->project_uuid();
         event["untitled"] = !open->untitled_dir.empty();
     }
     return event;
+}
+
+/// The refusal of a mutating call the stored operation rows decided not to run (`09-...` §4), or
+/// nothing for `execute` and `stored_outcome`.
+std::optional<CallError> AdmissionRefusal(const core::AdmissionDecision& decision, const std::string& key) {
+    switch (decision.admission) {
+        case core::Admission::idempotency_conflict:
+            return CallError{"idempotency_conflict", "the idempotency key was committed with other arguments",
+                             json::Object{{"key", key}, {"committed_revision", decision.record->committed_revision}}};
+        case core::Admission::outcome_unknown:
+            return CallError{"outcome_unknown",
+                             "the key is unknown and its precondition is missing, expired or unreadable: the call "
+                             "is not run",
+                             json::Object{{"key", key}, {"committed_revision", decision.current_revision}}};
+        case core::Admission::stale_revision: {
+            json::Object details{{"expected", decision.expected_revision ? json::Value(*decision.expected_revision)
+                                                                         : json::Value(nullptr)},
+                                 {"current", decision.current_revision}};
+            return CallError{"stale_revision", "the project is at another revision than the call expected",
+                             std::move(details)};
+        }
+        case core::Admission::stored_outcome:
+        case core::Admission::execute:
+            break;
+    }
+    return std::nullopt;
 }
 
 class Worker {
@@ -258,6 +299,7 @@ private:
     void DefineTools();
     json::Object Call(const json::Value& id, const json::Object& request);
     json::Object Reopen(const json::Value& id, const json::Object& request);
+    json::Object Operations(const json::Value& id, const json::Object& request);
     json::Object ListTools() const;
     std::optional<std::int64_t> CommittedRevision() const;
 
@@ -266,10 +308,25 @@ private:
     json::Object ProjectSave(const json::Object& arguments);
     json::Object ProjectInspect(const json::Object& arguments);
     json::Object EvaluateChannel(const json::Object& arguments);
+    json::Object SnapshotLayerTree(const json::Object& arguments);
+    json::Object DiffSnapshots(const json::Object& arguments);
+    json::Object IsolateLayer(const json::Object& arguments);
+    json::Object MaterialViews(const json::Object& arguments);
+    json::Object RegionStats(const json::Object& arguments);
+    json::Object DisplaySet(const json::Object& arguments);
+    json::Object ShaderSet(const json::Object& arguments);
+    json::Object CameraGet(const json::Object& arguments);
+    json::Object CameraSet(const json::Object& arguments);
+    /// Runs a typed setter as the admitted request (`m_mutation`); its transaction result, or the
+    /// refusal or typed error.
+    json::Object SubmitAdmitted(const std::function<void(core::Edit&)>& call);
     json::Object RunPython(const json::Object& arguments);
     json::Object PreviewStatus(const json::Object& arguments);
+    /// The folder a Diagnostics tool exports into: `path`, inside the output root.
+    std::filesystem::path OutputDirectory(const json::Object& arguments) const;
 #if defined(UZP_WORKER_FAULT_HOOKS)
     json::Object TestFault(const json::Object& arguments);
+    json::Object TestMutation(const json::Object& arguments);
 #endif
 
     [[noreturn]] void FailRender(const render::Error& error);
@@ -283,6 +340,8 @@ private:
     /// The attached preview (`--preview`): every evaluation is published to it, never waited for.
     preview::PreviewFeed* m_previewFeed = nullptr;
     preview::PreviewHost* m_previewHost = nullptr;
+    /// The admitted request of the mutating call being handled (a typed tool submits it as is).
+    std::optional<core::MutationRequest> m_mutation;
 };
 
 void Worker::DefineTools() {
@@ -311,6 +370,77 @@ void Worker::DefineTools() {
                 {"channel"}),
          false, true},
         [this](const json::Object& a) { return EvaluateChannel(a); });
+    // The Diagnostics tools (11-mcp-server.md §2; decision 136): GPU-free reads of the committed
+    // revision on the CPU evaluator, as the export; the exporting ones publish a generation.
+    add({"snapshot_layer_tree",
+         "The layer tree of the committed revision: every node's uid, kind, name, visibility, place and parameters.",
+         Schema({}, {}), false, false},
+        [this](const json::Object& a) { return SnapshotLayerTree(a); });
+    add({"diff_snapshots", "The nodes and stacks added, removed and modified between two layer-tree snapshots.",
+         Schema({{"before", json::Object{{"type", "object"}}}, {"after", json::Object{{"type", "object"}}}},
+                {"before", "after"}),
+         false, false},
+        [this](const json::Object& a) { return DiffSnapshots(a); });
+    add({"isolate_layer",
+         "Exports each map with the node hidden (diagnosticMap isolated/<map>/<uid>, OpenEXR 32f) as a generation "
+         "under `path`, a folder inside the output root.",
+         Schema({{"uid", UidProperty("The node to hide.")},
+                 {"channels", json::Object{{"type", "array"},
+                                           {"minItems", 1},
+                                           {"items", json::Object{{"type", "string"}}},
+                                           {"description", "Channel types, Normal_OpenGL or Normal_DirectX."}}},
+                 {"path", StringProperty("The export folder, relative to the output root.")}},
+                {"uid", "channels", "path"}),
+         false, false},
+        [this](const json::Object& a) { return IsolateLayer(a); });
+    add({"material_views",
+         "Exports the material's mask and its views with their leaks (diagnosticMap materialMask, materialView, "
+         "materialLeaks; OpenEXR 32f) as a generation under `path`, a folder inside the output root.",
+         Schema({{"mask", UidProperty("The material: a fill layer or group.")},
+                 {"path", StringProperty("The export folder, relative to the output root.")}},
+                {"mask", "path"}),
+         false, false},
+        [this](const json::Object& a) { return MaterialViews(a); });
+    add({"region_stats", "Statistics of a map inside a material's region (diagnosticMap regionStats/<map>/<uid>).",
+         Schema({{"mask", UidProperty("The material: a fill layer or group.")},
+                 {"map", StringProperty("A channel type, Normal_OpenGL or Normal_DirectX.")}},
+                {"mask", "map"}),
+         false, false},
+        [this](const json::Object& a) { return RegionStats(a); });
+    // The display state of the fixed render pipeline (src/python/display.h; decisions 038, 042, 132).
+    add({"display_get", "The display state: the active preset's fields, `parity` and the shader.", Schema({}, {}), false,
+         false},
+        [](const json::Object&) { return python::display::State(*python::Session::Get().ReadProject()); });
+    add({"display_set",
+         "Sets display values in one transaction: a whole `preset` first, then any of environment (SHA-256 or null), "
+         "exposure, rotation, opacity, blur, shadows, background (sRGB8) and color_lut (null). Values outside the "
+         "fixed render pipeline are refused before any change (decision 038).",
+         Schema({{"preset", json::Object{{"type", "object"}}},
+                 {"environment", json::Object{{"type", json::Array{"string", "null"}}}},
+                 {"exposure", json::Object{{"type", "number"}}},
+                 {"rotation", json::Object{{"type", "number"}}},
+                 {"opacity", json::Object{{"type", "number"}}},
+                 {"blur", json::Object{{"type", "number"}}},
+                 {"shadows", json::Object{{"type", "boolean"}}},
+                 {"background", json::Object{{"type", "array"}, {"items", json::Object{{"type", "integer"}}}}},
+                 {"color_lut", json::Object{{"type", "null"}}}},
+                {}),
+         true, false},
+        [this](const json::Object& a) { return DisplaySet(a); });
+    add({"shader_get", "The shader and its parameters: the default open-pbr instance (decision 042).", Schema({}, {}),
+         false, false},
+        [](const json::Object&) { return python::display::Shader(*python::Session::Get().ReadProject()); });
+    add({"shader_set", "Accepts only the default open-pbr instance's parameter values (decision 042).",
+         Schema({{"parameters", json::Object{{"type", "object"}}}}, {"parameters"}), true, false},
+        [this](const json::Object& a) { return ShaderSet(a); });
+    add({"camera_get", "The default camera in Painter's convention and in Blender's (null when none is set).",
+         Schema({}, {}), false, false},
+        [this](const json::Object& a) { return CameraGet(a); });
+    add({"camera_set",
+         "Sets the default camera from a whole record, in Painter's convention (`camera`) or Blender's (`blender`).",
+         Schema({{"camera", json::Object{{"type", "object"}}}, {"blender", json::Object{{"type", "object"}}}}, {}), true,
+         false},
+        [this](const json::Object& a) { return CameraSet(a); });
     if (m_options.allow_python) {
         add({"run_python", "Runs Python source in the worker's interpreter (only with --allow-python).",
              Schema({{"code", StringProperty("The Python source.")},
@@ -336,6 +466,15 @@ void Worker::DefineTools() {
                     {"fault"}),
              false, false},
             [this](const json::Object& a) { return TestFault(a); });
+        // A typed, single-transaction mutation (one fill layer on the active stack, or a call that
+        // fails after its edit with `fail`): the idempotency path of typed tools, tested before
+        // phase2.6 delivers them (decision 138).
+        add({"test_mutation", "Test-only typed mutation (Debug builds under --test-faults).",
+             Schema({{"name", StringProperty("The fill layer's name.")},
+                     {"fail", json::Object{{"type", "boolean"}, {"description", "Fail the call after its edit."}}}},
+                    {"name"}),
+             true, false},
+            [this](const json::Object& a) { return TestMutation(a); });
     }
 #endif
 }
@@ -367,6 +506,7 @@ json::Object Worker::Handle(const json::Object& request) {
     if (method == "tools/list") return ResultReply(*id, ListTools(), CommittedRevision());
     if (method == "tools/call") return Call(*id, request);
     if (method == "worker/reopen") return Reopen(*id, request);
+    if (method == "worker/operations") return Operations(*id, request);
     return ErrorReply(*id, "unknown_method", "unknown method " + method.value_or("(none)"),
                       json::Object{{"method", method ? json::Value(*method) : json::Value(nullptr)}});
 }
@@ -388,19 +528,42 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
     if (tool == m_tools.end()) {
         return ErrorReply(id, "unknown_tool", "unknown tool " + *name, json::Object{{"name", *name}});
     }
+    m_mutation.reset();
     if (tool->mutating) {
+        // The admission order of 02 §3: a known key and its request hash before the revision
+        // precondition. A key without a precondition is decided too: a known key returns its
+        // stored outcome, an unknown one `outcome_unknown`; it never runs.
         const std::optional<std::string> key = StringField(request, "idempotency_key");
         const json::Value* expected = Field(request, "expected_revision");
-        if (!key || key->empty() || !expected || !expected->IsInt()) {
+        const bool has_expected = expected && !expected->IsNull();
+        if (!key || key->empty() || (has_expected && !expected->IsInt())) {
             return ErrorReply(id, "invalid_request",
                               "a mutating call needs idempotency_key (string) and expected_revision (integer)");
         }
-        const std::optional<std::int64_t> current = CommittedRevision();
-        const std::int64_t want = std::get<std::int64_t>(expected->data);
-        if (current && *current != want) {
-            return ErrorReply(id, "stale_revision", "the project is at another revision than the call expected",
-                              json::Object{{"expected", want}, {"current", *current}});
+        core::MutationRequest mutation{*name, arguments, *key,
+                                       has_expected ? std::optional(std::get<std::int64_t>(expected->data))
+                                                    : std::nullopt};
+        python::Session& session = python::Session::Get();
+        if (session.IsOpen()) {
+            const std::shared_ptr<python::OpenProject> open = session.Current();
+            const core::AdmissionDecision decision = open->store->Decide(mutation, open->document->revision());
+            if (decision.admission == core::Admission::stored_outcome) {
+                const json::Value& stored = decision.record->outcome;
+                json::Object reply = ResultReply(
+                    id, stored.IsObject() ? std::get<json::Object>(stored.data) : json::Object{}, CommittedRevision());
+                reply["admission"] = "stored_outcome";
+                reply["request_hash"] = decision.record->request_hash;
+                return reply;
+            }
+            if (std::optional<CallError> refusal = AdmissionRefusal(decision, *key)) {
+                return ErrorReply(id, refusal->code, refusal->message, refusal->details);
+            }
+        } else if (!has_expected) {
+            return ErrorReply(id, "outcome_unknown",
+                              "the key is unknown and its precondition is missing: the call is not run",
+                              json::Object{{"key", *key}, {"committed_revision", nullptr}});
         }
+        m_mutation = std::move(mutation);
     }
     if (tool->gpu) {
         if (const std::optional<render::Error>& unavailable = m_engine.DeviceError()) {
@@ -411,7 +574,12 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
     }
     try {
         json::Object result = m_handlers.at(*name)(arguments);
-        return ResultReply(id, std::move(result), CommittedRevision());
+        json::Object reply = ResultReply(id, std::move(result), CommittedRevision());
+        if (m_mutation) {
+            reply["admission"] = "executed";
+            reply["request_hash"] = m_mutation->request_hash();
+        }
+        return reply;
     } catch (const CallError& error) {
         return ErrorReply(id, error.code, error.message, error.details);
     } catch (const python::ApiError& error) {
@@ -431,6 +599,39 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
         return ErrorReply(id, std::move(code), error.what(), std::move(details));
     } catch (const std::exception& error) {
         return ErrorReply(id, "call_failed", error.what(), json::Object{{"type", "RuntimeError"}});
+    }
+}
+
+/// `worker/operations {after}`: what the supervisor reconciles its ledger from after a restart
+/// (02 §3): the open project's UUID, current revision and horizon, its operation rows committed
+/// after `after` and the keys of rows that do not decode. Not a tool.
+json::Object Worker::Operations(const json::Value& id, const json::Object& request) {
+    const json::Value* after = Field(request, "after");
+    if (!after || !after->IsInt()) return ErrorReply(id, "invalid_request", "worker/operations needs after (integer)");
+    python::Session& session = python::Session::Get();
+    if (!session.IsOpen()) return ResultReply(id, {{"project_uuid", nullptr}}, std::nullopt);
+    const std::shared_ptr<python::OpenProject> open = session.Current();
+    try {
+        const store::ProjectStore::OperationLog log = open->store->OperationsAfter(std::get<std::int64_t>(after->data));
+        json::Array records;
+        for (const core::OperationRecord& record : log.records) {
+            records.push_back(json::Object{{"idempotency_key", record.idempotency_key},
+                                           {"request_hash", record.request_hash},
+                                           {"outcome", record.outcome},
+                                           {"committed_revision", record.committed_revision}});
+        }
+        json::Array unreadable;
+        for (const std::string& key : log.unreadable) unreadable.push_back(key);
+        return ResultReply(id,
+                           {{"project_uuid", open->store->project_uuid()},
+                            {"current_revision", log.current_revision},
+                            {"horizon_revision", log.horizon_revision},
+                            {"operations", std::move(records)},
+                            {"unreadable", std::move(unreadable)}},
+                           CommittedRevision());
+    } catch (const std::exception& error) {
+        return ErrorReply(id, "outcome_unknown", std::string("the operation records cannot be read: ") + error.what(),
+                          json::Object{{"committed_revision", open->document->revision()}});
     }
 }
 
@@ -505,6 +706,65 @@ json::Object Worker::ProjectInspect(const json::Object&) {
             {"path", path ? json::Value(python::Utf8(*path)) : json::Value(nullptr)},
             {"revision", session.Revision()},
             {"texture_sets", std::move(sets)}};
+}
+
+json::Object Worker::SubmitAdmitted(const std::function<void(core::Edit&)>& call) {
+    // The typed setters run the request the admission decided on (its key and precondition), so
+    // the stored operation row answers a retry of the same key (09 §4).
+    std::exception_ptr error;
+    const core::RequestOutcome outcome = python::Session::Get().Submit(*m_mutation, [&](core::Edit& edit) {
+        try {
+            call(edit);
+        } catch (...) {
+            error = std::current_exception();
+            throw;
+        }
+    });
+    if (std::optional<CallError> refusal = AdmissionRefusal(outcome.decision, m_mutation->idempotency_key)) {
+        throw *refusal;
+    }
+    const core::TransactionResult& result = *outcome.result;
+    if (result.status == core::ResultStatus::failed) {
+        if (error) std::rethrow_exception(error);  // the typed error, e.g. UnsupportedInUzPainter
+        throw CallError{"call_failed", result.error, json::Object{{"type", result.error_type}, {"outcome", result.ToJson()}}};
+    }
+    return result.ToJson();
+}
+
+json::Object Worker::DisplaySet(const json::Object& arguments) {
+    return SubmitAdmitted([&](core::Edit& edit) {
+        if (const json::Value* preset = Field(arguments, "preset")) python::display::ApplyPreset(edit, *preset);
+        if (const json::Value* environment = Field(arguments, "environment")) {
+            python::display::SetEnvironment(edit, "display_set", *environment);
+        }
+        for (const char* key : {"exposure", "rotation", "opacity", "blur", "shadows", "background"}) {
+            if (const json::Value* value = Field(arguments, key)) python::display::SetValue(edit, "display_set", key, *value);
+        }
+        if (const json::Value* lut = Field(arguments, "color_lut")) python::display::SetColorLut(edit, "display_set", *lut);
+    });
+}
+
+json::Object Worker::ShaderSet(const json::Object& arguments) {
+    const json::Value* parameters = Field(arguments, "parameters");
+    if (!parameters) throw CallError{"invalid_arguments", "shader_set needs parameters", {}};
+    return SubmitAdmitted(
+        [&](core::Edit& edit) { python::display::SetShaderParameters(edit, "shader_set", *parameters); });
+}
+
+json::Object Worker::CameraGet(const json::Object&) {
+    const json::Value camera = python::display::DefaultCamera(*python::Session::Get().ReadProject());
+    if (camera.IsNull()) return {{"camera", nullptr}, {"blender", nullptr}};
+    return {{"camera", camera}, {"blender", python::display::CameraToBlender(camera)}};
+}
+
+json::Object Worker::CameraSet(const json::Object& arguments) {
+    const json::Value* camera = Field(arguments, "camera");
+    const json::Value* blender = Field(arguments, "blender");
+    if ((camera == nullptr) == (blender == nullptr)) {
+        throw CallError{"invalid_arguments", "camera_set needs exactly one of camera and blender", {}};
+    }
+    const json::Value record = camera ? *camera : json::Value(python::display::CameraFromBlender(*blender));
+    return SubmitAdmitted([&](core::Edit& edit) { python::display::SetCamera(edit, record, "camera_set"); });
 }
 
 json::Object Worker::EvaluateChannel(const json::Object& arguments) {
@@ -638,6 +898,147 @@ json::Object Worker::PreviewStatus(const json::Object&) {
             {"last_error", status.lastError}};
 }
 
+core::Id UidArgument(const json::Object& arguments, std::string_view key) {
+    const json::Value* value = Field(arguments, key);
+    if (!value || !value->IsInt() || std::get<std::int64_t>(value->data) < 1) {
+        throw CallError{"invalid_arguments", std::string(key) + " must be a node uid (a positive integer)", {}};
+    }
+    return static_cast<core::Id>(std::get<std::int64_t>(value->data));
+}
+
+evaluator::DiagnosticMapId MapArgument(const std::string& name) {
+    render::Result<evaluator::DiagnosticMapId> map = evaluator::ParseMapName(name);
+    if (!map) {
+        throw CallError{"invalid_arguments", "unknown map " + name + ": a channel type, Normal_OpenGL or Normal_DirectX",
+                        {}};
+    }
+    return *map;
+}
+
+/// `{generation, directory, receipt, receipt_sha256, files: [{source, path, relative_path, sha256, size}]}`.
+json::Object PublicationJson(const exporter::Publication& published,
+                             const std::vector<evaluator::DiagnosticSource>& sources) {
+    json::Array files;
+    for (std::size_t i = 0; i < published.files.size(); ++i) {
+        const exporter::WrittenFile& file = published.files[i];
+        files.push_back(json::Object{{"source", evaluator::SourceName(sources.at(i))},
+                                     {"path", file.path},
+                                     {"relative_path", file.relativePath},
+                                     {"sha256", file.sha256},
+                                     {"size", static_cast<std::int64_t>(file.size)}});
+    }
+    return {{"generation", published.generation},
+            {"directory", exporter::Utf8String(published.directory)},
+            {"receipt", exporter::Utf8String(published.receipt)},
+            {"receipt_sha256", published.receiptSha256},
+            {"files", std::move(files)}};
+}
+
+json::Array Triple(const std::array<float, 3>& v) {
+    return {static_cast<double>(v[0]), static_cast<double>(v[1]), static_cast<double>(v[2])};
+}
+
+std::filesystem::path Worker::OutputDirectory(const json::Object& arguments) const {
+    const std::optional<std::string> path = StringField(arguments, "path");
+    if (!path || path->empty()) throw CallError{"invalid_arguments", "path must name a folder", {}};
+    // Exports stay inside the output root until MCP roots exist (phase2.5_mcp-transport-registry).
+    const std::filesystem::path root = std::filesystem::weakly_canonical(std::filesystem::absolute(m_options.output_root));
+    std::filesystem::path folder = python::PathFromUtf8(*path);
+    if (folder.is_relative()) folder = root / folder;
+    folder = std::filesystem::weakly_canonical(folder);
+    const auto [inside, rest] = std::mismatch(root.begin(), root.end(), folder.begin(), folder.end());
+    if (inside != root.end()) {
+        throw CallError{"invalid_arguments", "path must be inside the output root " + python::Utf8(root),
+                        json::Object{{"output_root", python::Utf8(root)}}};
+    }
+    return folder;
+}
+
+json::Object Worker::SnapshotLayerTree(const json::Object&) {
+    const core::Snapshot snapshot = python::Session::Get().Current()->document->snapshot();
+    return core::SnapshotLayerTree(*snapshot.project, snapshot.revision);
+}
+
+json::Object Worker::DiffSnapshots(const json::Object& arguments) {
+    const json::Value* before = Field(arguments, "before");
+    const json::Value* after = Field(arguments, "after");
+    if (!before || !after) throw CallError{"invalid_arguments", "diff_snapshots needs before and after", {}};
+    try {
+        return core::DiffSnapshots(*before, *after);
+    } catch (const core::ValueError& error) {
+        throw CallError{"invalid_arguments", error.what(), {}};
+    }
+}
+
+json::Object Worker::IsolateLayer(const json::Object& arguments) {
+    const core::Id uid = UidArgument(arguments, "uid");
+    const json::Value* channels = Field(arguments, "channels");
+    if (!channels || !channels->IsArray() || std::get<json::Array>(channels->data).empty()) {
+        throw CallError{"invalid_arguments", "channels must be a non-empty list of map names", {}};
+    }
+    std::vector<evaluator::DiagnosticSource> sources;
+    for (const json::Value& channel : std::get<json::Array>(channels->data)) {
+        if (!channel.IsString()) throw CallError{"invalid_arguments", "channels must be a non-empty list of map names", {}};
+        sources.push_back(
+            {evaluator::DiagnosticSource::Kind::Isolated, MapArgument(std::get<std::string>(channel.data)), {}, uid});
+    }
+    const std::filesystem::path folder = OutputDirectory(arguments);
+    python::DiagnosticRun run;
+    const exporter::Publication published = run.Export(uid, sources, folder);
+    bool visible = true;
+    core::ForEachNode(*run.snapshot().project, [&](const core::NodeVisit& visit) {
+        if (visit.layer && visit.layer->uid == uid) visible = visit.layer->visible;
+        if (visit.effect && visit.effect->uid == uid) visible = visit.effect->visible;
+    });
+    return {{"revision", run.snapshot().revision},
+            {"uid", static_cast<std::int64_t>(uid)},
+            {"was_visible", visible},
+            {"export", PublicationJson(published, sources)}};
+}
+
+json::Object Worker::MaterialViews(const json::Object& arguments) {
+    const core::Id material = UidArgument(arguments, "mask");
+    const std::filesystem::path folder = OutputDirectory(arguments);
+    python::DiagnosticRun run;
+    const python::DiagnosticMaterialViews result = run.MaterialViews(material);
+    using Kind = evaluator::DiagnosticSource::Kind;
+    std::vector<evaluator::DiagnosticSource> sources{{Kind::MaterialMask, {}, {}, material}};
+    json::Object views;
+    for (const evaluator::MaterialView& view : result.views.views) {
+        sources.push_back({Kind::MaterialView, {}, view.view, material});
+        sources.push_back({Kind::MaterialLeaks, {}, view.view, material});
+        views[std::string(evaluator::MaterialViewName(view.view))] =
+            json::Object{{"leak_count", static_cast<std::int64_t>(view.leakTexels.size())},
+                         {"modal_id", view.modalId ? json::Value(Triple(*view.modalId)) : json::Value(nullptr)}};
+    }
+    json::Array missing;
+    for (const evaluator::MaterialViewKind view : result.views.missing) {
+        missing.emplace_back(std::string(evaluator::MaterialViewName(view)));
+    }
+    json::Object refused;
+    for (const auto& [view, reason] : result.refused) refused[view] = reason;
+    const exporter::Publication published = run.Export(material, sources, folder);
+    return {{"revision", run.snapshot().revision},
+            {"material", static_cast<std::int64_t>(material)},
+            {"inside", static_cast<std::int64_t>(result.views.inside)},
+            {"views", std::move(views)},
+            {"missing", std::move(missing)},
+            {"refused", std::move(refused)},
+            {"export", PublicationJson(published, sources)}};
+}
+
+json::Object Worker::RegionStats(const json::Object& arguments) {
+    const core::Id material = UidArgument(arguments, "mask");
+    const std::optional<std::string> name = StringField(arguments, "map");
+    if (!name) throw CallError{"invalid_arguments", "map must name a channel type, Normal_OpenGL or Normal_DirectX", {}};
+    const evaluator::DiagnosticMapId map = MapArgument(*name);
+    python::DiagnosticRun run;
+    const std::string stats = evaluator::RegionStatsJson(run.RegionStats(map, material));
+    return {{"source", evaluator::SourceName({evaluator::DiagnosticSource::Kind::RegionStats, map, {}, material})},
+            {"revision", run.snapshot().revision},
+            {"stats", json::Parse(stats)}};
+}
+
 json::Object Worker::RunPython(const json::Object& arguments) {
     const std::optional<std::string> code = StringField(arguments, "code");
     if (!code) throw CallError{"invalid_arguments", "run_python needs code", {}};
@@ -677,6 +1078,31 @@ json::Object Worker::TestFault(const json::Object& arguments) {
     if (!parsed) throw CallError{"invalid_arguments", "unknown fault", {}};
     fault::Trigger(*parsed);
     return {{"armed", *name}};
+}
+
+json::Object Worker::TestMutation(const json::Object& arguments) {
+    const std::optional<std::string> layer = StringField(arguments, "name");
+    const json::Value* fail = Field(arguments, "fail");
+    if (!layer || (fail && !fail->IsBool())) {
+        throw CallError{"invalid_arguments", "test_mutation needs a name and a boolean fail", {}};
+    }
+    const bool failing = fail && std::get<bool>(fail->data);
+    python::Session& session = python::Session::Get();
+    const std::shared_ptr<python::OpenProject> open = session.Current();
+    const core::RequestOutcome outcome = session.Submit(*m_mutation, [&](core::Edit& edit) {
+        edit.Insert(core::InsertPosition::FromStack(open->active_set, open->active_stack), core::NodeType::FillLayer,
+                    *layer);
+        if (failing) throw core::ValueError("test_mutation: the call failed as requested");
+    });
+    if (std::optional<CallError> refusal = AdmissionRefusal(outcome.decision, m_mutation->idempotency_key)) {
+        throw *refusal;
+    }
+    const core::TransactionResult& result = *outcome.result;
+    if (result.status == core::ResultStatus::failed) {
+        throw CallError{"call_failed", result.error,
+                        json::Object{{"type", result.error_type}, {"outcome", result.ToJson()}}};
+    }
+    return result.ToJson();
 }
 #endif
 

@@ -17,7 +17,9 @@ When the worker ends (process exit, or a broken pipe followed by the exit), the 
 3. answers each call that was in flight with `interrupted {cause, committed_revision}`: it is
    never re-sent (recovery is never a silent replay); calls that arrived meanwhile were held and
    are forwarded to the new worker;
-4. records the recovery, with its time from the detected death to the reopened project.
+4. records the recovery, with its time from the detected death to the reopened project, and
+   starts a new project epoch, so admission reconciles the project's operation rows before it
+   admits the next call (admission.py).
 """
 
 from __future__ import annotations
@@ -167,8 +169,12 @@ class Supervisor:
         # What the worker durably holds, from its `revision` events: they arrive before the
         # reply of the call that caused them, so a lost reply loses neither (02 §5).
         self.project_path: str | None = None
+        self.project_uuid: str | None = None
         self.project_untitled = False
         self.durable_revision: int | None = None
+        # Changes with every relaunch and every switch of project: admission reconciles the
+        # project's operation rows once per epoch (admission.py).
+        self.project_epoch = 0
         self._numbers = itertools.count(1)
         self._current: _Generation | None = None
         self._ready = asyncio.Event()
@@ -342,6 +348,7 @@ class Supervisor:
             failed_attempts=failed,
         )
         self.recoveries.append(recovery)
+        self.project_epoch += 1
         log.info("recovered: %s", recovery.to_json())
         for request_id, future in list(dead.pending.items()):
             if not future.done():
@@ -384,6 +391,7 @@ class Supervisor:
         if "error" in frame:
             log.error("the relaunched worker could not reopen %s: %s", self.project_path, frame)
             self.project_path = None
+            self.project_uuid = None
             self.project_untitled = False
             self.durable_revision = None
             return True, None
@@ -393,12 +401,18 @@ class Supervisor:
 
     def _on_event(self, frame: dict[str, Any]) -> None:
         """A worker's `revision` event: the absolute store it holds (the saved file, or an
-        untitled project's temporary store; None when none is open), whether it is untitled, and
-        its revision, sent after every commit and switch."""
+        untitled project's temporary store; None when none is open), its UUID, whether it is
+        untitled, and its revision, sent after every commit and switch."""
         if frame.get("event") == "revision":
             project = frame.get("project")
+            project_uuid = frame.get("project_uuid")
             revision = frame.get("revision")
-            self.project_path = project if isinstance(project, str) else None
+            path = project if isinstance(project, str) else None
+            held = project_uuid if isinstance(project_uuid, str) and path is not None else None
+            if (path, held) != (self.project_path, self.project_uuid):
+                self.project_epoch += 1
+            self.project_path = path
+            self.project_uuid = held
             self.project_untitled = frame.get("untitled") is True and self.project_path is not None
             self.durable_revision = revision if isinstance(revision, int) else None
 
@@ -410,6 +424,10 @@ class Supervisor:
         os._exit(4)
 
     # ── Requests ─────────────────────────────────────────────────────────────────────────────
+
+    async def wait_ready(self) -> None:
+        """Returns once no relaunch is under way."""
+        await self._ready.wait()
 
     async def request(self, frame: dict[str, Any]) -> dict[str, Any]:
         """Sends `frame` (an `id` is added) and returns the worker's reply, held while the worker
@@ -452,6 +470,7 @@ class Supervisor:
             else None,
             "python": "allowed" if self.config.allow_python else "disabled",
             "project": self.project_path,
+            "project_uuid": self.project_uuid,
             "untitled": self.project_untitled,
             "revision": self.durable_revision,
             "crash_dir": str(generation.crash_dir) if generation else None,

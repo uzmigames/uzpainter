@@ -28,16 +28,17 @@
 #include <string_view>
 #include <vector>
 
+#include "python/display.h"
+
 namespace uzp::core {
 struct Project;
 }
 
 namespace uzp::preview {
 
-/// SHA-256 of Painter 12.1.5's `resources/ocio/substance/config.ocio`
-/// (parity/reports/phase0/iray-capture-procedure.md, `Render-Standard-Validation.json`).
-inline constexpr std::string_view kSubstanceConfigSha256 =
-    "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4";
+/// SHA-256 of Painter 12.1.5's `resources/ocio/substance/config.ocio`, the display presets' pin
+/// (src/python/display.h; parity/reports/phase0/iray-capture-procedure.md).
+inline constexpr std::string_view kSubstanceConfigSha256 = python::display::kOcioConfigSha256;
 /// The one supported OCIO view.
 inline constexpr std::string_view kDefaultSrgbView = "Default - sRGB";
 /// The colour-management mode of an OCIO project.

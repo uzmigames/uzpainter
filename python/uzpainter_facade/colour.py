@@ -96,7 +96,7 @@ def require_supported_configuration() -> str:
             f"colour management '{mode}' (working space '{declared.get('working_space', '')}') "
             f"is not a pinned colour profile; only Painter's Legacy mode (linear working space, "
             f"sRGB I/O) is supported until {SESSION_O} are recorded and fitted "
-            "(phase1.14_compositor-core, decision 107)"
+            "(phase1.15_compositor-colour-fits, decision 107)"
         )
     return PROFILES[mode]
 
@@ -314,7 +314,7 @@ def default_bitmap_space(channel: str | None, colour_image: bool) -> Any:
         return NormalColorSpace.NormalXYZLeft
     raise uzpainter.NotYetSupported(
         f"Painter's default colour space of a {'colour' if colour_image else 'grey'} bitmap on "
-        f"{channel} is not recorded ({CHANNEL_DEFAULTS_PROBE}; phase1.14_compositor-core)"
+        f"{channel} is not recorded ({CHANNEL_DEFAULTS_PROBE}; phase1.15_compositor-colour-fits)"
     )
 
 
@@ -332,5 +332,5 @@ def available_bitmap_spaces(channel: str | None, colour_managed: bool) -> list[A
         ]
     raise uzpainter.NotYetSupported(
         f"the colour spaces Painter lists for a bitmap on {channel} are not recorded "
-        f"({CHANNEL_DEFAULTS_PROBE}; phase1.14_compositor-core)"
+        f"({CHANNEL_DEFAULTS_PROBE}; phase1.15_compositor-colour-fits)"
     )

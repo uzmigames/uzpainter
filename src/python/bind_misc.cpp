@@ -1,7 +1,8 @@
 // `uzpainter.logging`, `.application` (with the engine-computation state, phase1.21), `.event` (the
 // Python dispatcher thread, dispatcher.h), `.properties` and the modules whose behaviour arrives
-// in later phases (`.baking`, `.render`, `.display`, `.diagnostics`): importable, every call
-// raising `NotYetSupported` naming its owner task before anything changes (decision 082); and
+// in later phases (`.baking`, `render.capture`): importable, every call raising
+// `NotYetSupported` naming its owner task before anything changes (decision 082); `.diagnostics`
+// (bind_diagnostics.cpp); `.display`, `render.display` and `render.shader` (bind_display.cpp); and
 // `.capabilities` (capabilities.h, phase1.22).
 
 #include "python/bindings.h"
@@ -171,24 +172,16 @@ void BindMisc(py::module_& m) {
 
     py::module_ render = submodule(m, "render", "uzpainter.render", "Renders and captures (phase2.3_realtime-preview).");
     Gaps(render, "uzpainter.render", {"capture"}, "phase2.3_realtime-preview");
-    py::module_ shader = submodule(render, "shader", "uzpainter.render.shader", "Shader parameters (phase2.3_realtime-preview).");
-    Gaps(shader, "uzpainter.render.shader", {"parameters", "set_parameters"}, "phase2.3_realtime-preview");
+    py::module_ shader = submodule(render, "shader", "uzpainter.render.shader",
+                                   "Shader parameters: the default open-pbr instance (decision 042).");
     py::module_ render_display = submodule(render, "display", "uzpainter.render.display",
-                                           "The fixed pipeline's display values (phase2.3_realtime-preview).");
-    Gaps(render_display, "uzpainter.render.display",
-         {"set_exposure", "set_rotation", "set_opacity", "set_blur", "set_shadows", "set_background"},
-         "phase2.3_realtime-preview");
-
-    py::module_ display = submodule(m, "display", "uzpainter.display", "Viewport display state (phase2.3_realtime-preview).");
-    Gaps(display, "uzpainter.display",
-         {"get_environment_resource", "set_environment_resource", "get_color_lut_resource", "set_color_lut_resource",
-          "get_tone_mapping", "set_tone_mapping", "Camera"},
-         "phase2.3_realtime-preview");
+                                           "The fixed pipeline's display values and presets (decisions 038, 042).");
+    py::module_ display = submodule(m, "display", "uzpainter.display", "Viewport display state: environment, camera.");
+    BindDisplay(display, render_display, shader);
 
     py::module_ diagnostics = submodule(m, "diagnostics", "uzpainter.diagnostics",
-                                        "Diagnostic views of the stack (phase2.2_recipe-and-diagnostics).");
-    Gaps(diagnostics, "uzpainter.diagnostics", {"isolate", "contribution", "material_views", "region_stats"},
-         "phase2.2_recipe-and-diagnostics");
+                                        "Diagnostic views of the stack and layer-tree snapshots (bind_diagnostics.cpp).");
+    BindDiagnostics(diagnostics);
 
     BindCapabilities(m);
 }

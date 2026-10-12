@@ -1,0 +1,38 @@
+{
+  "schema": "uzpainter/environment-provenance/1",
+  "asset": "studio-small-09",
+  "file": "studio-small-09.exr",
+  "sha256": "44dcbed056512ecd8afd2a3d7ba73d2dd4c24694d0c72005fafcb2469bbc8fd4",
+  "bytes": 1319434,
+  "version": 1,
+  "author": "Sergej Majboroda (Poly Haven)",
+  "licence": "CC0-1.0",
+  "date": "2026-10-12",
+  "reviewer": null,
+  "source": {
+    "approved_source": "X-POLYHAVEN",
+    "page": "https://polyhaven.com/a/studio_small_09",
+    "download": "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/studio_small_09_1k.exr",
+    "upstream_name": "Studio Small 09",
+    "resolution": "1k",
+    "md5": "d85346bc4f0d041d27393d5f9aee211c",
+    "retrieved": "2026-10-12"
+  },
+  "image": {
+    "format": "OpenEXR",
+    "projection": "equirectangular",
+    "width": 1024,
+    "height": 512
+  },
+  "modifications": "none",
+  "transitive": [],
+  "privateRecords": [],
+  "parity": {
+    "role": "non-parity-preview",
+    "notes": "A soft studio light for the realtime preview of projects that do not light with a standard environment. It is neither preset's environment (Studio White Soft for common, TOS-RefMatch-Skeletal-Mage for ref_match), so a display state lit by it reports parity false and is never parity evidence (decisions 038, 132).",
+    "tests": [
+      "tests/python/test_display_presets.py::test_shipped_environments_have_valid_provenance",
+      "tests/python/test_display_presets.py::test_preset_round_trip_is_lossless"
+    ]
+  }
+}
