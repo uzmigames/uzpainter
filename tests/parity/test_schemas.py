@@ -170,6 +170,22 @@ def test_record_problems_catch_unconverged_or_mislabelled_references(
     assert any(expected in p for p in problems), problems
 
 
+@pytest.mark.parametrize(
+    ("call", "valid"),
+    [
+        ("uzmigames.pipeline.run_script", True),
+        ("uzmigames.pipeline.other_script", False),
+        ("community.bridge.execute_python", False),
+    ],
+)
+def test_api_readback_call_is_documented_or_a_pipeline_script_run(call: str, valid: bool) -> None:
+    """A pipeline script's `result` is read back under its own call (decision 099), never under a
+    documented call the script did not make itself."""
+    record = load_json(SAMPLES / "private" / "api-readback-record.json")
+    record["recordings"][0]["outputs"][0]["call"] = call
+    assert is_valid(record, Schema.GOLDEN_PRIVATE) is valid
+
+
 def test_storage_format_requires_the_measured_encoding() -> None:
     record = load_json(SAMPLES / "private" / "exported-map-record.json")
     del record["recordings"][0]["outputs"][0]["storage_format"]["encoding"]

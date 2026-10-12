@@ -91,6 +91,29 @@ BAKING_CAPTURES = frozenset(
     }
 )
 
+# Captures of texture jobs (recordings R6/R7; `painter_side.py`): read after the state steps in
+# every recording, interleaved with the export steps and probes by step number.
+LIST_PREDEFINED_PRESETS: str = ps.CONSTANTS["LIST_PREDEFINED_PRESETS"]
+LIST_RESOURCE_PRESETS: str = ps.CONSTANTS["LIST_RESOURCE_PRESETS"]
+PREDEFINED_OUTPUT_MAPS: str = ps.CONSTANTS["PREDEFINED_OUTPUT_MAPS"]
+RESOURCE_OUTPUT_MAPS: str = ps.CONSTANTS["RESOURCE_OUTPUT_MAPS"]
+LIST_COLOR_SPACES: str = ps.CONSTANTS["LIST_COLOR_SPACES"]
+
+# Each capture's output-id prefix (`<prefix>/s<step>`) and the arguments it takes (those in
+# OPTIONAL_CAPTURE_ARGS may be left out).
+API_CAPTURES: dict[str, tuple[str, tuple[str, ...]]] = {
+    LIST_PREDEFINED_PRESETS: ("presets", ()),
+    LIST_RESOURCE_PRESETS: ("presets", ()),
+    PREDEFINED_OUTPUT_MAPS: ("presets", ("preset", "texture_set")),
+    RESOURCE_OUTPUT_MAPS: ("presets", ("preset",)),
+    LIST_COLOR_SPACES: ("color-spaces", ("node_step", "channel")),
+}
+# Without `preset`, the output maps of every predefined preset Painter lists are recorded.
+OPTIONAL_CAPTURE_ARGS = {PREDEFINED_OUTPUT_MAPS: ("preset",)}
+
+# Arguments of a `set_resolutions` step: the size, and optionally the one texture set it sets.
+RESOLUTION_ARGS = ("width", "height", "texture_set")
+
 # Getter recorded after each setter (readback of the documented property it changed).
 READBACK_OF = {
     ps.SET_SOURCE: (ps.GET_SOURCE, ("node_step", "channel")),
@@ -304,6 +327,50 @@ def check_baking_step(step: Step) -> None:
         raise RecorderError(f"{where}: {HIPOLY_MESH} is set only from an `input` (an input id)")
 
 
+def is_name(value: Any) -> bool:
+    return isinstance(value, str) and bool(value)
+
+
+def check_resolution_step(step: Step) -> None:
+    """Refuse a malformed `set_resolutions` step before Painter is touched."""
+    args = step.args
+    sizes = [args.get("width"), args.get("height")]
+    if (
+        set(args) - set(RESOLUTION_ARGS)
+        or not all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in sizes)
+        or ("texture_set" in args and not is_name(args["texture_set"]))
+    ):
+        raise RecorderError(
+            f"step {step.step}: set_resolutions takes `width`, `height` (positive integers) "
+            "and an optional `texture_set` name"
+        )
+
+
+def check_api_capture(step: Step, state: list[Step]) -> None:
+    """Refuse a malformed texture-job capture before Painter is touched: exactly its arguments,
+    preset and texture-set names as strings, a resource preset as a `resource://` URL, and the
+    bitmap's `node_step` naming an earlier `insert_fill` step (`channel` null in a mask)."""
+    names = API_CAPTURES[step.call][1]
+    optional = OPTIONAL_CAPTURE_ARGS.get(step.call, ())
+    args = step.args
+    where = f"step {step.step}: {step.call.rsplit('.', 1)[1]}"
+    if not set(names) - set(optional) <= set(args) <= set(names):
+        taken = [f"{n} (optional)" if n in optional else n for n in names]
+        raise RecorderError(f"{where} takes exactly {taken or 'no arguments'}")
+    for name in ("preset", "texture_set"):
+        if name in args and not is_name(args[name]):
+            raise RecorderError(f"{where}: `{name}` must be a name")
+    if step.call == RESOURCE_OUTPUT_MAPS and not str(args["preset"]).startswith("resource://"):
+        raise RecorderError(f"{where}: `preset` must be a resource:// URL")
+    if step.call == LIST_COLOR_SPACES:
+        fills = {s.step for s in state if s.call == ps.INSERT_FILL}
+        node_step = args["node_step"]
+        if isinstance(node_step, bool) or node_step not in fills:
+            raise RecorderError(f"{where}: `node_step` must name an insert_fill step")
+        if args["channel"] is not None and not is_name(args["channel"]):
+            raise RecorderError(f"{where}: `channel` must be a channel name or null")
+
+
 @dataclass(frozen=True)
 class Job:
     manifest: dict[str, Any]
@@ -312,6 +379,7 @@ class Job:
     exports: tuple[ExportStep, ...]
     captures: tuple[Step, ...] = ()
     export_probes: tuple[ExportProbe, ...] = ()
+    api_captures: tuple[Step, ...] = ()
 
     @property
     def golden_id(self) -> str:
@@ -393,6 +461,7 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
     exports: list[ExportStep] = []
     captures: list[Step] = []
     probes: list[ExportProbe] = []
+    api_captures: list[Step] = []
     for step in steps:
         if step.call == EXPORT:
             exports.append(export_step(step))
@@ -403,7 +472,11 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
         if step.call in BAKING_CAPTURES:
             captures.append(step)
             continue
-        if exports or captures or probes:
+        if step.call in API_CAPTURES:
+            check_api_capture(step, state)
+            api_captures.append(step)
+            continue
+        if exports or captures or probes or api_captures:
             raise RecorderError(f"step {step.step}: state steps must precede the captures")
         if step.call not in STATE_CALLS:
             raise RecorderError(f"step {step.step}: {step.call} is not in the recorder vocabulary")
@@ -420,6 +493,8 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
             raise RecorderError(f"step {step.step}: `{key}` must name an input with a path")
         if step.call in BAKING_SETTINGS or step.call == ps.BAKE:
             check_baking_step(step)
+        if step.call == ps.SET_RESOLUTIONS:
+            check_resolution_step(step)
         state.append(step)
     if not state or state[0].call != ps.CREATE:
         raise RecorderError("the instruction sequence must start with project.create")
@@ -429,4 +504,12 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
             raise RecorderError(
                 f"step {step.step}: baking settings must precede the last bake_async step"
             )
-    return Job(manifest, inputs, tuple(state), tuple(exports), tuple(captures), tuple(probes))
+    return Job(
+        manifest,
+        inputs,
+        tuple(state),
+        tuple(exports),
+        tuple(captures),
+        tuple(probes),
+        tuple(api_captures),
+    )

@@ -1,0 +1,119 @@
+{
+  "defaultExportPreset": "uzp_recorder",
+  "exportList": [
+    {
+      "rootPath": "s0"
+    },
+    {
+      "rootPath": "s1"
+    },
+    {
+      "rootPath": "s2"
+    },
+    {
+      "rootPath": "s3"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "bitDepth": "16",
+        "dithering": false,
+        "fileFormat": "png",
+        "paddingAlgorithm": "infinite",
+        "sizeLog2": [
+          7,
+          8
+        ]
+      }
+    }
+  ],
+  "exportPresets": [
+    {
+      "maps": [
+        {
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapName": "basecolor",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapName": "basecolor",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapName": "basecolor",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "$textureSet_basecolor"
+        },
+        {
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapName": "user0",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapName": "user0",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapName": "user0",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "$textureSet_user0"
+        },
+        {
+          "channels": [
+            {
+              "destChannel": "L",
+              "srcChannel": "L",
+              "srcMapName": "height",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "$textureSet_height"
+        },
+        {
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapName": "Normal_OpenGL",
+              "srcMapType": "virtualMap"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapName": "Normal_OpenGL",
+              "srcMapType": "virtualMap"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapName": "Normal_OpenGL",
+              "srcMapType": "virtualMap"
+            }
+          ],
+          "fileName": "$textureSet_Normal_OpenGL"
+        }
+      ],
+      "name": "uzp_recorder"
+    }
+  ],
+  "exportShaderParams": false
+}

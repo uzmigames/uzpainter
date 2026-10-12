@@ -1,0 +1,15 @@
+{
+  "id": 99,
+  "slug": "requested-goldens-are-staged-under-the-envelope-requests-root-and-the-wand-tier1-golden-runs-the-pinned-pipeline-scripts",
+  "title": "Requested goldens are staged under the envelope's requests root, and the Wand Tier 1 golden runs the pinned pipeline scripts",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.16_export-processing-encoders",
+    "phase1.17_export-presets",
+    "phase1.22_pyapi-cli-capabilities",
+    "phase1.23_pyapi-pipeline-adapter",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

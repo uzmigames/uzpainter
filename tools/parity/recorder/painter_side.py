@@ -71,6 +71,14 @@ SET_TONE_MAPPING = "substance_painter.display.set_tone_mapping"
 # configuration is exported (`export_textures`).
 LIST_TEXTURES = "substance_painter.export.list_project_textures"
 
+# Captures of texture jobs (recordings R6/R7): the export presets Painter lists and their output
+# maps, and the colour spaces of a bitmap source. Read after the state steps, in every recording.
+LIST_PREDEFINED_PRESETS = "substance_painter.export.list_predefined_export_presets"
+LIST_RESOURCE_PRESETS = "substance_painter.export.list_resource_export_presets"
+PREDEFINED_OUTPUT_MAPS = "substance_painter.export.PredefinedExportPreset.list_output_maps"
+RESOURCE_OUTPUT_MAPS = "substance_painter.export.ResourceExportPreset.list_output_maps"
+LIST_COLOR_SPACES = "substance_painter.source.SourceBitmap.list_available_color_spaces"
+
 # Procedural vocabulary (phase0.6_procedural-feasibility): imported resources, mesh maps, masks,
 # generator effects, smart materials and substance parameters.
 IMPORT_RESOURCE = "substance_painter.resource.import_project_resource"
@@ -942,12 +950,11 @@ def apply_step(args: dict[str, Any]) -> dict[str, Any]:
         node = NODES[int(params["node_step"])]
         node.set_opacity(float(params["opacity"]), channel_type(params["channel"]))
     elif call == SET_RESOLUTIONS:
+        # The named texture set, else every texture set; width and height may differ.
         resolution = substance_painter.textureset.Resolution(
             int(params["width"]), int(params["height"])
         )
-        substance_painter.textureset.set_resolutions(
-            substance_painter.textureset.all_texture_sets(), resolution
-        )
+        substance_painter.textureset.set_resolutions(texture_sets_of(params), resolution)
     elif call.startswith(CAMERA) and call[len(CAMERA) :] in CAMERA_PROPERTIES:
         set_camera(call[len(CAMERA) :], params["value"])
     elif call == SET_ENVIRONMENT:
@@ -1090,6 +1097,75 @@ def source_value(source: Any) -> Any:
     return {"source_kind": "neither uniform colour, substance nor bitmap"}
 
 
+def colour_space_value(space: Any) -> dict[str, str]:
+    """A colour space by documented class (`GenericColorSpace`, `LegacyColorSpace`,
+    `DataColorSpace`, `NormalColorSpace`, or `str`) and name."""
+    colormanagement = substance_painter.colormanagement
+    if isinstance(space, str):
+        kind = "str"
+    elif isinstance(space, colormanagement.GenericColorSpace):
+        kind = "GenericColorSpace"
+    elif isinstance(space, colormanagement.LegacyColorSpace):
+        kind = "LegacyColorSpace"
+    elif isinstance(space, colormanagement.DataColorSpace):
+        kind = "DataColorSpace"
+    elif isinstance(space, colormanagement.NormalColorSpace):
+        kind = "NormalColorSpace"
+    else:
+        return {"unrepresented": repr(space)}
+    return {"class": kind, "name": colour_space_name(space)}
+
+
+def bitmap_colour_spaces(source: Any) -> dict[str, Any]:
+    """`SourceBitmap.list_available_color_spaces` and `get_color_space` of a bitmap source."""
+    if not isinstance(source, substance_painter.source.SourceBitmap):
+        raise TypeError(f"the source is not a bitmap: {source_value(source)}")
+    return {
+        "available_color_spaces": [
+            colour_space_value(space) for space in source.list_available_color_spaces()
+        ],
+        "color_space": colour_space_value(source.get_color_space()),
+    }
+
+
+def predefined_output_maps(params: dict[str, Any]) -> dict[str, Any]:
+    """`PredefinedExportPreset.list_output_maps` on the named texture set's stack, by preset
+    name with its URL: the one preset `preset` names, else every preset Painter lists. A preset
+    whose call raises is recorded with what it raised."""
+    presets = substance_painter.export.list_predefined_export_presets()
+    if "preset" in params:
+        presets = [p for p in presets if p.name == params["preset"]]
+        if len(presets) != 1:
+            raise ValueError(
+                f"{len(presets)} predefined export presets are named {params['preset']!r}"
+            )
+    stack = substance_painter.textureset.Stack.from_name(params["texture_set"])
+    maps: dict[str, Any] = {}
+    for preset in presets:
+        name = str(preset.name)
+        if name in maps:
+            raise ValueError(f"several predefined export presets are named {name!r}")
+        entry: dict[str, Any] = {"url": json_value(preset.url)}
+        try:
+            entry["output_maps"] = json_value(preset.list_output_maps(stack))
+        except Exception as error:
+            entry["raised"] = raised_by(error)
+        maps[name] = entry
+    return maps
+
+
+def resource_id_value(identifier: Any) -> Any:
+    """A `resource.ResourceID`'s URL and documented fields."""
+    return json_value(
+        {
+            "url": identifier.url(),
+            "context": identifier.context,
+            "name": identifier.name,
+            "version": identifier.version,
+        }
+    )
+
+
 def readback(args: dict[str, Any]) -> Any:
     """Read one documented getter; the host records the value (or the documented exception)."""
     call = args["call"]
@@ -1136,6 +1212,25 @@ def readback(args: dict[str, Any]) -> Any:
         }
     if call == BAKING_ENABLED_BAKERS:
         return {ts.name(): enabled_bakers(ts) for ts in texture_sets_of(params)}
+    if call == LIST_PREDEFINED_PRESETS:
+        return [
+            json_value({"name": preset.name, "url": preset.url})
+            for preset in substance_painter.export.list_predefined_export_presets()
+        ]
+    if call == LIST_RESOURCE_PRESETS:
+        return [
+            {"resource_id": resource_id_value(preset.resource_id)}
+            for preset in substance_painter.export.list_resource_export_presets()
+        ]
+    if call == PREDEFINED_OUTPUT_MAPS:
+        return predefined_output_maps(params)
+    if call == RESOURCE_OUTPUT_MAPS:
+        identifier = substance_painter.resource.ResourceID.from_url(params["preset"])
+        preset = substance_painter.export.ResourceExportPreset(identifier)
+        return json_value(preset.list_output_maps())
+    if call == LIST_COLOR_SPACES:
+        node = NODES[int(params["node_step"])]
+        return bitmap_colour_spaces(node.get_source(channel_type(params["channel"])))
     raise ValueError(f"readback {call!r} is not in the recorder vocabulary")
 
 

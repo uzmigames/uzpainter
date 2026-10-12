@@ -5,9 +5,10 @@
    A golden whose settings sheet names values only Painter's UI can set has them applied by
    the operator here (`texture_sheet.py`, decision 029).
 2. Recording `same_session`: template capture, the operator's entries and panel images (if
-   any), readback of every property the sequence set, then each export step: wait for
-   readiness (edition state entered, not busy), write the fence, export into a fresh
-   directory, verify the exported files are current (`capture.py`).
+   any), readback of every property the sequence set, then each export step, export probe and
+   capture (export presets, a bitmap's colour spaces) in step order. An export step waits for
+   readiness (edition state entered, not busy), writes the fence, exports into a fresh
+   directory and verifies the exported files are current (`capture.py`).
 3. Save the project (Full), close it, reopen it, find the layers again at their recorded places.
 4. Recording `after_save_reopen`: the same captures; the operator re-reads the UI-set values.
 5. Write the private record and the public manifest to the oracle inbox (`output.py`).
@@ -35,6 +36,7 @@ from tools.parity.recorder.capture import (
     write_fence,
 )
 from tools.parity.recorder.job import (
+    API_CAPTURES,
     EXPORT,
     INPUT_ARGS,
     OPTIONAL_INPUT_ARGS,
@@ -43,6 +45,7 @@ from tools.parity.recorder.job import (
     ExportStep,
     Job,
     OutputMap,
+    Step,
     sha256_file,
 )
 from tools.parity.recorder.output import ensure_outside_repository, run_name, write_run
@@ -230,27 +233,45 @@ def readback_outputs(
             {"call": ps.GET_RESOLUTION, "args": {"texture_set": name}}
             for name in sorted(template["texture_sets"])
         ]
-    outputs: list[dict[str, Any]] = []
-    for spec in specs:
-        output: dict[str, Any] = {
-            "output_id": "/".join(
+    return [
+        api_readback(
+            session,
+            "/".join(
                 [
                     "readback",
                     spec["call"].rsplit(".", 1)[1],
                     *(output_safe(str(v)) for v in spec["args"].values()),
                 ]
             ),
-            "kind": "api_readback",
-            "call": spec["call"],
-            "args": spec["args"],
-        }
-        try:
-            output["value"] = session.call("readback", call=spec["call"], args=spec["args"])
-        except PainterCallError as error:
-            output["value"] = None
-            output["raised"] = {"type": error.kind, "message": error.message}
-        outputs.append(output)
-    return outputs
+            spec["call"],
+            spec["args"],
+        )
+        for spec in specs
+    ]
+
+
+def api_readback(
+    session: PainterSession, output_id: str, call: str, args: dict[str, Any]
+) -> dict[str, Any]:
+    """One documented call read through `readback`; an exception Painter raises is recorded."""
+    output: dict[str, Any] = {
+        "output_id": output_id,
+        "kind": "api_readback",
+        "call": call,
+        "args": args,
+    }
+    try:
+        output["value"] = session.call("readback", call=call, args=args)
+    except PainterCallError as error:
+        output["value"] = None
+        output["raised"] = {"type": error.kind, "message": error.message}
+    return output
+
+
+def capture_output(session: PainterSession, step: Step) -> dict[str, Any]:
+    """A texture-job capture (export presets, a bitmap's colour spaces): `<prefix>/s<step>`."""
+    prefix = API_CAPTURES[step.call][0]
+    return api_readback(session, f"{prefix}/s{step.step}", step.call, dict(step.args))
 
 
 def export_roots(template: dict[str, Any]) -> list[tuple[str, str]]:
@@ -488,10 +509,20 @@ def project_file_name(job: Job) -> str:
 
 def require_colour_management(job: Job, identity: PainterIdentity) -> None:
     """A manifest that names `OCIO` (applied by environment variable) is recorded only in a
-    session started with that configuration: a Legacy session would record another project."""
-    for setting in job.manifest["applied_settings"]:
-        if setting["applied_by"] != "environment_variable" or setting["name"] != "OCIO":
-            continue
+    session started with that configuration: a Legacy session would record another project.
+    Conversely, a manifest that names no `OCIO` is recorded only in a Legacy session (no `OCIO`,
+    no `PAINTER_ACE_CONFIG`), so a Legacy golden is never recorded under another configuration."""
+    named = [
+        setting
+        for setting in job.manifest["applied_settings"]
+        if setting["applied_by"] == "environment_variable" and setting["name"] == "OCIO"
+    ]
+    if not named and identity.colour_management.get("mode") != "legacy":
+        raise RecorderError(
+            f"{job.golden_id}: records under Legacy colour management; restart Painter without "
+            f"OCIO and PAINTER_ACE_CONFIG (found {identity.colour_management!r})"
+        )
+    for setting in named:
         found = str(identity.colour_management.get("OCIO") or "").replace("\\", "/")
         if identity.colour_management.get("mode") != "ocio" or not found.endswith(
             str(setting["value"])
@@ -526,8 +557,15 @@ def record_once(
     outputs += operator_outputs[0]
     outputs += readback_outputs(session, job, template, extra_readbacks)
     blobs: list[Path] = list(operator_outputs[1])
-    captures: list[ExportStep | ExportProbe] = [*job.exports, *job.export_probes]
+    captures: list[ExportStep | ExportProbe | Step] = [
+        *job.exports,
+        *job.export_probes,
+        *job.api_captures,
+    ]
     for capture in sorted(captures, key=lambda c: c.step):
+        if isinstance(capture, Step):
+            outputs.append(capture_output(session, capture))
+            continue
         if isinstance(capture, ExportProbe):
             exported, files = probe_outputs(session, capture, directory)
         else:
@@ -586,9 +624,10 @@ def record_texture_golden(
     it is refused, so a default can never be recorded in place of the sheet's value."""
     if job.tier == "3":
         raise RecorderError("Tier 3 goldens are Iray references: use the iray command")
-    if not job.exports and not job.export_probes:
+    if not job.exports and not job.export_probes and not job.api_captures:
         raise RecorderError(
-            "a texture golden needs at least one export_project_textures or export probe step"
+            "a texture golden needs at least one export_project_textures, export probe or "
+            "capture step"
         )
     if job.captures:
         raise RecorderError("baking-defaults captures are recorded by the record-defaults command")

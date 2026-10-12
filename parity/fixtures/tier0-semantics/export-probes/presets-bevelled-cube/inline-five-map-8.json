@@ -1,0 +1,106 @@
+{
+  "defaultExportPreset": "v6",
+  "exportList": [
+    {
+      "rootPath": "uzp_bevelled_cube"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "bitDepth": "16",
+        "dithering": false,
+        "fileFormat": "png",
+        "paddingAlgorithm": "infinite",
+        "sizeLog2": 8
+      }
+    }
+  ],
+  "exportPresets": [
+    {
+      "maps": [
+        {
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapName": "basecolor",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapName": "basecolor",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapName": "basecolor",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "uzp_staff_BaseColor"
+        },
+        {
+          "channels": [
+            {
+              "destChannel": "L",
+              "srcChannel": "L",
+              "srcMapName": "roughness",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "uzp_staff_Roughness"
+        },
+        {
+          "channels": [
+            {
+              "destChannel": "L",
+              "srcChannel": "L",
+              "srcMapName": "metallic",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "uzp_staff_Metallic"
+        },
+        {
+          "channels": [
+            {
+              "destChannel": "L",
+              "srcChannel": "L",
+              "srcMapName": "height",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "uzp_staff_Height"
+        },
+        {
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapName": "Normal_OpenGL",
+              "srcMapType": "virtualMap"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapName": "Normal_OpenGL",
+              "srcMapType": "virtualMap"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapName": "Normal_OpenGL",
+              "srcMapType": "virtualMap"
+            }
+          ],
+          "fileName": "uzp_staff_Normal"
+        }
+      ],
+      "name": "v6"
+    }
+  ],
+  "exportShaderParams": false
+}

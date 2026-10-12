@@ -24,6 +24,17 @@ The lifecycle golden (first step `event.Dispatcher.connect`) instead runs create
 close (`same_session`) and open -> save -> close (`after_save_reopen`) twice, recording the events
 dispatched in each phase and the readiness states polled meanwhile.
 
+An *observed* probe golden (step 2 `event.Dispatcher.connect`, right after `project.create`)
+records, after every later step, the events dispatched since the previous step and the states
+polled until the step's asynchronous calls answered (`reload_mesh`, `execute_when_not_busy`,
+`reload_modified_resources_async`), then a few more polls; a step with `wait: false` leaves its
+events to the next step's record. Further step arguments the host resolves: `work_file` (a file
+name in the recording's private work directory, the files of which are listed after every save
+step), and on `reload_modified_resources_async`, `rewrite_input` / `with_input` (the staged copy
+of one input is overwritten with another input's bytes just before the call). An
+`export_project_textures` step with `probe: true` is an export request among the probe steps:
+its result or error, then the files present in its directory once the step settled.
+
 Records go to the private oracle inbox exactly like texture goldens (`output.py`).
 """
 
@@ -32,6 +43,7 @@ from __future__ import annotations
 import argparse
 import ast
 import base64
+import contextlib
 import shutil
 import sys
 from collections.abc import Callable, Sequence
@@ -72,6 +84,7 @@ from tools.parity.recorder.texture import (
     Now,
     close_quietly,
     export_outputs,
+    export_roots,
     save_and_reopen,
     utc_now,
 )
@@ -112,10 +125,23 @@ PROJECT_SAVE: str = CONSTANTS["PROJECT_SAVE"]
 PROJECT_CLOSE: str = CONSTANTS["PROJECT_CLOSE"]
 PROJECT_OPEN: str = CONSTANTS["PROJECT_OPEN"]
 PROJECT_STATE: str = CONSTANTS["PROJECT_STATE"]
+PROJECT_SAVE_AS_COPY: str = CONSTANTS["PROJECT_SAVE_AS_COPY"]
+RELOAD_MESH: str = CONSTANTS["RELOAD_MESH"]
+RELOAD_RESOURCES: str = CONSTANTS["RELOAD_RESOURCES"]
 GET_NODE_BY_UID = "substance_painter.layerstack.get_node_by_uid"
 
 # Step arguments naming an input by input_id; the recorder passes the staged file's path.
-INPUT_ARGS = {ps.CREATE: "mesh", IMPORT_RESOURCE: "image"}
+INPUT_ARGS = {ps.CREATE: "mesh", IMPORT_RESOURCE: "image", RELOAD_MESH: "mesh"}
+
+# A file name in the recording's private work directory (saves, a missing mesh to reload).
+WORK_FILE = "work_file"
+SAVE_CALLS = frozenset({PROJECT_SAVE_AS, PROJECT_SAVE_AS_COPY, PROJECT_SAVE})
+# `reload_modified_resources_async`: the staged input to overwrite, and the input it becomes.
+REWRITE_ARGS = ("rewrite_input", "with_input")
+# `wait: false`: the step's events and states are recorded with the next step's.
+WAIT_FLAG = "wait"
+# Limit for a step's asynchronous calls to answer; one still pending is recorded, not refused.
+ASYNC_TIMEOUT_S = 600.0
 
 # The lifecycle procedure, step by step (after `event.Dispatcher.connect`).
 LIFECYCLE_STEPS = (
@@ -144,6 +170,7 @@ class ProbeStep:
     call: str
     args: dict[str, Any]
     probe: bool
+    wait: bool = True
 
     @property
     def output_id(self) -> str:
@@ -163,6 +190,11 @@ class ProbeJob:
     @property
     def lifecycle(self) -> bool:
         return bool(self.events)
+
+    @property
+    def observed(self) -> bool:
+        """Events are connected (step 2): every later step records its events and states."""
+        return bool(self.state_steps) and self.state_steps[0].call == EVENT_CONNECT
 
     @property
     def golden_id(self) -> str:
@@ -201,7 +233,24 @@ def checked_inputs(manifest: dict[str, Any], repo_root: Path) -> dict[str, Path]
 
 
 def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
+    work_file = step.args.get(WORK_FILE)
+    if work_file is not None and (
+        not isinstance(work_file, str)
+        or work_file in ("", ".", "..")
+        or Path(work_file).name != work_file
+    ):
+        raise RecorderError(f"step {step.step}: `{WORK_FILE}` must be a plain file name")
+    if step.call in SAVE_CALLS - {PROJECT_SAVE} and work_file is None:
+        raise RecorderError(f"step {step.step}: a save to a new file needs `{WORK_FILE}`")
+    rewrite = [step.args.get(key) for key in REWRITE_ARGS]
+    if step.call == RELOAD_RESOURCES and any(rewrite) and not all(r in inputs for r in rewrite):
+        raise RecorderError(
+            f"step {step.step}: `{REWRITE_ARGS[0]}` and `{REWRITE_ARGS[1]}` must both name "
+            "inputs with a path"
+        )
     key = INPUT_ARGS.get(step.call)
+    if step.call == RELOAD_MESH and work_file is not None and key not in step.args:
+        return  # a reload of a file that does not exist (the failing path)
     if key is not None and step.args.get(key) not in inputs:
         raise RecorderError(f"step {step.step}: `{key}` must name an input with a path")
 
@@ -214,6 +263,15 @@ def lifecycle_job(manifest: dict[str, Any], inputs: dict[str, Path], steps: list
         raise RecorderError("step 1: `events` must list the event class names to connect")
     check_input_arg(steps[1], inputs)
     return ProbeJob(manifest, inputs, steps[1], (), (), (), tuple(events))
+
+
+def check_connect(step: Step, probe: bool) -> None:
+    """The events of an observed probe golden are connected once, right after the project."""
+    if step.step != 2 or probe:
+        raise RecorderError(f"step {step.step}: events are connected by state step 2 only")
+    events = step.args.get("events")
+    if not isinstance(events, list) or not events or not all(isinstance(e, str) for e in events):
+        raise RecorderError(f"step {step.step}: `events` must list the event class names")
 
 
 def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> ProbeJob:
@@ -233,23 +291,30 @@ def probe_job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROO
     probes: list[ProbeStep] = []
     exports: list[ExportStep] = []
     for step in steps[1:]:
-        if step.call == EXPORT:
+        if step.call == EXPORT and step.args.get(PROBE_FLAG) is not True:
             exports.append(export_step(step))
             continue
         if exports:
             raise RecorderError(f"step {step.step}: probe steps must precede the captures")
-        if step.call not in EDIT_CALLS | GETTER_CALLS:
+        if step.call not in EDIT_CALLS | GETTER_CALLS | {EXPORT}:
             raise RecorderError(f"step {step.step}: {step.call} is not in the probe vocabulary")
         flag = step.args.pop(PROBE_FLAG, False)
-        if not isinstance(flag, bool):
-            raise RecorderError(f"step {step.step}: `{PROBE_FLAG}` must be true or false")
+        wait = step.args.pop(WAIT_FLAG, True)
+        if not isinstance(flag, bool) or not isinstance(wait, bool):
+            raise RecorderError(
+                f"step {step.step}: `{PROBE_FLAG}` and `{WAIT_FLAG}` must be true or false"
+            )
+        if step.call == EXPORT:
+            export_step(step)  # an export request among the probes: checked like a capture
+        if step.call == EVENT_CONNECT:
+            check_connect(step, flag)
         check_input_arg(step, inputs)
         probe = flag or is_read(step.call, step.args)
-        if probe and step.call in INPUT_ARGS:
+        if probe and step.call == IMPORT_RESOURCE:
             raise RecorderError(f"step {step.step}: an import cannot be a probe step")
         if not probe and probes:
             raise RecorderError(f"step {step.step}: state steps must precede the probe steps")
-        (probes if probe else state).append(ProbeStep(step.step, step.call, step.args, probe))
+        (probes if probe else state).append(ProbeStep(step.step, step.call, step.args, probe, wait))
     if not probes:
         raise RecorderError("a probe golden needs at least one probe step")
     return ProbeJob(manifest, inputs, steps[0], tuple(state), tuple(probes), tuple(exports), ())
@@ -322,15 +387,104 @@ def readback(
     return output
 
 
-def run_step(session: PainterSession, step: ProbeStep, staged: dict[str, Path]) -> dict[str, Any]:
+def run_step(
+    session: PainterSession, step: ProbeStep, staged: dict[str, Path], work_dir: Path
+) -> dict[str, Any]:
     resolved: dict[str, str] = {}
     key = INPUT_ARGS.get(step.call)
-    if key is not None:
+    if key is not None and key in step.args:
         resolved[key] = staged[step.args[key]].as_posix()
+    if WORK_FILE in step.args:
+        work_dir.mkdir(parents=True, exist_ok=True)
+        resolved[WORK_FILE] = (work_dir / step.args[WORK_FILE]).as_posix()
+    if step.call == RELOAD_RESOURCES and REWRITE_ARGS[0] in step.args:
+        target, source = (step.args[name] for name in REWRITE_ARGS)
+        shutil.copyfile(staged[source], staged[target])
     outcome: dict[str, Any] = session.call(
         "probe_step", step=step.step, call=step.call, args=step.args, resolved=resolved
     )
     return outcome
+
+
+def work_files(directory: Path) -> list[str]:
+    """Names of the files under a private work directory (relative paths, sorted)."""
+    if not directory.is_dir():
+        return []
+    return sorted(p.relative_to(directory).as_posix() for p in directory.rglob("*") if p.is_file())
+
+
+def observe(session: PainterSession, step: ProbeStep) -> list[dict[str, Any]]:
+    """After an observed step: the states polled until its asynchronous calls answered (and
+    `SETTLE_POLLS` more), then the events dispatched since the previous step."""
+    states: list[dict[str, Any]] = []
+
+    def note() -> list[str]:
+        polled = dict(session.call("probe_state"))
+        pending: list[str] = polled.pop("pending")
+        if not states or states[-1] != polled:
+            states.append(polled)
+        return pending
+
+    deadline = session.monotonic() + ASYNC_TIMEOUT_S
+    pending = note()
+    while pending and session.monotonic() < deadline:
+        session.sleep(session.poll_interval_s)
+        pending = note()
+    for _ in range(SETTLE_POLLS):
+        session.sleep(session.poll_interval_s)
+        pending = note()
+    events = session.call("events_take")["events"]
+    args = {"step": step.step}
+    outputs = [
+        readback(f"s{step.step}/events", EVENT_CONNECT, args, {"value": events}),
+        readback(f"s{step.step}/states", PROJECT_STATE, args, {"value": states}),
+    ]
+    if pending:
+        outputs.append(readback(f"s{step.step}/pending", EVENT_CONNECT, args, {"value": pending}))
+    return outputs
+
+
+def step_outputs(
+    session: PainterSession,
+    job: ProbeJob,
+    step: ProbeStep,
+    work_dir: Path,
+    outcome: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """A step's readback, then (observed goldens) its events and states, and the work files
+    after a save."""
+    outputs = [readback(step.output_id, step.call, step.args, outcome)]
+    if job.observed and step.call != EVENT_CONNECT and step.wait:
+        outputs += observe(session, step)
+    if step.call in SAVE_CALLS:
+        files = {"value": work_files(work_dir)}
+        outputs.append(readback(f"s{step.step}/files", step.call, {"step": step.step}, files))
+    return outputs
+
+
+def probe_export(
+    session: PainterSession,
+    job: ProbeJob,
+    step: ProbeStep,
+    template: dict[str, Any],
+    directory: Path,
+) -> list[dict[str, Any]]:
+    """An export request among the probe steps: its result or error, then (once the step
+    settled) the files in its directory with their SHA-256, compared by the capture exports."""
+    export = export_step(Step(step.step, EXPORT, step.args))
+    export_dir = directory / f"probe-export-step{step.step}"
+    export_dir.mkdir(parents=True)
+    roots = [ts if not st else f"{ts}/{st}" for ts, st in export_roots(template)]
+    outcome = session.call("probe_export", step=step.step, config=export.config(export_dir, roots))
+    outputs = [readback(step.output_id, step.call, step.args, outcome)]
+    if job.observed and step.wait:
+        outputs += observe(session, step)
+    files = [
+        {"file_name": name, "sha256": sha256_file(export_dir / name)}
+        for name in work_files(export_dir)
+    ]
+    outputs.append(readback(f"s{step.step}/files", EXPORT, {"step": step.step}, {"value": files}))
+    return outputs
 
 
 def create_project(session: PainterSession, job: ProbeJob, staged: dict[str, Path]) -> Any:
@@ -344,7 +498,7 @@ def create_project(session: PainterSession, job: ProbeJob, staged: dict[str, Pat
 
 
 def apply_state(
-    session: PainterSession, job: ProbeJob, staged: dict[str, Path]
+    session: PainterSession, job: ProbeJob, staged: dict[str, Path], work_dir: Path
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Create the project and apply the state steps once; returns defaults and step outcomes."""
     created = create_project(session, job, staged)
@@ -356,10 +510,10 @@ def apply_state(
     }
     outcomes: list[dict[str, Any]] = []
     for step in job.state_steps:
-        outcome = run_step(session, step, staged)
+        outcome = run_step(session, step, staged, work_dir)
         if "defaults" in outcome:
             defaults["inserted"][str(step.step)] = outcome["defaults"]
-        outcomes.append(readback(step.output_id, step.call, step.args, outcome))
+        outcomes += step_outputs(session, job, step, work_dir, outcome)
     session.wait_ready()
     return defaults, outcomes
 
@@ -386,9 +540,14 @@ def record_probes(
     uids: dict[str, int],
     first_outputs: list[dict[str, Any]],
     now: Now,
+    staged: dict[str, Path],
 ) -> tuple[dict[str, Any], list[Path]]:
     session.wait_ready()
     template = session.call("template_capture")
+    if job.observed:
+        # Events since the last recorded step (r2: the save, close and reopen).
+        events = {"value": session.call("events_take")["events"]}
+        first_outputs = [*first_outputs, readback("start/events", EVENT_CONNECT, {}, events)]
     outputs: list[dict[str, Any]] = [
         {
             "output_id": "template/texture-sets",
@@ -399,8 +558,13 @@ def record_probes(
         *first_outputs,
         *identity_outputs(session, uids),
     ]
+    work_dir = directory / "work-files"
     for step in job.probe_steps:
-        outputs.append(readback(step.output_id, step.call, step.args, run_step(session, step, {})))
+        if step.call == EXPORT:
+            outputs += probe_export(session, job, step, template, directory)
+            continue
+        outcome = run_step(session, step, staged, work_dir)
+        outputs += step_outputs(session, job, step, work_dir, outcome)
     blobs: list[Path] = []
     for export in job.exports:
         exported, files = export_outputs(session, export, template, directory)
@@ -447,6 +611,14 @@ def run_directory(job: ProbeJob, identity: PainterIdentity, work: Path, now: Now
     return directory / run_name(identity.session_id, now())
 
 
+def finish_quietly(session: PainterSession) -> None:
+    """Re-enable engine computations a probe disabled, disconnect the events, then discard the
+    throwaway project; a failure here must not hide the original error."""
+    with contextlib.suppress(RecorderError):
+        session.call("probe_finish")
+    close_quietly(session)
+
+
 def record_api_probe(
     session: PainterSession, job: ProbeJob, work: Path, inbox: Path, now: Now, record_prefix: str
 ) -> Path:
@@ -455,11 +627,20 @@ def record_api_probe(
     staged = stage_inputs(job.inputs, directory / "inputs")
     try:
         session.call("probe_reset")
-        defaults, outcomes = apply_state(session, job, staged)
+        defaults, outcomes = apply_state(session, job, staged, directory / "r1" / "work-files")
         locations = session.call("probe_locations")
         uids = {step: int(where["uid"]) for step, where in locations.items()}
         first, first_blobs = record_probes(
-            session, job, identity, directory / "r1", "r1", "same_session", uids, outcomes, now
+            session,
+            job,
+            identity,
+            directory / "r1",
+            "r1",
+            "same_session",
+            uids,
+            outcomes,
+            now,
+            staged,
         )
         session.wait_ready()
         locations = session.call("probe_locations")
@@ -467,10 +648,19 @@ def record_api_probe(
         found = session.call("probe_rebind", locations=locations)
         rebind = readback("identity/reopen", GET_NODE_BY_UID, {}, {"value": found})
         second, second_blobs = record_probes(
-            session, job, identity, directory / "r2", "r2", "after_save_reopen", uids, [rebind], now
+            session,
+            job,
+            identity,
+            directory / "r2",
+            "r2",
+            "after_save_reopen",
+            uids,
+            [rebind],
+            now,
+            staged,
         )
     finally:
-        close_quietly(session)
+        finish_quietly(session)
     key = golden_key(job, identity, defaults, defaults["colour_management"])
     record = private_record(job, key, [first, second])
     return write_run(

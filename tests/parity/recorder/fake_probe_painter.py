@@ -5,13 +5,18 @@
 bitmap sources, levels, mesh maps and project events. The behaviour is simple and authored for
 the tests (it states what the fake does, not what Painter does): the multichannel/mask rules raise
 `EditionContextException` or `ValueError`, assigning `active_channels` clears the fill's sources,
-and every node gets a new uid when a project is reopened.
+and every node gets a new uid when a project is reopened. Asynchronous work (`reload_mesh`,
+`execute_when_not_busy`, `reload_modified_resources_async`) is queued and runs one task per
+`project.is_busy()` poll; the project is busy while a mesh reload is queued.
 """
 
 from __future__ import annotations
 
 import enum
+import json
 import types
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -97,6 +102,44 @@ class MeshMapUsage(enum.Enum):
     Normal = 3
 
 
+class ReloadMeshStatus(enum.Enum):
+    SUCCESS = 0
+    ERROR = 2
+
+
+@dataclass
+class MeshReloadingSettings:
+    import_cameras: bool = True
+    preserve_strokes: bool = True
+
+
+class AllResourcesFilter:
+    pass
+
+
+class ProjectFilter:
+    pass
+
+
+class ResourcesUsedByProjectFilter:
+    pass
+
+
+class SessionFilter:
+    pass
+
+
+class ResourcesListFilter:
+    def __init__(self, resources: list[Any]) -> None:
+        self.resources = list(resources)
+
+
+@dataclass
+class ReloadedResourceResult:
+    old_resource_id: Any
+    new_resource_id: Any
+
+
 @dataclass
 class UVTransformationParams:
     scale_mode: Any = None
@@ -170,6 +213,10 @@ class ProbeWorld(FakeWorld):  # type: ignore[misc]
         self.listeners: dict[type, list[Any]] = {}
         self.edition_entered = False
         self.saved = False
+        self.deferred: list[Callable[[], None]] = []  # asynchronous work, one task per poll
+        self.dispatching = 0  # no queued task runs from inside a callback or another task
+        self.engine = True
+        self.reloading = False
         extend_modules(self)
 
     # Tree ----------------------------------------------------------------------------------
@@ -190,8 +237,12 @@ class ProbeWorld(FakeWorld):  # type: ignore[misc]
         return self.items[uid]
 
     def emit(self, event: Any) -> None:
-        for callback in list(self.listeners.get(type(event), [])):
-            callback(event)
+        self.dispatching += 1
+        try:
+            for callback in list(self.listeners.get(type(event), [])):
+                callback(event)
+        finally:
+            self.dispatching -= 1
 
     # Persistence ---------------------------------------------------------------------------
     def snapshot(self) -> dict[str, Any]:
@@ -593,6 +644,18 @@ def extend_modules(world: ProbeWorld) -> None:
     def get_node_by_uid(uid: int) -> Any:
         return handle(world.item(uid))
 
+    def delete_node(node: Node) -> None:
+        item = node.data
+
+        def forget(gone: Item) -> None:
+            del world.items[gone.uid]
+            for children in gone.children.values():
+                for child in children:
+                    forget(child)
+
+        world.siblings(item).remove(item)
+        forget(item)
+
     modules["substance_painter.layerstack"] = module(
         "substance_painter.layerstack",
         BlendingMode=BlendingMode,
@@ -619,6 +682,7 @@ def extend_modules(world: ProbeWorld) -> None:
         insert_color_selection_effect=insert_color_selection_effect,
         get_root_layer_nodes=get_root_layer_nodes,
         get_node_by_uid=get_node_by_uid,
+        delete_node=delete_node,
     )
 
     # Mesh maps on texture sets, and the enum the probes use.
@@ -664,6 +728,18 @@ def extend_modules(world: ProbeWorld) -> None:
     }
     events["ProjectAboutToSave"] = event_class("ProjectAboutToSave", "file_path")
     events["BusyStatusChanged"] = event_class("BusyStatusChanged", "busy")
+    events["EngineComputationsStatusChanged"] = event_class(
+        "EngineComputationsStatusChanged", "engine_computations_enabled"
+    )
+    events["ReloadResourcesStarted"] = event_class("ReloadResourcesStarted", "filter")
+    events["ReloadResourcesEnded"] = event_class(
+        "ReloadResourcesEnded", "filter", "reloaded_resources", "resource_errors"
+    )
+    events["ExportTexturesAboutToStart"] = event_class("ExportTexturesAboutToStart", "textures")
+    events["ExportTexturesEnded"] = event_class(
+        "ExportTexturesEnded", "status", "message", "textures"
+    )
+    events["LayerStacksModelDataChanged"] = event_class("LayerStacksModelDataChanged")
 
     class Dispatcher:
         def connect(self, event_cls: type, callback: Any) -> None:
@@ -733,10 +809,140 @@ def extend_modules(world: ProbeWorld) -> None:
     project.open = open_with_events
     project.needs_saving = needs_saving
     project.name = name
+    extend_async(world, events)
 
     root = modules["substance_painter"]
     root.layerstack = modules["substance_painter.layerstack"]
     root.event = modules["substance_painter.event"]
+
+
+def extend_async(world: ProbeWorld, events: dict[str, type]) -> None:
+    """Saves to a copy, mesh and resource reloads, deferred callbacks, engine computations and
+    export events (the R10 probe surface)."""
+    modules = world.modules
+    project = modules["substance_painter.project"]
+    resource = modules["substance_painter.resource"]
+    export = modules["substance_painter.export"]
+    application = modules["substance_painter.application"]
+    busy_before = project.is_busy
+
+    def is_busy() -> bool:
+        if world.deferred and not world.dispatching:
+            world.dispatching += 1
+            try:
+                world.deferred.pop(0)()
+            finally:
+                world.dispatching -= 1
+        return bool(busy_before())
+
+    def set_busy(busy: bool) -> None:
+        if world.busy != busy:
+            world.busy = busy
+            world.emit(events["BusyStatusChanged"](busy))
+
+    def save_as_copy(backup_file_path: str, mode: Any) -> None:
+        world.require_open()
+        world.emit(events["ProjectAboutToSave"](backup_file_path))
+        Path(backup_file_path).write_text(json.dumps(world.snapshot()), encoding="utf-8")
+        world.emit(events["ProjectSaved"]())
+
+    def reload_mesh(mesh_file_path: str, settings: Any, loading_status_cb: Any) -> None:
+        world.require_open()
+        if world.busy:
+            raise ProjectError("Substance 3D Painter is busy")
+        set_busy(True)
+
+        def finish() -> None:
+            set_busy(False)
+            ok = Path(mesh_file_path).is_file()
+            loading_status_cb(ReloadMeshStatus.SUCCESS if ok else ReloadMeshStatus.ERROR)
+
+        world.deferred.append(finish)
+
+    def execute_when_not_busy(callback: Any) -> None:
+        def run() -> None:
+            if world.busy:
+                world.deferred.append(run)
+            else:
+                callback()
+
+        world.deferred.append(run)
+
+    def update_layer_stack_resource(old_resource_id: Any, new_resource: Any) -> list[Any]:
+        world.require_open()
+        replaced: list[Any] = []
+        for item in world.items.values():
+            for key, source in list(item.sources.items()):
+                if isinstance(source, SourceBitmap) and source.rid.url() == old_resource_id.url():
+                    item.sources[key] = SourceBitmap(new_resource.identifier())
+                    replaced.append(source.rid)
+        return replaced
+
+    def used_bitmaps() -> list[Any]:
+        return [
+            source.rid
+            for item in world.items.values()
+            for source in item.sources.values()
+            if isinstance(source, SourceBitmap)
+        ]
+
+    def reload_modified_resources_async(resource_filter: Any) -> bool:
+        if world.reloading:
+            return False
+        world.reloading = True
+        world.emit(events["ReloadResourcesStarted"](resource_filter))
+        reloaded = (
+            [ReloadedResourceResult(rid, rid) for rid in used_bitmaps()]
+            if isinstance(resource_filter, ResourcesUsedByProjectFilter)
+            else []
+        )
+
+        def finish() -> None:
+            world.reloading = False
+            world.emit(events["ReloadResourcesEnded"](resource_filter, reloaded, []))
+
+        world.deferred.append(finish)
+        return True
+
+    def enable_engine_computations(enable: bool) -> None:
+        if world.engine != enable:
+            world.engine = enable
+            world.emit(events["EngineComputationsStatusChanged"](enable))
+
+    @contextmanager
+    def disable_engine_computations() -> Iterator[None]:
+        enable_engine_computations(False)
+        try:
+            yield
+        finally:
+            enable_engine_computations(True)
+
+    export_before = export.export_project_textures
+
+    def export_project_textures(config: dict[str, Any]) -> Any:
+        world.emit(events["ExportTexturesAboutToStart"]({}))
+        result = export_before(config)
+        world.emit(events["ExportTexturesEnded"](result.status, result.message, result.textures))
+        return result
+
+    project.is_busy = is_busy
+    project.save_as_copy = save_as_copy
+    project.reload_mesh = reload_mesh
+    project.execute_when_not_busy = execute_when_not_busy
+    project.MeshReloadingSettings = MeshReloadingSettings
+    project.ReloadMeshStatus = ReloadMeshStatus
+    resource.update_layer_stack_resource = update_layer_stack_resource
+    resource.reload_modified_resources_async = reload_modified_resources_async
+    resource.is_reload_modified_resources_running = lambda: world.reloading
+    resource.AllResourcesFilter = AllResourcesFilter
+    resource.ProjectFilter = ProjectFilter
+    resource.ResourcesListFilter = ResourcesListFilter
+    resource.ResourcesUsedByProjectFilter = ResourcesUsedByProjectFilter
+    resource.SessionFilter = SessionFilter
+    application.enable_engine_computations = enable_engine_computations
+    application.disable_engine_computations = disable_engine_computations
+    application.engine_computations_status = lambda: world.engine
+    export.export_project_textures = export_project_textures
 
 
 def module(name: str, **members: Any) -> types.ModuleType:

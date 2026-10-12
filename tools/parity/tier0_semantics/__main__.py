@@ -6,9 +6,11 @@ r"""Write or check the Tier 0 semantics fixtures and public manifests.
 
 Besides the 12.1.0 corpus (`corpus.py`, `parity/manifests/tier0/semantics/`) every command covers
 the goldens first recorded under the current envelope (`current.py`: its `tier0/semantics-ui/`
-and new `tier0/semantics/` manifests). `write` keeps the `private_records` a manifest already
-has (filled by `uzpainter parity record`) and refuses to change the authored part of a manifest
-that has records: a recorded golden is immutable, so a changed golden needs a new name.
+and new `tier0/semantics/` manifests) and the requested goldens prepared before their Painter
+session (`recording_requests.py`: the envelope's `requests/tier0/semantics/`). `write` keeps
+the `private_records` a manifest already has (filled by `uzpainter parity record`) and refuses to
+change the authored part of a manifest that has records: a recorded golden is immutable, so a
+changed golden needs a new name.
 """
 
 from __future__ import annotations
@@ -30,6 +32,11 @@ from tools.parity.tier0_semantics.corpus import (
     sha256,
 )
 from tools.parity.tier0_semantics.current import planned_current, ui_manifest_dir
+from tools.parity.tier0_semantics.recording_requests import (
+    REQUEST_FIXTURES,
+    planned_requests,
+    request_dir,
+)
 
 
 def manifest_text(data: dict[str, Any]) -> str:
@@ -47,10 +54,14 @@ def planned(root: Path = REPO_ROOT) -> tuple[dict[Path, bytes], dict[Path, dict[
             data = generate()
             files[root / path] = data
             hashes[name] = sha256(data)
+    for name, (_, path, generate) in REQUEST_FIXTURES.items():
+        data = generate()
+        files[root / path] = data
+        hashes[name] = sha256(data)
     manifests = {
         root / MANIFEST_DIR / f"{g.name}.json": manifest(g, hashes) for g in goldens(TEMPLATES)
     }
-    return files, manifests | planned_current(hashes, root)
+    return files, manifests | planned_current(hashes, root) | planned_requests(hashes, root)
 
 
 def authored(data: dict[str, Any]) -> dict[str, Any]:
@@ -72,6 +83,7 @@ def problems(root: Path = REPO_ROOT) -> list[str]:
             found.append(f"{path.relative_to(root).as_posix()}: authored part differs")
     extra = sorted(set((root / MANIFEST_DIR).glob("*.json")) - set(manifests))
     extra += sorted(set(ui_manifest_dir(root).glob("*.json")) - set(manifests))
+    extra += sorted(set(request_dir(root).glob("*.json")) - set(manifests))
     found += [f"{p.relative_to(root).as_posix()}: not in the corpus" for p in extra]
     return found
 
