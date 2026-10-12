@@ -5,8 +5,8 @@
 //
 // Submodules carry Painter's module names wherever a Painter symbol exists (`project`,
 // `textureset`, `layerstack`, `source`, `levels`, `resource`, `export`, `colormanagement`,
-// `properties`, `logging`, `exception`, `application`, `baking`, `display`) plus the UzPainter-only
-// `jobs`, `render` and `diagnostics`; each is also registered in `sys.modules`, so
+// `properties`, `logging`, `exception`, `application`, `event`, `baking`, `display`) plus the
+// UzPainter-only `jobs`, `render` and `diagnostics`; each is also registered in `sys.modules`, so
 // `import uzpainter.layerstack` works. The mutation contract and the thread rules are in
 // session.h; `uzpainter._selftest` holds the boundary checks of the CPython stages of `selftest`
 // (src/selftest/cpython_stages.cpp).

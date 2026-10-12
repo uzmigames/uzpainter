@@ -8,6 +8,13 @@ Success, the message Painter writes ("Export successfully finished", `export-oci
 probes s50-s51) and the files per (texture set, stack). Before anything is evaluated it checks the
 colour profile (`colour.require_supported_configuration`) and that no fill reads an unrecorded
 default source (`nodes.check_exportable`); a failure raises, as Painter documents.
+
+The export makes UzPainter busy: `BusyStatusChanged(True)` and `(False)` around it, as Painter's
+exports deliver them (Tier 0 R10 probes, the export before each reopen), with
+`ExportTexturesAboutToStart(textures)` and `ExportTexturesEnded(status, message, textures)` inside
+that window; their order relative to the busy events is unrecorded (recording
+`phase1-engine-computations`, decision 110). While engine computations are disabled the native
+export job stays queued, so the call waits, busy, until they are enabled again.
 """
 
 from __future__ import annotations
@@ -17,7 +24,7 @@ from typing import Any
 
 import uzpainter
 
-from uzpainter_facade import colour, nodes
+from uzpainter_facade import colour, event, host, nodes
 
 MODULE = "substance_painter.export"
 
@@ -62,5 +69,13 @@ def export_project_textures(json_config: dict[str, Any]) -> TextureExportResult:
     colour.require_supported_configuration()
     nodes.check_exportable()
     textures = list_project_textures(json_config)
-    uzpainter.export.export_project_textures(json_config, [str(json_config["exportPath"])])
-    return TextureExportResult(ExportStatus.Success, "Export successfully finished", textures)
+    with host.busy_section():
+        event.emit_sync(event.ExportTexturesAboutToStart(textures))
+        try:
+            uzpainter.export.export_project_textures(json_config, [str(json_config["exportPath"])])
+        except Exception as error:
+            event.emit_sync(event.ExportTexturesEnded(ExportStatus.Error, str(error), {}))
+            raise
+        result = TextureExportResult(ExportStatus.Success, "Export successfully finished", textures)
+        event.emit_sync(event.ExportTexturesEnded(result.status, result.message, textures))
+    return result

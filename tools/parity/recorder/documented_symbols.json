@@ -371,6 +371,18 @@
       "documented_as": "substance_painter.event.ReloadedResourceResult",
       "page": "substance_painter/event.html"
     },
+    "substance_painter.event.TextureStateEventAction.ADD": {
+      "documented_as": "substance_painter.event.TextureStateEventAction",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.TextureStateEventAction.REMOVE": {
+      "documented_as": "substance_painter.event.TextureStateEventAction",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.TextureStateEventAction.UPDATE": {
+      "documented_as": "substance_painter.event.TextureStateEventAction",
+      "page": "substance_painter/event.html"
+    },
     "substance_painter.export": {
       "documented_as": "substance_painter.export",
       "page": "substance_painter/export.html"
@@ -1124,6 +1136,18 @@
       "page": "substance_painter/project.html"
     },
     "substance_painter.project.MeshReloadingSettings": {
+      "documented_as": "substance_painter.project.MeshReloadingSettings",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.MeshReloadingSettings.auto_unwrap_settings": {
+      "documented_as": "substance_painter.project.MeshReloadingSettings",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.MeshReloadingSettings.import_cameras": {
+      "documented_as": "substance_painter.project.MeshReloadingSettings",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.MeshReloadingSettings.mesh_settings": {
       "documented_as": "substance_painter.project.MeshReloadingSettings",
       "page": "substance_painter/project.html"
     },

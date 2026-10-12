@@ -205,6 +205,7 @@ const pyapi_sources = [_][]const u8{
     "python/bind_project.cpp",
     "python/bind_resource.cpp",
     "python/bind_textureset.cpp",
+    "python/dispatcher.cpp",
     "python/errors.cpp",
     "python/jobs.cpp",
     "python/script.cpp",

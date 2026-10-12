@@ -7,6 +7,7 @@ and `docs/architecture/10-python-api.md` §0, §1, §3, §4."""
 
 from substance_painter import (
     application,
+    async_utils,
     baking,
     colormanagement,
     display,
@@ -29,6 +30,7 @@ from substance_painter._version import __version__
 __all__ = [
     "__version__",
     "application",
+    "async_utils",
     "baking",
     "colormanagement",
     "display",

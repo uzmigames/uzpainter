@@ -39,11 +39,11 @@ Rules:
 
 ## 4. Facade behaviour (Painter's observable contract)
 
-The facade is implemented in `python/` (`python/FACADE.md`; task phase1.20, decisions 107 and 108). The lifecycle, events and computation-state rows are phase1.21.
+The facade is implemented in `python/` (`python/FACADE.md`; task phase1.20, decisions 107 and 108). The lifecycle, events, mesh-reload, resources and computation-state rows are implemented by phase1.21 (`python/FACADE.md` §9; decisions 109 and 110).
 
 | Behaviour | Facade rule |
 |---|---|
-| Lifecycle | `project.create/open` return immediately; loading runs on the engine thread; `project.is_busy()` is true meanwhile; events in order `ProjectOpened`/`ProjectCreated` → `ProjectEditionEntered` (only when evaluation is ready); `ProjectAboutToClose` → `ProjectClosed`; `ProjectAboutToSave(path)` → `ProjectSaved`. `is_in_edition_state()` becomes true with `ProjectEditionEntered`, never before. |
+| Lifecycle | `project.create/open` load with `project.is_busy()` true and return once the project is in edition, as Painter's recorded polls show it ready right after the call (decision 109); events in order `ProjectOpened`/`ProjectCreated` → `ProjectEditionEntered` (only when evaluation is ready); `ProjectAboutToClose` → `ProjectClosed`; `ProjectAboutToSave(path)` → `ProjectSaved`. `is_in_edition_state()` becomes true with `ProjectEditionEntered`, never before. |
 | Events | `event.DISPATCHER.connect/connect_strong/disconnect` with all 27 event classes; dispatch on the Python dispatcher thread after the committed transition; delivered even if the script that started the operation returned; `execute_when_not_busy(cb)` runs on that thread when busy clears. |
 | Bake | `bake_async`/`bake_selected_textures_async → StopSource`; `BakingProcessAboutToStart/Progress/Ended`; `StopSource.request_stop/stop_requested`. |
 | Mesh reload | `reload_mesh(path, settings, cb)` calls `cb(ReloadMeshStatus)` on the dispatcher thread when done (callback, not event — as Painter). |

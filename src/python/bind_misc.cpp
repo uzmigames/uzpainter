@@ -1,9 +1,12 @@
-// `uzpainter.logging`, `.application`, `.properties` and the modules whose behaviour arrives in
-// later phases (`.baking`, `.render`, `.display`, `.diagnostics`): importable, every call raising
-// `NotYetSupported` naming its owner task before anything changes (decision 082).
+// `uzpainter.logging`, `.application` (with the engine-computation state, phase1.21), `.event` (the
+// Python dispatcher thread, dispatcher.h), `.properties` and the modules whose behaviour arrives
+// in later phases (`.baking`, `.render`, `.display`, `.diagnostics`): importable, every call
+// raising `NotYetSupported` naming its owner task before anything changes (decision 082).
 
 #include "python/bindings.h"
+#include "python/dispatcher.h"
 #include "python/errors.h"
+#include "python/jobs.h"
 
 namespace uzp::python {
 
@@ -39,6 +42,20 @@ def warning(message):
 
 def error(message):
     log(ERROR, "Python", message)
+)PY";
+
+constexpr const char* kEngineContext = R"PY(
+import contextlib as _contextlib
+
+
+@_contextlib.contextmanager
+def disable_engine_computations():
+    """Disables the engine computations for the block, then enables them again."""
+    enable_engine_computations(False)
+    try:
+        yield
+    finally:
+        enable_engine_computations(True)
 )PY";
 
 constexpr const char* kProperties = R"PY(
@@ -100,6 +117,45 @@ void BindMisc(py::module_& m) {
         return py::make_tuple(std::stoi(text.substr(0, a)), std::stoi(text.substr(a + 1, b - a - 1)),
                               std::stoi(text.substr(b + 1)));
     });
+    application.def(
+        "enable_engine_computations", [](bool enable) { JobEngine::Get().SetPaused(!enable); }, py::arg("enable"),
+        "Enables or disables the engine computations: while disabled, evaluation jobs (exports) stay queued.");
+    application.def("engine_computations_status", [] { return !JobEngine::Get().Paused(); },
+                    "Whether the engine computations are enabled.");
+    py::exec(kEngineContext, application.attr("__dict__"));
+
+    py::module_ event = submodule(m, "event", "uzpainter.event",
+                                  "The Python dispatcher thread: events and callbacks after committed transitions.");
+    event.def(
+        "post", [](py::object task) { return Dispatcher::Get().Post(std::move(task)); }, py::arg("task"),
+        "Queues the callable `task` on the dispatcher thread; returns its sequence number.");
+    event.def(
+        "flush",
+        [] {
+            Dispatcher& dispatcher = Dispatcher::Get();
+            const std::uint64_t seq = dispatcher.LastPosted();
+            if (dispatcher.OnDispatcherThread()) {
+                dispatcher.RunInline(seq);
+                return;
+            }
+            py::gil_scoped_release release;
+            dispatcher.WaitThrough(seq);
+        },
+        "Returns once every task queued before the call has run (inline on the dispatcher thread).");
+    event.def(
+        "drain",
+        [] {
+            Dispatcher& dispatcher = Dispatcher::Get();
+            if (dispatcher.OnDispatcherThread()) throw ApiError("RuntimeError", "drain() on the dispatcher thread");
+            py::gil_scoped_release release;
+            dispatcher.Drain();
+        },
+        "Returns once the queue is empty and no asynchronous operation holds the dispatcher.");
+    event.def("hold", [] { Dispatcher::Get().Hold(); }, "An asynchronous operation will post later.");
+    event.def("release", [] { Dispatcher::Get().Release(); }, "The operation of a `hold()` has posted its last task.");
+    event.def("on_dispatcher_thread", [] { return Dispatcher::Get().OnDispatcherThread(); });
+    event.def("dispatcher_thread_id", [] { return Dispatcher::Get().ThreadIdent(); },
+              "`threading.get_ident()` of the dispatcher thread (0 before its first task).");
 
     py::module_ properties = submodule(m, "properties", "uzpainter.properties", "Parameters of procedural content.");
     py::exec(kProperties, properties.attr("__dict__"));
