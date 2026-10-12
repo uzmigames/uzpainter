@@ -34,6 +34,18 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
   - the display encoding is sRGB of a half-float value;
   - the run-to-run spikes sit on faces with n_x = 0, a hypothesis under test;
   - report in `parity/reports/phase0/iray-noise-floor.md`.
+- Export engine (tasks `phase1.15`–`phase1.18`, decisions 085–104):
+  - The plan compiler's dry run lists exactly the files Painter writes.
+  - PNG 8/16 and OpenEXR 16f/32f writers are byte-identical to Painter's files: 1826 PNG and 823 OpenEXR re-encoded.
+  - Processing rules are fitted for bit depth, alpha layouts, Height and mesh maps.
+  - Presets come with provenance records.
+  - Publication goes through atomic generations, recovery and receipts.
+  - `UzPainter.exe export` runs end to end.
+  - Still refused, each with a named owner: sRGB8 material channels at PNG 16, `infinite` padding on islands, resize, dithering at PNG 8, three padding modes, and per-preset parity.
+- Python API (tasks `phase1.19`, `phase1.20`, decisions 105–108): the native `uzpainter` module, and the `substance_painter` compatibility facade, whose outputs equal Painter's recorded probes.
+- Height to normal closed (task `phase1.12`, decisions 079, 080): the mesh normal map, Normal-channel coverage and imports, and SignedAddition on Height are exact.
+- Bilinear minification (task `phase1.9`, decisions 083, 084): a tabulated replica of the GPU texture unit is exact, and axis-aligned minification is supported. Rotated minification and minification on Height stay refused.
+- sRGB bitmap sources are decoded as Painter does: BaseColor is exact on every recorded texel.
 - Compositor core (task `phase1.14_compositor-core`, decisions 081, 082):
   - Every Phase 1 node kind, source, projection and blend mode is registered as `supported` with current-envelope evidence, or as `release-gap` with its owner task (`tools/capabilities/compositor-capabilities.json`).
   - Excluded features raise `NotYetSupported` before any mutation, and only for the nodes a request touches.
