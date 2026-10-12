@@ -18,6 +18,7 @@ when the recorder finishes or fails, never saved anywhere else.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from collections.abc import Callable
@@ -28,14 +29,17 @@ from typing import Any
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.capture import (
     MEDIA_TYPES,
+    StaleCaptureError,
     measure_storage_format,
     verify_current_outputs,
     write_fence,
 )
 from tools.parity.recorder.job import (
+    EXPORT,
     INPUT_ARGS,
     OPTIONAL_INPUT_ARGS,
     SESSION_ENVIRONMENT,
+    ExportProbe,
     ExportStep,
     Job,
     OutputMap,
@@ -61,6 +65,11 @@ SOURCE_CHANNEL_OF_MAP = {
     "normal_directx": "normal",
     "ao_mixed": "ao",
 }
+
+# Encoding of an exported file that states none and has no single document channel that gives
+# one (a converted virtual map, a file of an export probe): the record makes no colour-space
+# claim; the consumer determines it, e.g. against the OpenEXR twin (decision 087).
+UNDETERMINED = "undetermined"
 
 # A bake (every texture set it covers) must end within this time.
 BAKE_TIMEOUT_S = 1800.0
@@ -278,7 +287,9 @@ def export_outputs(
     export: ExportStep,
     template: dict[str, Any],
     directory: Path,
+    keyed_by_step: frozenset[str] = frozenset(),
 ) -> tuple[list[dict[str, Any]], list[Path]]:
+    """Export one step; a map named in `keyed_by_step` gets the step in its output id."""
     roots = export_roots(template)
     export_dir = directory / f"export-step{export.step}"
     export_dir.mkdir(parents=True)
@@ -310,13 +321,19 @@ def export_outputs(
             elif out.map_type == "meshMap":
                 # Baked mesh maps hold data (directions, occlusion, positions), not colour.
                 encoding, basis = "linear", "baked_mesh_map"
+            elif out.map_type == "virtualMap" and out.name.lower() not in SOURCE_CHANNEL_OF_MAP:
+                # A converted virtual map (Diffuse, f0, 1/ior, ...) derives from several
+                # channels: no single channel format gives its encoding.
+                encoding, basis = UNDETERMINED, "converted_virtual_map"
             else:
                 if channel_names is None:
                     reported = session.call("channel_names")
                     channel_names = {k.lower(): v for k, v in reported.items()}
                 encoding = channel_encoding(template, texture_set, stack, out, channel_names)
                 basis = "source_channel_format"
-            parts = [output_safe(texture_set), *([output_safe(stack)] if stack else []), out.name]
+            parts = [output_safe(texture_set), *([output_safe(stack)] if stack else []), out.stem]
+            if out.name in keyed_by_step:
+                parts.append(f"step{export.step}")
             outputs.append(
                 {
                     "output_id": "/".join(parts),
@@ -340,6 +357,109 @@ def export_outputs(
             )
             blobs.append(path)
     return outputs, blobs
+
+
+def relative_files(groups: list[dict[str, Any]], root: Path) -> dict[str, list[str]]:
+    """Painter's `(texture set, stack) -> files` as `"<set>[/<stack>]" -> paths relative to the
+    probe's export directory`. A path outside it is recorded relative to it (`../...`), or by
+    its file name on another drive, and is never read."""
+    listed: dict[str, list[str]] = {}
+    for group in groups:
+        stack = group["stack"]
+        key = group["texture_set"] if not stack else f"{group['texture_set']}/{stack}"
+        names: list[str] = []
+        for name in group["files"]:
+            path = Path(os.path.normpath(name))
+            try:
+                names.append(Path(os.path.relpath(path, root)).as_posix())
+            except ValueError:
+                names.append(f"<other drive>/{path.name}")
+        listed[key] = names
+    return listed
+
+
+def probe_readback(
+    output_id: str, call: str, probe: ExportProbe, value: Any, error: PainterCallError | None
+) -> dict[str, Any]:
+    output: dict[str, Any] = {
+        "output_id": output_id,
+        "kind": "api_readback",
+        "call": call,
+        "args": {"config": probe.config_id},
+        "value": value,
+    }
+    if error is not None:
+        output["raised"] = {"type": error.kind, "message": error.message}
+    return output
+
+
+def probe_outputs(
+    session: PainterSession, probe: ExportProbe, directory: Path
+) -> tuple[list[dict[str, Any]], list[Path]]:
+    """Run one export probe (decision 087): the dry run of its configuration and, when the dry
+    run succeeds, the export into a fresh directory. Painter's answer, a raised error included,
+    is the observation, and so are the files the directory then holds and how they differ from
+    the files Painter reports; a file written before the fence is still refused as stale."""
+    root = (directory / f"probe-step{probe.step}").resolve()
+    root.mkdir(parents=True)
+    prefix = f"probe/s{probe.step}"
+    config = probe.config_at(root)
+    session.wait_ready()
+    try:
+        listed = session.call("list_textures", config=config)
+    except PainterCallError as error:
+        return [probe_readback(f"{prefix}/list", ps.LIST_TEXTURES, probe, None, error)], []
+    files = relative_files(listed["textures"], root)
+    outputs = [probe_readback(f"{prefix}/list", ps.LIST_TEXTURES, probe, files, None)]
+    session.wait_ready()
+    fence_ns = write_fence(directory / f"fence-probe-step{probe.step}")
+    raised: PainterCallError | None = None
+    reported: dict[str, list[str]] = {}
+    value: dict[str, Any] | None = None
+    try:
+        result = session.call("export_textures", config=config)
+        reported = relative_files(result["textures"], root)
+        value = {"status": result["status"], "message": result["message"], "textures": reported}
+    except PainterCallError as error:
+        raised = error
+    present = sorted(path for path in root.rglob("*") if path.is_file() or path.is_symlink())
+    for path in present:
+        if path.is_symlink():
+            raise StaleCaptureError(f"{path.name}: a link in the probe's export directory")
+        if path.stat().st_mtime_ns < fence_ns:
+            raise StaleCaptureError(f"{path.name} was written before export probe {probe.step}")
+    on_disk = [path.relative_to(root).as_posix() for path in present]
+    named = {name for names in reported.values() for name in names}
+    inventory = {"missing": sorted(named - set(on_disk)), "unlisted": sorted(set(on_disk) - named)}
+    if value is not None:
+        value["directory"] = inventory
+    outputs.append(probe_readback(f"{prefix}/export", EXPORT, probe, value, raised))
+    if raised is not None:
+        outputs[-1]["value"] = {"directory": inventory}
+    for path, name in zip(present, on_disk, strict=True):
+        groups = sorted(key for key, names in reported.items() if name in names)
+        measured = measure_storage_format(path)
+        encoding, basis = (
+            (measured.encoding, "file")
+            if measured.encoding is not None
+            else (UNDETERMINED, "export_probe")
+        )
+        outputs.append(
+            {
+                "output_id": "/".join([prefix, *(output_safe(part) for part in name.split("/"))]),
+                "kind": "exported_map",
+                "texture_set": ", ".join(groups) or "unlisted",
+                "map": name,
+                "blob": {
+                    "sha256": sha256_file(path),
+                    "size_bytes": path.stat().st_size,
+                    "media_type": MEDIA_TYPES[measured.container],
+                },
+                "storage_format": measured.as_schema(encoding),
+                "export_settings": {"step": probe.step, "probe": True, "encoding_basis": basis},
+            }
+        )
+    return outputs, present
 
 
 def require_colour_management(job: Job, identity: PainterIdentity) -> None:
@@ -382,8 +502,14 @@ def record_once(
     outputs += operator_outputs[0]
     outputs += readback_outputs(session, job, template, extra_readbacks)
     blobs: list[Path] = list(operator_outputs[1])
-    for export in job.exports:
-        exported, files = export_outputs(session, export, template, directory)
+    captures: list[ExportStep | ExportProbe] = [*job.exports, *job.export_probes]
+    for capture in sorted(captures, key=lambda c: c.step):
+        if isinstance(capture, ExportProbe):
+            exported, files = probe_outputs(session, capture, directory)
+        else:
+            exported, files = export_outputs(
+                session, capture, template, directory, job.maps_exported_twice
+            )
         outputs += exported
         blobs += files
     recording = {
@@ -436,8 +562,10 @@ def record_texture_golden(
     it is refused, so a default can never be recorded in place of the sheet's value."""
     if job.tier == "3":
         raise RecorderError("Tier 3 goldens are Iray references: use the iray command")
-    if not job.exports:
-        raise RecorderError("a texture golden needs at least one export_project_textures step")
+    if not job.exports and not job.export_probes:
+        raise RecorderError(
+            "a texture golden needs at least one export_project_textures or export probe step"
+        )
     if job.captures:
         raise RecorderError("baking-defaults captures are recorded by the record-defaults command")
     sheet = texture_sheet(job)
