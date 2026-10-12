@@ -65,8 +65,9 @@ def repoint(value: Any, root: Path) -> Any:
 class Wand:
     """The wand v1 inputs staged in `work`, and the adapter calls over them."""
 
-    def __init__(self, painter: Path, work: Path) -> None:
-        self.job: ScriptJob = load_script_job(REQUEST, ASSETS3D)
+    def __init__(self, painter: Path, work: Path, manifest: Path = REQUEST) -> None:
+        """`manifest`: the R9 request, or the golden admitted from it (the Tier 1 runner)."""
+        self.job: ScriptJob = load_script_job(manifest, ASSETS3D)
         self.work = work
         self.root = work / "assets"
         self.staged = stage_inputs(self.job, self.root)

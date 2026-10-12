@@ -232,6 +232,10 @@ Each export is verified like a texture export: fence, fresh empty directory, and
 
 The scripts' own Painter calls are pinned, not checked symbol by symbol. `delete_node`, which the sync code uses, is probed by R10.
 
+**Comparison (phase1.25, decision 124).** `tests/parity/tier1/wand_v1/runner.py` rebuilds the golden's job twice in UzPainter through the Assets3D adapter, with the same pins and the same staged inputs. `tools/parity/tier1/compare.py` then compares both rebuilds with the admitted golden. Run it as `python -m pytest tests/parity/tier1/wand_v1`; set `UZP_TIER1_REPORT=parity/reports/phase1/tier1-wand-v1.json` to write the report.
+
+The report (`comparison-report.json`) keeps three results apart: oracle stability, UzPainter repeatability and equality to Painter. Structural differences fail and are listed: a refused export, a map on one side only, a differing storage format or shape. A golden that is not admitted, or one whose record or blobs are missing, is `oracle_unavailable`.
+
 ## 10. Oracle envelope: rolling refresh, stability study, canary
 
 Task `phase0.9_oracle-envelope`, decisions 034 (envelope, study, canary) and 037 (rolling oracle). Code: `tools/parity/envelope/` and `tools/parity/recorder/{environment,launcher}.py`; tests: `tests/parity/test_oracle_envelope.py` (fake Painter only); report: `parity/reports/phase0/oracle-envelope.md` (generated, numbers and hashes only).

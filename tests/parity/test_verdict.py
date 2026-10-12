@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 
 from tools.parity.envelope.registry import current_envelope, initial_registry, save_registry
@@ -161,6 +162,40 @@ def test_diagnose_rejects_mismatched_or_empty_input() -> None:
         diagnose([1.0], [1.0, 2.0])
     with pytest.raises(ValueError, match="nothing to compare"):
         diagnose([], [])
+
+
+def test_arrays_are_judged_as_their_values_with_the_same_statistics() -> None:
+    """Decoded maps go in as arrays (any shape, flattened in order): the statistics equal those of
+    the same values as lists, infinities and NaNs included."""
+    oracle = [0.0, 1.0, math.inf, math.nan, -math.inf, 5.0]
+    candidate = [0.0, 2.0, math.inf, math.nan, math.inf, math.nan]
+    listed = diagnose(oracle, candidate)
+    arrayed = diagnose(np.array(oracle).reshape(2, 3), np.array(candidate).reshape(2, 3))
+    assert arrayed == listed
+    assert (listed.differing_count, listed.max_abs_diff) == (3, math.inf)
+    codes = np.arange(12, dtype=np.int64).reshape(2, 2, 3)
+    changed = codes.copy()
+    changed[1, 1, 2] = 65535
+    assert diagnose(codes, changed).max_abs_diff == 65535 - 11
+    with pytest.raises(ValueError, match="shape mismatch"):
+        diagnose(codes, codes.reshape(2, 3, 2))
+    verdict = evaluate(Comparison("1", TIER1_DOMAIN, codes, codes.reshape(2, 3, 2)), [])
+    assert verdict.outcome is Outcome.FAIL and "shape mismatch" in verdict.reason
+
+
+def test_integer_differences_are_exact_beyond_int64() -> None:
+    """uint64 2**64-1 against int64 -1 differs (an int64 cast would wrap both to -1)."""
+    oracle = np.array([2**64 - 1, 7], dtype=np.uint64)
+    candidate = np.array([-1, 7], dtype=np.int64)
+    d = diagnose(oracle, candidate)
+    assert (d.differing_count, d.max_abs_diff) == (1, float(2**64))
+    assert evaluate(Comparison("1", TIER1_DOMAIN, oracle, candidate), []).outcome is Outcome.FAIL
+    wide = np.array([np.iinfo(np.int64).max], dtype=np.int64)
+    low = np.array([np.iinfo(np.int64).min], dtype=np.int64)
+    assert diagnose(wide, low).max_abs_diff == float(2**64 - 1)
+    edge = diagnose(np.array([2**62]), np.array([-(2**62)]))  # 2**63 overflows int64
+    assert (edge.max_abs_diff, edge.mean_abs_diff, edge.p99_abs_diff) == (float(2**63),) * 3
+    assert diagnose([2**62 - 1], [-(2**62) + 1]).max_abs_diff == float(2**63 - 2)
 
 
 def test_tier3_equal_values_still_need_an_entry() -> None:
