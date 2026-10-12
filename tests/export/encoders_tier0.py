@@ -138,6 +138,114 @@ def reencode_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
     return report
 
 
+# ── Painter's files through UzPainter's processing (phase1.18) ───────────────
+
+# The sRGB8 material channels are exported sRGB-encoded, which is not fitted (decision 103).
+SRGB8_MATERIAL = ("basecolor", "specular", "emissive")
+# export-bit-depth: the OpenEXR 32f step of each group, and its other steps (format, bit depth).
+BIT_DEPTH_STEPS = {
+    359: ((353, "png", "8"), (355, "png", "16"), (357, "exr", "16f")),  # document maps
+    373: ((367, "png", "8"), (369, "png", "16"), (371, "exr", "16f")),  # mesh maps
+}
+
+
+def processing_cases(store: OracleStore) -> list[dict[str, Any]]:
+    """The cases of `uzp-export-tests process` (decision 103), r1 of each golden (decision 032):
+
+    - export-bit-depth: every map's OpenEXR 32f file (sRGB8 material channels excepted) as the
+      raster of its PNG 8, PNG 16 and OpenEXR 16f files (R-090 P1, P2, P7);
+    - export-dither: every map's PNG 16 file without dithering as the raster of its PNG 16 file
+      with dithering (R-090 P3);
+    - export-alpha-layouts: the L+A and RGB+A OpenEXR 32f files as the rasters of their PNG 16
+      files, an all-opaque alpha appended where Painter dropped it (R-090 P6)."""
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    cases: list[dict[str, Any]] = []
+
+    def path(golden: Golden, output_id: str) -> str:
+        return str(_blob_path(store, golden, golden.output("r1", output_id)["blob"]))
+
+    bit_depth = load(store, root / "export-bit-depth.json")
+    for output_id in bit_depth.maps("r1"):
+        texture_set, name, step = output_id.split("/")
+        group = BIT_DEPTH_STEPS.get(int(step.removeprefix("step")))
+        if group is None or name in SRGB8_MATERIAL:
+            continue
+        for target_step, fmt, depth in group:
+            cases.append(
+                {
+                    "golden": bit_depth.golden_id,
+                    "source": path(bit_depth, output_id),
+                    "target": path(bit_depth, f"{texture_set}/{name}/step{target_step}"),
+                    "format": fmt,
+                    "bit_depth": depth,
+                    "height": name == "height",
+                }
+            )
+    dither = load(store, root / "export-dither.json")
+    for output_id in dither.maps("r1"):
+        texture_set, name, step = output_id.split("/")
+        if step != "step106" or name in SRGB8_MATERIAL:
+            continue
+        cases.append(
+            {
+                "golden": dither.golden_id,
+                "source": path(dither, output_id),
+                "target": path(dither, f"{texture_set}/{name}/step104"),
+                "format": "png",
+                "bit_depth": "16",
+                "dithering": True,
+                # The PNG 16 source of a Height map already holds its written values.
+                "height": False,
+            }
+        )
+    alpha = load(store, root / "export-alpha-layouts.json")
+    for output_id in alpha.maps("r1"):
+        if not output_id.endswith(".exr"):
+            continue
+        source = alpha.map("r1", output_id)
+        layout = output_id.rsplit("_", 1)[1].removesuffix(".exr")
+        cases.append(
+            {
+                "golden": alpha.golden_id,
+                "source": path(alpha, output_id),
+                "target": path(alpha, output_id.replace("s19", "s18").replace(".exr", ".png")),
+                "format": "png",
+                "bit_depth": "16",
+                "append_opaque_alpha": source.values.shape[2] == {"la": 1, "rgba": 3}[layout],
+            }
+        )
+    return cases
+
+
+def process_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
+    """Runs `processing_cases` through `uzp-export-tests process`. Returns per golden the cases and
+    the identical ones, the differing targets, and the written layouts."""
+    needs_store()
+    store = locate()
+    assert store is not None
+    cases = processing_cases(store)
+    tmp.mkdir(parents=True, exist_ok=True)
+    listing = tmp / "process.json"
+    listing.write_text(json.dumps(cases), encoding="utf-8")
+    lines = _run([str(exe), "process", str(listing)]).splitlines()
+    assert len(lines) == len(cases)
+    report: dict[str, Any] = {
+        "cases": defaultdict(int),
+        "identical": defaultdict(int),
+        "differing": [],
+        "layouts": defaultdict(int),
+    }
+    for case, line in zip(cases, lines, strict=True):
+        result = json.loads(line)
+        kind = f"{case['golden']} {case['format']} {case['bit_depth']}"
+        report["cases"][kind] += 1
+        report["identical"][kind] += int(result["equal"])
+        report["layouts"][str(result["layout"])] += 1
+        if not result["equal"]:
+            report["differing"].append(f"{kind} {Path(case['target']).name[:12]}")
+    return report
+
+
 # ── Goldens written by WriteExport ───────────────────────────────────────────
 
 
@@ -308,8 +416,25 @@ def _byte_residual(
     return residual(golden_id, f"{fmt} files re-encoded", recording, "file (bytes identical)", diff)
 
 
-def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, Any]:
-    """The `export-processing.json` document of the two reports."""
+def _processed_residuals(processed: dict[str, Any], kind: str) -> list[dict[str, Any]]:
+    """The cases of one processing (`<format> <depth>`) per golden as byte residuals."""
+    out = []
+    for name, cases in sorted(processed["cases"].items()):
+        golden_id, fmt, depth = name.split(" ")
+        if f"{fmt} {depth}" != kind:
+            continue
+        differs = np.zeros((1, cases), np.int64)
+        differs[0, processed["identical"][name] :] = 1
+        diff = difference(np.zeros((1, cases), np.int64), differs)
+        label = f"{fmt} {depth} files from Painter's own values"
+        out.append(residual(golden_id, label, "r1", "file (bytes identical)", diff))
+    return out
+
+
+def publish(
+    reencoded: dict[str, Any], exported: dict[str, Any], processed: dict[str, Any]
+) -> dict[str, Any]:
+    """The `export-processing.json` document of the three reports."""
     png = [
         _byte_residual(g, "png", rec, n, k)
         for (g, fmt, rec), (n, k) in reencoded["per_golden"].items()
@@ -334,18 +459,19 @@ def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, An
         entry(
             "png-encoding",
             "PNG files: chunks, row filters and compression of Painter's PNG export",
-            "Signature; IHDR (8 or 16 bits; grey, RGB or RGBA; not interlaced); pHYs 2835 x 2835 "
-            "per metre; "
-            "IDAT chunks of 8192 bytes (the last shorter) holding one zlib stream (level 6, window "
-            "bits 15, memory level 8, strategy Z_FILTERED) of the filtered rows; IEND. Each row "
-            "takes, among None, Sub and Paeth only, the filter whose bytes have the smallest sum "
-            "of min(b, 256 - b), ties to the earlier; the row above the first is zero "
-            "(src/export/png_writer.h, decision 089).",
+            "Signature; IHDR (8 or 16 bits; grey, grey and alpha, RGB or RGBA; not interlaced); "
+            "pHYs 2835 x 2835 per metre; IDAT chunks of 8192 bytes (the last shorter) holding one "
+            "zlib stream (level 6, window bits 15, memory level 8) of the filtered rows; IEND. "
+            "Each row takes the filter whose bytes have the smallest sum of min(b, 256 - b), ties "
+            "to the earlier; the row above the first is zero. 8-bit grey chooses among all five "
+            "filters and compresses with Z_DEFAULT_STRATEGY; every other layout chooses among "
+            "None, Sub and Paeth and compresses with Z_FILTERED (src/export/png_writer.h, "
+            "decisions 089 and 103).",
             [PYDOC, LIBS],
             [
-                parameter("filters", "None, Sub, Paeth", "fitted"),
+                parameter("filters", "None, Sub, Paeth; 8-bit grey: all five", "fitted"),
                 parameter("zlib_level", 6, "fitted"),
-                parameter("zlib_strategy", "Z_FILTERED", "fitted"),
+                parameter("zlib_strategy", "Z_FILTERED; 8-bit grey: Z_DEFAULT_STRATEGY", "fitted"),
                 parameter("idat_size", 8192, "fitted", "byte"),
                 parameter("phys", 2835, "fitted", "pixel per metre"),
                 parameter("files", reencoded["files"]["png"], "fitted"),
@@ -357,14 +483,14 @@ def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, An
             "OpenEXR files: header, channels and PIZ compression of Painter's OpenEXR export",
             "Single-part scanline file, version 2; attributes channels, compression (PIZ), "
             "dataWindow, displayWindow, lineOrder (increasing y), pixelAspectRatio 1, "
-            "screenWindowCenter (0, 0), screenWindowWidth 1; FLOAT channels Y (grey), B, G, R "
-            "(RGB) or A, B, G, R (RGBA); PIZ as OpenEXR writes it, its Huffman heap breaking "
-            "frequency ties by symbol "
-            "(tinyexr with that local change, src/export/exr_writer.h, decision 089).",
+            "screenWindowCenter (0, 0), screenWindowWidth 1; FLOAT (32f) or HALF (16f) channels "
+            "Y (grey), A, Y (grey and alpha), B, G, R (RGB) or A, B, G, R (RGBA); PIZ as OpenEXR "
+            "writes it, its Huffman heap breaking frequency ties by symbol (tinyexr with that "
+            "local change, src/export/exr_writer.h, decisions 089 and 103).",
             [EXR, LIBS],
             [
                 parameter("compression", "PIZ", "fitted"),
-                parameter("pixel_type", "FLOAT", "fitted"),
+                parameter("pixel_type", "FLOAT, HALF", "fitted"),
                 parameter("files", reencoded["files"]["exr"], "fitted"),
             ],
             exr,
@@ -389,6 +515,38 @@ def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, An
             written32,
         ),
         entry(
+            "png8-write-rule",
+            "PNG 8: the written code of each exported value",
+            "code = (j 255 + 2^11 - 1) >> 12 with j = floor(clamp(v, 0, 1) 2^12) "
+            "(arith::WriteUnorm at 8 bits) of the OpenEXR 32f value of every channel and mesh "
+            "map, Height as v 0.5 + 0.5 (decision 103): Painter's own OpenEXR 32f file of each map "
+            "of export-bit-depth, encoded so, gives its PNG 8 file byte for byte.",
+            [PYDOC, D3D],
+            [parameter("bits", 8, "public_documentation")],
+            _processed_residuals(processed, "png 8"),
+        ),
+        entry(
+            "png16-height-alpha-dithering",
+            "PNG 16 from Painter's own values: Height signed, alpha layouts, dithering",
+            "The PNG 16 write rule of each value, Height as v 0.5 + 0.5; L+A and RGB+A written "
+            "as such, an alpha of 1 everywhere dropped (L, RGB); with dithering on, the bytes "
+            "PNG 16 has without it (export-bit-depth, export-alpha-layouts, export-dither; "
+            "decision 103).",
+            [PYDOC, D3D],
+            [parameter("bits", 16, "public_documentation")],
+            _processed_residuals(processed, "png 16"),
+        ),
+        entry(
+            "exr16f-values",
+            "OpenEXR 16f: the written half of each exported value",
+            "The float32 value rounded toward zero to a binary16 half (arith::HalfTowardZero; "
+            "decision 103): Painter's own OpenEXR 32f file of each map of export-bit-depth, "
+            "encoded so, gives its OpenEXR 16f file byte for byte.",
+            [PYDOC, EXR],
+            [parameter("bits", 16, "public_documentation")],
+            _processed_residuals(processed, "exr 16f"),
+        ),
+        entry(
             "padding-complete-coverage",
             "Padding infinite and passthrough on a texture set whose UV islands cover the tile",
             "Nothing changes: every texel holds its evaluated value (src/export/padding.h); the "
@@ -409,27 +567,34 @@ def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, An
             "the poles; a document channel's one-texel ring around each island blends across the "
             "UV seam with unidentified weights (2344 ring texels on the cube, 2152 on the sphere). "
             "Passthrough on such sets is written as no operation: Painter's r1 and r2 agree "
-            "inside the islands and differ outside them at up to every uncovered texel.",
+            "inside the islands and differ outside them at up to every uncovered texel. Owner "
+            "phase1.25_pilot-wand (decision 103).",
         ),
         "padding-dilation": (
             "Padding color, transparent and diffusion with dilationDistance",
-            None,
+            "Recorded (export-padding*, R-090 P5, P9), not fitted (decision 103); owner "
+            "phase3.2_unreal-ue56-packed-preset.",
         ),
-        "resize": ("Resize to a sizeLog2 other than the texture set's size", None),
-        "dithering": ("Dithering on", None),
-        "png-8": ("PNG at 8 bits per sample", None),
-        "exr-16f": ("OpenEXR at 16-bit half float", None),
-        "alpha-layouts": (
-            "The L+A and RGB+A layouts (an alpha channel) in PNG and OpenEXR",
-            "RGB+A is recorded (R-085 P6, P7: an alpha of 1 everywhere is dropped) and its files "
-            "re-encode byte for byte; it is written once the plan resolves its alpha sources.",
+        "resize": (
+            "Resize to a sizeLog2 other than the texture set's size",
+            "Recorded (export-resize, R-090 P4), partly fitted (decision 103): an upscale is the "
+            "evaluation at the target size; a downscale is a 2x2 box stored in the channel's "
+            "format (UNORM16; L16F rounds half away from zero); sRGB8 channels, virtual normals "
+            "after a downscale and BilinearHQ normal-channel magnification are not reproduced. "
+            "Owner phase3.2_unreal-ue56-packed-preset.",
+        ),
+        "dithering-png8-exr": (
+            "Dithering at PNG 8 bits, and dithering in OpenEXR",
+            "PNG 8: deterministic within and across sessions, not a threshold matrix (decision "
+            "103); OpenEXR: no recording compares it with dithering off. Owner "
+            "phase3.2_unreal-ue56-packed-preset.",
         ),
         "srgb8-material-channels": (
-            "sRGB8 material channels (BaseColor and the other material colours) in PNG and any "
-            "sRGB8 channel in OpenEXR",
-            "sRGB8 User channels are exported linear (their decoded operand); BaseColor is "
-            "exported sRGB-encoded and the evaluator's template constants of material colours are "
-            "already export values: recorded, not fitted here.",
+            "sRGB8 material channels (BaseColor, Specular, Emissive)",
+            "Exported sRGB-encoded: PNG 8 is the UNORM write of the IEC encoding of the linear "
+            "value (exact on export-bit-depth); PNG 16 misses by up to one code on about 70 of "
+            "258 values under every model tried, and the evaluator holds these channels' template "
+            "constants as export values (decision 103). Owner phase1.25_pilot-wand.",
         ),
     }
     for entry_id, (subject, notes) in gaps.items():
@@ -437,14 +602,16 @@ def publish(reencoded: dict[str, Any], exported: dict[str, Any]) -> dict[str, An
             entry(entry_id, subject, GAP_FORMULA, [PYDOC, HELP], [], [], notes, gap=True)
         )
     corpus = sorted(
-        {g for g, _, _ in reencoded["per_golden"]} | {f"tier0/{n}" for n in EXPORT_GOLDENS}
+        {g for g, _, _ in reencoded["per_golden"]}
+        | {f"tier0/{n}" for n in EXPORT_GOLDENS}
+        | {name.split(" ")[0] for name in processed["cases"]}
     )
     return document(
         "export-processing",
         "The export's processing and encoders (src/export/encode.h, padding.h, png_writer.h, "
-        "exr_writer.h; decisions 089 and 090): Painter's PNG and OpenEXR files re-encoded byte "
-        "for byte, the recorded processing written by WriteExport byte-identical to Painter's "
-        "files, and the processing no recording covers yet.",
+        "exr_writer.h; decisions 089, 090 and 103): Painter's PNG and OpenEXR files re-encoded "
+        "byte for byte, the recorded processing written by WriteExport and applied to Painter's "
+        "own values byte-identical to Painter's files, and the processing not fitted yet.",
         corpus,
         entries,
         painter_build=str(current_envelope()["painter_build"]),
@@ -464,15 +631,16 @@ def main(argv: list[str]) -> int:
     exe, work = Path(argv[0]), Path(argv[1])
     reencoded = reencode_painter_files(exe, work)
     exported = export_goldens(exe, work / "export", runs=2)
+    processed = process_painter_files(exe, work / "process")
     PUBLISHED.write_text(
-        json.dumps(publish(reencoded, exported), indent=2) + "\n", encoding="utf-8"
+        json.dumps(publish(reencoded, exported, processed), indent=2) + "\n", encoding="utf-8"
     )
     print(
         f"{PUBLISHED}: re-encoded {dict(reencoded['identical'])} of {dict(reencoded['files'])}; "
         f"{exported['identical_to_painter']} of {exported['comparisons']} written files identical; "
         f"{len(exported['problems'])} problems"
     )
-    ok = not reencoded["differing"] and not exported["problems"]
+    ok = not reencoded["differing"] and not exported["problems"] and not processed["differing"]
     return 0 if ok else 1
 
 

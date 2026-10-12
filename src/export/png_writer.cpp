@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <string_view>
 
@@ -19,7 +20,10 @@ constexpr uint32_t kPixelsPerMetre = 2835;
 /// The IDAT payload size; the last chunk holds the rest.
 constexpr size_t kIdatSize = 8192;
 
-enum Filter : uint8_t { kNone = 0, kSub = 1, kPaeth = 4 };
+/// The IHDR colour type per channel count: grey, grey and alpha, RGB, RGBA.
+constexpr std::array<char, 5> kColourType{0, 0, 4, 2, 6};
+
+enum Filter : uint8_t { kNone = 0, kSub = 1, kUp = 2, kAverage = 3, kPaeth = 4 };
 
 void PutU32(std::string& out, uint32_t v) {
     out.push_back(static_cast<char>(v >> 24));
@@ -52,38 +56,44 @@ uint8_t Paeth(int a, int b, int c) {
     return static_cast<uint8_t>(c);
 }
 
-/// Appends the filter byte and the filtered `row` (above: the previous raw row, zero for the first).
-void FilterRow(const uint8_t* row, const uint8_t* above, size_t stride, size_t bpp, std::vector<uint8_t>& sub,
-               std::vector<uint8_t>& paeth, std::vector<uint8_t>& out) {
-    uint64_t none = 0;
-    uint64_t subCost = 0;
-    uint64_t paethCost = 0;
-    for (size_t i = 0; i < stride; ++i) {
-        const int a = i >= bpp ? row[i - bpp] : 0;
-        const int b = above[i];
-        const int c = i >= bpp ? above[i - bpp] : 0;
-        sub[i] = static_cast<uint8_t>(row[i] - a);
-        paeth[i] = static_cast<uint8_t>(row[i] - Paeth(a, b, c));
-        none += Cost(row[i]);
-        subCost += Cost(sub[i]);
-        paethCost += Cost(paeth[i]);
+/// Appends the filter byte and the filtered `row` (above: the previous raw row, zero for the first):
+/// the filter among `filters` (in increasing filter type) whose filtered bytes cost least, ties to
+/// the earlier.
+void FilterRow(const uint8_t* row, const uint8_t* above, size_t stride, size_t bpp, std::span<const Filter> filters,
+               std::array<std::vector<uint8_t>, 5>& scratch, std::vector<uint8_t>& out) {
+    Filter best = filters.front();
+    uint64_t bestCost = std::numeric_limits<uint64_t>::max();
+    for (const Filter filter : filters) {
+        std::vector<uint8_t>& filtered = scratch[filter];
+        uint64_t cost = 0;
+        for (size_t i = 0; i < stride; ++i) {
+            const int a = i >= bpp ? row[i - bpp] : 0;
+            const int b = above[i];
+            const int c = i >= bpp ? above[i - bpp] : 0;
+            int predictor = 0;
+            switch (filter) {
+                case kNone: predictor = 0; break;
+                case kSub: predictor = a; break;
+                case kUp: predictor = b; break;
+                case kAverage: predictor = (a + b) >> 1; break;
+                case kPaeth: predictor = Paeth(a, b, c); break;
+            }
+            filtered[i] = static_cast<uint8_t>(row[i] - predictor);
+            cost += Cost(filtered[i]);
+        }
+        if (cost < bestCost) {
+            best = filter;
+            bestCost = cost;
+        }
     }
-    Filter best = kNone;
-    uint64_t bestCost = none;
-    if (subCost < bestCost) {
-        best = kSub;
-        bestCost = subCost;
-    }
-    if (paethCost < bestCost) best = kPaeth;
     out.push_back(best);
-    const uint8_t* chosen = best == kNone ? row : best == kSub ? sub.data() : paeth.data();
-    out.insert(out.end(), chosen, chosen + stride);
+    out.insert(out.end(), scratch[best].begin(), scratch[best].begin() + static_cast<std::ptrdiff_t>(stride));
 }
 
-/// One zlib stream of `data` (level 6, window bits 15, memory level 8, Z_FILTERED).
-std::string Deflate(const std::vector<uint8_t>& data) {
+/// One zlib stream of `data` (level 6, window bits 15, memory level 8, `strategy`).
+std::string Deflate(const std::vector<uint8_t>& data, int strategy) {
     z_stream zs{};
-    if (deflateInit2(&zs, 6, Z_DEFLATED, 15, 8, Z_FILTERED) != Z_OK) {
+    if (deflateInit2(&zs, 6, Z_DEFLATED, 15, 8, strategy) != Z_OK) {
         throw std::runtime_error("png: deflateInit2 failed");
     }
     std::string out;
@@ -114,11 +124,14 @@ std::string Deflate(const std::vector<uint8_t>& data) {
 
 std::string EncodePng(const PngImage& image) {
     if (image.width == 0 || image.height == 0) throw std::invalid_argument("png: empty image");
-    if (image.channels != 1 && image.channels != 3 && image.channels != 4) {
-        throw std::invalid_argument("png: only grey, RGB and RGBA are written (decision 090)");
+    if (image.channels < 1 || image.channels > 4) {
+        throw std::invalid_argument("png: only grey, grey and alpha, RGB and RGBA are written");
     }
     if (image.bitDepth != 8 && image.bitDepth != 16) {
         throw std::invalid_argument("png: only 8 and 16 bits per sample are written");
+    }
+    if (image.channels == 2 && image.bitDepth == 8) {
+        throw std::invalid_argument("png: 8-bit grey and alpha has no recording (decision 103)");
     }
     const size_t samplesPerRow = size_t{image.width} * image.channels;
     if (image.samples.size() != samplesPerRow * image.height) {
@@ -129,8 +142,15 @@ std::string EncodePng(const PngImage& image) {
     const size_t stride = samplesPerRow * bytesPerSample;
     std::vector<uint8_t> raw(stride);
     std::vector<uint8_t> above(stride, 0);
-    std::vector<uint8_t> sub(stride);
-    std::vector<uint8_t> paeth(stride);
+    // 8-bit grey: all five filters and the default strategy; every other layout: None, Sub and
+    // Paeth with Z_FILTERED (decision 103).
+    const bool grey8 = image.channels == 1 && image.bitDepth == 8;
+    static constexpr std::array<Filter, 5> kAllFilters{kNone, kSub, kUp, kAverage, kPaeth};
+    static constexpr std::array<Filter, 3> kThreeFilters{kNone, kSub, kPaeth};
+    const std::span<const Filter> filters =
+        grey8 ? std::span<const Filter>(kAllFilters) : std::span<const Filter>(kThreeFilters);
+    std::array<std::vector<uint8_t>, 5> scratch;
+    for (const Filter filter : filters) scratch[filter].resize(stride);
     std::vector<uint8_t> filtered;
     filtered.reserve((stride + 1) * image.height);
     for (uint32_t y = 0; y < image.height; ++y) {
@@ -144,17 +164,17 @@ std::string EncodePng(const PngImage& image) {
                 raw[2 * i + 1] = static_cast<uint8_t>(samples[i] & 0xFF);
             }
         }
-        FilterRow(raw.data(), above.data(), stride, bpp, sub, paeth, filtered);
+        FilterRow(raw.data(), above.data(), stride, bpp, filters, scratch, filtered);
         std::swap(raw, above);
     }
-    const std::string compressed = Deflate(filtered);
+    const std::string compressed = Deflate(filtered, grey8 ? Z_DEFAULT_STRATEGY : Z_FILTERED);
 
     std::string out(kSignature);
     std::string ihdr;
     PutU32(ihdr, image.width);
     PutU32(ihdr, image.height);
     ihdr.push_back(static_cast<char>(image.bitDepth));
-    ihdr.push_back(static_cast<char>(image.channels == 1 ? 0 : image.channels == 3 ? 2 : 6));  // grey/RGB/RGBA
+    ihdr.push_back(kColourType[image.channels]);
     ihdr.push_back(0);                                               // deflate
     ihdr.push_back(0);                                               // adaptive filtering
     ihdr.push_back(0);                                               // not interlaced

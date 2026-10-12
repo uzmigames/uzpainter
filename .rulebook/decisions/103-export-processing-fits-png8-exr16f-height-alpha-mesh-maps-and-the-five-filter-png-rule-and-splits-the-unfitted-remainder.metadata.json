@@ -1,0 +1,15 @@
+{
+  "id": 103,
+  "slug": "export-processing-fits-png8-exr16f-height-alpha-mesh-maps-and-the-five-filter-png-rule-and-splits-the-unfitted-remainder",
+  "title": "The export writes PNG 8, OpenEXR 16f, signed Height, alpha layouts and pass-through mesh maps exactly; the unfitted remainder is split with named owners",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders",
+    "phase1.25_pilot-wand",
+    "phase3.2_unreal-ue56-packed-preset",
+    "phase3.3_unreal-gltf-presets"
+  ],
+  "supersededBy": null
+}

@@ -29,6 +29,8 @@ struct EncodedFile {
     std::string bytes;
     /// The EXP-09 tag of the file's normal source, when it has one.
     std::optional<evaluator::NormalTag> normalTag;
+    /// The layout written: the plan's, or L / RGB when an all-opaque alpha was dropped (encode.h).
+    FileLayout layout = FileLayout::L;
 };
 
 /// Steps 1 and 2 above: every file of `plan` (compiled from revision `revision` of `project`)

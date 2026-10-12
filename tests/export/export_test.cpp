@@ -20,6 +20,13 @@
 //       (phase1.16) Each line a PNG or OpenEXR file: decoded at native depth (spng; DecodeExr) and
 //       encoded again with EncodePng / EncodeExr; prints one JSON line per file {"path", "format",
 //       "equal", "size", "encoded_size"} (whether the bytes are identical).
+//   uzp-export-tests process <cases.json>
+//       (phase1.18) Each case {"source": a file Painter exported (OpenEXR 32f, or PNG 16 read as
+//       UNORM operands), "target": Painter's file of the same map with another processing,
+//       "format": png|exr, "bit_depth": 8|16|16f|32f, "dithering"?, "height"? (the channel is
+//       Height), "append_opaque_alpha"? (an alpha of 1 appended)}: the source's values as the
+//       raster of an L, L+A, RGB or RGB+A file, encoded by EncodeFile; prints one JSON line per case
+//       {"target", "equal", "layout", "size", "target_size"}.
 //   uzp-export-tests roundtrip <out dir>
 //       (phase1.16) Encodes synthetic PNG16 and OpenEXR 32f images twice (ramps, runs, noise, signed
 //       zero, infinities, NaN payloads, odd sizes), decodes them back and writes the files; prints
@@ -40,6 +47,12 @@
 //       fault hook (src/export/fault.h).
 //   uzp-export-tests [--fault <point>[:<n>]] fixed-copy <exportPath> <dir>
 //       (phase1.17) `CopyFixedNames`; prints {"generation", "files": [path...]} or {"error"}.
+//   uzp-export-tests project <spec.json> <out.uzp>
+//       (phase1.18) The project of a spec (its "mesh" imported as the project's mesh, its bitmaps
+//       as resources) created as a `.uzp` file by the project store; prints {"project"}.
+//   uzp-export-tests cli <args>...
+//       (phase1.18) `UzPainter.exe export <args>...` (src/export/cli.h): the same output and exit
+//       status.
 //   uzp-export-tests consume-pinned <exportPath>
 //   uzp-export-tests consume-locked <exportPath> <dir>
 //       (phase1.17) A fixed-name test consumer through the generation-pinning adapter
@@ -63,12 +76,14 @@
 // "name" (the texture set's name) and "mesh_maps" ({usage: resource sha256}).
 
 #include "evaluator/admission.h"
+#include "evaluator/arith.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/profile.h"
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "evaluator/geometry_mask.h"
 #include "export/config.h"
+#include "export/encode.h"
 #include "export/cli.h"
 #include "export/exr_writer.h"
 #include "export/fault.h"
@@ -81,6 +96,7 @@
 #include "export/write.h"
 #include "mesh/mesh_import.h"
 #include "spng.h"
+#include "store/project_store.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/manifest/sha256.h"
@@ -512,21 +528,22 @@ int RunExport(const fs::path& templatesDir, const fs::path& specPath, const fs::
     return 0;
 }
 
-/// An 8- or 16-bit grey, RGB or RGBA PNG decoded at native depth with spng.
+/// An 8- or 16-bit grey, grey and alpha, RGB or RGBA PNG decoded at native depth with spng.
 exporter::PngImage DecodePng(const std::string& data) {
     std::unique_ptr<spng_ctx, decltype(&spng_ctx_free)> ctx(spng_ctx_new(0), &spng_ctx_free);
     spng_ihdr ihdr{};
     size_t size = 0;
     if (spng_set_png_buffer(ctx.get(), data.data(), data.size()) != 0 || spng_get_ihdr(ctx.get(), &ihdr) != 0 ||
         (ihdr.bit_depth != 8 && ihdr.bit_depth != 16) ||
-        (ihdr.color_type != SPNG_COLOR_TYPE_GRAYSCALE && ihdr.color_type != SPNG_COLOR_TYPE_TRUECOLOR &&
-         ihdr.color_type != SPNG_COLOR_TYPE_TRUECOLOR_ALPHA) ||
+        (ihdr.color_type != SPNG_COLOR_TYPE_GRAYSCALE && ihdr.color_type != SPNG_COLOR_TYPE_GRAYSCALE_ALPHA &&
+         ihdr.color_type != SPNG_COLOR_TYPE_TRUECOLOR && ihdr.color_type != SPNG_COLOR_TYPE_TRUECOLOR_ALPHA) ||
         spng_decoded_image_size(ctx.get(), SPNG_FMT_PNG, &size) != 0) {
-        throw core::ManifestError("not an 8- or 16-bit grey, RGB or RGBA PNG");
+        throw core::ManifestError("not an 8- or 16-bit grey, grey and alpha, RGB or RGBA PNG");
     }
-    const uint32_t channels = ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE ? 1u
-                              : ihdr.color_type == SPNG_COLOR_TYPE_TRUECOLOR ? 3u
-                                                                             : 4u;
+    const uint32_t channels = ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE         ? 1u
+                              : ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE_ALPHA ? 2u
+                              : ihdr.color_type == SPNG_COLOR_TYPE_TRUECOLOR       ? 3u
+                                                                                   : 4u;
     exporter::PngImage image{ihdr.width, ihdr.height, channels, ihdr.bit_depth, {}};
     // SPNG_FMT_PNG: the file's layout, 16-bit samples in host byte order.
     std::vector<uint8_t> bytes(size);
@@ -606,6 +623,86 @@ bool SameBits(const std::vector<float>& a, const std::vector<float>& b) {
     return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](float x, float y) {
                return std::bit_cast<uint32_t>(x) == std::bit_cast<uint32_t>(y);
            });
+}
+
+/// `process`: Painter's own file of a map as the raster, through EncodeFile with the case's
+/// processing; compared with Painter's file of that processing.
+int RunProcess(const fs::path& casesPath) {
+    for (const json::Value& value : Arr(json::Parse(ReadText(casesPath)), "cases")) {
+        const json::Object& c = Obj(value, "case");
+        const std::string source = ReadText(Str(Key(c, "source"), "source"));
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint32_t channels = 0;
+        std::vector<float> values;
+        if (source.starts_with("\x89PNG")) {
+            const exporter::PngImage png = DecodePng(source);
+            width = png.width;
+            height = png.height;
+            channels = png.channels;
+            for (const uint16_t sample : png.samples) values.push_back(evaluator::arith::UnormOperand(sample, png.bitDepth));
+        } else {
+            exporter::ExrImage exr = exporter::DecodeExr(source);
+            width = exr.width;
+            height = exr.height;
+            channels = exr.channels;
+            values = std::move(exr.values);
+        }
+        const bool opaque = c.contains("append_opaque_alpha") && std::get<bool>(c.at("append_opaque_alpha").data);
+        if (opaque) {
+            std::vector<float> withAlpha;
+            for (size_t t = 0; t < size_t{width} * height; ++t) {
+                withAlpha.insert(withAlpha.end(), values.begin() + static_cast<std::ptrdiff_t>(t * channels),
+                                 values.begin() + static_cast<std::ptrdiff_t>((t + 1) * channels));
+                withAlpha.push_back(1.0f);
+            }
+            values = std::move(withAlpha);
+            ++channels;
+        }
+        static constexpr std::array<exporter::FileLayout, 5> kLayouts{
+            exporter::FileLayout::L, exporter::FileLayout::L, exporter::FileLayout::LA, exporter::FileLayout::RGB,
+            exporter::FileLayout::RGBA};
+        static constexpr std::array<std::array<exporter::ChannelLetter, 4>, 5> kLetters{{
+            {},
+            {exporter::ChannelLetter::L},
+            {exporter::ChannelLetter::L, exporter::ChannelLetter::A},
+            {exporter::ChannelLetter::R, exporter::ChannelLetter::G, exporter::ChannelLetter::B},
+            {exporter::ChannelLetter::R, exporter::ChannelLetter::G, exporter::ChannelLetter::B,
+             exporter::ChannelLetter::A},
+        }};
+        exporter::PlannedFile file;
+        file.relativePath = Str(Key(c, "target"), "target");
+        file.width = width;
+        file.height = height;
+        file.layout = kLayouts.at(channels);
+        const bool heightChannel = c.contains("height") && std::get<bool>(c.at("height").data);
+        for (uint32_t i = 0; i < channels; ++i) {
+            exporter::PlannedChannel channel;
+            channel.dest = kLetters[channels][i];
+            channel.source.type = exporter::SourceType::documentMap;
+            if (heightChannel && i == 0) channel.source.channel = ChannelType::Height;
+            file.channels.push_back(channel);
+        }
+        exporter::ResolvedParameters parameters;
+        parameters.fileFormat = Str(Key(c, "format"), "format") == "exr" ? exporter::FileFormat::exr : exporter::FileFormat::png;
+        const std::string depth = Str(Key(c, "bit_depth"), "bit_depth");
+        parameters.bitDepth = depth == "8"     ? exporter::BitDepth::u8
+                              : depth == "16"  ? exporter::BitDepth::u16
+                              : depth == "16f" ? exporter::BitDepth::f16
+                                               : exporter::BitDepth::f32;
+        parameters.dithering = c.contains("dithering") && std::get<bool>(c.at("dithering").data);
+        file.parameters = parameters;
+        const exporter::FileRaster raster{width, height, channels, std::move(values), std::nullopt, std::nullopt};
+        const exporter::EncodedImage encoded = exporter::EncodeFile(file, raster);
+        const std::string target = ReadText(file.relativePath);
+        std::cout << json::WriteCanonical(json::Object{{"target", file.relativePath},
+                                                       {"equal", encoded.bytes == target},
+                                                       {"layout", std::string(exporter::FileLayoutName(encoded.layout))},
+                                                       {"size", static_cast<std::int64_t>(encoded.bytes.size())},
+                                                       {"target_size", static_cast<std::int64_t>(target.size())}})
+                  << "\n";
+    }
+    return 0;
 }
 
 int RunRoundtrip(const fs::path& out) {
@@ -714,6 +811,42 @@ int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs:
     return 0;
 }
 
+/// `project`: the project of a spec, with its mesh as the imported mesh, created as a `.uzp` file.
+int RunProject(const fs::path& specPath, const fs::path& out) {
+    Spec spec = ParseSpec(specPath);
+    const json::Value document = json::Parse(ReadText(specPath));
+    const json::Object& o = Obj(document, "spec");
+    store::CreateOptions options;
+    for (const json::Value& entry : Arr(Key(o, "resources"), "resources")) {
+        const json::Object& r = Obj(entry, "resource");
+        options.resources.push_back({ReadText(specPath.parent_path() / Str(Key(r, "png"), "png")), "image/png"});
+    }
+    if (o.contains("mesh")) {
+        const fs::path meshPath(Str(o.at("mesh"), "mesh"));
+        std::string bytes = ReadText(meshPath);
+        const std::string sha = core::Sha256Hex(bytes);
+        const mesh::ImportResult imported = mesh::ImportMeshFile(meshPath, {});
+        core::ResourceMeta meta;
+        meta.id = spec.project.AllocateId();
+        meta.name = meshPath.filename().string();
+        meta.mime = "model/obj";
+        meta.size = static_cast<std::int64_t>(bytes.size());
+        meta.usage = "mesh";
+        meta.origin = meshPath.generic_string();
+        meta.imported_at = "2026-10-12T00:00:00Z";
+        spec.project.resources[sha].push_back(std::move(meta));
+        spec.project.mesh = core::MeshReference{sha, imported.report, {}};
+        options.resources.push_back({std::move(bytes), "model/obj"});
+    }
+    core::Validate(spec.project);
+    core::DocumentState state;
+    state.project_uuid = "00000000-0000-4000-8000-000000000118";
+    state.project = std::move(spec.project);
+    store::ProjectStore::Create(out, state, options)->Close();
+    std::cout << json::WriteCanonical(json::Object{{"project", out.generic_string()}}) << "\n";
+    return 0;
+}
+
 int RunFixedCopy(const fs::path& exportPath, const fs::path& directory) {
     render::Result<exporter::Delivery> delivery = exporter::CopyFixedNames(exportPath, directory);
     json::Object result;
@@ -763,7 +896,7 @@ int RunReceipt(const fs::path& projectPath, const fs::path& configPath) {
     const core::Project project = ParseSkeleton(json::Parse(ReadText(projectPath)));
     const exporter::ExportPlan plan = exporter::CompilePlan(project, ReadText(configPath));
     std::vector<exporter::EncodedFile> encoded;
-    for (const exporter::PlannedFile& file : plan.files) encoded.push_back({file.relativePath, std::nullopt});
+    for (const exporter::PlannedFile& file : plan.files) encoded.push_back({file.relativePath, std::nullopt, file.layout});
     std::cout << json::WriteCanonical(exporter::BuildReceipt(
                      {project, 1, plan, encoded, "000001", "2026-10-12T00:00:00Z", "", {"0.0.0-test", "uzp-export-tests"}, {}}))
               << "\n";
@@ -853,6 +986,12 @@ int main(int argc, char** argv) {
         }
         if (args.size() == 4 && args[0] == "publish") return RunPublish(args[1], args[2], args[3]);
         if (args.size() == 3 && args[0] == "fixed-copy") return RunFixedCopy(args[1], args[2]);
+        if (args.size() == 3 && args[0] == "project") return RunProject(args[1], args[2]);
+        if (!args.empty() && args[0] == "cli") {
+            std::vector<std::string> verb(args);
+            verb[0] = "export";
+            return exporter::RunExportCommand(verb, stdout, stderr);
+        }
         if (args.size() == 2 && args[0] == "consume-pinned") return RunConsume(args[1], std::nullopt);
         if (args.size() == 3 && args[0] == "consume-locked") return RunConsume(args[1], fs::path(args[2]));
         if (args.size() == 3 && args[0] == "receipt") return RunReceipt(args[1], args[2]);
@@ -867,6 +1006,7 @@ int main(int argc, char** argv) {
         if (args.size() == 4 && args[0] == "export") return RunExport(args[1], args[2], args[3]);
         if (args.size() == 2 && args[0] == "reencode") return RunReencode(args[1]);
         if (args.size() == 2 && args[0] == "roundtrip") return RunRoundtrip(args[1]);
+        if (args.size() == 2 && args[0] == "process") return RunProcess(args[1]);
         if (args.size() == 3 && args[0] == "presets") return RunPresets(args[1], args[2]);
         if (args.size() == 1 && args[0] == "aliases") return RunAliases();
     } catch (const std::exception& e) {

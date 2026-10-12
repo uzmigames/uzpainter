@@ -293,9 +293,9 @@ def test_five_map_preset_plans_the_pipeline_maps(export_tests: Path, tmp_path: P
 
 
 def test_five_map_preset_refuses_basecolor_naming_r090(export_tests: Path, tmp_path: Path) -> None:
-    """Decision 090: BaseColor's sRGB export encoding is not fitted, so an export through the
-    five-map preset that writes BaseColor is refused before anything is written, naming recording
-    R-090 and its owner; the same export without BaseColor writes its files."""
+    """Decisions 090 and 103: BaseColor's sRGB export encoding is not fitted, so an export through
+    the five-map preset that writes BaseColor is refused before anything is written, naming
+    recording R-090 and decision 103; the same export without BaseColor writes its files."""
     spec_path = spec(tmp_path / "spec", GRID)
     out = tmp_path / "out"
     result = export(
@@ -305,7 +305,7 @@ def test_five_map_preset_refuses_basecolor_naming_r090(export_tests: Path, tmp_p
         tmp_path / "run",
     )
     assert result.get("error") == "NotYetSupported", result
-    for fragment in ("sRGB8 channel BaseColor", "R-090", "phase1.18_export-engine item 6.1"):
+    for fragment in ("sRGB8 channel BaseColor", "R-090", "decision 103"):
         assert fragment in result["message"], result["message"]
     assert files_under(out) == {}
     no_basecolor = shipped_config(

@@ -1,7 +1,8 @@
 // UzPainter.exe entry point (docs/architecture/01-overview.md, command line). Phase 0 provides the
 // `selftest` command (docs/architecture/13-engine-integration.md §4.2); the project store adds
-// `inspect`, `export-bundle` and `store-census` (src/store/cli.h), the export publication
-// `export --recover` (src/export/cli.h); the other commands are added by their phases.
+// `inspect`, `export-bundle` and `store-census` (src/store/cli.h), the export of a project and
+// its publication's recovery `export` (src/export/cli.h); the other commands are added by their
+// phases.
 
 #include "export/cli.h"
 #include "selftest/harness.h"
@@ -25,6 +26,8 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "usage: UzPainter.exe selftest [--out-dir <dir>] [--report <file>] "
                          "[--no-gpu]\n"
                          "       UzPainter.exe inspect | export-bundle | store-census ... (src/store/cli.h)\n"
+                         "       UzPainter.exe export <file.uzp> --config <config.json> --app-version <version> "
+                         "--build <id>\n"
                          "       UzPainter.exe export --recover <exportPath> [--fixed-names <dir>]...\n");
     return uzp::selftest::kExitUsage;
 }
