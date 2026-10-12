@@ -13,8 +13,13 @@ Task `phase1.15_export-plan-compiler` (child of `phase1.18_export-engine`, P1-EX
 | `padding.{h,cpp}` | (phase1.16) `CheckPadding` / `ApplyPadding` over the texture set's texel-centre UV coverage (§4). |
 | `png_writer.{h,cpp}` | (phase1.16) `EncodePng`: UzPainter's own PNG encoder over the vendored zlib, byte-identical to Painter's files. |
 | `exr_writer.{h,cpp}`, `tinyexr_unit.cpp` | (phase1.16) `EncodeExr` / `DecodeExr` over the vendored tinyexr (one recorded local change), byte-identical to Painter's files; `tinyexr_unit.cpp` is the third-party translation unit of tinyexr's implementation. |
-| `write.{h,cpp}` | (phase1.16) `WriteExport`: every planned file checked, then evaluated, padded and encoded in memory, then written under exportPath (generations and receipts: phase1.17). |
+| `write.{h,cpp}` | (phase1.16) `EncodeExport`: every planned file checked, then evaluated, padded and encoded in memory; `WriteExport`: those bytes written under exportPath in Painter's flat layout (the parity writer). |
 | `preset_aliases.{h,cpp}` | (phase1.17, decision 095) The shipped presets of `assets/export-presets/` and the compatibility alias table: `ShippedPresetId` (a shipped id, a Painter preset name, or its `resource://starter_assets/` URL), `LoadShippedPreset` (the preset and its provenance record), `DefaultPresetDirectory` (`assets/export-presets` beside the executable) (§5). |
+| `publish.{h,cpp}` | (phase1.17, decision 097) `PublishExport`: the encoded files, the plan and the receipt published as a new generation by an atomic pointer update; `PublicationLock`; `RecoverExport` (`export --recover`). |
+| `fixed_names.{h,cpp}` | (phase1.17) `OpenPinnedDelivery` (the generation-pinning adapter), `CopyFixedNames` (the journalled fixed-name copy), `LockedFixedNames` (the reader under the publication lock), `RecoverFixedNames`. |
+| `receipt.{h,cpp}`, `schema/receipt.schema.json` | (phase1.17) `BuildReceipt`, `ReadReceipt`, `ReadResourceHashes`: the receipt (ARC-11 header, per-file fields, normal tags, consumer gaps, the Assets3D v2 export block). |
+| `cli.{h,cpp}` | (phase1.17) `UzPainter.exe export --recover <exportPath> [--fixed-names <dir>]...`. |
+| `fault.{h,cpp}` | (phase1.17) Test-only fault hooks between every publication step, compiled into `uzp-export-tests.exe` only (`UZP_EXPORT_FAULT_HOOKS`). |
 
 Both `uzp-export-tests.exe` and `UzPainter.exe` compile these sources (`build.zig`, `export_sources`). The Python bindings (`uzpainter.export.plan`, `substance_painter.export.list_project_textures`) are `phase1.19_pyapi-native-module` item 2.7.
 
@@ -83,3 +88,36 @@ Task `phase1.17_export-presets`. Local run report: `parity/reports/phase1/export
   - A preset whose layout is `unconfirmed` is refused (`NotYetSupported`) before anything is planned, naming its pending recordings (R-095).
   - The five-map preset writes BaseColor, an sRGB8 channel whose export encoding is not fitted. Its export is refused before writing, naming recording R-090 and `phase1.18_export-engine` item 6.1. Without BaseColor (an `outputMaps` filter) it writes.
 - **Parity.** The five-map preset's Normal map, written on the recorded plane goldens, is byte-identical to Painter's `Normal_OpenGL` PNG 16 files. Every preset's full output parity waits on recording R-095 (and R-090 for BaseColor): `phase1.18_export-engine` item 6.2.
+
+## 6. Publication and receipts (decision 097)
+
+Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_publication.py` (CPU, every lane).
+
+- **Generations.** `PublishExport` holds the publication lock (`exportPath/publication.lock`) while it works:
+  1. It encodes every file in memory (`EncodeExport`).
+  2. It claims `exportPath/generations/<NNNNNN>/`. The number comes after every existing generation, and the directory is created only if absent.
+  3. It writes `files/<relativePath>`, `plan.json` and `receipt.json`. Each one is flushed and read back to check its size and SHA-256.
+  4. It renames `current.json.uzp-staging` over `current.json`. The pointer is `{schema: uzpainter/export-current/1, generation, receipt, receipt_sha256}`.
+
+  A failure before the rename removes the new generation and returns an `export:` failure. The previous generation stays selected. An encoder that throws is caught, so the host keeps running. A refusal (`ValueError`, `NotYetSupported`) happens before anything is written.
+- **Completeness.** A generation is complete when:
+  - its receipt reads as a receipt of that generation;
+  - `plan.json` hashes to the receipt's plan hash;
+  - every listed file has its recorded size and SHA-256.
+
+  Complete generations are never changed or removed.
+- **Recovery.** `export --recover` publishes the newest complete generation newer than the selected one. It removes every other incomplete generation and any staging pointer. A damaged selected generation is reported (exit 1) and left in place. A pointer that does not read fails the recovery before anything changes.
+- **Fixed names.** A consumer reads one complete generation by either route:
+  - **`OpenPinnedDelivery`:** the selected generation's `files/` directory, verified against its receipt.
+  - **`LockedFixedNames`:** a fixed-name copy (`CopyFixedNames`), read under the publication lock.
+
+  The copy is journalled in its directory (`fixed-names.journal.json`: `{generation, files, copied, obsolete}`). Each file is staged as `<name>.uzp-staging`, then renamed and recorded. Names the new generation lacks are removed last. The locked reader first rolls an interrupted copy forward from the journal's generation, then verifies every fixed name, and holds the lock until it is done. If that generation does not verify, the reader fails before consuming anything. A copy into `exportPath` itself gives Painter's flat layout beside the publication. It refuses `current.json`, `generations`, `publication.lock` and the journal as fixed names. Staging names never appear in a receipt, a journal or the pointer.
+- **Receipt** (`uzpainter/export-receipt/1`, `schema/receipt.schema.json`).
+  - **Header.** The ARC-11 header (`revision`, `evaluator_profile`, `compat_profile`, `app_version`, `resource_hashes`), plus `build`, `generation`, `moment`, `plan` and `plan_hash`.
+  - **`files[]`.** Each entry has `path`, `key`, `root_path`, `preset`, `bytes`, `sha256`, `format`, `bit_depth`, `colour_space`, `size`, `layout`, `channels` and `normal`. `normal` is `{role: combined, relief: {revision, height_hash, method}}`, `{role: geometry_only, relief: null}` or null. Each entry also has `consumer_gaps`.
+  - **`skipped[]`.** The maps the plan does not write, with their kind and reason.
+  - **`manifest_export`.** The Assets3D block in the form of `manifest-schema-v2.json` `$defs/export`, replacing v1's `exportacao`. `manifest_files` holds the `files` entries its keys name. Their paths are relative to the generation; the pipeline adapter rebases them. The block is null when the export writes no file.
+  - **Resources.** `resource_hashes` lists the resources the files read: bitmaps of the read channel DAGs, a diagnostic material's masks, the mesh maps read, and the texturing mesh.
+  - **Identity.** `app_version` and `build` come from the caller (`PublishRequest::identity`).
+  - **Colour space.** Every image file written today is `linear`.
+  - **Consumer gaps.** A SpecularWeight map carries the consumer gap of `08-export.md` §4.
