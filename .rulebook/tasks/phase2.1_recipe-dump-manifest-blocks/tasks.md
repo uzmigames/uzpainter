@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.25_pilot-wand — Phase 1 is functionally complete on main and open only on recordings and CI (coordinator, 2026-10-12); left unchecked until G1 records it
+- [ ] 1.1 Prerequisites accepted: phase1.25_pilot-wand — not accepted: phase1.25 still has implementation open (items 2.6 and 2.7) besides its recordings and CI; this task's work is host preparation, and the task stays open and unaccepted until phase1.25 and G1 are accepted
 
 ## 2. Implementation
 - [x] 2.1 Recipe JSON schema covering every output-determining field of `03-…` §7 plus revision, profiles, app version and resource hashes — `src/uzp_core/schema/recipe.schema.json`, `src/uzp_core/manifest/recipe.h` (decision 122)

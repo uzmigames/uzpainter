@@ -294,9 +294,10 @@ bool HasInvalidFlag(const json::Object& extra) {
 void IdenticalReload() {
     auto f = MakeFixture("identical");
     const core::Snapshot before = f->doc->snapshot();
-    // The same file again: the mesh source (decision 116) is unchanged too.
-    const ReloadOutcome out = Reload(*f, Obj(BaseQuads()), Settings(), "first");
-    CHECK(out.outcome.result && out.outcome.result->status == core::ResultStatus::no_op);
+    // The identical bytes from another folder: no pixel or derivation change, only the mesh's
+    // source (decision 116) moves, in a metadata-only revision (decision 123).
+    const ReloadOutcome out = Reload(*f, Obj(BaseQuads()));
+    CHECK(out.outcome.result && out.outcome.result->status == core::ResultStatus::committed);
     CHECK(out.report);
     const ReloadReport& r = *out.report;
     CHECK(r.added.empty() && r.removed.empty() && r.renamed.empty());
@@ -307,8 +308,14 @@ void IdenticalReload() {
     CHECK(RegionsOf(r, "cloth").texels.size() == 128u * 128u);
     CHECK(r.invalid_mesh_maps.empty() && r.invalid_geometry_masks.empty() && r.invalid_procedural.empty());
     CHECK(r.invalid_receipt_resources.empty());
-    CHECK(f->doc->revision() == before.revision);
-    CHECK(*f->doc->snapshot().project == *before.project);
+    CHECK(f->doc->revision() == before.revision + 1);
+    core::Project expected = *before.project;
+    expected.mesh->source = (f->dir / "next" / "mesh.obj").string();
+    CHECK(*f->doc->snapshot().project == expected);
+    // The same file again is a no-op: nothing at all changes.
+    const ReloadOutcome again = Reload(*f, Obj(BaseQuads()));
+    CHECK(again.outcome.result && again.outcome.result->status == core::ResultStatus::no_op);
+    CHECK(f->doc->revision() == before.revision + 1 && *f->doc->snapshot().project == expected);
     const json::Object sets = std::get<json::Object>(r.ToJson().at("sets").data);
     CHECK(sets.at("added") == json::Value(json::Array{}) && sets.at("removed") == json::Value(json::Array{}) &&
           sets.at("renamed") == json::Value(json::Array{}));

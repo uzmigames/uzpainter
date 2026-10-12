@@ -130,7 +130,8 @@ struct ReloadReport {
 struct ReloadOutcome {
     /// The transaction's outcome; its result's `returned.reload` is `report->ToJson()`.
     core::RequestOutcome outcome;
-    /// Set when the reload was applied (committed, or a no-op for an identical mesh).
+    /// Set when the reload was applied: committed, or a no-op for an identical mesh from the same
+    /// path (from another path the new `mesh.source` is a metadata-only commit, decision 123).
     std::optional<ReloadReport> report;
     /// The typed error behind a failed result (`ImportError`, `MaterialMappingError`,
     /// `core::ValueError`, a reader or commit error), for the bindings to raise.

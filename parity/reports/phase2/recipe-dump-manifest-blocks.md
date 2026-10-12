@@ -18,11 +18,11 @@ Run on 2026-10-12, branch `wt/phase2.1-recipe-dump`, on the owner's machine. CPU
 **Counts.** First batch: 47 tests, 43 passing, 4 failing. All four were fixed and re-run by node id, and they pass:
 
 - two script bugs in `test_pyapi_recipe.py`;
-- `identical_reload` (see below).
+- `identical_reload` (decision 123, below).
 
 Second batch: 36 of 36 pass. It covered `test_pyapi_native.py` and `test_capability_conformance.py` (later-phase calls, templates, reload, export, public symbols, pending evidence, release gaps), all of `test_export_publication.py`, and the rebuild test. The CLI test above passes. The `uzp-core-tests` native cases pass, 14 of 14.
 
-**Found on main.** `tests/mesh/reload_test.cpp` `identical_reload` has expected a no-op since `2ace938`, but it reloaded the identical mesh from another folder. Decision 116 records that folder as the new `mesh.source`, so the reload commits. The case now reloads the same file.
+**Found on main, settled by decision 123.** `tests/mesh/reload_test.cpp` `identical_reload` has failed since `2ace938`. phase1.6 called an identical reload a no-op, but decision 116 now records the folder a reload imports from as `mesh.source`. Reloading identical bytes from another folder therefore commits. Decision 123 (model panel, one round) keeps that behaviour. It is a metadata-only revision: the new `mesh.source` is recorded, because export provenance names it, and no pixel or derivation changes. A reload from the same path stays a `no_op`. The case tests both, and phase1.6's wording is amended.
 
 **Open, by scope split (decision 122 §5).**
 
