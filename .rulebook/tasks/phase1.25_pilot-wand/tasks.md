@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.24_python-api-facade
+- [ ] 1.1 Prerequisites accepted: phase1.24_python-api-facade (accepted without the wand's exported maps: the 16-bit export of the sRGB8 material channels is this task's item 2.6, and the five-map export and its parity are items 3.1 and 4.1; decision 116)
 
 ## 2. Implementation
 - [ ] 2.1 Author `parity/manifests/phase1/wand-v1.json` with the independently authored inputs, instruction sequence, settings and software identities
