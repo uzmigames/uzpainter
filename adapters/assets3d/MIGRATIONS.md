@@ -1,0 +1,92 @@
+# Assets3D pipeline adapter: migrations
+
+The UzmiGames adapter that lets the Assets3D pipeline scripts drive UzPainter byte-unchanged. Task `phase1.23_pyapi-pipeline-adapter`, decision 113. Architecture: `docs/architecture/10-python-api.md` §2 and §6.
+
+It is not part of the `substance_painter` facade. The facade holds Painter's documented symbols only. Every adaptation of how the pipeline reaches Painter is listed here, one entry per adapted call. The scripts themselves are never edited. The wand fixture pins them by SHA-256 (`tests/adapters/assets3d/wand.py`, from the R9 request manifest of decision 099):
+
+| Script | SHA-256 |
+|---|---|
+| `Pipeline/retopology/wand11-v1/painter_create.py` | `6820831ccd59b66314eaab5a010607f7f55d720e6d2e628aadf9d44a6018535f` |
+| `Pipeline/painting/painter_layer_stack.py` | `cc3037413a89c687ffb2d6b340ce1ad5a1351ad4924d7911c876eeb13d29eebc` |
+| `Pipeline/retopology/wand11-v1/painter_export.py` | `777ac278c7ce376bd8652bdd8400f0e5e5e1bef561262ccb7c22a9ac1c95c468` |
+
+## Use
+
+Every Painter call of the pipeline goes through `painter_layer_stack.py`. The host-side change is one command prefix; the arguments and every absolute path stay as they are:
+
+```sh
+# before: "$MCP" "$LS" run painter_create.py      (the MCP venv's python)
+python E:/UzmiGames/UzPainter/adapters/assets3d/layer_stack.py "$LS" run painter_create.py
+python E:/UzmiGames/UzPainter/adapters/assets3d/layer_stack.py "$LS" sync --stack S.json --masks DIR --state STATE.json
+```
+
+Any Python 3.13 runs it; the script needs only the standard library. Environment: `UZPAINTER_EXE` (else `UzPainter.exe` on PATH), and optionally `UZP_ASSETS3D_SESSION` (the session file, default `%LOCALAPPDATA%/UzPainter/assets3d-adapter/session.json`) and `UZP_ASSETS3D_ROOT` (default: the script's own root). `--pin FILE=SHA256` (repeatable, before the script path) refuses the call when a file's bytes differ.
+
+## Migrations
+
+### M1. Transport: `painter_mcp_client.py execute_python` → `UzPainter.exe run`
+
+- **Painter:** `painter_layer_stack.py`'s `execute(code)` runs `[MCP_PYTHON, CLIENT, "execute_python", args.json]`. The community MCP bridge executes the code in Painter's interpreter in the namespace `{"params": {}}` and returns `{"success": true, "data": result}`. A non-JSON value becomes its `str()` (`json.dumps(..., default=str)`). An uncaught exception is an MCP error, and the client exits 1.
+- **UzPainter:** `adapters/assets3d/client.py execute_python args.json`, a drop-in for the MCP client with the same command line, runs `UzPainter.exe run adapters/assets3d/runner.py -- <code> <session> <report>`. The runner executes the code as the bridge executes it: the namespace `{"params": {}}`, and `result` normalised with `default=str`.
+  - The reply is a superset of the bridge's envelope: `{"success", "data", "stdout", "stderr", "error": {type, message, traceback}, "code_sha256", "last_committed_revision", "session", "exports", "redirects"}`. It is printed as ASCII JSON and also written to `painter-last-response.json` in `SP_MCP_CLIENT_OUTPUT_DIR` when that is set.
+  - The exit status is mapped explicitly, not forwarded: 0 when the code ran to its end; 1 for a structured failure (the code raised, or the adapter refused, as the MCP client exits on an error result); 2 for a usage error of the client; 3 when UzPainter could not run the code (missing executable, a host error, an unexpected exit of `run`, or a session held by another call).
+  - Differences: the reply also returns the captured `print()` output, which Painter keeps in its log. The traceback names the code `<uzpainter-assets3d-adapter>`, where Painter names it `<substance-painter-mcp>`.
+
+### M2. The layer-stack script's transport globals
+
+- **Painter:** the pipeline runs `"$MCP" "$LS" <command>`. The script's `CLIENT` and `MCP_PYTHON` are hard-coded paths in Assets3D.
+- **UzPainter:** `adapters/assets3d/layer_stack.py` reads the script's bytes once and compiles them with their real path, under the module name `uzp_assets3d_painter_layer_stack` (not `__main__`). It rebinds only `CLIENT` (to `client.py`) and `MCP_PYTHON` (to the running interpreter), then calls the script's own `main()` with its own arguments. This is what the script's `if __name__ == "__main__": main()` does. Its own `execute()`, reply parsing and errors run unchanged.
+  - The recorder's alternative, replacing `execute()` itself (decision 099 4b), was rejected: it would skip the script's own reply handling.
+  - `UZP_ASSETS3D_ROOT` defaults to the script's `ROOT` (the folder holding `AGENTS.md`).
+
+### M3. Private call `_substance_painter.display.save_viewport(path, w, h, _)` (`capture`)
+
+- **Painter:** a private module saves the painting view. It can return a stale camera (`docs/analysis/assets3d-pipeline/02-painter-usage.md` §8).
+- **UzPainter:** a UzmiGames shim exists only in the runner. It is installed into `sys.modules` as `_substance_painter` and `_substance_painter.display` for the adapter's run only, and calls `uzpainter.render.capture(mode="painter_viewport", path=..., width=..., height=...)`, which always captures the current state. A plain `UzPainter.exe run` script and the facade have no such module or symbol, and the capability manifest names none.
+- **Phase 1:** the capture mode does not exist yet. The shim raises `NotYetSupported` naming `painter_viewport` and its owner, `phase2.2_preview-capture`, which wires the shim to the real capture. `capture`'s code changes nothing in the project before the call, so the revision is unchanged.
+
+### M4. Session carried between calls
+
+- **Painter:** one persistent process. `painter_create.py` creates and saves a project. `sync`, in the next call, edits it without saving. `painter_export.py` saves and exports it. The session also keeps the `resource://project<N>` context counter, the active stack and `needs_saving()`.
+- **UzPainter:** `run` is one process per call. It closes the project left open with the native close, which keeps every committed revision (decisions 105, 111). The session file names what a call left open:
+  - the project file;
+  - the facade's project index;
+  - the facade's `needs_saving()`;
+  - the active stack (texture set and stack name).
+
+  The next call reopens the project through the facade and restores those values before the code runs. Uncommitted state does not exist: every API call is a durable revision.
+  - Calls are serialised per session file by an OS lock (`<session>.lock`). The lock is released if the process dies. A call that cannot take it within about ten seconds is a host error, because Painter serves one call at a time.
+  - The session file is replaced atomically (a staging file, then a rename).
+  - A carried project that no longer opens fails the call before the code runs and empties the session.
+  - A call that leaves an untitled (never saved) project open fails with `AdapterSessionError`, with the script's `result` kept in `data`: the native close removes an untitled project's folder, so it cannot outlive the process.
+  - Not carried: the layer selection, selection types, the UI mode and collapsed state. They are inert script context (10 §3): nothing in evaluation or export reads them.
+- **Until:** `phase2.1_supervisor-ipc-worker`'s persistent worker, which makes the carry unnecessary.
+
+### M5. `painter_layer_stack.py smart` refused before any call
+
+- **Painter:** `smart`'s Painter-side code first deletes the root nodes named `SM *` and `Layer 1`, then inserts and edits fills, and only then calls `insert_smart_mask` and `resource.search`. Every call commits on its own.
+- **UzPainter:** smart masks and resource search are release gaps (`phase3.6_smart-presets-projections`). Running the code would leave a half-changed project. The entry therefore refuses `smart` before any call reaches UzPainter. It prints `{"success": false, "error": {"type": "NotYetSupported", "capability": "smart presets", "owner": ..., "missing": [...]}}` and exits 1.
+  - The gate (`GATES` in `layer_stack.py`) reads the shipped `capabilities.json` (`UzPainter.exe capabilities`). It opens by itself once every symbol it needs is `supported`. A `pending-evidence` symbol works but is unverified, so it keeps the gate closed.
+  - Code sent through `run FILE` is not gated. A missing call there raises where it is reached, after the script's earlier calls committed, as Painter's contract has it (10 §5).
+
+### M6. Exports: the consumers' route, the receipt and the manifest
+
+- **Painter:** `export_project_textures` writes the maps into `exportPath` under their file names. Assets3D's consumers (the Blender delivery and review scripts) read them there by name, later, with no lock.
+- **UzPainter:** the export publishes a generation with its receipt (`exportPath/generations/<N>/`), and the facade copies it under its fixed names into `exportPath`, which is Painter's flat layout, through a journalled copy (decision 097).
+  - **Route.** The consumers keep that fixed-name copy, the only layout the unchanged scripts and consumers know. Before the call reports success, the runner verifies the copy of the run's last export into each folder: the journal names the generation the export published, it is complete (`copied` = `files`, `obsolete` empty), and every file has the receipt's size and SHA-256. Otherwise the call fails with `AdapterExportError`.
+  - **Residual: reads after the call are not locked.** Unchanged Blender consumers cannot take the publication lock or open a pinned generation. Another export into the same folder while they read would race them. Assets3D's own Painter lock (`collab.py lock acquire --app Painter`, one agent at a time) serialises exports and reads. The pinned-generation route (`OpenPinnedDelivery`) is for consumers that can change, owned by `phase3.1_assets3d-cutover`.
+  - **Manifest.** Each export appears in the reply's `exports[]` with its generation, receipt, fixed-name copies and `manifest`. `manifest` holds the receipt's `manifest_files`, with its paths rebased under the Assets3D root (`UZP_ASSETS3D_ROOT`), beside its `manifest_export` block (Assets3D manifest schema v2 `$defs/export`). Generation-relative paths take the generation folder; `project` and `mesh` take the project file and the imported mesh. When a path lies outside the root, `manifest` is null and `manifest_unavailable` gives the reason; the export itself still succeeds.
+  - **App version and build.** The native export already passes them: `uzpainter.application.version()` and `uzpainter-<build mode>`.
+
+### M7. Fixture only: repointed arguments files (`UZP_ASSETS3D_OPEN_REDIRECTS`)
+
+- **Painter:** `painter_create.py` and `painter_export.py` read their arguments from a hard-coded Assets3D path. Those arguments name the production `.spp` and export folder.
+- **UzPainter, the wand fixture only:** the runner's namespace `open` maps exactly the paths given in `UZP_ASSETS3D_OPEN_REDIRECTS` (JSON `{path: copy}`) to their copies. This is decision 099's adaptation (a). The fixture's copies name a mirror of the Assets3D tree in its work directory, so nothing is written under Assets3D.
+  - The reply's `redirects` lists every redirect applied, so none is silent.
+  - The pipeline never sets the variable, and with it unset `open` is the builtin.
+
+## Not adapted (UzPainter differs; owners named)
+
+- **`OCIO` set by `painter_create.py`:** the variable reaches UzPainter's process and changes nothing. The project is in the facade's one pinned colour profile (Painter's Legacy mode: linear working space, sRGB I/O, the Assets3D contract). The OCIO configuration is unrecorded: Session O (decision 101) and the Wand v1 Tier 1 recording (R9), owner `phase1.25_pilot-wand`.
+- **`painter_create.py` run again onto an existing `.spp`:** `save_as` onto an existing file raises `ProjectError` (native store semantics, decision 105). What Painter does there is unrecorded: recording **P23-A** (decision 113), owner `phase1.24_python-api-facade`.
+- **The wand's five-map export:** the 16-bit BaseColor (an sRGB8 material channel at PNG 16) is refused before writing, naming recording R-090 (decision 103). Owner: `phase1.25_pilot-wand` item 2.6.
