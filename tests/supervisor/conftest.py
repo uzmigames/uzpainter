@@ -228,7 +228,10 @@ class Mcp:
         *args: str,
         env: dict[str, str] | None = None,
         initialize: bool = True,
+        ledger: Path | None = None,
     ) -> None:
+        # Never the user's own ledger: one per test unless the test shares one.
+        self.ledger = ledger or tmp_path / f"ledger-{next(_pipe_numbers)}.sqlite3"
         self.stderr_path = tmp_path / f"supervisor-{next(_pipe_numbers)}.log"
         self._stderr = self.stderr_path.open("wb")
         self.process = subprocess.Popen(
@@ -239,6 +242,8 @@ class Mcp:
                 str(tmp_path / "out"),
                 "--crash-dir",
                 str(tmp_path / "crashes"),
+                "--ledger",
+                str(self.ledger),
                 *args,
             ],
             stdin=subprocess.PIPE,
@@ -250,6 +255,7 @@ class Mcp:
         self.stdout_lines: list[str] = []
         threading.Thread(target=self._read, daemon=True).start()
         self._ids = itertools.count(1)
+        self._replies: dict[int, dict[str, Any]] = {}
         if initialize:
             self.request(
                 "initialize",
@@ -282,9 +288,20 @@ class Mcp:
     def notify(self, method: str, params: dict[str, Any] | None = None) -> None:
         self._write({"jsonrpc": "2.0", "method": method, **({"params": params} if params else {})})
 
-    def request(self, method: str, params: dict[str, Any], timeout: float = 300) -> dict[str, Any]:
+    def send(self, method: str, params: dict[str, Any]) -> int:
+        """Writes a request without waiting for its reply; its id (`reply` reads the reply)."""
         request_id = next(self._ids)
         self._write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+        return request_id
+
+    def request(self, method: str, params: dict[str, Any], timeout: float = 300) -> dict[str, Any]:
+        return self.reply(self.send(method, params), timeout)
+
+    def reply(self, request_id: int, timeout: float = 300) -> dict[str, Any]:
+        """The result of request `request_id`; replies to other requests are kept for them."""
+        if request_id in self._replies:
+            return self._replies.pop(request_id)
+        method = f"request {request_id}"
         deadline = time.monotonic() + timeout
         while True:
             try:
@@ -295,15 +312,24 @@ class Mcp:
                 raise AssertionError(f"the supervisor closed stdout: {self.log()}")
             message = json.loads(line)
             assert message.get("jsonrpc") == "2.0", line
-            if message.get("id") == request_id:
-                assert "error" not in message, message
-                result = message["result"]
-                assert isinstance(result, dict)
+            if "id" not in message or "method" in message:  # a notification or server request
+                continue
+            assert "error" not in message, message
+            result = message["result"]
+            assert isinstance(result, dict)
+            if message["id"] == request_id:
                 return result
+            self._replies[message["id"]] = result
 
     def call(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
-        """The structured content of a tool call: `{result, committed_revision?}` or `{error}`."""
-        result = self.request("tools/call", {"name": name, "arguments": arguments or {}})
+        """The structured content of a tool call: `{result, committed_revision?, receipt}` or
+        `{error, receipt}`."""
+        return self.content(
+            self.request("tools/call", {"name": name, "arguments": arguments or {}})
+        )
+
+    @staticmethod
+    def content(result: dict[str, Any]) -> dict[str, Any]:
         content = result["structuredContent"]
         assert isinstance(content, dict)
         assert result.get("isError", False) == ("error" in content)

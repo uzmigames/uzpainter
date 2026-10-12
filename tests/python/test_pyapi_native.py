@@ -440,8 +440,6 @@ LATER_PHASE = [
     ("uzpainter.baking", "bake_selected_textures_async", "phase3.5_embree-bakers"),
     ("uzpainter.baking", "BakingParameters", "phase3.5_embree-bakers"),
     ("uzpainter.render", "capture", "phase2.3_realtime-preview"),
-    ("uzpainter.diagnostics", "isolate", "phase2.2_recipe-and-diagnostics"),
-    ("uzpainter.diagnostics", "region_stats", "phase2.2_recipe-and-diagnostics"),
 ]
 
 

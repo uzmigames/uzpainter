@@ -91,7 +91,7 @@ def unrecorded_default(channel: Any) -> Exception:
     name = "the mask source" if channel is None else channel.name
     error: Exception = uzpainter.NotYetSupported(
         f"Painter's default source of {name} is not recorded: set it before reading or exporting "
-        f"it ({colour.CHANNEL_DEFAULTS_PROBE}; phase1.14_compositor-core)"
+        f"it ({colour.CHANNEL_DEFAULTS_PROBE}; phase1.15_compositor-colour-fits)"
     )
     return error
 

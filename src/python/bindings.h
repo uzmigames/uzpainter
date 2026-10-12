@@ -155,6 +155,7 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels);
 void BindProject(py::module_& m);       // project
 void BindExport(py::module_& m, py::module_& jobs);  // export, jobs
 void BindMisc(py::module_& m);          // logging, application, properties, later-phase modules
+void BindDiagnostics(py::module_& m);   // diagnostics (called by BindMisc)
 /// `uzpainter.display`, `uzpainter.render.display`, `uzpainter.render.shader` (display.h).
 void BindDisplay(py::module_& display, py::module_& render_display, py::module_& shader);
 

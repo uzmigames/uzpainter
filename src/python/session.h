@@ -140,6 +140,12 @@ public:
     /// One API call (see above). `tool` and `arguments` form the operation record's request.
     CallResult Mutate(const std::string& tool, core::json::Object arguments,
                       const std::function<void(core::Edit&)>& call);
+    /// One typed tool call of the worker (src/supervisor/worker.cpp): `request` as its client sent
+    /// it (its own idempotency key and original precondition), decided against the stored
+    /// operation rows and executed only when admitted (`ProjectStore::Submit`), with the support
+    /// check of `Mutate`. Returns the decision and, when executed, the committed or failed
+    /// result; a committed result is recorded like `Mutate`'s. Not inside a native `Transaction`.
+    core::RequestOutcome Submit(core::MutationRequest request, const std::function<void(core::Edit&)>& call);
 
     /// The native `Transaction` of this thread: opened (waiting for the document lock), then
     /// committed or rolled back. `Commit` raises the transaction's error when it fails.

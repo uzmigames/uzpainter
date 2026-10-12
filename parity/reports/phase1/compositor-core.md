@@ -1,17 +1,17 @@
 # Compositor core: union of the Tier 0 golden sets (`phase1.14_compositor-core`)
 
-Run: **interim**, 2026-10-11 22:09 UTC, commit `de66bfd55b53`, envelope `painter-12.1.5+js-api.1.1.20`, backend DX12 (`gpu`), adapter NVIDIA GeForce RTX 4090. Command: `python tests/evaluator/union_run.py --label interim` (2 passes in separate processes, pass-a 408 s, pass-b 415 s). Numbers and hashes only (`docs/licensing-and-clean-room.md`).
+Run: **final**, 2026-10-12 22:38 UTC, commit `563e0cc873b4`, envelope `painter-12.1.5+js-api.1.1.20`, backend DX12 (`gpu`), adapter NVIDIA GeForce RTX 4090. Command: `python tests/evaluator/union_run.py --label final` (2 passes in separate processes, pass-a 850 s, pass-b 880 s). Numbers and hashes only (`docs/licensing-and-clean-room.md`).
 
 The union is every Tier 0 golden test of the compositor children (`tests/evaluator/test_compositor_*.py`, `backend=gpu`), each comparing with its own conversion and domain (`tests/evaluator/union_run.py`). |Δ| is in the unit named per row (16-bit export codes or float values); mean and p99 are pooled over every compared value of the row (p99 nearest-rank, exact from the |Δ| histograms); differing texels have at least one differing component. Verdicts follow `tools/parity/verdict.py` (an unstable golden's exact target is r1, decision 032; r2 passes only through the exception register).
 
 ## Headline
 
-- Goldens compared: 57; maps: 1434; comparisons: 2834 (1445 against r1, 1389 against r2).
-- Against r1: 1445 of 1445 maps exact.
-- Verdicts: pass 2834.
-- Oracle stability: 31 of 1434 compared maps differ between r1 and r2.
-- UzPainter repeatability: 1456 of 1456 evaluated channel rasters byte-identical across the passes; 2834 of 2834 comparison statistics identical.
-- Tests per pass: pass-a: 125 passed, 0 failed, 0 skipped; pass-b: 125 passed, 0 failed, 0 skipped.
+- Goldens compared: 74; maps: 1839; comparisons: 3639 (1850 against r1, 1789 against r2).
+- Against r1: 1850 of 1850 maps exact.
+- Verdicts: pass 3639.
+- Oracle stability: 36 of 1839 compared maps differ between r1 and r2.
+- UzPainter repeatability: 1899 of 1899 evaluated channel rasters byte-identical across the passes; 3639 of 3639 comparison statistics identical.
+- Tests per pass: pass-a: 163 passed, 0 failed, 0 skipped; pass-b: 163 passed, 0 failed, 0 skipped.
 
 ## Per golden
 
@@ -88,17 +88,44 @@ The union is every Tier 0 golden test of the compositor children (`tests/evaluat
 | `tier0/semantics/group-masks` | float32 value | 4 | 0, 0, 0 | 0 of 262144 (0.0000) | 0, 0, 0 | 0 of 262144 (0.0000) | stable (12 maps) | `0c709211d33a0b2b` |
 | `tier0/semantics/height-normal-bevelled-cube` | 16-bit code value | 2 | 0, 0, 0 | 0 of 102080 (0.0000) | 0, 0, 0 | 0 of 102080 (0.0000) | stable (3 maps) | `74fe1bb68527800c` |
 | `tier0/semantics/height-normal-bevelled-cube` | float32 value | 2 | 0, 0, 0 | 0 of 104376 (0.0000) | 0, 0, 0 | 0 of 104376 (0.0000) | stable (3 maps) | `74fe1bb68527800c` |
+| `tier0/semantics/height-normal-channel-coverage` | 16-bit code value | 16 | 0, 0, 0 | 0 of 1048576 (0.0000) | 0, 0, 0 | 0 of 917504 (0.0000) | unstable: 3 of 28 maps, max 61 | `58fa28f33cdfefdb` |
+| `tier0/semantics/height-normal-channel-coverage` | float32 value | 12 | 0, 0, 0 | 0 of 786432 (0.0000) | 0, 0, 0 | 0 of 720896 (0.0000) | unstable: 3 of 28 maps, max 61 | `58fa28f33cdfefdb` |
+| `tier0/semantics/height-normal-mesh-map` | 16-bit code value | 16 | 0, 0, 0 | 0 of 1048576 (0.0000) | 0, 0, 0 | 0 of 1048576 (0.0000) | stable (28 maps) | `245069a4495272c2` |
+| `tier0/semantics/height-normal-mesh-map` | float32 value | 12 | 0, 0, 0 | 0 of 786432 (0.0000) | 0, 0, 0 | 0 of 786432 (0.0000) | stable (28 maps) | `245069a4495272c2` |
+| `tier0/semantics/height-normal-mesh-map-directx` | 16-bit code value | 8 | 0, 0, 0 | 0 of 524288 (0.0000) | 0, 0, 0 | 0 of 524288 (0.0000) | stable (14 maps) | `0571d1d45aba0b76` |
+| `tier0/semantics/height-normal-mesh-map-directx` | float32 value | 6 | 0, 0, 0 | 0 of 393216 (0.0000) | 0, 0, 0 | 0 of 393216 (0.0000) | stable (14 maps) | `0571d1d45aba0b76` |
 | `tier0/semantics/height-normal-plane-amplitudes` | 16-bit code value | 8 | 0, 0, 0 | 0 of 524288 (0.0000) | 0, 0, 0 | 0 of 524288 (0.0000) | stable (12 maps) | `ffbdd78546998ce3` |
 | `tier0/semantics/height-normal-plane-amplitudes` | float32 value | 8 | 0, 0, 0 | 0 of 524288 (0.0000) | 0, 0, 0 | 0 of 524288 (0.0000) | stable (12 maps) | `ffbdd78546998ce3` |
+| `tier0/semantics/height-normal-resolution-1024` | 16-bit code value | 8 | 0, 0, 0 | 0 of 8388608 (0.0000) | 0, 0, 0 | 0 of 8388608 (0.0000) | stable (12 maps) | `5a63f7eca7893785` |
+| `tier0/semantics/height-normal-resolution-1024` | float32 value | 4 | 0, 0, 0 | 0 of 4194304 (0.0000) | 0, 0, 0 | 0 of 4194304 (0.0000) | stable (12 maps) | `5a63f7eca7893785` |
+| `tier0/semantics/height-normal-resolution-1024-sobel` | 16-bit code value | 8 | 0, 0, 0 | 0 of 8388608 (0.0000) | 0, 0, 0 | 0 of 8388608 (0.0000) | stable (12 maps) | `6e51f5eccb47721b` |
+| `tier0/semantics/height-normal-resolution-1024-sobel` | float32 value | 4 | 0, 0, 0 | 0 of 4194304 (0.0000) | 0, 0, 0 | 0 of 4194304 (0.0000) | stable (12 maps) | `6e51f5eccb47721b` |
+| `tier0/semantics/height-normal-resolution-2048` | 16-bit code value | 8 | 0, 0, 0 | 0 of 33554432 (0.0000) | 0, 0, 0 | 0 of 25165824 (0.0000) | unstable: 2 of 12 maps, max 1 | `0f02c91260dac103` |
+| `tier0/semantics/height-normal-resolution-2048` | float32 value | 4 | 0, 0, 0 | 0 of 16777216 (0.0000) | 0, 0, 0 | 0 of 16777216 (0.0000) | unstable: 2 of 12 maps, max 1 | `0f02c91260dac103` |
+| `tier0/semantics/height-normal-resolution-512` | 16-bit code value | 8 | 0, 0, 0 | 0 of 2097152 (0.0000) | 0, 0, 0 | 0 of 2097152 (0.0000) | stable (12 maps) | `e52b103f64176ebf` |
+| `tier0/semantics/height-normal-resolution-512` | float32 value | 4 | 0, 0, 0 | 0 of 1048576 (0.0000) | 0, 0, 0 | 0 of 1048576 (0.0000) | stable (12 maps) | `e52b103f64176ebf` |
 | `tier0/semantics/height-normal-sphere` | 16-bit code value | 2 | 0, 0, 0 | 0 of 117632 (0.0000) | 0, 0, 0 | 0 of 117632 (0.0000) | stable (3 maps) | `1a05c72b79b77abe` |
 | `tier0/semantics/height-normal-sphere` | float32 value | 2 | 0, 0, 0 | 0 of 120256 (0.0000) | 0, 0, 0 | 0 of 120256 (0.0000) | stable (3 maps) | `1a05c72b79b77abe` |
+| `tier0/semantics/height-signed-addition` | 16-bit code value | 16 | 0, 0, 0 | 0 of 1048576 (0.0000) | 0, 0, 0 | 0 of 1048576 (0.0000) | stable (24 maps) | `731b1e97ca020aaa` |
+| `tier0/semantics/height-signed-addition` | float32 value | 8 | 0, 0, 0 | 0 of 524288 (0.0000) | 0, 0, 0 | 0 of 524288 (0.0000) | stable (24 maps) | `731b1e97ca020aaa` |
 | `tier0/semantics/levels-clamp` | 16-bit code value | 4 | 0, 0, 0 | 0 of 262144 (0.0000) | 0, 0, 0 | 0 of 262144 (0.0000) | stable (16 maps) | `385ff8dd604e5fb0` |
 | `tier0/semantics/levels-clamp` | float32 value | 12 | 0, 0, 0 | 0 of 786432 (0.0000) | 0, 0, 0 | 0 of 786432 (0.0000) | stable (16 maps) | `385ff8dd604e5fb0` |
 | `tier0/semantics/mask-precision` | 16-bit code value | 16 | 0, 0, 0 | 0 of 1048576 (0.0000) | 0, 0, 0 | 0 of 1048576 (0.0000) | stable (20 maps) | `e2d703c9d2872784` |
 | `tier0/semantics/mask-precision` | float32 value | 4 | 0, 0, 0 | 0 of 262144 (0.0000) | 0, 0, 0 | 0 of 262144 (0.0000) | stable (20 maps) | `e2d703c9d2872784` |
+| `tier0/semantics/normal-channel-import` | 16-bit code value | 8 | 0, 0, 0 | 0 of 524288 (0.0000) | 0, 0, 0 | 0 of 524288 (0.0000) | stable (14 maps) | `eebb4246d50ec6d5` |
+| `tier0/semantics/normal-channel-import` | float32 value | 6 | 0, 0, 0 | 0 of 393216 (0.0000) | 0, 0, 0 | 0 of 393216 (0.0000) | stable (14 maps) | `eebb4246d50ec6d5` |
+| `tier0/semantics/normal-channel-import-directx` | 16-bit code value | 8 | 0, 0, 0 | 0 of 524288 (0.0000) | 0, 0, 0 | 0 of 524288 (0.0000) | stable (14 maps) | `835b59789f332545` |
+| `tier0/semantics/normal-channel-import-directx` | float32 value | 6 | 0, 0, 0 | 0 of 393216 (0.0000) | 0, 0, 0 | 0 of 393216 (0.0000) | stable (14 maps) | `835b59789f332545` |
 | `tier0/semantics/quantisation-thirds` | 16-bit code value | 20 | 0, 0, 0 | 0 of 1310720 (0.0000) | not compared | - | unstable: 16 of 36 maps, max 512 | `7cf9c35b8d633e61` |
 | `tier0/semantics/quantisation-thirds` | float32 value | 16 | 0, 0, 0 | 0 of 1048576 (0.0000) | not compared | - | unstable: 16 of 36 maps, max 512 | `7cf9c35b8d633e61` |
-| `tier0/semantics/resample-uv` | 16-bit code value | 29 | 0, 0, 0 | 0 of 1900544 (0.0000) | 0, 0, 0 | 0 of 1900544 (0.0000) | stable (29 maps) | `367d491d7c52a165` |
+| `tier0/semantics/resample-uv` | 16-bit code value | 32 | 0, 0, 0 | 0 of 2097152 (0.0000) | 0, 0, 0 | 0 of 2097152 (0.0000) | stable (32 maps) | `367d491d7c52a165` |
+| `tier0/semantics/resample-uv-anisotropic` | 16-bit code value | 40 | 0, 0, 0 | 0 of 2621440 (0.0000) | 0, 0, 0 | 0 of 2621440 (0.0000) | stable (40 maps) | `f9421359740f9701` |
+| `tier0/semantics/resample-uv-anisotropic-impulse` | 16-bit code value | 40 | 0, 0, 0 | 0 of 2621440 (0.0000) | 0, 0, 0 | 0 of 2621440 (0.0000) | stable (40 maps) | `bc5a5096db686939` |
+| `tier0/semantics/resample-uv-impulse` | 16-bit code value | 32 | 0, 0, 0 | 0 of 2097152 (0.0000) | 0, 0, 0 | 0 of 2097152 (0.0000) | stable (32 maps) | `d4e0d8c2bef7d5e8` |
+| `tier0/semantics/resample-uv-lod` | 16-bit code value | 32 | 0, 0, 0 | 0 of 2097152 (0.0000) | 0, 0, 0 | 0 of 2097152 (0.0000) | stable (32 maps) | `80bf855316ed9059` |
+| `tier0/semantics/resample-uv-lod-boundaries` | 16-bit code value | 40 | 0, 0, 0 | 0 of 2621440 (0.0000) | 0, 0, 0 | 0 of 2621440 (0.0000) | stable (40 maps) | `cbc19cbd97632759` |
+| `tier0/semantics/resample-uv-minify` | 16-bit code value | 28 | 0, 0, 0 | 0 of 1835008 (0.0000) | 0, 0, 0 | 0 of 1835008 (0.0000) | stable (28 maps) | `65e85020f81558fc` |
+| `tier0/semantics/resample-uv-rotation` | 16-bit code value | 20 | 0, 0, 0 | 0 of 1310720 (0.0000) | 0, 0, 0 | 0 of 1310720 (0.0000) | stable (20 maps) | `8a7ee1e00f74e074` |
 
 ## Maps with a difference
 
@@ -116,21 +143,51 @@ None.
 
 Recorded goldens of `tier0/semantics` and `tier0/semantics-ui` outside the union (not yet owned by a comparison, or outside the compositor):
 
+- `tier0/semantics/ao-mixed-isolation-8bit`
+- `tier0/semantics/ao-mixed-isolation-float`
+- `tier0/semantics/ao-mixed-isolation`
+- `tier0/semantics/ao-mixed-opacity-float`
+- `tier0/semantics/ao-mixed-opacity`
 - `tier0/semantics/ao-mixed`
-- `tier0/semantics/height-normal-channel-coverage`
-- `tier0/semantics/height-normal-mesh-map-directx`
-- `tier0/semantics/height-normal-mesh-map`
-- `tier0/semantics/height-normal-resolution-1024-sobel`
-- `tier0/semantics/height-normal-resolution-1024`
-- `tier0/semantics/height-normal-resolution-2048`
-- `tier0/semantics/height-normal-resolution-512`
-- `tier0/semantics/height-signed-addition`
-- `tier0/semantics/normal-channel-import-directx`
-- `tier0/semantics/normal-channel-import`
-- `tier0/semantics/resample-uv-anisotropic-impulse`
-- `tier0/semantics/resample-uv-anisotropic`
-- `tier0/semantics/resample-uv-impulse`
-- `tier0/semantics/resample-uv-lod-boundaries`
-- `tier0/semantics/resample-uv-lod`
-- `tier0/semantics/resample-uv-minify`
-- `tier0/semantics/resample-uv-rotation`
+- `tier0/semantics/export-alpha-layouts`
+- `tier0/semantics/export-bit-depth`
+- `tier0/semantics/export-dither`
+- `tier0/semantics/export-ocio-encode-legacy`
+- `tier0/semantics/export-padding-bevelled-cube`
+- `tier0/semantics/export-padding-seam-1024`
+- `tier0/semantics/export-padding-seam-256`
+- `tier0/semantics/export-padding-seam-field-1024`
+- `tier0/semantics/export-padding-seam-field-256`
+- `tier0/semantics/export-padding-sphere`
+- `tier0/semantics/export-padding`
+- `tier0/semantics/export-probes-aliases-coat`
+- `tier0/semantics/export-probes-aliases-fuzz`
+- `tier0/semantics/export-probes-aliases-subsurface`
+- `tier0/semantics/export-probes-channels`
+- `tier0/semantics/export-probes-config`
+- `tier0/semantics/export-probes-naming`
+- `tier0/semantics/export-probes-r091-alpha`
+- `tier0/semantics/export-probes-r091-dotted`
+- `tier0/semantics/export-probes-r091-keys`
+- `tier0/semantics/export-probes-r091-mixes`
+- `tier0/semantics/export-probes-r091-naming`
+- `tier0/semantics/export-resize`
+- `tier0/semantics/view-2d-state-camera`
+- `tier0/semantics/view-2d-state-default-repeat`
+- `tier0/semantics/view-2d-state-default`
+- `tier0/semantics/view-2d-state-environment`
+- `tier0/semantics/view-2d-state-tone-aces`
+- `tier0/semantics/view-2d-state-tone-linear`
+- `tier0/semantics/virtual-maps-converted-float`
+- `tier0/semantics/virtual-maps-converted`
+- `tier0/semantics/virtual-maps-coverage-float`
+- `tier0/semantics/virtual-maps-coverage`
+- `tier0/semantics/virtual-maps-template-openpbr-coat-float`
+- `tier0/semantics/virtual-maps-template-openpbr-coat`
+- `tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend-float`
+- `tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend`
+- `tier0/semantics/virtual-maps-template-pbr-specular-glossiness-float`
+- `tier0/semantics/virtual-maps-template-pbr-specular-glossiness`
+- `tier0/semantics-ui/export-probes-r091-renamed`
+
+Owners of the goldens above: every one is an export recording (`export-plan-compiler.md` §4 and the export recording plan: requests R-085, R-086, R-090, R-091 and R-092, decisions 087, 093 and 100; the `export-*` probes, the virtual maps `virtual-maps-*`, `ao-mixed*` and `view-2d-state-*`), not a compositor channel-map golden. Their comparisons belong to the export tests (`tests/export`, `tests/parity/test_tier0_semantics_ui.py`) and to their owners `phase1.15_export-plan-compiler` and `phase1.18_export-engine`, with the export gaps of decision 103 assigned to `phase1.25_pilot-wand` and `phase3.2_unreal-ue56-packed-preset`. The readbacks of `export-ocio-encode-legacy` belong to the facade (`tests/python/test_pyapi_facade_tier0.py`), and its colour gaps belong to `phase1.15_compositor-colour-fits` (decision 130). The 17 compositor goldens that the interim run listed here (the `height-normal-*`, `height-signed-addition`, `normal-channel-import*` and `resample-uv-*` sets) are now compared in the union.

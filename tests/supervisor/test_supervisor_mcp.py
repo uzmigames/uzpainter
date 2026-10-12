@@ -57,11 +57,17 @@ def test_tools_are_forwarded_and_stdout_carries_protocol_frames_only(
     tools = {tool["name"]: tool for tool in session.request("tools/list", {})["tools"]}
     assert set(tools) == {
         "supervisor_status",
+        "wait_idle",
         "project_open",
         "project_close",
         "project_save",
         "project_inspect",
         "evaluate_channel",
+        "snapshot_layer_tree",
+        "diff_snapshots",
+        "isolate_layer",
+        "material_views",
+        "region_stats",
         "display_get",
         "display_set",
         "shader_get",
@@ -70,7 +76,20 @@ def test_tools_are_forwarded_and_stdout_carries_protocol_frames_only(
         "camera_set",
     }
     assert tools["project_open"]["inputSchema"]["required"] == ["path"]
-    assert session.call("project_inspect") == {"result": {"open": False}}
+    assert tools["isolate_layer"]["inputSchema"]["required"] == ["uid", "channels", "path"]
+    # The Diagnostics tools are reads (decision 136): admitted without a lease, key or precondition.
+    for name in (
+        "snapshot_layer_tree",
+        "diff_snapshots",
+        "isolate_layer",
+        "material_views",
+        "region_stats",
+    ):
+        assert tools[name]["annotations"]["readOnlyHint"] is True, name
+        assert "idempotency_key" not in tools[name]["inputSchema"]["properties"], name
+    inspected = session.call("project_inspect")
+    assert inspected["result"] == {"open": False}
+    assert inspected["receipt"]["project"] is None and inspected["receipt"]["job_id"] is None
     assert session.call("run_python", {"code": "1"})["error"]["code"] == "python_disabled"
     status = session.status()
     assert status["gpu_backend"] == "vulkan" and status["gpu_status"] == "unavailable"
@@ -449,8 +468,12 @@ def test_display_shader_and_camera_tools_hold_the_fixed_pipeline(
     }
     reply = mutate("camera_set", {"blender": blender}, "k-camera")
     assert reply["committed_revision"] == revision + 1, reply
-    assert reply["result"]["camera"] == CAMERA
-    assert reply["result"]["blender"] == blender
+    assert reply["result"]["status"] == "committed", reply
+    assert session.call("camera_get")["result"] == {"camera": CAMERA, "blender": blender}
+    # The setters run the admitted request: a retry of the key returns its stored outcome.
+    retry = mutate("camera_set", {"blender": blender}, "k-camera")
+    assert retry["result"] == reply["result"] and retry["receipt"]["admission"] == "stored_outcome"
+    assert retry["committed_revision"] == revision + 1, retry
     accepted = session.call(
         "display_set",
         {
@@ -460,28 +483,35 @@ def test_display_shader_and_camera_tools_hold_the_fixed_pipeline(
             "expected_revision": revision + 1,
         },
     )
-    assert (
-        accepted["committed_revision"] == revision + 1 and accepted["result"]["name"] == "common"
-    ), accepted
+    assert accepted["committed_revision"] == revision + 1, accepted
+    assert accepted["result"]["status"] == "no_op", accepted
+    assert session.call("display_get")["result"]["name"] == "common"
 
 
 def test_mutating_tools_publish_their_key_and_precondition(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:
-    """2.5: the MCP schema of a mutating tool requires `idempotency_key` and
-    `expected_revision`, so a schema-valid call is one the worker admits; GPU-free reads do not
-    take them."""
+    """2.5, phase2.2 item 2.8: the MCP schema of a mutating tool takes `idempotency_key` and
+    `expected_revision`; both may be omitted (the supervisor then generates the key and resolves
+    the precondition, returned in the receipt); GPU-free reads do not take them."""
     session = Mcp(painter, tmp_path, *BASE)
     sessions.append(session)
     tools = {tool["name"]: tool for tool in session.request("tools/list", {})["tools"]}
     schema = tools["run_python"]["inputSchema"]
-    assert schema["required"] == ["code", "idempotency_key", "expected_revision"]
+    assert schema["required"] == ["code"]
+    assert set(schema["properties"]) == {"code", "args", "idempotency_key", "expected_revision"}
     validator = Draft202012Validator(schema)
     call = {"code": "result = 1", "idempotency_key": "k-1", "expected_revision": 0}
     assert list(validator.iter_errors(call)) == []
-    assert list(validator.iter_errors({"code": "result = 1"}))
+    assert list(validator.iter_errors({"code": "result = 1"})) == []
+    assert list(validator.iter_errors({"code": "1", "expected_revision": "0"}))
     reply = session.call("run_python", call)
     assert reply["result"]["result"] == 1
+    generated = session.call("run_python", {"code": "result = 2"})
+    assert generated["result"]["result"] == 2
+    assert generated["receipt"]["key_source"] == "supervisor"
+    assert generated["receipt"]["idempotency_key"].startswith("sup-")
+    assert generated["receipt"]["expected_revision"] == 0
     assert "idempotency_key" not in tools["project_open"]["inputSchema"]["properties"]
     assert tools["run_python"]["annotations"]["readOnlyHint"] is False
     assert tools["project_inspect"]["annotations"]["readOnlyHint"] is True
