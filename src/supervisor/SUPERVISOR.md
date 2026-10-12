@@ -80,6 +80,10 @@ It then answers one request at a time on the interpreter's thread. The GIL is he
 | `project_save {mode?: incremental\|full}` | GPU-free, names a checkpoint | `{current, named, previous}` |
 | `project_inspect` | GPU-free | `{open, path, revision, texture_sets: [{name, stacks}]}` |
 | `evaluate_channel {channel, texture_set?, stack?}` | GPU (the GPU evaluator on the engine thread) | `{revision, texture_set, stack, channel, format, width, height, tiles, payload: {path, sha256, size}}`; the texels go to a file under `--output-root` |
+| `display_get` | GPU-free | `render.display.state()`: the preset's fields, `parity` and the shader (`src/python/display.h`, decision 132) |
+| `display_set {preset?, environment?, exposure?, rotation?, opacity?, blur?, shadows?, background?, color_lut?}` | mutating, one transaction (the preset first) | the new state; a value outside the fixed pipeline fails `call_failed` (`UnsupportedInUzPainter`, decision 038) with nothing committed |
+| `shader_get` / `shader_set {parameters}` | GPU-free / mutating | `{shader, parameters}`: the default `open-pbr` instance; other values are refused (decision 042) |
+| `camera_get` / `camera_set {camera \| blender}` | GPU-free / mutating | `{camera, blender}`: the default camera in Painter's and Blender's conventions, null when none is set |
 | `run_python {code, args?}` | mutating; listed and run only with `--allow-python`; its MCP schema also requires `idempotency_key` and `expected_revision` | the `RunScript` report; a raising script is `script_failed`, with the calls it committed in `details` |
 | `test_fault {fault}` | Debug builds under `--test-faults` only | `{armed}` |
 

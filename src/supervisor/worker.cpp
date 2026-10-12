@@ -34,6 +34,7 @@
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "mesh/reload.h"
+#include "python/display.h"
 #include "python/errors.h"
 #include "python/interpreter.h"
 #include "python/script.h"
@@ -258,6 +259,10 @@ private:
     json::Object ProjectSave(const json::Object& arguments);
     json::Object ProjectInspect(const json::Object& arguments);
     json::Object EvaluateChannel(const json::Object& arguments);
+    json::Object DisplaySet(const json::Object& arguments);
+    json::Object ShaderSet(const json::Object& arguments);
+    json::Object CameraGet(const json::Object& arguments);
+    json::Object CameraSet(const json::Object& arguments);
     json::Object RunPython(const json::Object& arguments);
 #if defined(UZP_WORKER_FAULT_HOOKS)
     json::Object TestFault(const json::Object& arguments);
@@ -299,6 +304,40 @@ void Worker::DefineTools() {
                 {"channel"}),
          false, true},
         [this](const json::Object& a) { return EvaluateChannel(a); });
+    // The display state of the fixed render pipeline (src/python/display.h; decisions 038, 042, 132).
+    add({"display_get", "The display state: the active preset's fields, `parity` and the shader.", Schema({}, {}), false,
+         false},
+        [](const json::Object&) { return python::display::State(*python::Session::Get().ReadProject()); });
+    add({"display_set",
+         "Sets display values in one transaction: a whole `preset` first, then any of environment (SHA-256 or null), "
+         "exposure, rotation, opacity, blur, shadows, background (sRGB8) and color_lut (null). Values outside the "
+         "fixed render pipeline are refused before any change (decision 038).",
+         Schema({{"preset", json::Object{{"type", "object"}}},
+                 {"environment", json::Object{{"type", json::Array{"string", "null"}}}},
+                 {"exposure", json::Object{{"type", "number"}}},
+                 {"rotation", json::Object{{"type", "number"}}},
+                 {"opacity", json::Object{{"type", "number"}}},
+                 {"blur", json::Object{{"type", "number"}}},
+                 {"shadows", json::Object{{"type", "boolean"}}},
+                 {"background", json::Object{{"type", "array"}, {"items", json::Object{{"type", "integer"}}}}},
+                 {"color_lut", json::Object{{"type", "null"}}}},
+                {}),
+         true, false},
+        [this](const json::Object& a) { return DisplaySet(a); });
+    add({"shader_get", "The shader and its parameters: the default open-pbr instance (decision 042).", Schema({}, {}),
+         false, false},
+        [](const json::Object&) { return python::display::Shader(*python::Session::Get().ReadProject()); });
+    add({"shader_set", "Accepts only the default open-pbr instance's parameter values (decision 042).",
+         Schema({{"parameters", json::Object{{"type", "object"}}}}, {"parameters"}), true, false},
+        [this](const json::Object& a) { return ShaderSet(a); });
+    add({"camera_get", "The default camera in Painter's convention and in Blender's (null when none is set).",
+         Schema({}, {}), false, false},
+        [this](const json::Object& a) { return CameraGet(a); });
+    add({"camera_set",
+         "Sets the default camera from a whole record, in Painter's convention (`camera`) or Blender's (`blender`).",
+         Schema({{"camera", json::Object{{"type", "object"}}}, {"blender", json::Object{{"type", "object"}}}}, {}), true,
+         false},
+        [this](const json::Object& a) { return CameraSet(a); });
     if (m_options.allow_python) {
         add({"run_python", "Runs Python source in the worker's interpreter (only with --allow-python).",
              Schema({{"code", StringProperty("The Python source.")},
@@ -485,6 +524,49 @@ json::Object Worker::ProjectInspect(const json::Object&) {
             {"path", path ? json::Value(python::Utf8(*path)) : json::Value(nullptr)},
             {"revision", session.Revision()},
             {"texture_sets", std::move(sets)}};
+}
+
+json::Object Worker::DisplaySet(const json::Object& arguments) {
+    python::Session& session = python::Session::Get();
+    session.Mutate("display_set", arguments, [&](core::Edit& edit) {
+        if (const json::Value* preset = Field(arguments, "preset")) python::display::ApplyPreset(edit, *preset);
+        if (const json::Value* environment = Field(arguments, "environment")) {
+            python::display::SetEnvironment(edit, "display_set", *environment);
+        }
+        for (const char* key : {"exposure", "rotation", "opacity", "blur", "shadows", "background"}) {
+            if (const json::Value* value = Field(arguments, key)) python::display::SetValue(edit, "display_set", key, *value);
+        }
+        if (const json::Value* lut = Field(arguments, "color_lut")) python::display::SetColorLut(edit, "display_set", *lut);
+    });
+    return python::display::State(*session.ReadProject());
+}
+
+json::Object Worker::ShaderSet(const json::Object& arguments) {
+    python::Session& session = python::Session::Get();
+    const json::Value* parameters = Field(arguments, "parameters");
+    if (!parameters) throw CallError{"invalid_arguments", "shader_set needs parameters", {}};
+    session.Mutate("shader_set", arguments, [&](core::Edit& edit) {
+        python::display::SetShaderParameters(edit, "shader_set", *parameters);
+    });
+    return python::display::Shader(*session.ReadProject());
+}
+
+json::Object Worker::CameraGet(const json::Object&) {
+    const json::Value camera = python::display::DefaultCamera(*python::Session::Get().ReadProject());
+    if (camera.IsNull()) return {{"camera", nullptr}, {"blender", nullptr}};
+    return {{"camera", camera}, {"blender", python::display::CameraToBlender(camera)}};
+}
+
+json::Object Worker::CameraSet(const json::Object& arguments) {
+    const json::Value* camera = Field(arguments, "camera");
+    const json::Value* blender = Field(arguments, "blender");
+    if ((camera == nullptr) == (blender == nullptr)) {
+        throw CallError{"invalid_arguments", "camera_set needs exactly one of camera and blender", {}};
+    }
+    const json::Value record = camera ? *camera : json::Value(python::display::CameraFromBlender(*blender));
+    python::Session::Get().Mutate("camera_set", arguments,
+                                  [&](core::Edit& edit) { python::display::SetCamera(edit, record, "camera_set"); });
+    return CameraGet({});
 }
 
 json::Object Worker::EvaluateChannel(const json::Object& arguments) {

@@ -17,6 +17,7 @@
 #include "evaluator/templates.h"
 #include "mesh/mesh_import.h"
 #include "mesh/reload.h"
+#include "python/display.h"
 #include "python/errors.h"
 #include "python/recipe.h"
 #include "uzp_core/manifest/sha256.h"
@@ -204,6 +205,7 @@ void Session::Create(const std::filesystem::path& mesh_path, const CreateSetting
     if (settings.mesh_unit_scale) p.settings.mesh_unit_scale = *settings.mesh_unit_scale;
     if (settings.import_cameras) p.settings.import_cameras = *settings.import_cameras;
     p.settings.template_id = template_id;
+    display::InitialiseNewProject(p);
     core::Validate(p);
 
     auto project = std::make_shared<OpenProject>();
