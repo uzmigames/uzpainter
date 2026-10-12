@@ -1,12 +1,14 @@
 // UzPainter.exe entry point (docs/architecture/01-overview.md, command line). Phase 0 provides the
 // `selftest` command (docs/architecture/13-engine-integration.md §4.2); the project store adds
-// `inspect`, `export-bundle` and `store-census` (src/store/cli.h), the export of a project and
+// `inspect` (with the recipe dump, src/python/recipe.h), `export-bundle` and `store-census`
+// (src/store/cli.h), the export of a project and
 // its publication's recovery `export` (src/export/cli.h), the Python API the script host `run`
 // (src/python/run.h) and `capabilities` (src/python/capabilities.h), the supervisor and worker
 // roles `--mcp` and `--worker` (src/supervisor/); the other commands are added by their phases.
 
 #include "export/cli.h"
 #include "python/capabilities.h"
+#include "python/recipe.h"
 #include "python/run.h"
 #include "selftest/harness.h"
 #include "store/cli.h"
@@ -36,7 +38,8 @@ int main(int argc, char** argv) {
         return uzp::selftest::RunSelftestCommand({args.begin() + 1, args.end()});
     }
     if (!args.empty() && uzp::store::IsStoreCommand(args.front())) {
-        return uzp::store::RunStoreCommand(args, stdout, stderr);
+        const uzp::core::RecipeHost recipe = uzp::python::HostRecipe();
+        return uzp::store::RunStoreCommand(args, stdout, stderr, &recipe);
     }
     if (!args.empty() && uzp::exporter::IsExportCommand(args.front())) {
         return uzp::exporter::RunExportCommand(args, stdout, stderr);

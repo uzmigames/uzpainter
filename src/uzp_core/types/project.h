@@ -58,6 +58,11 @@ struct ProjectSettings {
     bool operator==(const ProjectSettings&) const = default;
 };
 
+/// The import report's list of the files a mesh reads beside it (a glTF's external buffers),
+/// `[{uri, sha256, size}]`: each is stored as a resource with the mesh, so the mesh re-derives from
+/// the project alone (SAV-01). Absent when the mesh reads none.
+inline constexpr std::string_view kMeshExternalFiles = "external_files";
+
 /// The imported mesh: its original bytes as a resource, and the import report. Texturing-mesh
 /// data is re-derived, never stored.
 struct MeshReference {

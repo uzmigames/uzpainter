@@ -13,10 +13,12 @@
 // geometry mask on `sleeve` and a fill layer with a generator effect.
 
 #include <cstdio>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <string>
@@ -292,8 +294,10 @@ bool HasInvalidFlag(const json::Object& extra) {
 void IdenticalReload() {
     auto f = MakeFixture("identical");
     const core::Snapshot before = f->doc->snapshot();
+    // The identical bytes from another folder: no pixel or derivation change, only the mesh's
+    // source (decision 116) moves, in a metadata-only revision (decision 123).
     const ReloadOutcome out = Reload(*f, Obj(BaseQuads()));
-    CHECK(out.outcome.result && out.outcome.result->status == core::ResultStatus::no_op);
+    CHECK(out.outcome.result && out.outcome.result->status == core::ResultStatus::committed);
     CHECK(out.report);
     const ReloadReport& r = *out.report;
     CHECK(r.added.empty() && r.removed.empty() && r.renamed.empty());
@@ -304,8 +308,14 @@ void IdenticalReload() {
     CHECK(RegionsOf(r, "cloth").texels.size() == 128u * 128u);
     CHECK(r.invalid_mesh_maps.empty() && r.invalid_geometry_masks.empty() && r.invalid_procedural.empty());
     CHECK(r.invalid_receipt_resources.empty());
-    CHECK(f->doc->revision() == before.revision);
-    CHECK(*f->doc->snapshot().project == *before.project);
+    CHECK(f->doc->revision() == before.revision + 1);
+    core::Project expected = *before.project;
+    expected.mesh->source = (f->dir / "next" / "mesh.obj").string();
+    CHECK(*f->doc->snapshot().project == expected);
+    // The same file again is a no-op: nothing at all changes.
+    const ReloadOutcome again = Reload(*f, Obj(BaseQuads()));
+    CHECK(again.outcome.result && again.outcome.result->status == core::ResultStatus::no_op);
+    CHECK(f->doc->revision() == before.revision + 1 && *f->doc->snapshot().project == expected);
     const json::Object sets = std::get<json::Object>(r.ToJson().at("sets").data);
     CHECK(sets.at("added") == json::Value(json::Array{}) && sets.at("removed") == json::Value(json::Array{}) &&
           sets.at("renamed") == json::Value(json::Array{}));
@@ -539,6 +549,166 @@ void FailureMidReload() {
     CHECK(f->doc->revision() == before.revision + 1);
 }
 
+/// A glTF quad (material `skin`, tile 1001) whose buffer is the external file `quad.bin` beside it.
+std::filesystem::path WriteExternalGltf(const std::filesystem::path& dir) {
+    std::string bin;
+    const auto put = [&bin](const void* data, std::size_t size) { bin.append(static_cast<const char*>(data), size); };
+    const float positions[12] = {0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};
+    const float uvs[8] = {0, 1, 1, 1, 1, 0, 0, 0};
+    const std::uint32_t indices[6] = {0, 1, 2, 0, 2, 3};
+    put(positions, sizeof(positions));
+    put(uvs, sizeof(uvs));
+    put(indices, sizeof(indices));
+    WriteFile(dir / "quad.bin", bin);
+    const std::string gltf = R"({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],)"
+                             R"("nodes":[{"name":"head","mesh":0}],"materials":[{"name":"skin"}],)"
+                             R"("meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"indices":2,"material":0}]}],)"
+                             R"("accessors":[{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},)"
+                             R"({"bufferView":1,"componentType":5126,"count":4,"type":"VEC2"},)"
+                             R"({"bufferView":2,"componentType":5125,"count":6,"type":"SCALAR"}],)"
+                             R"("bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":48},{"buffer":0,"byteOffset":48,"byteLength":32},)"
+                             R"({"buffer":0,"byteOffset":80,"byteLength":24}],)"
+                             R"("buffers":[{"uri":"quad.bin","byteLength":104}]})";
+    return WriteFile(dir / "quad.gltf", gltf);
+}
+
+/// A document holding `imported` (its bytes in `blobs`, its external files too when `store_files`).
+std::unique_ptr<core::Document> GltfDocument(const ImportResult& imported, const std::filesystem::path& path,
+                                             std::map<std::string, std::string>& blobs, const std::string& gltf) {
+    blobs[imported.sha256] = gltf;
+    for (const ExternalFile& file : imported.external_files) blobs[core::Sha256Hex(file.bytes)] = file.bytes;
+    core::DocumentState state;
+    state.project_uuid = "00000000-0000-4000-8000-000000000017";
+    state.project.versions.app_version = "0.0.0";
+    state.project.versions.evaluator_profile = "painter-12.1-isolated-linear";
+    state.project.settings.default_resolution = {128, 128, {}};
+    auto doc = std::make_unique<core::Document>(std::move(state));
+    const auto created = core::Execute(*doc, core::MutationRequest{"project_create", json::Object{}, "create", 0},
+                                       [&](core::Edit& edit) {
+                                           CreateTextureSets(edit, imported, MeshSource{path.string(), std::string(kTime)},
+                                                             {{core::ChannelType::BaseColor,
+                                                               core::Channel{core::ChannelFormat::sRGB8, "", {}}}});
+                                       });
+    CHECK(created.result && created.result->status == core::ResultStatus::committed);
+    return doc;
+}
+
+/// A glTF's external buffer is stored with the mesh and re-derives without its folder; a project
+/// written before that (no `external_files` in its report) still re-derives beside its origin, is
+/// `MeshFileMissing` once the file is gone (or for a reader of stored files only), and its mesh is
+/// still replaced by a reload that cannot compare with it (phase2.1_recipe-dump-manifest-blocks).
+void GltfExternalBuffer() {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "uzp-mesh-reload-tests" / "gltf_external";
+    std::filesystem::remove_all(dir);
+    const std::filesystem::path path = WriteExternalGltf(dir / "source");
+    std::ifstream in(path, std::ios::binary);
+    const std::string gltf{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    in.close();
+    const ImportResult imported = ImportMeshFile(path, {});
+    CHECK(imported.external_files.size() == 1 && imported.external_files[0].uri == "quad.bin");
+    const json::Array& listed = std::get<json::Array>(imported.report.at(std::string(core::kMeshExternalFiles)).data);
+    CHECK(listed.size() == 1);
+    const std::string bin_sha = core::Sha256Hex(imported.external_files[0].bytes);
+    CHECK(std::get<json::Object>(listed[0].data).at("sha256") == json::Value(bin_sha));
+
+    // Current projects: the buffer is a resource, and the mesh re-derives with the folder gone.
+    std::map<std::string, std::string> blobs;
+    const auto current = GltfDocument(imported, path, blobs, gltf);
+    const auto& entries = current->snapshot().project->resources.at(bin_sha);
+    CHECK(entries.size() == 1 && entries[0].usage == std::string(kExternalFileUsage) && entries[0].name == "quad.bin");
+    const ResourceReader read = [&](const std::string& sha) { return blobs.at(sha); };
+
+    // A project of the previous version: the same mesh without the stored file or the report key.
+    ImportResult legacy_import = imported;
+    legacy_import.external_files.clear();
+    legacy_import.report.erase(std::string(core::kMeshExternalFiles));
+    std::map<std::string, std::string> legacy_blobs;
+    const auto legacy = GltfDocument(legacy_import, path, legacy_blobs, gltf);
+    const ResourceReader legacy_read = [&](const std::string& sha) { return legacy_blobs.at(sha); };
+    CHECK(!legacy->snapshot().project->resources.contains(bin_sha));
+    CHECK(RederiveMesh(*legacy->snapshot().project, legacy_read).mesh.hashes == imported.mesh.hashes);
+    const auto missing_message = [&](bool beside_origin) {
+        try {
+            RederiveMesh(*legacy->snapshot().project, legacy_read, beside_origin);
+        } catch (const MeshFileMissing& missing) {
+            return std::string(missing.what());
+        }
+        throw Failure{"expected MeshFileMissing"};
+    };
+    CHECK(missing_message(false).find("quad.bin") != std::string::npos);
+
+    // An altered file beside the origin: the old geometry is unavailable (not corruption), and a
+    // reload still replaces the mesh (below); the same change to a stored file is corruption.
+    std::string altered_bin = imported.external_files[0].bytes;
+    const float moved_uvs[2] = {0.25f, 0.75f};
+    std::memcpy(altered_bin.data() + 48, moved_uvs, sizeof(moved_uvs));
+    WriteFile(dir / "source" / "quad.bin", altered_bin);
+    CHECK(missing_message(true).find("no longer gives the recorded geometry") != std::string::npos);
+    WriteFile(dir / "source" / "quad.bin", altered_bin.substr(0, 40));  // shorter than the buffer
+    CHECK(missing_message(true).find("no longer gives the recorded geometry") != std::string::npos);
+    std::map<std::string, std::string> corrupt = blobs;
+    corrupt[bin_sha] = altered_bin;  // a stored blob that does not hold its hash's bytes
+    try {
+        RederiveMesh(*current->snapshot().project, [&](const std::string& sha) { return corrupt.at(sha); });
+        throw Failure{"expected a ValueError for a corrupt stored file"};
+    } catch (const MeshFileMissing&) {
+        throw Failure{"a corrupt stored file is not MeshFileMissing"};
+    } catch (const core::ValueError& error) {
+        CHECK(std::string(error.what()).find("do not match its hash") != std::string::npos);
+    }
+
+    std::filesystem::remove(dir / "source" / "quad.bin");
+    CHECK(RederiveMesh(*current->snapshot().project, read).mesh.hashes == imported.mesh.hashes);
+    CHECK(missing_message(true).find("gone") != std::string::npos);
+    WriteFile(dir / "source" / "quad.bin", altered_bin);  // the reload below meets the altered file
+
+    // The legacy project's mesh is replaced without re-deriving it: its set kept by material,
+    // its bindings invalidated with the reason; the new mesh re-derives afterwards.
+    const std::filesystem::path next = WriteFile(dir / "next" / "mesh.obj", Obj({{"head", "skin", 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f}}));
+    const ReloadOutcome out = ReloadMesh(*legacy, core::MutationRequest{"reload_mesh", json::Object{}, "reload", legacy->revision()},
+                                         next, Settings(), legacy_read, MeshSource{next.string(), std::string(kTime)});
+    CHECK(out.outcome.result && out.outcome.result->status == core::ResultStatus::committed && out.report);
+    CHECK(out.report->added.empty() && out.report->removed.empty());
+    CHECK(legacy->snapshot().project->texture_sets.size() == 1);
+    CHECK(legacy->snapshot().project->texture_sets[0].material_id == "skin");
+    std::ifstream obj(next, std::ios::binary);
+    legacy_blobs[core::Sha256Hex(std::string{std::istreambuf_iterator<char>(obj), std::istreambuf_iterator<char>()})] =
+        Obj({{"head", "skin", 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f}});
+    RederiveMesh(*legacy->snapshot().project, legacy_read, false);
+
+    // A reload of the current project whose .gltf is byte-identical and whose buffer moves the
+    // UVs: the old buffer's receipts are invalid though the mesh file's hash did not change.
+    const core::ResultRecordHeader before_reload{1, "p", "c", "0.0.0", {imported.sha256, bin_sha}};
+    CHECK(!ReceiptInvalidated(before_reload, *current->snapshot().project));
+    const std::filesystem::path moved = WriteExternalGltf(dir / "moved");
+    std::ifstream bin_in(dir / "moved" / "quad.bin", std::ios::binary);
+    std::string bin{std::istreambuf_iterator<char>(bin_in), std::istreambuf_iterator<char>()};
+    bin_in.close();
+    const float shifted[8] = {0.0f, 0.5f, 0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f};
+    std::memcpy(bin.data() + 48, shifted, sizeof(shifted));
+    WriteFile(dir / "moved" / "quad.bin", bin);
+    const ReloadOutcome uv_only = ReloadMesh(*current, core::MutationRequest{"reload_mesh", json::Object{}, "uv", current->revision()},
+                                             moved, Settings(), read, MeshSource{moved.string(), std::string(kTime)});
+    CHECK(uv_only.outcome.result && uv_only.outcome.result->status == core::ResultStatus::committed && uv_only.report);
+    CHECK(uv_only.report->mesh_from == uv_only.report->mesh_to);
+    CHECK(uv_only.report->invalid_receipt_resources == std::vector<std::string>{bin_sha});
+    CHECK(ReceiptInvalidated(before_reload, *current->snapshot().project));
+    CHECK(current->snapshot().project->resources.contains(core::Sha256Hex(bin)));
+
+    // A reload to a mesh without the set's material is refused before anything changes.
+    const std::int64_t revision = legacy->revision();
+    ImportResult stale = legacy_import;
+    std::map<std::string, std::string> stale_blobs;
+    const auto again = GltfDocument(stale, path, stale_blobs, gltf);
+    const std::filesystem::path other = WriteFile(dir / "other" / "mesh.obj", Obj({{"head", "cloth", 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f}}));
+    const ResourceReader stale_read = [&](const std::string& sha) { return stale_blobs.at(sha); };
+    const ReloadOutcome refused = ReloadMesh(*again, core::MutationRequest{"reload_mesh", json::Object{}, "refused", again->revision()},
+                                             other, Settings(), stale_read, MeshSource{other.string(), std::string(kTime)});
+    CHECK(refused.outcome.result && refused.outcome.result->status == core::ResultStatus::failed);
+    CHECK(std::string(ErrorOf<MaterialMappingError>(refused).what()).find("cannot be re-derived") != std::string::npos);
+    CHECK(legacy->revision() == revision);
+}
+
 const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
     static const std::vector<std::pair<std::string, std::function<void()>>> cases = {
         {"identical_reload", IdenticalReload},
@@ -549,6 +719,7 @@ const std::vector<std::pair<std::string, std::function<void()>>>& Cases() {
         {"merge_fixture", MergeFixture},
         {"added_and_removed_sets", AddedAndRemovedSets},
         {"failure_mid_reload", FailureMidReload},
+        {"gltf_external_buffer", GltfExternalBuffer},
     };
     return cases;
 }

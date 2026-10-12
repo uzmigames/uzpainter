@@ -9,7 +9,7 @@
 - [x] 2.5 Return `{sets: added, removed, renamed}` and the per-set region classes; leave the old mesh on any failure
 
 ## 3. Tests
-- [x] 3.1 Reload of an identical mesh: no set changes, all texels unchanged, nothing invalidated
+- [x] 3.1 Reload of an identical mesh: no pixel or derivation change (no set changes, all texels unchanged, nothing invalidated); from the same path a `no_op`, from another path a metadata-only revision recording the new `mesh.source` (amended by decision 123)
 - [x] 3.2 Reload with moved vertices: affected texels classified `moved`, dependent mesh maps marked `invalid` and kept
 - [x] 3.3 Rename fixture: explicit error with a mapping proposal; project unchanged
 - [x] 3.4 Split fixture: explicit error with a mapping proposal; project unchanged

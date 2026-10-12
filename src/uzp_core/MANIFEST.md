@@ -3,7 +3,8 @@
 Task `phase1.1_docmodel-types-manifest` (P1-DOCMODEL). Implements the document part of D3 in
 `docs/architecture/03-project-model.md` §1-§5 and `04-layer-stack-and-compositing.md` §1, and the
 manifest of `09-project-file-format.md` §1 and §5. The manifest is the public schema of the `.uzp`
-file: `uzpainter inspect` prints it, every revision stores it, and its SHA-256 is the recipe digest.
+file: `uzpainter inspect` prints it and every revision stores it. The recipe digest is the SHA-256
+of the output-determining part of it (§8).
 
 ## 1. Layout
 
@@ -20,7 +21,9 @@ file: `uzpainter inspect` prints it, every revision stores it, and its SHA-256 i
 | `manifest/json.h` | JSON values, strict parser, canonical writer |
 | `manifest/sha256.h` | SHA-256 (FIPS 180-4) |
 | `manifest/manifest.h` | Project ⇄ manifest, `SaveManifest`, `LoadManifest`, `ManifestDigest` |
+| `manifest/recipe.h` | The recipe dump and digest, and the project a dump rebuilds (§8) |
 | `schema/manifest.schema.json` | JSON Schema (draft 2020-12) of the manifest |
+| `schema/recipe.schema.json` | JSON Schema of the recipe dump |
 | `document/`, `transaction/`, `operation/`, `naming/` | Revisions, transactions, operation records, name addressing (`TRANSACTIONS.md`) |
 
 ## 2. Canonical form and digest
@@ -104,3 +107,43 @@ test); the digest is the same for maps filled in either order, in two processes 
 the schema accepts serialised manifests and rejects two channels of one type, resolution 3000, an
 unknown `ChannelFormat` and a compare mask in a content stack; unknown keys survive; insertion
 rules and anchor cycles raise; ids persist and same-named nodes keep distinct ids. No GPU is used.
+
+## 8. Recipe dump (`manifest/recipe.h`)
+
+Task `phase2.1_recipe-dump-manifest-blocks` (decision 122; `03-project-model.md` §5, §7; SAV-03,
+SAV-04, INT-20, ARC-11). `DumpRecipe(project, revision, host)` returns
+`{schema: uzpainter/recipe/1, revision, evaluator_profile, compat_profile, app_version,
+resource_hashes, recipe, rebuild, digest}`.
+
+- **The id-less document.** The manifest of the revision without ids, `next_id`, the version
+  bookkeeping and the keys this version does not know (it reads none of them). A reference
+  source's `anchor` and an instance layer's `instance_source` become JSON pointers into the node's
+  texture set (`/stacks/0/root_layers/2/content_effects/1`). A paint node's planes become their
+  content, `{chunk_root}` of the bound version (null when none is bound). Each stack channel gets
+  `base`, the float32 backdrop the evaluator reads from the project's template (the one implicit
+  default), and `settings.template` is always stated. `resources` lists the hashes the document
+  references (the mesh and the files it reads beside it, mesh maps, source and procedural
+  bindings), each `{mime, size}`; `resource_catalog` keeps every stored entry without its id.
+- **`recipe`, the body.** The document's output-determining keys: everything evaluation, export
+  (file names included: `$textureSet`, `$sceneMaterial`, `$mesh` read the set name,
+  `original_name` and the import report) or the mesh's derivation reads. `digest` is the SHA-256
+  of its canonical JSON (§2), so the same in C++ and Python.
+- **`rebuild`, outside the digest.** `{<pointer into the document>: value}` for what only a rebuild
+  needs: `display`, `export_defaults`, `metadata`, `painter_reference`, `resource_catalog`,
+  `mesh.source`, the settings `default_resolution`, `mesh_unit_scale`, `import_cameras` and
+  `auto_unwrap`, a set's `description` and `bake_settings`, a mesh map's `invalid_report` and its
+  provenance but for `kind` and `declared_convention`, a channel's `label`, a node's `collapsed` and
+  `preset_ref`.
+- **Header.** ARC-11, outside the digest: the revision moves on inert commits, the app version and
+  the compatibility profile do not change the output.
+- **Rebuild.** `ProjectFromRecipe(dump, host)` checks the schema, the digest and the header (every
+  key, `kCompatProfile`, the body's evaluator profile and hashes), puts the `rebuild` values in
+  place (refusing a pointer to output-determining state or to a place the body lacks), gives fresh
+  ids, resolves the pointers and validates. A channel `base` other than the host's (another build's
+  template data) is a `ValueError`; paint plane content is `NotYetSupported`
+  (phase4.1_nodes-paint-layers item 2.7). The rebuilt project's body and the rebuild values it
+  holds must equal the dump's, so its digest is the dump's.
+
+Tests: `tests/uzp_core/test_recipe.py` (native cases `recipe_dump_fields`,
+`recipe_digest_invariance`, `recipe_rebuild`; the schema on the every-kind fixture; the digest
+recomputed in Python; the rebuild through the command line).

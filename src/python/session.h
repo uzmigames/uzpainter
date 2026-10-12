@@ -108,6 +108,13 @@ public:
     /// died; it is reopened as that untitled project (no file path, the folder removed on close),
     /// the worker's recovery (src/supervisor/worker.cpp).
     void Open(const std::filesystem::path& path, bool untitled = false);
+    /// Rebuilds a recipe dump (`core::ProjectFromRecipe`) into a new untitled project in one
+    /// transaction (03 §6, §7): every resource the dump stores is read from `resources_dir`, a file
+    /// named `<sha256>` with any extension (the `export-bundle` `res/` layout) whose bytes must hash
+    /// to it; the mesh must re-derive from the stored bytes alone; the support check runs on the
+    /// whole project (a release gap raises `NotYetSupported` before anything is created).
+    /// `ProjectError` when a project is open, a resource file is missing or holds other bytes.
+    void Rebuild(const core::json::Value& dump, const std::filesystem::path& resources_dir);
     /// `ProjectError` when none is open, `BusyError` while a job runs.
     void Close();
     bool IsOpen() const;

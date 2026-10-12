@@ -7,6 +7,7 @@
 #include <ctime>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <random>
 #include <system_error>
 #include <utility>
@@ -15,8 +16,12 @@
 #include "evaluator/support.h"
 #include "evaluator/templates.h"
 #include "mesh/mesh_import.h"
+#include "mesh/reload.h"
 #include "python/errors.h"
+#include "python/recipe.h"
+#include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
+#include "uzp_core/types/validation.h"
 
 namespace uzp::python {
 
@@ -219,6 +224,9 @@ void Session::Create(const std::filesystem::path& mesh_path, const CreateSetting
     const core::RequestOutcome outcome = store.Submit(*project->document, request, [&](core::Edit& edit) {
         try {
             store.StageResource(bytes, std::string(mesh::MimeOf(imported.format)));
+            for (const mesh::ExternalFile& file : imported.external_files) {
+                store.StageResource(file.bytes, std::string(mesh::kExternalFileMime));
+            }
             mesh::CreateTextureSets(edit, imported, mesh::MeshSource{mesh_source, NowUtc()}, channels);
         } catch (...) {
             error = std::current_exception();
@@ -263,6 +271,87 @@ void Session::Open(const std::filesystem::path& path, bool untitled) {
         current_ = std::move(project);
     }
     NotifyDurableChange();
+}
+
+void Session::Rebuild(const core::json::Value& dump, const std::filesystem::path& resources_dir) {
+    if (IsOpen()) ThrowProjectError("a project is already open");
+    core::Project rebuilt = core::ProjectFromRecipe(dump, HostRecipe());
+
+    std::error_code ec;
+    if (!std::filesystem::is_directory(resources_dir, ec)) {
+        ThrowProjectError("rebuild: " + Utf8(resources_dir) + " is not a folder of resource files");
+    }
+    std::map<std::string, std::filesystem::path> files;  // sha256 -> file
+    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(resources_dir)) {
+        if (!entry.is_regular_file()) continue;
+        const std::string name = Utf8(entry.path().filename());
+        const std::string stem = name.substr(0, name.find('.'));
+        if (core::IsSha256Hex(stem)) files[stem] = entry.path();
+    }
+    std::map<std::string, std::string> bytes;  // sha256 -> stored bytes
+    for (auto& [hash, entries] : rebuilt.resources) {
+        const auto file = files.find(hash);
+        if (file == files.end()) ThrowProjectError("rebuild: the resource " + hash + " is not in " + Utf8(resources_dir));
+        std::string data = ReadFile(file->second);
+        if (core::Sha256Hex(data) != hash) {
+            ThrowProjectError("rebuild: " + Utf8(file->second) + " does not hold the bytes of " + hash);
+        }
+        for (core::ResourceMeta& meta : entries) {
+            if (meta.origin.empty()) meta.origin = Utf8(std::filesystem::absolute(file->second));
+            if (meta.imported_at.empty()) meta.imported_at = NowUtc();
+        }
+        bytes[hash] = std::move(data);
+    }
+    // The mesh, its external files included, re-derives from what the recipe stores alone, never
+    // from files beside an origin.
+    if (rebuilt.mesh) {
+        mesh::RederiveMesh(
+            rebuilt,
+            [&bytes](const std::string& sha256) -> std::string {
+                const auto it = bytes.find(sha256);
+                if (it == bytes.end()) {
+                    throw core::ValueError("rebuild: the mesh reads " + sha256 + ", which the recipe does not store");
+                }
+                return it->second;
+            },
+            false);
+    }
+    evaluator::RequireSupported(core::Project{}, rebuilt);
+
+    core::DocumentState state;
+    state.project_uuid = NewUuid();
+    state.project.versions = rebuilt.versions;
+    state.project.settings = rebuilt.settings;
+    core::Validate(state.project);
+
+    auto project = std::make_shared<OpenProject>();
+    project->untitled_dir = std::filesystem::temp_directory_path() / "UzPainter" / ("untitled-" + RandomHex(8));
+    std::filesystem::create_directories(project->untitled_dir);
+    if (rebuilt.mesh) project->mesh_path = rebuilt.mesh->source;
+    project->store = store::ProjectStore::Create(project->untitled_dir / "Untitled.uzp", state);
+    project->document = std::make_unique<core::Document>(std::move(state));
+    project->store->Attach(*project->document);
+
+    store::ProjectStore& store = *project->store;
+    const core::json::Object& dump_object = std::get<core::json::Object>(dump.data);
+    core::MutationRequest request{"project.rebuild_from_recipe",
+                                  core::json::Object{{"digest", dump_object.at("digest")}, {"resources", Utf8(resources_dir)}},
+                                  NewKey(), project->document->revision()};
+    std::exception_ptr error;
+    const core::RequestOutcome outcome = store.Submit(*project->document, request, [&](core::Edit& edit) {
+        try {
+            for (const auto& [hash, data] : bytes) store.StageResource(data, rebuilt.resources.at(hash).front().mime);
+            edit.project() = rebuilt;
+        } catch (...) {
+            error = std::current_exception();
+            throw;
+        }
+    });
+    Record(FromResult(Settle(outcome, error)));
+    SetActiveDefault(*project);
+    std::lock_guard lock(mutex_);
+    if (current_) ThrowProjectError("a project is already open");
+    current_ = std::move(project);
 }
 
 void Session::Close() {

@@ -73,7 +73,7 @@ Interruption: SQLite's rollback journal guarantees the file is either the previo
 
 ## 6. Inspection
 
-- `uzpainter inspect <file.uzp> [--revision N]` prints: format and app versions, profiles, project settings, texture sets/channels, layer tree with bindings, resource table (name, hash, bytes, usage), mesh maps with provenance, checkpoints, sizes (file, blobs, cache, external dependencies), recipe digest. No GPU, no project lock.
+- `uzpainter inspect <file.uzp> [--revision N]` prints: format and app versions, profiles, project settings, texture sets/channels, layer tree with bindings, resource table (name, hash, bytes, usage), mesh maps with provenance, checkpoints, sizes (file, blobs, cache, external dependencies), recipe digest. `--recipe` prints the revision's recipe dump instead (`03-project-model.md` §7). No GPU, no project lock.
 - `uzpainter export-bundle <file.uzp> <dir|zip>` writes `manifest.json`, `res/<sha256>.<ext>`, `meshmaps/`, `planes/` (PNG/EXR) for archive tools; the bundle is also importable (`project.open` accepts a bundle directory).
 - MCP resources `uzpainter://project/manifest`, `uzpainter://project/recipe`, `uzpainter://project/resources` expose the same data (`11-mcp-server.md`).
 

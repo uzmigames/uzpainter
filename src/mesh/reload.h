@@ -41,6 +41,7 @@
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/transaction/transaction.h"
 #include "uzp_core/types/enums.h"
+#include "uzp_core/types/errors.h"
 #include "uzp_core/types/ids.h"
 #include "uzp_core/types/project.h"
 #include "uzp_core/types/receipt.h"
@@ -129,7 +130,8 @@ struct ReloadReport {
 struct ReloadOutcome {
     /// The transaction's outcome; its result's `returned.reload` is `report->ToJson()`.
     core::RequestOutcome outcome;
-    /// Set when the reload was applied (committed, or a no-op for an identical mesh).
+    /// Set when the reload was applied: committed, or a no-op for an identical mesh from the same
+    /// path (from another path the new `mesh.source` is a metadata-only commit, decision 123).
     std::optional<ReloadReport> report;
     /// The typed error behind a failed result (`ImportError`, `MaterialMappingError`,
     /// `core::ValueError`, a reader or commit error), for the bindings to raise.
@@ -142,20 +144,48 @@ struct ReloadOutcome {
 ReloadReport ApplyReload(core::Edit& edit, const ImportResult& current, const ImportResult& next,
                          const MeshSource& source, const ReloadSettings& settings);
 
+/// The old geometry cannot be recovered: the current mesh is a glTF of a project written before a
+/// mesh's external files were stored (its import report has no `core::kMeshExternalFiles`), and a
+/// file it reads beside its origin is gone, or altered so that the mesh no longer gives the
+/// recorded geometry, or the caller reads stored files only. `ReloadMesh` then replaces the mesh
+/// without re-deriving it (`ApplyReloadWithoutCurrent`). A stored file or mesh whose bytes do not
+/// give the recorded geometry is corruption: `core::ValueError`.
+class MeshFileMissing : public core::ValueError {
+public:
+    using core::ValueError::ValueError;
+};
+
 /// The current mesh of `project` re-derived from its stored bytes with the settings its import
-/// report records (`requested_mesh_unit_scale`, merged duplicate names); a glTF's external
-/// buffers are read beside the resource's `origin`. Throws `core::ValueError` when the project
-/// has no mesh or the bytes do not give the stored hashes.
-ImportResult RederiveMesh(const core::Project& project, const ResourceReader& read);
+/// report records (`requested_mesh_unit_scale`, merged duplicate names). A glTF's external
+/// buffers are the stored resources its report lists (`core::kMeshExternalFiles`). A report
+/// written before they were stored lists none: its files are read beside the resource's `origin`,
+/// as that version did, when `beside_origin` (`MeshFileMissing` when one is gone, or always
+/// without `beside_origin`, or when such a file no longer gives the recorded hashes); the
+/// re-derived hashes are checked either way. Throws
+/// `core::ValueError` when the project has no mesh, a listed file is not stored, or the bytes do
+/// not give the stored hashes.
+ImportResult RederiveMesh(const core::Project& project, const ResourceReader& read, bool beside_origin = true);
+
+/// The reload when the current mesh cannot be re-derived (`MeshFileMissing`, whose message is
+/// `reason`): with no old geometry to compare, every texture set keeps its material by name or
+/// through `material_mapping` (a set whose material the new mesh lacks is a `MaterialMappingError`
+/// before anything changes), every mesh-map binding and mesh geometry mask of a kept set is
+/// invalidated with `previous_mesh: reason` in its report, every hash counts as changed, and a
+/// new material adds a set. The new mesh and its external files are recorded as by `ApplyReload`,
+/// so the project re-derives again afterwards.
+ReloadReport ApplyReloadWithoutCurrent(core::Edit& edit, const ImportResult& next, const MeshSource& source,
+                                       const ReloadSettings& settings, const std::string& reason);
 
 /// `project.reload_mesh(path, settings)`: one transaction (`request`) that re-derives the
-/// current mesh, imports `path` and applies `ApplyReload`. Never throws for a failing reload: the
-/// outcome is `failed` and `error` holds the typed error.
+/// current mesh, imports `path` and applies `ApplyReload` (`ApplyReloadWithoutCurrent` when the
+/// current mesh is `MeshFileMissing`). Never throws for a failing reload: the outcome is `failed`
+/// and `error` holds the typed error.
 ReloadOutcome ReloadMesh(core::Document& document, core::MutationRequest request, const std::filesystem::path& path,
                          const ReloadSettings& settings, const ResourceReader& read, const MeshSource& source);
 
 /// A receipt (export, capture, bake, recipe dump) is invalid in `project` when it read a mesh
-/// resource other than the project's mesh or the resource of an invalid mesh-map binding.
+/// file the project's mesh no longer reads (the mesh file or a file beside it, such as a glTF's
+/// buffer: `core::MeshResourceHashes`) or the resource of an invalid mesh-map binding.
 bool ReceiptInvalidated(const core::ResultRecordHeader& header, const core::Project& project);
 
 }  // namespace uzp::mesh

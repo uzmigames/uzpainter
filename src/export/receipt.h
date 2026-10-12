@@ -21,7 +21,8 @@
 // resource_hashes is the set of resources the planned files read: the bitmaps of every channel DAG
 // they evaluate (fills, content effects, masks, groups), the masks of a diagnostic's material and
 // its enclosing groups, the mesh maps read, and the texturing mesh whose UV coverage drives the
-// padding (and every geometry mask).
+// padding (and every geometry mask): its file and the files it reads beside it
+// (`core::MeshResourceHashes`).
 
 #include <cstdint>
 #include <set>

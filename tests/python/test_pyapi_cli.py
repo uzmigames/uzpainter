@@ -201,3 +201,44 @@ def test_capabilities_prints_the_shipped_manifest(painter: Path, tmp_path: Path)
     assert result["entry"]["symbol"] == "uzpainter.capabilities.profile"
     assert result["none"] is None
     assert cli(painter, "capabilities", "extra")[0] == 2
+
+
+def test_inspect_prints_the_recipe_dump_of_a_project_open_elsewhere(
+    painter: Path, tmp_path: Path
+) -> None:
+    """phase2.1_recipe-dump-manifest-blocks 2.3, 3.3: while a script holds the project open (its
+    lock taken), `UzPainter.exe inspect <file> --recipe` prints exactly what
+    `uzpainter.project.dump_recipe()` returns for that revision, and the report's digest is the
+    dump's; the script's lock is untouched and it commits afterwards. No GPU is used."""
+    path = script(
+        tmp_path,
+        f"""
+        import json, subprocess, sys
+        import uzpainter
+        from uzpainter import project, layerstack as ls, textureset as ts, colormanagement as cm
+        exe, work = sys.argv[1], sys.argv[2]
+        project.create({str(PLANE.as_posix())!r}, project.Settings(default_texture_resolution=256))
+        fill = ls.insert_fill(ls.InsertPosition.from_textureset_stack(ts.get_active_stack()))
+        fill.set_source(ts.ChannelType.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+        project.save_as(work + "/open.uzp")
+        dump = project.dump_recipe()
+        def inspect(*flags):
+            done = subprocess.run([exe, "inspect", work + "/open.uzp", *flags],
+                                  capture_output=True, text=True, encoding="utf-8")
+            return done.returncode, done.stdout, done.stderr
+        recipe = inspect("--recipe")
+        report = inspect()
+        fill.set_opacity(0.5, ts.ChannelType.Height)
+        printed = json.loads(recipe[1]) if recipe[0] == 0 else recipe[2]
+        result = {{"dump": dump, "recipe": [recipe[0], printed],
+                   "report": json.loads(report[1])["recipe_digest"], "after": project.revision()}}
+        """,
+    )
+    status, documents, stderr = cli(painter, "run", path, "--", str(painter), str(tmp_path))
+    assert status == 0, stderr
+    [report] = documents
+    result = report["result"]
+    assert result["recipe"][0] == 0, result["recipe"][1]
+    assert result["recipe"][1] == result["dump"]
+    assert result["report"] == {"available": True, "digest": result["dump"]["digest"]}
+    assert result["after"] == result["dump"]["revision"] + 1

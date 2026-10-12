@@ -387,8 +387,8 @@ void InspectFields() {
     CHECK(IntAt(r, "sizes.manifests.count") == IntAt(r, "revisions.count") && IntAt(r, "sizes.manifests.stored_bytes") > 0);
     CHECK(IntAt(r, "sizes.cache.count") == 0 && IntAt(r, "sizes.operations.count") == 3);
     CHECK(IntAt(r, "sizes.external_dependencies.count") == 0 && IntAt(r, "sizes.external_dependencies.bytes") == 0);
-    CHECK(!std::get<bool>(At(r, "recipe_digest.available").data));
-    CHECK(Contains(TextAt(r, "recipe_digest.reason"), "phase2.2_recipe-and-diagnostics"));
+    CHECK(!std::get<bool>(At(r, "recipe_digest.available").data));  // no recipe host here
+    CHECK(TextAt(r, "recipe_digest.reason") == std::string(kRecipeHostMissing));
     CHECK(!std::get_if<json::Object>(&r.data)->count("verify"));
 
     // --revision: the revision before the planes.
@@ -431,6 +431,27 @@ void InspectWhileLocked() {
     const json::Value verified = Inspect(f.path, InspectOptions{std::nullopt, true});
     CHECK(std::chrono::steady_clock::now() - start < std::chrono::seconds(30));
     CHECK(TextAt(plain, "project.uuid") == kUuid && std::get<bool>(At(verified, "verify.ok").data));
+
+    // The recipe dump of the current revision, read the same way (phase2.1_recipe-dump-manifest-blocks
+    // 3.3): the report's digest is the dump's, and `inspect --recipe` prints the dump.
+    const RecipeHost host{"0.0.0-test", [](std::string_view, ChannelType, ChannelFormat) {
+                              return std::array<float, 3>{0.5f, 0.5f, 0.5f};
+                          }};
+    const json::Object dump = InspectRecipe(f.path, std::nullopt, host);
+    CHECK(dump.at("revision") == At(plain, "revision.current"));
+    CHECK(dump.at("digest") == json::Value(RecipeDigest(std::get<json::Object>(dump.at("recipe").data))));
+    const json::Value with_host = Inspect(f.path, InspectOptions{std::nullopt, false, &host});
+    CHECK(std::get<bool>(At(with_host, "recipe_digest.available").data));
+    CHECK(At(with_host, "recipe_digest.digest") == dump.at("digest"));
+    CHECK(Contains(json::WriteCanonical(dump.at("recipe")), "\"chunk_root\":\""));  // bound planes: their content
+    const fs::path printed_path = dir / "recipe.json";
+    std::FILE* printed_file = nullptr;
+    CHECK(_wfopen_s(&printed_file, printed_path.c_str(), L"wb") == 0);
+    const int printed_status = RunStoreCommand({"inspect", Utf8(f.path), "--recipe"}, printed_file, stderr, &host);
+    std::fclose(printed_file);
+    CHECK(printed_status == kCliOk && json::Parse(ReadBytes(printed_path)) == json::Value(dump));
+    CHECK(RunStoreCommand({"inspect", Utf8(f.path), "--recipe"}, stdout, stderr) == kCliFailed);  // no host
+    CHECK(RunStoreCommand({"inspect", Utf8(f.path), "--recipe", "--verify"}, stdout, stderr, &host) == kCliUsage);
     CHECK(ReadLockOwner(LockPath(f.path)) == owner);  // still the child's lock, untouched
     CHECK(ReadBytes(f.path) == bytes);
 

@@ -9,8 +9,12 @@
 //   uzp-core-tests canonical <file>    load and validate a manifest, print its canonical form
 //   uzp-core-tests digest <file>       load and validate a manifest, print its SHA-256 digest
 //   uzp-core-tests json <file>         print the canonical form of any JSON text
+//   uzp-core-tests recipe <file>       load and validate a manifest, print its recipe dump at
+//                                      revision 1 with the test host's base values
+//   uzp-core-tests rebuild <file>      read a recipe dump, print the canonical manifest of the
+//                                      project rebuilt from it with the test host
 // Errors print "<ErrorClass>: <message>" on stderr and exit 3 (ValueError, ManifestError,
-// ParseError).
+// NotYetSupported, ParseError).
 
 #include <algorithm>
 #include <cstdio>
@@ -24,6 +28,7 @@
 
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/manifest/manifest.h"
+#include "uzp_core/manifest/recipe.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/project.h"
@@ -689,6 +694,332 @@ void ResultHeader() {
     EXPECT_THROW(ManifestError, HeaderFromJson(bad));
 }
 
+// ── Recipe dump and rebuild (phase2.1_recipe-dump-manifest-blocks, decision 122) ────────────
+
+/// A host whose base values differ per channel, format and template, with a float32 third, and
+/// which knows no Metallic default outside L8 (a format-restricted default, decision 126).
+RecipeHost TestHost() {
+    return {"9.9.9-test",
+            [](std::string_view template_id, ChannelType type, ChannelFormat format) -> std::array<float, 3> {
+                if (template_id == "unknown") throw ValueError("no project template 'unknown' is installed");
+                if (type == ChannelType::Metallic && format != ChannelFormat::L8) {
+                    throw ValueError("no Metallic default outside L8");
+                }
+                const float k = static_cast<float>(static_cast<int>(type)) / 7.0f;
+                const float f = format == ChannelFormat::sRGB8 ? 1.0f / 3.0f : 1.0f / 5.0f;
+                return {k, template_id == "default" ? 0.5f : 0.25f, f};
+            }};
+}
+
+const json::Object& O(const json::Value& value) { return std::get<json::Object>(value.data); }
+const json::Array& A(const json::Value& value) { return std::get<json::Array>(value.data); }
+json::Object& MO(json::Value& value) { return std::get<json::Object>(value.data); }
+json::Array& MA(json::Value& value) { return std::get<json::Array>(value.data); }
+
+bool Contains(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
+
+/// The recipe body's stack 0 of set 0.
+const json::Object& Stack0(const json::Object& body) { return O(A(O(A(body.at("texture_sets"))[0]).at("stacks"))[0]); }
+
+const json::Object& Root(const json::Object& body, std::size_t index) { return O(A(Stack0(body).at("root_layers"))[index]); }
+
+std::string Digest(const Project& p) { return RecipeDigest(RecipeBody(p, TestHost().base_value)); }
+
+Layer& RootLayer(Project& p, Id uid) {
+    for (Layer& layer : p.texture_sets[0].stacks[0].root_layers) {
+        if (layer.uid == uid) return layer;
+    }
+    throw Failure{"no root layer " + std::to_string(uid)};
+}
+
+/// The fixture without paint content (a rebuild cannot replay planes: phase4.1).
+Project PaintlessFixture() {
+    Project p = BuildFixture(false);
+    std::vector<Layer>& roots = p.texture_sets[0].stacks[0].root_layers;
+    roots.erase(std::remove_if(roots.begin(), roots.end(), [](const Layer& l) { return l.kind == LayerKind::paint; }),
+                roots.end());
+    Layer& base = RootLayer(p, fx::kBase);
+    const auto is_paint = [](const Effect& e) { return e.kind == EffectKind::paint; };
+    base.content_effects.erase(std::remove_if(base.content_effects.begin(), base.content_effects.end(), is_paint),
+                               base.content_effects.end());
+    base.mask->effects.erase(std::remove_if(base.mask->effects.begin(), base.mask->effects.end(), is_paint),
+                             base.mask->effects.end());
+    Validate(p);
+    return p;
+}
+
+json::Value BoundPlane(int version) {
+    return json::Object{{"1004", json::Object{{"chunk_root", Hash("chunks")}, {"version_id", version}}}};
+}
+
+void RecipeDumpFields() {
+    const Project p = BuildFixture(false);
+    const json::Object dump = DumpRecipe(p, 7, TestHost());
+    const json::Object& body = O(dump.at("recipe"));
+    CHECK(dump.at("schema") == json::Value(std::string(kRecipeSchema)));
+    CHECK(dump.at("revision") == json::Value(std::int64_t{7}));
+    CHECK(dump.at("app_version") == json::Value("9.9.9-test"));
+    CHECK(dump.at("compat_profile") == json::Value(std::string(kCompatProfile)));
+    CHECK(dump.at("evaluator_profile") == json::Value("painter-12.1-layerq-linear"));
+    CHECK(body.at("evaluator_profile") == dump.at("evaluator_profile"));
+    CHECK(dump.at("digest") == json::Value(RecipeDigest(body)));
+    CHECK(json::WriteCanonical(json::Value(dump)) ==
+          json::WriteCanonical(json::Value(DumpRecipe(BuildFixture(true), 7, TestHost()))));
+
+    // The resources the body references, the display's environment excluded; one entry per hash.
+    std::set<std::string> hashes;
+    for (const json::Value& h : A(dump.at("resource_hashes"))) hashes.insert(std::get<std::string>(h.data));
+    CHECK(hashes == (std::set<std::string>{Hash("bitmap bytes"), Hash("svg bytes"), Hash("font bytes"),
+                                           Hash("mesh bytes"), Hash("ao bytes"), Hash("normal bytes")}));
+    CHECK(O(body.at("resources")).size() == 6);
+    CHECK(O(O(body.at("resources")).at(Hash("bitmap bytes"))) ==
+          (json::Object{{"mime", "image/png"}, {"size", std::int64_t{10}}}));
+
+    // Removed keys: identity, inert state, provenance paths, stores nothing reads.
+    const std::string text = json::WriteCanonical(json::Value(body));
+    for (const char* key : {"\"uid\"", "\"id\"", "\"next_id\"", "\"collapsed\"", "\"preset_ref\"", "\"display\"",
+                            "\"metadata\"", "\"export_defaults\"", "\"versions\"", "\"source_path\"",
+                            "\"bake_settings\"", "\"description\"", "\"imported_at\"", "\"origin\""}) {
+        CHECK(!Contains(text, key));
+    }
+    CHECK(O(body.at("settings")).at("template") == json::Value("default"));
+    for (const char* key : {"\"import_cameras\"", "\"label\"", "\"mesh_unit_scale\"", "\"default_resolution\""}) {
+        CHECK(!Contains(text, key));
+    }
+
+    // The rebuild block holds the rest, by pointer, outside the digest.
+    const json::Object& rebuild = O(dump.at("rebuild"));
+    CHECK(rebuild.at("/settings/import_cameras") == json::Value(false));
+    CHECK(rebuild.at("/settings/mesh_unit_scale") == json::Value(0.01));
+    CHECK(rebuild.at("/texture_sets/0/stacks/0/root_layers/1/collapsed") == json::Value(true));
+    CHECK(O(rebuild.at("/texture_sets/0/stacks/0/root_layers/1/preset_ref")).at("asset") ==
+          json::Value("uzasset://smart-material/leather@3.0.0"));
+    CHECK(rebuild.at("/texture_sets/0/stacks/0/channels/User0/label") == json::Value("dirt"));
+    CHECK(rebuild.at("/texture_sets/0/description") == json::Value(""));
+    CHECK(rebuild.at("/texture_sets/0/mesh_maps/Normal/provenance/source_path") == json::Value("A3D/tunic/normal.png"));
+    CHECK(rebuild.contains("/texture_sets/0/mesh_maps/AO/provenance/baker_version"));
+    CHECK(!rebuild.contains("/texture_sets/0/mesh_maps/Normal/provenance/declared_convention"));
+    CHECK(O(rebuild.at("/resource_catalog")).contains(Hash("hdri bytes")));
+    CHECK(A(O(rebuild.at("/resource_catalog")).at(Hash("bitmap bytes"))).size() == 2);
+    CHECK(O(rebuild.at("/display")).at("tone_mapping") == json::Value("ACES"));
+    CHECK(O(rebuild.at("/metadata")).contains("pipeline"));
+
+    // Effective defaults: every stack channel carries the host's float32 base value.
+    const json::Object& channels = O(Stack0(body).at("channels"));
+    CHECK(channels.size() == 6);
+    const json::Array& roughness = A(O(channels.at("Roughness")).at("base"));  // L8
+    CHECK(roughness[1] == json::Value(0.5));
+    CHECK(roughness[2] == json::Value(static_cast<double>(1.0f / 5.0f)));
+    // The host saw each channel's format: sRGB8 BaseColor, and a Metallic default it knows for L8 only.
+    CHECK(A(O(channels.at("BaseColor")).at("base"))[2] == json::Value(static_cast<double>(1.0f / 3.0f)));
+    Project metallic16 = BuildFixture(false);
+    metallic16.texture_sets[0].stacks[0].channels.at(ChannelType::Metallic).format = ChannelFormat::L16;
+    CHECK(Contains(EXPECT_THROW(ValueError, RecipeBody(metallic16, TestHost().base_value)), "outside L8"));
+
+    // References are pointers inside the texture set: root 0 instances root 1, root 3 references
+    // Base's anchor (root 5, content effect 5).
+    CHECK(Root(body, 0).at("instance_source") == json::Value("/stacks/0/root_layers/1"));
+    const json::Object& piping_b = O(Root(body, 3).at("fill"));
+    CHECK(O(O(piping_b.at("sources")).at("BaseColor")).at("anchor") ==
+          json::Value("/stacks/0/root_layers/5/content_effects/5"));
+    // A plane without a bound version has a null chunk root; a bound plane has its content's.
+    CHECK(O(O(Root(body, 2).at("paint")).at("planes")).at("BaseColor") == json::Value(json::Object{{"chunk_root", nullptr}}));
+    Project bound = BuildFixture(false);
+    RootLayer(bound, fx::kPaint).paint->extra["plane_versions"] = BoundPlane(3);
+    const json::Object bound_body = RecipeBody(bound, TestHost().base_value);
+    CHECK(O(O(Root(bound_body, 2).at("paint")).at("planes")).at("BaseColor") ==
+          json::Value(json::Object{{"chunk_root", Hash("chunks")}}));
+    CHECK(O(Root(bound_body, 2).at("paint")).count("plane_versions") == 0);
+
+    // A reference outside the texture set, and a template the host does not know, are refused.
+    Project dangling = BuildFixture(false);
+    RootLayer(dangling, fx::kInstance).instance_source = 99;
+    EXPECT_THROW(ValueError, RecipeBody(dangling, TestHost().base_value));
+    Project unknown = BuildFixture(false);
+    unknown.settings.template_id = "unknown";
+    EXPECT_THROW(ValueError, RecipeBody(unknown, TestHost().base_value));
+}
+
+void RecipeDigestInvariance() {
+    const std::string digest = Digest(BuildFixture(false));
+    const auto same = [&](const std::function<void(Project&)>& edit) {
+        Project p = BuildFixture(false);
+        edit(p);
+        return Digest(p) == digest;
+    };
+    // Inert state, identity and stores nothing reads keep the digest.
+    CHECK(same([](Project& p) { RootLayer(p, fx::kGroup).collapsed = false; }));
+    CHECK(same([](Project& p) { RootLayer(p, fx::kGroup).preset_ref.reset(); }));
+    CHECK(same([](Project& p) { p.metadata["pipeline"]["stage"] = "review"; }));
+    CHECK(same([](Project& p) { p.display.environment.rotation = 45.0; }));
+    CHECK(same([](Project& p) { p.export_defaults["padding"] = "none"; }));
+    CHECK(same([](Project& p) {
+        p.versions.app_version = "9.0.0";
+        p.versions.painter_reference.build = "12.2.0";
+        p.next_id += 50;
+    }));
+    CHECK(same([](Project& p) { p.mesh->source = "C:/elsewhere/tunic.fbx"; }));
+    CHECK(same([](Project& p) {  // settings no evaluation, export or mesh derivation reads
+        p.settings.import_cameras = true;
+        p.settings.auto_unwrap = true;
+        p.settings.mesh_unit_scale = 2.0;
+        p.settings.default_resolution = {512, 512, {}};
+        p.texture_sets[0].stacks[0].channels.at(ChannelType::User0).label = "grime";
+    }));
+    CHECK(same([](Project& p) {
+        p.texture_sets[0].description = "notes";
+        p.texture_sets[0].bake_settings.common["output_size"] = 4096;
+        std::get<ImportedProvenance>(p.texture_sets[0].mesh_maps.at(MeshMapUsage::Normal).provenance).source_path = "x";
+    }));
+    CHECK(same([](Project& p) {  // resource entries: renamed, re-imported under another name, unused
+        std::vector<ResourceMeta>& entries = p.resources.at(Hash("bitmap bytes"));
+        entries[0].name = "renamed";
+        entries[0].origin = "C:/other.png";
+        entries[0].imported_at = "2027-01-01T00:00:00Z";
+        entries.push_back(Meta(fx::kNext, "third", "image/png", 10, "TEXTURE"));
+        p.resources[Hash("unused bytes")] = {Meta(fx::kNext + 1, "unused", "image/png", 5, "TEXTURE")};
+        p.next_id = fx::kNext + 2;
+    }));
+    CHECK(same([](Project& p) {  // keys this version does not read
+        p.extra["future_top"] = 1;
+        RootLayer(p, fx::kBase).extra["future_node"] = "x";
+        p.texture_sets[0].stacks[0].channels.at(ChannelType::BaseColor).extra["future"] = true;
+    }));
+    // A plane's bound content is output; a new store version of the same content is not.
+    CHECK(!same([](Project& p) { RootLayer(p, fx::kPaint).paint->extra["plane_versions"] = BoundPlane(3); }));
+    Project v3 = BuildFixture(false), v4 = BuildFixture(false);
+    RootLayer(v3, fx::kPaint).paint->extra["plane_versions"] = BoundPlane(3);
+    RootLayer(v4, fx::kPaint).paint->extra["plane_versions"] = BoundPlane(4);
+    CHECK(Digest(v3) == Digest(v4));
+
+    // Output-determining edits move it.
+    CHECK(!same([](Project& p) { RootLayer(p, fx::kBase).blending.at(ChannelType::Height).opacity = 0.25; }));
+    CHECK(!same([](Project& p) { RootLayer(p, fx::kPipingA).visible = false; }));
+    CHECK(!same([](Project& p) { RootLayer(p, fx::kPipingA).name = "M_piping_v11"; }));
+    CHECK(!same([](Project& p) {
+        std::get<UniformColorSource>(RootLayer(p, fx::kBase).fill->sources.at(ChannelType::BaseColor).value).rgb[0] = 0.7;
+    }));
+    CHECK(!same([](Project& p) {
+        std::get<BitmapSource>(RootLayer(p, fx::kPipingA).fill->sources.at(ChannelType::BaseColor).value).resource.alias =
+            "Source_v11_M_piping";
+    }));
+    CHECK(!same([](Project& p) { p.settings.template_id = "blender"; }));
+    CHECK(!same([](Project& p) { p.versions.evaluator_profile = "painter-12.1-isolated-linear"; }));
+    CHECK(!same([](Project& p) { p.texture_sets[0].mesh_maps.at(MeshMapUsage::Normal).invalid = false; }));
+    CHECK(!same([](Project& p) {
+        std::vector<Layer>& roots = p.texture_sets[0].stacks[0].root_layers;
+        std::swap(roots[3], roots[4]);
+    }));
+}
+
+void RecipeRebuild() {
+    const RecipeHost host = TestHost();
+    const Project original = PaintlessFixture();
+    const json::Object dump = DumpRecipe(original, 4, host);
+    const Project rebuilt = ProjectFromRecipe(json::Value(dump), host);
+    Validate(rebuilt);
+    CHECK(RecipeBody(rebuilt, host.base_value) == O(dump.at("recipe")));
+    CHECK(Digest(rebuilt) == std::get<std::string>(dump.at("digest").data));
+    CHECK(rebuilt.versions.app_version == "9.9.9-test");
+    CHECK(rebuilt.versions.evaluator_profile == original.versions.evaluator_profile);
+    // Fresh ids: the references point at the rebuilt nodes.
+    const std::vector<Layer>& roots = rebuilt.texture_sets[0].stacks[0].root_layers;
+    CHECK(roots[0].kind == LayerKind::instance && roots[0].instance_source == roots[1].uid);
+    const Layer& base = roots.back();
+    const auto& reference = std::get<ReferenceSource>(roots[2].fill->sources.at(ChannelType::BaseColor).value);
+    CHECK(base.content_effects.back().kind == EffectKind::anchor && reference.anchor == base.content_effects.back().uid);
+    // Lossless: the rebuilt project holds every value of the rebuild block (inert state, names,
+    // display, metadata, provenance) under fresh ids.
+    CHECK(O(DumpRecipe(rebuilt, 4, host).at("rebuild")) == O(dump.at("rebuild")));
+    CHECK(roots[1].collapsed && roots[1].preset_ref && rebuilt.metadata == original.metadata);
+    CHECK(rebuilt.display == original.display && rebuilt.resources.at(Hash("bitmap bytes")).size() == 2);
+    CHECK(rebuilt.texture_sets[0].bake_settings == original.texture_sets[0].bake_settings);
+
+    // Two projects differing only in import_cameras: one digest, each rebuilds to its own value.
+    Project cameras = PaintlessFixture();
+    cameras.settings.import_cameras = true;
+    const json::Object cameras_dump = DumpRecipe(cameras, 4, host);
+    CHECK(cameras_dump.at("digest") == dump.at("digest"));
+    CHECK(ProjectFromRecipe(json::Value(cameras_dump), host).settings.import_cameras);
+    CHECK(!rebuilt.settings.import_cameras);
+
+    // Without its rebuild block (a migration's recipe), a project rebuilds with a new project's
+    // defaults; a baked mesh map's provenance has none.
+    json::Value bare = dump;
+    MO(bare)["rebuild"] = json::Object{};
+    CHECK(Contains(EXPECT_THROW(ManifestError, ProjectFromRecipe(bare, host)), "baker_version"));
+    Project unbaked = PaintlessFixture();
+    unbaked.texture_sets[0].mesh_maps.erase(MeshMapUsage::AO);
+    json::Value unbaked_dump = DumpRecipe(unbaked, 2, host);
+    MO(unbaked_dump)["rebuild"] = json::Object{};
+    const Project from_bare = ProjectFromRecipe(unbaked_dump, host);
+    CHECK(Digest(from_bare) == Digest(unbaked));
+    CHECK(from_bare.resources.at(Hash("mesh bytes")).front().usage == "mesh");
+    CHECK(!from_bare.resources.contains(Hash("hdri bytes")));  // the display's environment is not output
+    CHECK(!from_bare.texture_sets[0].stacks[0].root_layers[1].collapsed);
+
+    // The rebuild block cannot change output-determining state, name a place the body lacks, or
+    // give a value the rebuilt project does not hold.
+    const auto block_refused = [&](const std::string& pointer, json::Value value, const char* part) {
+        json::Value bad = dump;
+        MO(MO(bad)["rebuild"])[pointer] = std::move(value);
+        CHECK(Contains(EXPECT_THROW(ManifestError, ProjectFromRecipe(bad, host)), part));
+    };
+    block_refused("/settings/normal_map_format", json::Value("DirectX"), "output-determining");
+    block_refused("/texture_sets/0/stacks/0/root_layers/0/name", json::Value("x"), "output-determining");
+    block_refused("/texture_sets/9/description", json::Value("x"), "does not hold");
+    block_refused("settings/import_cameras", json::Value(true), "JSON pointer");
+    json::Value misplaced = dump;  // a collapse on an instance layer: the model refuses it
+    MO(MO(misplaced)["rebuild"])["/texture_sets/0/stacks/0/root_layers/0/collapsed"] = true;
+    CHECK(Contains(EXPECT_THROW(ValueError, ProjectFromRecipe(misplaced, host)), "collapsed"));
+    json::Value unknown_value = dump;  // a value the rebuilt project does not hold
+    MO(MO(unknown_value)["rebuild"])["/texture_sets/0/mesh_maps/Normal/provenance/future_key"] = 1;
+    CHECK(Contains(EXPECT_THROW(ManifestError, ProjectFromRecipe(unknown_value, host)), "rebuilt project"));
+
+    // A tampered body, another build's base values, a dangling pointer, a mistyped body, another
+    // schema and paint content are refused.
+    json::Value tampered = dump;
+    MO(MO(tampered)["recipe"])["evaluator_profile"] = "painter-12.1-isolated-linear";
+    CHECK(Contains(EXPECT_THROW(ManifestError, ProjectFromRecipe(tampered, host)), "digest"));
+    RecipeHost other = host;
+    other.base_value = [](std::string_view, ChannelType, ChannelFormat) { return std::array<float, 3>{0.0f, 0.0f, 0.0f}; };
+    CHECK(Contains(EXPECT_THROW(ValueError, ProjectFromRecipe(json::Value(dump), other)), "base value"));
+    json::Value dangling = dump;
+    json::Object& body = MO(MO(dangling)["recipe"]);
+    json::Object& set = MO(MA(body["texture_sets"])[0]);
+    json::Object& stack = MO(MA(set["stacks"])[0]);
+    MO(MA(stack["root_layers"])[0])["instance_source"] = "/stacks/0/root_layers/40";
+    MO(dangling)["digest"] = RecipeDigest(body);
+    CHECK(Contains(EXPECT_THROW(ValueError, ProjectFromRecipe(dangling, host)), "root_layers/40"));
+    json::Value mistyped = dump;
+    MO(MO(mistyped)["recipe"])["texture_sets"] = json::Array{json::Value(5)};
+    MO(mistyped)["digest"] = RecipeDigest(MO(MO(mistyped)["recipe"]));
+    EXPECT_THROW(ManifestError, ProjectFromRecipe(mistyped, host));
+    json::Value wrong = dump;
+    MO(wrong)["schema"] = "uzpainter/manifest/1";
+    EXPECT_THROW(ManifestError, ProjectFromRecipe(wrong, host));
+    // The ARC-11 header is required and checked against the body.
+    for (const char* key : {"revision", "evaluator_profile", "compat_profile", "app_version", "resource_hashes"}) {
+        json::Value missing = dump;
+        MO(missing).erase(key);
+        EXPECT_THROW(ManifestError, ProjectFromRecipe(missing, host));
+    }
+    const auto header_refused = [&](const char* key, json::Value value, const char* part) {
+        json::Value bad = dump;
+        MO(bad)[key] = std::move(value);
+        CHECK(Contains(EXPECT_THROW(ManifestError, ProjectFromRecipe(bad, host)), part));
+    };
+    header_refused("revision", json::Value(-1), "revision");
+    header_refused("revision", json::Value("4"), "revision");
+    header_refused("app_version", json::Value(""), "app_version");
+    header_refused("compat_profile", json::Value("painter-13.0-api-1.0.0"), "compat_profile");
+    header_refused("evaluator_profile", json::Value("painter-12.1-isolated-linear"), "evaluator_profile");
+    header_refused("resource_hashes", json::Value(json::Array{Hash("bitmap bytes")}), "resource_hashes");
+    header_refused("resource_hashes", json::Value(json::Array{json::Value("xyz")}), "resource_hashes");
+    const json::Value painted(DumpRecipe(BuildFixture(false), 1, host));
+    CHECK(Contains(EXPECT_THROW(NotYetSupported, ProjectFromRecipe(painted, host)), "phase4.1_nodes-paint-layers"));
+}
+
 int Run(const std::string& only) {
     const std::vector<std::pair<const char*, void (*)()>> cases = {
         {"sha256_vectors", Sha256Vectors},
@@ -702,6 +1033,9 @@ int Run(const std::string& only) {
         {"manifest_reader", ManifestReader},
         {"resource_urls", ResourceUrls},
         {"result_header", ResultHeader},
+        {"recipe_dump_fields", RecipeDumpFields},
+        {"recipe_digest_invariance", RecipeDigestInvariance},
+        {"recipe_rebuild", RecipeRebuild},
     };
     int failed = 0;
     int ran = 0;
@@ -739,8 +1073,10 @@ int Command(int argc, char** argv) {
         std::fwrite(out.data(), 1, out.size(), stdout);
         return 0;
     }
-    if (argc < 3 || (command != "canonical" && command != "digest" && command != "json")) {
-        std::fprintf(stderr, "usage: uzp-core-tests run [case] | fixture [reversed] | canonical|digest|json <file>\n");
+    if (argc < 3 || (command != "canonical" && command != "digest" && command != "json" && command != "recipe" &&
+                     command != "rebuild")) {
+        std::fprintf(stderr,
+                     "usage: uzp-core-tests run [case] | fixture [reversed] | canonical|digest|json|recipe|rebuild <file>\n");
         return 2;
     }
     const std::string text = ReadFile(argv[2]);
@@ -748,6 +1084,8 @@ int Command(int argc, char** argv) {
     if (command == "canonical") out = SaveManifest(LoadManifest(text));
     if (command == "digest") out = ManifestDigest(LoadManifest(text));
     if (command == "json") out = json::WriteCanonical(json::Parse(text));
+    if (command == "recipe") out = json::WriteCanonical(json::Value(DumpRecipe(LoadManifest(text), 1, TestHost())));
+    if (command == "rebuild") out = SaveManifest(ProjectFromRecipe(json::Parse(text), TestHost()));
     std::fwrite(out.data(), 1, out.size(), stdout);
     return 0;
 }
@@ -761,6 +1099,8 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "ValueError: %s\n", error.what());
     } catch (const ManifestError& error) {
         std::fprintf(stderr, "ManifestError: %s\n", error.what());
+    } catch (const NotYetSupported& error) {
+        std::fprintf(stderr, "NotYetSupported: %s\n", error.what());
     } catch (const json::ParseError& error) {
         std::fprintf(stderr, "ParseError: %s\n", error.what());
     } catch (const std::exception& error) {

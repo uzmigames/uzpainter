@@ -12,6 +12,7 @@
 #include "store/planes.h"
 #include "store/save.h"
 #include "store/versioning.h"
+#include "uzp_core/manifest/manifest.h"
 #include "uzp_core/manifest/sha256.h"
 
 namespace uzp::store {
@@ -309,7 +310,16 @@ Value Report(Container& container, const std::filesystem::path& project, const I
                          "stored_bytes", nullptr)},
         {"external_dependencies", ExternalDependencies(container)},
     };
-    report["recipe_digest"] = Object{{"available", false}, {"reason", std::string(kRecipeDigestUnavailable)}};
+    if (options.recipe == nullptr) {
+        report["recipe_digest"] = Object{{"available", false}, {"reason", std::string(kRecipeHostMissing)}};
+    } else {
+        try {
+            const Object dump = core::DumpRecipe(core::LoadManifest(text), revision, *options.recipe);
+            report["recipe_digest"] = Object{{"available", true}, {"digest", dump.at("digest")}};
+        } catch (const std::exception& error) {
+            report["recipe_digest"] = Object{{"available", false}, {"reason", std::string(error.what())}};
+        }
+    }
 
     if (options.verify) {
         const Value current_manifest = revision == current ? manifest : core::json::Parse(ReadManifestText(container, current));
@@ -357,6 +367,21 @@ Value Inspect(const std::filesystem::path& project, const InspectOptions& option
     Value report = Report(container, project, options);
     container.Exec("COMMIT");
     return report;
+}
+
+Object InspectRecipe(const std::filesystem::path& project, std::optional<std::int64_t> revision,
+                     const core::RecipeHost& host) {
+    Container container = Container::OpenReadOnly(project);
+    container.Exec("BEGIN");  // one consistent read; a read-only connection never writes
+    const std::optional<std::string> version_text = container.Meta("format_version");
+    if (!container.HasTable("meta") || !version_text) {
+        throw StoreError(StoreError::Code::not_a_project, Utf8(project) + " is not a .uzp project");
+    }
+    CheckReadable(FormatVersion::Parse(*version_text), VersionPolicy::Current());
+    const std::int64_t number = revision.value_or(ReadCurrentRevision(container));
+    Object dump = core::DumpRecipe(core::LoadManifest(ReadManifestText(container, number)), number, host);
+    container.Exec("COMMIT");
+    return dump;
 }
 
 std::string WriteIndented(const Value& value) {

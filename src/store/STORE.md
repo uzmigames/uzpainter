@@ -379,8 +379,11 @@ MIME, usage, colour space, origin and `storage` = `embedded`, `locator` or `miss
 `checkpoints`, `sizes` (`file_bytes`, then the parts of the file — `manifests`, `resources`,
 `plane_chunks`, `operations`, `cache` — and, listed separately, `external_dependencies`: the
 locator targets of a non-portable project with their bytes and the missing count) and
-`recipe_digest`, reported as `{available: false, reason}` until `dump_recipe` exists
-(`phase2.2_recipe-and-diagnostics`). It opens the file read-only (`Container::OpenReadOnly`)
+`recipe_digest` (`{available: true, digest}` with the running application's recipe host,
+`{available: false, reason}` without one, as in the store's own test executable, or when the dump
+fails). `inspect <file.uzp> --recipe [--revision N]` prints the revision's recipe dump instead
+(`InspectRecipe`, `src/uzp_core/MANIFEST.md` §8): the JSON `uzpainter.project.dump_recipe()`
+returns for that revision. Both open the file read-only (`Container::OpenReadOnly`)
 inside one read transaction: no lock sidecar, no GPU, nothing written; a file a killed worker left
 with a hot journal is refused (`io`) rather than rolled back by a reader. `--verify` runs
 `CheckIntegrity` at `VerifyLevel::full` — every rule of 09 §1: foreign keys, every manifest

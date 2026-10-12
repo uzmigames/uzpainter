@@ -2,6 +2,7 @@
 
 #include "evaluator/dag.h"
 #include "uzp_core/document/nodes.h"
+#include "uzp_core/manifest/recipe.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/receipt.h"
@@ -242,7 +243,10 @@ render::Result<std::set<std::string>> ReadResourceHashes(const core::Project& pr
             if (!read) return render::Unexpected(read.error());
         }
     }
-    if (walk.geometry && project.mesh) walk.hashes.insert(project.mesh->resource);
+    if (walk.geometry) {
+        // The texturing mesh: its file and the files it reads beside it (a glTF's buffers).
+        for (const std::string& hash : core::MeshResourceHashes(project)) walk.hashes.insert(hash);
+    }
     return std::move(walk.hashes);
 }
 

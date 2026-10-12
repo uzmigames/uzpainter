@@ -1,0 +1,14 @@
+{
+  "id": 123,
+  "slug": "a-reload-of-identical-mesh-bytes-from-another-path-is-a-metadata-only-revision-recording-the-new-mesh-source",
+  "title": "A reload of identical mesh bytes from another path is a metadata-only revision that records the new mesh source",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.6_mesh-reload",
+    "phase1.24_python-api-facade",
+    "phase1.23_pyapi-pipeline-adapter",
+    "phase2.1_recipe-dump-manifest-blocks"
+  ],
+  "supersededBy": null
+}
