@@ -16,6 +16,9 @@ P2-RECIPE in `docs/dag.md`, implementing D3 (`docs/architecture/03-project-model
 ## Acceptance
 DAG gate: rebuild-from-dump equality on wand — the wand v1 project dumped, rebuilt from the dump plus its referenced resources into a new project, and exported with the same configuration gives byte-identical files and the same recipe digest. The parent closes only when both children pass.
 
+## Child results
+- `phase2.1_recipe-diagnostic-views` (decision 136): `uzpainter.diagnostics` (`isolate`, `contribution`, `material_views`, `region_stats`, `snapshot_layer_tree`, `diff_snapshots`) and the worker's five MCP Diagnostics tools. Its §3 tests are green on CPU: `tests/python/test_pyapi_diagnostics.py` (4 cases) and `tests/supervisor/test_worker_diagnostics.py` (1 case). Each view equals the OpenEXR 32f export of its `diagnosticMap` source. Its prerequisite item 1.1 (`phase1.25_pilot-wand` accepted) is still open. Item 3.2 here runs the same calls on the wand.
+
 ## Impact
 - Affected specs: `recipe`
 - Affected code: recipe dump, rebuild, diagnostics, export receipts

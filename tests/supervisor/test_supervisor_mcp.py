@@ -62,8 +62,14 @@ def test_tools_are_forwarded_and_stdout_carries_protocol_frames_only(
         "project_save",
         "project_inspect",
         "evaluate_channel",
+        "snapshot_layer_tree",
+        "diff_snapshots",
+        "isolate_layer",
+        "material_views",
+        "region_stats",
     }
     assert tools["project_open"]["inputSchema"]["required"] == ["path"]
+    assert tools["isolate_layer"]["inputSchema"]["required"] == ["uid", "channels", "path"]
     assert session.call("project_inspect") == {"result": {"open": False}}
     assert session.call("run_python", {"code": "1"})["error"]["code"] == "python_disabled"
     status = session.status()

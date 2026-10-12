@@ -15,6 +15,11 @@ namespace uzp::core {
 /// The manifest object of `project`, unknown keys included (no validation).
 json::Value ProjectToJson(const Project& project);
 
+/// The manifest object of one layer (its effects and sub-layers included) and of one effect
+/// (`mask`: an effect of a mask stack), as `ProjectToJson` writes them.
+json::Value LayerToJson(const Layer& layer);
+json::Value EffectToJson(const Effect& effect, bool mask);
+
 /// Reads a manifest object. Throws `ManifestError` on a missing or mistyped key, an unknown
 /// enum member, a wrong `schema` or a `format_version` of a newer major; unknown keys are kept
 /// in the `extra` members. Does not validate the model (see `LoadManifest`).

@@ -80,6 +80,11 @@ It then answers one request at a time on the interpreter's thread. The GIL is he
 | `project_save {mode?: incremental\|full}` | GPU-free, names a checkpoint | `{current, named, previous}` |
 | `project_inspect` | GPU-free | `{open, path, revision, texture_sets: [{name, stacks}]}` |
 | `evaluate_channel {channel, texture_set?, stack?}` | GPU (the GPU evaluator on the engine thread) | `{revision, texture_set, stack, channel, format, width, height, tiles, payload: {path, sha256, size}}`; the texels go to a file under `--output-root` |
+| `snapshot_layer_tree` | GPU-free | the layer-tree snapshot of the committed revision (`uzp_core/document/layer_tree.h`) |
+| `diff_snapshots {before, after}` | GPU-free | the nodes and stacks added, removed and modified between two snapshots |
+| `isolate_layer {uid, channels, path}` | GPU-free (CPU evaluator, as the export) | `{revision, uid, was_visible, export}`: the sources `isolated/<channel>/<uid>` published as an export generation (OpenEXR 32f, padding `passthrough`) under `path` |
+| `material_views {mask, path}` | GPU-free | `{revision, material, inside, views: {view: {leak_count, modal_id}}, missing, refused, export}`: the material's mask and each view with its leaks published the same way |
+| `region_stats {mask, map}` | GPU-free | `{source, revision, stats}`: the statistics the export writes for `regionStats/<map>/<mask>` |
 | `run_python {code, args?}` | mutating; listed and run only with `--allow-python`; its MCP schema also requires `idempotency_key` and `expected_revision` | the `RunScript` report; a raising script is `script_failed`, with the calls it committed in `details` |
 | `test_fault {fault}` | Debug builds under `--test-faults` only | `{armed}` |
 
@@ -92,6 +97,8 @@ The checks run in this order, and every refusal comes before the call runs:
 5. A GPU call on a worker without a device returns `gpu_backend_unavailable {backend, reason}`.
 
 Replies carry `committed_revision` while a project is open. A bad frame gets `{"id": null, "error": {"code": "invalid_frame"}}`, and the worker keeps serving.
+
+The Diagnostics tools (task phase2.1_recipe-diagnostic-views, decision 136) read the committed revision through `python::DiagnosticRun` (`src/python/diagnostics.h`), the code behind `uzpainter.diagnostics`. Their `path` must lie inside `--output-root`; a relative path is taken under it, and anything else is `invalid_arguments` until MCP roots exist (phase2.5). Each export is an ordinary generation with its plan and receipt, so a call never overwrites an earlier one.
 
 In this task the GPU operations are exactly the tools that run on the engine thread (decision 120). The Phase 1 export computes on the CPU evaluator (decision 111), so it is not refused on a worker without a device. It joins the GPU set when it moves to the GPU evaluator.
 
@@ -124,4 +131,5 @@ All tests are in `tests/supervisor/`:
 - `test_ipc_codec.py` (pure Python) covers the codec, every handshake mismatch and the exit causes.
 - `test_worker_pipe.py` runs the worker with the test process as its supervisor, on Vulkan, so no device is created. It covers the handshake, the Python gate, the unavailable backend, the precondition, script failures, protocol errors, refused clients, broken pipes and usage errors.
 - `test_supervisor_mcp.py` drives the supervisor over stdio MCP. It covers stdout cleanliness, fatal mismatches, external kill, abort and SEH with their minidumps, a lost acknowledgement, calls held during a relaunch, and a killed supervisor.
+- `test_worker_diagnostics.py` drives the Diagnostics tools on a saved project and compares their files and summaries with `uzpainter.diagnostics` on the same project.
 - `test_supervisor_gpu.py` runs on DX12 and skips under `UZP_NO_GPU=1`. It checks that the device lives only in the worker, the evaluation payload by path and hash, and device removal and GPU stall with relaunch on the same backend.

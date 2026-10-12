@@ -1,8 +1,8 @@
 // `uzpainter.logging`, `.application` (with the engine-computation state, phase1.21), `.event` (the
 // Python dispatcher thread, dispatcher.h), `.properties` and the modules whose behaviour arrives
-// in later phases (`.baking`, `.render`, `.display`, `.diagnostics`): importable, every call
-// raising `NotYetSupported` naming its owner task before anything changes (decision 082); and
-// `.capabilities` (capabilities.h, phase1.22).
+// in later phases (`.baking`, `.render`, `.display`): importable, every call raising
+// `NotYetSupported` naming its owner task before anything changes (decision 082); `.diagnostics`
+// (bind_diagnostics.cpp); and `.capabilities` (capabilities.h, phase1.22).
 
 #include "python/bindings.h"
 #include "python/capabilities.h"
@@ -186,9 +186,8 @@ void BindMisc(py::module_& m) {
          "phase2.3_realtime-preview");
 
     py::module_ diagnostics = submodule(m, "diagnostics", "uzpainter.diagnostics",
-                                        "Diagnostic views of the stack (phase2.2_recipe-and-diagnostics).");
-    Gaps(diagnostics, "uzpainter.diagnostics", {"isolate", "contribution", "material_views", "region_stats"},
-         "phase2.2_recipe-and-diagnostics");
+                                        "Diagnostic views of the stack and layer-tree snapshots (bind_diagnostics.cpp).");
+    BindDiagnostics(diagnostics);
 
     BindCapabilities(m);
 }

@@ -65,7 +65,13 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 - **`logging`, `application`, `properties`.** Log lines go to the script's standard error; `version()` and `version_info()`; the `Property` type of procedural parameters, which no Phase 1 call returns.
 - **Engine computations (`application`).** `enable_engine_computations(enable)`, `engine_computations_status()` and the context manager `disable_engine_computations()`. While computations are disabled the job worker starts no queued job: an export is deferred, not dropped, and `jobs.busy()` names it until it ran.
 - **`event`.** The dispatcher thread (§6): `post(task)`, `flush()`, `drain()`, `hold()` / `release()`, `on_dispatcher_thread()` and `dispatcher_thread_id()`.
-- **Later phases.** `baking` (phase3.5), `render`, `render.shader`, `render.display`, `display` (phase2.3) and `diagnostics` (phase2.2) are importable. Every call raises `NotYetSupported` naming the owner before anything changes.
+- **`diagnostics`** (`bind_diagnostics.cpp`, `diagnostics.{h,cpp}`; decision 136). Nothing here commits or changes the document.
+  - `isolate(node, map)`, `contribution(node, map)`, `material_views(material)` and `region_stats(map, mask)` read the committed revision. They refuse inside an open `Transaction`, as the export does.
+  - They evaluate on the CPU evaluator with the export's inputs and the entry points of its `diagnosticMap` sources, so each view equals the export of its source.
+  - Each result names its source (decision 076) and the revision it read. A map is `{width, height, components, values}`, with `values` the float32 little-endian bytes, rows top first.
+  - A view reading a channel whose template base is inferred is refused by the export's guard (decision 126). The three single views raise `NotYetSupported`. `material_views` lists such a view in `refused` and returns the others.
+  - `snapshot_layer_tree()` returns the layer tree of the committed revision (`uzp_core/document/layer_tree.h`). `diff_snapshots(before, after)` returns the nodes and stacks added, removed and modified, each change as a JSON pointer with its values.
+- **Later phases.** `baking` (phase3.5), `render`, `render.shader`, `render.display` and `display` (phase2.3) are importable. Every call raises `NotYetSupported` naming the owner before anything changes.
 - **`capabilities`.** `profile()` (`"painter-12.1-api-0.3.7"`), `manifest()` (the shipped `capabilities.json`) and `entry(symbol, context="any")` (§7).
 - **Top level.** `Result`, `last_result()`, `Transaction(name)`.
 
@@ -114,6 +120,15 @@ The result's `returned["sync"]` lists the groups, layers, imported and skipped i
 - LAY-08;
 - a second Python thread running while an export job is waited on;
 - the export dry run, job errors and `BusyError`.
+
+`tests/python/test_pyapi_diagnostics.py` (CPU) checks `diagnostics` against OpenEXR 32f exports of the same project:
+- the isolated map equals the export with the node hidden by hand, and the revision and every visibility flag are unchanged;
+- the contribution equals the float32 difference of the two exports;
+- a seeded Roughness leak is detected and a clean fixture reports none;
+- the statistics equal those recomputed from the exported map and mask;
+- every view equals the export of its `diagnosticMap` source;
+- decision 126 refuses per source;
+- the snapshot diff reports exactly the seeded changes.
 
 `tests/python/test_pyapi_tier0.py` compares the native-owned Tier 0 readbacks with the private goldens on the owner's machine (decision 106).
 

@@ -34,6 +34,7 @@
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "mesh/reload.h"
+#include "python/diagnostics.h"
 #include "python/errors.h"
 #include "python/interpreter.h"
 #include "python/script.h"
@@ -44,7 +45,10 @@
 #include "supervisor/fault_hooks.h"
 #include "supervisor/ipc.h"
 #include "supervisor/pipe.h"
+#include "uzp_core/document/layer_tree.h"
+#include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/sha256.h"
+#include "uzp_core/types/errors.h"
 #include "uzp_core/types/enums.h"
 
 namespace uzp::supervisor {
@@ -204,6 +208,10 @@ json::Object Schema(json::Object properties, json::Array required) {
 
 json::Object StringProperty(const char* description) { return {{"type", "string"}, {"description", description}}; }
 
+json::Object UidProperty(const char* description) {
+    return {{"type", "integer"}, {"minimum", 1}, {"description", description}};
+}
+
 const json::Value* Field(const json::Object& object, std::string_view key) {
     const auto it = object.find(key);
     return it == object.end() ? nullptr : &it->second;
@@ -258,7 +266,14 @@ private:
     json::Object ProjectSave(const json::Object& arguments);
     json::Object ProjectInspect(const json::Object& arguments);
     json::Object EvaluateChannel(const json::Object& arguments);
+    json::Object SnapshotLayerTree(const json::Object& arguments);
+    json::Object DiffSnapshots(const json::Object& arguments);
+    json::Object IsolateLayer(const json::Object& arguments);
+    json::Object MaterialViews(const json::Object& arguments);
+    json::Object RegionStats(const json::Object& arguments);
     json::Object RunPython(const json::Object& arguments);
+    /// The folder a Diagnostics tool exports into: `path`, inside the output root.
+    std::filesystem::path OutputDirectory(const json::Object& arguments) const;
 #if defined(UZP_WORKER_FAULT_HOOKS)
     json::Object TestFault(const json::Object& arguments);
 #endif
@@ -299,6 +314,43 @@ void Worker::DefineTools() {
                 {"channel"}),
          false, true},
         [this](const json::Object& a) { return EvaluateChannel(a); });
+    // The Diagnostics tools (11-mcp-server.md §2; decision 136): GPU-free reads of the committed
+    // revision on the CPU evaluator, as the export; the exporting ones publish a generation.
+    add({"snapshot_layer_tree",
+         "The layer tree of the committed revision: every node's uid, kind, name, visibility, place and parameters.",
+         Schema({}, {}), false, false},
+        [this](const json::Object& a) { return SnapshotLayerTree(a); });
+    add({"diff_snapshots", "The nodes and stacks added, removed and modified between two layer-tree snapshots.",
+         Schema({{"before", json::Object{{"type", "object"}}}, {"after", json::Object{{"type", "object"}}}},
+                {"before", "after"}),
+         false, false},
+        [this](const json::Object& a) { return DiffSnapshots(a); });
+    add({"isolate_layer",
+         "Exports each map with the node hidden (diagnosticMap isolated/<map>/<uid>, OpenEXR 32f) as a generation "
+         "under `path`, a folder inside the output root.",
+         Schema({{"uid", UidProperty("The node to hide.")},
+                 {"channels", json::Object{{"type", "array"},
+                                           {"minItems", 1},
+                                           {"items", json::Object{{"type", "string"}}},
+                                           {"description", "Channel types, Normal_OpenGL or Normal_DirectX."}}},
+                 {"path", StringProperty("The export folder, relative to the output root.")}},
+                {"uid", "channels", "path"}),
+         false, false},
+        [this](const json::Object& a) { return IsolateLayer(a); });
+    add({"material_views",
+         "Exports the material's mask and its views with their leaks (diagnosticMap materialMask, materialView, "
+         "materialLeaks; OpenEXR 32f) as a generation under `path`, a folder inside the output root.",
+         Schema({{"mask", UidProperty("The material: a fill layer or group.")},
+                 {"path", StringProperty("The export folder, relative to the output root.")}},
+                {"mask", "path"}),
+         false, false},
+        [this](const json::Object& a) { return MaterialViews(a); });
+    add({"region_stats", "Statistics of a map inside a material's region (diagnosticMap regionStats/<map>/<uid>).",
+         Schema({{"mask", UidProperty("The material: a fill layer or group.")},
+                 {"map", StringProperty("A channel type, Normal_OpenGL or Normal_DirectX.")}},
+                {"mask", "map"}),
+         false, false},
+        [this](const json::Object& a) { return RegionStats(a); });
     if (m_options.allow_python) {
         add({"run_python", "Runs Python source in the worker's interpreter (only with --allow-python).",
              Schema({{"code", StringProperty("The Python source.")},
@@ -586,6 +638,147 @@ json::Object Worker::EvaluateChannel(const json::Object& arguments) {
             {"payload", json::Object{{"path", python::Utf8(file)},
                                      {"sha256", core::Sha256Hex(texels)},
                                      {"size", static_cast<std::int64_t>(texels.size())}}}};
+}
+
+core::Id UidArgument(const json::Object& arguments, std::string_view key) {
+    const json::Value* value = Field(arguments, key);
+    if (!value || !value->IsInt() || std::get<std::int64_t>(value->data) < 1) {
+        throw CallError{"invalid_arguments", std::string(key) + " must be a node uid (a positive integer)", {}};
+    }
+    return static_cast<core::Id>(std::get<std::int64_t>(value->data));
+}
+
+evaluator::DiagnosticMapId MapArgument(const std::string& name) {
+    render::Result<evaluator::DiagnosticMapId> map = evaluator::ParseMapName(name);
+    if (!map) {
+        throw CallError{"invalid_arguments", "unknown map " + name + ": a channel type, Normal_OpenGL or Normal_DirectX",
+                        {}};
+    }
+    return *map;
+}
+
+/// `{generation, directory, receipt, receipt_sha256, files: [{source, path, relative_path, sha256, size}]}`.
+json::Object PublicationJson(const exporter::Publication& published,
+                             const std::vector<evaluator::DiagnosticSource>& sources) {
+    json::Array files;
+    for (std::size_t i = 0; i < published.files.size(); ++i) {
+        const exporter::WrittenFile& file = published.files[i];
+        files.push_back(json::Object{{"source", evaluator::SourceName(sources.at(i))},
+                                     {"path", file.path},
+                                     {"relative_path", file.relativePath},
+                                     {"sha256", file.sha256},
+                                     {"size", static_cast<std::int64_t>(file.size)}});
+    }
+    return {{"generation", published.generation},
+            {"directory", exporter::Utf8String(published.directory)},
+            {"receipt", exporter::Utf8String(published.receipt)},
+            {"receipt_sha256", published.receiptSha256},
+            {"files", std::move(files)}};
+}
+
+json::Array Triple(const std::array<float, 3>& v) {
+    return {static_cast<double>(v[0]), static_cast<double>(v[1]), static_cast<double>(v[2])};
+}
+
+std::filesystem::path Worker::OutputDirectory(const json::Object& arguments) const {
+    const std::optional<std::string> path = StringField(arguments, "path");
+    if (!path || path->empty()) throw CallError{"invalid_arguments", "path must name a folder", {}};
+    // Exports stay inside the output root until MCP roots exist (phase2.5_mcp-transport-registry).
+    const std::filesystem::path root = std::filesystem::weakly_canonical(std::filesystem::absolute(m_options.output_root));
+    std::filesystem::path folder = python::PathFromUtf8(*path);
+    if (folder.is_relative()) folder = root / folder;
+    folder = std::filesystem::weakly_canonical(folder);
+    const auto [inside, rest] = std::mismatch(root.begin(), root.end(), folder.begin(), folder.end());
+    if (inside != root.end()) {
+        throw CallError{"invalid_arguments", "path must be inside the output root " + python::Utf8(root),
+                        json::Object{{"output_root", python::Utf8(root)}}};
+    }
+    return folder;
+}
+
+json::Object Worker::SnapshotLayerTree(const json::Object&) {
+    const core::Snapshot snapshot = python::Session::Get().Current()->document->snapshot();
+    return core::SnapshotLayerTree(*snapshot.project, snapshot.revision);
+}
+
+json::Object Worker::DiffSnapshots(const json::Object& arguments) {
+    const json::Value* before = Field(arguments, "before");
+    const json::Value* after = Field(arguments, "after");
+    if (!before || !after) throw CallError{"invalid_arguments", "diff_snapshots needs before and after", {}};
+    try {
+        return core::DiffSnapshots(*before, *after);
+    } catch (const core::ValueError& error) {
+        throw CallError{"invalid_arguments", error.what(), {}};
+    }
+}
+
+json::Object Worker::IsolateLayer(const json::Object& arguments) {
+    const core::Id uid = UidArgument(arguments, "uid");
+    const json::Value* channels = Field(arguments, "channels");
+    if (!channels || !channels->IsArray() || std::get<json::Array>(channels->data).empty()) {
+        throw CallError{"invalid_arguments", "channels must be a non-empty list of map names", {}};
+    }
+    std::vector<evaluator::DiagnosticSource> sources;
+    for (const json::Value& channel : std::get<json::Array>(channels->data)) {
+        if (!channel.IsString()) throw CallError{"invalid_arguments", "channels must be a non-empty list of map names", {}};
+        sources.push_back(
+            {evaluator::DiagnosticSource::Kind::Isolated, MapArgument(std::get<std::string>(channel.data)), {}, uid});
+    }
+    const std::filesystem::path folder = OutputDirectory(arguments);
+    python::DiagnosticRun run;
+    const exporter::Publication published = run.Export(uid, sources, folder);
+    bool visible = true;
+    core::ForEachNode(*run.snapshot().project, [&](const core::NodeVisit& visit) {
+        if (visit.layer && visit.layer->uid == uid) visible = visit.layer->visible;
+        if (visit.effect && visit.effect->uid == uid) visible = visit.effect->visible;
+    });
+    return {{"revision", run.snapshot().revision},
+            {"uid", static_cast<std::int64_t>(uid)},
+            {"was_visible", visible},
+            {"export", PublicationJson(published, sources)}};
+}
+
+json::Object Worker::MaterialViews(const json::Object& arguments) {
+    const core::Id material = UidArgument(arguments, "mask");
+    const std::filesystem::path folder = OutputDirectory(arguments);
+    python::DiagnosticRun run;
+    const python::DiagnosticMaterialViews result = run.MaterialViews(material);
+    using Kind = evaluator::DiagnosticSource::Kind;
+    std::vector<evaluator::DiagnosticSource> sources{{Kind::MaterialMask, {}, {}, material}};
+    json::Object views;
+    for (const evaluator::MaterialView& view : result.views.views) {
+        sources.push_back({Kind::MaterialView, {}, view.view, material});
+        sources.push_back({Kind::MaterialLeaks, {}, view.view, material});
+        views[std::string(evaluator::MaterialViewName(view.view))] =
+            json::Object{{"leak_count", static_cast<std::int64_t>(view.leakTexels.size())},
+                         {"modal_id", view.modalId ? json::Value(Triple(*view.modalId)) : json::Value(nullptr)}};
+    }
+    json::Array missing;
+    for (const evaluator::MaterialViewKind view : result.views.missing) {
+        missing.emplace_back(std::string(evaluator::MaterialViewName(view)));
+    }
+    json::Object refused;
+    for (const auto& [view, reason] : result.refused) refused[view] = reason;
+    const exporter::Publication published = run.Export(material, sources, folder);
+    return {{"revision", run.snapshot().revision},
+            {"material", static_cast<std::int64_t>(material)},
+            {"inside", static_cast<std::int64_t>(result.views.inside)},
+            {"views", std::move(views)},
+            {"missing", std::move(missing)},
+            {"refused", std::move(refused)},
+            {"export", PublicationJson(published, sources)}};
+}
+
+json::Object Worker::RegionStats(const json::Object& arguments) {
+    const core::Id material = UidArgument(arguments, "mask");
+    const std::optional<std::string> name = StringField(arguments, "map");
+    if (!name) throw CallError{"invalid_arguments", "map must name a channel type, Normal_OpenGL or Normal_DirectX", {}};
+    const evaluator::DiagnosticMapId map = MapArgument(*name);
+    python::DiagnosticRun run;
+    const std::string stats = evaluator::RegionStatsJson(run.RegionStats(map, material));
+    return {{"source", evaluator::SourceName({evaluator::DiagnosticSource::Kind::RegionStats, map, {}, material})},
+            {"revision", run.snapshot().revision},
+            {"stats", json::Parse(stats)}};
 }
 
 json::Object Worker::RunPython(const json::Object& arguments) {

@@ -92,6 +92,8 @@ Settled in phase1.13 (decisions 075, 076; `src/evaluator/diagnostics.h`):
 - **Region statistics.** Count, thresholded and weighted coverage, min, max, mean, p10, p50 and p90 per component, plus luminance and saturation for colour maps.
 - **Export-plan sources.** Every diagnostic is a source with `srcMapType` `diagnosticMap` (08 §6).
 
+Exposed in phase2.1 (decision 136): `uzpainter.diagnostics` and the worker's MCP Diagnostics tools read the committed revision through the export's entry points, so each view equals the export of its source. Decision 126's refusal of inferred template bases applies per source. A layer-tree snapshot and its structural diff (`snapshot_layer_tree`, `diff_snapshots`; `src/uzp_core/document/layer_tree.h`) report nodes added, removed and modified by uid, each change as a JSON pointer.
+
 ## 9. What Tier 0 must settle before the kernels are frozen
 
 Blend formulas and spaces; quantisation points; stack base values; mask precision (8 vs 16 bit); group `Normal`/`PassThrough` semantics with masks; content-effect order; levels clamp behaviour; the `BilinearHQ` kernel; height→normal methods and strength scaling; the `AO_Mixed` operator; API readback rules (set→get, mask `None`, insertion errors). Each has a golden set recorded through Painter's documented API (`14-parity-testing.md` §2) and stored privately (`14-…` §6); only the fitted formula, its public source and its residual are published under `parity/semantics/`.
