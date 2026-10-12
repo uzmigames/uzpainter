@@ -102,15 +102,17 @@ def test_zip_bundle_holds_the_directory_bundle(inspect_tests: Path, tmp_path: Pa
     assert any(name.startswith("res/") for name in files)
 
 
-def test_inspect_cli_reports_the_recipe_digest_unavailable(
+def test_inspect_cli_without_a_recipe_host_reports_the_digest_unavailable(
     inspect_tests: Path, tmp_path: Path
 ) -> None:
+    """The store's own executable resolves no template base values, so it names the host that
+    reports the digest (`UzPainter.exe inspect`, tests/python/test_pyapi_cli.py)."""
     assert run(inspect_tests, "fixture", str(tmp_path)).returncode == 0
     proc = run(inspect_tests, "cli", "inspect", str(tmp_path / "fixture.uzp"))
     assert proc.returncode == 0, proc.stderr.decode()
     report = json.loads(proc.stdout)
     assert report["recipe_digest"]["available"] is False
-    assert "phase2.2_recipe-and-diagnostics" in report["recipe_digest"]["reason"]
+    assert "UzPainter.exe inspect" in report["recipe_digest"]["reason"]
 
 
 def _png(

@@ -446,7 +446,6 @@ LATER_PHASE = [
     ("uzpainter.display", "set_tone_mapping", "phase2.3_realtime-preview"),
     ("uzpainter.diagnostics", "isolate", "phase2.2_recipe-and-diagnostics"),
     ("uzpainter.diagnostics", "region_stats", "phase2.2_recipe-and-diagnostics"),
-    ("uzpainter.project", "dump_recipe", "phase2.2_recipe-and-diagnostics"),
 ]
 
 
@@ -487,9 +486,11 @@ def test_later_phase_calls_raise_not_yet_supported_before_mutation(run: Run) -> 
         )
     )
     for module, name, owner, error in result["out"]:
-        assert error == f"NotYetSupported: {module}.{name} is a release gap ({owner})" or (
-            name == "dump_recipe" and error.startswith("NotYetSupported") and owner in error
-        ), (module, name, error)
+        assert error == f"NotYetSupported: {module}.{name} is a release gap ({owner})", (
+            module,
+            name,
+            error,
+        )
     assert all(e.startswith("UnsupportedProcedural") for e in result["procedural"])
     assert result["gaps"][0].startswith("NotYetSupported") and "Triplanar" in result["gaps"][0]
     assert result["gaps"][1].startswith("NotYetSupported")

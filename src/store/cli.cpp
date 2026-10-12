@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 namespace {
 
 constexpr const char* kUsage =
-    "usage: UzPainter.exe inspect <file.uzp> [--revision N] [--verify]\n"
+    "usage: UzPainter.exe inspect <file.uzp> [--revision N] [--verify | --recipe]\n"
     "       UzPainter.exe export-bundle <file.uzp> <dir|file.zip> [--revision N]\n"
     "       UzPainter.exe store-census --inputs <inputs.json> --assets-root <dir> --work <dir> --out <report.json> "
     "[--edits N]\n";
@@ -45,15 +45,18 @@ struct Parsed {
     std::vector<std::string> positional;
     std::optional<std::int64_t> revision;
     bool verify = false;
+    bool recipe = false;
     std::map<std::string, std::string> values;
 };
 
-Parsed Parse(const std::vector<std::string>& args, const std::vector<std::string>& valued, bool allow_verify) {
+Parsed Parse(const std::vector<std::string>& args, const std::vector<std::string>& valued, bool allow_flags) {
     Parsed parsed;
     for (std::size_t i = 1; i < args.size(); ++i) {
         const std::string& arg = args[i];
-        if (arg == "--verify" && allow_verify) {
+        if (arg == "--verify" && allow_flags) {
             parsed.verify = true;
+        } else if (arg == "--recipe" && allow_flags) {
+            parsed.recipe = true;
         } else if (arg.rfind("--", 0) == 0) {
             if (std::find(valued.begin(), valued.end(), arg) == valued.end()) throw UsageError{"unknown option " + arg};
             if (i + 1 >= args.size()) throw UsageError{arg + " needs a value"};
@@ -75,10 +78,18 @@ std::string Required(const Parsed& parsed, const char* option) {
     return it->second;
 }
 
-int Inspect(const std::vector<std::string>& args, std::FILE* out) {
+int Inspect(const std::vector<std::string>& args, std::FILE* out, const core::RecipeHost* recipe) {
     const Parsed parsed = Parse(args, {"--revision"}, true);
     if (parsed.positional.size() != 1) throw UsageError{"inspect takes one project file"};
-    const Value report = store::Inspect(fs::path(parsed.positional[0]), InspectOptions{parsed.revision, parsed.verify});
+    if (parsed.recipe) {
+        if (parsed.verify) throw UsageError{"inspect takes --verify or --recipe, not both"};
+        if (recipe == nullptr) throw std::runtime_error(std::string(kRecipeHostMissing));
+        const Object dump = InspectRecipe(fs::path(parsed.positional[0]), parsed.revision, *recipe);
+        std::fputs(WriteIndented(Value(dump)).c_str(), out);
+        return kCliOk;
+    }
+    const Value report =
+        store::Inspect(fs::path(parsed.positional[0]), InspectOptions{parsed.revision, parsed.verify, recipe});
     std::fputs(WriteIndented(report).c_str(), out);
     if (parsed.verify) {
         const auto& verify = std::get<Object>(std::get<Object>(report.data).at("verify").data);
@@ -134,10 +145,10 @@ bool IsStoreCommand(std::string_view verb) {
     return verb == "inspect" || verb == "export-bundle" || verb == "store-census";
 }
 
-int RunStoreCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err) {
+int RunStoreCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err, const core::RecipeHost* recipe) {
     try {
         if (args.empty()) throw UsageError{"no command"};
-        if (args[0] == "inspect") return Inspect(args, out);
+        if (args[0] == "inspect") return Inspect(args, out, recipe);
         if (args[0] == "export-bundle") return ExportBundleCommand(args, out);
         if (args[0] == "store-census") return Census(args, out);
         throw UsageError{"unknown command " + args[0]};

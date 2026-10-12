@@ -686,3 +686,41 @@ def test_receipt_consumer_gap_and_empty_export(export_tests: Path, tmp_path: Pat
     )
     validate(empty)
     assert empty["files"] == [] and empty["manifest_export"] is None
+
+
+# SHA-256 of the canonical JSON of the Assets3D definitions the receipt schema copies, as Assets3D
+# commit b14511b78ae627ceb5be5e69f0740a3804570311 writes them in
+# `Pipeline/manifest/manifest-schema-v2.json` (decision 097).
+A3D_COMMIT = "b14511b78ae627ceb5be5e69f0740a3804570311"
+A3D_SCHEMA = "Pipeline/manifest/manifest-schema-v2.json"
+A3D_DEFS = ("export", "map_format", "comparison", "source", "moment", "path", "sha256", "file")
+A3D_DEFS_SHA256 = "899949754a3619e9a1eadc00e839c4168cad135c2f38262304210183960e7eac"
+
+
+def test_receipt_schema_copies_the_pinned_assets3d_export_block() -> None:
+    """phase2.1_recipe-dump-manifest-blocks 2.6, 3.5: the manifest export block every receipt
+    carries (v2 `$defs/export`, replacing v1's `exportacao`) is validated by definitions equal to
+    the pinned Assets3D schema's: their digest is pinned here, on every lane, and recomputed from
+    the pinned commit when the Assets3D checkout is beside this repository."""
+    from tools.parity.recorder.job import canonical_json
+
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    copied = {name: schema["$defs"][name] for name in A3D_DEFS}
+    assert hashlib.sha256(canonical_json(copied)).hexdigest() == A3D_DEFS_SHA256
+    assert schema["properties"]["manifest_export"] == {
+        "anyOf": [{"$ref": "#/$defs/export"}, {"type": "null"}]
+    }
+    # The checkout beside this one, or beside the folder of a git worktree of it.
+    for assets3d in (REPO_ROOT.parent / "Assets3D", REPO_ROOT.parent.parent / "Assets3D"):
+        shown = subprocess.run(
+            ["git", "-C", str(assets3d), "show", f"{A3D_COMMIT}:{A3D_SCHEMA}"],
+            capture_output=True,
+            check=False,
+        )
+        if shown.returncode == 0:
+            break
+    else:
+        pytest.skip("the Assets3D checkout with the pinned commit is not beside this repository")
+    pinned = json.loads(shown.stdout)
+    original = {name: pinned["$defs"][name] for name in A3D_DEFS}
+    assert hashlib.sha256(canonical_json(original)).hexdigest() == A3D_DEFS_SHA256

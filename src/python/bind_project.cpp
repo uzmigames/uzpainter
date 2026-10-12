@@ -23,6 +23,7 @@
 #include "mesh/reload.h"
 #include "python/bindings.h"
 #include "python/errors.h"
+#include "python/recipe.h"
 
 namespace uzp::python {
 
@@ -70,11 +71,23 @@ CallResult ReloadMesh(const std::string& mesh_file_path, std::optional<bool> imp
     core::json::Object arguments{{"mesh", Utf8(path.filename())}};
     if (import_cameras) arguments["import_cameras"] = *import_cameras;
     CallResult result = Mutate("project.reload_mesh", std::move(arguments), [&](core::Edit& edit) {
-        const mesh::ImportResult current = mesh::RederiveMesh(edit.base(), read);
+        // A project written before a glTF's external files were stored, whose files are gone, has
+        // a mesh that cannot be re-derived: the reload replaces it without the comparison.
+        std::optional<mesh::ImportResult> current;
+        std::string unavailable;
+        try {
+            current = mesh::RederiveMesh(edit.base(), read);
+        } catch (const mesh::MeshFileMissing& missing) {
+            unavailable = missing.what();
+        }
         const mesh::ImportResult next =
             mesh::ImportMesh(bytes, Utf8(path.filename()), settings.import, path.parent_path());
         store->StageResource(bytes, std::string(mesh::MimeOf(next.format)));
-        mesh::ApplyReload(edit, current, next, source, settings);
+        for (const mesh::ExternalFile& external : next.external_files) {
+            store->StageResource(external.bytes, std::string(mesh::kExternalFileMime));
+        }
+        if (current) mesh::ApplyReload(edit, *current, next, source, settings);
+        else mesh::ApplyReloadWithoutCurrent(edit, next, source, settings, unavailable);
         if (import_cameras) edit.project().settings.import_cameras = *import_cameras;
     });
     project->mesh_path = Utf8(path);
@@ -229,9 +242,39 @@ void BindProject(py::module_& m) {
         return py::module_::import("uuid").attr("UUID")(Session::Get().Current()->document->project_uuid());
     });
     m.def("last_imported_mesh_path", [] { return Session::Get().Current()->mesh_path; });
-    m.def("dump_recipe", [](const py::args&, const py::kwargs&) -> py::object {
-        ThrowNotYetSupported("project.dump_recipe is a release gap (phase2.2_recipe-and-diagnostics)");
-    });
+    m.def(
+        "dump_recipe",
+        [] {
+            core::json::Object dump;
+            {
+                py::gil_scoped_release release;
+                dump = DumpCurrentRecipe();
+            }
+            return FromJson(core::json::Value(std::move(dump)));
+        },
+        "The recipe dump of the current revision (decision 122): {schema, revision, evaluator_profile, "
+        "compat_profile, app_version, resource_hashes, recipe, rebuild, digest}. `recipe` is every "
+        "output-determining field and `digest` the SHA-256 of its canonical JSON; `rebuild` holds what only a "
+        "rebuild needs. Inside a Transaction it describes the committed revision.");
+    m.def(
+        "rebuild_from_recipe",
+        [](const py::object& recipe, const std::string& resources_dir) {
+            core::json::Value dump;
+            if (py::isinstance<py::str>(recipe)) {
+                const std::filesystem::path path = PathOf(recipe.cast<std::string>());
+                std::ifstream file(path, std::ios::binary);
+                if (!file) ThrowProjectError("cannot read " + recipe.cast<std::string>());
+                dump = core::json::Parse(std::string{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()});
+            } else {
+                dump = ToJson(recipe);
+            }
+            py::gil_scoped_release release;
+            Session::Get().Rebuild(dump, PathOf(resources_dir));
+        },
+        py::arg("recipe"), py::arg("resources_dir"),
+        "Opens a new untitled project rebuilt from a recipe dump (a dict, or the path of its JSON file) and the "
+        "resource files of `resources_dir` (named `<sha256>`, any extension), in one transaction. Its exports "
+        "equal the original's, and its dump_recipe() digest is the recipe's.");
 
     py::class_<Metadata> metadata(m, "Metadata", "Project metadata of one context, saved with the project.");
     metadata.def(py::init([](std::string context) { return Metadata{std::move(context)}; }), py::arg("context"))

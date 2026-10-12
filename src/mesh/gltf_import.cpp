@@ -1,6 +1,7 @@
 #include "mesh/gltf_import.h"
 
 #include <cstddef>
+#include <cstring>
 #include <map>
 #include <string>
 #include <utility>
@@ -207,12 +208,32 @@ private:
 
 }  // namespace
 
-void ImportGltf(std::string_view bytes, const std::filesystem::path& directory, TexturingMesh& mesh) {
+void ImportGltf(std::string_view bytes, const ExternalFileReader& read, TexturingMesh& mesh,
+                std::vector<ExternalFile>& external) {
     auto data = fastgltf::GltfDataBuffer::FromBytes(reinterpret_cast<const std::byte*>(bytes.data()), bytes.size());
     if (data.error() != fastgltf::Error::None) Fail(data.error());
     fastgltf::Parser parser(fastgltf::Extensions::KHR_mesh_quantization);
-    auto asset = parser.loadGltf(data.get(), directory, fastgltf::Options::LoadExternalBuffers);
+    // External buffers stay URIs: they are read here, through `read`, so the caller sees (and
+    // stores) every byte the mesh is derived from.
+    auto asset = parser.loadGltf(data.get(), std::filesystem::path(), fastgltf::Options::None);
     if (asset.error() != fastgltf::Error::None) Fail(asset.error());
+    for (fastgltf::Buffer& buffer : asset.get().buffers) {
+        const auto* source = std::get_if<fastgltf::sources::URI>(&buffer.data);
+        if (source == nullptr) continue;
+        const std::string uri(source->uri.string());
+        if (!source->uri.isLocalPath()) Fail("the buffer '" + uri + "' is not a local file");
+        std::string file = read(uri, source->uri.fspath());
+        if (file.size() < buffer.byteLength) {
+            Fail("the buffer '" + uri + "' holds " + std::to_string(file.size()) + " bytes; the file declares " +
+                 std::to_string(buffer.byteLength));
+        }
+        fastgltf::sources::Vector loaded;
+        loaded.bytes.resize(file.size());
+        if (!file.empty()) std::memcpy(loaded.bytes.data(), file.data(), file.size());
+        loaded.mimeType = source->mimeType;
+        external.push_back({uri, std::move(file)});
+        buffer.data = std::move(loaded);
+    }
     Importer(asset.get(), mesh).Run();
 }
 

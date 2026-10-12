@@ -227,6 +227,15 @@ json::Object Report(const ImportResult& r, const ImportSettings& settings, json:
         {"certificate", CertificateToJson(r.certificate, m)},
     };
     if (!merges.empty()) report["merged_materials"] = std::move(merges);
+    if (!r.external_files.empty()) {
+        json::Array files;
+        for (const ExternalFile& f : r.external_files) {
+            files.push_back(json::Object{{"uri", f.uri},
+                                         {"sha256", core::Sha256Hex(f.bytes)},
+                                         {"size", static_cast<std::int64_t>(f.bytes.size())}});
+        }
+        report[std::string(core::kMeshExternalFiles)] = std::move(files);
+    }
     return report;
 }
 
@@ -234,6 +243,20 @@ json::Object Report(const ImportResult& r, const ImportSettings& settings, json:
 
 ImportResult ImportMesh(std::string_view bytes, std::string_view file_name, const ImportSettings& settings,
                         const std::filesystem::path& directory) {
+    const ExternalFileReader beside = [&directory](const std::string& uri, const std::filesystem::path& path) {
+        if (directory.empty()) {
+            throw ImportError(ImportErrorKind::parse_error,
+                              "glTF: the buffer '" + uri + "' is a file beside the mesh, and no folder was given to read it from");
+        }
+        std::ifstream file(directory / path, std::ios::binary);
+        if (!file) throw ImportError(ImportErrorKind::parse_error, "glTF: cannot read the buffer '" + uri + "'");
+        return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    };
+    return ImportMesh(bytes, file_name, settings, beside);
+}
+
+ImportResult ImportMesh(std::string_view bytes, std::string_view file_name, const ImportSettings& settings,
+                        const ExternalFileReader& read) {
     if (settings.auto_unwrap) {
         throw ImportError(ImportErrorKind::not_yet_supported,
                           "AutoUnwrapSettings is not supported yet: UzPainter never unwraps or repacks UVs "
@@ -249,7 +272,7 @@ ImportResult ImportMesh(std::string_view bytes, std::string_view file_name, cons
         case MeshFormat::obj: ParseObj(bytes, result.mesh); break;
         case MeshFormat::fbx: ImportFbx(bytes, result.mesh); break;
         case MeshFormat::gltf:
-        case MeshFormat::glb: ImportGltf(bytes, directory, result.mesh); break;
+        case MeshFormat::glb: ImportGltf(bytes, read, result.mesh, result.external_files); break;
     }
     json::Array merges = ApplyDuplicateRule(result.mesh, settings.allow_duplicate_material_names);
     CheckUvTiles(result.mesh);
@@ -287,6 +310,25 @@ void RecordMeshResource(core::Edit& edit, const ImportResult& result, const Mesh
         meta.origin = source.origin;
         meta.imported_at = source.imported_at;
         entries.push_back(std::move(meta));
+    }
+    for (const ExternalFile& file : result.external_files) {
+        const std::string sha256 = core::Sha256Hex(file.bytes);
+        std::vector<core::ResourceMeta>& list = project.resources[sha256];
+        if (std::any_of(list.begin(), list.end(), [&](const core::ResourceMeta& e) { return e.name == file.uri; })) {
+            edit.NoteSkippedResource(sha256);
+            continue;
+        }
+        core::ResourceMeta meta;
+        meta.id = edit.AllocateId();
+        meta.name = file.uri;
+        meta.mime = std::string(kExternalFileMime);
+        meta.size = static_cast<std::int64_t>(file.bytes.size());
+        meta.usage = std::string(kExternalFileUsage);
+        meta.origin = source.origin.empty()
+                          ? std::string()
+                          : (std::filesystem::path(source.origin).parent_path() / file.uri).generic_string();
+        meta.imported_at = source.imported_at;
+        list.push_back(std::move(meta));
     }
     project.mesh = core::MeshReference{result.sha256, result.report, {}, source.origin};
 }

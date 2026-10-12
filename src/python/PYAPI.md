@@ -30,7 +30,15 @@ Module and class names follow Painter's documented API wherever a Painter symbol
   - `reload_mesh(path, import_cameras=None, material_mapping={})`: one transaction over `mesh/reload.h`. Texture sets are matched by material, added sets get the channels of the project's template, and the new mesh's bytes are stored with the commit. Renamed, split or merged materials raise `MaterialMappingError` (a `ProjectError` whose `details` hold the proposal and the renames to pass back).
   - Saving: `save(ProjectSaveMode)`, `save_as`, `save_as_copy`, `revert(revision | checkpoint)`.
   - State: `revision()`, `checkpoints()`, `needs_saving()`, `file_path()`, `name()`, `get_uuid()`, `last_imported_mesh_path()`, `Metadata(context)`.
-  - `dump_recipe()` raises `NotYetSupported` (phase2.2).
+  - Recipes (decision 122): `dump_recipe()` returns the recipe dump of the current revision
+    (`src/uzp_core/MANIFEST.md` §8; inside a `Transaction`, the committed revision).
+    `rebuild_from_recipe(recipe, resources_dir)` opens a new untitled project rebuilt from a dump
+    (a dict or the path of its JSON) and the resource files of `resources_dir` (named `<sha256>`,
+    any extension: the `export-bundle` `res/` layout), in one transaction. Every stored resource
+    must be there with its bytes, the mesh must re-derive from them alone, and the support check
+    runs on the whole project; anything else raises before a project exists. `recipe.{h,cpp}`
+    holds the session dump and the application's recipe host (its version and the installed
+    templates' base values), which `UzPainter.exe inspect` uses too.
 - **`textureset`.**
   - Module functions: `all_texture_sets`, `set_resolutions`, `get_active_stack`, `set_active_stack`. The active stack is the default address of calls that take a stack and is otherwise inert.
   - `TextureSet`: `from_name`, `name`, `get_resolution` / `set_resolution`, `all_stacks`, `get_stack`, `all_uv_tiles`, `get_mesh_map_resource` / `set_mesh_map_resource`.

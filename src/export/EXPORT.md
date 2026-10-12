@@ -125,7 +125,7 @@ Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_p
   - **`files[]`.** Each entry has `path`, `key`, `root_path`, `preset`, `bytes`, `sha256`, `format`, `bit_depth`, `colour_space`, `size`, `layout`, `channels` and `normal`. `normal` is `{role: combined, relief: {revision, height_hash, method}}`, `{role: geometry_only, relief: null}` or null. Each entry also has `consumer_gaps`.
   - **`skipped[]`.** The maps the plan does not write, with their kind and reason.
   - **`manifest_export`.** The Assets3D block in the form of `manifest-schema-v2.json` `$defs/export`, replacing v1's `exportacao`. `manifest_files` holds the `files` entries its keys name. Their paths are relative to the generation; the pipeline adapter rebases them. The block is null when the export writes no file.
-  - **Resources.** `resource_hashes` lists the resources the files read: bitmaps of the read channel DAGs, a diagnostic material's masks, the mesh maps read, and the texturing mesh.
+  - **Resources.** `resource_hashes` lists the resources the files read: bitmaps of the read channel DAGs, a diagnostic material's masks, the mesh maps read, and the texturing mesh (its file and the files it reads beside it, such as a glTF's buffers).
   - **Identity.** `app_version` and `build` come from the caller (`PublishRequest::identity`).
   - **Colour space.** Every image file written today is `linear`.
   - **Consumer gaps.** A SpecularWeight map carries the consumer gap of `08-export.md` §4.

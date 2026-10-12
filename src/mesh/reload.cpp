@@ -4,10 +4,14 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <fstream>
+#include <iterator>
+#include <map>
 #include <set>
 #include <utility>
 #include <variant>
 
+#include "uzp_core/manifest/recipe.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 
@@ -456,7 +460,7 @@ const json::Object& ObjectMember(const json::Object& object, std::string_view ke
 
 }  // namespace
 
-ImportResult RederiveMesh(const core::Project& project, const ResourceReader& read) {
+ImportResult RederiveMesh(const core::Project& project, const ResourceReader& read, bool beside_origin) {
     if (!project.mesh) throw core::ValueError("the project has no mesh to reload; import one first");
     const core::MeshReference& ref = *project.mesh;
     const json::Object& report = ref.import_report;
@@ -469,22 +473,94 @@ ImportResult RederiveMesh(const core::Project& project, const ResourceReader& re
         if (scale->IsDouble()) settings.mesh_unit_scale = std::get<double>(scale->data);
     }
     settings.allow_duplicate_material_names = Member(report, "merged_materials") != nullptr;
-    std::filesystem::path directory;
+    // The files the mesh reads beside it come from the project too (SAV-01). A report written
+    // before they were stored reads them beside the origin, as that version did.
+    std::map<std::string, std::string> files;  // uri -> sha256
+    const json::Value* list = Member(report, core::kMeshExternalFiles);
+    std::filesystem::path origin_dir;
     if (const auto entries = project.resources.find(ref.resource); entries != project.resources.end()) {
         for (const core::ResourceMeta& e : entries->second) {
-            if (e.name == file_name && !e.origin.empty()) directory = std::filesystem::path(e.origin).parent_path();
+            if (e.name == file_name && !e.origin.empty()) origin_dir = std::filesystem::path(e.origin).parent_path();
         }
     }
+    const ExternalFileReader beside = [&](const std::string& uri, const std::filesystem::path& path) {
+        const std::string legacy = "the mesh '" + file_name + "' reads the file '" + uri +
+                                   "' beside it, which a project written before a mesh's files were stored does not hold";
+        if (!beside_origin) throw MeshFileMissing(legacy + " (reload the mesh to store it)");
+        if (origin_dir.empty()) throw MeshFileMissing(legacy + ", and its origin is unknown (reload the mesh to store it)");
+        std::ifstream file(origin_dir / path, std::ios::binary);
+        if (!file) {
+            throw MeshFileMissing(legacy + ", and it is gone from " + origin_dir.generic_string() +
+                                  " (reload the mesh to store it)");
+        }
+        return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    };
+    if (list != nullptr && list->IsArray()) {
+        for (const json::Value& file : std::get<json::Array>(list->data)) {
+            const json::Value* uri = file.IsObject() ? Member(std::get<json::Object>(file.data), "uri") : nullptr;
+            const json::Value* sha = file.IsObject() ? Member(std::get<json::Object>(file.data), "sha256") : nullptr;
+            if (uri == nullptr || sha == nullptr || !uri->IsString() || !sha->IsString()) {
+                throw core::ValueError("the mesh's import report lists an external file without its uri and sha256");
+            }
+            files[std::get<std::string>(uri->data)] = std::get<std::string>(sha->data);
+        }
+    }
+    const ExternalFileReader stored = [&](const std::string& uri, const std::filesystem::path&) {
+        const auto it = files.find(uri);
+        if (it == files.end()) {
+            throw core::ValueError("the mesh '" + file_name + "' reads the file '" + uri +
+                                   "' beside it, which the project does not store (reload the mesh to store it)");
+        }
+        std::string file = read(it->second);
+        if (core::Sha256Hex(file) != it->second) {
+            throw core::ValueError("the stored bytes of the mesh file '" + uri + "' do not match its hash " + it->second);
+        }
+        return file;
+    };
     const std::string bytes = read(ref.resource);
     if (core::Sha256Hex(bytes) != ref.resource) {
         throw core::ValueError("the stored bytes of the mesh '" + file_name + "' do not match its hash " + ref.resource);
     }
-    ImportResult current = ImportMesh(bytes, file_name, settings, directory);
+    ImportResult current = ImportMesh(bytes, file_name, settings, list != nullptr ? stored : beside);
     const json::Value* hashes = Member(report, "hashes");
     if (hashes == nullptr || !(*hashes == json::Value(HashesToJson(current.mesh.hashes)))) {
         throw core::ValueError("the mesh '" + file_name + "' no longer re-derives to the hashes its import report records");
     }
     return current;
+}
+
+/// The texture set a material of the new mesh adds: named after it, the project's default
+/// resolution, tile 1001, one stack with the reload's channels.
+core::TextureSet NewSet(core::Edit& edit, const Material& material, const ReloadSettings& settings) {
+    core::TextureSet set;
+    set.id = edit.AllocateId();
+    set.name = material.name;
+    set.original_name = material.name;
+    set.material_id = material.name;
+    set.resolution = edit.project().settings.default_resolution;
+    set.uv_tiles.push_back(core::UVTile{edit.AllocateId(), 1001, {}});
+    core::Stack stack;
+    stack.id = edit.AllocateId();
+    stack.channels = settings.new_set_channels;
+    set.stacks.push_back(std::move(stack));
+    return set;
+}
+
+/// The new mesh recorded, and the receipts the reload invalidates: those of every mesh file the
+/// new mesh no longer reads (the old file, or only a glTF buffer whose bytes changed), sorted and
+/// unique.
+void FinishReload(core::Edit& edit, const ImportResult& next, const MeshSource& source, ReloadReport& report) {
+    const std::set<std::string> before = core::MeshResourceHashes(edit.project());
+    RecordMeshResource(edit, next, source);
+    const std::set<std::string> after = core::MeshResourceHashes(edit.project());
+    for (const std::string& hash : before) {
+        if (!after.contains(hash)) report.invalid_receipt_resources.push_back(hash);
+    }
+    std::sort(report.invalid_receipt_resources.begin(), report.invalid_receipt_resources.end());
+    report.invalid_receipt_resources.erase(
+        std::unique(report.invalid_receipt_resources.begin(), report.invalid_receipt_resources.end()),
+        report.invalid_receipt_resources.end());
+    edit.returned()["reload"] = report.ToJson();
 }
 
 ReloadReport ApplyReload(core::Edit& edit, const ImportResult& current, const ImportResult& next, const MeshSource& source,
@@ -515,17 +591,7 @@ ReloadReport ApplyReload(core::Edit& edit, const ImportResult& current, const Im
         }
         const auto found = old_name.empty() ? set_of.end() : set_of.find(old_name);
         if (found == set_of.end()) {
-            core::TextureSet set;
-            set.id = edit.AllocateId();
-            set.name = material.name;
-            set.original_name = material.name;
-            set.material_id = material.name;
-            set.resolution = project.settings.default_resolution;
-            set.uv_tiles.push_back(core::UVTile{edit.AllocateId(), 1001, {}});
-            core::Stack stack;
-            stack.id = edit.AllocateId();
-            stack.channels = settings.new_set_channels;
-            set.stacks.push_back(std::move(stack));
+            core::TextureSet set = NewSet(edit, material, settings);
             report.added.push_back(material.name);
             report.regions.push_back(Classify(material.name, before, kNone, after, material.index, set.resolution));
             sets.push_back(std::move(set));
@@ -587,14 +653,78 @@ ReloadReport ApplyReload(core::Edit& edit, const ImportResult& current, const Im
     project.texture_sets = std::move(sets);
 
     // Receipts that read the old mesh or an invalidated map (`ReceiptInvalidated`).
-    if (report.mesh_from != report.mesh_to) report.invalid_receipt_resources.push_back(report.mesh_from);
-    std::sort(report.invalid_receipt_resources.begin(), report.invalid_receipt_resources.end());
-    report.invalid_receipt_resources.erase(
-        std::unique(report.invalid_receipt_resources.begin(), report.invalid_receipt_resources.end()),
-        report.invalid_receipt_resources.end());
+    FinishReload(edit, next, source, report);
+    return report;
+}
 
-    RecordMeshResource(edit, next, source);
-    edit.returned()["reload"] = report.ToJson();
+ReloadReport ApplyReloadWithoutCurrent(core::Edit& edit, const ImportResult& next, const MeshSource& source,
+                                       const ReloadSettings& settings, const std::string& reason) {
+    core::Project& project = edit.project();
+    if (!project.mesh) throw core::ValueError("the project has no mesh to reload; import one first");
+    const KeyedMesh after(next);
+    std::set<std::string> names;
+    for (const Material& m : next.mesh.materials) names.insert(m.name);
+
+    // Every set keeps its material by name, or through the mapping; nothing else can be proven.
+    std::map<std::string, std::size_t> set_of;  // new material -> current set
+    for (std::size_t i = 0; i < project.texture_sets.size(); ++i) {
+        const std::string& from = project.texture_sets[i].material_id;
+        const auto mapped = settings.material_mapping.find(from);
+        const std::string to = mapped != settings.material_mapping.end() ? mapped->second : from;
+        if (!names.contains(to) || !set_of.emplace(to, i).second) {
+            throw MaterialMappingError("the current mesh cannot be re-derived (" + reason +
+                                           "): the texture set of material '" + from +
+                                           "' is kept only by its name or through material_mapping, and the new mesh " +
+                                           (names.contains(to) ? "gives material '" + to + "' to two sets"
+                                                               : "has no material '" + to + "'"),
+                                       json::Object{{"proposal", json::Array{}}, {"mapping", json::Object{}}});
+        }
+    }
+
+    ReloadReport report;
+    report.mesh_from = project.mesh->resource;
+    report.mesh_to = next.sha256;
+    report.changed = {"corner_normals", "materials", "positions", "triangulation", "uvs"};
+    const json::Object invalid{{"changed", json::Array(report.changed.begin(), report.changed.end())},
+                               {"mesh", json::Object{{"from", report.mesh_from}, {"to", report.mesh_to}}},
+                               {"previous_mesh", reason},
+                               {"reason", "mesh_reload"},
+                               {"regions", json::Value(nullptr)}};
+    std::vector<core::TextureSet> sets;
+    for (const Material& material : next.mesh.materials) {
+        const auto found = set_of.find(material.name);
+        if (found == set_of.end()) {
+            core::TextureSet set = NewSet(edit, material, settings);
+            report.added.push_back(material.name);
+            report.regions.push_back(Classify(material.name, after, kNone, after, material.index, set.resolution));
+            sets.push_back(std::move(set));
+            continue;
+        }
+        core::TextureSet set = std::move(project.texture_sets[found->second]);
+        if (set.material_id != material.name) {
+            report.renamed.emplace_back(set.material_id, material.name);
+            if (set.name == set.original_name) set.name = material.name;
+            set.original_name = material.name;
+            set.material_id = material.name;
+        }
+        for (auto& [usage, binding] : set.mesh_maps) {
+            binding.invalid = true;
+            binding.invalid_report = invalid;
+            report.invalid_mesh_maps.push_back({set.name, usage});
+            report.invalid_receipt_resources.push_back(binding.resource);
+        }
+        SetInvalidation inv;
+        inv.report = invalid;
+        inv.mask_changed = [](const core::GeometryMask& mask) {
+            return mask.type == core::GeometryMaskType::Mesh && !mask.items.empty();
+        };
+        for (core::Stack& stack : set.stacks) InvalidateLayers(stack.root_layers, inv, report);
+        // No old coverage to compare with: every texel the new mesh covers counts as new.
+        report.regions.push_back(Classify(material.name, after, kNone, after, material.index, set.resolution));
+        sets.push_back(std::move(set));
+    }
+    project.texture_sets = std::move(sets);
+    FinishReload(edit, next, source, report);
     return report;
 }
 
@@ -605,9 +735,16 @@ ReloadOutcome ReloadMesh(core::Document& document, core::MutationRequest request
     std::exception_ptr error;
     out.outcome = core::Execute(document, std::move(request), [&](core::Edit& edit) {
         try {
-            const ImportResult current = RederiveMesh(edit.base(), read);
+            std::optional<ImportResult> current;
+            std::string unavailable;
+            try {
+                current = RederiveMesh(edit.base(), read);
+            } catch (const MeshFileMissing& missing) {
+                unavailable = missing.what();
+            }
             const ImportResult next = ImportMeshFile(path, settings.import);
-            report = ApplyReload(edit, current, next, source, settings);
+            report = current ? ApplyReload(edit, *current, next, source, settings)
+                             : ApplyReloadWithoutCurrent(edit, next, source, settings, unavailable);
         } catch (...) {
             error = std::current_exception();
             throw;
@@ -623,11 +760,13 @@ ReloadOutcome ReloadMesh(core::Document& document, core::MutationRequest request
 }
 
 bool ReceiptInvalidated(const core::ResultRecordHeader& header, const core::Project& project) {
+    const std::set<std::string> current = core::MeshResourceHashes(project);
     for (const std::string& hash : header.resource_hashes) {
         if (const auto entries = project.resources.find(hash); entries != project.resources.end()) {
-            const bool mesh = std::any_of(entries->second.begin(), entries->second.end(),
-                                          [](const core::ResourceMeta& e) { return e.usage == "mesh"; });
-            if (mesh && (!project.mesh || project.mesh->resource != hash)) return true;
+            const bool mesh = std::any_of(entries->second.begin(), entries->second.end(), [](const core::ResourceMeta& e) {
+                return e.usage == "mesh" || e.usage == kExternalFileUsage;
+            });
+            if (mesh && !current.contains(hash)) return true;
         }
         for (const core::TextureSet& set : project.texture_sets) {
             for (const auto& [usage, binding] : set.mesh_maps) {

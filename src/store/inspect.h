@@ -13,6 +13,7 @@
 
 #include "store/container.h"
 #include "uzp_core/manifest/json.h"
+#include "uzp_core/manifest/recipe.h"
 
 namespace uzp::store {
 
@@ -21,12 +22,15 @@ struct InspectOptions {
     std::optional<std::int64_t> revision;
     /// Also run every integrity rule of 09 §1 (`CheckIntegrity` with `VerifyLevel::full`).
     bool verify = false;
+    /// The running application's recipe host (its version and template base values,
+    /// `python::HostRecipe`); without one the recipe digest is unavailable.
+    const core::RecipeHost* recipe = nullptr;
 };
 
-/// The recipe digest is produced by `dump_recipe` (task `phase2.2_recipe-and-diagnostics`,
-/// P2-RECIPE); until it exists `inspect` reports it as unavailable with this reason.
-inline constexpr std::string_view kRecipeDigestUnavailable =
-    "dump_recipe is not implemented yet (phase2.2_recipe-and-diagnostics, P2-RECIPE)";
+/// The reason of an unavailable recipe digest when the host resolves no base values (the store's
+/// own test executable; `UzPainter.exe inspect` always passes its host).
+inline constexpr std::string_view kRecipeHostMissing =
+    "this host resolves no template base values; UzPainter.exe inspect reports the recipe digest";
 
 /// The inspection report of `project`, a JSON object:
 ///
@@ -44,13 +48,22 @@ inline constexpr std::string_view kRecipeDigestUnavailable =
 /// - `sizes`: `file_bytes`, the project file's parts (`manifests`, `resources`,
 ///   `plane_chunks`, `operations`, `cache`) and, listed separately, `external_dependencies`
 ///   (the locator targets of a non-portable project: count, bytes, missing);
-/// - `recipe_digest` {available: false, reason: `kRecipeDigestUnavailable`};
+/// - `recipe_digest` {available: true, digest} of the revision's recipe dump (`InspectRecipe`),
+///   or {available: false, reason} without a recipe host (`kRecipeHostMissing`) or when the dump
+///   fails (a template the host does not hold);
 /// - with `verify`: `verify` {ok, corrupt, missing, collectable} (`IntegrityReport::ToJson`).
 ///
 /// Throws `StoreError` when the file is not a readable project (`not_a_project`, `version` for a
 /// newer major, `io` for a file a killed worker left with a hot journal) and `CorruptionError`
 /// when the requested revision's manifest does not verify.
 core::json::Value Inspect(const std::filesystem::path& project, const InspectOptions& options = {});
+
+/// The recipe dump (`core::DumpRecipe`) of `revision` (`checkpoint('current')` when absent), read
+/// like the report: a read-only connection inside one read transaction, no lock, no GPU, so it is
+/// the dump `uzpainter.project.dump_recipe()` returns for that revision while a worker holds the
+/// project. Throws as `Inspect`, and what the dump throws.
+core::json::Object InspectRecipe(const std::filesystem::path& project, std::optional<std::int64_t> revision,
+                                 const core::RecipeHost& host);
 
 /// Indented JSON (two spaces, keys in canonical order, numbers as the canonical writer spells
 /// them), newline-terminated: the text `uzpainter inspect` prints and the census report.

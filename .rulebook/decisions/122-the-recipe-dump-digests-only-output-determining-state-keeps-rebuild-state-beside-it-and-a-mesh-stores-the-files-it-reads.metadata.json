@@ -1,0 +1,19 @@
+{
+  "id": 122,
+  "slug": "the-recipe-dump-digests-only-output-determining-state-keeps-rebuild-state-beside-it-and-a-mesh-stores-the-files-it-reads",
+  "title": "The recipe dump digests only output-determining state, keeps the rebuild state beside it, and a mesh stores the files it reads",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.1_recipe-dump-manifest-blocks",
+    "phase2.2_recipe-and-diagnostics",
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.1_supervisor-ipc-worker",
+    "phase4.1_nodes-paint-layers",
+    "phase3.1_assets3d-cutover",
+    "phase1.17_export-publication-receipts",
+    "phase1.6_mesh-reload",
+    "phase5.6_gate-g5"
+  ],
+  "supersededBy": null
+}
