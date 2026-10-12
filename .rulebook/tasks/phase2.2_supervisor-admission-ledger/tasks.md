@@ -25,7 +25,7 @@
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
 - [x] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.3 Run tests and confirm they pass
 
 ## 6. Notes (scope splits and evidence)
 - 1.1: left open on purpose. phase1.25_pilot-wand is not accepted yet (Phase 1/G1).
