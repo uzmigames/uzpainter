@@ -1,0 +1,9 @@
+{
+  "id": 147,
+  "slug": "embedded-files-are-part-of-their-object-s-cache-key-through-a-content-digest-define",
+  "title": "Embedded files are part of their object's cache key through a content digest define",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": ["phase1.9_compositor-resample-gaps", "phase2.1_preview-viewport-window"],
+  "supersededBy": null
+}
