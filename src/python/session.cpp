@@ -254,7 +254,7 @@ void Session::Open(const std::filesystem::path& path, bool untitled) {
     if (untitled) {
         project->untitled_dir = std::filesystem::absolute(path).parent_path();
     } else {
-        project->project_source = std::filesystem::absolute(path);
+        project->project_source = std::filesystem::absolute(project->store->path());  // a bundle: its `.uzp`
     }
     SetActiveDefault(*project);
     {
@@ -287,7 +287,7 @@ core::Checkpoints Session::SaveAs(const std::filesystem::path& path, store::Save
     RequireNotBusy("save_as()");
     if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
     core::Checkpoints checkpoints = project->store->SaveAs(*project->document, path);
-    project->project_source = std::filesystem::absolute(path);
+    project->project_source = std::filesystem::absolute(project->store->path());
     if (mode == store::SaveMode::full) project->store->Compact(*project->document);
     if (!project->untitled_dir.empty()) {
         std::error_code ignored;

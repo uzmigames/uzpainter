@@ -49,7 +49,7 @@ Any Python 3.13 runs it; the script needs only the standard library. Environment
 
 - **Painter:** one persistent process. `painter_create.py` creates and saves a project. `sync`, in the next call, edits it without saving. `painter_export.py` saves and exports it. The session also keeps the `resource://project<N>` context counter, the active stack and `needs_saving()`.
 - **UzPainter:** `run` is one process per call. It closes the project left open with the native close, which keeps every committed revision (decisions 105, 111). The session file names what a call left open:
-  - the project file;
+  - the project file, as the absolute path `open` or `save_as` resolved when it named the file (`uzpainter.project.absolute_file_path()`, decision 118). Each call runs in the client's working directory, so a script that changed directory before a relative `save_as` is still reopened where it saved;
   - the facade's project index;
   - the facade's `needs_saving()`;
   - the active stack (texture set and stack name).
@@ -57,7 +57,7 @@ Any Python 3.13 runs it; the script needs only the standard library. Environment
   The next call reopens the project through the facade and restores those values before the code runs. Uncommitted state does not exist: every API call is a durable revision.
   - Calls are serialised per session file by an OS lock (`<session>.lock`). The lock is released if the process dies. A call that cannot take it within about ten seconds is a host error, because Painter serves one call at a time.
   - The session file is replaced atomically (a staging file, then a rename).
-  - A carried project that no longer opens fails the call before the code runs and empties the session.
+  - A carried project that no longer opens fails the call before the code runs and empties the session. So does a session file that names a relative path (written before decision 118).
   - A call that leaves an untitled (never saved) project open fails with `AdapterSessionError`, with the script's `result` kept in `data`: the native close removes an untitled project's folder, so it cannot outlive the process.
   - Not carried: the layer selection, selection types, the UI mode and collapsed state. They are inert script context (10 §3): nothing in evaluation or export reads them.
 - **Until:** `phase2.1_supervisor-ipc-worker`'s persistent worker, which makes the carry unnecessary.
