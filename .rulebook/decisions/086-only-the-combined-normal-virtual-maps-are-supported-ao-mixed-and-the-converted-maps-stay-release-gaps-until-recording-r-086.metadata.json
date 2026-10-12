@@ -1,0 +1,12 @@
+{
+  "id": 86,
+  "slug": "only-the-combined-normal-virtual-maps-are-supported-ao-mixed-and-the-converted-maps-stay-release-gaps-until-recording-r-086",
+  "title": "Only the combined-normal virtual maps are supported; AO_Mixed and the converted maps stay release gaps until recording R-086",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.15_export-plan-compiler",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}

@@ -31,6 +31,8 @@
 //!   tile DAG, cache, admission, templates and kernels (`src/evaluator/`,
 //!   `tests/evaluator/evaluator_test.cpp`) with the DX run-time files and `assets/templates/`
 //!   beside it
+//! - `zig build export-tests` `uzp-export-tests.exe`, the native tests of the export plan
+//!   compiler (`src/export/`, `tests/export/export_test.cpp`) with `assets/templates/` beside it
 //! - `zig build uzp-store`    the project store as a static library (`zig-out/lib/uzp_store.lib`,
 //!   `src/store/` with SQLite and zstd); `zig build uzp-store-tests` `uzp-store-tests.exe`, its
 //!   native tests with the test-only fault hooks (`tests/store/store_test.cpp`);
@@ -283,6 +285,13 @@ const evaluator_sources = [_][]const u8{
     "evaluator/sources.cpp",
     "evaluator/support.cpp",
     "evaluator/templates.cpp",
+};
+/// The export plan compiler (`src/export/`, P1-EXPORT, `08-export.md` §1, §2, §6), relative to
+/// `src/`: compiled with the evaluator into `UzPainter.exe` and into `uzp-export-tests.exe`.
+const export_sources = [_][]const u8{
+    "export/config.cpp",
+    "export/plan.cpp",
+    "export/virtual_maps.cpp",
 };
 /// spng is linked statically wherever the evaluator is (its bitmap decoder, `sources.h`).
 const evaluator_flags = cxx_flags ++ own_warning_flags ++ [_][]const u8{ "-ffp-contract=off", "-DSPNG_STATIC" };
@@ -1091,6 +1100,11 @@ pub fn build(b: *std.Build) void {
         .files = &evaluator_sources,
         .flags = &evaluator_flags,
     });
+    app_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &export_sources,
+        .flags = &evaluator_flags,
+    });
     app_mod.linkLibrary(uzp_core_lib);
     const install_templates = b.addInstallDirectory(.{
         .source_dir = b.path(templates_dir),
@@ -1148,6 +1162,58 @@ pub fn build(b: *std.Build) void {
     for (dx_runtime) |step| evaluator_tests_step.dependOn(step);
     evaluator_tests_step.dependOn(&install_templates.step);
     b.getInstallStep().dependOn(evaluator_tests_step);
+
+    // ── The export plan compiler (phase1.15_export-plan-compiler) ─────────────────────────────
+    // `src/export/` over the evaluator; its tests evaluate on the CPU store only, so they run on
+    // hosted runners without a GPU.
+    const export_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, export_tests_mod);
+    export_tests_mod.addIncludePath(b.path("src"));
+    export_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/export"),
+        .files = &.{"export_test.cpp"},
+        .flags = &evaluator_flags,
+    });
+    export_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &export_sources,
+        .flags = &evaluator_flags,
+    });
+    export_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &evaluator_sources,
+        .flags = &evaluator_flags,
+    });
+    export_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &render_sources,
+        .flags = &(cxx_flags ++ own_warning_flags),
+    });
+    export_tests_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    export_tests_mod.linkLibrary(core_lib);
+    export_tests_mod.addIncludePath(b.path("thirdparty/spng/spng"));
+    export_tests_mod.addIncludePath(b.path("thirdparty/zlib"));
+    export_tests_mod.linkLibrary(mesh_lib);
+    export_tests_mod.linkLibrary(uzp_core_lib);
+    for (system_libraries) |name| export_tests_mod.linkSystemLibrary(name, .{});
+    export_tests_mod.linkSystemLibrary("version", .{});
+    const export_tests_exe = b.addExecutable(.{
+        .name = "uzp-export-tests",
+        .root_module = export_tests_mod,
+    });
+    const export_tests_step = b.step("export-tests", "Build the native tests of the export plan compiler");
+    export_tests_step.dependOn(&b.addInstallArtifact(export_tests_exe, .{}).step);
+    export_tests_step.dependOn(&install_templates.step);
+    b.getInstallStep().dependOn(export_tests_step);
 }
 
 /// The project store's sources (`store_sources`, compiled with `flags`) with SQLite and zstd.
