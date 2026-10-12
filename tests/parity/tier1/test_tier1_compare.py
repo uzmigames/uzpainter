@@ -266,6 +266,34 @@ def test_flip_is_reported_as_a_diagnostic_with_its_pinned_tool(tmp_path: Path) -
     assert all(m["flip_mean"] == 0 for m in equal["equality_to_painter"]["maps"])
 
 
+@pytest.mark.parametrize(("bound", "outcome"), [(1.0, "pass"), (1e-4, "fail")])
+def test_a_register_bound_on_the_normal_angle_judges_a_normal_map(
+    tmp_path: Path, bound: float, outcome: str
+) -> None:
+    """The normal diagnostics reach the register under its metric names (`normal_*`): a one-code
+    difference (about 0.0017 degrees) passes an entry bounding `normal_angular_max_deg` by 1 and
+    fails one bounding it by 1e-4."""
+    resolved, store = stable_golden(tmp_path)
+    changed = maps()
+    changed[NORMAL][2, 2, 0] += 1
+    runs = (candidate(tmp_path / "a", changed), candidate(tmp_path / "b", changed))
+    entry = load_json(REPO_ROOT / "parity/schema/samples/exceptions/tier2b-bake-entry.json")
+    entry = {
+        **entry,
+        "tier": "1",
+        "domain": {**entry["domain"], "selector": MANIFEST["domain"]},
+        "bounds": [{"metric": "normal_angular_max_deg", "scope": "whole", "max": bound}],
+    }
+    report = compare(subject(), resolved, store, runs, IDENTITY, [entry])
+    assert validation_errors(report, Schema.COMPARISON_REPORT) == []
+    equality = report["equality_to_painter"]
+    angle = by_id(equality["maps"])[f"{SET}/{NORMAL}"]["normal"]["angular_max_deg"]
+    assert 1e-4 < angle < 1.0
+    assert equality["outcome"] == outcome
+    relied = [{"exception_id": entry["exception_id"], "version": entry["version"]}]
+    assert equality["exceptions_relied_on"] == (relied if outcome == "pass" else [])
+
+
 # --- oracle_unavailable (3.4) -------------------------------------------------------------------
 
 

@@ -435,7 +435,7 @@ def equality(
                 domain,
                 oracle.values,
                 candidate.values,
-                extra_metrics=normal or {},
+                extra_metrics={f"normal_{name}": value for name, value in (normal or {}).items()},
                 region_metrics={name: d.metrics() for name, d in regions.items()},
                 oracle_stable=stable[key],
                 exact_target=not stable[key],
