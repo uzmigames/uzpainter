@@ -16,7 +16,7 @@ A re-serialised readback no longer matches the index, so it is caught by its con
 
 ## 2. Schema of each JSON path under `parity/`
 
-First match wins; any other JSON under `parity/` is blocked until a rule for its area (for example comparison reports) is added to `PATH_RULES` in `tools/parity/guard/guard.py` together with its schema.
+First match wins; any other JSON under `parity/` is blocked until a rule for its area is added to `PATH_RULES` in `tools/parity/guard/guard.py` together with its schema.
 
 | Path | Must be |
 |---|---|
@@ -31,6 +31,7 @@ First match wins; any other JSON under `parity/` is blocked until a rule for its
 | `parity/envelopes/<envelope id>/manifests/**` | Valid `golden-public.json` (a promoted envelope's manifests) |
 | `parity/envelopes/<envelope id>/requests/**` | Valid `golden-public.json` with `private_records` empty: a requested golden, prepared before the Painter session that records it and admitted under `manifests/` (`parity/RECORDER.md` §11) |
 | `parity/reports/<phase>/oracle-envelope*.json` | Valid `oracle-envelope.json` (stability study, drift, prepared register entries); a prepared entry must be a valid `exceptions.json` entry once the owner's approval fields are added, and must not carry them |
+| `parity/reports/<phase>/tier<tier>-*.json` | Valid `comparison-report.json`: a golden's comparison report (numbers and hashes only; Tier 1 pilots, `parity/RECORDER.md` §11) |
 | `parity/semantics/*.json` | Valid `semantics.json` (fitted formulas: public sources, constants, residuals as numbers) |
 | `parity/fixtures/**` | An authored input (fixture description, authored recipe) that a valid manifest under `parity/manifests/`, under an envelope's `parity/envelopes/<envelope id>/manifests/` or among its requested goldens (`requests/`) declares by this path and SHA-256 (decision 087) |
 | `parity/reports/<phase>/store-census.json` | The project store's size census (`src/store/census.h`, `phase1.7_store-inspect-census`): `schema` `uzpainter/store-census/1`, a non-empty `projects` list of objects with an `id`, numbers everywhere else; text only in `schema`, `task`, `date`, `id`, `format`, `raster_plane_format` and the `not_measured` lists, each an identifier (no paths) |
