@@ -21,10 +21,12 @@ texture-golden settings sheet of `texture_sheet.py`) with these actions, so the 
 and the automated operator follow the same procedure text. A prompt it does not recognise stops
 the run.
 
-Texture goldens (task `phase0.7_tier0-semantics-ui-cases`) use two docked panels that Painter
+Texture goldens (task `phase0.7_tier0-semantics-ui-cases`) use docked panels that Painter
 12.1.5 shows as tabs of the main window: Texture Set Settings (the height-to-normal method of
 the texture set the recorder made active) and Layers (a layer's blending mode in the channel
-chosen in the panel's channel selector, through the row's blending-mode menu). A hidden tab is
+chosen in the panel's channel selector, through the row's blending-mode menu). The Texture Set
+List renames a texture set (a double click on its row's name, the name typed and committed with
+Enter; decision 093), which the documented API cannot do. A hidden tab is
 brought forward with UI Automation's tab selection, which only navigates and sets nothing.
 Before every click on these panels the point is checked to belong to Painter's own window (or
 to the menu it opened), so a click can never land on a window that covers Painter.
@@ -72,6 +74,7 @@ TAB_DOCKS = {
         "QApplication.S4MainWindow.textureSetSettings",
     ),
     "Layers": ("Layers", "QApplication.S4MainWindow.LayersStackView"),
+    "Texture Set List": ("Texture Set List", "QApplication.S4MainWindow.TextureSetsView"),
 }
 TEXTURE_SET_NAME = ".MaterialViewGeneralProperties.name.Alg::ElidedLabel.QLabel"
 TEXTURE_SET_COMBOS = {"Height to normal method": ".height2NormalMethod"}
@@ -82,6 +85,10 @@ MENU_CLASS = "QMenu"
 # What a layer row's blending-mode button shows for a menu label (Painter 12.1.5, observed).
 BLENDING_SHOWN = {"Pthr": "Passthrough", "Norm": "Normal"}
 TEXTURE_SET_TARGET = re.compile(r"^(?P<setting>.+) of texture set '(?P<texture_set>[^']+)'$")
+LIST_TARGET = re.compile(r"^Name of texture set '(?P<texture_set>[^']+)'$")
+# The Texture Set List's rows: a double click on a row's name (this far from the row's left
+# edge, past the visibility icon) opens the name for editing (Painter 12.1.5, observed).
+LIST_ROW_NAME_X = 40
 LAYER_TARGET = re.compile(
     r"^Blending mode of layer '(?P<layer>[^']+)' in channel '(?P<channel>[^']+)'$"
 )
@@ -460,9 +467,44 @@ class PainterUi:
                 raise RecorderError("the blending-mode menu did not open")
             time.sleep(0.2)
 
+    def list_rows(self) -> list[Any]:
+        """The Texture Set List's rows (one per texture set, in the list's order)."""
+        dock = self.tab_dock("Texture Set List")
+        return [e for e in dock.descendants() if e.element_info.control_type == "TreeItem"]
+
+    def texture_set_name(self, listed: str, value: str | None) -> str:
+        """The name of the Texture Set List row showing `listed`, renamed to `value` when given
+        (a guarded double click on the row's name, the new name typed and committed with
+        Enter); returns the name the row then shows."""
+        rows = self.list_rows()
+        names = [str(r.window_text()) for r in rows]
+        if names.count(listed) != 1:
+            raise RecorderError(f"the Texture Set List shows {names.count(listed)} rows {listed!r}")
+        index = names.index(listed)
+        if value is None or value == listed:
+            return listed
+        import win32gui
+        from pywinauto.keyboard import send_keys
+
+        box = rows[index].rectangle()
+        point = (box.left + LIST_ROW_NAME_X, (box.top + box.bottom) // 2)
+        self.front()
+        if win32gui.GetAncestor(win32gui.WindowFromPoint(point), 2) != self.window.handle:
+            raise RecorderError(
+                f"the point {point} of the Texture Set List is covered by another window; "
+                "nothing was clicked"
+            )
+        self.mouse.double_click(coords=point)
+        time.sleep(self.settle_s)
+        send_keys("^a" + value + "{ENTER}")
+        time.sleep(self.settle_s)
+        return str(self.list_rows()[index].window_text())
+
     def target_value(self, panel: str, setting: str, value: str | None) -> str | None:
         """Read (`value` None) or set a targeted texture-golden setting; None when `setting`
         names no target."""
+        if panel == "Texture Set List" and (match := LIST_TARGET.match(setting)):
+            return self.texture_set_name(match["texture_set"], value)
         if panel == "Texture Set Settings" and (match := TEXTURE_SET_TARGET.match(setting)):
             return self.texture_set_value(match["setting"], match["texture_set"], value)
         if panel == "Layers" and (match := LAYER_TARGET.match(setting)):

@@ -399,6 +399,7 @@ class FakeWorld:
         self.busy = False
         self.file_path: str | None = None
         self.texture_set = "uzp_plane"
+        self.imported_texture_set = "uzp_plane"  # TextureSet.original_name (a UI rename keeps it)
         self.resolution = (1024, 1024)
         self.layers: list[Layer] = []  # bottom to top
         self.next_uid = 100
@@ -616,6 +617,11 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
 
         def name(self) -> str:
             return self.set_name
+
+        @property
+        def original_name(self) -> str:
+            """Painter 12.1.5 exposes the documented `original_name` as a string."""
+            return world.imported_texture_set
 
         def get_resolution(self) -> Resolution:
             return Resolution(*world.resolution)
