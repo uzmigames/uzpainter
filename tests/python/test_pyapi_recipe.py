@@ -16,7 +16,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from tests.mesh.mesh_fixtures import GltfNode, Primitive, gltf_document
-from tests.python.conftest import REPO_ROOT, Run
+from tests.python.conftest import PLANE, REPO_ROOT, Run
 from tests.python.test_pyapi_native import CONFIG_EXPRESSION, ok
 from tools.parity.recorder.job import canonical_json
 
@@ -189,6 +189,69 @@ def test_rebuild_from_recipe_exports_byte_identical_files(run: Run, tmp_path: Pa
         result["wrong"].startswith("ProjectError") and "does not hold the bytes" in result["wrong"]
     )
     assert result["nothing_open"] is False
+
+
+def test_an_added_channel_takes_its_format_restricted_default_in_the_dump_and_rebuild(
+    run: Run, tmp_path: Path
+) -> None:
+    """2.2, 2.5 with decision 126: the application's recipe host passes the channel's format to
+    the template library, so Specular and Emissive added as sRGB8 (absent from the default
+    template) dump with the channel defaults recorded for sRGB8 and rebuild to the same digest;
+    Specular added as RGB16, a format no recording covers, is refused by the dump, and by the
+    rebuild of a dump that states it."""
+    plane_sha = hashlib.sha256(PLANE.read_bytes()).hexdigest()
+    first = ok(
+        run("""
+        import hashlib
+        stack = create()
+        stack.add_channel(CT.Specular, ts.ChannelFormat.sRGB8)
+        stack.add_channel(CT.Emissive, ts.ChannelFormat.sRGB8)
+        dump = project.dump_recipe()
+        project.close()
+        os.makedirs(WORK + "/res", exist_ok=True)
+        data = open(PLANE, "rb").read()
+        open(WORK + "/res/" + hashlib.sha256(data).hexdigest() + ".obj", "wb").write(data)
+        project.rebuild_from_recipe(dump, WORK + "/res")
+        rebuilt = project.dump_recipe()
+        project.close()
+        stack = create()
+        stack.add_channel(CT.Specular, ts.ChannelFormat.RGB16)
+        dump_refused = raises(project.dump_recipe)
+        project.close()
+        result = {"dump": dump, "rebuilt": rebuilt, "dump_refused": dump_refused}
+        """)
+    )
+    defaults = json.loads(
+        (REPO_ROOT / "assets" / "templates" / "channel-defaults.json").read_text(encoding="utf-8")
+    )
+    recorded = {c["type"]: c for c in defaults["channels"] if c["type"] in ("Specular", "Emissive")}
+    assert {t: c["format"] for t, c in recorded.items()} == {
+        "Specular": "sRGB8",
+        "Emissive": "sRGB8",
+    }
+    dump: dict[str, Any] = first["dump"]
+    assert set(dump["resource_hashes"]) == {plane_sha}
+    channels = dump["recipe"]["texture_sets"][0]["stacks"][0]["channels"]
+    for name, channel in recorded.items():
+        assert channels[name]["format"] == "sRGB8"
+        assert channels[name]["base"] == channel["base"], name
+    assert first["rebuilt"]["digest"] == dump["digest"]
+    assert first["rebuilt"]["recipe"] == dump["recipe"]
+    refusal = "channel Specular is not in template 'default', and its channel default is recorded"
+    assert first["dump_refused"].startswith("ValueError") and refusal in first["dump_refused"]
+
+    # The sRGB8 dump restated as RGB16 under a valid digest: refused before anything is created.
+    restated = json.loads(json.dumps(dump))
+    restated["recipe"]["texture_sets"][0]["stacks"][0]["channels"]["Specular"]["format"] = "RGB16"
+    restated["digest"] = hashlib.sha256(canonical_json(restated["recipe"])).hexdigest()
+    (tmp_path / "rgb16.json").write_text(json.dumps(restated), encoding="utf-8")
+    second = ok(
+        run("""
+        refused = raises(project.rebuild_from_recipe, WORK + "/rgb16.json", WORK + "/res")
+        result = {"refused": refused, "open": project.is_open()}
+        """)
+    )
+    assert refusal in second["refused"] and second["open"] is False
 
 
 def external_gltf(folder: Path) -> Path:
