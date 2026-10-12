@@ -14,7 +14,7 @@
 | Licence | zlib licence (`LICENSE`; the same notice is in `README` and `zlib.h`) |
 | Licence files | `LICENSE`, `README` (verbatim) |
 | Distribution role | shipped: compiled into `UzPainter.exe` |
-| Selected features | The units spng uses, compiled as C11: `adler32`, `compress`, `crc32`, `deflate`, `inffast`, `inflate`, `inftrees`, `trees`, `zutil`; `gzguts.h` only because `zutil.c` includes it; no gz* sources, `uncompr`, contrib, examples or tests |
+| Selected features | The units spng, the export's PNG writer and tinyexr use, compiled as C11: `adler32`, `compress`, `crc32`, `deflate`, `inffast`, `inflate`, `inftrees`, `trees`, `uncompr` (tinyexr's `uncompress`, added by `phase1.16_export-processing-encoders`), `zutil`; `gzguts.h` only because `zutil.c` includes it; no gz* sources, contrib, examples or tests |
 | Include directories | `thirdparty/zlib/.` |
 
 Every file below is byte-equal to the archive member at the same path; none was taken from a UzEngine tree. `MANIFEST.json` records the SHA-256 of each file.
@@ -23,7 +23,7 @@ Every file below is byte-equal to the archive member at the same path; none was 
 
 - Status: confirmed against the pinned package (licence text, notices, hash, features, role)
 
-## Selected files (22)
+## Selected files (23)
 
 - `LICENSE` (1,002 bytes)
 - `README` (5,291 bytes)
@@ -43,6 +43,7 @@ Every file below is byte-equal to the archive member at the same path; none was 
 - `inftrees.h` (3,003 bytes)
 - `trees.c` (41,030 bytes)
 - `trees.h` (8,472 bytes)
+- `uncompr.c` (3,711 bytes)
 - `zconf.h` (16,955 bytes)
 - `zlib.h` (103,848 bytes)
 - `zutil.c` (7,454 bytes)

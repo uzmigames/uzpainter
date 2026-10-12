@@ -197,7 +197,7 @@ int ParseLog2(const json::Value& value, const std::string& path) {
     const int v = AsInt(value, path);
     if (v < kMinSizeLog2 || v > kMaxSizeLog2) {
         throw core::NotYetSupported("export: " + path + ": sizeLog2 " + std::to_string(v) +
-                                    " is outside the recorded texture sizes 2^7..2^13 (phase1.16_export-processing-encoders)");
+                                    " is outside the recorded texture sizes 2^7..2^13 (export-processing recording R-090 (decision 090))");
     }
     return v;
 }

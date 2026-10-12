@@ -76,6 +76,10 @@ IMPORTER_MESH = (
     "Rulebook task `phase1.4_mesh-importers`, run with "
     "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
 )
+IMPORTER_EXPORT = (
+    "Rulebook task `phase1.16_export-processing-encoders`, run with "
+    "`python -m tools.vendoring.import_thirdparty` for UzmiGames"
+)
 MESH_ROLE = (
     "build-only today: compiled into `uzp_mesh.lib` (UzPainter's mesh importers, `src/mesh/`) "
     "and its native tests `uzp-mesh-tests.exe` (`phase1.4_mesh-importers`); shipped once "
@@ -92,6 +96,19 @@ HEADERS = "build-only: headers, nothing of it is compiled on its own or shipped"
 
 Result = Literal["identical", "line-endings", "different", "uzengine-only"]
 RESULTS: tuple[Result, ...] = ("identical", "line-endings", "different", "uzengine-only")
+
+
+@dataclass(frozen=True)
+class LocalChange:
+    """One recorded edit of a vendored file (the exception decision 089 allows: a root-cause fix
+    that upstream lacks). `upstream` occurs exactly once in the archive member at `path` and is
+    replaced by `replacement`; `cause` says why. The vendored file is the archive member with
+    every change of its path applied, which the provenance tests recompute."""
+
+    path: str
+    upstream: str
+    replacement: str
+    cause: str
 
 
 @dataclass(frozen=True)
@@ -130,6 +147,7 @@ class Library:
     release_blocker: str | None = None
     core: bool = True
     importer: str = IMPORTER
+    local_changes: tuple[LocalChange, ...] = ()
 
     @property
     def path(self) -> str:
@@ -650,6 +668,7 @@ LIBRARIES: tuple[Library, ...] = (
             "inftrees.h",
             "trees.c",
             "trees.h",
+            "uncompr.c",
             "zconf.h",
             "zlib.h",
             "zutil.c",
@@ -666,14 +685,17 @@ LIBRARIES: tuple[Library, ...] = (
             "inflate.c",
             "inftrees.c",
             "trees.c",
+            "uncompr.c",
             "zutil.c",
         ),
         licence="zlib licence (`LICENSE`; the same notice is in `README` and `zlib.h`)",
         role=COMPILED,
         features=(
-            "The units spng uses, compiled as C11: `adler32`, `compress`, `crc32`, `deflate`, "
-            "`inffast`, `inflate`, `inftrees`, `trees`, `zutil`; `gzguts.h` only because "
-            "`zutil.c` includes it; no gz* sources, `uncompr`, contrib, examples or tests"
+            "The units spng, the export's PNG writer and tinyexr use, compiled as C11: "
+            "`adler32`, `compress`, `crc32`, `deflate`, `inffast`, `inflate`, `inftrees`, "
+            "`trees`, `uncompr` (tinyexr's `uncompress`, added by "
+            "`phase1.16_export-processing-encoders`), `zutil`; `gzguts.h` only because "
+            "`zutil.c` includes it; no gz* sources, contrib, examples or tests"
         ),
         uzengine_folder=None,
         uzengine_note=(
@@ -712,6 +734,75 @@ LIBRARIES: tuple[Library, ...] = (
         uzengine_folder="spng",
         core=False,
         importer=IMPORTER_SLICE,
+    ),
+    Library(
+        name="tinyexr",
+        folder="tinyexr",
+        upstream="https://github.com/syoyo/tinyexr",
+        version="v3.2.0",
+        commit="6f470c9ab24bf3992bc512ce07e8ecb00d9bf105",
+        archive_url="https://github.com/syoyo/tinyexr/archive/refs/tags/v3.2.0.tar.gz",
+        archive_name="tinyexr-v3.2.0.tar.gz",
+        archive_sha256="df2bd61124a35d8138f8b0bc22418a1d4fe33622c818e0e022f5522afc0821b0",
+        archive_root="tinyexr-3.2.0/",
+        version_source=(
+            "`runtime/thirdparty/README.md` pins tinyexr 1.0.9; UzPainter's selection is the "
+            "newest release on the retrieval date (tag `v3.2.0`, published 2026-07-08), the "
+            "export's OpenEXR writer (`docs/licensing-and-clean-room.md` §3, decision 089)"
+        ),
+        select=("tinyexr.h", "exr_reader.hh", "streamreader.hh", "LICENSE"),
+        licence_files=("LICENSE", "tinyexr.h"),
+        include_dirs=(".",),
+        licence=(
+            "BSD-3-Clause (`LICENSE`, also heading `tinyexr.h`); the OpenEXR-derived code in "
+            "`tinyexr.h` under Industrial Light & Magic's BSD-3-Clause notice, reproduced in "
+            "the header"
+        ),
+        role=(
+            "shipped: the header-only implementation compiled once into `UzPainter.exe` and "
+            "`uzp-export-tests.exe` by `src/export/tinyexr_unit.cpp`"
+        ),
+        features=(
+            "`TINYEXR_IMPLEMENTATION` with `TINYEXR_USE_MINIZ` 0 over the vendored zlib "
+            "(`zlib.h` included first; `uncompress` from `uncompr.c`), PIZ compression enabled, "
+            "no threads, no ZFP; the scanline writer and reader of single-part images "
+            "(`SaveEXRImageToMemory`, `LoadEXRImageFromMemory`); the v3 C sources under `src/` "
+            "are not vendored"
+        ),
+        uzengine_folder="tinyexr",
+        differences={
+            "tinyexr.h": (
+                "UzEngine pins tinyexr 1.0.9 (`runtime/thirdparty/README.md`); UzPainter takes "
+                "release v3.2.0, so the headers differ by version"
+            ),
+            "miniz.c": (
+                "UzEngine compiles tinyexr with miniz; UzPainter sets `TINYEXR_USE_MINIZ` 0 and "
+                "uses the vendored zlib, so miniz is not vendored"
+            ),
+            "miniz.h": "see `miniz.c`",
+        },
+        core=False,
+        importer=IMPORTER_EXPORT,
+        local_changes=(
+            LocalChange(
+                path="tinyexr.h",
+                upstream="  bool operator()(long long *a, long long *b) { return *a > *b; }",
+                replacement=(
+                    "  bool operator()(long long *a, long long *b) { return *a > *b || (*a == *b "
+                    "&& a > b); }  // UzPainter local change (thirdparty/tinyexr/ORIGIN.md)"
+                ),
+                cause=(
+                    "The heap order of the PIZ Huffman table builder (`hufBuildEncTable`) "
+                    "breaks ties between equal frequencies by the symbol's address, as OpenEXR's "
+                    "own `FHeapCompare` does (OpenEXR added the tie-break so that "
+                    "`std::make_heap`/`pop_heap`/`push_heap` build the same table with every "
+                    "standard library). Upstream compares frequencies only, so its PIZ bytes "
+                    "depend on the C++ library's heap algorithm: with Zig's libc++ it re-encodes "
+                    "20 of Painter 12.1.5's 216 recorded OpenEXR files byte for byte, with the "
+                    "tie-break all 216 (decision 089)"
+                ),
+            ),
+        ),
     ),
     Library(
         name="CPython",
@@ -1252,6 +1343,26 @@ def select_files(lib: Library, names: Collection[str], root: Path | None = None)
     return sorted(chosen)
 
 
+def apply_local_changes(lib: Library, members: Mapping[str, bytes]) -> dict[str, bytes]:
+    """The vendored bytes of `members` (archive path -> archive bytes): each `LocalChange` of `lib`
+    applied to its file. Raises `ValueError` when a change's file is not among `members` or its
+    upstream text does not occur exactly once."""
+    out = dict(members)
+    for change in lib.local_changes:
+        if change.path not in out:
+            raise ValueError(f"{lib.name}: local change of {change.path}, which is not selected")
+        text = out[change.path]
+        upstream = change.upstream.encode("utf-8")
+        found = text.count(upstream)
+        if found != 1:
+            raise ValueError(
+                f"{lib.name}: {change.path} holds the upstream text of a local change {found} "
+                "times, not once"
+            )
+        out[change.path] = text.replace(upstream, change.replacement.encode("utf-8"))
+    return out
+
+
 # ---------------------------------------------------------------------------------------------
 # Comparison with UzEngine's copy
 
@@ -1461,6 +1572,14 @@ def folder_problems(repo_root: Path, lib: Library, manifest: LibraryManifest) ->
 def render_origin(lib: Library, manifest: LibraryManifest) -> str:
     """`ORIGIN.md` of a library, written from the table and the manifest."""
     commit = f"`{lib.commit}`" if lib.commit else "none (NuGet package, not a git tag)"
+    provenance = (
+        "Every file below is byte-equal to the archive member at the same path, except for the "
+        "local changes listed below; none was taken from a UzEngine tree. `MANIFEST.json` "
+        "records the SHA-256 of each vendored file."
+        if lib.local_changes
+        else "Every file below is byte-equal to the archive member at the same path; none was "
+        "taken from a UzEngine tree. `MANIFEST.json` records the SHA-256 of each file."
+    )
     lines = [
         f"# Origin of {lib.name}",
         "",
@@ -1482,14 +1601,21 @@ def render_origin(lib: Library, manifest: LibraryManifest) -> str:
         f"| Selected features | {lib.features} |",
         f"| Include directories | {', '.join(f'`{lib.path}/{d}`' for d in lib.include_dirs)} |",
         "",
-        "Every file below is byte-equal to the archive member at the same path; none was taken "
-        "from a UzEngine tree. `MANIFEST.json` records the SHA-256 of each file.",
+        provenance,
         "",
         "## Licence inventory",
         "",
         f"- Status: {_status(lib)}",
     ]
     lines += [f"- {note}" for note in lib.licence_notes]
+    if lib.local_changes:
+        lines += ["", "## Local changes", ""]
+        for change in lib.local_changes:
+            lines += [
+                f"- `{change.path}`: {change.cause}.",
+                f"  - Upstream: `{change.upstream.strip()}`",
+                f"  - Vendored: `{change.replacement.strip()}`",
+            ]
     lines += ["", f"## Selected files ({len(manifest.files)})", ""]
     lines += [f"- `{f.path}` ({f.size:,} bytes)" for f in manifest.files]
     lines += ["", *_comparison_section(lib, manifest), ""]
@@ -1746,7 +1872,13 @@ APPLICATION_SYSTEM_INCLUDES: dict[str, str] = {
     "stdbool.h": _CRT,
     "sys/stat.h": _CRT,
     "sys/types.h": _CRT,
-    "miniz.h": "spng with `SPNG_USE_MINIZ`, not enabled (zlib is used)",
+    "miniz.h": (
+        "spng with `SPNG_USE_MINIZ` and tinyexr with `TINYEXR_USE_MINIZ` 1, neither enabled "
+        "(zlib is used)"
+    ),
+    "nanozlib.h": "tinyexr with `TINYEXR_USE_NANOZLIB`, not enabled (zlib is used)",
+    "zfp.h": "tinyexr with `TINYEXR_USE_ZFP`, not enabled",
+    "omp.h": "tinyexr with `TINYEXR_USE_OPENMP`, not enabled",
     "tests/framac_stubs.h": "spng's Frama-C analysis branch (`__FRAMAC__`), not built",
     "basetsd.h": _WINSDK + " (CPython's `pyconfig.h`, `_MSC_VER` branch)",
     "winapifamily.h": _WINSDK + " (CPython's `pyconfig.h`; fastgltf's `core.hpp`, `_WIN32`)",
@@ -1856,6 +1988,7 @@ APPLICATION_HEADERS = (
     "embree/include/embree4/rtcore.h",
     "pybind11/include/pybind11/embed.h",
     "cpython-dev/include/Python.h",
+    "tinyexr/tinyexr.h",
 )
 
 

@@ -782,7 +782,7 @@ def test_presence_and_sources(export_tests: Path, tmp_path: Path) -> None:
     normal = ok(r[9])["files"][0]["channels"][0]["source"]
     assert normal["meshMap"] == "Normal" and normal["normal"] == "geometry_only"
     refused(r[10], "NotYetSupported", "not bound")
-    refused(r[11], "NotYetSupported", "phase1.16_export-processing-encoders")
+    refused(r[11], "NotYetSupported", "R-090")
     refused(r[12], "NotYetSupported", "srcChannel L of a three-component map")
     assert ok(r[13])["files"][0]["channels"][0]["component"] == 0
     refused(r[14], "NotYetSupported", "srcChannel A")
@@ -925,7 +925,7 @@ def test_dry_run_equals_painter_export(export_tests: Path, tmp_path: Path) -> No
     recorder's documented configuration (tools/parity/recorder/job.py) on the recording's texture
     sets lists exactly the files Painter wrote, and the maps it skips are exactly the requested
     maps Painter did not write. A golden that uses a release gap of the plan (a baked mesh map
-    other than normal_base, phase1.16) is refused with NotYetSupported, never planned
+    other than normal_base, recording R-090) is refused with NotYetSupported, never planned
     differently."""
     from tests.export.tier0 import compare_dry_runs
 

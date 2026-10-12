@@ -91,7 +91,7 @@ render::Result<VirtualMapResult> EvaluateMeshMapOn(const core::Project& project,
     if (usage != core::MeshMapUsage::Normal) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
                         "exporting the " + std::string(core::ToString(usage)) +
-                            " mesh map at its native precision is a release gap (phase1.16_export-processing-encoders)");
+                            " mesh map is not recorded (export-processing recording R-090 (decision 090))");
     }
     evaluator::VirtualNormalRequest normal;
     normal.textureSet = request.textureSet;
