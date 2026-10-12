@@ -288,7 +288,7 @@ def test_lifecycle_events_equal_painter(facade: Run, tmp_path: Path) -> None:
     for index, (painter, facade_outputs) in enumerate(zip(theirs, ours, strict=True)):
         assert facade_outputs == painter, f"recording r{index + 1}"
     golden_id = "tier0/api-probes/lifecycle-events"
-    check_trace("facade/lifecycle-events", golden_id, exercised(trace))
+    check_trace("facade-events/lifecycle-events", golden_id, exercised(trace))
 
 
 OBSERVED_PROBES = {
@@ -361,4 +361,4 @@ def test_observed_probe_events_equal_painter(facade: Run, tmp_path: Path, probe:
                 differences.append(f"{condition} {output_id}: facade {value!r} != {painter!r}")
     assert differences == [], "\n".join(differences)
     skipped = {o.split("/")[0] + "/events" for c in EXCLUDED.get(probe, {}).values() for o in c}
-    check_trace(f"facade/{probe}", f"tier0/api-probes/{probe}", exercised(trace, skipped))
+    check_trace(f"facade-events/{probe}", f"tier0/api-probes/{probe}", exercised(trace, skipped))

@@ -17,9 +17,9 @@
 - [x] 3.5 Conformance: every `supported` entry exercised with its evidence present; every `desktop-only-omitted` raises `UnsupportedInUzPainter`; every `release-gap` raises `NotYetSupported` before mutation; no public symbol lacks an entry
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green (hosted CPU lane for `run`, the manifest and conformance on GPU-free symbols; a local run on the owner's machine for evaluating symbols, decision 028, skipped on hosted CI with an explicit reason); results attached to `phase1.24_python-api-facade`
+- [x] 4.1 Every §3 test green (hosted CPU lane for `run`, the manifest and conformance on GPU-free symbols; a local run on the owner's machine for evaluating symbols, decision 028, skipped on hosted CI with an explicit reason); results attached to `phase1.24_python-api-facade`
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.1 Update or create documentation covering the implementation
+- [x] 5.2 Write tests covering the new behavior
+- [x] 5.3 Run tests and confirm they pass
