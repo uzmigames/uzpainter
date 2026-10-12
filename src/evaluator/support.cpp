@@ -37,15 +37,15 @@ Gap BitmapColourSpaceGap(const core::Stack* stack, const core::BitmapSource& bit
     switch (BitmapColourSpaceOf(bitmap.color_space)) {
         case BitmapColourSpace::Linear: return std::nullopt;
         case BitmapColourSpace::Srgb: {
-            if (!channel) return Make(node, "an sRGB bitmap as a mask source", "phase1.20_pyapi-facade");
+            if (!channel) return Make(node, "an sRGB bitmap as a mask source", "phase1.14_compositor-core");
             if (stack == nullptr) return std::nullopt;
             const auto it = stack->channels.find(*channel);
             if (it == stack->channels.end() || it->second.format == core::ChannelFormat::sRGB8) return std::nullopt;
             return Make(node, "an sRGB bitmap on a " + std::string(core::ToString(it->second.format)) + " channel",
-                        "phase1.20_pyapi-facade");
+                        "phase1.14_compositor-core");
         }
         case BitmapColourSpace::Unrecorded:
-            return Make(node, "the bitmap colour space '" + bitmap.color_space + "'", "phase1.20_pyapi-facade");
+            return Make(node, "the bitmap colour space '" + bitmap.color_space + "'", "phase1.14_compositor-core");
     }
     return std::nullopt;
 }
@@ -109,7 +109,7 @@ Gap FillGap(const core::Project& project, const core::Stack* stack, const core::
     const bool hasSource = !fill.sources.empty() || fill.mono_source || fill.material_source;
     if (hasSource && !LegacyColour(project)) {
         return Make(node, "colour management mode '" + project.settings.color_management.mode + "'",
-                    "phase1.20_pyapi-facade");
+                    "phase1.14_compositor-core");
     }
     for (const auto& [channel, source] : fill.sources) {
         if (Gap gap = SourceGap(project, stack, source, channel, node)) return gap;
@@ -205,7 +205,7 @@ std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid) {
 std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::Project& after) {
     if (!LegacyColour(after) && after.settings.color_management.mode != before.settings.color_management.mode) {
         return Make(core::kNoId, "colour management mode '" + after.settings.color_management.mode + "'",
-                    "phase1.20_pyapi-facade");
+                    "phase1.14_compositor-core");
     }
     const core::ChangeSet changes = core::Diff(before, after);
     std::vector<core::Id> touched = changes.created;
