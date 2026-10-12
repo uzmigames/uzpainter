@@ -1158,8 +1158,6 @@ pub fn build(b: *std.Build) void {
         .flags = &evaluator_flags,
     });
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
-    // The end-to-end export re-derives the project's texturing mesh (`mesh::RederiveMesh`).
-    app_mod.linkLibrary(mesh_lib);
     app_mod.linkLibrary(uzp_core_lib);
     // The native Python API (phase1.19) creates projects from meshes and re-derives the texturing
     // mesh of an export: the mesh importers join `UzPainter.exe`.

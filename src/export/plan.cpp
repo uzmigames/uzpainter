@@ -733,7 +733,7 @@ ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config,
     const std::string& mode = project.settings.color_management.mode;
     if (!mode.empty() && mode != "legacy") {
         throw core::NotYetSupported("export: the colour-management mode \"" + mode +
-                                    "\" (its $colorSpace and encodings) is a release gap (phase1.20_pyapi-facade)");
+                                    "\" (its $colorSpace and encodings) is a release gap (phase1.18_export-engine)");
     }
     if (project.settings.workflow != core::ProjectWorkflow::Default) {
         throw core::NotYetSupported("export: the " + std::string(core::ToString(project.settings.workflow)) +
