@@ -1,0 +1,14 @@
+{
+  "id": 126,
+  "slug": "srgb8-material-channels-are-written-as-the-gpu-srgb-encode-of-a-linear-read-out-and-inferred-template-bases-stay-refused",
+  "title": "sRGB8 material channels are written as the GPU sRGB encode of a linear read-out; inferred template bases stay refused",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.23_pyapi-pipeline-adapter",
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

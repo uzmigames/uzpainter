@@ -20,6 +20,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 from jsonschema import Draft202012Validator
 
@@ -292,35 +293,23 @@ def test_five_map_preset_plans_the_pipeline_maps(export_tests: Path, tmp_path: P
     assert {f["preset"] for f in ours["plan"]["files"]} == {FIVE_MAP}
 
 
-def test_five_map_preset_refuses_basecolor_naming_r090(export_tests: Path, tmp_path: Path) -> None:
-    """Decisions 090 and 103: BaseColor's sRGB export encoding is not fitted, so an export through
-    the five-map preset that writes BaseColor is refused before anything is written, naming
-    recording R-090 and decision 103; the same export without BaseColor writes its files."""
+def test_five_map_preset_writes_basecolor_srgb_encoded(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 126: an export through the five-map preset writes BaseColor (sRGB8) as the PNG 16
+    write of the sRGB encode of its linear read-out, beside the other maps the stack has."""
+    from tests.export.tier0 import evaluate_files, srgb16
+    from tools.parity.fit.decode import decode
+
     spec_path = spec(tmp_path / "spec", GRID)
     out = tmp_path / "out"
-    result = export(
-        export_tests,
-        spec_path,
-        shipped_config(FIVE_MAP, exportPath=out.as_posix()),
-        tmp_path / "run",
-    )
-    assert result.get("error") == "NotYetSupported", result
-    for fragment in ("sRGB8 channel BaseColor", "R-090", "decision 103"):
-        assert fragment in result["message"], result["message"]
-    assert files_under(out) == {}
-    no_basecolor = shipped_config(
-        FIVE_MAP,
-        exportPath=out.as_posix(),
-        exportList=[
-            {
-                "rootPath": "s0",
-                "filter": {"outputMaps": ["$textureSet_Roughness", "$textureSet_Height"]},
-            }
-        ],
-    )
-    written = export(export_tests, spec_path, no_basecolor, tmp_path / "run2")
-    assert "error" not in written, written
-    assert sorted(files_under(out)) == ["s0_Height.png", "s0_Roughness.png"]
+    cfg = shipped_config(FIVE_MAP, exportPath=out.as_posix())
+    result = export(export_tests, spec_path, cfg, tmp_path / "run")
+    assert "error" not in result, result
+    written = files_under(out)
+    assert "s0_BaseColor.png" in written and "s0_Normal.png" in written, sorted(written)
+    document = json.loads(spec_path.read_text(encoding="utf-8"))
+    rasters = evaluate_files(export_tests, document, cfg, tmp_path / "spec")
+    linear = rasters["s0_BaseColor.png"]
+    assert np.array_equal(decode(written["s0_BaseColor.png"]).values, srgb16(linear))
 
 
 # ── Tier 0 (owner's machine) ─────────────────────────────────────────────────

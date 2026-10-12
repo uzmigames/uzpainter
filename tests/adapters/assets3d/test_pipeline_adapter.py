@@ -95,9 +95,11 @@ def production_state() -> dict[str, Any]:
 
 
 def export_gaps() -> list[str]:
-    """The export-processing entries the wand's five-map export needs that are still gaps."""
+    """The export-processing entries the wand's five-map export needs that are still gaps: its
+    BaseColor at PNG 16 (decision 126) and `infinite` padding on its UV islands (phase1.25 item
+    2.7)."""
     entries = json.loads(SEMANTICS.read_text(encoding="utf-8"))["entries"]
-    needed = {"srgb8-material-channels"}
+    needed = {"srgb8-material-channels", "padding-islands"}
     return [e["entry_id"] for e in entries if e["entry_id"] in needed and e["status"] == "gap"]
 
 
@@ -133,8 +135,8 @@ def count(nodes: list[dict[str, Any]]) -> int:
 
 def test_wand_create_sync_and_export_run_unchanged(wand: Wand) -> None:
     """3.1: create and sync return their JSON results through the adapter; export runs its pinned
-    bytes and returns its result, or, while the export of sRGB8 material channels at PNG 16 is a
-    gap (decision 103, owner phase1.25_pilot-wand item 2.6), the export's explicit refusal."""
+    bytes and returns its result, or, while a processing it needs is a gap (`export_gaps`: owner
+    phase1.25_pilot-wand items 2.6 and 2.7), the export's explicit refusal."""
     before = production_state()
     create = wand.create()
     assert create.status == 0, create.stdout + create.stderr
@@ -162,7 +164,8 @@ def test_wand_create_sync_and_export_run_unchanged(wand: Wand) -> None:
     if export_gaps():
         assert export.status == 1
         assert "NotYetSupported" in export.stderr and "R-090" in export.stderr, export.stderr
-        assert "sRGB8 channel BaseColor" in export.stderr
+        if export_gaps() == ["padding-islands"]:
+            assert "do not cover the whole tile" in export.stderr, export.stderr
         assert not out.exists() or not any(out.iterdir())  # refused before writing
     else:
         assert export.status == 0, export.stdout + export.stderr

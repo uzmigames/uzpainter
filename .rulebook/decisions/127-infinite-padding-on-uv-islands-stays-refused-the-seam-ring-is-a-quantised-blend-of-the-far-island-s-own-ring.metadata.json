@@ -1,0 +1,13 @@
+{
+  "id": 127,
+  "slug": "infinite-padding-on-uv-islands-stays-refused-the-seam-ring-is-a-quantised-blend-of-the-far-island-s-own-ring",
+  "title": "infinite padding on UV islands stays refused: the seam ring blends the far island's last row with that island's own ring, by weights not yet identified",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}

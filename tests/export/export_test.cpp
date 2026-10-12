@@ -24,7 +24,8 @@
 //       (phase1.18) Each case {"source": a file Painter exported (OpenEXR 32f, or PNG 16 read as
 //       UNORM operands), "target": Painter's file of the same map with another processing,
 //       "format": png|exr, "bit_depth": 8|16|16f|32f, "dithering"?, "height"? (the channel is
-//       Height), "append_opaque_alpha"? (an alpha of 1 appended)}: the source's values as the
+//       Height), "srgb8_material"? (an sRGB8 BaseColor, Specular or Emissive: every channel
+//       sRGB-encoded in a PNG), "append_opaque_alpha"? (an alpha of 1 appended)}: the source's values as the
 //       raster of an L, L+A, RGB or RGB+A file, encoded by EncodeFile; prints one JSON line per case
 //       {"target", "equal", "layout", "size", "target_size"}.
 //   uzp-export-tests roundtrip <out dir>
@@ -692,7 +693,10 @@ int RunProcess(const fs::path& casesPath) {
                                                : exporter::BitDepth::f32;
         parameters.dithering = c.contains("dithering") && std::get<bool>(c.at("dithering").data);
         file.parameters = parameters;
-        const exporter::FileRaster raster{width, height, channels, std::move(values), std::nullopt, std::nullopt};
+        const bool srgb8Material = c.contains("srgb8_material") && std::get<bool>(c.at("srgb8_material").data);
+        const exporter::FileRaster raster{width,        height,       channels,
+                                          std::move(values), std::nullopt, std::nullopt,
+                                          std::vector<uint8_t>(channels, srgb8Material ? 1 : 0)};
         const exporter::EncodedImage encoded = exporter::EncodeFile(file, raster);
         const std::string target = ReadText(file.relativePath);
         std::cout << json::WriteCanonical(json::Object{{"target", file.relativePath},

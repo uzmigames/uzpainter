@@ -222,15 +222,15 @@ def test_template_file_structure(path: Path) -> None:
     for channel in document["channels"]:
         if document["kind"] == "project":
             assert channel["format"] in FORMATS
-        else:
-            assert "format" not in channel
+        else:  # a channel default applies to any format, or to the one it names
+            assert channel.get("format", "sRGB8") in FORMATS
         base = channel["base"]
         assert len(base) == 3 and all(0.0 <= v <= 1.0 for v in base)
         for v in base:
             assert struct.unpack("<f", struct.pack("<f", v))[0] == v, "base values are float32"
         provenance = channel["base_provenance"]
-        assert provenance["kind"] in {"observed", "fitted", "unobserved"}
-        if provenance["kind"] == "observed":
+        assert provenance["kind"] in {"observed", "fitted", "inferred", "unobserved"}
+        if provenance["kind"] in {"observed", "inferred"}:
             assert re.fullmatch(r"[0-9a-f]{64}", provenance["record_sha256"])
             assert provenance["golden_id"].startswith("tier0/")
         if provenance["kind"] == "fitted":
@@ -268,6 +268,11 @@ def backends() -> list[str]:
     return ["cpu", "gpu"]
 
 
+# The material channels Painter exports sRGB-encoded when stored as sRGB8 (src/export/plan.h
+# `SrgbEncodedOnExport`).
+SRGB_ENCODED_ON_EXPORT = frozenset({"BaseColor", "Specular", "Emissive"})
+
+
 def write16(v: float) -> int:
     """The evaluator's 16-bit UNORM write rule: truncate to 20 fractional bits, nearest, ties
     down."""
@@ -303,16 +308,22 @@ def raster(result: dict[str, Any], channel: str) -> np.ndarray:
     return values.astype(np.float64) if entry["format"].endswith("F") else values.astype(np.int64)
 
 
-def export16_of_constant(constant: list[float], channel: str) -> list[int]:
+def export16_of_constant(constant: list[float], channel: str, fmt: str) -> list[int]:
     """What a 16-bit PNG export of an empty channel's constant holds, per component: the write
     rule of the export depth, whatever the channel format (Painter's default maps are not
     quantised to the channel: the Dota 2 Specular L8 base exports 14330, off the 8-bit lattice).
-    The signed Height channel exports (h + 1) / 2 (its base 0 exports 32767)."""
+    The signed Height channel exports (h + 1) / 2 (its base 0 exports 32767). An sRGB8 BaseColor,
+    Specular or Emissive holds its linear constant and exports its sRGB encode (src/export/encode.h,
+    decision 126)."""
     if channel == "Height":
         return [
             write16(float(np.float32(np.float32(v) + np.float32(1.0)) * np.float32(0.5)))
             for v in constant
         ]
+    if fmt == "sRGB8" and channel in SRGB_ENCODED_ON_EXPORT:
+        from tests.export.tier0 import srgb16  # tests/export imports this module at load
+
+        return [int(c) for c in srgb16(np.asarray(constant, np.float32))]
     return [write16(v) for v in constant]
 
 
@@ -351,6 +362,7 @@ def test_base_values_equal_the_empty_project_exports(
     for args in added:
         name = "SubsurfaceRadiusScale" if args["channel"] == "Scattering" else args["channel"]
         channels.append({"type": name, "format": args["format"]})
+    formats = {c["type"]: c["format"] for c in channels}
     outputs = []
     maps: dict[str, str] = {}
     for map_name in golden.maps("r1"):
@@ -375,7 +387,9 @@ def test_base_values_equal_the_empty_project_exports(
             decoded = golden.map(recording, map_name)
             observed = decoded.values
             if decoded.integer:
-                ours = np.asarray(export16_of_constant(entry["constant"], channel), np.int64)
+                ours = np.asarray(
+                    export16_of_constant(entry["constant"], channel, formats[channel]), np.int64
+                )
                 unit = "16-bit code value"
             else:
                 ours = np.asarray([float(np.float32(v)) for v in entry["constant"]], np.float64)
@@ -387,7 +401,9 @@ def test_base_values_equal_the_empty_project_exports(
             components = unique[0].tolist()
             constant = entry["constant"]
             if decoded.integer:
-                exported = export16_of_constant(constant, channel)[: len(components)]
+                exported = export16_of_constant(constant, channel, formats[channel])[
+                    : len(components)
+                ]
                 assert exported == components, (
                     f"{golden_stem} {map_name} {recording}: {exported} != {components}"
                 )

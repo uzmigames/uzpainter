@@ -840,6 +840,54 @@ std::vector<StackFiles> ListProjectTextures(const core::Project& project, std::s
     return FilesByStack(plan);
 }
 
+namespace {
+
+/// The stack channel whose read-out (its template base included) a source's values depend on:
+/// a documentMap's channel, the channel a diagnosticMap isolates, compares, summarises, views or
+/// checks for leaks (a non-ID materialLeaks view compares the channel's full and solo read-outs).
+/// None for the other sources (mesh maps; the virtual normals read Height and Normal, whose bases
+/// are observed or fitted; the material masks read masks; the ID views read the ID mesh map).
+std::optional<ChannelType> ChannelRead(const PlannedSource& s) {
+    if (s.type == SourceType::documentMap) return s.channel;
+    if (s.type != SourceType::diagnosticMap || !s.diagnostic) return std::nullopt;
+    using Kind = evaluator::DiagnosticSource::Kind;
+    const evaluator::DiagnosticSource& d = *s.diagnostic;
+    if (d.kind == Kind::Isolated || d.kind == Kind::Contribution || d.kind == Kind::RegionStats) {
+        if (d.map.kind == evaluator::DiagnosticMapId::Kind::Channel) return d.map.channel;
+        return std::nullopt;
+    }
+    if ((d.kind == Kind::MaterialView || d.kind == Kind::MaterialLeaks) && d.view != evaluator::MaterialViewKind::ID) {
+        return evaluator::MaterialViewChannel(d.view);
+    }
+    return std::nullopt;
+}
+
+/// Refuses (`unsupported_source`) a file whose values depend on channel `type` of the file's stack
+/// when that channel's base value is `inferred` (templates.h): a range of linear values writes
+/// the template's recorded 16-bit PNG code, so no output built on it is exact, whatever the
+/// channel's format (decision 126). A channel the stack lacks is left to the evaluation.
+render::Result<void> RequireIdentifiedBase(const core::Project& project, const PlannedFile& file, ChannelType type,
+                                           std::string_view templateId, const evaluator::TemplateLibrary& templates) {
+    const core::Stack* stack = core::FindStack(project, file.textureSetId, file.stackId);
+    if (stack == nullptr) return {};
+    const auto it = stack->channels.find(type);
+    if (it == stack->channels.end()) return {};
+    render::Result<const evaluator::TemplateChannel*> base = templates.BaseChannel(templateId, type, it->second.format);
+    if (!base) return render::Unexpected(base.error());
+    if ((*base)->baseProvenance != "inferred") return {};
+    return evaluator::EvalFail(evaluator::EvalErrorKind::UnsupportedSource,
+                               "the base value of the channel " + std::string(core::ToString(type)) + " in template '" +
+                                   std::string(templateId) +
+                                   "' is inferred from its 16-bit PNG export only (an OpenEXR export of the empty "
+                                   "channel on this template settles it; decision 126)");
+}
+
+}  // namespace
+
+bool SrgbEncodedOnExport(ChannelType type) {
+    return type == ChannelType::BaseColor || type == ChannelType::Specular || type == ChannelType::Emissive;
+}
+
 render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int64_t revision, const PlannedFile& file,
                                           const SourceInputs& inputs, const evaluator::TemplateLibrary& templates,
                                           evaluator::ITileStore& store, evaluator::TileCache& cache) {
@@ -850,10 +898,15 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
                                                   inputs.geometry};
     FileRaster raster;
     std::map<std::string, DiagnosticMap> evaluated;  // by srcMapType/srcMapName
+    std::set<std::string> srgbEncoded;               // the keys of sources written sRGB-encoded
     for (const PlannedChannel& channel : file.channels) {
         const PlannedSource& s = channel.source;
         const std::string key = std::string(SourceTypeName(s.type)) + "/" + s.name;
         if (evaluated.contains(key) || s.type == SourceType::defaultMap) continue;
+        if (const std::optional<ChannelType> read = ChannelRead(s)) {
+            render::Result<void> identified = RequireIdentifiedBase(project, file, *read, inputs.templateId, templates);
+            if (!identified) return render::Unexpected(identified.error());
+        }
         switch (s.type) {
             case SourceType::documentMap: {
                 evaluator::EvaluateRequest r;
@@ -865,20 +918,10 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
                 r.geometry = inputs.geometry;
                 render::Result<evaluator::ChannelResult> result = evaluator::EvaluateOn(project, r, templates, store, cache);
                 if (!result) return render::Unexpected(result.error());
-                // The luma reads linear components. A base constant of an sRGB8 channel holds its
-                // export value, not its linear one (evaluator/templates.h): its luma is not
-                // reproduced (probe P5 records Painter's luma of the empty BaseColor as the
-                // channel's linear 0.8).
-                const bool luma = std::any_of(file.channels.begin(), file.channels.end(), [&](const PlannedChannel& c) {
-                    return c.luma && c.source.type == s.type && c.source.name == s.name;
-                });
-                if (luma && result->format == core::ChannelFormat::sRGB8 &&
-                    std::any_of(result->tiles.begin(), result->tiles.end(),
-                                [](const evaluator::TileResult& t) { return t.constant.has_value(); })) {
-                    return evaluator::EvalFail(evaluator::EvalErrorKind::UnsupportedSource,
-                                               "the luma of the sRGB8 channel " + s.name +
-                                                   " where it holds its base value (no layer) needs the base's linear "
-                                                   "value (phase1.18_export-engine: sRGB8 material-channel fit, decision 090)");
+                // An sRGB8 BaseColor, Specular or Emissive is read out linear, its template constant
+                // included, and written to PNG sRGB-encoded (encode.h; decision 126).
+                if (result->format == core::ChannelFormat::sRGB8 && SrgbEncodedOnExport(*s.channel)) {
+                    srgbEncoded.insert(key);
                 }
                 evaluated[key] = evaluator::MapOf(*result);
                 break;
@@ -919,6 +962,7 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
     raster.channels = static_cast<uint32_t>(file.channels.size());
     const size_t texels = size_t{raster.width} * raster.height;
     raster.values.resize(texels * raster.channels);
+    raster.srgbEncoded.assign(raster.channels, 0);
     for (uint32_t c = 0; c < raster.channels; ++c) {
         const PlannedChannel& channel = file.channels[c];
         const PlannedSource& s = channel.source;
@@ -926,7 +970,9 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
             for (size_t t = 0; t < texels; ++t) raster.values[t * raster.channels + c] = *s.constant;
             continue;
         }
-        const DiagnosticMap& map = evaluated.at(std::string(SourceTypeName(s.type)) + "/" + s.name);
+        const std::string key = std::string(SourceTypeName(s.type)) + "/" + s.name;
+        raster.srgbEncoded[c] = srgbEncoded.contains(key) ? 1 : 0;
+        const DiagnosticMap& map = evaluated.at(key);
         if (map.width != raster.width || map.height != raster.height || channel.component >= map.components) {
             return evaluator::EvalFail(evaluator::EvalErrorKind::Internal,
                                        "the sources of " + file.relativePath + " disagree in size or components");

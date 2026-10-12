@@ -441,19 +441,136 @@ def test_height_is_written_signed_to_png(export_tests: Path, tmp_path: Path) -> 
     assert np.array_equal(stored, toward_zero)
 
 
-def test_unfitted_srgb8_exports_are_refused(export_tests: Path, tmp_path: Path) -> None:
-    """6.1 (decision 103): an sRGB8 material channel (BaseColor: sRGB-encoded samples, PNG 16 not
-    fitted, export-valued template constants) is refused before writing."""
+def test_srgb8_material_channels_are_written_encoded(export_tests: Path, tmp_path: Path) -> None:
+    """2.6 (decision 126): an sRGB8 BaseColor is written to PNG 16 as the sRGB encode of its linear
+    value (Painter 12.1.5's encode, `tier0.srgb16`) and to OpenEXR 32f linear, equal to the sRGB8
+    User0 read-out of the same bitmap; an sRGB8 material channel no recording shows (Diffuse) is
+    refused before writing; a template whose BaseColor base is inferred from its PNG export only
+    fails its evaluation (`unsupported_source`) before writing."""
+    from tests.export.tier0 import srgb16
+
     out = tmp_path / "out"
+    cfg = config(out)
+    cfg["exportPresets"][0]["maps"] = [
+        {"fileName": f"$textureSet_{name}", "channels": [chan(c, "documentMap", m) for c in "RGB"]}
+        for name, m in (("base", "basecolor"), ("base32", "basecolor"), ("user", "user0"))
+    ]
+    cfg["exportParameters"][1]["filter"]["outputMaps"] = ["$textureSet_base32"]
+    result = export(export_tests, spec(tmp_path / "spec"), cfg, tmp_path / "run")
+    assert "error" not in result, result
+    from tests.export.tier0 import write16
+    from tools.parity.fit.decode import decode
+
+    base16 = decode((out / "s0_base.png").read_bytes()).values
+    base32 = decode((out / "s0_base32.exr").read_bytes()).values.astype(np.float32)
+    user16 = decode((out / "s0_user.png").read_bytes()).values
+    assert np.array_equal(base16, srgb16(base32))
+    assert np.array_equal(user16, write16(base32))
+    assert not np.array_equal(base16, user16)
+
+    document = json.loads((tmp_path / "spec" / "spec.json").read_text(encoding="utf-8"))
+    document["channels"].append({"type": "Diffuse", "format": "sRGB8"})
+    document["layers"][0]["sources"]["Diffuse"] = document["layers"][0]["sources"]["BaseColor"]
+    (tmp_path / "spec" / "diffuse.json").write_text(json.dumps(document), encoding="utf-8")
+    out = tmp_path / "diffuse"
+    cfg = config(out)
+    for c in cfg["exportPresets"][0]["maps"][0]["channels"]:
+        c["srcMapName"] = "diffuse"
+    result = export(export_tests, tmp_path / "spec" / "diffuse.json", cfg, tmp_path / "run-diffuse")
+    assert result.get("error") == "NotYetSupported", result
+    assert "the export encoding of the sRGB8 channel Diffuse" in result["message"], result
+    assert "decision 126" in result["message"], result
+    assert files_under(out) == {}
+
+    document = json.loads((tmp_path / "spec" / "spec.json").read_text(encoding="utf-8"))
+    document["template"] = "unreal-engine"
+    (tmp_path / "spec" / "unreal.json").write_text(json.dumps(document), encoding="utf-8")
+    out = tmp_path / "inferred"
     cfg = config(out)
     for c in cfg["exportPresets"][0]["maps"][0]["channels"]:
         c["srcMapName"] = "basecolor"
-    result = export(export_tests, spec(tmp_path / "spec"), cfg, tmp_path / "run")
-    assert result.get("error") == "NotYetSupported", result
-    message = result["message"]
-    assert "the export encoding of the sRGB8 channel BaseColor" in message, message
-    assert "decision 103" in message, message
+    result = export(export_tests, tmp_path / "spec" / "unreal.json", cfg, tmp_path / "run-inferred")
+    # An evaluator refusal (`unsupported_source`, NotYetSupported in the Python API, decision 082)
+    # before anything is written.
+    assert result.get("error") == "Failure", result
+    assert result["message"].startswith("evaluator:unsupported_source"), result
+    assert "inferred from its 16-bit PNG export only" in result["message"], result
     assert files_under(out) == {}
+
+
+def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path: Path) -> None:
+    """2.6 (decision 126): on a template whose BaseColor base is inferred (Unreal Engine), every
+    export source that reads BaseColor fails its evaluation (`unsupported_source`) before anything
+    is written: the documentMap on sRGB8 and on RGB16, and the diagnosticMap sources isolated,
+    contribution, regionStats, materialView and materialLeaks of BaseColor (leaks compare the
+    channel's full and solo read-outs). On the default template, whose base is observed, the same
+    diagnostic sources are written. Specular and Emissive added in a format other than sRGB8 fail
+    with `missing_base_value`: their channel default is recorded on sRGB8 only."""
+
+    def variant(name: str, template: str | None, basecolor: str = "sRGB8") -> Path:
+        document = json.loads(spec(tmp_path / "spec").read_text(encoding="utf-8"))
+        if template is not None:
+            document["template"] = template
+        for c in document["channels"]:
+            if c["type"] == "BaseColor":
+                c["format"] = basecolor
+        document["layers"][0]["uid"] = 501
+        path = tmp_path / "spec" / f"{name}.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        return path
+
+    def single(out: Path, kind: str, source: str, layout: str = "RGB") -> dict[str, Any]:
+        cfg = config(out)
+        letters = "L" if layout == "L" else "RGB"
+        cfg["exportPresets"][0]["maps"] = [
+            {"fileName": "$textureSet_x", "channels": [chan(c, kind, source) for c in letters]}
+        ]
+        cfg["exportParameters"] = cfg["exportParameters"][:1]
+        return cfg
+
+    sources = [
+        ("documentMap", "basecolor", "RGB"),
+        ("diagnosticMap", "isolated/BaseColor/501", "RGB"),
+        ("diagnosticMap", "contribution/BaseColor/501", "RGB"),
+        ("diagnosticMap", "regionStats/BaseColor/501", "L"),
+        ("diagnosticMap", "materialView/BaseColor/501", "RGB"),
+        ("diagnosticMap", "materialLeaks/BaseColor/501", "L"),
+    ]
+    cases = [(variant("unreal", "unreal-engine"), *src) for src in sources]
+    cases.append((variant("unreal-rgb16", "unreal-engine", "RGB16"), *sources[0]))
+    for i, (spec_path, kind, source, layout) in enumerate(cases):
+        out = tmp_path / f"inferred{i}"
+        result = export(
+            export_tests, spec_path, single(out, kind, source, layout), tmp_path / f"r{i}"
+        )
+        assert result.get("error") == "Failure", (source, result)
+        assert result["message"].startswith("evaluator:unsupported_source"), (source, result)
+        assert "BaseColor in template 'unreal-engine' is inferred" in result["message"], result
+        assert files_under(out) == {}, source
+    default = variant("default", None)
+    for i, (kind, source, layout) in enumerate(sources[1:]):
+        out = tmp_path / f"observed{i}"
+        result = export(
+            export_tests, default, single(out, kind, source, layout), tmp_path / f"o{i}"
+        )
+        assert "error" not in result, (source, result)
+        assert files_under(out), source
+
+    # Specular and Emissive added in a format other than sRGB8: their channel default is recorded
+    # on sRGB8 only, so the evaluation fails (`missing_base_value`) before anything is written.
+    for channel, fmt in (("Specular", "RGB16"), ("Emissive", "RGB16"), ("Specular", "L8")):
+        document = json.loads((tmp_path / "spec" / "default.json").read_text(encoding="utf-8"))
+        document["channels"].append({"type": channel, "format": fmt})
+        path = tmp_path / "spec" / f"{channel}-{fmt}.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        out = tmp_path / f"added-{channel}-{fmt}"
+        layout = "L" if fmt.startswith("L") else "RGB"
+        cfg = single(out, "documentMap", channel.lower(), layout)
+        result = export(export_tests, path, cfg, tmp_path / f"a-{channel}-{fmt}")
+        assert result.get("error") == "Failure", (channel, fmt, result)
+        assert result["message"].startswith("evaluator:missing_base_value"), (channel, result)
+        assert "recorded as sRGB8 only" in result["message"], (channel, result)
+        assert files_under(out) == {}, (channel, fmt)
 
 
 def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
@@ -546,13 +663,31 @@ def test_processing_reproduces_painter_files(
 ) -> None:
     """6.1 (decision 103): Painter's own file of each map, as the raster, encoded with the
     processing of its other files gives those files byte for byte: PNG 8, PNG 16 and OpenEXR 16f of
-    every channel, mesh map and Height of export-bit-depth (sRGB8 material channels excepted), PNG
-    16 with dithering of export-dither, and the L+A and RGB+A PNG 16 files of export-alpha-layouts
-    (an all-opaque alpha dropped)."""
+    every channel, mesh map and Height of export-bit-depth (sRGB8 material channels sRGB-encoded in
+    PNG, decision 126), PNG 16 with dithering of export-dither, and the L+A and RGB+A PNG 16 files
+    of export-alpha-layouts (an all-opaque alpha dropped)."""
     _, _, processed = tier0_reports
     assert processed["cases"] and processed["differing"] == [], processed["differing"][:10]
     assert processed["identical"] == processed["cases"]
     assert processed["layouts"]["LA"] > 0 and processed["layouts"]["RGBA"] > 0
+    assert sum(processed["srgb8_cases"].values()) == 2 * 8 * 3 * 3
+
+
+def test_srgb8_material_channels_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:
+    """2.6 (decision 126): export-bit-depth's BaseColor, Specular and Emissive (colour bitmaps,
+    uniform colours stored as the facade stores them, empty channels over their linear template
+    constants and channel defaults; sets s0-s3 and s6), rebuilt per texture set and written by
+    WriteExport at PNG 8, PNG 16, OpenEXR 16f and OpenEXR 32f, are byte-identical to Painter's
+    files (r1 and r2)."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.srgb8_material_written(export_tests, tmp_path)
+    assert report["problems"] == [], report["problems"][:10]
+    # s4, s5 and s7 fill these channels from grey 16-bit bitmaps (height-ramps, grey-a) in the sRGB
+    # space, which the evaluator refuses before writing (phase1.14_compositor-core, sources.h).
+    assert report["grey_bitmap_sets"] == {"s4", "s5", "s7"}, report
+    assert report["files"] == 5 * 4 * 3, report
+    assert report["identical"] == report["comparisons"] == 2 * report["files"], report
 
 
 def test_published_export_processing_reproduces(

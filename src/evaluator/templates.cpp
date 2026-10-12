@@ -55,11 +55,9 @@ TemplateChannel ParseChannel(const Value& value, std::string_view path, bool def
     const core::json::Object& object = Object(value, path);
     TemplateChannel channel;
     channel.type = Enum<core::ChannelType>(String(object, "type", path), std::string(path) + ".type");
-    if (!defaults) {
+    if (!defaults || object.contains("format")) {
         channel.format = Enum<core::ChannelFormat>(String(object, "format", path),
                                                    std::string(path) + ".format");
-    } else if (object.contains("format")) {
-        Fail(path, "a channel default names no format");
     }
     const Value& base = Need(object, "base", path);
     const std::string basePath = std::string(path) + ".base";
@@ -74,9 +72,9 @@ TemplateChannel ParseChannel(const Value& value, std::string_view path, bool def
     const std::string provenancePath = std::string(path) + ".base_provenance";
     channel.provenanceRecord = Object(provenance, provenancePath);
     channel.baseProvenance = String(channel.provenanceRecord, "kind", provenancePath);
-    static const std::set<std::string, std::less<>> kKinds = {"observed", "fitted", "unobserved"};
+    static const std::set<std::string, std::less<>> kKinds = {"observed", "fitted", "inferred", "unobserved"};
     if (!kKinds.contains(channel.baseProvenance)) {
-        Fail(provenancePath + ".kind", "expected observed, fitted or unobserved");
+        Fail(provenancePath + ".kind", "expected observed, fitted, inferred or unobserved");
     }
     return channel;
 }
@@ -206,18 +204,33 @@ std::vector<std::string> TemplateLibrary::Ids() const {
     return ids;
 }
 
-render::Result<std::array<float, 3>> TemplateLibrary::BaseValue(std::string_view templateId,
-                                                                core::ChannelType type) const {
+render::Result<const TemplateChannel*> TemplateLibrary::BaseChannel(std::string_view templateId,
+                                                                   core::ChannelType type,
+                                                                   std::optional<core::ChannelFormat> format) const {
     const ProjectTemplate* project = Find(templateId);
     if (project == nullptr) {
         return EvalFail(EvalErrorKind::UnknownTemplate,
                         "no template '" + std::string(templateId) + "' in the library");
     }
-    if (const TemplateChannel* channel = project->Find(type)) return channel->base;
-    if (const TemplateChannel* fallback = defaults_.Find(type)) return fallback->base;
+    if (const TemplateChannel* channel = project->Find(type)) return channel;
+    const TemplateChannel* fallback = defaults_.Find(type);
+    if (fallback != nullptr && (!fallback->format || fallback->format == format)) return fallback;
+    if (fallback != nullptr) {
+        return EvalFail(EvalErrorKind::MissingBaseValue,
+                        "channel " + std::string(core::ToString(type)) + " is not in template '" +
+                            std::string(templateId) + "', and its channel default is recorded as " +
+                            std::string(core::ToString(*fallback->format)) + " only");
+    }
     return EvalFail(EvalErrorKind::MissingBaseValue,
                     "channel " + std::string(core::ToString(type)) + " is neither in template '" +
                         std::string(templateId) + "' nor in the channel defaults");
+}
+
+render::Result<std::array<float, 3>> TemplateLibrary::BaseValue(std::string_view templateId, core::ChannelType type,
+                                                                std::optional<core::ChannelFormat> format) const {
+    render::Result<const TemplateChannel*> channel = BaseChannel(templateId, type, format);
+    if (!channel) return render::Unexpected(channel.error());
+    return (*channel)->base;
 }
 
 }  // namespace uzp::evaluator

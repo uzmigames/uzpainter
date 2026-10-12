@@ -140,7 +140,7 @@ def reencode_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
 
 # ── Painter's files through UzPainter's processing (phase1.18) ───────────────
 
-# The sRGB8 material channels are exported sRGB-encoded, which is not fitted (decision 103).
+# The sRGB8 material channels, exported sRGB-encoded to PNG (R-090 P10; decisions 091 and 126).
 SRGB8_MATERIAL = ("basecolor", "specular", "emissive")
 # export-bit-depth: the OpenEXR 32f step of each group, and its other steps (format, bit depth).
 BIT_DEPTH_STEPS = {
@@ -154,8 +154,8 @@ def processing_cases(store: OracleStore) -> list[dict[str, Any]]:
     case's source and target from the same recording (decision 032: r1 is the exact target, the
     residuals against r2 are published):
 
-    - export-bit-depth: every map's OpenEXR 32f file (sRGB8 material channels excepted) as the
-      raster of its PNG 8, PNG 16 and OpenEXR 16f files (R-090 P1, P2, P7);
+    - export-bit-depth: every map's OpenEXR 32f file as the raster of its PNG 8, PNG 16 and
+      OpenEXR 16f files (R-090 P1, P2, P7), an sRGB8 material channel sRGB-encoded in a PNG (P10);
     - export-dither: every map's PNG 16 file without dithering as the raster of its PNG 16 file
       with dithering (R-090 P3);
     - export-alpha-layouts: the L+A and RGB+A OpenEXR 32f files as the rasters of their PNG 16
@@ -173,7 +173,7 @@ def processing_cases(store: OracleStore) -> list[dict[str, Any]]:
         for output_id in bit_depth.maps(recording):
             texture_set, name, step = output_id.split("/")
             group = BIT_DEPTH_STEPS.get(int(step.removeprefix("step")))
-            if group is None or name in SRGB8_MATERIAL:
+            if group is None:
                 continue
             for target_step, fmt, depth in group:
                 cases.append(
@@ -187,10 +187,12 @@ def processing_cases(store: OracleStore) -> list[dict[str, Any]]:
                         "format": fmt,
                         "bit_depth": depth,
                         "height": name == "height",
+                        "srgb8_material": name in SRGB8_MATERIAL,
                     }
                 )
         for output_id in dither.maps(recording):
             texture_set, name, step = output_id.split("/")
+            # The PNG 16 source of an sRGB8 material channel holds encoded values.
             if step != "step106" or name in SRGB8_MATERIAL:
                 continue
             cases.append(
@@ -243,12 +245,17 @@ def process_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
         "identical": defaultdict(int),
         "differing": [],
         "layouts": defaultdict(int),
+        "srgb8_cases": defaultdict(int),
+        "srgb8_identical": defaultdict(int),
     }
     for case, line in zip(cases, lines, strict=True):
         result = json.loads(line)
         kind = f"{case['golden']} {case['format']} {case['bit_depth']} {case['recording']}"
         report["cases"][kind] += 1
         report["identical"][kind] += int(result["equal"])
+        if case.get("srgb8_material"):
+            report["srgb8_cases"][kind] += 1
+            report["srgb8_identical"][kind] += int(result["equal"])
         report["layouts"][str(result["layout"])] += 1
         if not result["equal"]:
             report["differing"].append(f"{kind} {Path(case['target']).name[:12]}")
@@ -397,6 +404,120 @@ def export_goldens(exe: Path, tmp: Path, runs: int = 1) -> dict[str, Any]:
     return report
 
 
+# ── export-bit-depth's sRGB8 material channels written end to end (decision 126) ─
+
+# export-bit-depth: the document-map steps of r1 (PNG 8, PNG 16, OpenEXR 16f, OpenEXR 32f).
+SRGB8_STEPS = (353, 355, 357, 359)
+SRGB8_CHANNELS = ("BaseColor", "Specular", "Emissive")
+# The evaluator's refusal of an sRGB bitmap other than a 16-bit colour image (sources.h).
+GREY_SRGB_BITMAP = "an sRGB bitmap is recorded as a 16-bit colour image only"
+
+
+def _f32(value: float) -> float:
+    return float(np.float32(value))
+
+
+def srgb_to_working(value: float) -> float:
+    """A uniform colour component in the sRGB space as the working value the Python facade stores
+    on a colour-managed channel (python/uzpainter_facade/colour.py `srgb_to_linear`): float32
+    operands, the power rounded once to float32."""
+    x = _f32(value)
+    if x <= _f32(0.04045):
+        return _f32(x / _f32(12.92))
+    base = _f32(_f32(x + _f32(0.055)) / _f32(1.055))
+    return _f32(base ** _f32(2.4))
+
+
+def working_colours(manifest: dict[str, Any]) -> dict[str, Any]:
+    """`manifest` reduced to its sRGB8 material channels' sources (the other channels' sources
+    dropped: they are not exported here), with every uniform colour given in the sRGB space (or in
+    none: Painter's default there) replaced by its working value, as the facade stores it
+    (decision 107): the evaluator takes a stored colour as linear. A bitmap on Specular or
+    Emissive without a colour space takes sRGB: Painter's OpenEXR 32f files of both equal
+    BaseColor's (whose default is sRGB) texel for texel on every set filled from the same bitmap
+    (s0, s1, s4, s5)."""
+    steps = []
+    for raw in manifest["instruction_sequence"]["steps"]:
+        args = raw.get("args", {})
+        channel = args.get("channel")
+        if raw["call"].endswith("set_source") and channel not in (None, *SRGB8_CHANNELS):
+            continue  # a mask's source (channel None) stays
+        if raw["call"].endswith("set_source") and args.get("channel") in SRGB8_CHANNELS:
+            if "color" in args and args.get("color_space", "sRGB") == "sRGB":
+                colour = [srgb_to_working(float(c)) for c in args["color"]]
+                raw = dict(raw, args=dict(args, color=colour, color_space="Working"))
+            elif "resource_step" in args and "color_space" not in args:
+                raw = dict(raw, args=dict(args, color_space="sRGB"))
+        steps.append(raw)
+    return dict(manifest, instruction_sequence=dict(manifest["instruction_sequence"], steps=steps))
+
+
+def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """export-bit-depth's BaseColor, Specular and Emissive maps (bitmaps, uniform colours, empty
+    channels over their linear template constants) rebuilt per texture set on the grid mesh and
+    written by `WriteExport` at PNG 8, PNG 16, OpenEXR 16f and OpenEXR 32f: compared byte for
+    byte with Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032). Returns the
+    counts, the differing files, and the sets the evaluator refuses before writing because their
+    bitmap is a grey image in the sRGB space (`GREY_SRGB_BITMAP`, phase1.14_compositor-core)."""
+    needs_store()
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    golden = load(locate(), root / "export-bit-depth.json")
+    manifest = working_colours(golden.manifest)
+    by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
+    report: dict[str, Any] = {
+        "files": 0,
+        "comparisons": 0,
+        "identical": 0,
+        "problems": [],
+        "grey_bitmap_sets": set(),
+    }
+    for texture_set in sorted({k.split("/")[0] for k in golden.maps("r1")}):
+        spec_dir = tmp / texture_set / "spec"
+        spec = export_spec(manifest, texture_set, spec_dir)
+        spec["mesh"] = str(_mesh_of(manifest))
+        # The stack holds the default template's channels (BaseColor among them) and the added ones.
+        added = {c["type"] for c in spec["channels"]}
+        spec["channels"] += [
+            {"type": c["type"], "format": c["format"]}
+            for c in json.loads((TEMPLATES_DIR / "default.json").read_text(encoding="utf-8"))[
+                "channels"
+            ]
+            if c["type"] not in added
+        ]
+        for step in SRGB8_STEPS:
+            raw = by_step[step]
+            out_dir = tmp / texture_set / f"out{step}"
+            config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                out_dir, [texture_set]
+            )
+            preset = config["exportPresets"][0]
+            preset["maps"] = [
+                m for m in preset["maps"] if m["fileName"].rsplit("_", 1)[1] in SRGB8_MATERIAL
+            ]
+            result = write_export(exe, spec, spec_dir, config, tmp / texture_set / f"run{step}")
+            where = f"{texture_set} step {step}"
+            if "error" in result and GREY_SRGB_BITMAP in result["message"]:
+                report["grey_bitmap_sets"].add(texture_set)
+                continue
+            if "error" in result:
+                report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                continue
+            theirs_r1 = _painter_files(golden, "r1", step, texture_set)
+            theirs_r2 = _painter_files(golden, "r2", step, texture_set)
+            for written in result["written"]:
+                rel = written["relativePath"]
+                report["files"] += 1
+                for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
+                    if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
+                        continue
+                    report["comparisons"] += 1
+                    if written["sha256"] == theirs.get(rel):
+                        report["identical"] += 1
+                    else:
+                        report["problems"].append(f"{where}: {rel} differs from {recording}")
+    return report
+
+
 # ── parity/semantics/export-processing.json ─────────────────────────────────
 
 PYDOC = source(
@@ -437,6 +558,22 @@ def _processed_residuals(processed: dict[str, Any], kind: str) -> list[dict[str,
         differs[0, processed["identical"][name] :] = 1
         diff = difference(np.zeros((1, cases), np.int64), differs)
         label = f"{fmt} {depth} files from Painter's own values"
+        out.append(residual(golden_id, label, recording, "file (bytes identical)", diff))
+    return out
+
+
+def _srgb8_residuals(processed: dict[str, Any]) -> list[dict[str, Any]]:
+    """The sRGB8 material-channel cases of each PNG processing per golden and recording as byte
+    residuals."""
+    out = []
+    for name, cases in sorted(processed["srgb8_cases"].items()):
+        golden_id, fmt, depth, recording = name.split(" ")
+        if fmt != "png":
+            continue
+        differs = np.zeros((1, cases), np.int64)
+        differs[0, processed["srgb8_identical"][name] :] = 1
+        diff = difference(np.zeros((1, cases), np.int64), differs)
+        label = f"{fmt} {depth} sRGB8 material files from Painter's own values"
         out.append(residual(golden_id, label, recording, "file (bytes identical)", diff))
     return out
 
@@ -557,6 +694,21 @@ def publish(
             _processed_residuals(processed, "exr 16f"),
         ),
         entry(
+            "srgb8-material-channels",
+            "sRGB8 material channels (BaseColor, Specular, Emissive) in PNG 8 and 16",
+            "The UNORM write rule at the file's depth of the sRGB encode of the linear value: "
+            "x <= 0.0031308 ? 12.92 x : fma(1.055, exp2(0.41666 log2 x), -0.055) in float32 with "
+            "the recording GPU's log2 and exp2 (src/evaluator/hwmath.h; decisions 091 and 126); "
+            "OpenEXR holds the linear value. Painter's own OpenEXR 32f file of each such map of "
+            "export-bit-depth, encoded so, gives its PNG 8 and PNG 16 files byte for byte.",
+            [PYDOC, D3D],
+            [
+                parameter("exponent", 0.41666, "fitted"),
+                parameter("linear_threshold", 0.0031308, "fitted"),
+            ],
+            _srgb8_residuals(processed),
+        ),
+        entry(
             "padding-complete-coverage",
             "Padding infinite and passthrough on a texture set whose UV islands cover the tile",
             "Nothing changes: every texel holds its evaluated value (src/export/padding.h); the "
@@ -599,13 +751,6 @@ def publish(
             "103); OpenEXR: no recording compares it with dithering off. Owner "
             "phase3.2_unreal-ue56-packed-preset.",
         ),
-        "srgb8-material-channels": (
-            "sRGB8 material channels (BaseColor, Specular, Emissive)",
-            "Exported sRGB-encoded: PNG 8 is the UNORM write of the IEC encoding of the linear "
-            "value (exact on export-bit-depth); PNG 16 misses by up to one code on about 70 of "
-            "258 values under every model tried, and the evaluator holds these channels' template "
-            "constants as export values (decision 103). Owner phase1.25_pilot-wand.",
-        ),
     }
     for entry_id, (subject, notes) in gaps.items():
         entries.append(
@@ -619,9 +764,10 @@ def publish(
     return document(
         "export-processing",
         "The export's processing and encoders (src/export/encode.h, padding.h, png_writer.h, "
-        "exr_writer.h; decisions 089, 090 and 103): Painter's PNG and OpenEXR files re-encoded "
-        "byte for byte, the recorded processing written by WriteExport and applied to Painter's "
-        "own values byte-identical to Painter's files, and the processing not fitted yet.",
+        "exr_writer.h; decisions 089, 090, 103 and 126): Painter's PNG and OpenEXR files "
+        "re-encoded byte for byte, the recorded processing written by WriteExport and applied "
+        "to Painter's own values byte-identical to Painter's files, and the processing not "
+        "fitted yet.",
         corpus,
         entries,
         painter_build=str(current_envelope()["painter_build"]),

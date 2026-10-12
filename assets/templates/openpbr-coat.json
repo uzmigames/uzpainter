@@ -22,12 +22,12 @@
       "type": "BaseColor",
       "format": "sRGB8",
       "base": [
-        0.9063401222229004,
-        0.9063401222229004,
-        0.9063401222229004
+        0.800000011920929,
+        0.800000011920929,
+        0.800000011920929
       ],
       "base_provenance": {
-        "kind": "observed",
+        "kind": "inferred",
         "golden_id": "tier0/semantics/base-values-openpbr-coat",
         "record_sha256": "fb076738e6c97010dbe3e10004d082c900c52f0af87d21a6ccc713da8f2e95a0",
         "map": "uzp_plane/basecolor",
@@ -36,7 +36,7 @@
           59397,
           59397
         ],
-        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+        "note": "linear (decision 126): the 16-bit PNG export of the empty channel is the PNG write of the sRGB export encode of float32(0.8) (src/export/encode.h); this template's OpenEXR export of the empty channel is not recorded: float32(0.8) is the linear value the default template's empty BaseColor exports to OpenEXR 32f with the same 16-bit code (tier0/semantics/export-bit-depth s3)"
       }
     },
     {

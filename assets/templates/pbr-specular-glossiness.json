@@ -95,12 +95,12 @@
       "type": "Specular",
       "format": "sRGB8",
       "base": [
-        0.21866178512573242,
-        0.21866178512573242,
-        0.21866178512573242
+        0.03921568766236305,
+        0.03921568766236305,
+        0.03921568766236305
       ],
       "base_provenance": {
-        "kind": "observed",
+        "kind": "inferred",
         "golden_id": "tier0/semantics/base-values-pbr-specular-glossiness",
         "record_sha256": "95c799726477ca4d694853ca589b9eba005c91e65c9974500038723d77c55f31",
         "map": "uzp_plane/specular",
@@ -109,7 +109,7 @@
           14330,
           14330
         ],
-        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+        "note": "linear (decision 126): the 16-bit PNG export of the empty channel is the PNG write of the sRGB export encode of float32(10/255) (src/export/encode.h); this template's OpenEXR export of the empty channel is not recorded: float32(10/255) is the linear value an empty sRGB8 Specular exports to OpenEXR 32f with the same 16-bit code (tier0/semantics/export-bit-depth s3)"
       }
     }
   ]
