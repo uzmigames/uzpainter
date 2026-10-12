@@ -71,7 +71,8 @@ def test_cpython_stages_pass(painter_bin: Path, tmp_path: Path) -> None:
 
 def test_python313_pth_and_site_packages_installed(painter_bin: Path) -> None:
     """2.2/2.4: the folder holds UzPainter's `python313._pth` (not the package's) and a
-    `Lib/site-packages/` that is exactly the pinned wheels' files."""
+    `Lib/site-packages/` that is exactly the pinned wheels' files; `python` is the folder of
+    UzPainter's own facade packages (phase1.20_pyapi-facade)."""
     pth = (painter_bin / "python313._pth").read_bytes()
     assert pth == (REPO_ROOT / "src/python/python313._pth").read_bytes()
     entries = [
@@ -79,7 +80,7 @@ def test_python313_pth_and_site_packages_installed(painter_bin: Path) -> None:
         for line in pth.decode("utf-8").splitlines()
         if line.split("#", 1)[0].strip()
     ]
-    assert entries == ["python313.zip", ".", "Lib\\site-packages", "import site"]
+    assert entries == ["python313.zip", ".", "Lib\\site-packages", "python", "import site"]
     assert not (painter_bin / "python.exe").exists()
     problems = site_packages_problems(painter_bin / "Lib/site-packages", read_wheels(REPO_ROOT))
     assert problems == []
@@ -91,7 +92,8 @@ def test_python313_pth_and_site_packages_installed(painter_bin: Path) -> None:
 def test_isolated_from_user_python(painter_bin: Path, tmp_path: Path) -> None:
     """3.2: with `PYTHONPATH`, `PYTHONHOME`, `PYTHONSTARTUP`, the user site-packages (through
     `APPDATA` and `PYTHONUSERBASE`) and the current folder all offering a conflicting `mcp`, the
-    embedded interpreter imports only the vendored modules."""
+    embedded interpreter imports only the modules installed with UzPainter: the vendored
+    interpreter and wheels, and the app's own `python/` facade folder."""
     conflicting = "raise ImportError('conflicting mcp imported from {}')\n"
     evil = tmp_path / "evil"
     user_sites = [
@@ -132,8 +134,13 @@ def test_isolated_from_user_python(painter_bin: Path, tmp_path: Path) -> None:
     assert start["user_site_enabled"] == "False"
     site_packages = norm(painter_bin / "Lib/site-packages")
     path = [norm(p.strip()) for p in start["sys_path"].split(" ; ")]
-    assert path[:3] == [norm(painter_bin / "python313.zip"), norm(painter_bin), site_packages]
-    assert all(p.startswith(site_packages + os.sep) for p in path[3:]), path
+    assert path[:4] == [
+        norm(painter_bin / "python313.zip"),
+        norm(painter_bin),
+        site_packages,
+        norm(painter_bin / "python"),
+    ]
+    assert all(p.startswith(site_packages + os.sep) for p in path[4:]), path
     assert norm(evil) not in path
     mcp_file = norm(by_name["cpython-mcp-sdk"]["details"]["mcp_file"])
     assert mcp_file == norm(painter_bin / "Lib/site-packages/mcp/__init__.py")
