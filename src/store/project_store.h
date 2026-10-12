@@ -177,6 +177,24 @@ public:
     core::RequestOutcome Submit(core::Document& document, core::MutationRequest request,
                                 const std::function<void(core::Edit&)>& call);
 
+    /// `DecideStored` for `request` without executing anything: the worker's admission of a
+    /// mutating call before its handler runs (src/supervisor/worker.cpp). `fallback_revision` as
+    /// in `DecideStored`.
+    core::AdmissionDecision Decide(const core::MutationRequest& request, std::int64_t fallback_revision);
+
+    /// The operation rows a supervisor reconciles its ledger from after a worker restart.
+    struct OperationLog {
+        std::int64_t current_revision = 0;
+        std::int64_t horizon_revision = 0;
+        /// The readable rows committed after the revision asked for, by committed revision.
+        std::vector<core::OperationRecord> records;
+        /// The keys of every row that does not decode (`ReadOperations`).
+        std::vector<std::string> unreadable;
+    };
+    /// `checkpoint('current')`, the horizon and the operation rows committed after `after`.
+    /// Throws `StoreError` when the file cannot be read.
+    OperationLog OperationsAfter(std::int64_t after);
+
 private:
     ProjectStore(ProjectLock lock, Container container, std::string project_uuid, bool portable,
                  core::json::Value manifest);

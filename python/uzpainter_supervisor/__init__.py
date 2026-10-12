@@ -9,5 +9,7 @@ after every fault. It never creates a GPU device, opens a project or runs user P
 - `ipc`: the pipe protocol's frames, the handshake check and the worker's exit codes (standard
   library only, so the repository's tests import it directly).
 - `worker`: the worker process and its pipe, fault detection and relaunch.
+- `admission`: the lease, busy state, keys, reconciliation and receipts of every call (phase2.2).
+- `ledger`: the durable SQLite ledger of leases, jobs, acknowledgements and outcomes (phase2.2).
 - `main`: the command line and the MCP server.
 """
