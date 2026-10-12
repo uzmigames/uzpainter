@@ -317,3 +317,119 @@ def test_an_export_keeps_the_sources_it_was_started_from(
     files = result["manifest"]["manifest_files"]
     assert files["project"] == {"path": "A.spp", "sha256": "hash-of-A"}
     assert files["mesh"] == {"path": "A.obj", "sha256": "hash-of-A-mesh"}
+
+
+def fake_session_modules(
+    monkeypatch: pytest.MonkeyPatch, file_path: str, absolute_file_path: str, opened: list[Path]
+) -> None:
+    """The modules `session_left_open` and `restore_session` import, as fakes: the facade's
+    `file_path()` returns the path as the script named it, the native `absolute_file_path()` the
+    path resolved when it was named, and `open` resolves its argument as the filesystem does."""
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    def open_project(path: str) -> None:
+        resolved = Path(path).resolve()
+        resolved.read_bytes()  # a missing file raises, as the native open does
+        opened.append(resolved)
+
+    stack = SimpleNamespace(
+        material=lambda: SimpleNamespace(name=lambda: "Material"), name=lambda: ""
+    )
+    project: Any = ModuleType("substance_painter.project")
+    project.is_open = lambda: True
+    project.file_path = lambda: file_path
+    project.needs_saving = lambda: False
+    project.open = open_project
+    textureset: Any = ModuleType("substance_painter.textureset")
+    textureset.get_active_stack = lambda: stack
+    textureset.set_active_stack = lambda value: None
+    textureset.Stack = SimpleNamespace(from_name=lambda *args: stack)
+    painter: Any = ModuleType("substance_painter")
+    painter.project, painter.textureset = project, textureset
+    state: Any = ModuleType("uzpainter_facade.state")
+    state.SESSION = SimpleNamespace(projects=1)
+    native: Any = ModuleType("uzpainter")
+    native.project = SimpleNamespace(
+        needs_saving=lambda: False, absolute_file_path=lambda: absolute_file_path
+    )
+    for name, module in {
+        "substance_painter": painter,
+        "substance_painter.project": project,
+        "substance_painter.textureset": textureset,
+        "uzpainter_facade.state": state,
+        "uzpainter": native,
+    }.items():
+        monkeypatch.setitem(sys.modules, name, module)
+
+
+@pytest.mark.parametrize("homonym", [False, True])
+def test_a_project_saved_under_a_relative_path_is_carried_where_it_was_saved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, homonym: bool
+) -> None:
+    """Decision 118 (Codex audit): a script that changes directory and saves `A.uzp` leaves the
+    project's absolute path in the session, and the next call, run in the client's directory,
+    reopens that project: not a same-named file there, and not a failure when there is none."""
+    work, elsewhere, client_dir = tmp_path / "work", tmp_path / "elsewhere", tmp_path / "client"
+    for folder in (work, elsewhere, client_dir):
+        folder.mkdir()
+    intended = work / "A.uzp"
+    intended.write_text("intended project", encoding="utf-8")
+    if homonym:
+        (client_dir / "A.uzp").write_text("different project", encoding="utf-8")
+        (elsewhere / "A.uzp").write_text("different project", encoding="utf-8")
+    opened: list[Path] = []
+    fake_session_modules(monkeypatch, "A.uzp", str(intended), opened)
+    monkeypatch.chdir(elsewhere)  # the script moved on after saving in `work`
+    carried = runner.session_left_open()
+    assert carried is not None and carried["project"] == str(intended)
+    session_file = tmp_path / "session.json"
+    session_file.write_text(json.dumps(carried), encoding="utf-8")
+    monkeypatch.chdir(client_dir)  # each call inherits the client's directory
+    assert runner.restore_session(session_file) == carried
+    assert opened == [intended]
+
+
+def test_a_session_naming_a_relative_path_is_emptied_before_anything_opens(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A session file that names a relative project path (written before decision 118) is not
+    resolved under the client's directory, where a same-named file may be another project: the
+    call fails before opening anything and the session is emptied."""
+    (tmp_path / "A.uzp").write_text("different project", encoding="utf-8")
+    opened: list[Path] = []
+    fake_session_modules(monkeypatch, "A.uzp", "A.uzp", opened)
+    monkeypatch.chdir(tmp_path)
+    session_file = tmp_path / "session.json"
+    carried = {"project": "A.uzp", "project_index": 1, "needs_saving": False}
+    session_file.write_text(json.dumps({**carried, "active_stack": ["Material", ""]}), "utf-8")
+    with pytest.raises(runner.AdapterSessionError, match="relative path; the session was emptied"):
+        runner.restore_session(session_file)
+    assert opened == []
+    assert json.loads(session_file.read_text(encoding="utf-8")) == {}
+
+
+def test_a_project_opened_from_a_bundle_is_carried_as_its_store_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decision 118 (Codex audit): a bundle directory opens as the `.uzp` it is imported into, and
+    importing it again fails because that file exists. The session carries what the native
+    `absolute_file_path()` names, the store file, so the next call reopens it instead of
+    re-importing the directory."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "bundle.json").write_text("{}", encoding="utf-8")
+    store = tmp_path / "bundle.uzp"
+    store.write_text("imported project", encoding="utf-8")
+    opened: list[Path] = []
+    fake_session_modules(monkeypatch, "bundle.uzp", str(store), opened)
+    monkeypatch.chdir(tmp_path)
+    carried = runner.session_left_open()
+    assert carried is not None and carried["project"] == str(store)
+    session_file = tmp_path / "session.json"
+    session_file.write_text(json.dumps(carried), encoding="utf-8")
+    client_dir = tmp_path / "client"
+    client_dir.mkdir()
+    monkeypatch.chdir(client_dir)
+    assert runner.restore_session(session_file) == carried
+    assert opened == [store]
