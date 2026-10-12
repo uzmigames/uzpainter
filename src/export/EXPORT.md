@@ -79,7 +79,7 @@ Tasks `phase1.16_export-processing-encoders` and `phase1.18_export-engine` item 
   - resize (a sizeLog2 other than the set's size): partly fitted, `parity/semantics/export-processing.json` `resize`;
   - the `color`, `transparent` and `diffusion` paddings, and `infinite` on islanded sets;
   - an sRGB8 channel other than a User channel, BaseColor, Specular and Emissive (EmissionColor, Diffuse, CoatColor, ...): not recorded (decision 126);
-  - any file whose values depend on a channel whose template base is `inferred` (every shipped template but `default` for BaseColor and the sRGB8 Specular: only its PNG 16 code is recorded), whatever the format and through documentMap or diagnosticMap sources: `unsupported_source` at evaluation (decision 126).
+  - any file whose values depend on a channel whose template base is `inferred` (every shipped template but `default` for BaseColor and the sRGB8 Specular: only its PNG 16 code is recorded), whatever the format and through documentMap or diagnosticMap sources: `unsupported_source` at evaluation (decision 126). The guard is `RequireIdentifiedBase` (`plan.h`); `uzpainter.diagnostics` applies the same function to every view it returns (decision 136).
 
   Their owners: `phase1.25_pilot-wand` (inferred template bases, `infinite` on islands: decisions 126 and 127) and `phase3.2_unreal-ue56-packed-preset` (dithering, resize, dilation paddings).
 - **Order.** `WriteExport` checks every file's processing and padding, then evaluates, pads and encodes every file in memory, and only then writes. A refusal or an evaluation failure leaves nothing written. Two runs in two processes write identical bytes.

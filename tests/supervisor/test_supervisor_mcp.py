@@ -63,8 +63,24 @@ def test_tools_are_forwarded_and_stdout_carries_protocol_frames_only(
         "project_save",
         "project_inspect",
         "evaluate_channel",
+        "snapshot_layer_tree",
+        "diff_snapshots",
+        "isolate_layer",
+        "material_views",
+        "region_stats",
     }
     assert tools["project_open"]["inputSchema"]["required"] == ["path"]
+    assert tools["isolate_layer"]["inputSchema"]["required"] == ["uid", "channels", "path"]
+    # The Diagnostics tools are reads (decision 136): admitted without a lease, key or precondition.
+    for name in (
+        "snapshot_layer_tree",
+        "diff_snapshots",
+        "isolate_layer",
+        "material_views",
+        "region_stats",
+    ):
+        assert tools[name]["annotations"]["readOnlyHint"] is True, name
+        assert "idempotency_key" not in tools[name]["inputSchema"]["properties"], name
     inspected = session.call("project_inspect")
     assert inspected["result"] == {"open": False}
     assert inspected["receipt"]["project"] is None and inspected["receipt"]["job_id"] is None

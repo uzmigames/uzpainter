@@ -17,6 +17,11 @@ namespace uzp::exporter {
 
 namespace json = core::json;
 
+std::string RootPathOf(const core::TextureSet& set, const core::Stack& stack) {
+    if (set.stacks.size() == 1 && stack.name.empty()) return set.name;
+    return set.name + "/" + stack.name;
+}
+
 namespace {
 
 using core::ChannelType;
@@ -44,11 +49,6 @@ struct Root {
     const core::Stack* stack = nullptr;
     std::string rootPath;
 };
-
-std::string RootPathOf(const core::TextureSet& set, const core::Stack& stack) {
-    if (set.stacks.size() == 1 && stack.name.empty()) return set.name;
-    return set.name + "/" + stack.name;
-}
 
 std::vector<std::string> ValidRootPaths(const core::Project& project) {
     std::vector<std::string> paths;
@@ -866,9 +866,10 @@ std::optional<ChannelType> ChannelRead(const PlannedSource& s) {
 /// when that channel's base value is `inferred` (templates.h): a range of linear values writes
 /// the template's recorded 16-bit PNG code, so no output built on it is exact, whatever the
 /// channel's format (decision 126). A channel the stack lacks is left to the evaluation.
-render::Result<void> RequireIdentifiedBase(const core::Project& project, const PlannedFile& file, ChannelType type,
-                                           std::string_view templateId, const evaluator::TemplateLibrary& templates) {
-    const core::Stack* stack = core::FindStack(project, file.textureSetId, file.stackId);
+render::Result<void> RequireIdentifiedChannel(const core::Project& project, core::Id textureSet, core::Id stackId,
+                                              ChannelType type, std::string_view templateId,
+                                              const evaluator::TemplateLibrary& templates) {
+    const core::Stack* stack = core::FindStack(project, textureSet, stackId);
     if (stack == nullptr) return {};
     const auto it = stack->channels.find(type);
     if (it == stack->channels.end()) return {};
@@ -883,6 +884,14 @@ render::Result<void> RequireIdentifiedBase(const core::Project& project, const P
 }
 
 }  // namespace
+
+render::Result<void> RequireIdentifiedBase(const core::Project& project, core::Id textureSet, core::Id stack,
+                                           const PlannedSource& source, std::string_view templateId,
+                                           const evaluator::TemplateLibrary& templates) {
+    const std::optional<ChannelType> read = ChannelRead(source);
+    if (!read) return {};
+    return RequireIdentifiedChannel(project, textureSet, stack, *read, templateId, templates);
+}
 
 bool SrgbEncodedOnExport(ChannelType type) {
     return type == ChannelType::BaseColor || type == ChannelType::Specular || type == ChannelType::Emissive;
@@ -903,10 +912,9 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
         const PlannedSource& s = channel.source;
         const std::string key = std::string(SourceTypeName(s.type)) + "/" + s.name;
         if (evaluated.contains(key) || s.type == SourceType::defaultMap) continue;
-        if (const std::optional<ChannelType> read = ChannelRead(s)) {
-            render::Result<void> identified = RequireIdentifiedBase(project, file, *read, inputs.templateId, templates);
-            if (!identified) return render::Unexpected(identified.error());
-        }
+        render::Result<void> identified =
+            RequireIdentifiedBase(project, file.textureSetId, file.stackId, s, inputs.templateId, templates);
+        if (!identified) return render::Unexpected(identified.error());
         switch (s.type) {
             case SourceType::documentMap: {
                 evaluator::EvaluateRequest r;

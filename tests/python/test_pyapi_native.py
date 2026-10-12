@@ -444,8 +444,6 @@ LATER_PHASE = [
     ("uzpainter.render.display", "set_exposure", "phase2.3_realtime-preview"),
     ("uzpainter.display", "set_environment_resource", "phase2.3_realtime-preview"),
     ("uzpainter.display", "set_tone_mapping", "phase2.3_realtime-preview"),
-    ("uzpainter.diagnostics", "isolate", "phase2.2_recipe-and-diagnostics"),
-    ("uzpainter.diagnostics", "region_stats", "phase2.2_recipe-and-diagnostics"),
 ]
 
 

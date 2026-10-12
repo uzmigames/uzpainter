@@ -199,6 +199,7 @@ const app_sources = [_][]const u8{
 const pyapi_sources = [_][]const u8{
     "python/bind_color.cpp",
     "python/bind_core.cpp",
+    "python/bind_diagnostics.cpp",
     "python/bind_export.cpp",
     "python/bind_layerstack.cpp",
     "python/bind_misc.cpp",
@@ -206,6 +207,7 @@ const pyapi_sources = [_][]const u8{
     "python/bind_resource.cpp",
     "python/bind_textureset.cpp",
     "python/capabilities.cpp",
+    "python/diagnostics.cpp",
     "python/dispatcher.cpp",
     "python/errors.cpp",
     "python/jobs.cpp",
@@ -297,6 +299,7 @@ const uzp_core_sources = [_][]const u8{
     "uzp_core/types/validation.cpp",
     "uzp_core/document/document.cpp",
     "uzp_core/document/nodes.cpp",
+    "uzp_core/document/layer_tree.cpp",
     "uzp_core/naming/naming.cpp",
     "uzp_core/operation/operation.cpp",
     "uzp_core/transaction/transaction.cpp",
