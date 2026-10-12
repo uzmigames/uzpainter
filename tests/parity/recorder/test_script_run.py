@@ -1,6 +1,8 @@
 """Pipeline-script Tier 1 goldens (decision 099; recording R9): job parsing, the `open` redirect,
 the sync transport swap and the r1 / r1-repeat / r2 recordings, against a fake Painter and a
-temporary stand-in asset repository whose small scripts mirror the shape of the real ones."""
+temporary stand-in asset repository whose small scripts mirror the shape of the real ones. The
+private store is a temporary one (or none): the owner's real store is read only by the test of the
+committed manifest."""
 
 from __future__ import annotations
 
@@ -30,6 +32,8 @@ from tools.parity.recorder.script_run import (
 )
 from tools.parity.recorder.session import RecorderError
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, record_problems, validation_errors
+from tools.parity.store.store import STORE_ENV, OracleStore
+from tools.parity.store.store import locate as locate_store
 
 BUILD = "12.1.5+js-api.1.1.20"
 OCIO = r"C:\Program Files\Adobe\Adobe Substance 3D Painter\resources\ocio\substance\config.ocio"
@@ -54,17 +58,27 @@ result = {"file": project.file_path(), "sets": [x.name() for x in ts.all_texture
           "maps": maps, "name": A["name"]}
 '''
 
-LAYER_STACK = '''"""Stand-in of painter_layer_stack.py: sync builds Painter code and executes it."""
+LAYER_STACK = '''"""Stand-in of painter_layer_stack.py: sync builds Painter code and executes it,
+behind the route guard of Assets3D 9a718b9 (a probe of the open project, then `locate`)."""
 import argparse
 import hashlib
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / 'AGENTS.md').exists())
 CLIENT = ROOT / "Pipeline/mcp/painter_mcp_client.py"
 MCP_PYTHON = ROOT / "Tools/SubstancePainterMCP/.venv/Scripts/python.exe"
+sys.path.insert(0, str(ROOT / "Pipeline/qa"))
+from route_check import locate  # noqa: E402
+
+GUARD_CODE = r\'\'\'
+import substance_painter.project as project
+name = __TS__
+result = {"project": project.file_path(), "texture_set": name}
+\'\'\'
 
 SYNC_CODE = r\'\'\'
 import json
@@ -79,10 +93,23 @@ result = {"project": project.file_path(), "layers": [L["id"] for L in S["layers"
 \'\'\'
 
 
-def execute(code):
+def execute(code, token=None):
     command = [str(MCP_PYTHON), str(CLIENT), "execute_python", code]
-    run = subprocess.run(command, capture_output=True, text=True)
+    env = dict(os.environ, UZ_ROUTE_TOKEN=token or "")
+    run = subprocess.run(command, capture_output=True, text=True, env=env)
     return json.loads(run.stdout)["data"]
+
+
+def route_guard(texture_set, mode):
+    info = execute(GUARD_CODE.replace("__TS__", repr(texture_set)))
+    if not info.get("project"):
+        raise SystemExit("ROUTE BLOCKED: save the Painter project inside the piece folder first")
+    state, state_path = locate(info["project"])
+    if state == "legacy":
+        return None
+    if state != "production":
+        raise SystemExit(f"ROUTE BLOCKED: {info['project']} has no production state")
+    return "attempt-token"
 
 
 def sync(a):
@@ -98,7 +125,8 @@ def sync(a):
         sha = hashlib.sha1(path.read_bytes()).hexdigest()
         masks[name] = {"sha": sha, "path": path.as_posix(), "url": None}
     code = SYNC_CODE.replace("__STACK__", json.dumps(stack)).replace("__MASKS__", json.dumps(masks))
-    data = execute(code)
+    token = route_guard(a.texture_set, "sync")
+    data = execute(code, token)
     for name, url in data["resources"].items():
         state[name] = {"sha": masks[name]["sha"], "url": url}
     state_path.write_text(json.dumps(state, indent=1), encoding="utf-8")
@@ -112,6 +140,7 @@ def main():
     s.add_argument("--stack", required=True)
     s.add_argument("--masks", required=True)
     s.add_argument("--state", required=True)
+    s.add_argument("--texture-set")
     args = parser.parse_args()
     {"sync": sync}[args.command](args)
 
@@ -142,6 +171,19 @@ result = {"status": str(r.status), "message": r.message,
           "files": {str(k): v for k, v in r.textures.items()}, "saved": project.file_path()}
 '''
 
+ROUTE_CHECK = '''"""Stand-in of route_check.py: `locate` finds a character's production state."""
+from pathlib import Path
+
+
+def locate(path):
+    path = Path(path).resolve()
+    for folder in [path, *path.parents]:
+        if (folder / "Concept").is_dir() and (folder / "Project").is_dir():
+            state = folder / "Project" / "production.json"
+            return ("production", state) if state.exists() else ("missing", state)
+    return ("legacy", None)
+'''
+
 MESH = "mtllib 11-Varinha-Madeira-v1_low.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nf 1 2 3\n"
 STACK = {
     "title": "stand-in stack",
@@ -170,6 +212,7 @@ def make_assets(root: Path) -> Path:
     write(scripts / "painter_create.py", CREATE.replace("__ARGS__", create_args))
     write(scripts / "painter_export.py", EXPORT.replace("__ARGS__", export_args))
     write(root / "Pipeline/painting/painter_layer_stack.py", LAYER_STACK)
+    write(root / "Pipeline/qa/route_check.py", ROUTE_CHECK)
     paint = root / WAND / "paint"
     write(paint / "11-Varinha-Madeira-v1_low.obj", MESH)
     write(paint / "11-Varinha-Madeira-v1_low.mtl", "newmtl 11-Varinha-Madeira\n")
@@ -205,6 +248,12 @@ def tree_state(root: Path) -> dict[str, str]:
         for p in sorted(root.rglob("*"))
         if p.is_file()
     }
+
+
+@pytest.fixture(autouse=True)
+def no_private_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No private store unless a test makes one: the stand-in pins resolve under `assets`."""
+    monkeypatch.setenv(STORE_ENV, str(tmp_path / "no-store"))
 
 
 @pytest.fixture
@@ -247,11 +296,12 @@ def test_manifest_names_every_input_by_hash_and_assets3d_path(manifest: dict[str
         assert item["provenance"] == {"origin": "uzmigames_authored", "licence": ASSETS3D_LICENCE}
     sync = manifest["instruction_sequence"]["steps"][1]["args"]
     assert sync["mask_files"] == ["M_iron.png", "M_wood.png", "T_base.png"]
+    assert sync["imports"] == ["route-check-py"]
 
 
 def test_job_refuses_a_hash_mismatch(assets: Path, manifest: dict[str, Any]) -> None:
     (assets / WAND / "paint/masks/M_wood.png").write_bytes(b"changed")
-    with pytest.raises(RecorderError, match="mask-m_wood: sha256"):
+    with pytest.raises(RecorderError, match=r"mask-m_wood: .* has sha256 .*no private store"):
         script_job_from_manifest(manifest, assets)
 
 
@@ -260,14 +310,64 @@ def test_job_refuses_a_script_whose_bytes_differ_from_the_pin(
 ) -> None:
     path = assets / "Pipeline/painting/painter_layer_stack.py"
     path.write_bytes(path.read_bytes() + b"\n")
-    with pytest.raises(RecorderError, match="painter-layer-stack-py: sha256"):
+    with pytest.raises(RecorderError, match=r"painter-layer-stack-py: .* has sha256"):
         script_job_from_manifest(manifest, assets)
+
+
+def test_job_refuses_a_changed_import(assets: Path, manifest: dict[str, Any]) -> None:
+    path = assets / "Pipeline/qa/route_check.py"
+    path.write_bytes(path.read_bytes() + b"\n")
+    with pytest.raises(RecorderError, match=r"route-check-py: .* has sha256"):
+        script_job_from_manifest(manifest, assets)
+
+
+def test_job_refuses_an_import_the_sync_script_does_not_make(
+    assets: Path, manifest: dict[str, Any]
+) -> None:
+    changed = copy.deepcopy(manifest)
+    changed["instruction_sequence"]["steps"][1]["args"]["imports"] = ["painter-export-py"]
+    with pytest.raises(RecorderError, match=r"imports no module \['painter_export'\]"):
+        script_job_from_manifest(changed, assets)
 
 
 def test_job_refuses_a_missing_input(assets: Path, manifest: dict[str, Any]) -> None:
     (assets / WAND / "paint/11-Varinha-Madeira-v1_low.mtl").unlink()
-    with pytest.raises(RecorderError, match="does not exist"):
+    with pytest.raises(RecorderError, match="does not exist, and the private store holds no"):
         script_job_from_manifest(manifest, assets)
+
+
+def test_an_input_gone_from_assets3d_resolves_from_the_private_store(
+    assets: Path, manifest: dict[str, Any], tmp_path: Path
+) -> None:
+    """Decision 144: a missing or changed file at the pinned path falls back to the store's blob
+    of the pinned hash; the job stages and runs those bytes. A store without it refuses."""
+    store = OracleStore.init(tmp_path / "store")
+    mask = assets / WAND / "paint/masks/M_wood.png"
+    script = assets / "Pipeline/qa/route_check.py"
+    for path in (mask, script):
+        relative = path.relative_to(assets).as_posix()
+        assert main_store(store, "input", path, "--path", relative) == 0
+    pinned = {path: path.read_bytes() for path in (mask, script)}
+    mask.unlink()
+    script.write_bytes(b"locate = None\n")
+    job = script_job_from_manifest(manifest, assets, store)
+    for input_id, path in (("mask-m_wood", mask), ("route-check-py", script)):
+        item = job.inputs[input_id]
+        assert item.file.is_relative_to(store.root) and item.file.read_bytes() == pinned[path]
+    assert job.sync.imports[0].data == pinned[script]
+    staged = script_run.stage_inputs(job, tmp_path / "staged")
+    assert staged["mask-m_wood"].read_bytes() == pinned[mask]
+    assert staged["mask-m_wood"] == tmp_path / "staged" / WAND / "paint/masks/M_wood.png"
+    with pytest.raises(
+        RecorderError, match=r"route-check-py: .* not the pinned one, .*blob missing"
+    ):
+        script_job_from_manifest(manifest, assets, OracleStore.init(tmp_path / "empty"))
+
+
+def main_store(store: OracleStore, *args: str | Path) -> int:
+    from tools.parity.store.cli import main as store_main
+
+    return store_main(["--store", str(store.root), *(str(a) for a in args)])
 
 
 def test_job_refuses_an_unknown_call(assets: Path, manifest: dict[str, Any]) -> None:
@@ -382,9 +482,14 @@ def test_records_r1_repeat_and_r2_without_writing_under_the_assets_root(
     monkeypatch.setattr(subprocess, "run", no_subprocess)
     decoy = types.ModuleType("painter_layer_stack")
     monkeypatch.setitem(sys.modules, "painter_layer_stack", decoy)
+    route_decoy = types.ModuleType("route_check")
+    route_decoy.locate = no_subprocess  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "route_check", route_decoy)
+    path = list(sys.path)
     run = record(painter, manifest, assets, tmp_path)
 
     assert tree_state(assets) == before
+    assert sys.modules["route_check"] is route_decoy and sys.path == path  # restored
     assert not [name for name in sys.modules if "mcp" in name.lower()]
     data = json.loads((run / "record.json").read_text(encoding="utf-8"))
     assert record_problems(data) == []
@@ -429,6 +534,30 @@ def test_records_r1_repeat_and_r2_without_writing_under_the_assets_root(
     published = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
     assert validation_errors(published, Schema.GOLDEN_PUBLIC) == []
     assert data["key"]["project_settings"]["colour_management"]["mode"] == "ocio"
+
+
+@pytest.mark.parametrize(
+    ("production_state", "refusal"),
+    [(False, "ROUTE BLOCKED: .* has no production state"), (True, "attempt token")],
+)
+def test_refuses_a_route_guard_verdict_inside_the_production_layout(
+    painter: tuple[Any, ScriptSession],
+    manifest: dict[str, Any],
+    assets: Path,
+    tmp_path: Path,
+    production_state: bool,
+    refusal: str,
+) -> None:
+    """The work directory inside a new-layout character: the guard blocks (no production state)
+    or returns an attempt token; either way the sync code never reaches Painter."""
+    (tmp_path / "Concept").mkdir()
+    (tmp_path / "Project").mkdir()
+    if production_state:
+        (tmp_path / "Project" / "production.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(RecorderError, match=refusal):
+        record(painter, manifest, assets, tmp_path)
+    assert not list((tmp_path / "work").rglob("sync-state.json"))
+    assert not painter[0].project_open
 
 
 def test_refuses_without_the_ocio_configuration(
@@ -481,11 +610,18 @@ def test_manifest_command_writes_the_generated_manifest(assets: Path, tmp_path: 
 # --- the committed manifest against the real asset repository --------------------------------
 
 
-def test_committed_manifest_matches_the_real_assets() -> None:
+def test_committed_manifest_matches_the_real_assets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every pin of the committed R9 manifest resolves, in Assets3D or in the owner's private
+    store (decision 144), and the generator writes the same manifest over the pinned files."""
+    monkeypatch.undo()  # the owner's store, read only
     if not (REAL_ASSETS / "AGENTS.md").is_file():
         pytest.skip(f"the UzmiGames asset repository is not at {REAL_ASSETS}")
     committed = load_json(COMMITTED)
     assert validation_errors(committed, Schema.GOLDEN_PUBLIC) == []
-    assert committed == wand_manifest(REAL_ASSETS)
-    job = load_script_job(COMMITTED, REAL_ASSETS)
+    job = load_script_job(COMMITTED, REAL_ASSETS, locate_store())
     assert job.sync.args["command"] == "sync"
+    pinned = tmp_path / "pinned"
+    script_run.stage_inputs(job, pinned)
+    assert committed == wand_manifest(pinned)
