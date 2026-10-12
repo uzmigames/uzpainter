@@ -215,6 +215,17 @@ const pyapi_sources = [_][]const u8{
     "python/stack_sync.cpp",
 };
 
+/// The supervisor and worker roles (`src/supervisor/`, phase2.1_supervisor-ipc-worker), relative to
+/// `src/`: compiled with `-Werror` into `UzPainter.exe`. `fault_hooks.cpp` is empty unless
+/// `UZP_WORKER_FAULT_HOOKS` is defined, which only a Debug build does (decision 120).
+const supervisor_sources = [_][]const u8{
+    "supervisor/fault_hooks.cpp",
+    "supervisor/ipc.cpp",
+    "supervisor/pipe.cpp",
+    "supervisor/supervisor.cpp",
+    "supervisor/worker.cpp",
+};
+
 /// UzPainter's render layer over the vendored RHI (`src/render/`, P1-CORE), relative to `src/`:
 /// compiled into `UzPainter.exe` and into `uzp-render-tests.exe`.
 const render_sources = [_][]const u8{
@@ -1166,6 +1177,12 @@ pub fn build(b: *std.Build) void {
     // mesh of an export: the mesh importers join `UzPainter.exe`.
     const pyapi_flags = evaluator_flags ++ app_defines;
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
+    // The supervisor and worker roles (phase2.1). The worker's test-only fault hooks exist in a
+    // Debug build only: ReleaseFast, ReleaseSafe and ReleaseSmall contain none of their code and
+    // refuse `--test-faults` (decision 120).
+    const worker_hook_flags: []const []const u8 = if (optimize == .Debug) &.{"-DUZP_WORKER_FAULT_HOOKS=1"} else &.{};
+    const supervisor_flags = std.mem.concat(b.allocator, []const u8, &.{ &pyapi_flags, worker_hook_flags }) catch @panic("OOM");
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &supervisor_sources, .flags = supervisor_flags });
     app_mod.linkLibrary(mesh_lib);
     const install_templates = b.addInstallDirectory(.{
         .source_dir = b.path(templates_dir),

@@ -103,8 +103,11 @@ public:
     /// Imports the mesh and creates an untitled project with one texture set per material.
     /// `ProjectError` when a project is open; mesh refusals as `mesh::ImportError`.
     void Create(const std::filesystem::path& mesh_path, const CreateSettings& settings);
-    /// `ProjectError` when a project is open or the file cannot be opened.
-    void Open(const std::filesystem::path& path);
+    /// `ProjectError` when a project is open or the file cannot be opened. `untitled`: `path` is
+    /// the store of an untitled project (`<untitled folder>/Untitled.uzp`) left by a worker that
+    /// died; it is reopened as that untitled project (no file path, the folder removed on close),
+    /// the worker's recovery (src/supervisor/worker.cpp).
+    void Open(const std::filesystem::path& path, bool untitled = false);
     /// `ProjectError` when none is open, `BusyError` while a job runs.
     void Close();
     bool IsOpen() const;
@@ -148,10 +151,18 @@ public:
     /// The id of a running job, if any (`BusyError` checks).
     std::function<std::optional<std::string>()> running_job;
 
+    /// Called after every change of what the session durably holds: a project created, opened,
+    /// closed or saved under a new path, and every committed call. The worker reports the open
+    /// project and its revision to its supervisor from here, before the call that caused the
+    /// change returns (src/supervisor/worker.cpp). Set before any project is opened; called on
+    /// the thread that made the change, outside the session's lock.
+    std::function<void()> on_durable_change;
+
 private:
     Session() = default;
     void RequireNotBusy(const std::string& what) const;
     void Record(const CallResult& result);
+    void NotifyDurableChange() const;
     void SetCurrent(std::shared_ptr<OpenProject> project);
 
     mutable std::mutex mutex_;  // guards current_

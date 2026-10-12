@@ -1,0 +1,13 @@
+{
+  "id": 121,
+  "slug": "the-vulkan-device-loss-hook-and-test-move-to-phase3-1-vulkan-compute-parity",
+  "title": "The Vulkan device-loss hook and test move to phase3.1_vulkan-compute-parity",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.1_supervisor-ipc-worker",
+    "phase3.1_vulkan-compute-parity",
+    "phase2.4_supervisor-worker"
+  ],
+  "supersededBy": null
+}

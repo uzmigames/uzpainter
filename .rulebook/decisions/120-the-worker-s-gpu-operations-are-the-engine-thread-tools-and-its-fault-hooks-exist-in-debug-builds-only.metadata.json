@@ -1,0 +1,14 @@
+{
+  "id": 120,
+  "slug": "the-worker-s-gpu-operations-are-the-engine-thread-tools-and-its-fault-hooks-exist-in-debug-builds-only",
+  "title": "The worker's GPU operations are the engine-thread tools, and its fault hooks exist in Debug builds only",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.1_supervisor-ipc-worker",
+    "phase2.4_supervisor-worker",
+    "phase2.2_supervisor-admission-ledger",
+    "phase2.6_mcp-typed-tool-families"
+  ],
+  "supersededBy": null
+}

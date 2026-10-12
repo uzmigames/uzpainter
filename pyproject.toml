@@ -16,7 +16,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["tools", "tests", "adapters"]
+files = ["tools", "tests", "adapters", "python/uzpainter_supervisor"]
 explicit_package_bases = true
 exclude = ["^thirdparty/"]
 
@@ -61,6 +61,13 @@ ignore_missing_imports = true
 # installed.
 module = ["scipy", "scipy.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The pinned MCP SDK runs only inside the embedded interpreter (thirdparty/python-wheels/,
+# python/uzpainter_supervisor/main.py); the development Python need not have it.
+module = ["mcp", "mcp.*", "mcp_types", "mcp_types.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [[tool.mypy.overrides]]
 # PyYAML (tests reading the CI workflows) ships no type information; types-PyYAML is not installed.

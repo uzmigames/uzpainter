@@ -17,7 +17,7 @@
 - [ ] 3.1 Readback drain tests on Vulkan (`tests/render/`): in-flight requests drained on shutdown, failed request releases its staging memory, pitch alignment for every supported format
 - [ ] 3.2 Unit tests on synthetic meshes (plane, sphere, bevelled cube) for UV raster, dilation, resampling and mips on Vulkan, byte-equal to the DX12 results
 - [ ] 3.3 Compositor kernel tests on both backends with identical outputs for every implemented node kind, blend mode and channel format
-- [ ] 3.4 Device-loss and stall injection on Vulkan: `device_removed` or `timeout` reported, job fails, no partial result published
+- [ ] 3.4 Device-loss and stall injection on Vulkan: `device_removed` or `timeout` reported, job fails, no partial result published; includes the worker's Vulkan device-loss hook (`src/supervisor/fault_hooks.h`, Debug-only) and the phase2.1 item 3.3 Vulkan variant through the supervisor: worker exits, relaunched on Vulkan at the last committed revision (decision 121)
 - [ ] 3.5 Tier 0 subset (compositor and export goldens implemented through `phase1.14_compositor-core` and `phase1.18_export-engine`) on Vulkan: equal to the private goldens and byte-equal to DX12
 - [ ] 3.6 Tier 1 for Wand v1, Belt v5 and Tunic v10 on Vulkan: every exported map byte-equal to DX12 and to the private goldens
 - [ ] 3.7 `painter_viewport` regression goldens recorded on Vulkan and repeatable across two runs
