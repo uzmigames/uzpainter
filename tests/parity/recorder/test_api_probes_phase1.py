@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import random
 import sys
 import types
 from pathlib import Path
@@ -43,10 +44,14 @@ STEMS = [
     "phase1-delete-node",
     "phase1-engine-computations",
     "phase1-execute-when-not-busy",
+    "phase1-mesh-map-update",
     "phase1-reload-mesh",
     "phase1-reload-resources",
     "phase1-resource-update",
+    "phase1-restored-values",
+    "phase1-save-as-existing",
     "phase1-save-modes",
+    "phase1-srgb-uniform-decode",
 ]
 
 
@@ -329,3 +334,31 @@ def test_execute_when_not_busy_runs_after_the_busy_period(
             "execute_when_not_busy.callback",
         ]
         assert recording["s10/events"]["value"][-1]["busy"] is False
+
+
+def test_dense_srgb_decode_reads_back_every_code_and_the_seeded_floats() -> None:
+    """P20-B (decision 107): each set_source probe is followed by its get_source readback."""
+    steps = load_json(probe_path("phase1-srgb-uniform-decode"))["instruction_sequence"]["steps"]
+    sets = [s for s in steps if s["call"].endswith("FillLayerNode.set_source")]
+    gets = [s for s in steps if s["call"].endswith("FillLayerNode.get_source")]
+    assert len(sets) == len(gets) == 256 + 64
+    assert all(g["step"] == s["step"] + 1 for s, g in zip(sets, gets, strict=True))
+    rng = random.Random(20261012)
+    expected = [[c / 255] * 3 for c in range(256)] + [
+        [rng.random() for _ in range(3)] for _ in range(64)
+    ]
+    assert [s["args"]["color"] for s in sets] == expected
+    assert {s["args"]["color_space"] for s in sets} == {"sRGB"}
+
+
+@pytest.mark.parametrize("stem", ["phase1-restored-values", "phase1-save-as-existing"])
+def test_every_save_probe_edit_is_followed_by_a_readback(stem: str) -> None:
+    """P22-C and P23-A (decisions 111, 113): after each probed edit, a getter reads the result."""
+    steps = load_json(probe_path(stem))["instruction_sequence"]["steps"]
+    edits = [i for i, s in enumerate(steps) if s["args"].get("probe")]
+    assert edits
+    for index in edits:
+        following = steps[index + 1]["call"]
+        assert (
+            following.endswith(("needs_saving", "file_path")) or "probe" in steps[index + 1]["args"]
+        )
