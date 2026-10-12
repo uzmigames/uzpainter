@@ -2,9 +2,9 @@
 
 `phase1.24_python-api-facade` is the parent and acceptance task of P1-PYAPI (`docs/dag.md`; `docs/architecture/10-python-api.md`). Its five children are archived on main: phase1.19 (native module), phase1.20 (facade), phase1.21 (dispatcher and lifecycle), phase1.22 (CLI and capabilities) and phase1.23 (pipeline adapter). Their local run reports are `pyapi-native-module.md`, `pyapi-facade.md`, `pyapi-dispatcher-lifecycle.md`, `pyapi-cli-capabilities.md` and `pyapi-pipeline-adapter.md` in this folder.
 
-Under decision 028, this report is the local-run evidence for the G1 gate record. The run was on 2026-10-12, branch `wt/phase1.24-api-parent` from main `8dc3c96`, envelope `painter-12.1.5_js-api.1.1.20`. The decisions are 115 and 116.
+Under decision 028, this report is the local-run evidence for the G1 gate record. The run was on 2026-10-12, branch `wt/phase1.24-api-parent` from main `8dc3c96`, envelope `painter-12.1.5_js-api.1.1.20`. The decisions are 115, 116 and 117.
 
-**Result.** The evidence is recorded below. The P1-PYAPI gate is **open** on two items: 1.1, where two prerequisites are not accepted (§5), and 3.1, where four outputs outside the supported scope have no owning checklist item or need an owner ruling (§3). The code changes of this task are ready for merge review apart from task acceptance.
+**Result.** The evidence is recorded below. The P1-PYAPI gate is **open** on two items: 1.1, where two prerequisites are not accepted (§5), and 3.1, where the Dota 2 user-channel labels wait for the owner's clean-room ruling (§3). Decision 117 gave every other output outside the supported scope an owning checklist item. The code changes of this task are ready for merge review apart from task acceptance.
 
 ## 1. Integration added by this task
 
@@ -38,12 +38,12 @@ Under decision 028, this report is the local-run evidence for the G1 gate record
 | A uid's value (`phase1-delete-node` s17, `phase1-resource-update` s14-s15) | Normalisation: Painter's own allocation. The identity outputs compare what a uid resolves to. | — |
 | Resource contexts `project<N>` | Normalisation up to the session offset (decision 107 §4) | — |
 | `phase1-execute-when-not-busy` s9-s10 | Painter's two recordings differ from each other | the recording (decision 109) |
-| `phase1-reload-resources` recording 1 s9, s12 | Refused: the facade refuses s6's grey bitmap on BaseColor (P20-A) | phase1.14_compositor-core (decision 108 §4). It has **no checklist item or acceptance criterion** for P20-A, so item 3.1 stays open. |
+| `phase1-reload-resources` recording 1 s9, s12 | Refused: the facade refuses s6's grey bitmap on BaseColor (P20-A) | phase1.14_compositor-core item 2.9 (decisions 108 §4, 117): record P20-A, fit exactly, and make these two steps exact |
 | **Known divergences that return a value.** Each test requires them to still differ. | | |
-| `readback/get_source/29/BaseColor` of `export-ocio-encode-legacy`: the sRGB decode of 70/255 reads 2 float32 ulp off | Divergence (decision 107 §3) | phase1.14_compositor-core with recording P20-B (decision 108 §4). It has **no checklist item or acceptance criterion**, so item 3.1 stays open. |
+| `readback/get_source/29/BaseColor` of `export-ocio-encode-legacy`: the sRGB decode of 70/255 reads 2 float32 ulp off | Divergence (decision 107 §3) | phase1.14_compositor-core item 2.9 (decisions 108 §4, 117): record P20-B, then fit the decode exactly |
 | Painter's empty default paint layer "Layer 1" | Divergence: UzPainter creates no such layer. The structure readbacks are compared without it after asserting it is exactly that empty layer. | phase4.1_nodes-paint-layers item 2.8 |
-| `phase1-reload-resources` recording 2 s9, s12: Painter reports reloads of bytes the project already holds | Divergence (decision 110 §6) | History: decision 110 §6 and phase1.21_pyapi-dispatcher-lifecycle item 2.8 (archived) named it as a residual. **No open task owns it**, so item 3.1 stays open until one is assigned. |
-| The channel labels of Dota 2's User0-User3 (`project-templates`) | Divergence: they read "", Painter's text is not shipped (decision 116 §4) | **none**: this needs the owner's clean-room ruling on shipping Painter's label text. Item 3.1 stays open. |
+| `phase1-reload-resources` recording 2 s9, s12: Painter reports reloads of bytes the project already holds | Divergence (decision 110 §6) | phase5.2_parity-report-tiers item 2.10 (decision 117): after recording 1 is exact, explained by a recording that settles it, or entered in `parity/exceptions.json` as a decision-032 r2 divergence. Named first by decision 110 §6 and phase1.21 item 2.8 (archived). |
+| The channel labels of Dota 2's User0-User3 (`project-templates`) | Divergence: they read "", Painter's text is not shipped (decision 116 §4) | **Owner question q1** in the task's `.metadata.json` (decision 117): (a) ship generic labels, or (b) ship Painter's label text after the owner's licence review. Item 3.1 stays open until it is answered. |
 
 ## 4. Local run on the owner's machine
 
@@ -92,6 +92,7 @@ The adapter regressions export a project, then each of the following, and requir
 ## 5. Open
 
 - **Item 1.1.** `phase1.18_export-engine` is not accepted: it waits on phase1.14_compositor-core and phase1.15_export-plan-compiler. `phase1.8_project-store` is not accepted: it waits on phase1.6_store-save-retention and phase1.7_store-inspect-census. Every child's code is on main.
+- **Item 3.1.** Owner question q1 (`.rulebook/tasks/phase1.24_python-api-facade/.metadata.json`): may UzPainter ship Painter's label text for Dota 2's User0-User3? Decision 117 leaves it to the owner.
 - **Recordings named** (owner action): P23-A, `save_as` onto an existing `.spp` (decision 113); P24-A, a template path that is missing or is not a template (decision 116); P22-B, one api-probe calling every Painter symbol marked `pending-evidence` (decision 112).
 - **The adapter's session carry.** The runner stores `project.file_path()`, as given, as the next call's project. A script that opens a project by a relative path and then changes directory carries a path that the next process resolves elsewhere. The export manifests are fixed (§1); the carry is not changed here and has no test.
 

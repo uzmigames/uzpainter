@@ -12,6 +12,9 @@
 - [ ] 2.7 `phase1.13_compositor-diagnostics` accepted
 - [x] 2.8 Register every Phase 1 node kind, source, projection and blend mode as `supported` with its Tier 0 evidence id, and every excluded one as `release-gap`, in the capability inventory of `phase1.2_docmodel-capability-manifest`
   - `tools/capabilities/compositor-capabilities.json` (decision 081): context `compositor`/`compositor:<case>`, 54 `supported` with current-envelope goldens, 42 `release-gap` naming their owner task (Blur and filter effects, minification, instances, ...); evidence resolves through the current envelope (decision 037).
+- [ ] 2.9 (decisions 108 §4 and 117, from phase1.24_python-api-facade item 3.1) Record P20-A (fill channel defaults) and P20-B (dense sRGB decode), the recordings of decision 107, then fit the facade's colour tables to them exactly: `DEFAULT_SOURCES` (`python/uzpainter_facade/nodes.py`), `default_bitmap_space`, `available_bitmap_spaces` and the float32 sRGB decode (`colour.py`)
+  - Acceptance: every P20-A and P20-B output equal to its golden, both recordings; the `NotYetSupported` refusals naming P20-A and the exclusion `readback/get_source/29/BaseColor` of `export-ocio-encode-legacy` removed, their tests turned into exact comparisons; `phase1-reload-resources` recording 1 s9 and s12 exact in `test_pyapi_lifecycle_tier0.py`.
+  - Blocked only by the two recordings (owner action); `parity/reports/phase1/python-api-facade.md` §3 names this item as the owner.
 
 ## 3. Tests
 - [ ] 3.1 Run the union of the children's Tier 0 golden sets in one pass in a local DX12 run on the owner's machine (decision 028) and publish, in the local run report used as evidence, the comparison numbers (max |Δ|, mean |Δ|, p99, differing-texel count and percentage) next to oracle stability and UzPainter repeatability
