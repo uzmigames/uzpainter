@@ -1,0 +1,17 @@
+{
+  "id": 107,
+  "slug": "the-facade-reproduces-painter-s-recorded-quirks-and-colour-rules-over-the-native-api-and-names-every-unrecorded-case",
+  "title": "The facade reproduces Painter's recorded quirks and colour rules over the native API and names every unrecorded case",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.20_pyapi-facade",
+    "phase1.19_pyapi-native-module",
+    "phase1.21_pyapi-dispatcher-lifecycle",
+    "phase1.22_pyapi-cli-capabilities",
+    "phase1.24_python-api-facade",
+    "phase1.18_export-engine",
+    "phase1.14_compositor-core"
+  ],
+  "supersededBy": null
+}

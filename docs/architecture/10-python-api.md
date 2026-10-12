@@ -39,6 +39,8 @@ Rules:
 
 ## 4. Facade behaviour (Painter's observable contract)
 
+The facade is implemented in `python/` (`python/FACADE.md`; task phase1.20, decisions 107 and 108). The lifecycle, events and computation-state rows are phase1.21.
+
 | Behaviour | Facade rule |
 |---|---|
 | Lifecycle | `project.create/open` return immediately; loading runs on the engine thread; `project.is_busy()` is true meanwhile; events in order `ProjectOpened`/`ProjectCreated` → `ProjectEditionEntered` (only when evaluation is ready); `ProjectAboutToClose` → `ProjectClosed`; `ProjectAboutToSave(path)` → `ProjectSaved`. `is_in_edition_state()` becomes true with `ProjectEditionEntered`, never before. |

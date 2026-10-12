@@ -469,6 +469,12 @@ const cpython_package_dir = "thirdparty/cpython";
 const cpython_package_excluded = [_][]const u8{ ".txt", ".md", ".json" };
 /// UzPainter's module search path of the embedded interpreter, beside `python313.dll`.
 const cpython_pth_file = "src/python/python313._pth";
+/// The pure-Python packages of the embedded interpreter (`python/`, `python/FACADE.md`): the
+/// `substance_painter` compatibility facade, `substance_painter_plugins` and their implementation
+/// `uzpainter_facade` (phase1.20_pyapi-facade), installed into `bin/python/`, a folder of the
+/// module search path (`python313._pth`). Only the `.py` sources are installed.
+const facade_dir = "python";
+const facade_included = [_][]const u8{".py"};
 /// The pinned wheel closure of the MCP SDK (`tools/vendoring/wheels.py`), unpacked into
 /// `bin/Lib/site-packages/`.
 const wheels_dir = "thirdparty/python-wheels";
@@ -645,6 +651,12 @@ pub fn build(b: *std.Build) void {
         .exclude_extensions = &cpython_package_excluded,
     }).step);
     painter_step.dependOn(&b.addInstallBinFile(b.path(cpython_pth_file), "python313._pth").step);
+    painter_step.dependOn(&b.addInstallDirectory(.{
+        .source_dir = b.path(facade_dir),
+        .install_dir = .bin,
+        .install_subdir = "python",
+        .include_extensions = &facade_included,
+    }).step);
     painter_step.dependOn(&InstallWheels.create(b, b.path(wheels_dir), "Lib/site-packages").step);
 
     // ── Capability manifest (docs/architecture/10-python-api.md §3) ───────────────────────────
@@ -1328,6 +1340,12 @@ pub fn build(b: *std.Build) void {
         .exclude_extensions = &cpython_package_excluded,
     }).step);
     pyapi_tests_step.dependOn(&b.addInstallBinFile(b.path(cpython_pth_file), "python313._pth").step);
+    pyapi_tests_step.dependOn(&b.addInstallDirectory(.{
+        .source_dir = b.path(facade_dir),
+        .install_dir = .bin,
+        .install_subdir = "python",
+        .include_extensions = &facade_included,
+    }).step);
     pyapi_tests_step.dependOn(&install_templates.step);
     pyapi_tests_step.dependOn(&install_export_presets.step);
     b.getInstallStep().dependOn(pyapi_tests_step);
