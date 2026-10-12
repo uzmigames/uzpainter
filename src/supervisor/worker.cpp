@@ -34,6 +34,7 @@
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "mesh/reload.h"
+#include "preview/preview.h"
 #include "python/diagnostics.h"
 #include "python/display.h"
 #include "python/errors.h"
@@ -61,7 +62,7 @@ namespace json = core::json;
 constexpr const char* kUsage =
     "usage: UzPainter.exe --worker --pipe \\\\.\\pipe\\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12|vulkan\n"
     "                     [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>]\n"
-    "                     [--connect-timeout-ms <ms>] [--test-faults]\n";
+    "                     [--connect-timeout-ms <ms>] [--test-faults] [--preview]\n";
 
 constexpr std::string_view kPipePrefix = "\\\\.\\pipe\\uzpainter-";
 
@@ -75,6 +76,8 @@ struct Options {
     std::filesystem::path output_root;
     std::filesystem::path crash_dir;
     bool test_faults = false;
+    /// Attach the preview window (src/preview/preview.h) to this worker.
+    bool preview = false;
 };
 
 std::optional<std::uint64_t> Digits(std::string_view text) {
@@ -105,6 +108,8 @@ std::optional<Options> Parse(const std::vector<std::string>& args, std::string& 
             options.allow_python = true;
         } else if (arg == "--test-faults") {
             options.test_faults = true;
+        } else if (arg == "--preview") {
+            options.preview = true;
         } else if (arg == "--pipe" || arg == "--gpu-backend" || arg == "--gpu-deadline-ms" || arg == "--output-root" ||
                    arg == "--crash-dir" || arg == "--connect-timeout-ms") {
             const std::string* v = value();
@@ -277,7 +282,10 @@ std::optional<CallError> AdmissionRefusal(const core::AdmissionDecision& decisio
 
 class Worker {
 public:
-    Worker(const Options& options, render::Engine& engine) : m_options(options), m_engine(engine) { DefineTools(); }
+    Worker(const Options& options, render::Engine& engine, preview::PreviewFeed* feed, preview::PreviewHost* host)
+        : m_options(options), m_engine(engine), m_previewFeed(feed), m_previewHost(host) {
+        DefineTools();
+    }
 
     /// The reply to one request frame.
     json::Object Handle(const json::Object& request);
@@ -313,6 +321,7 @@ private:
     /// refusal or typed error.
     json::Object SubmitAdmitted(const std::function<void(core::Edit&)>& call);
     json::Object RunPython(const json::Object& arguments);
+    json::Object PreviewStatus(const json::Object& arguments);
     /// The folder a Diagnostics tool exports into: `path`, inside the output root.
     std::filesystem::path OutputDirectory(const json::Object& arguments) const;
 #if defined(UZP_WORKER_FAULT_HOOKS)
@@ -328,6 +337,9 @@ private:
     std::map<std::string, Handler, std::less<>> m_handlers;
     std::unique_ptr<evaluator::Evaluator> m_evaluator;
     std::uint64_t m_payloads = 0;
+    /// The attached preview (`--preview`): every evaluation is published to it, never waited for.
+    preview::PreviewFeed* m_previewFeed = nullptr;
+    preview::PreviewHost* m_previewHost = nullptr;
     /// The admitted request of the mutating call being handled (a typed tool submits it as is).
     std::optional<core::MutationRequest> m_mutation;
 };
@@ -437,12 +449,20 @@ void Worker::DefineTools() {
              true, false},
             [this](const json::Object& a) { return RunPython(a); });
     }
+    if (m_previewHost) {
+        add({"preview_status", "The attached preview: window, frames published, taken and rendered, last error.",
+             Schema({}, {}), false, false},
+            [this](const json::Object& a) { return PreviewStatus(a); });
+    }
 #if defined(UZP_WORKER_FAULT_HOOKS)
     if (m_options.test_faults) {
+        json::Array faults{"kill", "abort", "seh", "remove_device", "gpu_stall", "kill_before_reply"};
+        if (m_previewHost) {
+            faults.push_back("preview_stall");
+            faults.push_back("preview_resume");
+        }
         add({"test_fault", "Test-only fault hook (Debug builds under --test-faults).",
-             Schema({{"fault", json::Object{{"type", "string"},
-                                            {"enum", json::Array{"kill", "abort", "seh", "remove_device", "gpu_stall",
-                                                                 "kill_before_reply"}}}}},
+             Schema({{"fault", json::Object{{"type", "string"}, {"enum", std::move(faults)}}}},
                     {"fault"}),
              false, false},
             [this](const json::Object& a) { return TestFault(a); });
@@ -785,11 +805,12 @@ json::Object Worker::EvaluateChannel(const json::Object& arguments) {
                 throw;
             }
         });
+    std::shared_ptr<const mesh::TexturingMesh> texturing;
     if (project.mesh) {
         mesh::ImportResult mesh =
             mesh::RederiveMesh(project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
-        request.geometry = std::make_shared<evaluator::MeshGeometryMasks>(
-            std::make_shared<const mesh::TexturingMesh>(std::move(mesh.mesh)));
+        texturing = std::make_shared<const mesh::TexturingMesh>(std::move(mesh.mesh));
+        request.geometry = std::make_shared<evaluator::MeshGeometryMasks>(texturing);
     }
 #if defined(UZP_WORKER_FAULT_HOOKS)
     if (fault::GpuFaultArmed()) {
@@ -806,8 +827,26 @@ json::Object Worker::EvaluateChannel(const json::Object& arguments) {
             m_engine, std::make_shared<const evaluator::TemplateLibrary>(
                           evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory())));
     }
-    render::Result<evaluator::ChannelResult> evaluated = m_evaluator->Evaluate(snapshot, std::move(request)).get();
-    if (!evaluated) FailRender(evaluated.error());
+    render::Result<evaluator::ChannelResult> result = m_evaluator->Evaluate(snapshot, std::move(request)).get();
+    if (!result) FailRender(result.error());
+    const auto evaluated = std::make_shared<const evaluator::ChannelResult>(std::move(*result));
+    if (m_previewFeed) {
+        // The preview takes the newest published state when it wants a frame; publishing never
+        // waits for it (preview/latest.h).
+        m_previewFeed->Update(snapshot.revision, snapshot.project, texturing,
+                              [store](const std::string& sha256) -> std::optional<std::string> {
+                                  try {
+                                      return store->ReadResource(sha256);
+                                  } catch (const store::StoreError& error) {
+                                      if (error.code() == store::StoreError::Code::missing_resource) return std::nullopt;
+                                      throw;
+                                  }
+                              });
+        if (const std::optional<preview::MaterialSlot> slot = preview::SlotOf(*channel)) {
+            m_previewFeed->Record(set->id, *slot, evaluated);
+        }
+        m_previewFeed->Publish();
+    }
 
     // The texels of every tile in order (constant tiles contribute none), under the output root.
     std::string texels;
@@ -846,6 +885,17 @@ json::Object Worker::EvaluateChannel(const json::Object& arguments) {
             {"payload", json::Object{{"path", python::Utf8(file)},
                                      {"sha256", core::Sha256Hex(texels)},
                                      {"size", static_cast<std::int64_t>(texels.size())}}}};
+}
+
+json::Object Worker::PreviewStatus(const json::Object&) {
+    const preview::PreviewStatus status = m_previewHost->Status();
+    return {{"window_open", status.windowOpen},
+            {"stalled", status.stalled},
+            {"frames_published", static_cast<std::int64_t>(status.framesPublished)},
+            {"frames_taken", static_cast<std::int64_t>(status.framesTaken)},
+            {"frames_rendered", static_cast<std::int64_t>(status.framesRendered)},
+            {"revision_shown", status.revisionShown},
+            {"last_error", status.lastError}};
 }
 
 core::Id UidArgument(const json::Object& arguments, std::string_view key) {
@@ -1020,6 +1070,10 @@ json::Object Worker::RunPython(const json::Object& arguments) {
 #if defined(UZP_WORKER_FAULT_HOOKS)
 json::Object Worker::TestFault(const json::Object& arguments) {
     const std::optional<std::string> name = StringField(arguments, "fault");
+    if (m_previewHost && (name == "preview_stall" || name == "preview_resume")) {
+        m_previewHost->Stall(name == "preview_stall");
+        return {{"armed", *name}};
+    }
     const std::optional<fault::Fault> parsed = name ? fault::Parse(*name) : std::nullopt;
     if (!parsed) throw CallError{"invalid_arguments", "unknown fault", {}};
     fault::Trigger(*parsed);
@@ -1169,7 +1223,19 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
         if (!reader_pipe->Write(EncodeFrame(RevisionEvent()))) Exit(kWorkerExitSupervisorGone);
     };
 
-    Worker worker(options, engine);
+    // The attached preview runs on its own thread with its own device; the process ends without
+    // joining it (every end of the worker terminates the process).
+    std::shared_ptr<preview::PreviewFeed> preview_feed;
+    std::unique_ptr<preview::PreviewHost> preview_host;
+    if (options.preview) {
+        preview_feed = std::make_shared<preview::PreviewFeed>();
+        preview::PreviewOptions preview_options;
+        preview_options.backend = options.backend;
+        preview_options.deadline = options.gpu_deadline;
+        preview_options.title = "UzPainter preview - worker " + std::to_string(GetCurrentProcessId());
+        preview_host = std::make_unique<preview::PreviewHost>(preview_options, preview_feed);
+    }
+    Worker worker(options, engine, preview_feed.get(), preview_host.get());
     // The interpreter's thread holds the GIL only while Python runs (`run_python`).
     pybind11::gil_scoped_release release;
     for (;;) {

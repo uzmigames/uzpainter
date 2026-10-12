@@ -1,0 +1,9 @@
+{
+  "id": 134,
+  "slug": "the-preview-display-transform-is-the-calibrated-table-of-the-pinned-ocio-view-and-opencolorio-is-not-linked",
+  "title": "The preview's display transform is the calibrated table of the pinned OCIO view, and OpenColorIO is not linked",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": ["phase2.1_preview-viewport-window", "phase2.2_preview-capture", "phase2.1_preview-display-presets"],
+  "supersededBy": null
+}

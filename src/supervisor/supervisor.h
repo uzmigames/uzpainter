@@ -4,7 +4,7 @@
 // phase2.1_supervisor-ipc-worker; `SUPERVISOR.md`):
 //
 //   UzPainter.exe --mcp [--gpu-backend dx12|vulkan] [--allow-python] [--gpu-deadline-ms <ms>]
-//                 [--output-root <dir>] [--crash-dir <dir>] [--test-faults]
+//                 [--output-root <dir>] [--crash-dir <dir>] [--test-faults] [--preview]
 //
 // The supervisor starts the embedded interpreter and hands the process to
 // `uzpainter_supervisor.main` (python/uzpainter_supervisor/), UzPainter's own Python code over the
