@@ -228,6 +228,31 @@ No truncation, rounding or alignment rule that was tried fits every dataset (dec
 - the next step is a focused measurement of the multi-probe accumulator;
 - the validation goldens of decision 078 stay unused until a replica exists.
 
+## 8. The accumulator is identified; gate 3 passes (decision 083)
+
+`python -m tools.parity.vk_sampler_probe.replica_gates <work-dir> 3` reprints the gate-3 counts (synthetic textures, RTX 4090, driver 617.14, Vulkan).
+
+Each probe keeps decision 071's arithmetic: E of its largest weighed texel, S = sum of w floor(t 2^(28 - E)) with w in 1/1024, value S 2^(E - 38). The probes are summed as follows, with coarse(E) = E - ((E + 126) mod 4):
+
+| Step | Rule |
+|---|---|
+| Probe | truncated to a multiple of 2^(coarse(E) - 36) |
+| Order | lower level first; within a level by offset along the major-axis gradient (ascending for a positive gradient) |
+| Running sum | the probes of a level form consecutive pairs; before each addition after the first, truncated to a multiple of 2^(coarse(G) - 36), G the largest E of every pair up to the incoming probe's |
+| Offset-0 pair | one probe of the pair's weight |
+| Result | rounded to the nearest float32, ties up |
+
+| Data | Samples | Exact sum | Accumulator |
+|---|---|---|---|
+| Decision 071's datasets (same seeds) | 1 170 000 | 1 169 944 | 1 170 000 |
+| Decision 071's dial (613 cases) | 58 848 steps | 559 cases | every step |
+| 23 footprints the rule was found on | 1 840 000 | 0-329 misses each | 1 840 000 |
+| 10 held-out footprints, five texture families | 800 000 | 0-225 misses each | 800 000 |
+
+Running maxima over single probes, per-level or global maxima, pairwise or per-level partial sums and grids one to four bits off all miss (3 to 832 per footprint).
+
+Gate 3 therefore passes. Gate 4 comes next: acquire the LOD and geometry tables, build the replica, and validate it sample for sample against the hardware. The refusal stays until that validation is exact.
+
 ## Reproduce
 
 ```
@@ -236,5 +261,5 @@ python -m pytest tests/evaluator/test_compositor_sources_projection.py
 python tests/evaluator/sources_fits.py zig-out/bin/uzp-evaluator-tests.exe <work-dir>
 python -m tools.parity.vk_sampler_probe.measure <work-dir>
 python -m tools.parity.vk_sampler_probe.texture_unit <work-dir>
-python -m tools.parity.vk_sampler_probe.replica_gates <work-dir>
+python -m tools.parity.vk_sampler_probe.replica_gates <work-dir> [gate ...]
 ```

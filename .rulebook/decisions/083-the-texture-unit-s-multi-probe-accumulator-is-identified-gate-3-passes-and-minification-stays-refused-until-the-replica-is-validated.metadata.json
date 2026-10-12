@@ -1,0 +1,9 @@
+{
+  "id": 83,
+  "slug": "the-texture-unit-s-multi-probe-accumulator-is-identified-gate-3-passes-and-minification-stays-refused-until-the-replica-is-validated",
+  "title": "The texture unit's multi-probe accumulator is identified; gate 3 passes and minification stays refused until the replica is validated",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": ["phase1.9_compositor-resample-gaps"],
+  "supersededBy": null
+}

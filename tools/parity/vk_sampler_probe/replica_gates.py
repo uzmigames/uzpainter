@@ -2,7 +2,7 @@
 through Vulkan (decision 071; task phase1.9_compositor-resample-gaps). Synthetic textures only;
 no Painter data is read. Prints the statistics as JSON.
 
-    python -m tools.parity.vk_sampler_probe.replica_gates <work-dir>
+    python -m tools.parity.vk_sampler_probe.replica_gates <work-dir> [gate ...]
 
 Conventions: footprints a (along x) and b (along y) are in level-0 texels; lambda is the LOD in
 1/256; the kernel of a level is a set of probe pairs (p, wl, wr, m): m copies of a probe at -p
@@ -116,30 +116,55 @@ def lod(probe: Probe, a: np.ndarray, b: np.ndarray, bias: float = 0.0) -> np.nda
     return lam
 
 
+def footprint_gradients(
+    a: Any,
+    b: Any,
+    size: int,
+    sign: int = 1,
+    axis: int = 0,
+    swap: bool = False,
+    minor_sign: int = 1,
+) -> tuple[tuple[Any, Any], tuple[Any, Any]]:
+    """ddx and ddy of an axis-aligned footprint in texels of a `size` texture: the major extent a
+    along x (axis 0) or y (axis 1) with the sign `sign`, the minor extent b along the other axis
+    with `minor_sign`; `swap` hands the v gradient to ddx (a rotation by 90 degrees)."""
+    zero = np.zeros_like(np.asarray(a, np.float64))
+    major = sign * np.asarray(a, np.float64) / size
+    minor = minor_sign * np.asarray(b, np.float64) / size + zero
+    gu, gv = ((major, zero), (zero, minor)) if axis == 0 else ((minor, zero), (zero, major))
+    return (gv, gu) if swap else (gu, gv)
+
+
 def marginals(
-    probe: Probe, a: np.ndarray, b: np.ndarray, bias: float, level: int, sign: int = 1
+    probe: Probe,
+    a: np.ndarray,
+    b: np.ndarray,
+    bias: float,
+    level: int,
+    sign: int = 1,
+    axis: int = 0,
+    swap: bool = False,
 ) -> np.ndarray:
-    """[key, phase, column]: the column weights (1/1024) of level `level` at the 256 sub-texel
-    phases of a sample on a texel row, columns LO..HI-1, read as pairs per channel (1, 2^-12)."""
+    """[key, phase, column]: the weights (1/1024) of level `level` summed across the major axis,
+    at the 256 sub-texel phases of a sample moving along it from a texel centre, columns (rows for
+    axis 1) LO..HI-1, read as pairs per channel (1, 2^-12)."""
     size = 1024
     sk = size >> level
     phase = np.tile(np.arange(256), a.size)
-    u = (400 + phase / 256 + 0.5) / sk
-    v = np.full(u.size, (400 + 0.5) / sk)
+    along = (400 + phase / 256 + 0.5) / sk
+    across = np.full(along.size, (400 + 0.5) / sk)
+    u, v = (along, across) if axis == 0 else (across, along)
+    ddx, ddy = footprint_gradients(np.repeat(a, 256), np.repeat(b, 256), size, sign, axis, swap)
     result = np.zeros((u.size, NC), np.int64)
     for start in range(0, NC, 8):
         levels = empty(size)
         for q, d in enumerate(range(LO + start, min(HI, LO + start + 8))):
-            levels[level][:, (400 + d) % sk, q // 2] = 1.0 if q % 2 == 0 else 2.0**-12
-        out = sample(
-            probe,
-            levels,
-            u,
-            v,
-            (np.repeat(sign * a / size, 256), 0),
-            (0, np.repeat(b / size, 256)),
-            bias,
-        )
+            value = 1.0 if q % 2 == 0 else 2.0**-12
+            if axis == 0:
+                levels[level][:, (400 + d) % sk, q // 2] = value
+            else:
+                levels[level][(400 + d) % sk, :, q // 2] = value
+        out = sample(probe, levels, u, v, ddx, ddy, bias)
         for q in range(min(8, NC - start)):
             hi = np.floor(out[:, q // 2] * 1024 + 2.0**-14)
             result[:, start + q] = (
@@ -149,20 +174,33 @@ def marginals(
     return marg
 
 
-def phi(w: int, q: np.ndarray) -> np.ndarray:
-    """Mass of a probe of weight w left of a column boundary q/256 texels right of it."""
-    inner = w - rhu(w * (256 - np.clip(q, 0, 256)))
+def phi(w: int, q: np.ndarray, down: bool = False) -> np.ndarray:
+    """Mass of a probe of weight w left of a column boundary q/256 texels right of it; `down`
+    rounds the split half down (rule F's y split of a probe at x phase 0, for the y axis)."""
+    inner = w - (rhd if down else rhu)(w * (256 - np.clip(q, 0, 256)))
     out: np.ndarray = np.where(q <= 0, 0, np.where(q > 256, w, inner))
     return out
 
 
 _Q = np.arange(600)
-FIRST = {w: int(_Q[np.argmax(phi(w, _Q) >= 1)]) for w in range(1, 1025)}
-FULL = {w: int(_Q[np.argmax(phi(w, _Q) >= w)]) for w in range(1, 1025)}
+FIRST = {
+    down: {w: int(_Q[np.argmax(phi(w, _Q, down) >= 1)]) for w in range(1, 1025)}
+    for down in (False, True)
+}
+FULL = {
+    down: {w: int(_Q[np.argmax(phi(w, _Q, down) >= w)]) for w in range(1, 1025)}
+    for down in (False, True)
+}
 
 
 def search(
-    z: np.ndarray, rest: np.ndarray, pairs: list[Pair], left: int, depth: int, found: list[Geometry]
+    z: np.ndarray,
+    rest: np.ndarray,
+    pairs: list[Pair],
+    left: int,
+    depth: int,
+    found: list[Geometry],
+    down: bool = False,
 ) -> None:
     """Peel probe pairs from the left: the leftmost remaining probe's first increment fixes its
     offset for each weight, the rightmost one's last increment must agree."""
@@ -178,21 +216,23 @@ def search(
     last = int(z[len(z) - 1 - np.argmax(rest[::-1] < left)])
     for mult in (4, 2, 1):
         for wl in range(1, left // mult + 1):
-            p = FIRST[wl] - first
+            p = FIRST[down][wl] - first
             if p < 0 or (pairs and p > pairs[-1][0]):
                 continue
             for wr in range(max(1, wl - 2), wl + 3):
-                if mult * (wl + wr) > left or last - FULL[wr] + 1 != p:
+                if mult * (wl + wr) > left or last - FULL[down][wr] + 1 != p:
                     continue
-                r2 = rest - mult * (phi(wl, z + p) + phi(wr, z - p))
+                r2 = rest - mult * (phi(wl, z + p, down) + phi(wr, z - p, down))
                 if np.any(r2 < 0) or np.any(np.diff(r2) < 0):
                     continue
-                search(z, r2, [*pairs, (p, wl, wr, mult)], left - mult * (wl + wr), depth, found)
+                pair = (p, wl, wr, mult)
+                search(z, r2, [*pairs, pair], left - mult * (wl + wr), depth, found, down)
 
 
-def decode(m: np.ndarray) -> Geometry | None | str:
+def decode(m: np.ndarray, down: bool = False) -> Geometry | None | str:
     """The probe pairs whose rule-F marginals reproduce m at every phase (fewest pairs, then the
-    largest multiplicity); None when nothing fits, 'ambiguous' when several do."""
+    largest multiplicity); None when nothing fits, 'ambiguous' when several do. `down`: the
+    marginals run along y (axis 1)."""
     cumulative = np.concatenate([np.zeros((256, 1), np.int64), np.cumsum(m, 1)], 1)
     z = (256 * (LO + np.arange(NC + 1))[None, :] - np.arange(256)[:, None]).ravel()
     order = np.argsort(z)
@@ -202,7 +242,7 @@ def decode(m: np.ndarray) -> Geometry | None | str:
         return ()
     for depth in (1, 2, 3):
         found: list[Geometry] = []
-        search(z, mass.copy(), [], total, depth, found)
+        search(z, mass.copy(), [], total, depth, found, down)
         if found:
             # Equal marginals: prefer the coarsest weight unit (largest multiplicity).
             top = max(min(pair[3] for pair in g) for g in found)
@@ -399,31 +439,54 @@ def geometry_cells(probe: Probe) -> dict[str, Any]:
     return report
 
 
-def probe_sums(
-    levels: list[np.ndarray], u: float, v: float, lower: int, geometry: Sequence[Geometry]
-) -> list[Taps]:
-    """The taps (weight 1/1024, texel) of every probe of a sample (x-major, repeat)."""
-    out = []
+def ordered_probes(
+    levels: list[np.ndarray],
+    u: float,
+    v: float,
+    lower: int,
+    geometry: Sequence[Geometry],
+    sign: int = 1,
+    axis: int = 0,
+) -> list[tuple[int, Taps]]:
+    """The probes of a sample in the order the texture unit adds them (repeat addressing): the
+    lower level first; within a level by offset along the major-axis gradient, ascending for a
+    positive gradient; a pair at offset 0 is one probe of the pair's weight. Each probe is
+    (level, taps), the taps (weight 1/1024, texel) of rule F with zero weights dropped."""
+    out: list[tuple[int, Taps]] = []
     for k, pairs in zip((lower, lower + 1), geometry, strict=True):
         level = levels[k]
         h, w = level.shape
         x = math.floor(256 * (u * w - 0.5) + 0.5)
         y = math.floor(256 * (v * h - 0.5) + 0.5)
+        found: list[tuple[int, Taps]] = []
         for p, wl, wr, mult in pairs:
-            for offset, weight in ((-p, wl), (p, wr)):
-                px = x + offset
+            ends = ((0, wl), (0, wr)) if p == 0 else ((-p, wl), (p, wr))
+            for offset, weight in ends:
+                px, py = (x + offset, y) if axis == 0 else (x, y + offset)
                 taps = [
-                    (mult * ww, float(level[((y >> 8) + dy) % h, ((px >> 8) + dx) % w]))
-                    for dx, dy, ww in split(weight, px & 255, y & 255)
+                    (mult * ww, float(level[((py >> 8) + dy) % h, ((px >> 8) + dx) % w]))
+                    for dx, dy, ww in split(weight, px & 255, py & 255)
                     if ww
                 ]
-                out.append(taps)
+                if p == 0 and found and found[-1][0] == 0:
+                    taps = found.pop()[1] + taps
+                found.append((offset, taps))
+        found.sort(key=lambda item: sign * item[0])
+        out += [(k, taps) for _, taps in found]
     return out
 
 
+def probe_sums(
+    levels: list[np.ndarray], u: float, v: float, lower: int, geometry: Sequence[Geometry]
+) -> list[Taps]:
+    """The taps (weight 1/1024, texel) of every probe of a sample (x-major, positive, repeat)."""
+    return [taps for _, taps in ordered_probes(levels, u, v, lower, geometry)]
+
+
 def exact_sum(probes: list[Taps], unit_bits: int) -> tuple[int, int]:
-    """Each probe: E the exponent of its largest texel, operands floor(t 2^(28 - E)), the integer
-    sum; all probes summed exactly. Returns (n, e) with the value n 2^e."""
+    """Decision 071's rule. Each probe: E the exponent of its largest texel, operands
+    floor(t 2^(28 - E)), the integer sum; all probes summed exactly. Returns (n, e) with the
+    value n 2^e."""
     parts = []
     for taps in probes:
         largest = max(t for _, t in taps)
@@ -447,12 +510,69 @@ def ties_up(n: int, e: int) -> float:
     return math.ldexp(q, e + shift)
 
 
+def coarse(e: int) -> int:
+    """E lowered until the biased float32 exponent E + 126 is a multiple of 4."""
+    return e - (e + 126) % 4
+
+
+def probe_sum(taps: Taps) -> tuple[int, int] | None:
+    """(S, E) of one probe: E the exponent of its largest texel (t in [2^(E-1), 2^E)), S the sum
+    of w floor(t 2^(28 - E)) over its taps (w in 1/1024), the value S 2^(E - 38); None when every
+    texel is 0."""
+    largest = max((t for _, t in taps), default=0.0)
+    if largest <= 0:
+        return None
+    e = math.frexp(largest)[1]
+    return sum(w * math.floor(math.ldexp(t, 28 - e)) for w, t in taps), e
+
+
+def accumulate(probes: Sequence[tuple[int, tuple[int, int] | None]]) -> float:
+    """The texture unit's sum of (level, probe_sum) in its order (decision 083):
+
+    - a probe of exponent E enters truncated to a multiple of 2^(coarse(E) - 36);
+    - the probes of a level go in pairs (consecutive in the order; a level of one probe is one
+      group); before each addition after the first, the running sum is truncated to a multiple
+      of 2^(coarse(G) - 36), G the largest E of the probes of every pair up to and including the
+      incoming probe's;
+    - the sum is rounded to the nearest float32, ties up."""
+    seen: Counter[int] = Counter()
+    groups = []
+    for level, _ in probes:
+        groups.append((level, seen[level] // 2))
+        seen[level] += 1
+    total, low = 0, 0
+    for i, (_, part) in enumerate(probes):
+        if i >= 2 and total:
+            g = max(
+                (
+                    q[1]
+                    for q, group in zip((p for _, p in probes), groups, strict=True)
+                    if q is not None and group <= groups[i]
+                ),
+                default=None,
+            )
+            if g is not None and coarse(g) - 36 > low:
+                total, low = total >> (coarse(g) - 36 - low), coarse(g) - 36
+        if part is None or part[0] == 0:
+            continue
+        s, e = part
+        n, x = s, e - 38
+        if coarse(e) - 36 > x:
+            n, x = n >> (coarse(e) - 36 - x), coarse(e) - 36
+        if total == 0:
+            total, low = n, x
+        else:
+            lo = min(low, x)
+            total, low = (total << (low - lo)) + (n << (x - lo)), lo
+    return ties_up(total, low)
+
+
 def accumulation(probe: Probe) -> dict[str, Any]:
     rng = np.random.default_rng(9)
     report: dict[str, Any] = {}
     # One probe per level (isotropic, 1/256): random texels over 24 octaves.
     size = 256
-    count = equal = 0
+    count = equal = modelled = 0
     for k in (0, 60, 130, 200, 240):
         f = (256 - k) & 255
         t = min((7 * f) >> 2, 256) if k else 0
@@ -485,7 +605,13 @@ def accumulation(probe: Probe) -> dict[str, Any]:
                     )
                 count += 1
                 equal += ties_up(*exact_sum(probes, 8)) == got[i, c]
-    report["one probe per level, texels over 24 octaves"] = {"samples": count, "equal": equal}
+                parts = [(0, probe_sum([(4 * ww, t) for ww, t in taps])) for taps in probes]
+                modelled += accumulate(parts) == got[i, c]
+    report["one probe per level, texels over 24 octaves"] = {
+        "samples": count,
+        "equal": equal,
+        "accumulator equal": modelled,
+    }
 
     # Two probes (1.5 x 1 at bias -8: +-86/256, 256/512 each), texels with 3-bit mantissas.
     size = 256
@@ -523,6 +649,8 @@ def accumulation(probe: Probe) -> dict[str, Any]:
                 key = "representable" if odd.bit_length() <= 24 else "rounded"
                 stats[f"{key} samples"] += 1
                 stats[f"{key} equal"] += ties_up(total, e) == got[i, c]
+                parts = [(0, probe_sum([(2 * ww, t) for ww, t in taps])) for taps in probes]
+                stats[f"{key} accumulator equal"] += accumulate(parts) == got[i, c]
     report["two probes, texels with 3-bit mantissas"] = dict(stats)
 
     # Probe sets decoded per footprint; three texture families with 16- and 8-bit codes.
@@ -541,7 +669,7 @@ def accumulation(probe: Probe) -> dict[str, Any]:
         (5.5, 2.0, -0.25),
     ]
     for name, make in families.items():
-        count = equal = 0
+        count = equal = modelled = 0
         for a, b, bias in footprints:
             lam = max(int(lod(probe, np.array([a]), np.array([b]), bias)[0]), 0)
             geometry = []
@@ -557,9 +685,14 @@ def accumulation(probe: Probe) -> dict[str, Any]:
             red = [level[..., 0] for level in levels]
             for i in range(n):
                 count += 1
-                sums = probe_sums(red, float(u[i]), float(v[i]), lam >> 8, geometry)
-                equal += ties_up(*exact_sum(sums, 10)) == got[i]
-        report[f"probes summed exactly, {name}"] = {"samples": count, "equal": equal}
+                ordered = ordered_probes(red, float(u[i]), float(v[i]), lam >> 8, geometry)
+                equal += ties_up(*exact_sum([taps for _, taps in ordered], 10)) == got[i]
+                modelled += accumulate([(k, probe_sum(taps)) for k, taps in ordered]) == got[i]
+        report[f"probes summed exactly, {name}"] = {
+            "samples": count,
+            "equal": equal,
+            "accumulator equal": modelled,
+        }
     report["one ulp above the rounding midpoint, rounded down"] = dial(probe)
     return report
 
@@ -568,7 +701,7 @@ def dial(probe: Probe) -> dict[str, int]:
     """Two probes (1.5 x 1, bias -8, centre 256 k + 86, 256 r + 1): probe A at 256 k holds
     T (weight 1/512, exponent EA) and d1 (255); probe B holds d1 (84), d2 (171) and a dial (1).
     The dial steps one operand unit of B across a float32 tie: where the hardware first rounds
-    up gives its sum to one unit of B."""
+    up gives its sum to one unit of B. The accumulator (decision 083) is compared at every step."""
     rng = np.random.default_rng(17)
     size, steps = 1024, 96
 
@@ -612,8 +745,31 @@ def dial(probe: Probe) -> dict[str, int]:
         -8.0,
     )[:, 0]
     result: Counter[str] = Counter()
-    for q, (_, _, _, _, _, start, need, a_sum) in enumerate(cases):
+    for q, (_, t, eb, d1, d2, start, need, a_sum) in enumerate(cases):
         values = got[q * steps : (q + 1) * steps]
+        part_a = probe_sum([(2, t), (510, d1)])
+        modelled = [
+            accumulate(
+                [
+                    (0, part_a),
+                    (
+                        0,
+                        probe_sum(
+                            [
+                                (168, d1),
+                                (342, d2),
+                                (2, float(np.float32((start + j) * 2.0 ** (eb - 28)))),
+                            ]
+                        ),
+                    ),
+                ]
+            )
+            for j in range(steps)
+        ]
+        same = sum(m == h for m, h in zip(modelled, values, strict=True))
+        result["accumulator: steps equal"] += same
+        result["accumulator: cases equal at every step"] += int(same == steps)
+        result["steps"] += steps
         # the exact sum reaches the tie at step need - start; the hardware's first step above it
         flips = [j for j in range(steps) if values[j] > values[0]]
         exact_flip = need - start
@@ -625,9 +781,128 @@ def dial(probe: Probe) -> dict[str, int]:
     return dict(result)
 
 
+Family = Callable[[np.random.Generator, tuple[int, ...]], np.ndarray]
+FAMILIES: dict[str, Family] = {
+    # 24-bit mantissas over 24 octaves
+    "wide": lambda rng, shape: rng.integers(1 << 23, 1 << 24, shape)
+    * np.exp2(-24.0 - rng.integers(0, 24, shape)),
+    "dark 16-bit": lambda rng, shape: np.floor(np.exp2(rng.uniform(0, 16, shape))) / 65535,
+    "dark 8-bit": lambda rng, shape: np.floor(np.exp2(rng.uniform(0, 8, shape))) / 255,
+    # uniform 16-bit codes, a fifth of them 0 and a tenth 65535
+    "uniform 16-bit with 0 and 1": lambda rng, shape: np.select(
+        [(r := rng.random(shape)) < 0.2, r < 0.3], [0, 65535], rng.integers(0, 65536, shape)
+    )
+    / 65535,
+    # 3-bit mantissas over 20 octaves
+    "sparse": lambda rng, shape: rng.integers(4, 8, shape)
+    / 8
+    * np.exp2(-rng.integers(0, 20, shape).astype(np.float64)),
+}
+# (a, b, bias, sign, minor sign, axis, swap, family): the footprints the accumulator rule was
+# found on (decision 083) and footprints held out of the search.
+Footprint = tuple[float, float, float, int, int, int, bool, str]
+FOUND_ON: list[Footprint] = [
+    (3.0, 1.2, 0.0, 1, 1, 0, False, "wide"),
+    (3.0, 1.2, 0.0, -1, 1, 0, False, "wide"),
+    (3.0, 1.2, 0.0, 1, 1, 1, False, "wide"),
+    (3.0, 1.2, 0.0, -1, 1, 1, False, "wide"),
+    (10.0, 2.5, 0.0, 1, 1, 0, False, "wide"),
+    (10.0, 2.5, 0.0, -1, 1, 0, False, "wide"),
+    (10.0, 2.5, 0.0, 1, 1, 1, False, "wide"),
+    (10.0, 2.5, 0.0, -1, 1, 1, False, "wide"),
+    (6.0, 2.0, 0.0, 1, 1, 0, False, "wide"),
+    (6.0, 2.0, 0.0, -1, 1, 0, False, "wide"),
+    (7.371, 2.945, -1.5, 1, 1, 0, False, "wide"),
+    (8.98, 1.733, 0.0, 1, 1, 0, False, "wide"),
+    (5.5, 2.0, -0.25, 1, 1, 0, False, "wide"),
+    (20.0, 3.0, -1.5, 1, 1, 0, False, "wide"),
+    (2.5, 1.0, 0.5, 1, 1, 0, False, "wide"),
+    (1.5, 1.0, -8.0, 1, 1, 0, False, "wide"),
+    (12.0, 4.0, 0.0, -1, -1, 1, True, "wide"),
+    (1.2825, 1.2825, -1.5, 1, 1, 0, False, "wide"),
+    (1.6, 1.6, 0.0, 1, 1, 0, False, "wide"),
+    (1.212, 1.212, 0.0, 1, 1, 0, False, "wide"),
+    (1.3, 1.3, 0.0, 1, 1, 0, False, "wide"),
+    (2.5, 2.5, 0.0, 1, 1, 0, False, "wide"),
+    (1.25, 1.1, 0.0, 1, 1, 0, False, "wide"),
+]
+HELD_OUT: list[Footprint] = [
+    (4.7, 1.3, -1.5, 1, 1, 0, False, "wide"),
+    (5.13, 5.13, 0.0, 1, -1, 0, False, "wide"),
+    (13.2, 5.13, 0.0, 1, -1, 0, False, "dark 16-bit"),
+    (2.2, 1.9, -1.5, -1, 1, 1, False, "wide"),
+    (7.77, 7.77, -1.5, 1, -1, 0, False, "sparse"),
+    (3.6, 1.1, 0.0, -1, -1, 1, True, "uniform 16-bit with 0 and 1"),
+    (9.5, 2.1, -0.75, 1, 1, 1, True, "dark 8-bit"),
+    (1.9, 1.05, 0.0, 1, 1, 0, False, "sparse"),
+    (16.6, 4.0, 0.0, -1, 1, 0, False, "wide"),
+    (2.9, 2.0, 0.3, 1, -1, 1, False, "uniform 16-bit with 0 and 1"),
+]
+
+
+def footprint_samples(
+    probe: Probe, footprint: Footprint, seed: int, n: int = 20000
+) -> dict[str, Any]:
+    """Random texels on the two levels of one footprint, every channel: the hardware against the
+    exact sum (decision 071) and the accumulator (decision 083)."""
+    a, b, bias, sign, minor_sign, axis, swap, family = footprint
+    rng = np.random.default_rng(seed)
+    lam = int(lod(probe, np.array([a]), np.array([b]), bias)[0])
+    lower = max(lam, 0) >> 8
+    geometry = []
+    for k in (lower, lower + 1):
+        m = marginals(probe, np.array([a]), np.array([b]), bias, k, sign, axis, swap)
+        g = decode(m[0], axis == 1)
+        assert isinstance(g, tuple), g
+        geometry.append(g)
+    size = 256
+    levels = empty(size)
+    for k in (lower, lower + 1):
+        levels[k][...] = FAMILIES[family](rng, levels[k].shape)
+    u = ((rng.integers(0, 256 * size, n) / 256 + 0.5) / size).astype(np.float32)
+    v = ((rng.integers(0, 256 * size, n) / 256 + 0.5) / size).astype(np.float32)
+    ddx, ddy = footprint_gradients(a, b, size, sign, axis, swap, minor_sign)
+    got = sample(probe, levels, u, v, ddx, ddy, bias)
+    equal = modelled = 0
+    for c in range(4):
+        channel = [level[..., c] for level in levels]
+        for i in range(n):
+            ordered = ordered_probes(channel, float(u[i]), float(v[i]), lower, geometry, sign, axis)
+            equal += ties_up(*exact_sum([taps for _, taps in ordered], 10)) == got[i, c]
+            modelled += accumulate([(k, probe_sum(taps)) for k, taps in ordered]) == got[i, c]
+    return {
+        "footprint": f"{a} x {b}, bias {bias}, sign {sign}/{minor_sign}, axis {axis}"
+        + (", swapped" if swap else "")
+        + f", {family}",
+        "lambda": lam,
+        "geometry": geometry,
+        "samples": 4 * n,
+        "exact sum equal": equal,
+        "accumulator equal": modelled,
+    }
+
+
+def accumulator_found_on(probe: Probe) -> dict[str, Any]:
+    rows = [footprint_samples(probe, f, 100 + i) for i, f in enumerate(FOUND_ON)]
+    return {
+        "footprints": rows,
+        "samples": sum(r["samples"] for r in rows),
+        "accumulator equal": sum(r["accumulator equal"] for r in rows),
+    }
+
+
+def accumulator_held_out(probe: Probe) -> dict[str, Any]:
+    rows = [footprint_samples(probe, f, 200 + i) for i, f in enumerate(HELD_OUT)]
+    return {
+        "footprints": rows,
+        "samples": sum(r["samples"] for r in rows),
+        "accumulator equal": sum(r["accumulator equal"] for r in rows),
+    }
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) != 1:
-        print("usage: python -m tools.parity.vk_sampler_probe.replica_gates <work-dir>")
+    if not argv:
+        print("usage: python -m tools.parity.vk_sampler_probe.replica_gates <work-dir> [gate ...]")
         return 2
     probe = Probe(Path(argv[0]))
     sections: dict[str, Callable[[Probe], dict[str, Any]]] = {
@@ -635,8 +910,14 @@ def main(argv: list[str]) -> int:
         "gate 2: key sufficiency": key_sufficiency,
         "gate 2: geometry cells": geometry_cells,
         "gate 3: accumulation": accumulation,
+        "gate 3: accumulator, footprints it was found on": accumulator_found_on,
+        "gate 3: accumulator, held-out footprints": accumulator_held_out,
     }
+    # Optional gate numbers select sections ("3" runs the gate-3 sections only).
+    wanted = argv[1:]
     for name, section in sections.items():
+        if wanted and name.split(":")[0].split()[1] not in wanted:
+            continue
         print(json.dumps({name: section(probe)}, indent=1, default=int), flush=True)
     return 0
 
