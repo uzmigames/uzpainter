@@ -1,0 +1,13 @@
+{
+  "id": 90,
+  "slug": "export-processing-writes-only-what-the-recordings-decide-and-refuses-the-rest-before-writing-until-recording-r-090",
+  "title": "Export processing writes only what the recordings decide and refuses the rest before writing, until recording R-090",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.16_export-processing-encoders",
+    "phase1.18_export-engine",
+    "phase1.15_export-plan-compiler"
+  ],
+  "supersededBy": null
+}

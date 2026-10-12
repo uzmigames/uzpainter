@@ -156,8 +156,8 @@ Resolved ResolveMesh(const ChannelSpec& spec, const Root& root, const std::strin
         return r;
     }
     if (usage != core::MeshMapUsage::Normal) {
-        Gap(what, "exporting the meshMap \"" + spec.name + "\" at its native precision is not implemented",
-            "phase1.16_export-processing-encoders");
+        Gap(what, "exporting the meshMap \"" + spec.name + "\" (a mesh map other than normal_base) is not recorded",
+            "export-processing recording R-090 (decision 090)");
     }
     r.source.meshMap = usage;
     r.source.components = 3;
@@ -871,7 +871,7 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
                     return evaluator::EvalFail(evaluator::EvalErrorKind::UnsupportedSource,
                                                "the luma of the sRGB8 channel " + s.name +
                                                    " where it holds its base value (no layer) needs the base's linear "
-                                                   "value (phase1.16_export-processing-encoders)");
+                                                   "value (phase1.18_export-engine: sRGB8 material-channel fit, decision 090)");
                 }
                 evaluated[key] = evaluator::MapOf(*result);
                 break;

@@ -7,8 +7,9 @@ Usage:
 
 For each library: download the pinned archive into the cache (or reuse it) and check its SHA-256,
 extract it into a fresh folder under `--staging` (outside both repositories), select the files
-of the table, byte-compare the package with UzEngine's copy at the selected commit (read from the
-commit's blobs, never from a working tree) and fail if a difference has no recorded cause. Then
+of the table, apply its recorded local changes (`LocalChange`, decision 089), byte-compare the
+package with UzEngine's copy at the selected commit (read from the commit's blobs, never from a
+working tree) and fail if a difference has no recorded cause. Then
 copy the selected files into `thirdparty/<folder>/` and write `MANIFEST.json` and `ORIGIN.md`.
 A folder that already holds exactly the selected bytes only gets its metadata rewritten; any
 other existing content is an error. Evidence is written to `<staging>/thirdparty-evidence.json`.
@@ -35,6 +36,7 @@ from tools.vendoring.thirdparty import (
     ComparedFile,
     Library,
     LibraryManifest,
+    apply_local_changes,
     build_manifest,
     compare,
     default_cache,
@@ -81,7 +83,7 @@ def stage(
     root = extracted / lib.archive_root if lib.archive_root else extracted
     names = list_files(root)
     selected = select_files(lib, names, root)
-    data = {path: (root / path).read_bytes() for path in selected}
+    data = apply_local_changes(lib, {path: (root / path).read_bytes() for path in selected})
     copy = uzengine_copy(uzengine, lib)
     name_set = set(names)
     upstream = {path: (root / path).read_bytes() for path in copy if path in name_set}

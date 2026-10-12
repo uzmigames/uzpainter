@@ -1,0 +1,12 @@
+{
+  "id": 89,
+  "slug": "the-export-writes-painters-png-and-openexr-bytes-with-its-own-png-encoder-over-zlib-and-tinyexr-with-openexrs-huffman-tie-break",
+  "title": "The export writes Painter's PNG and OpenEXR bytes, with its own PNG encoder over zlib and tinyexr with OpenEXR's Huffman tie-break",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.16_export-processing-encoders",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}

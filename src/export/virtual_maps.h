@@ -98,8 +98,8 @@ struct VirtualMapResult {
 
 /// The meshMap pass-through of revision `revision`: `normal_base` (MeshMapUsage::Normal) is the
 /// geometry-only normal in the project's convention (height_to_normal.h), tagged
-/// `geometry_only`. Every other mesh map fails with `evaluator:unsupported_source` (its native
-/// precision export belongs to phase1.16_export-processing-encoders).
+/// `geometry_only`. Every other mesh map fails with `evaluator:unsupported_source`: no recording
+/// shows Painter exporting one (recording R-090, decision 090).
 [[nodiscard]] render::Result<VirtualMapResult> EvaluateMeshMapOn(const core::Project& project, std::int64_t revision,
                                                                  core::MeshMapUsage usage,
                                                                  const VirtualMapRequest& request,

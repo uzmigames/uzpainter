@@ -30,8 +30,10 @@ from tools.vendoring.thirdparty import (
     UZENGINE_COMMIT,
     ComparedFile,
     Library,
+    LocalChange,
     VendoredFile,
     application_include_problems,
+    apply_local_changes,
     build_manifest,
     classify,
     compare,
@@ -76,6 +78,37 @@ def test_classify() -> None:
     assert classify(b"a\nb\n", up_sha, up_lf) == "line-endings"
     assert classify(b"a\nc\n", up_sha, up_lf) == "different"
     assert classify(b"x", None, None) == "uzengine-only"
+
+
+def test_apply_local_changes() -> None:
+    """A recorded change replaces its upstream text once; a missing file, an absent or a repeated
+    upstream text is refused (decision 089)."""
+    change = LocalChange("a.h", "return x;", "return y;", "cause")
+    lib = _lib(local_changes=(change,))
+    members = {"a.h": b"int f() { return x; }", "b.h": b"return x;"}
+    assert apply_local_changes(lib, members) == {
+        "a.h": b"int f() { return y; }",
+        "b.h": b"return x;",
+    }
+    assert apply_local_changes(_lib(), members) == members
+    for bad in ({"b.h": b""}, {"a.h": b"none"}, {"a.h": b"return x; return x;"}):
+        with pytest.raises(ValueError):
+            apply_local_changes(lib, bad)
+
+
+def test_local_changes_are_recorded_in_origin() -> None:
+    """Only tinyexr carries a local change: its ORIGIN.md lists it, and its vendored header holds
+    the replacement once and the upstream text nowhere."""
+    changed = [lib for lib in LIBRARIES if lib.local_changes]
+    assert [lib.name for lib in changed] == ["tinyexr"]
+    for lib in changed:
+        origin = (REPO_ROOT / lib.path / "ORIGIN.md").read_text(encoding="utf-8")
+        assert "## Local changes" in origin
+        for change in lib.local_changes:
+            text = (REPO_ROOT / lib.path / change.path).read_text(encoding="utf-8")
+            assert text.count(change.replacement) == 1
+            assert change.upstream not in text
+            assert change.replacement.strip() in origin
 
 
 def test_compare_and_unexplained() -> None:
@@ -206,7 +239,8 @@ def test_archive_hash_and_selection_reproduce(
     lib: Library, archives: dict[str, Path], tmp_path: Path
 ) -> None:
     """The archive SHA-256 recomputes to ORIGIN.md's value, the selection rule reproduces the
-    vendored file list, and every vendored file equals its archive member byte for byte."""
+    vendored file list, and every vendored file equals its archive member byte for byte, with the
+    library's recorded local changes applied (decision 089)."""
     archive = archives[lib.name]
     digest = sha256_hex(archive.read_bytes())
     manifest = load_manifest(REPO_ROOT, lib)
@@ -216,7 +250,7 @@ def test_archive_hash_and_selection_reproduce(
     root = tmp_path / lib.archive_root if lib.archive_root else tmp_path
     selected = select_files(lib, list_files(root), root)
     assert selected == [f.path for f in manifest.files]
-    members = read_archive(archive, lib.archive_root, set(selected))
+    members = apply_local_changes(lib, read_archive(archive, lib.archive_root, set(selected)))
     for path in selected:
         assert (REPO_ROOT / lib.path / path).read_bytes() == members[path], path
 

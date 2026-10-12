@@ -228,8 +228,8 @@ struct SourceInputs {
 };
 
 /// A planned file's content before processing: its channels in destination order, float32
-/// values at the texture set's resolution (sizeLog2, padding, dithering and encoding belong to
-/// phase1.16_export-processing-encoders), or the canonical statistics JSON of a statistics file.
+/// values at the texture set's resolution (padding and encoding: padding.h, encode.h), or the
+/// canonical statistics JSON of a statistics file.
 struct FileRaster {
     uint32_t width = 0;
     uint32_t height = 0;

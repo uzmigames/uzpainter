@@ -9,6 +9,11 @@ Task `phase1.15_export-plan-compiler` (child of `phase1.18_export-engine`, P1-EX
 | `config.{h,cpp}` | `ParseConfig`: Painter's `json_config` dictionary read verbatim (export.html, "Full json_config dict possibilities") into `ExportConfig`. Checks every project-independent identifier: keys, channel letters and destination sets, `srcMapType`, the documented `srcMapName`s of each type, decision 076's `diagnosticMap` grammar, file formats, bit depths, padding algorithms, `sizeLog2`, preset references. `Nearest` orders the valid alternatives of an unknown name. |
 | `plan.{h,cpp}` | `CompilePlan`: the configuration against a project (texture sets, stacks, channels, bound mesh maps) into `ExportPlan`, every output file with its sources, parameters, size, name and format, the maps skipped and the plan hash; `PlanJson` (schema `uzpainter/export-plan/1`); `FilesByStack` / `ListProjectTextures`, the dry run in `list_project_textures`'s shape; `EvaluateFileOn`, a planned file's channels evaluated on a tile store. |
 | `virtual_maps.{h,cpp}` | The documented virtual maps and their support (`Support`); `EvaluateVirtualMapOn` (the combined normals of `evaluator/height_to_normal.h`) and `EvaluateMeshMapOn` (the `normal_base` geometry-only pass-through). |
+| `encode.{h,cpp}` | (phase1.16, decisions 089 and 090) `CheckProcessing`: the processing a planned file asks for, refused with `NotYetSupported` outside the recorded domain (§4); `EncodeFile`: a padded raster to the PNG or OpenEXR bytes (or the statistics JSON). |
+| `padding.{h,cpp}` | (phase1.16) `CheckPadding` / `ApplyPadding` over the texture set's texel-centre UV coverage (§4). |
+| `png_writer.{h,cpp}` | (phase1.16) `EncodePng`: UzPainter's own PNG encoder over the vendored zlib, byte-identical to Painter's files. |
+| `exr_writer.{h,cpp}`, `tinyexr_unit.cpp` | (phase1.16) `EncodeExr` / `DecodeExr` over the vendored tinyexr (one recorded local change), byte-identical to Painter's files; `tinyexr_unit.cpp` is the third-party translation unit of tinyexr's implementation. |
+| `write.{h,cpp}` | (phase1.16) `WriteExport`: every planned file checked, then evaluated, padded and encoded in memory, then written under exportPath (generations and receipts: phase1.17). |
 
 Both `uzp-export-tests.exe` and `UzPainter.exe` compile these sources (`build.zig`, `export_sources`). The Python bindings (`uzpainter.export.plan`, `substance_painter.export.list_project_textures`) are `phase1.19_pyapi-native-module` item 2.7.
 
@@ -30,7 +35,7 @@ Painter's documented semantics, with the Tier 0 recordings and the export probes
   - not recorded (R-091): a mesh or project file name with more than one dot, a renamed set's `$sceneMaterial`, a group with both empty and non-empty wildcards, a `)` after no literal `(`, a third equal path;
   - two entries' files with one path, and paths equal only ignoring case: Painter lists both, but the file a case-insensitive file system keeps depends on a write order not recorded. Both are named.
 - **Channels.** The destination sets are L, L+A, R+G+B and R+G+B+A. `srcChannel` L, R, G or B of a one-component source reads its value. R, G or B of a three-component source reads that component. L of a three-component source reads the Rec. 601 luma of its linear components, `fma(0.114, b, fma(0.299, r, 0.587 g))` in float32 (probe P5; the luma of an sRGB8 channel's base value is refused at evaluation, the evaluator holding its export value). Any letter of a `defaultMap` reads its constant. A of any other source is recorded only at full and no coverage (probe P6) and is refused.
-- **Normal sources.** `Normal_OpenGL` and `Normal_DirectX` need a Height and a Normal channel at plan time. Their other limits (set size, a bound Normal mesh map) belong to the evaluator, which refuses them with `unsupported_source` (`NotYetSupported`) when the export evaluates every file, before any write. `meshMap normal_base` is the geometry-only pass-through. Other mesh maps at native precision belong to `phase1.16`.
+- **Normal sources.** `Normal_OpenGL` and `Normal_DirectX` need a Height and a Normal channel at plan time. Their other limits (set size, a bound Normal mesh map) belong to the evaluator, which refuses them with `unsupported_source` (`NotYetSupported`) when the export evaluates every file, before any write. `meshMap normal_base` is the geometry-only pass-through. Other mesh maps are refused until recording R-090 (decision 090).
 - **Diagnostics** (decision 076, `08-export.md` §6). A `diagnosticMap` source resolves in the stacks that hold its node and is absent in the others. A node in no exported stack is invalid, and so is a channel the stack lacks. A `regionStats` source is a statistics file: the map's only channel (destination L), written as canonical JSON (`<name>.json`). Anywhere else it is invalid.
 - **Plan hash.** The SHA-256 of the canonical JSON of the plan without its `hash` member (`core::json::WriteCanonical`): the same project and configuration give the same bytes.
 
@@ -41,3 +46,26 @@ Painter's documented semantics, with the Tier 0 recordings and the export probes
 - `AO_Mixed`: the best model of recording R-086a misses r1 at 31 values, each a few ulps from a 2^-12 boundary; no correctly rounded float32 evaluation of the tested inputs reproduces them, and Painter's arithmetic there is not identified (recording R-092).
 - `Diffuse`, `Specular`, `Glossiness`, `Glossiness2`, `Unity4Diff`, `Unity4Gloss`, `reflection`, `1/ior`, `f0`: fitted exactly on recording R-086b at PNG 16 and OpenEXR 32f. They read each channel's per-texel coverage, which the evaluator does not give, and fixed inputs where a channel has no layer, seen on one template only (recording R-092).
 - `View_2D`: a shaded render of the 2D view, not an operator on the channels.
+
+## 4. Processing and encoders (decisions 089 and 090)
+
+Task `phase1.16_export-processing-encoders`. Local run report: `parity/reports/phase1/export-processing-encoders.md`. Published semantics: `parity/semantics/export-processing.json` (re-derived by `python tests/export/encoders_tier0.py`). Tests: `tests/export/test_export_encoders.py`.
+
+- **Writers (decision 089).**
+  - PNG: UzPainter's own encoder over zlib. Chunks IHDR, pHYs (2835 per metre), IDAT and IEND. Rows are filtered with None, Sub or Paeth by the minimum sum of min(b, 256 - b), ties to the earlier. One zlib stream (level 6, window bits 15, memory level 8, Z_FILTERED) is split into 8192-byte IDATs.
+  - OpenEXR: tinyexr, single-part scanline, PIZ, FLOAT channels `Y`, `B G R` or `A B G R`, with OpenEXR's Huffman heap tie-break as its one local change.
+  - Every distinct PNG (1027) and OpenEXR (267) file Painter exported in the current envelope, decoded and encoded again, is byte-identical. That covers grey, RGB and RGBA, PNG 8 and 16, and OpenEXR 32f.
+- **Values.**
+  - The evaluator's read-out of each channel (an sRGB8 User channel as its linear operand).
+  - PNG 16: the UNORM write rule (`arith::WriteUnorm`).
+  - OpenEXR 32f: the float unchanged.
+  - Written end to end by `WriteExport`, the recorded export steps of the height-normal plane goldens give Painter's bytes: 148 of 148 files.
+- **Padding.**
+  - With complete UV coverage, `infinite` and `passthrough` change nothing.
+  - With incomplete coverage, `passthrough` is no operation; Painter's own texels outside the islands are session state.
+  - Refused with incomplete coverage: `infinite`, and `passthrough` of meshMap and virtualMap sources (recording R-090).
+- **Refused before anything is written** (`NotYetSupported`):
+  - naming R-090: PNG 8, OpenEXR 16f, the L+A layout, an sRGB8 channel in OpenEXR, dithering, resize, and the `color`, `transparent` and `diffusion` paddings;
+  - naming decision 090, recorded but not fitted: sRGB8 material channels such as BaseColor (sRGB-encoded on export) and the RGB+A layout.
+- **Order.** `WriteExport` checks every file's processing and padding, then evaluates, pads and encodes every file in memory, and only then writes. A refusal or an evaluation failure leaves nothing written. Two runs in two processes write identical bytes.
+

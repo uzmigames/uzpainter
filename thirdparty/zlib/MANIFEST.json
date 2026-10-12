@@ -98,6 +98,11 @@
       "size": 8472
     },
     {
+      "path": "uncompr.c",
+      "sha256": "953f5381650838d507b01499790bd64524433ea6ea29ea9325bf542af10cfe7d",
+      "size": 3711
+    },
+    {
       "path": "zconf.h",
       "sha256": "cb7c2c84211473b4699223edd363d3207b43b9578e739b5bf638f42204ea6e0f",
       "size": 16955
@@ -140,6 +145,7 @@
     "inftrees.h",
     "trees.c",
     "trees.h",
+    "uncompr.c",
     "zconf.h",
     "zlib.h",
     "zutil.c",

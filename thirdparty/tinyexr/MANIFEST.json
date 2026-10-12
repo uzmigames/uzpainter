@@ -1,0 +1,61 @@
+{
+  "library": "tinyexr",
+  "upstream": "https://github.com/syoyo/tinyexr",
+  "version": "v3.2.0",
+  "commit": "6f470c9ab24bf3992bc512ce07e8ecb00d9bf105",
+  "archive_url": "https://github.com/syoyo/tinyexr/archive/refs/tags/v3.2.0.tar.gz",
+  "archive_sha256": "df2bd61124a35d8138f8b0bc22418a1d4fe33622c818e0e022f5522afc0821b0",
+  "archive_root": "tinyexr-3.2.0/",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "b90388aaadc2b6f77a5c01278697a2a0539eab471a3befc6a081728becdc3390",
+      "size": 1549
+    },
+    {
+      "path": "exr_reader.hh",
+      "sha256": "9e0bfef0487b9c3082165b2a637c75ef91d9fcc4aa55a5f32eb97f77db19f99b",
+      "size": 4645
+    },
+    {
+      "path": "streamreader.hh",
+      "sha256": "81f2d1502930ca9ca9957e7607c2a7924d3ef2fe4b08b1a4001245dc6d3fefb6",
+      "size": 3782
+    },
+    {
+      "path": "tinyexr.h",
+      "sha256": "9d434c3ddd345695d10a2f7b37131331a35edb6406588cc21ae1a7a6e7b77339",
+      "size": 385857
+    }
+  ],
+  "uzengine_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
+  "uzengine_dir": "runtime/thirdparty/tinyexr",
+  "comparison": [
+    {
+      "path": "miniz.c",
+      "uzengine_blob": "6e7e2184c67686710275f2f45ced97505c13ed10",
+      "upstream_sha256": null,
+      "upstream_lf_sha256": null,
+      "result": "uzengine-only"
+    },
+    {
+      "path": "miniz.h",
+      "uzengine_blob": "9fcfffcc8cd7ac9e9d9af271cffdbc8d0a58a9ea",
+      "upstream_sha256": null,
+      "upstream_lf_sha256": null,
+      "result": "uzengine-only"
+    },
+    {
+      "path": "tinyexr.h",
+      "uzengine_blob": "64ee67f2c6a52c04de3aae4b58200dba2e7d61a7",
+      "upstream_sha256": "b1d33ca1350d64e2b9a199614991cffd45d7982ff3d68f107020a1230bde38ec",
+      "upstream_lf_sha256": "b1d33ca1350d64e2b9a199614991cffd45d7982ff3d68f107020a1230bde38ec",
+      "result": "different"
+    }
+  ],
+  "not_in_uzengine": [
+    "LICENSE",
+    "exr_reader.hh",
+    "streamreader.hh"
+  ]
+}

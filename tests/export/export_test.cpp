@@ -11,6 +11,19 @@
 //       Builds the project of an evaluator spec, compiles the configuration and evaluates every
 //       planned file on the CPU store (`EvaluateFileOn`); writes <out>/index.json and one raw
 //       float32 file per planned file (<out>/<n>.f32).
+//   uzp-export-tests export <templates dir> <spec.json> <config.json>
+//       (phase1.16) Builds the project of a spec (with "mesh": an OBJ path, the texturing mesh whose
+//       material per texture set gives the UV coverage), compiles the configuration and writes its
+//       files with `WriteExport`; prints {"plan": PlanJson, "list": the dry run, "written":
+//       [{rootPath, relativePath, path, size, sha256}]} or {"error": class, "message": text}.
+//   uzp-export-tests reencode <list.txt>
+//       (phase1.16) Each line a PNG or OpenEXR file: decoded at native depth (spng; DecodeExr) and
+//       encoded again with EncodePng / EncodeExr; prints one JSON line per file {"path", "format",
+//       "equal", "size", "encoded_size"} (whether the bytes are identical).
+//   uzp-export-tests roundtrip <out dir>
+//       (phase1.16) Encodes synthetic PNG16 and OpenEXR 32f images twice (ramps, runs, noise, signed
+//       zero, infinities, NaN payloads, odd sizes), decodes them back and writes the files; prints
+//       one JSON line per image {"name", "format", "decoded_equal", "repeat_equal", "sha256"}.
 //
 // A project skeleton: {"color_management"?, "workflow"?, "normal_map_format"?, "mesh"?: <mesh file
 // name>, "texture_sets": [{"name", "original_name"?, "resolution"?: [w, h], "mesh_maps"?:
@@ -24,9 +37,15 @@
 #include "evaluator/profile.h"
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
+#include "evaluator/geometry_mask.h"
 #include "export/config.h"
+#include "export/exr_writer.h"
 #include "export/plan.h"
+#include "export/png_writer.h"
 #include "export/virtual_maps.h"
+#include "export/write.h"
+#include "mesh/mesh_import.h"
+#include "spng.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/manifest/sha256.h"
@@ -34,12 +53,15 @@
 #include "uzp_core/types/validation.h"
 
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -287,6 +309,8 @@ struct Spec {
     core::Project project;
     std::string templateId{evaluator::kDefaultTemplateId};
     std::shared_ptr<evaluator::DecodingResourceProvider> resources;
+    /// The texturing mesh's coverage ("mesh": an OBJ path), null without one.
+    std::shared_ptr<const evaluator::IGeometryMaskProvider> geometry;
 };
 
 Spec ParseSpec(const fs::path& path) {
@@ -318,6 +342,10 @@ Spec ParseSpec(const fs::path& path) {
     set.resolution.width = static_cast<int>(Num(resolution.at(0), "width"));
     set.resolution.height = static_cast<int>(Num(resolution.at(1), "height"));
     set.uv_tiles.push_back(core::UVTile{project.AllocateId(), 1001, {}});
+    if (o.contains("mesh")) {
+        auto mesh = std::make_shared<mesh::TexturingMesh>(mesh::ImportMeshFile(Str(o.at("mesh"), "mesh"), {}).mesh);
+        spec.geometry = std::make_shared<evaluator::MeshGeometryMasks>(std::move(mesh));
+    }
     if (o.contains("height_to_normal_method")) {
         set.height_to_normal_method = EnumOf<core::HeightToNormalMethod>(
             Str(o.at("height_to_normal_method"), "height_to_normal_method"), "height to normal method");
@@ -404,6 +432,183 @@ int RunFiles(const fs::path& templatesDir, const fs::path& specPath, const fs::p
     return 0;
 }
 
+// ── Writers (phase1.16) ─────────────────────────────────────────────────────
+
+int RunExport(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath) {
+    const Spec spec = ParseSpec(specPath);
+    json::Object result;
+    try {
+        const exporter::ExportPlan plan = exporter::CompilePlan(spec.project, ReadText(configPath));
+        auto templates = std::make_shared<const evaluator::TemplateLibrary>(evaluator::TemplateLibrary::Load(templatesDir));
+        evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
+        exporter::SourceInputs inputs;
+        inputs.templateId = spec.templateId;
+        inputs.resources = spec.resources;
+        inputs.geometry = spec.geometry;
+        render::Result<std::vector<exporter::WrittenFile>> written =
+            exporter::WriteExport(spec.project, 1, plan, inputs, *templates, cpu.store(), cpu.cache());
+        if (!written) {
+            result["error"] = "Failure";
+            result["message"] = written.error().reason;
+        } else {
+            json::Array files;
+            for (const exporter::WrittenFile& f : *written) {
+                files.push_back(json::Object{{"rootPath", f.rootPath},
+                                             {"relativePath", f.relativePath},
+                                             {"path", f.path},
+                                             {"size", static_cast<std::int64_t>(f.size)},
+                                             {"sha256", f.sha256}});
+            }
+            result["plan"] = exporter::PlanJson(plan);
+            result["list"] = ListJson(exporter::FilesByStack(plan));
+            result["written"] = std::move(files);
+        }
+    } catch (const core::ValueError& e) {
+        result["error"] = "ValueError";
+        result["message"] = std::string(e.what());
+    } catch (const core::NotYetSupported& e) {
+        result["error"] = "NotYetSupported";
+        result["message"] = std::string(e.what());
+    }
+    std::cout << json::WriteCanonical(result) << "\n";
+    return 0;
+}
+
+/// An 8- or 16-bit grey, RGB or RGBA PNG decoded at native depth with spng.
+exporter::PngImage DecodePng(const std::string& data) {
+    std::unique_ptr<spng_ctx, decltype(&spng_ctx_free)> ctx(spng_ctx_new(0), &spng_ctx_free);
+    spng_ihdr ihdr{};
+    size_t size = 0;
+    if (spng_set_png_buffer(ctx.get(), data.data(), data.size()) != 0 || spng_get_ihdr(ctx.get(), &ihdr) != 0 ||
+        (ihdr.bit_depth != 8 && ihdr.bit_depth != 16) ||
+        (ihdr.color_type != SPNG_COLOR_TYPE_GRAYSCALE && ihdr.color_type != SPNG_COLOR_TYPE_TRUECOLOR &&
+         ihdr.color_type != SPNG_COLOR_TYPE_TRUECOLOR_ALPHA) ||
+        spng_decoded_image_size(ctx.get(), SPNG_FMT_PNG, &size) != 0) {
+        throw core::ManifestError("not an 8- or 16-bit grey, RGB or RGBA PNG");
+    }
+    const uint32_t channels = ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE ? 1u
+                              : ihdr.color_type == SPNG_COLOR_TYPE_TRUECOLOR ? 3u
+                                                                             : 4u;
+    exporter::PngImage image{ihdr.width, ihdr.height, channels, ihdr.bit_depth, {}};
+    // SPNG_FMT_PNG: the file's layout, 16-bit samples in host byte order.
+    std::vector<uint8_t> bytes(size);
+    if (spng_decode_image(ctx.get(), bytes.data(), size, SPNG_FMT_PNG, 0) != 0) {
+        throw core::ManifestError("spng could not decode the PNG");
+    }
+    if (ihdr.bit_depth == 8) {
+        image.samples.assign(bytes.begin(), bytes.end());
+    } else {
+        image.samples.resize(size / 2);
+        std::memcpy(image.samples.data(), bytes.data(), size);
+    }
+    return image;
+}
+
+int RunReencode(const fs::path& listPath) {
+    std::ifstream list(listPath);
+    std::string line;
+    while (std::getline(list, line)) {
+        if (line.empty()) continue;
+        const std::string data = ReadText(line);
+        json::Object result{{"path", line}, {"size", static_cast<std::int64_t>(data.size())}};
+        std::string encoded;
+        if (data.starts_with("\x89PNG")) {
+            result["format"] = "png";
+            encoded = exporter::EncodePng(DecodePng(data));
+        } else {
+            result["format"] = "exr";
+            encoded = exporter::EncodeExr(exporter::DecodeExr(data));
+        }
+        result["encoded_size"] = static_cast<std::int64_t>(encoded.size());
+        result["equal"] = encoded == data;
+        std::cout << json::WriteCanonical(result) << "\n";
+    }
+    return 0;
+}
+
+/// Synthetic PNG16 samples: a ramp through every code, a constant run and noise from a fixed LCG,
+/// by rows in turn.
+exporter::PngImage SyntheticPng(uint32_t width, uint32_t height, uint32_t channels) {
+    exporter::PngImage image{width, height, channels, 16, {}};
+    uint32_t state = 12345;
+    const size_t perRow = size_t{width} * channels;
+    for (size_t i = 0; i < perRow * height; ++i) {
+        state = state * 1664525u + 1013904223u;
+        const size_t kind = (i / perRow) % 3;
+        image.samples.push_back(static_cast<uint16_t>(kind == 0 ? i % 65536 : kind == 1 ? 32768 : state >> 16));
+    }
+    return image;
+}
+
+/// Synthetic float32 values: a ramp with edge and special values bit for bit (signed zero,
+/// subnormal, maximum, infinities, NaN payloads).
+exporter::ExrImage SyntheticExr(uint32_t width, uint32_t height, uint32_t channels) {
+    const std::array<float, 13> specials{0.0f,
+                                         -0.0f,
+                                         1.0f,
+                                         -1.0f,
+                                         std::numeric_limits<float>::denorm_min(),
+                                         std::numeric_limits<float>::max(),
+                                         -std::numeric_limits<float>::infinity(),
+                                         std::numeric_limits<float>::infinity(),
+                                         std::bit_cast<float>(0x7FC00001u),
+                                         std::bit_cast<float>(0xFFA00000u),
+                                         0.333333343f,
+                                         65504.0f,
+                                         1e-30f};
+    exporter::ExrImage image{width, height, channels, {}};
+    for (size_t i = 0; i < size_t{width} * height * channels; ++i) {
+        const size_t k = i % 97;
+        image.values.push_back(k < specials.size() ? specials[k] : static_cast<float>(i) / 4093.0f - 7.5f);
+    }
+    return image;
+}
+
+bool SameBits(const std::vector<float>& a, const std::vector<float>& b) {
+    return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](float x, float y) {
+               return std::bit_cast<uint32_t>(x) == std::bit_cast<uint32_t>(y);
+           });
+}
+
+int RunRoundtrip(const fs::path& out) {
+    fs::create_directories(out);
+    const auto emit = [&](const std::string& name, const std::string& format, bool decodedEqual, const std::string& a,
+                          const std::string& b) {
+        std::ofstream(out / name, std::ios::binary).write(a.data(), static_cast<std::streamsize>(a.size()));
+        std::cout << json::WriteCanonical(json::Object{{"name", name},
+                                                       {"format", format},
+                                                       {"decoded_equal", decodedEqual},
+                                                       {"repeat_equal", a == b},
+                                                       {"sha256", core::Sha256Hex(a)}})
+                  << "\n";
+    };
+    const std::array<std::array<uint32_t, 3>, 5> sizes{
+        {{1, 1, 1}, {257, 33, 3}, {64, 64, 1}, {300, 70, 3}, {33, 17, 4}}};
+    for (const auto& [w, h, c] : sizes) {
+        const std::string suffix = std::to_string(w) + "x" + std::to_string(h) + "x" + std::to_string(c);
+        for (const uint32_t bits : {16u, 8u}) {
+            exporter::PngImage png = SyntheticPng(w, h, c);
+            png.bitDepth = bits;
+            if (bits == 8) {
+                for (uint16_t& sample : png.samples) sample &= 0xFF;
+            }
+            const std::string pngBytes = exporter::EncodePng(png);
+            const exporter::PngImage back = DecodePng(pngBytes);
+            emit("synthetic-" + suffix + (bits == 8 ? "-8" : "") + ".png", "png",
+                 back.width == w && back.height == h && back.channels == c && back.bitDepth == bits &&
+                     back.samples == png.samples,
+                 pngBytes, exporter::EncodePng(png));
+        }
+        const exporter::ExrImage exr = SyntheticExr(w, h, c);
+        const std::string exrBytes = exporter::EncodeExr(exr);
+        const exporter::ExrImage exrBack = exporter::DecodeExr(exrBytes);
+        emit("synthetic-" + suffix + ".exr", "exr",
+             exrBack.width == w && exrBack.height == h && exrBack.channels == c && SameBits(exrBack.values, exr.values),
+             exrBytes, exporter::EncodeExr(exr));
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -411,10 +616,14 @@ int main(int argc, char** argv) {
     try {
         if (args.size() == 2 && args[0] == "plan") return RunPlan(args[1]);
         if (args.size() == 5 && args[0] == "files") return RunFiles(args[1], args[2], args[3], args[4]);
+        if (args.size() == 4 && args[0] == "export") return RunExport(args[1], args[2], args[3]);
+        if (args.size() == 2 && args[0] == "reencode") return RunReencode(args[1]);
+        if (args.size() == 2 && args[0] == "roundtrip") return RunRoundtrip(args[1]);
     } catch (const std::exception& e) {
         std::cerr << "uzp-export-tests: " << e.what() << "\n";
         return 2;
     }
-    std::cerr << "usage: uzp-export-tests plan <cases.json> | files <templates> <spec.json> <config.json> <out>\n";
+    std::cerr << "usage: uzp-export-tests plan <cases.json> | files <templates> <spec.json> <config.json> <out> | "
+                 "export <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out>\n";
     return 2;
 }

@@ -216,6 +216,7 @@ const app_thirdparty_include_dirs = [_][]const u8{
     "thirdparty/embree/include",
     "thirdparty/zlib",
     "thirdparty/spng/spng",
+    "thirdparty/tinyexr",
     "thirdparty/cpython-dev/include",
     "thirdparty/pybind11/include",
 };
@@ -229,6 +230,7 @@ const zlib_sources = [_][]const u8{
     "inflate.c",
     "inftrees.c",
     "trees.c",
+    "uncompr.c",
     "zutil.c",
 };
 /// spng without DLL import/export decorations, on zlib (`SPNG_USE_MINIZ` undefined).
@@ -290,9 +292,17 @@ const evaluator_sources = [_][]const u8{
 /// `src/`: compiled with the evaluator into `UzPainter.exe` and into `uzp-export-tests.exe`.
 const export_sources = [_][]const u8{
     "export/config.cpp",
+    "export/encode.cpp",
+    "export/exr_writer.cpp",
+    "export/padding.cpp",
     "export/plan.cpp",
+    "export/png_writer.cpp",
     "export/virtual_maps.cpp",
+    "export/write.cpp",
 };
+/// tinyexr's implementation (`thirdparty/tinyexr/`, decision 089), one translation unit of
+/// third-party code relative to `src/`: compiled without UzPainter's warning flags.
+const tinyexr_unit = "export/tinyexr_unit.cpp";
 /// spng is linked statically wherever the evaluator is (its bitmap decoder, `sources.h`).
 const evaluator_flags = cxx_flags ++ own_warning_flags ++ [_][]const u8{ "-ffp-contract=off", "-DSPNG_STATIC" };
 /// The project templates the evaluator reads (`src/evaluator/templates.h`), installed beside the
@@ -1105,6 +1115,7 @@ pub fn build(b: *std.Build) void {
         .files = &export_sources,
         .flags = &evaluator_flags,
     });
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
     app_mod.linkLibrary(uzp_core_lib);
     const install_templates = b.addInstallDirectory(.{
         .source_dir = b.path(templates_dir),
@@ -1184,6 +1195,7 @@ pub fn build(b: *std.Build) void {
         .files = &export_sources,
         .flags = &evaluator_flags,
     });
+    export_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
     export_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
         .files = &evaluator_sources,
@@ -1202,6 +1214,7 @@ pub fn build(b: *std.Build) void {
     export_tests_mod.linkLibrary(core_lib);
     export_tests_mod.addIncludePath(b.path("thirdparty/spng/spng"));
     export_tests_mod.addIncludePath(b.path("thirdparty/zlib"));
+    export_tests_mod.addIncludePath(b.path("thirdparty/tinyexr"));
     export_tests_mod.linkLibrary(mesh_lib);
     export_tests_mod.linkLibrary(uzp_core_lib);
     for (system_libraries) |name| export_tests_mod.linkSystemLibrary(name, .{});
