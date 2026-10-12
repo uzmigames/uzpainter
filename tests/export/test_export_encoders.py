@@ -502,8 +502,9 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
     """2.6 (decision 126): on a template whose BaseColor base is inferred (Unreal Engine), every
     export source that reads BaseColor fails its evaluation (`unsupported_source`) before anything
     is written: the documentMap on sRGB8 and on RGB16, and the diagnosticMap sources isolated,
-    contribution, regionStats and materialView of BaseColor. On the default template, whose base
-    is observed, the same diagnostic sources are written."""
+    contribution, regionStats, materialView and materialLeaks of BaseColor (leaks compare the
+    channel's full and solo read-outs). On the default template, whose base is observed, the same
+    diagnostic sources are written."""
 
     def variant(name: str, template: str | None, basecolor: str = "sRGB8") -> Path:
         document = json.loads(spec(tmp_path / "spec").read_text(encoding="utf-8"))
@@ -532,6 +533,7 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
         ("diagnosticMap", "contribution/BaseColor/501", "RGB"),
         ("diagnosticMap", "regionStats/BaseColor/501", "L"),
         ("diagnosticMap", "materialView/BaseColor/501", "RGB"),
+        ("diagnosticMap", "materialLeaks/BaseColor/501", "L"),
     ]
     cases = [(variant("unreal", "unreal-engine"), *src) for src in sources]
     cases.append((variant("unreal-rgb16", "unreal-engine", "RGB16"), *sources[0]))

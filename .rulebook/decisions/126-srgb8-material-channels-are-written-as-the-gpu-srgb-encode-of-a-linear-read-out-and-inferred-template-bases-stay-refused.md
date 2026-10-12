@@ -33,7 +33,7 @@ Both are adopted below. The model panel was not consulted: both points come from
    - The sRGB8 BaseColor and Specular bases hold linear values.
    - `default` BaseColor is `float32(0.8)`, kind `observed`.
    - The other 25 entries are kind `inferred` (new; EVALUATOR.md §3): `float32(0.8)`, `float32(127/255)` and `float32(10/255)`. Each note records the PNG 16 code and the candidate.
-   - The export refuses every file whose values depend on a channel whose base is `inferred`, in any format, before anything is written (`RequireIdentifiedBase` in `plan.cpp`; `unsupported_source`, `NotYetSupported` in the Python API). That covers the documentMap of the channel (sRGB8, RGB16, ...) and the diagnosticMap sources that read it (`isolated`, `contribution`, `regionStats`, `materialView`). Diagnostics on a template whose base is observed keep working. The evaluator itself still evaluates these constants: the base-values goldens compare their PNG 16 codes, which every candidate in the range writes.
+   - The export refuses every file whose values depend on a channel whose base is `inferred`, in any format, before anything is written (`RequireIdentifiedBase` in `plan.cpp`; `unsupported_source`, `NotYetSupported` in the Python API). That covers the documentMap of the channel (sRGB8, RGB16, ...) and the diagnosticMap sources that read it (`isolated`, `contribution`, `regionStats`, `materialView` and the non-ID `materialLeaks`, which compares the channel's full and solo read-outs). Diagnostics on a template whose base is observed keep working. The evaluator itself still evaluates these constants: the base-values goldens compare their PNG 16 codes, which every candidate in the range writes.
 3. **Channel defaults.**
    - `channel-defaults.json` gains Specular (`float32(10/255)`) and Emissive (1.0). Both are restricted to `"format": "sRGB8"`, the only format recorded.
    - A channel-defaults entry may now name a format (`TemplateLibrary::BaseChannel`). On another format, the channel fails with `missing_base_value`, as before.
@@ -44,7 +44,7 @@ Both are adopted below. The model panel was not consulted: both points come from
      - `test_processing_reproduces_painter_files`: the material maps of export-bit-depth in PNG 8, PNG 16 and OpenEXR 16f;
      - `test_srgb8_material_channels_equal_painter_files`: written end to end;
      - `test_srgb8_material_channels_are_written_encoded`;
-     - `test_no_export_reads_an_inferred_template_base` (documentMap on sRGB8 and RGB16, and four diagnosticMap kinds, against the default template's diagnostics);
+     - `test_no_export_reads_an_inferred_template_base` (documentMap on sRGB8 and RGB16, and five diagnosticMap kinds, against the default template's diagnostics);
      - `test_five_map_preset_writes_basecolor_srgb_encoded`;
      - `test_luma_probe_exact`, now on s1 too;
      - `test_base_values_equal_the_empty_project_exports`, which encodes the constant.

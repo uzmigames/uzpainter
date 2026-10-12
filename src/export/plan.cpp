@@ -843,9 +843,10 @@ std::vector<StackFiles> ListProjectTextures(const core::Project& project, std::s
 namespace {
 
 /// The stack channel whose read-out (its template base included) a source's values depend on:
-/// a documentMap's channel, the channel a diagnosticMap isolates, compares, summarises or views.
+/// a documentMap's channel, the channel a diagnosticMap isolates, compares, summarises, views or
+/// checks for leaks (a non-ID materialLeaks view compares the channel's full and solo read-outs).
 /// None for the other sources (mesh maps; the virtual normals read Height and Normal, whose bases
-/// are observed or fitted; the material masks and leaks read masks and the ID map).
+/// are observed or fitted; the material masks read masks; the ID views read the ID mesh map).
 std::optional<ChannelType> ChannelRead(const PlannedSource& s) {
     if (s.type == SourceType::documentMap) return s.channel;
     if (s.type != SourceType::diagnosticMap || !s.diagnostic) return std::nullopt;
@@ -855,7 +856,7 @@ std::optional<ChannelType> ChannelRead(const PlannedSource& s) {
         if (d.map.kind == evaluator::DiagnosticMapId::Kind::Channel) return d.map.channel;
         return std::nullopt;
     }
-    if (d.kind == Kind::MaterialView && d.view != evaluator::MaterialViewKind::ID) {
+    if ((d.kind == Kind::MaterialView || d.kind == Kind::MaterialLeaks) && d.view != evaluator::MaterialViewKind::ID) {
         return evaluator::MaterialViewChannel(d.view);
     }
     return std::nullopt;
