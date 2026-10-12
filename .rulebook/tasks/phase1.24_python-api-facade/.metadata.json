@@ -1,5 +1,26 @@
 {
   "status": "pending",
   "createdAt": "2026-10-10T06:02:39.602Z",
-  "updatedAt": "2026-10-10T06:02:39.602Z"
+  "updatedAt": "2026-10-12T10:53:03.000Z",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "May UzPainter ship Painter's own label text for the Dota 2 template's user channels User0-User3, or should it ship generic labels?",
+      "status": "pending",
+      "askedAt": "2026-10-12T10:53:03.000Z",
+      "context": "Dota 2 is the only shipped Painter template that labels channels: its User0-User3 carry Painter's own text. UzPainter never reads, parses or copies a .spt file (clean room, decision 116), so today these four labels read \"\" and `test_pyapi_facade_tier0.py` (`project-templates`) requires them to still differ. A label changes no texture: texture sets, resolution, channels and formats of all 26 templates are already exact. Whether Painter's label text may ship is a licence and clean-room ruling only the owner can make; agents do not decide it (decision 117). Item 3.1 of this task stays open on it until answered.",
+      "options": [
+        {
+          "label": "(a) Ship generic labels",
+          "description": "UzPainter labels the four channels with its own generic text (or none). The divergence stays named in the report §3 as an accepted owner ruling, the test keeps requiring it to differ, and item 3.1 can close on it."
+        },
+        {
+          "label": "(b) Ship Painter's label text after the owner's licence review",
+          "description": "The owner reviews the licence terms of the label text first. If cleared, the observed labels are recorded as facts in the template capture and compared exactly in `project-templates`; the named residual is removed."
+        }
+      ],
+      "recommended": null,
+      "blocks": "3.1 Run the full Tier 0 API-probe comparison (the Dota 2 user-channel labels in report §3)"
+    }
+  ]
 }

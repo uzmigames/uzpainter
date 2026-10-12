@@ -11,6 +11,7 @@
 - [ ] 2.7 Report generator: oracle stability, repeatability and equality reported separately; 14 §4 diagnostics; hardware, driver, backend, build hash, resource hashes and exception entries per result; written to `parity/reports/phase5/tiers.json` with numbers and hashes only
 - [ ] 2.8 Exception register `parity/exceptions.json` published: each entry versioned, linked to its owner decision under `.rulebook/decisions/`, with domain, metric, bound and evidence hashes
 - [ ] 2.9 Per-gate fixture status, reporting any `not_migratable` fixture without an owner scope decision as a gate failure
+- [ ] 2.10 (decision 117, from phase1.24_python-api-facade item 3.1) `tier0/api-probes/phase1-reload-resources` recording 2, s9 and s12: Painter reports reloads of bytes the project already holds (decision 110 §6; unstable r1 vs r2 in `parity/reports/phase0/tier0-stability.md`). After phase1.14_compositor-core item 2.9 makes recording 1 s9 and s12 exact, either explain recording 2 from a Painter recording that settles it, or enter it in `parity/exceptions.json` as a decision-032 r2 divergence (`api_readback`, the events of s9 and s12). Recording 2 is not claimed exact until a recording shows the rule
 
 ## 3. Tests
 - [ ] 3.1 Repeatability lane: the frozen build run twice on the same inputs produces identical exported bytes on each backend
