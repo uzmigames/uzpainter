@@ -40,7 +40,7 @@ Every rulebook task under `.rulebook/tasks/`, one table per phase, rows ordered 
 
 ## Phase 1
 
-41 tasks, levels 1–26.
+42 tasks, levels 1–26.
 
 | Id | DAG node | Parent | Depends on (same phase) | Goal |
 |---|---|---|---|---|
@@ -72,6 +72,7 @@ Every rulebook task under `.rulebook/tasks/`, one table per phase, rows ordered 
 | `phase1.12_compositor-height-normal` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.7_mesh-loader`, `phase1.10_compositor-blend-kernels`, `phase1.11_compositor-mask-effects` | Height is authored in declared units and converted to a normal; the exported normals must combine the mesh normal map, the channel normal and the height-derived normal exactly as Painter does, and relief must be applied … |
 | `phase1.13_compositor-diagnostics` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.3_document-model`, `phase1.11_compositor-mask-effects`, `phase1.12_compositor-height-normal` | Agents and paint gates need per-layer isolation, contribution maps, material-isolation views and region statistics that are exports of the general engine, never separate code paths (LAY-09, LAY-14, EXP-04, DIA-01 … |
 | `phase1.14_compositor-core` | P1-COMPOSITOR | — | `phase1.3_document-model`, `phase1.4_render-core-layer`, `phase1.5_compositor-tile-dag`, `phase1.7_mesh-loader`, `phase1.8_compositor-sources-projection`, `phase1.9_compositor-quantisation-profile`, `phase1.10_compositor-blend-kernels`, `phase1.11_compositor-mask-effects`, `phase1.12_compositor-height-normal`, `phase1.13_compositor-diagnostics` | The compositor turns the document into channel rasters and is the heart of output parity: Wand v1 (G1) and every later pilot are accepted on exact map equality with Painter. |
+| `phase1.15_compositor-colour-fits` | (P1-COMPOSITOR) | — | `phase1.14_compositor-core` | Decision 130 moves the compositor's colour fits out of `phase1.14_compositor-core`, so that phase1.14 can close on its union run. |
 | `phase1.15_export-plan-compiler` | (P1-EXPORT) | `phase1.18_export-engine` | `phase1.12_compositor-height-normal`, `phase1.13_compositor-diagnostics`, `phase1.14_compositor-core` | The Assets3D scripts call `export_project_textures(json_config)` with Painter's dictionary; UzPainter must accept it verbatim, compile it into a typed plan before any GPU work, reject unknown identifiers with the valid … |
 | `phase1.16_export-processing-encoders` | (P1-EXPORT) | `phase1.18_export-engine` | `phase1.3_core-image-passes`, `phase1.14_compositor-core`, `phase1.15_export-plan-compiler` | Exported maps are compared on decoded pixels at native depth and must be byte-identical across runs: padding (including infinite padding), resize, dithering and bit-depth/colour encoding must match Painter's export … |
 | `phase1.17_export-presets` | (P1-EXPORT) | `phase1.18_export-engine` | `phase1.14_compositor-core`, `phase1.15_export-plan-compiler`, `phase1.16_export-processing-encoders` | The pipeline exports through named presets (`defaultExportPreset`) and through its inline five-map configuration; UzPainter ships its own hand-written presets in the documented export-configuration form, defined from … |

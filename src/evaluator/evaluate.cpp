@@ -35,7 +35,9 @@ render::Result<std::shared_ptr<const DecodedImage>> GreenInverted(const DecodedI
 render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedImage& image, core::Id node) {
     if (image.channels != 3 || image.encoding != render::TexelEncoding::Unorm16) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "an sRGB bitmap is recorded as a 16-bit colour image only (phase1.14_compositor-core)", node);
+                        "an sRGB bitmap is recorded as a 16-bit colour image only "
+                        "(phase1.15_compositor-colour-fits)",
+                        node);
     }
     auto decoded = std::make_shared<DecodedImage>(image);
     decoded->encoding = render::TexelEncoding::Unorm8;
@@ -253,7 +255,7 @@ private:
         if (!identity || image.width != m_dag.grid.width || image.height != m_dag.grid.height) {
             return EvalFail(EvalErrorKind::UnsupportedSource,
                             "an sRGB bitmap is recorded sampled 1:1 only (the bitmap the size of the set, the "
-                            "identity transform; phase1.14_compositor-core)",
+                            "identity transform; phase1.15_compositor-colour-fits)",
                             node);
         }
         std::shared_ptr<const DecodedImage>& decoded = m_env.srgbDecoded[source.sha256];
