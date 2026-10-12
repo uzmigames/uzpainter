@@ -114,7 +114,7 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
                     if (mask || !ctx.tileFormat.srgb) {
                         return EvalFail(EvalErrorKind::UnsupportedSource,
                                         "an sRGB bitmap on a channel that is not sRGB8 is not recorded "
-                                        "(phase1.20_pyapi-facade)",
+                                        "(phase1.14_compositor-core)",
                                         uid);
                     }
                     result.srgbDecode = true;
@@ -122,7 +122,7 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
                 case BitmapColourSpace::Unrecorded:
                     return EvalFail(EvalErrorKind::UnsupportedSource,
                                     "the bitmap colour space '" + bitmap.color_space +
-                                        "' is not recorded (phase1.20_pyapi-facade)",
+                                        "' is not recorded (phase1.14_compositor-core)",
                                     uid);
             }
             // Bound by content hash (LAY-13: the alias plays no part); the linear colour spaces

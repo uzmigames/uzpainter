@@ -1,0 +1,14 @@
+{
+  "id": 108,
+  "slug": "the-colour-fits-of-the-compositor-and-export-move-from-phase1-20-to-phase1-14-and-phase1-18",
+  "title": "The colour fits of the compositor and the export move from phase1.20 to phase1.14 and phase1.18",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.20_pyapi-facade",
+    "phase1.14_compositor-core",
+    "phase1.18_export-engine",
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

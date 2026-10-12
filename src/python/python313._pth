@@ -10,6 +10,9 @@ python313.zip
 .
 # The pinned wheels (thirdparty/python-wheels/), unpacked by `zig build painter`.
 Lib\site-packages
+# The substance_painter facade, substance_painter_plugins and uzpainter_facade (python/,
+# python/FACADE.md), installed by `zig build painter` and `zig build pyapi-tests`.
+python
 # Run site.main(): processes the .pth files of Lib\site-packages (pywin32.pth); the user
 # site-packages stays disabled in isolated mode.
 import site
