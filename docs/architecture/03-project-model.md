@@ -32,7 +32,9 @@ Display state covers only the fixed render pipeline: the Assets3D render compari
 - colour LUT: none; post-effects: off;
 - shader: Painter's default `open-pbr` instance at its default parameters;
 - environment: Linear, exposure 0, opacity 0, blur 0, infinite-sphere dome, no ground, the preset's clear colour and shadows; rotation 0, or the `ref_match` per-view rotation;
-- cameras: free.
+- cameras: free, with aperture 0 (no depth of field); a project has no camera until a whole record is set (decision 132).
+
+The values are kept as a display preset of the standard (`common` or `ref_match`, `src/python/display.h`, decision 132), and a new project starts on `common` with no environment.
 
 Identity: every node, set, stack, tile and resource has a 64-bit id persisted in the file (UzPainter guarantee; Painter promises only an in-session integer — `substance-parity-astra-review.md` V03, historical context; confirmed through the documented API by the Tier 0 probes, P0-TIER0). Names are not unique (Painter semantics); the API resolves by id, and name lookups return all matches. Name-addressed mutations (LAY-06) are idempotent within an explicit `{project, set, stack, parent}` scope: an ambiguous match fails before mutation and lists the candidate ids; repeating the same named operation does not create duplicate nodes. Tests cover ambiguity and repeats as well as save/reopen.
 

@@ -15,6 +15,11 @@
 // project file and the imported mesh the export was started from (`project_path`, `mesh_path`),
 // absolute, as resolved when the call that named each one ran (None when there is none), so a
 // later switch of project or of working directory does not move its sources.
+//
+// The export job checks for cancellation at every tile the CPU evaluator allocates and before
+// every file it evaluates (nothing is written then), and before every fixed-name folder; its commit
+// point is the publication of the generation (`JobContext::Commit {generation, revision}`), so a
+// cancel during the fixed-name copies reports `stopped: after_commit` (jobs.h, decision 140).
 
 #include <memory>
 
@@ -65,6 +70,42 @@ core::json::Object WrittenJson(const exporter::WrittenFile& file) {
             {"size", static_cast<std::int64_t>(file.size)}};
 }
 
+/// The CPU evaluator's tile store, refusing the next tile once the job was asked to stop: the
+/// evaluation then fails, and the job ends cancelled before anything is written (a tile checkpoint).
+class StoppableTileStore final : public evaluator::ITileStore {
+public:
+    StoppableTileStore(evaluator::ITileStore& inner, const JobContext& context) : inner_(inner), context_(context) {}
+
+    /// Whether a tile was refused.
+    bool stopped() const { return stopped_; }
+
+    render::Result<evaluator::TileHandle> Allocate(const evaluator::TileFormat& format, uint32_t width,
+                                                   uint32_t height) override {
+        if (context_.CancelRequested()) {
+            stopped_ = true;
+            return render::Fail(render::ErrorCode::RequestFailed, std::nullopt, "export: cancelled at a tile");
+        }
+        return inner_.Allocate(format, width, height);
+    }
+    void Release(evaluator::TileHandle tile) override { inner_.Release(tile); }
+    render::Result<void> Upload(evaluator::TileHandle tile, const evaluator::DecodedImage& image, uint32_t x0,
+                                uint32_t y0) override {
+        return inner_.Upload(tile, image, x0, y0);
+    }
+    render::Result<void> Project(const evaluator::ProjectOp& op) override { return inner_.Project(op); }
+    render::Result<void> Blend(const evaluator::BlendOp& op) override { return inner_.Blend(op); }
+    render::Result<void> Levels(const evaluator::LevelsOp& op) override { return inner_.Levels(op); }
+    render::Result<void> VirtualNormal(const evaluator::VirtualNormalOp& op) override { return inner_.VirtualNormal(op); }
+    render::Result<void> Flush() override { return inner_.Flush(); }
+    render::Result<evaluator::TileImage> Read(evaluator::TileHandle tile) override { return inner_.Read(tile); }
+    uint64_t AllocatedBytes() const override { return inner_.AllocatedBytes(); }
+
+private:
+    evaluator::ITileStore& inner_;
+    const JobContext& context_;
+    bool stopped_ = false;
+};
+
 /// The export job of `snapshot` (see above).
 JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot, std::string config,
                    std::string project_path, std::string project_source, std::vector<std::string> fixed_names) {
@@ -77,7 +118,7 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
         const core::Project& p = *snapshot.project;
         const exporter::ExportPlan plan = exporter::CompilePlan(p, config, exporter::PlanContext{project_path});
         exporter::CheckExportable(plan);
-        context.SetProgress(0.1);
+        context.SetProgress(0.1, "plan compiled");
         context.Checkpoint();
 
         store::ProjectStore* store = project->store.get();
@@ -100,22 +141,40 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
             inputs.geometry = std::make_shared<evaluator::MeshGeometryMasks>(
                 std::make_shared<const mesh::TexturingMesh>(std::move(mesh.mesh)));
         }
-        context.SetProgress(0.2);
+        context.SetProgress(0.2, "sources ready");
         context.Checkpoint();
 
+        bool stopped_at_file = false;
+        inputs.beforeFile = [&](size_t file, size_t files) {
+            if (context.CancelRequested()) {
+                stopped_at_file = true;
+                return false;
+            }
+            context.SetProgress(0.2 + 0.7 * static_cast<double>(file) / static_cast<double>(files),
+                                "evaluating " + plan.files[file].relativePath);
+            return true;
+        };
         evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
+        StoppableTileStore tiles(cpu.store(), context);
         exporter::PublishRequest request;
         request.identity = exporter::BuildIdentity{kAppVersion, std::string("uzpainter-") + UZP_BUILD_MODE};
         request.projectPath = project_path;
         render::Result<exporter::Publication> published =
-            exporter::PublishExport(p, snapshot.revision, plan, inputs, *templates, cpu.store(), cpu.cache(), request);
-        if (!published) RaiseRender(published.error());
-        context.SetProgress(0.9);
+            exporter::PublishExport(p, snapshot.revision, plan, inputs, *templates, tiles, cpu.cache(), request);
+        if (!published) {
+            if (stopped_at_file || tiles.stopped()) context.Checkpoint();  // nothing was written
+            RaiseRender(published.error());
+        }
+        context.Commit({{"generation", published->generation},
+                        {"directory", exporter::Utf8String(published->directory)},
+                        {"revision", snapshot.revision}});
+        context.SetProgress(0.9, "published generation " + published->generation);
 
         core::json::Array files;
         for (const exporter::WrittenFile& file : published->files) files.push_back(WrittenJson(file));
         core::json::Array copies;
         for (const std::string& folder : fixed_names) {
+            context.Checkpoint();
             render::Result<exporter::Delivery> delivery =
                 exporter::CopyFixedNames(exporter::Utf8Path(plan.exportPath), exporter::Utf8Path(folder));
             if (!delivery) RaiseRender(delivery.error());
@@ -154,26 +213,36 @@ py::object WaitFor(const JobHandle& handle, std::optional<double> timeout) {
 }
 
 JobHandle StartExport(const py::object& config, const std::vector<std::string>& fixed_names) {
+    return {JobEngine::Get().Start("export", ExportJob(ConfigText(config), fixed_names))};
+}
+
+}  // namespace
+
+JobBody ExportJob(std::string config, std::vector<std::string> fixed_names) {
     if (Session::Get().TransactionOpen()) {
         throw ApiError("RuntimeError", "an export reads a committed revision: commit the open Transaction first");
     }
     const std::shared_ptr<OpenProject> project = Session::Get().Current();
     core::Snapshot snapshot = project->document->snapshot();
     std::string source = project->untitled_dir.empty() ? exporter::Utf8String(project->project_source) : std::string();
-    return {JobEngine::Get().Start("export", ExportBody(project, std::move(snapshot), ConfigText(config), ProjectPath(),
-                                                        std::move(source), fixed_names))};
+    return ExportBody(project, std::move(snapshot), std::move(config), ProjectPath(), std::move(source),
+                      std::move(fixed_names));
 }
-
-}  // namespace
 
 void BindExport(py::module_& m, py::module_& jobs) {
     Session::Get().running_job = [] { return JobEngine::Get().Busy(); };
 
-    py::class_<JobHandle> job(jobs, "Job", "A worker job: id, status, progress, wait(timeout=None), cancel().");
+    py::class_<JobHandle> job(jobs, "Job",
+                              "A worker job: id, kind, status, progress, message, wait(timeout=None), cancel(), "
+                              "receipt().");
     job.def_property_readonly("id", [](const JobHandle& j) { return j.job->id(); })
         .def_property_readonly("kind", [](const JobHandle& j) { return j.job->kind(); })
         .def_property_readonly("status", [](const JobHandle& j) { return std::string(JobStatusName(j.job->status())); })
         .def_property_readonly("progress", [](const JobHandle& j) { return j.job->progress(); })
+        .def_property_readonly("message", [](const JobHandle& j) { return j.job->message(); })
+        .def("receipt", [](const JobHandle& j) { return FromJson(j.job->Receipt()); },
+             "{id, kind, status, progress, message, committed, stopped, cancel_requested, no_op}: what the job "
+             "committed and, once it ended, whether it stopped before or after its commit point.")
         .def("wait", &WaitFor, py::arg("timeout") = py::none(),
              "Blocks (the GIL released) until the job ends, then returns its result or raises its error; "
              "ValueError('timeout') when `timeout` seconds pass first.")

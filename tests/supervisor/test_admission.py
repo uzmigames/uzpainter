@@ -9,6 +9,7 @@ through `UzPainter.exe --mcp`, are covered in test_worker_pipe.py and test_super
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -292,3 +293,57 @@ def test_the_ledger_is_durable_and_a_dead_holders_lease_is_taken_over(tmp_path: 
     reopened.release("stdio:new")
     assert reopened.lease(UUID) is None
     reopened.close()
+
+
+def test_a_version_0_ledger_is_migrated_and_orphaned_jobs_are_interrupted(tmp_path: Path) -> None:
+    """phase2.3 items 2.2, 3.4 (decision 141): a phase2.2 ledger (version 0, a required key) is
+    rebuilt in place with its jobs kept; a running job of a supervisor that has ended is marked
+    `interrupted` with an unknown outcome when the next supervisor starts, and its key's
+    operation row resolves it at the next reconciliation."""
+    path = tmp_path / "ledger.sqlite3"
+    old = sqlite3.connect(path)
+    old.executescript(
+        """
+        CREATE TABLE job (job_id TEXT PRIMARY KEY, project_uuid TEXT, tool TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL, key_source TEXT NOT NULL, expected_revision INTEGER,
+            state TEXT NOT NULL, created TEXT NOT NULL, finished TEXT, request_hash TEXT,
+            committed_revision INTEGER, error_code TEXT);
+        INSERT INTO job VALUES ('job-old', 'u', 'edit', 'k-0', 'client', 1, 'succeeded',
+            '2026-10-12T00:00:00Z', '2026-10-12T00:00:01Z', 'h', 2, NULL);
+        """
+    )
+    old.close()
+    ledger = Ledger(path)
+    kept = ledger.job("job-old")
+    assert kept is not None and kept["state"] == "succeeded" and kept["long"] is False
+    ledger.begin_job("job-free", None, "project_open", None, None, None, long=True)
+    ledger.begin_job("job-orphan", UUID, "test_job", "k-1", "client", 5, True, "1:1")
+    ledger.close()
+
+    async def scenario() -> None:
+        worker = FakeWorker()
+        worker.operations["result"]["operations"] = [
+            {
+                "idempotency_key": "k-1",
+                "request_hash": "h-1",
+                "outcome": {"status": "committed"},
+                "committed_revision": 6,
+            }
+        ]
+        admission = Admission(worker, Ledger(path))
+        orphan = admission.job_status("job-orphan")["result"]
+        assert orphan["status"] == "interrupted"
+        assert orphan["resolution"] == {"committed": None, "source": "supervisor_ended"}
+        assert admission.job_status("job-free")["result"]["status"] == "interrupted"
+        await admission.call("project_inspect", {}, False)
+        assert admission.job_status("job-orphan")["result"]["resolution"] == {
+            "committed": True,
+            "committed_revision": 6,
+            "source": "operation_row",
+        }
+        assert admission.job_result("job-free")["error"]["code"] == "interrupted"
+        assert admission.job_status("job-x")["error"]["code"] == "unknown_job"
+        refused = await admission.cancel("job-old")
+        assert refused["result"]["cancel"] == "already_ended"
+
+    asyncio.run(scenario())

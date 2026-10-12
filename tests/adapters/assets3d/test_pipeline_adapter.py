@@ -76,13 +76,12 @@ def adapter_env(wand: Wand, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     yield
 
 
-def production_state() -> dict[str, Any]:
-    """What the wand's production arguments name in Assets3D: the run must leave it as it is."""
+def production_state(wand: Wand) -> dict[str, Any]:
+    """What the wand's pinned production arguments name in Assets3D: the run must leave it as it
+    is."""
     found: dict[str, Any] = {}
-    for name in ("painter_create_args.json", "painter_export_args.json"):
-        arguments = json.loads(
-            (ASSETS3D / "_tmp/claude/varinha11-v1" / name).read_text(encoding="utf-8")
-        )
+    for step in (wand.job.create, wand.job.export):
+        arguments = step.arguments or {}
         for key in ("dst", "out"):
             if key in arguments:
                 path = Path(arguments[key])
@@ -137,10 +136,10 @@ def test_wand_create_sync_and_export_run_unchanged(wand: Wand) -> None:
     """3.1: create and sync return their JSON results through the adapter; export runs its pinned
     bytes and returns its result, or, while a processing it needs is a gap (`export_gaps`: owner
     phase1.25_pilot-wand items 2.6 and 2.7), the export's explicit refusal."""
-    before = production_state()
+    before = production_state(wand)
     create = wand.create()
     assert create.status == 0, create.stdout + create.stderr
-    created = create.document()
+    created = create.document()["data"]
     dst = wand.argument("create", "dst")
     assert Path(created["file"]).resolve() == dst.resolve()
     assert created["sets"] == ["11-Varinha-Madeira"]
@@ -172,7 +171,7 @@ def test_wand_create_sync_and_export_run_unchanged(wand: Wand) -> None:
         exported = export.document()
         assert exported["status"] == "ExportStatus.Success"
         assert len(next(iter(exported["files"].values()))) == 5
-    assert production_state() == before  # nothing written under the Assets3D root
+    assert production_state(wand) == before  # nothing written under the Assets3D root
 
 
 def test_a_changed_script_is_refused_before_anything_runs(wand: Wand, tmp_path: Path) -> None:
@@ -191,9 +190,10 @@ def test_a_changed_script_is_refused_before_anything_runs(wand: Wand, tmp_path: 
 # ── 3.2 Structured failures ─────────────────────────────────────────────────────────────────────
 
 
-def test_a_raising_script_is_a_structured_failure(wand: Wand, adapter_env: None) -> None:
+def test_a_raising_script_is_a_structured_failure(created: Wand, adapter_env: None) -> None:
     """3.2: the reply carries the error and its traceback; the exit status is 1, and the layer
-    stack script's own transport turns it into its usual failure."""
+    stack script's own transport turns it into its usual failure (after its route guard's probe,
+    which needs the saved project `created` leaves open)."""
     reply, status = client.execute_python("print('before')\nx = 1\nraise ValueError('boom')\n")
     assert status == client.FAILED
     assert reply["success"] is False and reply["data"] is None
@@ -202,9 +202,9 @@ def test_a_raising_script_is_a_structured_failure(wand: Wand, adapter_env: None)
     assert "raise ValueError('boom')" in reply["error"]["traceback"]
     assert reply["stdout"] == "before\n"
 
-    path = wand.work / "raises.py"
+    path = created.work / "raises.py"
     path.write_text("raise RuntimeError('from the script')\n", encoding="utf-8")
-    call = wand.run_file(path)
+    call = created.run_file(path)
     assert call.status == 1
     assert "Painter MCP call failed" in call.stderr and "from the script" in call.stderr
 

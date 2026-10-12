@@ -4,9 +4,11 @@
 // (src/store/cli.h), the export of a project and
 // its publication's recovery `export` (src/export/cli.h), the Python API the script host `run`
 // (src/python/run.h) and `capabilities` (src/python/capabilities.h), the supervisor and worker
-// roles `--mcp` and `--worker` (src/supervisor/); the other commands are added by their phases.
+// roles `--mcp` and `--worker` (src/supervisor/), the preview window `--preview` (src/preview/cli.h);
+// the other commands are added by their phases.
 
 #include "export/cli.h"
+#include "preview/cli.h"
 #include "python/capabilities.h"
 #include "python/recipe.h"
 #include "python/run.h"
@@ -30,6 +32,12 @@ int main(int argc, char** argv) {
     if (!args.empty() && uzp::supervisor::IsSupervisorCommand(args.front())) {
         const int status = uzp::supervisor::RunSupervisorCommand(args, stderr);
         // The interpreter is not finalized: the MCP SDK's threads may still be blocked on stdin.
+        std::fflush(stdout);
+        std::fflush(stderr);
+        std::_Exit(status);
+    }
+    if (!args.empty() && uzp::preview::IsPreviewCommand(args.front())) {
+        const int status = uzp::preview::RunPreviewCommand(args, stdout, stderr);
         std::fflush(stdout);
         std::fflush(stderr);
         std::_Exit(status);

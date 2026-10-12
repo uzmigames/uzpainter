@@ -15,6 +15,7 @@
 #include <set>
 
 #include "python/bindings.h"
+#include "python/display.h"
 #include "python/errors.h"
 #include "python/stack_sync.h"
 #include "uzp_core/types/errors.h"
@@ -169,27 +170,44 @@ void BindResource(py::module_& m) {
     m.def(
         "import_project_resource",
         [](const std::string& file_path, Usage usage, std::optional<std::string> name, std::optional<std::string> group) {
-            if (usage != Usage::TEXTURE) {
-                ThrowNotYetSupported(std::string("importing a resource of usage ") +
-                                     (usage == Usage::ENVIRONMENT || usage == Usage::COLOR_LUT
-                                          ? "ENVIRONMENT or COLOR_LUT (phase2.3_realtime-preview)"
-                                          : "GENERATOR or SMART_MATERIAL (phase3.3_procedural-families)"));
+            if (usage == Usage::COLOR_LUT) {
+                ApiError error("UnsupportedInUzPainter",
+                               "uzpainter.resource.import_project_resource is not supported in UzPainter: a COLOR_LUT "
+                               "resource; the colour LUT is pinned to none by the fixed render pipeline (decision 038)");
+                error.symbol = "uzpainter.resource.import_project_resource";
+                error.reason = "a COLOR_LUT resource; the colour LUT is pinned to none by the fixed render pipeline "
+                               "(decision 038)";
+                throw error;
             }
+            if (usage != Usage::TEXTURE && usage != Usage::ENVIRONMENT) {
+                ThrowNotYetSupported("importing a resource of usage GENERATOR or SMART_MATERIAL "
+                                     "(phase3.3_procedural-families)");
+            }
+            const bool environment = usage == Usage::ENVIRONMENT;
             const std::filesystem::path path = PathFromUtf8(file_path);
-            if (Lower(Utf8(path.extension())) != ".png") {
+            if (!environment && Lower(Utf8(path.extension())) != ".png") {
                 ThrowNotYetSupported("importing " + Utf8(path.filename()) +
                                      ": the bitmap decoder of this build reads PNG files only (src/evaluator/sources.h)");
             }
             std::ifstream file(path, std::ios::binary);
             if (!file) ThrowResourceNotFound("cannot read " + file_path);
             std::string bytes{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+            // An environment is an OpenEXR equirectangular map, stored as its unmodified bytes under
+            // their SHA-256 (RES-03; display.h).
+            if (environment) {
+                if (const std::string problem = display::EnvironmentProblem(bytes); !problem.empty()) {
+                    throw core::ValueError("cannot import " + Utf8(path.filename()) + " as an environment: " + problem);
+                }
+            }
+            const std::string kind = environment ? "ENVIRONMENT" : "TEXTURE";
+            const std::string mime = environment ? "image/x-exr" : "image/png";
             const std::string entry = name.value_or(Utf8(path.stem()));
             const std::shared_ptr<OpenProject> project = Session::Get().Current();
             std::string sha256;
-            core::json::Object args{{"name", entry}, {"usage", "TEXTURE"}, {"file", Utf8(path.filename())}};
+            core::json::Object args{{"name", entry}, {"usage", kind}, {"file", Utf8(path.filename())}};
             if (group) args["group"] = *group;
             Mutate("resource.import_project_resource", args, [&](core::Edit& edit) {
-                sha256 = ImportResource(edit, *project->store, bytes, entry, "image/png", "TEXTURE", Utf8(path));
+                sha256 = ImportResource(edit, *project->store, bytes, entry, mime, kind, Utf8(path));
                 if (group) {
                     for (core::ResourceMeta& meta : edit.project().resources.at(sha256)) {
                         // The resource group (Painter's `group` argument) is kept with the entry.
@@ -197,7 +215,7 @@ void BindResource(py::module_& m) {
                     }
                 }
             });
-            return ResourceHandle{{"project", entry, sha256}, "TEXTURE"};
+            return ResourceHandle{{"project", entry, sha256}, kind};
         },
         py::arg("file_path"), py::arg("usage"), py::arg("name") = py::none(), py::arg("group") = py::none());
 

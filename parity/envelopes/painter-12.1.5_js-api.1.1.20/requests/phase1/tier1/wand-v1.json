@@ -4,7 +4,7 @@
   "golden_id": "phase1/tier1/wand-v1",
   "tier": "1",
   "domain": "tier1/pilot/wand-v1",
-  "description": "Tier 1 pilot golden of the UzmiGames wand 11-Varinha-Madeira v1 (phase1.25 items 2.2, 2.3, 3.1; decision 099). Three UzmiGames pipeline scripts run byte-unchanged in Painter, each pinned by SHA-256, through Painter's documented remote control (never the community MCP bridge): painter_create.py (a new project from the low-poly OBJ under OCIO with Painter's substance config, OpenGL normals, 2048 px, no cameras; imports the Normal and AO mesh maps; save_as Full), painter_layer_stack.py sync (the stack-wand.json group: 4 groups, 13 fills, the 13 UV masks and the T_base colour bitmap) and painter_export.py (BaseColor, Roughness, Metallic, Height and Normal_OpenGL as 16-bit PNG, sizeLog2 11, infinite padding, no dithering). Two adaptations, both by the recorder: (1) the Painter-side scripts read their arguments from a hard-coded Assets3D path; the recorder hash-checks and copies every input into its private work directory and runs each script in a namespace whose open maps exactly that path to a copy of the arguments in which mesh, normal, ao, dst and out name the staged copies and the work directory, every other key unchanged; (2) the sync command's own remote-execution function is replaced by the recorder's remote control with the same contract, so the Painter-side code the script builds is its own. Recordings: r1 (same session: create, sync, export), r1-repeat (same session, export again) and r2 (after save, close and reopen, export again). Recorded on Painter 12.1.5 (the current envelope; phase1.25's text says 12.1.0).",
+  "description": "Tier 1 pilot golden of the UzmiGames wand 11-Varinha-Madeira v1 (phase1.25 items 2.2, 2.3, 3.1; decision 099). Three UzmiGames pipeline scripts run byte-unchanged in Painter, each pinned by SHA-256, through Painter's documented remote control (never the community MCP bridge): painter_create.py (a new project from the low-poly OBJ under OCIO with Painter's substance config, OpenGL normals, 2048 px, no cameras; imports the Normal and AO mesh maps; save_as Full), painter_layer_stack.py sync (the stack-wand.json group: 4 groups, 13 fills, the 13 UV masks and the T_base colour bitmap) and painter_export.py (BaseColor, Roughness, Metallic, Height and Normal_OpenGL as 16-bit PNG, sizeLog2 11, infinite padding, no dithering). Two adaptations, both by the recorder: (1) the Painter-side scripts read their arguments from a hard-coded Assets3D path; the recorder hash-checks and copies every input into its private work directory and runs each script in a namespace whose open maps exactly that path to a copy of the arguments in which mesh, normal, ao, dst and out name the staged copies and the work directory, every other key unchanged; (2) the sync command's own remote-execution function is replaced by the recorder's remote control with the same contract, so the Painter-side code the script builds is its own. Its route guard (Assets3D 9a718b9; decision 144) sends its own probe through that function before the sync and imports locate from Pipeline/qa/route_check.py, pinned here and loaded from its pinned bytes; the project lies in the private work directory, outside a production character's folder, so the guard passes with no attempt token, and any other verdict is refused. Recordings: r1 (same session: create, sync, export), r1-repeat (same session, export again) and r2 (after save, close and reopen, export again). Recorded on Painter 12.1.5 (the current envelope; phase1.25's text says 12.1.0).",
   "inputs": [
     {
       "input_id": "painter-create-py",
@@ -20,7 +20,17 @@
       "input_id": "painter-layer-stack-py",
       "kind": "pipeline_script",
       "assets3d_path": "Pipeline/painting/painter_layer_stack.py",
-      "sha256": "cc3037413a89c687ffb2d6b340ce1ad5a1351ad4924d7911c876eeb13d29eebc",
+      "sha256": "bf7006e256198879e5108b415439fb64d7e50b82d49afc58d2febaf3891ef62d",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "LicenseRef-UzmiGames-Assets3D"
+      }
+    },
+    {
+      "input_id": "route-check-py",
+      "kind": "pipeline_script",
+      "assets3d_path": "Pipeline/qa/route_check.py",
+      "sha256": "d2024ead911d86527e4702fb74cccc7ddeeeebe425c86ee61cfd8f094f87dbc8",
       "provenance": {
         "origin": "uzmigames_authored",
         "licence": "LicenseRef-UzmiGames-Assets3D"
@@ -301,6 +311,9 @@
             "M_wood_ridge.png",
             "M_wood_streak.png",
             "T_base.png"
+          ],
+          "imports": [
+            "route-check-py"
           ]
         }
       },

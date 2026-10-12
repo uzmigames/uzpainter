@@ -23,7 +23,9 @@ def opened(
     project = project or make_project(painter, tmp_path)
     session = Mcp(painter, tmp_path, *BASE, **kwargs)
     sessions.append(session)
-    revision = session.call("project_open", {"path": str(project)})["result"]["revision"]
+    revision = session.call("project_open", {"path": str(project), "wait": True})["result"][
+        "revision"
+    ]
     assert isinstance(revision, int)
     return session, project, revision
 
@@ -171,7 +173,8 @@ def test_busy_lease_and_wait_idle_through_mcp(
     busy = mutate(session, "B", "k-b", revision)
     assert busy["error"] == {
         "code": "busy",
-        "message": "another mutating call of this project is running; the call is not queued",
+        "message": "another mutating call or long job of this project is running; the call is "
+        "not queued",
         "details": {"job_id": job_id},
     }
     assert session.call("wait_idle", {"timeout": 0.2})["error"]["code"] == "timeout"

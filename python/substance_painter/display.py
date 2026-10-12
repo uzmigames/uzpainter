@@ -1,9 +1,11 @@
 """Painter's documented `substance_painter.display` module: the facade over the native `uzpainter`
-module (decision 042; release gap phase2.3_realtime-preview: every call raises NotYetSupported).
-Documented symbols only; the implementation is `uzpainter_facade` (`python/FACADE.md`)."""
+module, limited to the fixed render pipeline (decisions 038, 042 and 132). Documented symbols only;
+the implementation is `uzpainter_facade` (`python/FACADE.md`)."""
 
-from uzpainter.display import (
+from uzpainter_facade.display import (
     Camera,
+    CameraProjectionType,
+    ToneMappingFunction,
     get_color_lut_resource,
     get_environment_resource,
     get_tone_mapping,
@@ -14,6 +16,8 @@ from uzpainter.display import (
 
 __all__ = [
     "Camera",
+    "CameraProjectionType",
+    "ToneMappingFunction",
     "get_color_lut_resource",
     "get_environment_resource",
     "get_tone_mapping",

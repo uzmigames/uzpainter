@@ -31,7 +31,9 @@ def dx12_session(painter: Path, tmp_path: Path, sessions: list[Mcp], *args: str)
     status = session.status()
     if status["gpu_status"] != "ready":
         pytest.skip("no DX12 device on this machine")
-    revision = session.call("project_open", {"path": str(project)})["result"]["revision"]
+    revision = session.call("project_open", {"path": str(project), "wait": True})["result"][
+        "revision"
+    ]
     return session, revision
 
 
