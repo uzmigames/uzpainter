@@ -676,18 +676,29 @@ def test_processing_reproduces_painter_files(
 def test_srgb8_material_channels_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:
     """2.6 (decision 126): export-bit-depth's BaseColor, Specular and Emissive (colour bitmaps,
     uniform colours stored as the facade stores them, empty channels over their linear template
-    constants and channel defaults; sets s0-s3 and s6), rebuilt per texture set and written by
-    WriteExport at PNG 8, PNG 16, OpenEXR 16f and OpenEXR 32f, are byte-identical to Painter's
-    files (r1 and r2)."""
+    constants and channel defaults; every set: s4, s5 and s7 fill them from grey 16-bit bitmaps
+    in the sRGB space, phase1.15_compositor-colour-fits item 2.2), rebuilt per texture set and
+    written by WriteExport at PNG 8, PNG 16, OpenEXR 16f and OpenEXR 32f, are byte-identical to
+    Painter's files (r1 and r2)."""
     from tests.export import encoders_tier0
 
     report = encoders_tier0.srgb8_material_written(export_tests, tmp_path)
     assert report["problems"] == [], report["problems"][:10]
-    # s4, s5 and s7 fill these channels from grey 16-bit bitmaps (height-ramps, grey-a) in the sRGB
-    # space, which the evaluator refuses before writing (phase1.15_compositor-colour-fits,
-    # sources.h).
-    assert report["grey_bitmap_sets"] == {"s4", "s5", "s7"}, report
-    assert report["files"] == 5 * 4 * 3, report
+    assert report["files"] == 8 * 4 * 3, report
+    assert report["identical"] == report["comparisons"] == 2 * report["files"], report
+
+
+def test_srgb8_bitmap_equals_painter_files(export_tests: Path, tmp_path: Path) -> None:
+    """phase1.15_compositor-colour-fits item 2.2: export-ocio-encode-legacy's BaseColor filled
+    from the authored 8-bit sRGB ramp at 1:1 (UV, BilinearHQ, RepeatNone) in the sRGB space (s3:
+    each 8-bit code is its own sRGB8 code, sources.h) and in Raw (s4), rebuilt per texture set
+    and written by WriteExport at PNG 16, PNG 8 and OpenEXR 32f, is byte-identical to Painter's
+    files (r1 and r2)."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.srgb8_bitmap_written(export_tests, tmp_path)
+    assert report["problems"] == [], report["problems"][:10]
+    assert report["files"] == 2 * 3, report
     assert report["identical"] == report["comparisons"] == 2 * report["files"], report
 
 

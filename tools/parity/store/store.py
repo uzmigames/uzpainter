@@ -6,6 +6,8 @@ Layout under the store root (`UZP_PARITY_STORE`, default `%LOCALAPPDATA%\\UzPain
 - `index.json`: the sorted SHA-256 of every stored blob (`uzpainter/parity/store-index/1`).
 - `blobs/<first two hex digits>/<sha256>`: the bytes, named by their SHA-256, read-only.
 - `corpora/<Painter build id>/<golden id>/<record id>.json`: one write-once entry per record.
+- `inputs/<sha256>.json`: one write-once entry per stored authored input (a file a public
+  manifest pins by hash, kept here so a job resolves it when its source path is gone).
 
 A record id is unique per Painter build and golden; recording a different blob under an existing
 id is refused. Any blob that is missing, unreadable or fails its hash resolves to
@@ -32,6 +34,7 @@ STORE_ENV = "UZP_PARITY_STORE"
 STORE_SCHEMA = "uzpainter/parity/store/1"
 INDEX_SCHEMA = "uzpainter/parity/store-index/1"
 ENTRY_SCHEMA = "uzpainter/parity/store-entry/1"
+INPUT_SCHEMA = "uzpainter/parity/store-input/1"
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _BUILD_DIR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
@@ -164,6 +167,10 @@ class OracleStore:
             raise StoreError(f"record id {record_id!r} is not valid ({_RECORD_ID.pattern})")
         return self.root / "corpora" / painter_build_id / golden_id / f"{record_id}.json"
 
+    def input_entry_path(self, sha256: str) -> Path:
+        self.blob_path(sha256)  # refuses a name that is not a SHA-256
+        return self.root / "inputs" / f"{sha256}.json"
+
     def index(self) -> set[str]:
         document = json.loads((self.root / "index.json").read_text(encoding="utf-8"))
         return set(document["sha256"])
@@ -256,6 +263,21 @@ class OracleStore:
         os.chmod(path, stat.S_IREAD)
         return record
 
+    def add_input(self, source: Path, sha256: str, source_path: str) -> int:
+        """Store an authored input (already hashed to `sha256`) with a write-once entry naming
+        the path a manifest pins it at; returns its size. Resolve it with `resolve`."""
+        size = self.put_blob(source, sha256)
+        path = self.input_entry_path(sha256)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        entry = {"schema": INPUT_SCHEMA, "sha256": sha256, "size_bytes": size, "path": source_path}
+        try:
+            with path.open("x", encoding="utf-8") as stream:
+                stream.write(json.dumps(entry, indent=2) + "\n")
+        except FileExistsError:
+            return size  # the same bytes, already stored
+        os.chmod(path, stat.S_IREAD)
+        return size
+
     # --- resolution --------------------------------------------------------------------------
 
     def resolve(self, record_id: str, sha256: str, size_bytes: int | None = None) -> Resolution:
@@ -310,7 +332,8 @@ class OracleStore:
             f"index names {sha} but the blob is missing" for sha in sorted(indexed - on_disk)
         )
         problems.extend(f"blob {sha} is not in the index" for sha in sorted(on_disk - indexed))
-        for path in sorted((self.root / "corpora").rglob("*.json")):
+        entries = [*(self.root / "corpora").rglob("*.json"), *(self.root / "inputs").glob("*.json")]
+        for path in sorted(entries):
             document = json.loads(path.read_text(encoding="utf-8"))
             if document.get("sha256") not in on_disk:
                 problems.append(

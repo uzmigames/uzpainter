@@ -1,18 +1,24 @@
 """The wand v1 fixture runner of the Assets3D adapter (task phase1.23 item 2.5; decision 113).
 
-It runs the three Assets3D pipeline scripts byte-unchanged through the adapter
-(`adapters/assets3d/layer_stack.py`) on the wand v1 inputs. The pins are those of the committed
-R9 request manifest (`phase1/tier1/wand-v1`, decision 099), loaded by the recorder's own loader:
-every input is hash-checked under the Assets3D root before anything runs, and each call passes
-`--pin` for the layer-stack script and the script it runs, so the adapter refuses a changed
-script before anything reaches UzPainter.
+It runs the three Assets3D pipeline scripts byte-unchanged through the adapter on the wand v1
+inputs: `painter_create.py` through the adapter's client (`client.py execute_python`, the drop-in
+for the MCP client the pipeline sends it with: since Assets3D 9a718b9 the layer-stack script's
+`run` sends a route-guard probe first, which needs a saved project open), then
+`painter_layer_stack.py sync` and `run painter_export.py` through
+`adapters/assets3d/layer_stack.py`. The pins are those of the committed R9 request manifest
+(`phase1/tier1/wand-v1`, decision 099), loaded by the recorder's own loader: every input
+resolves in Assets3D or, by hash, in the private store (decision 144) before anything runs, and
+each layer-stack call passes `--pin` for the scripts it runs and imports, so the adapter refuses
+a changed script before anything reaches UzPainter.
 
 Nothing is written under the Assets3D root. The inputs are staged into `work/assets`, a mirror of
-the Assets3D tree (`stage_inputs`). The two Painter-side scripts read their arguments from a
-hard-coded Assets3D path; the runner's namespace `open` maps exactly that path to a copy in which
-every absolute path under the Assets3D root names the same relative path under the mirror
-(decision 099 adaptation (a)), so `dst` and `out` land in the mirror at their production-relative
-paths. The session file lives in the work directory too.
+the Assets3D tree (`stage_inputs`, with the root marker the scripts find their root by), and the
+scripts run from their staged copies, so the layer-stack script imports the pinned
+`route_check`. The two Painter-side scripts read their arguments from a hard-coded Assets3D path;
+the runner's namespace `open` maps exactly that path to a copy in which every absolute path under
+the Assets3D root names the same relative path under the mirror (decision 099 adaptation (a)),
+so `dst` and `out` land in the mirror at their production-relative paths. The session file lives
+in the work directory too.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ REQUEST = (
     REPO_ROOT / "parity/envelopes/painter-12.1.5_js-api.1.1.20/requests/phase1/tier1/wand-v1.json"
 )
 ENTRY = REPO_ROOT / "adapters" / "assets3d" / "layer_stack.py"
+CLIENT = REPO_ROOT / "adapters" / "assets3d" / "client.py"
 
 
 @dataclass(frozen=True)
@@ -92,14 +99,14 @@ class Wand:
         }
 
     def script(self, input_id: str) -> Path:
-        """The pinned script as the pipeline runs it: its real path in Assets3D."""
-        return self.job.inputs[input_id].file
+        """The pinned script as the pipeline runs it: its staged copy in the mirror."""
+        return self.staged[input_id]
 
     def pins(self) -> list[str]:
         out = []
-        for input_id in ("painter-layer-stack-py", "painter-create-py", "painter-export-py"):
-            item = self.job.inputs[input_id]
-            out += ["--pin", f"{item.file}={item.sha256}"]
+        for item in self.job.inputs.values():
+            if item.kind == "pipeline_script":
+                out += ["--pin", f"{self.staged[item.input_id]}={item.sha256}"]
         return out
 
     def call(self, *arguments: str, pins: list[str] | None = None) -> Call:
@@ -124,7 +131,23 @@ class Wand:
         return Call(process.returncode, process.stdout, process.stderr)
 
     def create(self) -> Call:
-        return self.call("run", str(self.script("painter-create-py")))
+        """`painter_create.py`'s pinned bytes through the client; stdout is the client's reply."""
+        script = self.job.inputs["painter-create-py"]
+        assert script.data is not None
+        arguments = self.work / "painter-create.json"
+        arguments.write_text(json.dumps({"code": script.data.decode("utf-8")}), encoding="utf-8")
+        process = subprocess.run(
+            [sys.executable, str(CLIENT), "execute_python", str(arguments)],
+            cwd=self.work,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=600,
+            check=False,
+        )
+        return Call(process.returncode, process.stdout, process.stderr)
 
     def sync(self, *extra: str) -> Call:
         stack = self.staged["wand-stack"]
