@@ -8,6 +8,11 @@
 #include <fstream>
 #include <map>
 #include <optional>
+#include <stdexcept>
+
+#if defined(UZP_EXPORT_FAULT_HOOKS)
+#include "export/fault.h"
+#endif
 
 namespace uzp::exporter {
 
@@ -46,10 +51,10 @@ std::optional<Coverage> CoverageOf(const core::TextureSet& set, const SourceInpu
 
 }  // namespace
 
-render::Result<std::vector<WrittenFile>> WriteExport(const core::Project& project, std::int64_t revision,
-                                                     const ExportPlan& plan, const SourceInputs& inputs,
-                                                     const evaluator::TemplateLibrary& templates,
-                                                     evaluator::ITileStore& store, evaluator::TileCache& cache) {
+render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& project, std::int64_t revision,
+                                                      const ExportPlan& plan, const SourceInputs& inputs,
+                                                      const evaluator::TemplateLibrary& templates,
+                                                      evaluator::ITileStore& store, evaluator::TileCache& cache) {
     // 1. Every file's processing and padding, before any evaluation.
     std::map<core::Id, Coverage> coverages;
     for (const PlannedFile& file : plan.files) {
@@ -67,15 +72,35 @@ render::Result<std::vector<WrittenFile>> WriteExport(const core::Project& projec
         }
         CheckPadding(file, coverages.at(set->id));
     }
-    // 2. Every file evaluated, padded and encoded in memory.
-    std::vector<std::string> encoded;
+    // 2. Every file evaluated, padded and encoded in memory. Every check passed in step 1, so a
+    // padding or an encoder that throws here is a failure of this export, returned as such: the
+    // host keeps running (EXP-06).
+    std::vector<EncodedFile> encoded;
     encoded.reserve(plan.files.size());
-    for (const PlannedFile& file : plan.files) {
+    for (size_t i = 0; i < plan.files.size(); ++i) {
+        const PlannedFile& file = plan.files[i];
         render::Result<FileRaster> raster = EvaluateFileOn(project, revision, file, inputs, templates, store, cache);
         if (!raster) return render::Unexpected(raster.error());
-        if (file.layout != FileLayout::Statistics) ApplyPadding(file, *raster, coverages.at(file.textureSetId));
-        encoded.push_back(EncodeFile(file, *raster));
+        try {
+#if defined(UZP_EXPORT_FAULT_HOOKS)
+            if (fault::Fails(fault::Point::fail_encode, i)) throw std::runtime_error("injected encoder failure");
+#endif
+            if (file.layout != FileLayout::Statistics) ApplyPadding(file, *raster, coverages.at(file.textureSetId));
+            encoded.push_back({EncodeFile(file, *raster), raster->normalTag});
+        } catch (const std::exception& e) {
+            return ExportFail("encoding " + file.relativePath + " failed: " + e.what());
+        }
     }
+    return encoded;
+}
+
+render::Result<std::vector<WrittenFile>> WriteExport(const core::Project& project, std::int64_t revision,
+                                                     const ExportPlan& plan, const SourceInputs& inputs,
+                                                     const evaluator::TemplateLibrary& templates,
+                                                     evaluator::ITileStore& store, evaluator::TileCache& cache) {
+    render::Result<std::vector<EncodedFile>> encoded =
+        EncodeExport(project, revision, plan, inputs, templates, store, cache);
+    if (!encoded) return render::Unexpected(encoded.error());
     // 3. The files written.
     std::vector<WrittenFile> written;
     for (size_t i = 0; i < plan.files.size(); ++i) {
@@ -85,11 +110,12 @@ render::Result<std::vector<WrittenFile>> WriteExport(const core::Project& projec
         fs::create_directories(path.parent_path(), error);
         if (error) return ExportFail("cannot create the folder of " + path.string() + ": " + error.message());
         std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-        stream.write(encoded[i].data(), static_cast<std::streamsize>(encoded[i].size()));
+        const std::string& bytes = (*encoded)[i].bytes;
+        stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
         stream.close();
         if (!stream) return ExportFail("cannot write " + path.string());
-        written.push_back({file.rootPath, file.relativePath, path.generic_string(), encoded[i].size(),
-                           core::Sha256Hex(encoded[i])});
+        written.push_back(
+            {file.rootPath, file.relativePath, path.generic_string(), bytes.size(), core::Sha256Hex(bytes)});
     }
     return written;
 }

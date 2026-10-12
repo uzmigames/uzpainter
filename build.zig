@@ -291,15 +291,23 @@ const evaluator_sources = [_][]const u8{
 /// The export plan compiler (`src/export/`, P1-EXPORT, `08-export.md` §1, §2, §6), relative to
 /// `src/`: compiled with the evaluator into `UzPainter.exe` and into `uzp-export-tests.exe`.
 const export_sources = [_][]const u8{
+    "export/cli.cpp",
     "export/config.cpp",
     "export/encode.cpp",
     "export/exr_writer.cpp",
+    "export/fixed_names.cpp",
     "export/padding.cpp",
     "export/plan.cpp",
     "export/png_writer.cpp",
+    "export/publish.cpp",
+    "export/receipt.cpp",
     "export/virtual_maps.cpp",
     "export/write.cpp",
 };
+/// Test-only fault hooks of the export publication (`src/export/fault.h`): compiled, with
+/// `-DUZP_EXPORT_FAULT_HOOKS=1` on every export source, into `uzp-export-tests.exe` only, never
+/// into `UzPainter.exe`.
+const export_fault_source = "export/fault.cpp";
 /// tinyexr's implementation (`thirdparty/tinyexr/`, decision 089), one translation unit of
 /// third-party code relative to `src/`: compiled without UzPainter's warning flags.
 const tinyexr_unit = "export/tinyexr_unit.cpp";
@@ -1185,15 +1193,16 @@ pub fn build(b: *std.Build) void {
     });
     addCoreIncludePaths(b, export_tests_mod);
     export_tests_mod.addIncludePath(b.path("src"));
+    const export_hook_flags = evaluator_flags ++ [_][]const u8{"-DUZP_EXPORT_FAULT_HOOKS=1"};
     export_tests_mod.addCSourceFiles(.{
         .root = b.path("tests/export"),
         .files = &.{"export_test.cpp"},
-        .flags = &evaluator_flags,
+        .flags = &export_hook_flags,
     });
     export_tests_mod.addCSourceFiles(.{
         .root = b.path("src"),
-        .files = &export_sources,
-        .flags = &evaluator_flags,
+        .files = &(export_sources ++ [_][]const u8{export_fault_source}),
+        .flags = &export_hook_flags,
     });
     export_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
     export_tests_mod.addCSourceFiles(.{

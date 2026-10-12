@@ -16,12 +16,31 @@
 // build, project and configuration give the same bytes (EXP-05).
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "export/plan.h"
 
 namespace uzp::exporter {
+
+/// A planned file's bytes, encoded in memory.
+struct EncodedFile {
+    std::string bytes;
+    /// The EXP-09 tag of the file's normal source, when it has one.
+    std::optional<evaluator::NormalTag> normalTag;
+};
+
+/// Steps 1 and 2 above: every file of `plan` (compiled from revision `revision` of `project`)
+/// checked, then evaluated, padded and encoded in memory, in plan order. Throws
+/// `core::NotYetSupported` (or `core::ValueError`) before anything is evaluated for an unrecorded
+/// processing or padding; returns the evaluator's failure, or an `export:` failure (no texturing
+/// mesh, a padding or encoder that fails). Writes nothing.
+[[nodiscard]] render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& project, std::int64_t revision,
+                                                                    const ExportPlan& plan, const SourceInputs& inputs,
+                                                                    const evaluator::TemplateLibrary& templates,
+                                                                    evaluator::ITileStore& store,
+                                                                    evaluator::TileCache& cache);
 
 struct WrittenFile {
     std::string rootPath;

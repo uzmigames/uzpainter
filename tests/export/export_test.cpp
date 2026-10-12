@@ -24,6 +24,28 @@
 //       (phase1.16) Encodes synthetic PNG16 and OpenEXR 32f images twice (ramps, runs, noise, signed
 //       zero, infinities, NaN payloads, odd sizes), decodes them back and writes the files; prints
 //       one JSON line per image {"name", "format", "decoded_equal", "repeat_equal", "sha256"}.
+//   uzp-export-tests [--fault <point>[:<n>]] publish <templates dir> <spec.json> <config.json>
+//       (phase1.17) As `export`, through `PublishExport`: the files and the receipt published as a
+//       new generation under exportPath; the spec's mesh is also the project's imported mesh (a
+//       resource). Prints {"generation", "receipt_sha256", "files": [{rootPath, relativePath,
+//       path, size, sha256}]} or {"error": class, "message": text}. `--fault` arms a test-only
+//       fault hook (src/export/fault.h).
+//   uzp-export-tests [--fault <point>[:<n>]] fixed-copy <exportPath> <dir>
+//       (phase1.17) `CopyFixedNames`; prints {"generation", "files": [path...]} or {"error"}.
+//   uzp-export-tests consume-pinned <exportPath>
+//   uzp-export-tests consume-locked <exportPath> <dir>
+//       (phase1.17) A fixed-name test consumer through the generation-pinning adapter
+//       (`OpenPinnedDelivery`) or under the publication lock (`LockedFixedNames`): reads every
+//       file of the delivery by its fixed name and prints {"generation", "files": {path:
+//       sha256 of the bytes read}} or {"error": "Failure", "message"} when it fails before
+//       consumption.
+//   uzp-export-tests receipt <project skeleton.json> <config.json>
+//       (phase1.17) `BuildReceipt` of the compiled plan, each file's bytes standing in as its
+//       relativePath (no evaluation); prints the receipt.
+//   uzp-export-tests hold-lock <exportPath> <milliseconds>
+//       (phase1.17) Takes the publication lock, prints "held", keeps it for the given time.
+//   uzp-export-tests recover --recover <exportPath> [--fixed-names <dir>]...
+//       (phase1.17) `UzPainter.exe export --recover ...` (src/export/cli.h): the same output.
 //
 // A project skeleton: {"color_management"?, "workflow"?, "normal_map_format"?, "mesh"?: <mesh file
 // name>, "texture_sets": [{"name", "original_name"?, "resolution"?: [w, h], "mesh_maps"?:
@@ -39,9 +61,13 @@
 #include "evaluator/templates.h"
 #include "evaluator/geometry_mask.h"
 #include "export/config.h"
+#include "export/cli.h"
 #include "export/exr_writer.h"
+#include "export/fault.h"
+#include "export/fixed_names.h"
 #include "export/plan.h"
 #include "export/png_writer.h"
+#include "export/publish.h"
 #include "export/virtual_maps.h"
 #include "export/write.h"
 #include "mesh/mesh_import.h"
@@ -55,6 +81,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -64,7 +91,9 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -609,11 +638,160 @@ int RunRoundtrip(const fs::path& out) {
     return 0;
 }
 
+// ── Publication and fixed-name delivery (phase1.17) ─────────────────────────
+
+json::Object FailureJson(const render::Error& error) {
+    return json::Object{{"error", "Failure"}, {"message", error.reason}};
+}
+
+int RunPublish(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath) {
+    Spec spec = ParseSpec(specPath);
+    const json::Value document = json::Parse(ReadText(specPath));
+    const json::Object& o = Obj(document, "spec");
+    if (o.contains("mesh")) {
+        const fs::path meshPath(Str(o.at("mesh"), "mesh"));
+        const std::string bytes = ReadText(meshPath);
+        const std::string sha = core::Sha256Hex(bytes);
+        core::ResourceMeta meta;
+        meta.id = spec.project.AllocateId();
+        meta.name = meshPath.filename().string();
+        meta.mime = "model/obj";
+        meta.size = static_cast<std::int64_t>(bytes.size());
+        meta.usage = "mesh";
+        meta.origin = "test";
+        meta.imported_at = "2026-10-12T00:00:00Z";
+        spec.project.resources[sha].push_back(std::move(meta));
+        spec.project.mesh = core::MeshReference{
+            sha, json::Object{{"source", json::Object{{"name", meshPath.filename().string()}}}}, {}};
+        core::Validate(spec.project);
+    }
+    json::Object result;
+    try {
+        const exporter::ExportPlan plan = exporter::CompilePlan(spec.project, ReadText(configPath));
+        auto templates = std::make_shared<const evaluator::TemplateLibrary>(evaluator::TemplateLibrary::Load(templatesDir));
+        evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
+        exporter::SourceInputs inputs;
+        inputs.templateId = spec.templateId;
+        inputs.resources = spec.resources;
+        inputs.geometry = spec.geometry;
+        exporter::PublishRequest request;
+        request.identity = {"0.0.0-test", "uzp-export-tests"};
+        request.projectPath = "C:/projects/fixture.uzp";
+        render::Result<exporter::Publication> published =
+            exporter::PublishExport(spec.project, 1, plan, inputs, *templates, cpu.store(), cpu.cache(), request);
+        if (!published) {
+            result = FailureJson(published.error());
+        } else {
+            json::Array files;
+            for (const exporter::WrittenFile& f : published->files) {
+                files.push_back(json::Object{{"rootPath", f.rootPath},
+                                             {"relativePath", f.relativePath},
+                                             {"path", f.path},
+                                             {"size", static_cast<std::int64_t>(f.size)},
+                                             {"sha256", f.sha256}});
+            }
+            result["generation"] = published->generation;
+            result["receipt_sha256"] = published->receiptSha256;
+            result["files"] = std::move(files);
+        }
+    } catch (const core::ValueError& e) {
+        result["error"] = "ValueError";
+        result["message"] = std::string(e.what());
+    } catch (const core::NotYetSupported& e) {
+        result["error"] = "NotYetSupported";
+        result["message"] = std::string(e.what());
+    }
+    std::cout << json::WriteCanonical(result) << "\n";
+    return 0;
+}
+
+int RunFixedCopy(const fs::path& exportPath, const fs::path& directory) {
+    render::Result<exporter::Delivery> delivery = exporter::CopyFixedNames(exportPath, directory);
+    json::Object result;
+    if (!delivery) {
+        result = FailureJson(delivery.error());
+    } else {
+        json::Array files;
+        for (const exporter::ReceiptFile& f : delivery->files) files.emplace_back(f.path);
+        result["generation"] = delivery->generation;
+        result["files"] = std::move(files);
+    }
+    std::cout << json::WriteCanonical(result) << "\n";
+    return 0;
+}
+
+/// The fixed-name test consumer: every file of the delivery read by its fixed name.
+int RunConsume(const fs::path& exportPath, const std::optional<fs::path>& directory) {
+    json::Object result;
+    const auto consume = [&](const exporter::Delivery& delivery) {
+        json::Object files;
+        for (const exporter::ReceiptFile& f : delivery.files) {
+            files[f.path] = core::Sha256Hex(ReadText(delivery.directory / exporter::Utf8Path(f.path)));
+        }
+        result["generation"] = delivery.generation;
+        result["files"] = std::move(files);
+    };
+    if (directory) {
+        render::Result<exporter::LockedFixedNames> locked = exporter::LockedFixedNames::Open(exportPath, *directory);
+        if (!locked) {
+            result = FailureJson(locked.error());
+        } else {
+            consume(locked->delivery());
+        }
+    } else {
+        render::Result<exporter::Delivery> pinned = exporter::OpenPinnedDelivery(exportPath);
+        if (!pinned) {
+            result = FailureJson(pinned.error());
+        } else {
+            consume(*pinned);
+        }
+    }
+    std::cout << json::WriteCanonical(result) << "\n";
+    return 0;
+}
+
+int RunReceipt(const fs::path& projectPath, const fs::path& configPath) {
+    const core::Project project = ParseSkeleton(json::Parse(ReadText(projectPath)));
+    const exporter::ExportPlan plan = exporter::CompilePlan(project, ReadText(configPath));
+    std::vector<exporter::EncodedFile> encoded;
+    for (const exporter::PlannedFile& file : plan.files) encoded.push_back({file.relativePath, std::nullopt});
+    std::cout << json::WriteCanonical(exporter::BuildReceipt(
+                     {project, 1, plan, encoded, "000001", "2026-10-12T00:00:00Z", "", {"0.0.0-test", "uzp-export-tests"}, {}}))
+              << "\n";
+    return 0;
+}
+
+int RunHoldLock(const fs::path& exportPath, const std::string& milliseconds) {
+    render::Result<exporter::PublicationLock> lock = exporter::PublicationLock::Acquire(exportPath);
+    if (!lock) {
+        std::cout << json::WriteCanonical(FailureJson(lock.error())) << std::endl;
+        return 1;
+    }
+    std::cout << "held" << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(std::stoll(milliseconds)));
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-    const std::vector<std::string> args(argv + 1, argv + argc);
+    std::vector<std::string> args(argv + 1, argv + argc);
     try {
+        if (args.size() >= 2 && args[0] == "--fault") {
+            exporter::fault::Arm(args[1]);
+            args.erase(args.begin(), args.begin() + 2);
+        }
+        if (args.size() == 4 && args[0] == "publish") return RunPublish(args[1], args[2], args[3]);
+        if (args.size() == 3 && args[0] == "fixed-copy") return RunFixedCopy(args[1], args[2]);
+        if (args.size() == 2 && args[0] == "consume-pinned") return RunConsume(args[1], std::nullopt);
+        if (args.size() == 3 && args[0] == "consume-locked") return RunConsume(args[1], fs::path(args[2]));
+        if (args.size() == 3 && args[0] == "receipt") return RunReceipt(args[1], args[2]);
+        if (args.size() == 3 && args[0] == "hold-lock") return RunHoldLock(args[1], args[2]);
+        if (!args.empty() && args[0] == "recover") {
+            std::vector<std::string> verb(args);
+            verb[0] = "export";
+            return exporter::RunExportCommand(verb, stdout, stderr);
+        }
         if (args.size() == 2 && args[0] == "plan") return RunPlan(args[1]);
         if (args.size() == 5 && args[0] == "files") return RunFiles(args[1], args[2], args[3], args[4]);
         if (args.size() == 4 && args[0] == "export") return RunExport(args[1], args[2], args[3]);
@@ -624,6 +802,9 @@ int main(int argc, char** argv) {
         return 2;
     }
     std::cerr << "usage: uzp-export-tests plan <cases.json> | files <templates> <spec.json> <config.json> <out> | "
-                 "export <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out>\n";
+                 "export <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out> | "
+                 "[--fault <point>[:<n>]] publish <templates> <spec.json> <config.json> | "
+                 "[--fault <point>[:<n>]] fixed-copy <exportPath> <dir> | consume-pinned <exportPath> | "
+                 "consume-locked <exportPath> <dir> | receipt <project.json> <config.json> | hold-lock <exportPath> <ms> | recover --recover <exportPath> [--fixed-names <dir>]...\n";
     return 2;
 }
