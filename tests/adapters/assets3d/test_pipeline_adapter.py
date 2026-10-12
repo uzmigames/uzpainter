@@ -1,0 +1,465 @@
+"""The Assets3D pipeline adapter over `UzPainter.exe` (task phase1.23 items 3.1-3.6; decision 113).
+
+The three pipeline scripts run byte-unchanged (their pins from the committed R9 request manifest)
+through `adapters/assets3d/layer_stack.py` on the wand v1 inputs (`wand.py`). Local run on the
+owner's machine (decision 028): it needs the UzmiGames asset repository at `E:\\UzmiGames\\Assets3D`
+(or `UZP_TEST_ASSETS3D`) and `zig` for a fresh `zig build painter`. CPU only.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import textwrap
+from collections.abc import Iterator
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+import pytest
+
+from adapters.assets3d import client
+from tests.adapters.assets3d.wand import ASSETS3D, REPO_ROOT, Wand
+
+SEMANTICS = REPO_ROOT / "parity" / "semantics" / "export-processing.json"
+PROBE_IMAGE = REPO_ROOT / "parity" / "fixtures" / "api-probes" / "checker-16.png"
+# Assets3D manifest `$defs/path` (the receipt schema's copy).
+A3D_PATH = re.compile(r"^(?!/)(?!.*[\\:])(?!.*(?:^|/)\.\.?(/|$))[^/]+(?:/[^/]+)*$")
+
+pytestmark = pytest.mark.skipif(
+    not (ASSETS3D / "AGENTS.md").is_file(),
+    reason=f"the UzmiGames asset repository is not at {ASSETS3D} (local run, decision 028)",
+)
+
+
+@pytest.fixture(scope="module")
+def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """`UzPainter.exe` of a fresh `zig build painter` install."""
+    zig = shutil.which("zig")
+    if zig is None:
+        pytest.skip("zig is not on PATH; UzPainter.exe cannot be built")
+    prefix = tmp_path_factory.mktemp("painter")
+    build = subprocess.run(
+        [zig, "build", "painter", "--prefix", str(prefix)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=3600,
+        check=False,
+    )
+    assert build.returncode == 0, build.stdout + build.stderr
+    return prefix / "bin" / "UzPainter.exe"
+
+
+@pytest.fixture
+def wand(painter: Path, tmp_path: Path) -> Wand:
+    return Wand(painter, tmp_path)
+
+
+@pytest.fixture
+def created(wand: Wand) -> Wand:
+    call = wand.create()
+    assert call.status == 0, call.stdout + call.stderr
+    return wand
+
+
+@pytest.fixture
+def adapter_env(wand: Wand, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """The wand's environment for in-process client calls."""
+    for key in ("UZPAINTER_EXE", "UZP_ASSETS3D_SESSION", "UZP_ASSETS3D_ROOT"):
+        monkeypatch.setenv(key, wand.env[key])
+    monkeypatch.delenv("UZP_ASSETS3D_OPEN_REDIRECTS", raising=False)
+    yield
+
+
+def production_state() -> dict[str, Any]:
+    """What the wand's production arguments name in Assets3D: the run must leave it as it is."""
+    found: dict[str, Any] = {}
+    for name in ("painter_create_args.json", "painter_export_args.json"):
+        arguments = json.loads(
+            (ASSETS3D / "_tmp/claude/varinha11-v1" / name).read_text(encoding="utf-8")
+        )
+        for key in ("dst", "out"):
+            if key in arguments:
+                path = Path(arguments[key])
+                found[key] = (
+                    sorted((p.name, p.stat().st_mtime_ns) for p in path.iterdir())
+                    if path.is_dir()
+                    else (path.stat().st_mtime_ns if path.exists() else None)
+                )
+    return found
+
+
+def export_gaps() -> list[str]:
+    """The export-processing entries the wand's five-map export needs that are still gaps."""
+    entries = json.loads(SEMANTICS.read_text(encoding="utf-8"))["entries"]
+    needed = {"srgb8-material-channels"}
+    return [e["entry_id"] for e in entries if e["entry_id"] in needed and e["status"] == "gap"]
+
+
+def revision(wand: Wand) -> Any:
+    return wand.probe("revision", "import uzpainter\nresult = uzpainter.project.revision()\n")
+
+
+ROOTS = """
+import substance_painter.layerstack as ls, substance_painter.textureset as ts
+import substance_painter.resource as rs
+stack = ts.get_active_stack()
+def tree(node):
+    out = {"name": node.get_name(), "uid": node.uid(), "visible": node.is_visible()}
+    if hasattr(node, "sub_layers"):
+        out["children"] = [tree(n) for n in node.sub_layers()]
+    return out
+result = {"roots": [tree(n) for n in ls.get_root_layer_nodes(stack)],
+          "resources": sorted(r.name for r in rs.list_project_resources())}
+"""
+
+
+def roots(wand: Wand) -> dict[str, Any]:
+    found: dict[str, Any] = wand.probe("roots", ROOTS)
+    return found
+
+
+def count(nodes: list[dict[str, Any]]) -> int:
+    return sum(1 + count(n.get("children", [])) for n in nodes)
+
+
+# ── 3.1 The wand v1 fixture ─────────────────────────────────────────────────────────────────────
+
+
+def test_wand_create_sync_and_export_run_unchanged(wand: Wand) -> None:
+    """3.1: create and sync return their JSON results through the adapter; export runs its pinned
+    bytes and returns its result, or, while the export of sRGB8 material channels at PNG 16 is a
+    gap (decision 103, owner phase1.25_pilot-wand item 2.6), the export's explicit refusal."""
+    before = production_state()
+    create = wand.create()
+    assert create.status == 0, create.stdout + create.stderr
+    created = create.document()
+    dst = wand.argument("create", "dst")
+    assert Path(created["file"]).resolve() == dst.resolve()
+    assert created["sets"] == ["11-Varinha-Madeira"]
+    assert sorted(created["maps"]) == ["AO", "Normal"]
+    assert created["needs_saving"] is False
+    assert created["res"] == "Resolution(2048, 2048)"
+
+    sync = wand.sync()
+    assert sync.status == 0, sync.stdout + sync.stderr
+    synced = sync.document("SYNC_DONE")
+    assert Path(synced["project"]).resolve() == dst.resolve()
+    assert synced["layers"] == 13
+    masks = sorted(PurePosixPath(name).stem for name in wand.job.sync.args["mask_files"])
+    assert len(masks) == 14 and sorted(synced["imported"]) == masks
+    assert synced["hidden"] == []
+    state = json.loads(wand.state.read_text(encoding="utf-8"))
+    assert sorted(state) == sorted(synced["imported"])
+
+    export = wand.export()
+    out = wand.argument("export", "out")
+    if export_gaps():
+        assert export.status == 1
+        assert "NotYetSupported" in export.stderr and "R-090" in export.stderr, export.stderr
+        assert "sRGB8 channel BaseColor" in export.stderr
+        assert not out.exists() or not any(out.iterdir())  # refused before writing
+    else:
+        assert export.status == 0, export.stdout + export.stderr
+        exported = export.document()
+        assert exported["status"] == "ExportStatus.Success"
+        assert len(next(iter(exported["files"].values()))) == 5
+    assert production_state() == before  # nothing written under the Assets3D root
+
+
+def test_a_changed_script_is_refused_before_anything_runs(wand: Wand, tmp_path: Path) -> None:
+    """2.5: a pinned script whose bytes differ is refused; nothing reaches UzPainter."""
+    changed = tmp_path / "painter_create.py"
+    changed.write_bytes(wand.script("painter-create-py").read_bytes() + b"\n")
+    pin = wand.job.inputs["painter-create-py"].sha256
+    pins = [*wand.pins(), "--pin", f"{changed}={pin}"]
+    call = wand.call("run", str(changed), pins=pins)
+    assert call.status == 1
+    refusal = json.loads(call.stdout)
+    assert refusal["success"] is False and refusal["error"]["type"] == "PinMismatch"
+    assert not wand.session.exists()
+
+
+# ── 3.2 Structured failures ─────────────────────────────────────────────────────────────────────
+
+
+def test_a_raising_script_is_a_structured_failure(wand: Wand, adapter_env: None) -> None:
+    """3.2: the reply carries the error and its traceback; the exit status is 1, and the layer
+    stack script's own transport turns it into its usual failure."""
+    reply, status = client.execute_python("print('before')\nx = 1\nraise ValueError('boom')\n")
+    assert status == client.FAILED
+    assert reply["success"] is False and reply["data"] is None
+    assert reply["error"]["type"] == "ValueError" and reply["error"]["message"] == "boom"
+    assert 'File "<uzpainter-assets3d-adapter>", line 3' in reply["error"]["traceback"]
+    assert "raise ValueError('boom')" in reply["error"]["traceback"]
+    assert reply["stdout"] == "before\n"
+
+    path = wand.work / "raises.py"
+    path.write_text("raise RuntimeError('from the script')\n", encoding="utf-8")
+    call = wand.run_file(path)
+    assert call.status == 1
+    assert "Painter MCP call failed" in call.stderr and "from the script" in call.stderr
+
+
+def test_a_result_is_returned_as_the_bridge_returns_it(adapter_env: None) -> None:
+    """3.2: `result` as JSON with both streams; a non-JSON value as its str(), as the bridge."""
+    reply, status = client.execute_python(
+        "import sys\nprint('out')\nprint('err', file=sys.stderr)\n"
+        "result = {'n': 1, 'path': __import__('pathlib').PurePosixPath('a/b'), 'params': params}\n"
+    )
+    assert status == client.OK
+    assert reply["success"] is True
+    assert reply["data"] == {"n": 1, "path": "a/b", "params": {}}
+    assert (reply["stdout"], reply["stderr"]) == ("out\n", "err\n")
+    assert reply["session"] is None and reply["exports"] == [] and reply["redirects"] == {}
+
+
+# ── 3.3 Shim isolation ──────────────────────────────────────────────────────────────────────────
+
+
+def test_the_shim_is_visible_to_adapter_run_scripts_only(
+    created: Wand, painter: Path, tmp_path: Path
+) -> None:
+    """3.3: `_substance_painter` imports inside an adapter-run script; a plain `run` script and
+    the facade expose no such symbol, and the capability manifest names none."""
+    inside = created.probe(
+        "shim",
+        "import _substance_painter.display as display\n"
+        "result = {'name': display.__name__, 'callable': callable(display.save_viewport)}\n",
+    )
+    assert inside == {"name": "_substance_painter.display", "callable": True}
+
+    plain = tmp_path / "plain.py"
+    plain.write_text(
+        textwrap.dedent(
+            """
+            import importlib, pkgutil, sys
+            import substance_painter
+            for info in pkgutil.iter_modules(substance_painter.__path__):
+                importlib.import_module("substance_painter." + info.name)
+            try:
+                import _substance_painter
+                found = True
+            except ModuleNotFoundError:
+                found = False
+            facade = sorted(
+                name for name, module in sys.modules.items()
+                if name.startswith(("substance_painter", "uzpainter_facade"))
+                for attr in dir(module) if "_substance_painter" in attr
+            )
+            result = {"importable": found, "facade": facade,
+                      "loaded": sorted(m for m in sys.modules if m.startswith("_substance"))}
+            """
+        ),
+        encoding="utf-8",
+    )
+    process = subprocess.run(
+        [str(painter), "run", str(plain)], capture_output=True, text=True, timeout=600, check=False
+    )
+    report = client.report_line(process.stdout)
+    assert process.returncode == 0 and report is not None, process.stdout + process.stderr
+    assert report["result"] == {"importable": False, "facade": [], "loaded": []}
+    manifest = json.loads((painter.parent / "capabilities.json").read_text(encoding="utf-8"))
+    assert not [e for e in manifest["entries"] if e["symbol"].startswith("_substance_painter")]
+
+
+# ── 3.4 Missing capabilities in Phase 1 ─────────────────────────────────────────────────────────
+
+
+def test_capture_fails_naming_painter_viewport(created: Wand) -> None:
+    """3.4: `capture` reaches the shim, which names the missing capture mode; nothing changes."""
+    before = revision(created)
+    out = created.work / "capture.png"
+    call = created.call("capture", "--out", str(out), "--size", "640", "480")
+    assert call.status == 1
+    assert "NotYetSupported" in call.stderr and "painter_viewport" in call.stderr, call.stderr
+    assert "phase2.2_preview-capture" in call.stderr
+    assert "CAPTURE_DONE" not in call.stdout and not out.exists()
+    assert revision(created) == before
+
+
+def test_smart_is_refused_naming_smart_presets(created: Wand) -> None:
+    """3.4: `smart` is refused before any call reaches UzPainter, naming the smart presets of
+    phase3.6; the project's revision and the session are unchanged."""
+    before = revision(created)
+    session = created.session.read_text(encoding="utf-8")
+    config = created.work / "smart.json"
+    config.write_text(
+        json.dumps(
+            {
+                "layers": [
+                    {
+                        "name": "dirt",
+                        "color": [90, 70, 50],
+                        "mask": {"type": "smart_mask", "name": "Dirt"},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    call = created.call("smart", "--config", str(config))
+    assert call.status == 1
+    refusal = json.loads(call.stdout)
+    assert refusal["error"]["type"] == "NotYetSupported"
+    assert refusal["error"]["capability"] == "smart presets"
+    assert refusal["error"]["owner"] == "phase3.6_smart-presets-projections"
+    assert {m["symbol"] for m in refusal["error"]["missing"]} == {
+        "substance_painter.layerstack.insert_smart_mask",
+        "substance_painter.resource.search",
+    }
+    assert created.session.read_text(encoding="utf-8") == session
+    assert revision(created) == before
+
+
+# ── 3.5 LAY-06 through the scripts ──────────────────────────────────────────────────────────────
+
+
+def test_sync_repeated_creates_no_duplicate_and_ids_survive_reopen(created: Wand) -> None:
+    """3.5: the layer uids `sync` reports read back unchanged in the next call (a fresh process
+    reopening the saved project) and after a save; repeating `sync` leaves one group of the
+    title with the same 13 layers and reuses every imported image."""
+    first = created.sync()
+    assert first.status == 0, first.stdout + first.stderr
+    title = json.loads(created.staged["wand-stack"].read_text(encoding="utf-8"))["title"]
+    data = json.loads(created.state.read_text(encoding="utf-8"))
+    tree = roots(created)
+    group = next(n for n in tree["roots"] if n["name"] == title)
+    assert count(group["children"]) == 13 + 4
+
+    created.probe(
+        "save", "import substance_painter.project as p\np.save()\nresult = p.needs_saving()\n"
+    )
+    after_save = roots(created)
+    assert after_save["roots"] == tree["roots"]
+
+    second = created.sync()
+    assert second.status == 0, second.stdout + second.stderr
+    synced = second.document("SYNC_DONE")
+    assert synced["imported"] == [] and synced["layers"] == 13
+    assert json.loads(created.state.read_text(encoding="utf-8")) == data
+    again = roots(created)
+    titled = [n for n in again["roots"] if n["name"] == title]
+    assert len(titled) == 1 and count(titled[0]["children"]) == 13 + 4
+    assert titled[0]["uid"] != group["uid"]  # rebuilt, the earlier group deleted
+    assert again["resources"] == tree["resources"]  # no image imported twice
+
+
+# ── 3.6 LAY-07 through sync ─────────────────────────────────────────────────────────────────────
+
+
+UNRELATED = f"""
+import substance_painter.layerstack as ls, substance_painter.textureset as ts
+import substance_painter.resource as rs
+CT = ts.ChannelType
+stack = ts.get_active_stack()
+def group(name):
+    g = ls.insert_group(ls.InsertPosition.from_textureset_stack(stack)); g.set_name(name)
+    f = ls.insert_fill(ls.InsertPosition.inside_node(g, ls.NodeStack.Substack))
+    f.set_name(name + " fill")
+    return g, f
+metal, _ = group("metal")
+extra, fill = group("extra")
+r = rs.import_project_resource({str(PROBE_IMAGE)!r}, rs.Usage.TEXTURE, "extra_only", "probe")
+fill.active_channels = {{CT.BaseColor}}
+fill.set_source(CT.BaseColor, r.identifier())
+result = {{"extra_fill": fill.uid()}}
+"""
+
+SOURCE = """
+import substance_painter.layerstack as ls, substance_painter.textureset as ts
+node = ls.get_node_by_uid(__UID__)
+result = node.get_source(ts.ChannelType.BaseColor).resource_id.name
+"""
+
+SHOW = """
+import substance_painter.layerstack as ls, substance_painter.textureset as ts
+for n in ls.get_root_layer_nodes(ts.get_active_stack()):
+    n.set_visible(True)
+result = None
+"""
+
+
+def test_sync_rebuilds_only_its_group_and_keeps_unrelated_content(created: Wand) -> None:
+    """3.6: `sync` rebuilds only the stack's group; `metal` and `extra` are hidden, not deleted,
+    with their content and the resource only `extra` uses; `--keep-visible` keeps `metal` shown."""
+    first = created.sync()
+    assert first.status == 0, first.stdout + first.stderr
+    fill = created.probe("unrelated", UNRELATED)["extra_fill"]
+    title = json.loads(created.staged["wand-stack"].read_text(encoding="utf-8"))["title"]
+    before = {n["name"]: n for n in roots(created)["roots"]}
+    assert {"metal", "extra", title} <= set(before)
+
+    second = created.sync()
+    assert second.status == 0, second.stdout + second.stderr
+    assert sorted(second.document("SYNC_DONE")["hidden"]) == ["extra", "metal"]
+    after = roots(created)
+    by_name = {n["name"]: n for n in after["roots"]}
+    for name in ("metal", "extra"):
+        assert by_name[name]["visible"] is False
+        assert {**by_name[name], "visible": True} == before[name]  # same nodes, same content
+    assert by_name[title]["uid"] != before[title]["uid"] and by_name[title]["visible"] is True
+    assert "extra_only" in after["resources"]
+    assert created.probe("source", SOURCE.replace("__UID__", str(fill))) == "extra_only"
+
+    created.probe("show", SHOW)
+    kept = created.sync("--keep-visible", "met")
+    assert kept.status == 0, kept.stdout + kept.stderr
+    assert kept.document("SYNC_DONE")["hidden"] == ["extra"]
+    shown = {n["name"]: n["visible"] for n in roots(created)["roots"]}
+    assert shown["metal"] is True and shown["extra"] is False
+
+
+# ── The consumers' route and the manifest (decisions 097, 113) ──────────────────────────────────
+
+
+EXPORT = """
+import os
+import substance_painter.export as ex, substance_painter.textureset as ts
+cfg = {"exportShaderParams": False, "exportPath": __OUT__, "defaultExportPreset": "p",
+       "exportPresets": [{"name": "p", "maps": [{"fileName": "probe_Roughness", "channels": [
+           {"destChannel": "L", "srcChannel": "L", "srcMapType": "documentMap",
+            "srcMapName": "roughness"}]}]}],
+       "exportList": [{"rootPath": s.name()} for s in ts.all_texture_sets()],
+       "exportParameters": [{"parameters": {
+           "fileFormat": "png", "bitDepth": "8", "dithering": False,
+           "paddingAlgorithm": "passthrough"}}]}
+r = ex.export_project_textures(cfg)
+result = {"status": str(r.status), "files": {str(k): v for k, v in r.textures.items()}}
+"""
+
+
+def test_exports_are_verified_and_their_manifest_rebased(
+    created: Wand, adapter_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The fixed-name copy the consumers read is verified against its receipt in the run, and
+    the receipt's manifest files are named under the Assets3D root (here the mirror)."""
+    out = created.root / "_tmp" / "claude" / "varinha11-v1" / "probe-export"
+    reply, status = client.execute_python(EXPORT.replace("__OUT__", repr(str(out))))
+    assert status == client.OK, reply["error"]
+    (export,) = reply["exports"]
+    assert [c["verified"] for c in export["fixed_names"]] == [True]
+    assert Path(export["fixed_names"][0]["directory"]).resolve() == out.resolve()
+    files = export["manifest"]["manifest_files"]
+    assert all(A3D_PATH.match(f["path"]) for f in files.values())
+    generation = f"_tmp/claude/varinha11-v1/probe-export/generations/{export['generation']}"
+    assert files["export-plan"]["path"] == f"{generation}/plan.json"
+    assert files["probe_roughness-png"]["path"] == f"{generation}/files/probe_Roughness.png"
+    dst = created.argument("create", "dst")
+    assert files["project"]["path"] == dst.relative_to(created.root).as_posix()
+    assert files["mesh"]["path"] == "_tmp/claude/varinha11-v1/paint/11-Varinha-Madeira-v1_low.obj"
+    assert export["manifest"]["manifest_export"]["outputs"] == ["probe_roughness-png"]
+
+    monkeypatch.setenv("UZP_ASSETS3D_ROOT", str(tmp_path / "elsewhere"))
+    reply, status = client.execute_python(EXPORT.replace("__OUT__", repr(str(out))))
+    assert status == client.OK, reply
+    (export,) = reply["exports"]
+    assert (
+        export["manifest"] is None and "outside the Assets3D root" in export["manifest_unavailable"]
+    )
+    assert os.path.isfile(out / "probe_Roughness.png")

@@ -1,0 +1,17 @@
+{
+  "id": 113,
+  "slug": "the-assets3d-adapter-swaps-only-the-transport-carries-the-session-between-run-calls-and-refuses-a-missing-capability-before-mutation",
+  "title": "The Assets3D adapter swaps only the transport, carries the session between run calls and refuses a missing capability before mutation",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.23_pyapi-pipeline-adapter",
+    "phase1.24_python-api-facade",
+    "phase1.25_pilot-wand",
+    "phase2.1_supervisor-ipc-worker",
+    "phase2.2_preview-capture",
+    "phase3.1_assets3d-cutover",
+    "phase3.6_smart-presets-projections"
+  ],
+  "supersededBy": null
+}

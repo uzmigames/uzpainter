@@ -16,7 +16,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["tools", "tests"]
+files = ["tools", "tests", "adapters"]
 explicit_package_bases = true
 exclude = ["^thirdparty/"]
 
@@ -28,6 +28,12 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 # Painter's runtime package: tools/parity/recorder/painter_side.py runs only inside Painter.
 module = ["substance_painter", "substance_painter.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# UzPainter's embedded modules: adapters/assets3d/runner.py imports them only inside
+# `UzPainter.exe run` (the native `uzpainter` and the facade's `uzpainter_facade`, python/).
+module = ["uzpainter", "uzpainter.*", "uzpainter_facade", "uzpainter_facade.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
