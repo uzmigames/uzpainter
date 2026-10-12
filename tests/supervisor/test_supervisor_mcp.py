@@ -333,6 +333,36 @@ def test_lost_reply_after_a_relative_save_as_keeps_the_path_it_resolved_to(
     assert session.call("project_inspect")["result"]["revision"] == revision + 1
 
 
+def test_lost_reply_after_opening_a_bundle_directory_recovers_its_imported_file(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """2.8: opening a bundle directory imports it into `<dir>.uzp`; after a lost reply the
+    supervisor reopens that imported file, not the bundle (whose import target now exists)."""
+    source = make_project(painter, tmp_path)
+    bundle = tmp_path / "bundle"
+    exported = subprocess.run(
+        [str(painter), "export-bundle", str(source), str(bundle)],
+        capture_output=True,
+        timeout=300,
+        check=False,
+    )
+    assert exported.returncode == 0, exported.stdout + exported.stderr
+    session = Mcp(painter, tmp_path, *BASE)
+    sessions.append(session)
+    opened = session.call("project_open", {"path": str(bundle)})["result"]
+    imported = tmp_path / "bundle.uzp"
+    assert Path(opened["path"]) == imported
+    revision = opened["revision"]
+    error = lost_reply_after(session, revision, INSERT_FILL)
+    assert error["details"]["committed_revision"] == revision + 1
+    status = session.status()
+    assert Path(status["project"]) == imported and status["revision"] == revision + 1
+    recovery = status["recoveries"][-1]
+    assert Path(recovery["project"]) == imported and recovery["revision"] == revision + 1
+    inspected = session.call("project_inspect")["result"]
+    assert inspected["open"] and inspected["revision"] == revision + 1
+
+
 def run_revision(session: Mcp, path: Path) -> int:
     """The revision of the project file `path`, read through the session's worker without
     disturbing what it holds (opened and closed inside one script that reopens the original)."""
