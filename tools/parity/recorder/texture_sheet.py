@@ -10,11 +10,15 @@ manifest's `applied_settings` with `applied_by: operator_settings_sheet`, one en
 |---|---|
 | `Texture Set Settings/Height to normal method (<texture set>)` | that texture set |
 | `Layers/Blending mode (step <n>, <channel>)` | the node inserted by step n, one channel |
+| `Texture Set List/Name (<texture set>)` | the set imported under that name (decision 093) |
 
 After the state steps are replayed and before recording `r1`, the recorder shows each target
 through the documented API (`textureset.set_active_stack`) and asks the operator (a person at the
 console or `painter_ui.UiOperator`) to apply the sheet value and enter what the widget then shows.
-A layer value is also read back through the documented `Node.get_blending_mode`. Any value that
+A layer value is also read back through the documented `Node.get_blending_mode`, and a texture
+set's name through the documented `TextureSet.name` and `original_name` (the documented API
+cannot rename a texture set; the export wildcard `$sceneMaterial` of a renamed set is the
+observation). Any value that
 differs from the sheet refuses the golden before anything is written. The operator gives an image
 of the panel for each target. After save and reopen (`r2`) the same values are read again, not
 applied, and must still equal the sheet. Entries and images are private outputs of both
@@ -37,8 +41,10 @@ from tools.parity.recorder.session import PainterSession, RecorderError
 OPERATOR = "operator_settings_sheet"
 TEXTURE_SET_PANEL = "Texture Set Settings"
 LAYERS_PANEL = "Layers"
+TEXTURE_SET_LIST = "Texture Set List"
 HEIGHT_METHOD = "Height to normal method"
 BLENDING_MODE = "Blending mode"
+SET_NAME = "Name"
 HEIGHT_METHODS = ("Sharp", "Smooth (Sobel)")
 TEXTURE_SET_NAME = re.compile(
     rf"^{TEXTURE_SET_PANEL}/(?P<setting>{HEIGHT_METHOD}) \((?P<texture_set>[^()]+)\)$"
@@ -46,6 +52,9 @@ TEXTURE_SET_NAME = re.compile(
 LAYER_NAME = re.compile(
     rf"^{LAYERS_PANEL}/(?P<setting>{BLENDING_MODE}) \(step (?P<step>\d+), (?P<channel>\w+)\)$"
 )
+LIST_NAME = re.compile(rf"^{TEXTURE_SET_LIST}/(?P<setting>{SET_NAME}) \((?P<texture_set>[^()]+)\)$")
+# A texture-set name the operator types: no wildcard, path or group character.
+SET_NAME_VALUE = re.compile(r"[A-Za-z0-9_]+")
 PANEL_IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 
 
@@ -92,6 +101,18 @@ def texture_sheet(job: Job) -> tuple[SheetEntry, ...]:
                     texture_set=match["texture_set"],
                 )
             )
+        elif match := LIST_NAME.match(name):
+            if not SET_NAME_VALUE.fullmatch(value):
+                raise RecorderError(f"{name}: {value!r} is not a texture set name the sheet allows")
+            entries.append(
+                SheetEntry(
+                    name,
+                    TEXTURE_SET_LIST,
+                    match["setting"],
+                    value,
+                    texture_set=match["texture_set"],
+                )
+            )
         elif match := LAYER_NAME.match(name):
             step = int(match["step"])
             if step not in inserted:
@@ -110,7 +131,8 @@ def texture_sheet(job: Job) -> tuple[SheetEntry, ...]:
             raise RecorderError(
                 f"operator setting {name!r} names no target the texture operator knows "
                 f"('{TEXTURE_SET_PANEL}/{HEIGHT_METHOD} (<texture set>)' or "
-                f"'{LAYERS_PANEL}/{BLENDING_MODE} (step <n>, <channel>)')"
+                f"'{LAYERS_PANEL}/{BLENDING_MODE} (step <n>, <channel>)' or "
+                f"'{TEXTURE_SET_LIST}/{SET_NAME} (<texture set>)')"
             )
     names = [e.name for e in entries]
     if len(names) != len(set(names)):
@@ -130,8 +152,25 @@ def readback_specs(entries: tuple[SheetEntry, ...]) -> list[dict[str, Any]]:
     return [blending_readback(e) for e in entries if e.node_step is not None]
 
 
+def listed_name(session: PainterSession, entry: SheetEntry) -> str:
+    """The name the texture set imported as `entry.texture_set` has now (documented
+    `TextureSet.name` and `original_name`)."""
+    names = [
+        n["name"]
+        for n in session.call("texture_set_names")
+        if n["original_name"] == entry.texture_set
+    ]
+    if len(names) != 1:
+        raise RecorderError(
+            f"{entry.name}: {len(names)} texture sets were imported under that name"
+        )
+    return str(names[0])
+
+
 def show_target(session: PainterSession, entry: SheetEntry) -> str:
     """Make the entry's target the one Painter's panels show; returns how a prompt names it."""
+    if entry.panel == TEXTURE_SET_LIST:
+        return f"{entry.setting} of texture set '{listed_name(session, entry)}'"
     if entry.texture_set is not None:
         shown = session.call("show_texture_set", texture_set=entry.texture_set)
         if shown != entry.texture_set:
@@ -142,7 +181,16 @@ def show_target(session: PainterSession, entry: SheetEntry) -> str:
 
 
 def check_api_value(session: PainterSession, entry: SheetEntry) -> None:
-    """A layer's blending mode as the documented getter reports it must be the sheet's."""
+    """A layer's blending mode or a texture set's name, as the documented getters report it,
+    must be the sheet's."""
+    if entry.panel == TEXTURE_SET_LIST:
+        name = listed_name(session, entry)
+        if name != entry.value:
+            raise RecorderError(
+                f"{entry.name}: TextureSet.name reads {name!r}, sheet says {entry.value!r}; "
+                "golden refused"
+            )
+        return
     if entry.node_step is None:
         return
     spec = blending_readback(entry)

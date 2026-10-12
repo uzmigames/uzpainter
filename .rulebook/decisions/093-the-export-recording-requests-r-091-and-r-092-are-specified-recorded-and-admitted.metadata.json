@@ -1,0 +1,13 @@
+{
+  "id": 93,
+  "slug": "the-export-recording-requests-r-091-and-r-092-are-specified-recorded-and-admitted",
+  "title": "The export recording requests R-091 and R-092 are specified, recorded and admitted",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.15_export-plan-compiler",
+    "phase1.16_export-processing-encoders",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}

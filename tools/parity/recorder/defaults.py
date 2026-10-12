@@ -60,7 +60,7 @@ def check_baking_job(job: Job) -> None:
         raise RecorderError("a baking-defaults job creates one project and changes nothing else")
     if set(job.state_steps[0].args) != {"mesh"}:
         raise RecorderError("defaults are read on a fresh project: create takes only `mesh`")
-    if job.exports:
+    if job.exports or job.export_probes:
         raise RecorderError("a baking-defaults job exports nothing")
     ids = [baking_output_id(step) for step in job.captures]
     if len(ids) != len(set(ids)):
@@ -252,7 +252,7 @@ def list_shipped_templates(session: PainterSession) -> list[str]:
 
 def check_template_job(job: Job) -> list[str]:
     """One `project.create(mesh, template)` per template; returns the template identifiers."""
-    if job.exports or job.captures:
+    if job.exports or job.export_probes or job.captures:
         raise RecorderError("a template job only creates projects; it exports nothing")
     named: list[str] = []
     for step in job.state_steps:

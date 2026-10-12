@@ -19,3 +19,7 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Scope taken over from phase1.16 (decision 090; refused before writing until then)
+- [ ] 6.1 Fit and implement, from recording R-090 (`parity/reports/phase1/export-processing-encoders.md` §5), every export processing phase1.16 refuses: the `color`, `transparent` and `diffusion` paddings with `dilationDistance` and `infinite` on islanded texture sets (P5, P9; partial fit in `parity/semantics/export-processing.json`), resize (P4), dithering (P3), PNG 8 values (P1), OpenEXR 16f (P2), the L+A layout (P6), mesh maps other than normal_base (P7), sRGB8 channels in OpenEXR and the sRGB8 material channels with the luma of an empty one (P10), and RGB+A once the plan resolves alpha sources (R-091); each exact on its Tier 0 goldens
+

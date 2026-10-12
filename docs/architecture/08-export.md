@@ -8,9 +8,13 @@ Implements D7 (`05-resolution.md`) and owner answers Q10 (decision 023: UE 5.6 w
 
 The configuration is **compiled into a typed export plan** before any GPU work: every output file with its resolved sources, parameters, size, naming and target format. Unknown identifiers (e.g. the pipeline's `Mixed_AO`, which crashed Painter — the documented name is `AO_Mixed`) are rejected here with the valid alternatives. `list_project_textures` returns the plan; the MCP `export` tool exposes it as the dry run.
 
+Implemented in `src/export/` (`phase1.15_export-plan-compiler`, decision 085; `src/export/EXPORT.md`). The rules the documentation leaves open were decided by the Tier 0 recordings: the dry run of every recorded export step lists exactly the files Painter wrote (`parity/reports/phase1/export-plan-compiler.md`). A `documentMap` the stack lacks makes its map absent (no file), as does a map made only of `defaultMap white`. Legacy names read their OpenPBR member when the stack lacks the legacy one. Every case no recording covers fails with `NotYetSupported` before anything is written, naming recording R-085. The evaluator's own limits stay with it: the export evaluates every planned file before it writes any. The Python surface (`uzpainter.export.plan`, `list_project_textures`) is `phase1.19_pyapi-native-module` item 2.7.
+
 ## 2. Virtual maps
 
 `Normal_OpenGL`, `Normal_DirectX` (mesh normal ⊕ channel normal ⊕ height-derived normal, `04-layer-stack-and-compositing.md` §6, tagged `combined`), `AO_Mixed`, `Diffuse`, `Specular`, `Glossiness`, `Glossiness2`, `Unity4Diff`, `Unity4Gloss`, `reflection`, `1/ior`, `f0`, `View_2D` — definitions from Adobe's public output-template documentation (the `export.html` API page and the help pages), operators fitted and confirmed in Tier 0 against private oracles. A geometry-only normal pass-through is exported through `meshMap normal_base` (EXP-01).
+
+Supported today (decision 086, `parity/semantics/virtual-maps.json`): `Normal_OpenGL` and `Normal_DirectX`, exact through the plan. `AO_Mixed` and the ten converted maps are release gaps, refused before writing until recording R-086 and its fit: `AO_Mixed`'s calibrated operator (`ao-mixed.json`) misses its opacity-0.5 golden set, and the converted maps have no golden.
 
 ## 3. Formats and processing
 
@@ -20,11 +24,23 @@ The configuration is **compiled into a typed export plan** before any GPU work: 
 | Resize | `sizeLog2` scalar keeps aspect; `[w,h]` does not; filter fitted in Tier 0 |
 | Dithering | Explicit per map; algorithm fitted in Tier 0 (Painter's export dithering is not documented) |
 | Bit depth / colour | `8`, `16`, `16f`, `32f` as the format allows; colour-managed channels encoded sRGB, data channels linear; the project's colour configuration decides `$colorSpace` |
-| PNG | 8/16-bit through UzPainter's own writer over libpng + zlib (vendored from upstream, `docs/licensing-and-clean-room.md` §3; UzEngine's 8-bit-only PNG file encoder is not used, `13-engine-integration.md` §2.4); fixed zlib level and strategy for byte determinism |
-| EXR | 16f/32f via tinyexr (lossless modes) |
+| PNG | 8/16-bit through UzPainter's own encoder over the vendored zlib (decision 089: it writes Painter's bytes; libpng is not vendored, spng stays the decoder; UzEngine's 8-bit-only PNG file encoder is not used, `13-engine-integration.md` §2.4); fixed filter choice, zlib level and strategy for byte determinism |
+| EXR | 16f/32f via tinyexr (PIZ, Painter's bytes with OpenEXR's Huffman tie-break as the one recorded local change, decision 089) |
 | TGA/BMP/JPEG | stb / libjpeg-turbo (8-bit) |
 | DDS | Own header writer + etcpak BC1/BC3/BC4/BC5/BC7 (CPU, deterministic, behind an encoder adapter; bc7enc_rdo is the replacement candidate) |
 | Not in v1 | TIFF, PSD, WebP, J2K/JP2, PGM, JNG, `sbsar` — listed as release gaps in the capability manifest; requesting them raises before writing anything |
+
+Implemented in `src/export/` (`phase1.16_export-processing-encoders`, decisions 089 and 090; `src/export/EXPORT.md` §4).
+
+- **Exact in the recorded domain.**
+  - Painter's PNG and OpenEXR files re-encode byte for byte.
+  - The recorded PNG 16 and OpenEXR 32f exports, written end to end, equal Painter's files where the UV islands cover the tile.
+  - `passthrough` on islanded sets writes the evaluated values.
+- **Refused before writing** until recording R-090 and its fit:
+  - PNG 8 values, OpenEXR 16f, dithering, resize;
+  - the `color`, `transparent` and `diffusion` paddings, and `infinite` on islanded sets (seam-following, partially fitted);
+  - the L+A layout, sRGB8 channels in OpenEXR, and mesh maps other than `normal_base`.
+- **Recorded but not fitted**: sRGB8 material channels such as BaseColor (exported sRGB-encoded), and RGB+A, whose alpha sources the plan does not resolve yet.
 
 ## 4. Presets
 

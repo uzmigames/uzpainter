@@ -275,6 +275,10 @@
       "documented_as": "substance_painter.export.export_project_textures",
       "page": "substance_painter/export.html"
     },
+    "substance_painter.export.list_project_textures": {
+      "documented_as": "substance_painter.export.list_project_textures",
+      "page": "substance_painter/export.html"
+    },
     "substance_painter.js": {
       "documented_as": "substance_painter.js",
       "page": "substance_painter/js.html"
@@ -1609,6 +1613,10 @@
     },
     "substance_painter.textureset.TextureSet.name": {
       "documented_as": "substance_painter.textureset.TextureSet.name",
+      "page": "substance_painter/textureset/textureset.html"
+    },
+    "substance_painter.textureset.TextureSet.original_name": {
+      "documented_as": "substance_painter.textureset.TextureSet.original_name",
       "page": "substance_painter/textureset/textureset.html"
     },
     "substance_painter.textureset.TextureSet.set_mesh_map_resource": {

@@ -67,6 +67,10 @@ CAMERA = "substance_painter.display.Camera."
 SET_ENVIRONMENT = "substance_painter.display.set_environment_resource"
 SET_TONE_MAPPING = "substance_painter.display.set_tone_mapping"
 
+# Export probe (decision 087): the dry run of a literal `json_config`; when it succeeds the same
+# configuration is exported (`export_textures`).
+LIST_TEXTURES = "substance_painter.export.list_project_textures"
+
 # Procedural vocabulary (phase0.6_procedural-feasibility): imported resources, mesh maps, masks,
 # generator effects, smart materials and substance parameters.
 IMPORT_RESOURCE = "substance_painter.resource.import_project_resource"
@@ -192,6 +196,15 @@ CHANNEL_TYPES = {
     "SpecularWeight": lambda: substance_painter.textureset.ChannelType.SpecularWeight,
     "SpecularColor": lambda: substance_painter.textureset.ChannelType.SpecularColor,
     "SpecularRoughness": lambda: substance_painter.textureset.ChannelType.SpecularRoughness,
+    "CoatColor": lambda: substance_painter.textureset.ChannelType.CoatColor,
+    "CoatRoughness": lambda: substance_painter.textureset.ChannelType.CoatRoughness,
+    "CoatWeight": lambda: substance_painter.textureset.ChannelType.CoatWeight,
+    "FuzzColor": lambda: substance_painter.textureset.ChannelType.FuzzColor,
+    "FuzzRoughness": lambda: substance_painter.textureset.ChannelType.FuzzRoughness,
+    "FuzzWeight": lambda: substance_painter.textureset.ChannelType.FuzzWeight,
+    "SubsurfaceColor": lambda: substance_painter.textureset.ChannelType.SubsurfaceColor,
+    "SubsurfaceRadiusScale": lambda: substance_painter.textureset.ChannelType.SubsurfaceRadiusScale,
+    "SubsurfaceWeight": lambda: substance_painter.textureset.ChannelType.SubsurfaceWeight,
     "EmissionColor": lambda: substance_painter.textureset.ChannelType.EmissionColor,
     "Opacity": lambda: substance_painter.textureset.ChannelType.Opacity,
     "Height": lambda: substance_painter.textureset.ChannelType.Height,
@@ -213,6 +226,10 @@ CHANNEL_TYPES = {
     "User9": lambda: substance_painter.textureset.ChannelType.User9,
     "Scattering": lambda: substance_painter.textureset.ChannelType.Scattering,
     "Anisotropylevel": lambda: substance_painter.textureset.ChannelType.Anisotropylevel,
+    # The Specular Glossiness workflow's channels (decision 093).
+    "Diffuse": lambda: substance_painter.textureset.ChannelType.Diffuse,
+    "Specular": lambda: substance_painter.textureset.ChannelType.Specular,
+    "Glossiness": lambda: substance_painter.textureset.ChannelType.Glossiness,
 }
 
 # textureset.ChannelFormat members.
@@ -910,6 +927,10 @@ def apply_step(args: dict[str, Any]) -> dict[str, Any]:
         else:
             source = color_of(params["color"], params.get("color_space"))
         node.set_source(channel_type(params["channel"]), source)
+        if "color" not in params and "color_space" in params:
+            # A bitmap source's colour space (documented `SourceBitmap.set_color_space`).
+            space = member(COLOR_SPACES, "GenericColorSpace", params["color_space"])
+            node.get_source(channel_type(params["channel"])).set_color_space(space)
     elif call in (SET_ACTIVE_CHANNELS, SET_EFFECT_CHANNELS, SET_FILTER_CHANNELS):
         node = NODES[int(params["node_step"])]
         node.active_channels = {channel_type(c) for c in params["channels"]}
@@ -1221,6 +1242,20 @@ def export_textures(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def list_textures(args: dict[str, Any]) -> dict[str, Any]:
+    """The files `export_project_textures` would write for a configuration (documented dry run);
+    an invalid configuration raises its documented `ValueError`, which the host records."""
+    if not substance_painter.project.is_in_edition_state() or substance_painter.project.is_busy():
+        raise RuntimeError("project not ready for export")
+    listed = substance_painter.export.list_project_textures(args["config"])
+    return {
+        "textures": [
+            {"texture_set": key[0], "stack": key[1], "files": list(files)}
+            for key, files in sorted(listed.items())
+        ]
+    }
+
+
 def save_as(args: dict[str, Any]) -> dict[str, Any]:
     substance_painter.project.save_as(args["path"], substance_painter.project.ProjectSaveMode.Full)
     return {"saved_at": time.time()}
@@ -1331,6 +1366,22 @@ def show_texture_set(args: dict[str, Any]) -> str:
     return str(substance_painter.textureset.get_active_stack().material().name())
 
 
+def texture_set_names(args: dict[str, Any]) -> list[dict[str, str]]:
+    """Each texture set's name and the name it had when the mesh was imported (the operator's
+    rename in the Texture Set List, `texture_sheet.py`, decision 093). Painter 12.1.5 exposes
+    the documented `TextureSet.original_name` as a string, not a method."""
+    names = []
+    for texture_set in substance_painter.textureset.all_texture_sets():
+        original = texture_set.original_name
+        names.append(
+            {
+                "name": str(texture_set.name()),
+                "original_name": str(original() if callable(original) else original),
+            }
+        )
+    return names
+
+
 def show_node(args: dict[str, Any]) -> dict[str, Any]:
     """Make the stack of a recorded node the active one; returns the node's name as the Layers
     panel lists it, and its texture set."""
@@ -1348,6 +1399,7 @@ OPERATIONS = {
     "node_locations": node_locations,
     "rebind_nodes": rebind_nodes,
     "export_textures": export_textures,
+    "list_textures": list_textures,
     "save_as": save_as,
     "close_project": close_project,
     "open_project": open_project,
@@ -1356,6 +1408,7 @@ OPERATIONS = {
     "channel_names": channel_names,
     "show_texture_set": show_texture_set,
     "show_node": show_node,
+    "texture_set_names": texture_set_names,
     "shipped_templates": shipped_templates,
     "baking_capture": baking_capture,
     "baking_state": baking_state,

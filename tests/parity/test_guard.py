@@ -298,6 +298,27 @@ def test_authored_fixture_and_expectation_pass(
     assert len(staged_snapshot(repo).checked) == 2
 
 
+def test_a_json_fixture_declared_by_an_envelope_manifest_passes(repo: Path) -> None:
+    """Goldens first recorded under a later envelope declare their authored inputs in the
+    envelope's manifests (decision 087)."""
+    recipe = b'{"exportPresets": [], "exportList": [{"rootPath": "s0"}]}\n'
+    manifest = load_json(AUTHORED_EXPECTATION)
+    manifest["inputs"].append(
+        {
+            "input_id": "probe",
+            "kind": "recipe_json",
+            "path": "parity/fixtures/tier0/probe-config.json",
+            "sha256": hashlib.sha256(recipe).hexdigest(),
+            "provenance": {"origin": "uzmigames_authored", "licence": "Apache-2.0"},
+        }
+    )
+    envelope = "parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/tier0/probe.json"
+    put(repo, envelope, json.dumps(manifest).encode())
+    put(repo, "parity/fixtures/tier0/probe-config.json", recipe)
+    put(repo, "parity/fixtures/tier0/stray.json", recipe + b" ")
+    assert blocked(repo, None) == {"parity/fixtures/tier0/stray.json": {"public-schema"}}
+
+
 def test_declared_json_fixture_passes_and_undeclared_one_is_blocked(repo: Path) -> None:
     fixture = b'{"description": "two uniform fills, authored"}\n'
     manifest = load_json(AUTHORED_EXPECTATION)

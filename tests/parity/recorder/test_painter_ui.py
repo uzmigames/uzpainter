@@ -160,3 +160,22 @@ def test_an_unknown_prompt_stops_the_run(tmp_path: Path) -> None:
         robot.ask("Paint a stroke on the sphere:")
     with pytest.raises(RecorderError, match="no Save Render target"):
         robot.ask("Press Enter once the file is saved.")
+
+
+def test_a_texture_set_list_prompt_reaches_the_rename(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Decision 093: the sheet's `Texture Set List/Name (<set>)` prompt names the row by the
+    name the set has now; reading it changes nothing, setting it renames that row."""
+    from tools.parity.recorder.painter_ui import PainterUi
+
+    calls: list[tuple[str, str | None]] = []
+
+    def rename(listed: str, value: str | None) -> str:
+        calls.append((listed, value))
+        return "renamed0"
+
+    ui = PainterUi.__new__(PainterUi)
+    monkeypatch.setattr(ui, "texture_set_name", rename)
+    assert ui.target_value("Texture Set List", "Name of texture set 's0'", "renamed0") == "renamed0"
+    assert ui.target_value("Texture Set List", "Name of texture set 'renamed0'", None) == "renamed0"
+    assert ui.target_value("Texture Set List", "Visibility of texture set 's0'", None) is None
+    assert calls == [("s0", "renamed0"), ("renamed0", None)]
