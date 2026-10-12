@@ -73,6 +73,24 @@ Items 3.5, 3.6 and 4.1 stay open (§5).
 
 Before decision 086 made `AO_Mixed` a gap, the `ao-mixed` step also planned exactly Painter's files, giving 166 equal steps. The equality covers the 26 template channel sets of the `base-values-*` goldens. Each of them requests every documented `documentMap`, so the presence and alias rules of decision 085 are measured on every template.
 
+### The export probes (recording R-085, decisions 087 and 091)
+
+`test_dry_run_equals_painter_probes` compiles every probe of the six `export-probes-*` goldens. It uses the recording's texture sets, the mesh file name, and the project path: none for r1, and r2's `golden.spp`. Each result is compared with what Painter did:
+
+- a configuration Painter's `list_project_textures` refused must be a `ValueError`;
+- an export Painter refused must make the dry run raise `ValueError` (`CheckExportable`);
+- otherwise the planned files must be exactly the files on disk after Painter's export, meaning its result less the inventory's missing names, with Painter's bit depth and channel count;
+- each legacy name must read the channel whose direct export Painter wrote with the same bytes.
+
+| Outcome | Compilations (45 probes × r1, r2) |
+|---|---|
+| As Painter (files, depths, channels, refusals) | 84 |
+| Legacy-name pairings checked against Painter's bytes | 24 |
+| Refused as not recorded (R-091) | 6: the case-only collision P9 and srcChannel A (P6, two probes) |
+| Differing, or refused unexpectedly | 0 |
+
+`test_luma_probe_exact` evaluates P5 through the plan: srcChannel L of BaseColor, field A in Raw, as the Rec. 601 luma of the linear channel. Written with Painter 12.1.5's 16-bit sRGB encode (`srgb16`), it equals r1 and r2 on every texel of s0, and so does the channel's RGB export. On s1 the BaseColor holds its base value, and the luma of a base value is refused (decision 091 §5).
+
 ## 3. Virtual maps through the plan (item 3.6)
 
 `test_virtual_map_goldens_exact` uses `uzp-export-tests files`. Each golden's texture set is built from its instruction sequence (`spec_from_steps`, with the bound mesh maps), and the recorder's configuration for the map is compiled. Every planned file is evaluated through `EvaluateFileOn` on the CPU store and written with the 16-bit UNORM write rule.
