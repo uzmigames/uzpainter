@@ -37,10 +37,11 @@ inline constexpr std::string_view kChannelDefaultsId = "channel-defaults";
 
 struct TemplateChannel {
     core::ChannelType type = core::ChannelType::BaseColor;
-    /// Absent in the channel-defaults table (a default applies to any format).
+    /// Absent in a channel-defaults entry that applies to any format; present in one that applies
+    /// to that format only (its base is recorded on that format alone).
     std::optional<core::ChannelFormat> format;
     std::array<float, 3> base{0.0f, 0.0f, 0.0f};
-    /// "observed", "fitted" or "unobserved" (EVALUATOR.md §3).
+    /// "observed", "fitted", "inferred" or "unobserved" (EVALUATOR.md §3).
     std::string baseProvenance;
     core::json::Object provenanceRecord;
 };
@@ -75,11 +76,17 @@ public:
     [[nodiscard]] std::vector<std::string> Ids() const;
     [[nodiscard]] const ProjectTemplate& ChannelDefaults() const { return defaults_; }
 
-    /// The base value of channel `type` in a stack created from `templateId`: the template's
-    /// entry when it lists the channel, else the channel default. `evaluator:unknown_template`
-    /// or `evaluator:missing_base_value` otherwise.
-    [[nodiscard]] render::Result<std::array<float, 3>> BaseValue(std::string_view templateId,
-                                                                 core::ChannelType type) const;
+    /// The entry giving the base value of channel `type` stored as `format` in a stack created
+    /// from `templateId`: the template's entry when it lists the channel, else the channel default
+    /// for any format or for `format` (none for a format-restricted default when `format` is
+    /// unknown). `evaluator:unknown_template` or `evaluator:missing_base_value` otherwise.
+    [[nodiscard]] render::Result<const TemplateChannel*> BaseChannel(
+        std::string_view templateId, core::ChannelType type,
+        std::optional<core::ChannelFormat> format = std::nullopt) const;
+    /// The base value of that entry (BaseChannel).
+    [[nodiscard]] render::Result<std::array<float, 3>> BaseValue(
+        std::string_view templateId, core::ChannelType type,
+        std::optional<core::ChannelFormat> format = std::nullopt) const;
 
 private:
     std::map<std::string, ProjectTemplate, std::less<>> templates_;

@@ -60,7 +60,7 @@ Every map's decision and its source are in the preset's `.provenance.json` (`pac
 | `test_unconfirmed_presets_are_refused_naming_r095` | 2.1 | Both Painter-named presets, by name, URL or id, as `defaultExportPreset` or `exportList[].exportPreset`, are refused naming R-095 |
 | `test_preset_references_resolve_inline_first` | 2.3 | Inline first; a shadowing inline preset is a `ValueError`; unknown names list the shipped ids and Painter names; other shelf and generator URLs are `NotYetSupported` |
 | `test_five_map_preset_plans_the_pipeline_maps` | 2.1 | The plan equals the pipeline's inline configuration, file for file |
-| `test_five_map_preset_refuses_basecolor_naming_r090` | 2.1 | BaseColor is refused before writing, naming R-090 and item 6.1; without it, the files are written |
+| `test_five_map_preset_writes_basecolor_srgb_encoded` | 2.1 | BaseColor is written as the sRGB encode of its linear read-out (decision 126; until then it was refused, naming R-090) |
 | `test_five_map_preset_normal_equals_painter_files` (Tier 0) | 3.1, part | The Normal map is byte-identical to Painter's on s0-s3 of the plane goldens |
 | `test_shipped_presets_pass_the_guard` | 3.4 | The repository guard over `assets/export-presets/` finds nothing with the owner's store index, and catches a planted hash |
 

@@ -41,7 +41,7 @@ Painter's documented semantics, with the Tier 0 recordings and the export probes
   - unknown wildcards (`ValueError`, with the alternatives);
   - not recorded (R-091): a mesh or project file name with more than one dot, a renamed set's `$sceneMaterial`, a group with both empty and non-empty wildcards, a `)` after no literal `(`, a third equal path;
   - two entries' files with one path, and paths equal only ignoring case: Painter lists both, but the file a case-insensitive file system keeps depends on a write order not recorded. Both are named.
-- **Channels.** The destination sets are L, L+A, R+G+B and R+G+B+A. `srcChannel` L, R, G or B of a one-component source reads its value. R, G or B of a three-component source reads that component. L of a three-component source reads the Rec. 601 luma of its linear components, `fma(0.114, b, fma(0.299, r, 0.587 g))` in float32 (probe P5; the luma of an sRGB8 channel's base value is refused at evaluation, the evaluator holding its export value). Any letter of a `defaultMap` reads its constant. A of any other source is recorded only at full and no coverage (probe P6) and is refused.
+- **Channels.** The destination sets are L, L+A, R+G+B and R+G+B+A. `srcChannel` L, R, G or B of a one-component source reads its value. R, G or B of a three-component source reads that component. L of a three-component source reads the Rec. 601 luma of its linear components, `fma(0.114, b, fma(0.299, r, 0.587 g))` in float32 (probe P5; an sRGB8 channel's base value is linear, decision 126). Any letter of a `defaultMap` reads its constant. A of any other source is recorded only at full and no coverage (probe P6) and is refused.
 - **Normal sources.** `Normal_OpenGL` and `Normal_DirectX` need a Height and a Normal channel at plan time. Their other limits (set size, a bound Normal mesh map) belong to the evaluator, which refuses them with `unsupported_source` (`NotYetSupported`) when the export evaluates every file, before any write. `meshMap normal_base` is the geometry-only pass-through. `ambient_occlusion`, `curvature` (L) and `position` (RGB) pass their bound 8- or 16-bit image through at the set's resolution, each code as its UNORM operand (recording R-090 P7, decision 103). The other mesh maps (`id`, `world_space_normals`, `thickness`) are refused (`NotYetSupported`, no recording).
 - **Diagnostics** (decision 076, `08-export.md` §6). A `diagnosticMap` source resolves in the stacks that hold its node and is absent in the others. A node in no exported stack is invalid, and so is a channel the stack lacks. A `regionStats` source is a statistics file: the map's only channel (destination L), written as canonical JSON (`<name>.json`). Anywhere else it is invalid.
 - **Plan hash.** The SHA-256 of the canonical JSON of the plan without its `hash` member (`core::json::WriteCanonical`): the same project and configuration give the same bytes.
@@ -63,8 +63,8 @@ Tasks `phase1.16_export-processing-encoders` and `phase1.18_export-engine` item 
   - OpenEXR: tinyexr, single-part scanline, PIZ, FLOAT (32f) or HALF (16f) channels `Y`, `A Y`, `B G R` or `A B G R`, with OpenEXR's Huffman heap tie-break as its one local change.
   - Every distinct PNG (1826) and OpenEXR (823) file Painter exported in the current envelope, decoded and encoded again, is byte-identical.
 - **Values.**
-  - The evaluator's read-out of each channel (an sRGB8 User channel as its linear operand, in every format).
-  - PNG 8 and 16: the UNORM write rule at the file's depth (`arith::WriteUnorm`). A Height channel is written as v * 0.5 + 0.5.
+  - The evaluator's read-out of each channel (an sRGB8 channel as its linear operand, in every format; the template constants of the sRGB8 BaseColor and Specular are linear, decision 126).
+  - PNG 8 and 16: the UNORM write rule at the file's depth (`arith::WriteUnorm`). A Height channel is written as v * 0.5 + 0.5. An sRGB8 BaseColor, Specular or Emissive (and its luma) is written as the sRGB encode of its linear value, `x <= 0.0031308 ? 12.92 x : fma(1.055, exp2(0.41666 log2 x), -0.055)` with the recording GPU's log2 and exp2 (decisions 091 and 126): 258 of 258 values of `export-bit-depth` and 134 of 134 PNG files of four goldens re-encoded from Painter's own OpenEXR 32f files; written end to end, 120 of 120 of `export-bit-depth`'s material files. Its OpenEXR files hold the linear value.
   - OpenEXR 32f: the float unchanged. OpenEXR 16f: the half rounded toward zero (`arith::HalfTowardZero`).
   - L+A and RGB+A: written as such; an alpha of exactly 1 at every texel is dropped (the file is L or RGB, and the receipt says so).
   - Dithering: no change at PNG 16.
@@ -78,9 +78,10 @@ Tasks `phase1.16_export-processing-encoders` and `phase1.18_export-engine` item 
   - dithering at PNG 8 (deterministic, not a threshold matrix) and in OpenEXR (no recording compares it with off);
   - resize (a sizeLog2 other than the set's size): partly fitted, `parity/semantics/export-processing.json` `resize`;
   - the `color`, `transparent` and `diffusion` paddings, and `infinite` on islanded sets;
-  - sRGB8 material channels such as BaseColor: PNG 8 is the UNORM write of the IEC encoding of the linear value, PNG 16 is not fitted, and the evaluator's template constants of these channels hold export values.
+  - an sRGB8 channel other than a User channel, BaseColor, Specular and Emissive (EmissionColor, Diffuse, CoatColor, ...): not recorded (decision 126);
+  - any file whose values depend on a channel whose template base is `inferred` (every shipped template but `default` for BaseColor and the sRGB8 Specular: only its PNG 16 code is recorded), whatever the format and through documentMap or diagnosticMap sources: `unsupported_source` at evaluation (decision 126).
 
-  Their owners: `phase1.25_pilot-wand` (sRGB8 material channels, `infinite` on islands) and `phase3.2_unreal-ue56-packed-preset` (dithering, resize, dilation paddings).
+  Their owners: `phase1.25_pilot-wand` (inferred template bases, `infinite` on islands: decisions 126 and 127) and `phase3.2_unreal-ue56-packed-preset` (dithering, resize, dilation paddings).
 - **Order.** `WriteExport` checks every file's processing and padding, then evaluates, pads and encodes every file in memory, and only then writes. A refusal or an evaluation failure leaves nothing written. Two runs in two processes write identical bytes.
 
 ## 5. Shipped presets (decision 095)
@@ -94,7 +95,7 @@ Task `phase1.17_export-presets`. Local run report: `parity/reports/phase1/export
 - **Resolution.** A reference that names an inline preset is that preset. Otherwise `ShippedPresetId` reads it as a shipped id, a Painter name of the alias table (`PBR Metallic Roughness`, `Blender (Principled BSDF)`), or `resource://starter_assets/<Painter name>` with no query or a recorded `?version=` (an unrecorded query: `NotYetSupported`, R-095). The shipped preset joins `exportPresets` under its id, and the reference becomes that id. Painter names are aliases only (CLR-06). An inline preset named like the shipped id a reference resolves to is a `ValueError`. Any other `resource://` or `export-preset-generator://` reference is `NotYetSupported` (the Unreal, glTF and UzEngine presets are Phase 3).
 - **Refusals.**
   - A preset whose layout is `unconfirmed` is refused (`NotYetSupported`) before anything is planned, naming its pending recordings (R-095).
-  - The five-map preset writes BaseColor, an sRGB8 channel whose PNG 16 export encoding is not fitted. Its export is refused before writing, naming recording R-090 and decision 103 (owner `phase1.25_pilot-wand`). Without BaseColor (an `outputMaps` filter) it writes.
+  - The five-map preset writes BaseColor sRGB-encoded (decision 126); on a template whose BaseColor base is inferred the export is refused before writing.
 - **Parity.** The five-map preset's Normal map, written on the recorded plane goldens, is byte-identical to Painter's `Normal_OpenGL` PNG 16 files. Every preset's full output parity waits on recording R-095 (not recorded: `export-presets-legacy` crashed Painter) and on BaseColor's fit: a scope split to `phase3.3_unreal-gltf-presets` (decision 103).
 
 ## 6. Publication and receipts (decision 097)

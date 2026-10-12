@@ -14,21 +14,25 @@
 //   admits. An sRGB8 User channel is exported linear, as its decoded operand, in every format.
 // - PNG 8 and 16: each value is written with the UNORM write rule at the file's depth
 //   (arith::WriteUnorm): clamped to [0, 1], truncated to depth + 4 fractional bits, the nearest
-//   code with ties down. A Height channel is written as v * 0.5 + 0.5. Encoded by png_writer.h.
+//   code with ties down. A Height channel is written as v * 0.5 + 0.5. An sRGB8 BaseColor,
+//   Specular or Emissive (`FileRaster::srgbEncoded`) is written as the sRGB encode of its linear
+//   value: x <= 0.0031308 ? 12.92 x : fma(1.055, exp2(0.41666 log2 x), -0.055), with the
+//   recording GPU's log2 and exp2 (evaluator/hwmath.h; decisions 091 and 126). Its OpenEXR files
+//   hold the linear value. Encoded by png_writer.h.
 // - OpenEXR 32f: each value unchanged (float32, no clamp; a signed channel keeps its sign).
 //   OpenEXR 16f: each value rounded toward zero to a half. Encoded by exr_writer.h.
 // - Alpha: an L+A or RGB+A file whose alpha is 1 everywhere is written without it (L or RGB).
 // - Dithering: no change at PNG 16.
 //
 // Measured on recording R-090 (export-bit-depth, export-dither, export-alpha-layouts), every rule
-// exact against Painter's own files (decision 103).
+// exact against Painter's own files (decisions 103 and 126).
 //
 // Refused with `core::NotYetSupported`, recorded but not fitted (decision 103): dithering at PNG
 // 8 bits (deterministic, not a threshold matrix), dithering in OpenEXR (not compared with off), a size
-// other than the texture set's (resize), the `color`, `transparent` and `diffusion` paddings, and
-// an sRGB8 channel other than a User channel (BaseColor and the other material colours are
-// written sRGB-encoded: PNG 8 is the UNORM write of the IEC encoding of the linear value, PNG 16 is
-// not fitted, and the evaluator's template constants of such channels are export values).
+// other than the texture set's (resize), and the `color`, `transparent` and `diffusion` paddings.
+// An sRGB8 channel other than a User channel, BaseColor, Specular and Emissive (EmissionColor,
+// Diffuse, CoatColor, ...) is refused as not recorded: no recording shows whether Painter writes it
+// linear or sRGB-encoded.
 
 #include <string>
 

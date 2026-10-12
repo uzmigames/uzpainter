@@ -233,14 +233,22 @@ def recipes() -> dict[Any, tuple[str, str]]:
             "",
             export_call(file_format),
         )
-    # The 16-bit export of an sRGB8 material channel (decision 103, R-090): refused before writing
-    # until phase1.25_pilot-wand item 2.6 fits it.
-    for symbol, module in (
-        ("substance_painter.export.export_project_textures", "export"),
-        ("uzpainter.export.export_project_textures", "uzpainter.export"),
+    # The export of an sRGB8 BaseColor whose template base is inferred from its PNG export only
+    # (decision 126): refused before writing until a recording shows the template's linear base.
+    for symbol, module, create in (
+        (
+            "substance_painter.export.export_project_textures",
+            "export",
+            "project.create(PLANE, template_file_path='templates/Unreal Engine.spt')",
+        ),
+        (
+            "uzpainter.export.export_project_textures",
+            "uzpainter.export",
+            "uzpainter.project.create(PLANE, uzpainter.project.Settings(template='unreal-engine'))",
+        ),
     ):
-        r[(symbol, "srgb8-material-channels")] = (
-            "",
+        r[(symbol, "srgb8-inferred-template-base")] = (
+            f"{CLOSED}\n{create}",
             export_call("png", "basecolor", "16", module, "RGB"),
         )
     r[("substance_painter.resource.update_layer_stack_resource", "mesh-map")] = (
@@ -266,7 +274,7 @@ PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
 REFUSALS = {"release-gap": uzpainter.NotYetSupported,
             "desktop-only-omitted": uzpainter.UnsupportedInUzPainter}
 # Contexts whose refusal must name what settles it.
-NAMED = {"srgb8-material-channels": "R-090"}
+NAMED = {"srgb8-inferred-template-base": "decision 126"}
 
 
 def resolve(symbol):

@@ -240,7 +240,15 @@ struct FileRaster {
     std::optional<evaluator::NormalTag> normalTag;
     /// Statistics files: RegionStatsJson.
     std::optional<std::string> statistics;
+    /// Per channel, 1 where a PNG writes the sRGB encode of the linear value (`SrgbEncodedOnExport`
+    /// of a documentMap source stored as sRGB8; encode.h). Empty: no channel is encoded.
+    std::vector<uint8_t> srgbEncoded;
 };
+
+/// True for the material channels Painter exports sRGB-encoded when they are stored as sRGB8:
+/// BaseColor, Specular and Emissive (recording R-090 P10, decision 126). An sRGB8 User channel is
+/// exported linear.
+[[nodiscard]] bool SrgbEncodedOnExport(core::ChannelType type);
 
 /// Evaluates every source of `file` (compiled from revision `revision` of `project`) on `store`
 /// with `cache` and assembles its channels: documentMap the channel read-out, meshMap and

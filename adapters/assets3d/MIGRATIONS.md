@@ -89,4 +89,4 @@ Any Python 3.13 runs it; the script needs only the standard library. Environment
 
 - **`OCIO` set by `painter_create.py`:** the variable reaches UzPainter's process and changes nothing. The project is in the facade's one pinned colour profile (Painter's Legacy mode: linear working space, sRGB I/O, the Assets3D contract). The OCIO configuration is unrecorded: Session O (decision 101) and the Wand v1 Tier 1 recording (R9), owner `phase1.25_pilot-wand`.
 - **`painter_create.py` run again onto an existing `.spp`:** `save_as` onto an existing file raises `ProjectError` (native store semantics, decision 105). What Painter does there is unrecorded: recording **P23-A** (decision 113), owner `phase1.24_python-api-facade`.
-- **The wand's five-map export:** the 16-bit BaseColor (an sRGB8 material channel at PNG 16) is refused before writing, naming recording R-090 (decision 103). Owner: `phase1.25_pilot-wand` item 2.6.
+- **The wand's five-map export:** its BaseColor is written exactly (decision 126), but `infinite` padding on the wand's UV islands is refused before writing, naming recording R-090 (decision 127). Owner: `phase1.25_pilot-wand` item 2.7.

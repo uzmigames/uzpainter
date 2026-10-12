@@ -7,7 +7,7 @@
   "provenance": {
     "author": "UzmiGames",
     "licence": "Apache-2.0",
-    "note": "a channel added with add_channel starts from these values whatever its format; a channel type absent here fails evaluation explicitly (missing_base_value)"
+    "note": "a channel added with add_channel starts from these values whatever its format, or only in the format an entry names; a channel type absent here, or added in another format than its entry names, fails evaluation explicitly (missing_base_value)"
   },
   "channels": [
     {
@@ -25,6 +25,22 @@
       }
     },
     {
+      "type": "Emissive",
+      "format": "sRGB8",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-bit-depth",
+        "record_sha256": "a646339578936fe65ddc1ad20a0dd4bc386855852d1328829d0c089380f8b9ef",
+        "map": "s3/emissive",
+        "note": "Emissive added as sRGB8 and left empty exports 1.0 to OpenEXR 32f and 65535 to PNG 16 (sets s3 and s7, r1 and r2; decision 126); this default applies to sRGB8 only: other formats are not recorded and fail with missing_base_value"
+      }
+    },
+    {
       "type": "Normal",
       "base": [
         0.49803921580314636,
@@ -36,6 +52,22 @@
         "semantics": "parity/semantics/height-to-normal.json",
         "entry": "height-normal-default-normal-channel-base",
         "note": "float32(127/255), float32(127/255), 1.0 (height-to-normal.json, height-normal-default-normal-channel-base, exact): the 8-bit flat normal read as UNORM8"
+      }
+    },
+    {
+      "type": "Specular",
+      "format": "sRGB8",
+      "base": [
+        0.03921568766236305,
+        0.03921568766236305,
+        0.03921568766236305
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-bit-depth",
+        "record_sha256": "a646339578936fe65ddc1ad20a0dd4bc386855852d1328829d0c089380f8b9ef",
+        "map": "s3/specular",
+        "note": "Specular added as sRGB8 and left empty exports float32(10/255) to OpenEXR 32f, linear, and its sRGB export encode to PNG 8 and 16 (sets s3 and s7, r1 and r2; decision 126); this default applies to sRGB8 only: other formats are not recorded and fail with missing_base_value"
       }
     },
     {

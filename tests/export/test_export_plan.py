@@ -1087,15 +1087,13 @@ def test_dry_run_equals_painter_probes(export_tests: Path, tmp_path: Path) -> No
 def test_luma_probe_exact(export_tests: Path, tmp_path: Path) -> None:
     """Probe P5 (decision 091): `srcChannel L` of BaseColor through the plan is the Rec. 601 luma
     of the linear channel; written with Painter 12.1.5's 16-bit sRGB encode it equals r1 and r2
-    on every texel of s0 (field A), and so does the RGB export of the channel. On s1 (no layer)
-    the luma of BaseColor's base value is refused: the evaluator holds the base's export value,
-    not its linear one."""
+    on every texel of s0 (field A) and of s1 (no layer: the luma of BaseColor's linear base value,
+    decision 126), and so does the RGB export of the channel."""
     from tests.export.tier0 import luma_probe
 
     report, refused = luma_probe(export_tests, tmp_path)
-    assert len(report) == 4 and not any(report.values()), report
-    assert list(refused) == ["s1_lum.png"], refused
-    assert "base value" in refused["s1_lum.png"], refused
+    assert not refused, refused
+    assert len(report) == 8 and not any(report.values()), report
 
 
 def test_srgb_bitmap_exact(export_tests: Path, tmp_path: Path) -> None:

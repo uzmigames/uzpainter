@@ -2,7 +2,7 @@
   "schema": "uzpainter/parity/semantics/1",
   "record_class": "public_semantics",
   "semantics_id": "export-processing",
-  "description": "The export's processing and encoders (src/export/encode.h, padding.h, png_writer.h, exr_writer.h; decisions 089, 090 and 103): Painter's PNG and OpenEXR files re-encoded byte for byte, the recorded processing written by WriteExport and applied to Painter's own values byte-identical to Painter's files, and the processing not fitted yet.",
+  "description": "The export's processing and encoders (src/export/encode.h, padding.h, png_writer.h, exr_writer.h; decisions 089, 090, 103 and 126): Painter's PNG and OpenEXR files re-encoded byte for byte, the recorded processing written by WriteExport and applied to Painter's own values byte-identical to Painter's files, and the processing not fitted yet.",
   "painter_build_id": "12.1.5+js-api.1.1.20",
   "corpus": [
     "phase0/normal-convention/hemisphere/per-fragment",
@@ -8301,9 +8301,9 @@
             "mean": 0.0,
             "p99": 0,
             "differing": 0,
-            "total": 128,
+            "total": 152,
             "affected_texels": 0,
-            "texels": 128
+            "texels": 152
           }
         },
         {
@@ -8316,9 +8316,9 @@
             "mean": 0.0,
             "p99": 0,
             "differing": 0,
-            "total": 128,
+            "total": 152,
             "affected_texels": 0,
-            "texels": 128
+            "texels": 152
           }
         }
       ]
@@ -8386,9 +8386,9 @@
             "mean": 0.0,
             "p99": 0,
             "differing": 0,
-            "total": 128,
+            "total": 152,
             "affected_texels": 0,
-            "texels": 128
+            "texels": 152
           }
         },
         {
@@ -8401,9 +8401,9 @@
             "mean": 0.0,
             "p99": 0,
             "differing": 0,
-            "total": 128,
+            "total": 152,
             "affected_texels": 0,
-            "texels": 128
+            "texels": 152
           }
         },
         {
@@ -8471,9 +8471,9 @@
             "mean": 0.0,
             "p99": 0,
             "differing": 0,
-            "total": 128,
+            "total": 152,
             "affected_texels": 0,
-            "texels": 128
+            "texels": 152
           }
         },
         {
@@ -8486,9 +8486,99 @@
             "mean": 0.0,
             "p99": 0,
             "differing": 0,
-            "total": 128,
+            "total": 152,
             "affected_texels": 0,
-            "texels": 128
+            "texels": 152
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "srgb8-material-channels",
+      "subject": "sRGB8 material channels (BaseColor, Specular, Emissive) in PNG 8 and 16",
+      "status": "exact",
+      "formula": "The UNORM write rule at the file's depth of the sRGB encode of the linear value: x <= 0.0031308 ? 12.92 x : fma(1.055, exp2(0.41666 log2 x), -0.055) in float32 with the recording GPU's log2 and exp2 (src/evaluator/hwmath.h; decisions 091 and 126); OpenEXR holds the linear value. Painter's own OpenEXR 32f file of each such map of export-bit-depth, encoded so, gives its PNG 8 and PNG 16 files byte for byte.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.export: Full json_config dict possibilities, exportParameters parameters"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "exponent",
+          "value": 0.41666,
+          "origin": "fitted"
+        },
+        {
+          "name": "linear_threshold",
+          "value": 0.0031308,
+          "origin": "fitted"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "png 16 sRGB8 material files from Painter's own values",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 24,
+            "affected_texels": 0,
+            "texels": 24
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "png 16 sRGB8 material files from Painter's own values",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 24,
+            "affected_texels": 0,
+            "texels": 24
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "png 8 sRGB8 material files from Painter's own values",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 24,
+            "affected_texels": 0,
+            "texels": 24
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "png 8 sRGB8 material files from Painter's own values",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 24,
+            "affected_texels": 0,
+            "texels": 24
           }
         }
       ]
@@ -10813,25 +10903,6 @@
       "parameters": [],
       "residuals": [],
       "notes": "PNG 8: deterministic within and across sessions, not a threshold matrix (decision 103); OpenEXR: no recording compares it with dithering off. Owner phase3.2_unreal-ue56-packed-preset."
-    },
-    {
-      "entry_id": "srgb8-material-channels",
-      "subject": "sRGB8 material channels (BaseColor, Specular, Emissive)",
-      "status": "gap",
-      "formula": "Release gap (decision 090): no Tier 0 recording shows it; a configuration asking for it is refused with NotYetSupported before anything is written, naming recording R-090.",
-      "public_sources": [
-        {
-          "source_id": "A-PYDOC",
-          "locator": "substance_painter.export: Full json_config dict possibilities, exportParameters parameters"
-        },
-        {
-          "source_id": "A-HELP-EXPORT",
-          "locator": "Export settings: file type, bit depth, padding, dilation, size"
-        }
-      ],
-      "parameters": [],
-      "residuals": [],
-      "notes": "Exported sRGB-encoded: PNG 8 is the UNORM write of the IEC encoding of the linear value (exact on export-bit-depth); PNG 16 misses by up to one code on about 70 of 258 values under every model tried, and the evaluator holds these channels' template constants as export values (decision 103). Owner phase1.25_pilot-wand."
     }
   ]
 }

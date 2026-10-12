@@ -22,12 +22,12 @@
       "type": "BaseColor",
       "format": "sRGB8",
       "base": [
-        0.7340657711029053,
-        0.7340657711029053,
-        0.7340657711029053
+        0.49803921580314636,
+        0.49803921580314636,
+        0.49803921580314636
       ],
       "base_provenance": {
-        "kind": "observed",
+        "kind": "inferred",
         "golden_id": "tier0/semantics/base-values-roblox-materialvariant",
         "record_sha256": "7e6d4a29b348ad2fd597ce67124f589fe0a3dd2cd042560f3fd77426d0472b36",
         "map": "uzp_plane/basecolor",
@@ -36,7 +36,7 @@
           48107,
           48107
         ],
-        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+        "note": "linear (decision 126): the 16-bit PNG export of the empty channel is the PNG write of the sRGB export encode of float32(127/255) (src/export/encode.h); no OpenEXR export of an empty channel with this code is recorded: float32(127/255) is the value k/255 whose encode writes it (the class of the flat normal's 127/255); every float32 from 0.4980261 to 0.4980471 writes it too"
       }
     },
     {

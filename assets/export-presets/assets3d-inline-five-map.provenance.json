@@ -73,11 +73,6 @@
     "status": "pending",
     "pending": [
       {
-        "recording": "R-090",
-        "owner": "phase1.18_export-engine item 6.1",
-        "what": "BaseColor (sRGB8) is exported sRGB-encoded; the encoding is recorded but not fitted (decision 090), so every export writing it is refused before writing."
-      },
-      {
         "recording": "R-095",
         "owner": "phase1.18_export-engine item 6.2",
         "what": "Painter's output for this preset's configuration on a UzmiGames fixture with all five maps present (basecolor, roughness, metallic, height and normal channels filled), PNG 16, so that every file is compared, not only the normal maps the earlier goldens hold."
@@ -85,7 +80,7 @@
     ],
     "tests": [
       "tests/export/test_export_presets.py::test_five_map_preset_plans_the_pipeline_maps",
-      "tests/export/test_export_presets.py::test_five_map_preset_refuses_basecolor_naming_r090",
+      "tests/export/test_export_presets.py::test_five_map_preset_writes_basecolor_srgb_encoded",
       "tests/export/test_export_presets.py::test_five_map_preset_normal_equals_painter_files",
       "tests/export/test_export_presets.py::test_provenance_records_are_complete",
       "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard"

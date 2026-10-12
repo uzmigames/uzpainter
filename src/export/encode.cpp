@@ -1,6 +1,7 @@
 #include "export/encode.h"
 
 #include "evaluator/arith.h"
+#include "evaluator/hwmath.h"
 #include "export/exr_writer.h"
 #include "export/png_writer.h"
 #include "uzp_core/types/errors.h"
@@ -12,9 +13,8 @@ namespace uzp::exporter {
 namespace {
 
 /// Recorded by R-090 and not fitted (decision 103); the owners of the remaining fits.
-constexpr std::string_view kSrgb8NotFitted =
-    "recording R-090 P10: PNG 8 fitted, PNG 16 not, and the evaluator's linear read-out of export-valued "
-    "constants; decision 103";
+constexpr std::string_view kSrgb8NotRecorded =
+    "recording R-090 P10 records BaseColor, Specular and Emissive only; decision 126";
 constexpr std::string_view kDitherNotFitted = "recording R-090 P3, decision 103";
 constexpr std::string_view kResizeNotFitted = "recording R-090 P4, decision 103";
 constexpr std::string_view kPaddingNotFitted = "recording R-090 P5 and P9, decision 103";
@@ -77,11 +77,11 @@ void CheckProcessing(const core::Project& project, const PlannedFile& file) {
     }
     for (const PlannedChannel& channel : file.channels) {
         const std::optional<core::ChannelType> srgb8 = Srgb8Channel(set, file, channel.source);
-        if (!srgb8 || IsUserChannel(*srgb8)) continue;
+        if (!srgb8 || IsUserChannel(*srgb8) || SrgbEncodedOnExport(*srgb8)) continue;
         Refuse(file,
                "the export encoding of the sRGB8 channel " + std::string(core::ToString(*srgb8)) +
-                   " (sRGB-encoded samples, export-valued template constants) is recorded but not fitted",
-               kSrgb8NotFitted);
+                   " (linear like a User channel, or sRGB-encoded like BaseColor) is not recorded",
+               kSrgb8NotRecorded);
     }
 }
 
@@ -93,6 +93,14 @@ float PngValue(const PlannedChannel& channel, float v) {
     const PlannedSource& s = channel.source;
     if (s.type == SourceType::documentMap && s.channel == core::ChannelType::Height) return v * 0.5f + 0.5f;
     return v;
+}
+
+/// Painter 12.1.5's sRGB encode of a linear value before its PNG write (decisions 091 and 126):
+/// 12.92 x up to 0.0031308, else fma(1.055, exp2(0.41666 log2 x), -0.055) with the recording GPU's
+/// log2 and exp2 (hwmath.h `Pow`: the product one float32 multiplication) and one fused rounding.
+float SrgbExportEncode(float x) {
+    if (x <= 0.0031308f) return 12.92f * x;
+    return evaluator::arith::Fma(1.055f, evaluator::hw::Pow(x, 0.41666f), -0.055f);
 }
 
 /// True when every alpha (last component) of `raster` is 1.
@@ -139,13 +147,18 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster) {
         }
         return {EncodeExr(image), layout};
     }
-    // PNG 8 and 16: the UNORM write rule at the file's depth (R-090 P1).
+    // PNG 8 and 16: the UNORM write rule at the file's depth (R-090 P1), of the sRGB encode of an
+    // sRGB8 material channel's linear value (R-090 P10, decision 126).
+    if (!raster.srgbEncoded.empty() && raster.srgbEncoded.size() != components) {
+        throw std::invalid_argument("export: the sRGB flags of " + file.relativePath + " do not match its layout");
+    }
     const uint32_t bits = p.bitDepth == BitDepth::u8 ? 8 : 16;
     PngImage image{raster.width, raster.height, written, bits, {}};
     image.samples.reserve(texels * written);
     for (size_t t = 0; t < texels; ++t) {
         for (uint32_t c = 0; c < written; ++c) {
-            const float v = PngValue(file.channels[c], raster.values[t * components + c]);
+            float v = PngValue(file.channels[c], raster.values[t * components + c]);
+            if (!raster.srgbEncoded.empty() && raster.srgbEncoded[c] != 0) v = SrgbExportEncode(v);
             image.samples.push_back(static_cast<uint16_t>(evaluator::arith::WriteUnorm(v, bits)));
         }
     }

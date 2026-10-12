@@ -107,11 +107,6 @@
         "recording": "R-095",
         "owner": "phase1.18_export-engine item 6.2",
         "what": "Painter's files and dry run for resource://starter_assets/Blender (Principled BSDF) on a UzmiGames fixture with every channel the preset reads filled distinctly, with and without an exportParameters rule, under legacy and OCIO colour management: confirms or corrects every map, its channels, its name and the preset's own parameters."
-      },
-      {
-        "recording": "R-090",
-        "owner": "phase1.18_export-engine item 6.1",
-        "what": "BaseColor (sRGB8) is exported sRGB-encoded; the encoding is recorded but not fitted (decision 090), so every export writing it is refused before writing."
       }
     ],
     "tests": [

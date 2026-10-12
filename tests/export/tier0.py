@@ -409,8 +409,8 @@ def srgb_bitmap_probe(exe: Path, tmp: Path) -> dict[str, int]:
 def luma_probe(exe: Path, tmp: Path) -> tuple[dict[str, int], dict[str, str]]:
     """Probe P5 through the plan: `srcChannel L` of BaseColor (field A in Raw) evaluated by
     `EvaluateFileOn` (the luma of the linear channel) and the channel's RGB, both written with
-    `srgb16`, against r1 and r2 of every texel of s0: differing values; and the evaluation
-    failures of s1, whose BaseColor holds its base value (the luma of a base value is refused)."""
+    `srgb16`, against r1 and r2 of every texel of s0 and of s1, whose BaseColor holds its linear
+    base value (decision 126): differing values; and the evaluation failures."""
     needs_store()
     name = "semantics/export-probes-channels"
     manifest, golden = envelope_manifest(name), envelope_golden(name)
@@ -444,8 +444,8 @@ def luma_probe(exe: Path, tmp: Path) -> tuple[dict[str, int], dict[str, str]]:
             cfg | {"exportPath": "C:/export", "exportList": [{"rootPath": texture_set}]},
             workdir,
         )
-        if texture_set == "s1":
-            refused |= errors
+        refused |= errors
+        if errors:
             continue
         lum = srgb16(rasters[f"{texture_set}_lum.png"][..., 0])
         rgb = srgb16(rasters[f"{texture_set}_rgb.png"])
