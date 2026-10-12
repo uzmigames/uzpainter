@@ -110,6 +110,21 @@ FIXTURES: dict[str, tuple[str, str, Callable[[], bytes] | None]] = {
     ),
 }
 
+
+# The export probes' configurations (recording request R-085, decision 087): one authored
+# `recipe_json` input per probe, `probe-<group>-<probe>`.
+def probe_fixture(group: str, probe: str) -> Callable[[], bytes]:
+    return lambda: fixtures.export_probe(group, probe)
+
+
+for _group, _probes in fixtures.export_probes().items():
+    for _probe in _probes:
+        FIXTURES[f"probe-{_group}-{_probe}"] = (
+            "recipe_json",
+            f"{FIXTURE_DIR}/export-probes/{_group}/{_probe}.json",
+            probe_fixture(_group, _probe),
+        )
+
 MESH_SETS = {
     "plane": ["uzp_plane"],
     "sphere": ["uzp_sphere"],
