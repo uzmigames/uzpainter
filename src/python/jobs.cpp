@@ -26,9 +26,13 @@ std::string_view JobStatusName(JobStatus status) {
     return "failed";
 }
 
-void JobContext::SetProgress(double progress) {
-    std::lock_guard lock(job_.mutex_);
-    job_.progress_ = std::clamp(progress, 0.0, 1.0);
+void JobContext::SetProgress(double progress, std::string message) {
+    {
+        std::lock_guard lock(job_.mutex_);
+        job_.progress_ = std::clamp(progress, 0.0, 1.0);
+        job_.message_ = std::move(message);
+    }
+    if (job_.observer_) job_.observer_(job_);
 }
 
 void JobContext::Checkpoint() const {
@@ -36,8 +40,26 @@ void JobContext::Checkpoint() const {
     if (job_.cancel_requested_) throw Cancelled{};
 }
 
-Job::Job(std::string id, std::string kind, JobBody body)
-    : id_(std::move(id)), kind_(std::move(kind)), body_(std::move(body)) {}
+bool JobContext::CancelRequested() const {
+    std::lock_guard lock(job_.mutex_);
+    return job_.cancel_requested_;
+}
+
+void JobContext::Commit(core::json::Object committed) {
+    {
+        std::lock_guard lock(job_.mutex_);
+        job_.committed_ = std::move(committed);
+    }
+    if (job_.observer_) job_.observer_(job_);
+}
+
+void JobContext::NoOp() {
+    std::lock_guard lock(job_.mutex_);
+    job_.no_op_ = true;
+}
+
+Job::Job(std::string id, std::string kind, JobBody body, JobObserver observer)
+    : id_(std::move(id)), kind_(std::move(kind)), body_(std::move(body)), observer_(std::move(observer)) {}
 
 JobStatus Job::status() const {
     std::lock_guard lock(mutex_);
@@ -47,6 +69,34 @@ JobStatus Job::status() const {
 double Job::progress() const {
     std::lock_guard lock(mutex_);
     return progress_;
+}
+
+std::string Job::message() const {
+    std::lock_guard lock(mutex_);
+    return message_;
+}
+
+std::optional<core::json::Object> Job::committed() const {
+    std::lock_guard lock(mutex_);
+    return committed_;
+}
+
+core::json::Object Job::Receipt() const {
+    std::lock_guard lock(mutex_);
+    const bool ended = status_ == JobStatus::succeeded || status_ == JobStatus::failed || status_ == JobStatus::cancelled;
+    core::json::Value stopped = nullptr;
+    if (ended && (status_ != JobStatus::succeeded || cancel_requested_)) {
+        stopped = committed_ ? "after_commit" : "before_commit";
+    }
+    return {{"id", id_},
+            {"kind", kind_},
+            {"status", std::string(JobStatusName(status_))},
+            {"progress", progress_},
+            {"message", message_},
+            {"committed", committed_ ? core::json::Value(*committed_) : core::json::Value(nullptr)},
+            {"stopped", std::move(stopped)},
+            {"cancel_requested", cancel_requested_},
+            {"no_op", status_ == JobStatus::succeeded && no_op_ && !committed_}};
 }
 
 bool Job::Wait(std::optional<std::chrono::milliseconds> timeout) {
@@ -73,6 +123,7 @@ bool Job::Cancel() {
     std::lock_guard lock(mutex_);
     if (status_ == JobStatus::queued) {
         status_ = JobStatus::cancelled;
+        cancel_requested_ = true;
         body_ = nullptr;
         ended_.notify_all();
         return true;
@@ -117,9 +168,10 @@ JobEngine& JobEngine::Get() {
     return *engine;
 }
 
-std::shared_ptr<Job> JobEngine::Start(std::string kind, JobBody body) {
+std::shared_ptr<Job> JobEngine::Start(std::string kind, JobBody body, JobObserver observer) {
     std::lock_guard lock(mutex_);
-    auto job = std::make_shared<Job>("job-" + std::to_string(next_++), std::move(kind), std::move(body));
+    auto job = std::make_shared<Job>("job-" + std::to_string(next_++), std::move(kind), std::move(body),
+                                     std::move(observer));
     jobs_.push_back(job);
     queue_.push_back(job);
     if (!started_) {

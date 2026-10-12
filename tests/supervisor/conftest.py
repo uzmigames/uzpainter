@@ -256,6 +256,7 @@ class Mcp:
         threading.Thread(target=self._read, daemon=True).start()
         self._ids = itertools.count(1)
         self._replies: dict[int, dict[str, Any]] = {}
+        self.notifications: list[dict[str, Any]] = []  # in arrival order
         if initialize:
             self.request(
                 "initialize",
@@ -313,6 +314,8 @@ class Mcp:
             message = json.loads(line)
             assert message.get("jsonrpc") == "2.0", line
             if "id" not in message or "method" in message:  # a notification or server request
+                if "id" not in message:
+                    self.notifications.append(message)
                 continue
             assert "error" not in message, message
             result = message["result"]
@@ -321,12 +324,18 @@ class Mcp:
                 return result
             self._replies[message["id"]] = result
 
-    def call(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    def call(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """The structured content of a tool call: `{result, committed_revision?, receipt}` or
-        `{error, receipt}`."""
-        return self.content(
-            self.request("tools/call", {"name": name, "arguments": arguments or {}})
-        )
+        `{error, receipt}`; `meta` is the request's `_meta` (a progress token)."""
+        params: dict[str, Any] = {"name": name, "arguments": arguments or {}}
+        if meta is not None:
+            params["_meta"] = meta
+        return self.content(self.request("tools/call", params))
 
     @staticmethod
     def content(result: dict[str, Any]) -> dict[str, Any]:

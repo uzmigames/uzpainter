@@ -39,7 +39,9 @@ def opened_session(
     project = make_project(painter, tmp_path)
     session = Mcp(painter, tmp_path, *BASE, env=env)
     sessions.append(session)
-    revision = session.call("project_open", {"path": str(project)})["result"]["revision"]
+    revision = session.call("project_open", {"path": str(project), "wait": True})["result"][
+        "revision"
+    ]
     reply = session.call(
         "run_python", {"code": INSERT_FILL, "idempotency_key": "k-1", "expected_revision": revision}
     )
@@ -74,6 +76,11 @@ def test_tools_are_forwarded_and_stdout_carries_protocol_frames_only(
         "shader_set",
         "camera_get",
         "camera_set",
+        "export",
+        "job_status",
+        "job_result",
+        "job_cancel",
+        "job_list",
     }
     assert tools["project_open"]["inputSchema"]["required"] == ["path"]
     assert tools["isolate_layer"]["inputSchema"]["required"] == ["uid", "channels", "path"]
@@ -374,7 +381,7 @@ def test_lost_reply_after_opening_a_bundle_directory_recovers_its_imported_file(
     assert exported.returncode == 0, exported.stdout + exported.stderr
     session = Mcp(painter, tmp_path, *BASE)
     sessions.append(session)
-    opened = session.call("project_open", {"path": str(bundle)})["result"]
+    opened = session.call("project_open", {"path": str(bundle), "wait": True})["result"]
     imported = tmp_path / "bundle.uzp"
     assert Path(opened["path"]) == imported
     revision = opened["revision"]

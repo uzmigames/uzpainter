@@ -1,0 +1,13 @@
+{
+  "id": 141,
+  "slug": "interrupted-jobs-are-resolved-from-the-operation-rows-or-their-commit-event-and-the-ledger-keeps-terminal-replies-across-restarts",
+  "title": "Interrupted jobs are resolved from the operation rows or their commit event, and the ledger keeps terminal replies across restarts",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.3_supervisor-jobs",
+    "phase2.4_supervisor-worker",
+    "phase2.5_mcp-transport-registry"
+  ],
+  "supersededBy": null
+}

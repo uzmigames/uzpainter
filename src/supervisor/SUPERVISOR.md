@@ -1,6 +1,6 @@
 # Supervisor and worker (`src/supervisor/`, `python/uzpainter_supervisor/`)
 
-This folder holds the process boundary of `docs/architecture/02-runtime-topology.md` §1, §2 and §5 (task `phase2.1_supervisor-ipc-worker`, decisions 120 and 121) and the command admission of §3 (task `phase2.2_supervisor-admission-ledger`, decisions 138 and 139). One executable has two roles:
+This folder holds the process boundary of `docs/architecture/02-runtime-topology.md` §1, §2 and §5 (task `phase2.1_supervisor-ipc-worker`, decisions 120 and 121) the command admission of §3 (task `phase2.2_supervisor-admission-ledger`, decisions 138 and 139) and the long jobs of §3 and 11 §3 (task `phase2.3_supervisor-jobs`, decisions 140 and 141). One executable has two roles:
 
 | Role | Command | Code |
 |---|---|---|
@@ -15,7 +15,7 @@ This folder holds the process boundary of `docs/architecture/02-runtime-topology
 `uzpainter_supervisor` runs inside the embedded interpreter, on the pinned MCP SDK (`thirdparty/python-wheels/`):
 
 - **`main.py`** parses the command line and serves the stdio MCP session through the SDK's low-level `Server` and `stdio_server`. While the session runs, stdout carries protocol frames only. Logs go to stderr, and the worker's own stdout is sent to stderr.
-  - `tools/list` returns the worker's tools plus `supervisor_status` and `wait_idle`.
+  - `tools/list` returns the worker's tools plus `supervisor_status`, `wait_idle`, `job_status`, `job_result`, `job_cancel` and `job_list`. A long tool's schema also takes `wait` (see Jobs).
   - `tools/call` goes through the admission (below) and is then forwarded to the worker. A mutating call may carry `idempotency_key` and `expected_revision` among its arguments, and the supervisor lifts them into the pipe request.
   - The final MCP contract belongs to phase2.5-phase2.8: the registry, schema validation, roots, HTTP, resources and prompts.
 - **`admission.py`** admits every call, and **`ledger.py`** is the durable ledger (see Admission).
@@ -80,8 +80,8 @@ The supervisor learns which project to reopen from the worker's `revision` event
    - A lease whose holder process has ended is taken over.
    - A mutating call from another owner returns `lease_held {holder, since, active_job}`. Reads need no lease.
    - phase2.5 gives HTTP clients their own owners.
-4. **Busy.** A mutating call while another mutating call of the same project runs returns `busy {job_id}`; it is not queued. `wait_idle {timeout}` (seconds) waits until no mutating call runs, and a timeout is the error `timeout`.
-5. **Job.** Each admitted mutating call is a ledger job: `running`, then `succeeded`, `failed` or `interrupted`.
+4. **Busy.** A mutating call or long job while another mutating call or long job of the same project runs returns `busy {job_id}`; it is not queued. `wait_idle {timeout}` (seconds) waits until none runs, and a timeout is the error `timeout`.
+5. **Job.** Each admitted mutating call and each long call is a ledger job: `running`, then `succeeded`, `failed`, `cancelled` or `interrupted` (see Jobs).
 6. **Receipt.** Every reply carries `receipt`:
    - always: `tool`, `project` and `project_uuid` (what the worker holds afterwards), `texture_set` (named in the arguments or returned), `job_id`, `revision` (the revision the call was admitted on) and `committed_revision`;
    - for a mutating call, also: `idempotency_key`, `key_source` (`client` or `supervisor`), `expected_revision`, `request_hash` and `admission` (`executed` or `stored_outcome`).
@@ -93,6 +93,26 @@ The supervisor learns which project to reopen from the worker's `revision` event
 - Deleting the ledger loses no project state.
 
 `supervisor_status` reports the ledger path, the project's lease, the running calls and the acknowledged revision.
+
+## Jobs
+
+Long operations are jobs (02 §3, 11 §3; task phase2.3, decisions 140 and 141). The worker lists a tool as `long`, with its `commit_point`: `revision` (a project revision with its operation row), `publication` (an export generation) or none. Today they are `project_open` (no commit point), `export` (`publication`) and the Debug-only `test_job` (`revision`); phase2.6's long typed tools (`bake_start`, `mesh_reload`, `capture`, `project_create`) take the same path.
+
+- **Start.** A long call is admitted like any call (a mutating one also takes the lease, key and precondition) and gets a job id. Without `wait` it returns `{job_id, status: "running"}` at once. With `wait: true` it returns the terminal reply. If the request carries a progress token (`_meta.progressToken`), each event goes to the client as `notifications/progress {progress, total: 1, message}` whose `_meta["uzpainter/job"]` is `{job_id, status, progress, message}`: `running` at the start, the worker's progress, then the terminal state. A wait that the client cancels cancels the job.
+- **Worker side.** The worker runs the job's body on the native job pool (`uzpainter.jobs`, `src/python/jobs.h`) while its command thread waits, so it still answers one call at a time: a read sent during a long job is answered after it. The body's progress and its commit point reach the supervisor as `{"event": "job_progress", "job_id", "progress", "message", "committed"}`, which the ledger row follows.
+- **Cancellation.** `job_cancel {job_id}` records the request in the ledger and sends the pipe method `worker/cancel {job_id}`. The worker's pipe reader thread answers it at once: `{job_id, acknowledged: true, state: running | pending}` (`pending`: the job has not started and stops at its first checkpoint). The job checks at every tile the CPU evaluator allocates, before every export file and every fixed-name folder, and at every `test_job` step. A job stopped by a cancel replies `cancelled {job_id, stopped, committed, committed_revision}`.
+- **Receipt.** A long job's terminal receipt adds `status` and `job`, the worker's job receipt: `{id, kind, status, progress, message, committed, stopped, cancel_requested, no_op}`. `committed` is what the job made durable (`{revision}`, or `{generation, directory, revision}` for an export); `stopped` is null for a success no cancel was asked of, otherwise `before_commit` or `after_commit`. A job is `succeeded` only when it ran to its end: one that committed and then failed or was cancelled is `failed` or `cancelled` with its `committed`. A cancel that arrives after the last checkpoint leaves the job `succeeded`, with `cancel_requested` and `stopped: after_commit`. `no_op` marks a success that changed nothing, distinct from `failed`.
+- **Interrupted.** A worker death answers the job `interrupted`, and the supervisor resolves its outcome without running it again (`resolution` in the receipt and the ledger):
+
+  | Job | Resolution |
+  |---|---|
+  | mutating | from the operation rows the relaunched worker's reconciliation reads: `{committed: true, committed_revision, source: operation_row}` when its key has a row, `{committed: false, source: operation_row}` when it has none, `{committed: null, source: operation_rows_unreadable}` when they cannot be read |
+  | long, commit point reported | `{committed: true, what, source: job_event}` |
+  | long, no commit point | `{committed: false, source: no_commit_point}` |
+  | long, commit point not reported | `{committed: null, source: no_commit_event, commit_point}`: an export may have published just before the death (`uzpainter export --recover` completes or discards its generation) |
+
+- **Queries.** `job_status {job_id}` returns a running job's progress, message and commit point, or a finished one's terminal state, `job` and `resolution`. `job_result {job_id}` returns the reply as it was answered, with its receipt (`job_running` while it runs). `job_list {limit?}` lists the ledger's newest jobs (50 by default). An unknown id is `unknown_job`; `job_cancel` of a finished job returns `{status, cancel: already_ended, job}`.
+- **Restart.** The ledger keeps every job's terminal reply, so a later supervisor answers the queries. Each job row names its supervisor by process id and creation time. When a supervisor starts, running jobs of supervisors that have ended become `interrupted` with `{committed: null, source: supervisor_ended}`; the next reconciliation of their project that finds their key's row resolves them as committed.
 
 ## Worker
 
@@ -109,11 +129,12 @@ The worker starts in this order:
 6. It accepts only the client whose process id the pipe name carries. Any other client is disconnected. The connect deadline and the supervisor's process are checked before every attempt.
 7. It sends the handshake.
 
-It then answers one request at a time on the interpreter's thread. The GIL is held only while `run_python` runs.
+It then answers one request at a time on the interpreter's thread; a long tool's body runs on the native job pool while that thread waits for it (see Jobs). The GIL is held only while `run_python` runs.
 
 | Tool | Kind | Result |
 |---|---|---|
-| `project_open {path}` | GPU-free | `{path, revision}` |
+| `project_open {path}` | GPU-free, long (no commit point) | `{path, revision}` |
+| `export {config, fixed_names?}` | GPU-free (CPU evaluator), long (commit point: the publication) | the export job's result (`uzpainter.export`): `{directory, files, fixed_names, generation, plan_hash, project_path, mesh_path, receipt, receipt_sha256, revision}`; phase2.6 adds presets, overrides and the dry run |
 | `project_close` | GPU-free | `{}` |
 | `project_save {mode?: incremental\|full}` | GPU-free, names a checkpoint | `{current, named, previous}` |
 | `project_inspect` | GPU-free | `{open, path, revision, texture_sets: [{name, stacks}]}` |
@@ -131,6 +152,7 @@ It then answers one request at a time on the interpreter's thread. The GIL is he
 | `preview_status` | GPU-free; listed only with `--preview` | `{window_open, stalled, frames_published, frames_taken, frames_rendered, revision_shown, last_error}` of the attached preview (`src/preview/PREVIEW.md`) |
 | `test_fault {fault}` | Debug builds under `--test-faults` only; `preview_stall` and `preview_resume` only with `--preview` (the stall hook of the preview thread) | `{armed}` |
 | `test_mutation {name, fail?}` | mutating and typed (one transaction); Debug builds under `--test-faults` only (decision 138) | the committed `TransactionResult` (`{status, revision, committed_revision, created, ...}`). It inserts the fill layer `name` on the active stack. With `fail`, the call fails after its edit (`call_failed`) and commits nothing. |
+| `test_job {name, steps, step_ms?, commit_at?}` | mutating, typed and long (commit point: the revision); Debug builds under `--test-faults` only (decision 140) | `steps` cancellable steps of `step_ms`; at step `commit_at` it commits the fill layer `name` with its operation row and returns that `TransactionResult`; without `commit_at` it is a no-op (`{status: no_op, revision}`) |
 
 The checks run in this order, and every refusal comes before the call runs:
 
@@ -203,4 +225,11 @@ All tests are in `tests/supervisor/`:
   - a replay beyond retention after compaction, with the ledger deleted;
   - busy, the lease and `wait_idle`.
 - `test_worker_diagnostics.py` drives the Diagnostics tools on a saved project and compares their files and summaries with `uzpainter.diagnostics` on the same project.
+- `test_supervisor_jobs.py` drives long jobs over stdio MCP and in `UzPainter.exe run` (phase2.3). It covers:
+  - `wait=true` progress streams of `project_open` and `export`, `{job_id, status}` at once, busy, unique ids and the job queries;
+  - cancels before and after the commit point, no-op and failure;
+  - a worker killed during a long job after and before its commit point, resolved from the operation rows;
+  - terminal states read after a restart, and a job a killed supervisor left running;
+  - `uzpainter.jobs` receipts in the single-process path.
+- `test_admission.py` also covers the migration of a version 0 ledger and the sweep of orphaned jobs.
 - `test_supervisor_gpu.py` runs on DX12 and skips under `UZP_NO_GPU=1`. It checks that the device lives only in the worker, the evaluation payload by path and hash, and device removal and GPU stall with relaunch on the same backend.
