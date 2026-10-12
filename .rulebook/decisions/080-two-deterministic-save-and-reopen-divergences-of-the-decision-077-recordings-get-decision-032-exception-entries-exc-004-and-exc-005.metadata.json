@@ -1,0 +1,11 @@
+{
+  "id": 80,
+  "slug": "two-deterministic-save-and-reopen-divergences-of-the-decision-077-recordings-get-decision-032-exception-entries-exc-004-and-exc-005",
+  "title": "Two deterministic save-and-reopen divergences of the decision 077 recordings get decision-032 exception entries EXC-004 and EXC-005",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.12_compositor-height-normal"
+  ],
+  "supersededBy": null
+}

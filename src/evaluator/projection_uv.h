@@ -96,19 +96,24 @@ struct ProjectedTexel {
 /// Bits the bilinear filter keeps of each texel below the largest weighed texel's exponent.
 inline constexpr int kFilterOperandBits = 28;
 
-/// The GPU's linear filter of float32 texels in [0, 1] with 8-bit weights (summing to 256): with
-/// E the binary exponent of the largest texel of non-zero weight (t_max in [2^(E-1), 2^E)), each
-/// texel t enters as the integer floor(t 2^(28 - E)); the weighted sum of these integers, times
-/// 2^(E - 36), is rounded to the nearest float32, ties up. A texel weighed 256 comes back
-/// unchanged.
+/// The GPU's linear filter of float32 texels with 8-bit weights (summing to 256): with E the binary
+/// exponent of the largest texel magnitude of non-zero weight (|t|_max in [2^(E-1), 2^E)), each
+/// texel t enters as the integer t 2^(28 - E) truncated toward zero (floor for t >= 0, the
+/// measured range); the weighted sum of these integers, times 2^(E - 36), is rounded to the
+/// nearest float32, ties away from zero (up for t >= 0). A texel weighed 256 comes back unchanged.
+/// Signed texels are the Height channel's (height-to-normal.json `height-normal-resolution`:
+/// exact on its magnified sets).
 [[nodiscard]] float BilinearFilter(const std::array<uint32_t, 4>& weights,
                                    const std::array<float, 4>& texels);
 
 /// The texel (i, j) of the set (whole-set indices) projected from `image`; a grey bitmap feeds
-/// all three channels, a colour bitmap its first three.
+/// all three channels, a colour bitmap its first three. With `signedRange` (the Height channel)
+/// every bitmap texel is its signed value RangeValue(t, true) before the filter: Painter filters
+/// the signed heights (height-to-normal.json `height-normal-resolution`; filtering t and then
+/// taking 2 v - 1 leaves 16 values of the 512 set one half step off).
 [[nodiscard]] ProjectedTexel ProjectTexel(const UvProjection& projection, const DecodedImage& image,
                                           uint32_t i, uint32_t j, uint32_t setWidth,
-                                          uint32_t setHeight);
+                                          uint32_t setHeight, bool signedRange = false);
 
 /// The full description of a projection operation on a tile store.
 struct ProjectOp {
@@ -122,12 +127,12 @@ struct ProjectOp {
     uint32_t setHeight = 0;
     uint32_t x0 = 0;
     uint32_t y0 = 0;
-    /// The Height channel: the sampled value v is stored as float32(float32(2 v) - 1) (sources.h).
+    /// The Height channel: each bitmap texel t is sampled as float32(float32(2 t) - 1) (sources.h,
+    /// ProjectTexel).
     bool signedRange = false;
 };
 
-/// The value a projection stores before the channel's write rule: `v`, or 2 v - 1 in float32
-/// on the Height channel.
+/// The signed value of a bitmap texel `v` on the Height channel: 2 v - 1 in float32 (else `v`).
 [[nodiscard]] float RangeValue(float v, bool signedRange);
 
 }  // namespace uzp::evaluator

@@ -447,18 +447,37 @@ render::Result<void> GpuTileStore::VirtualNormal(const VirtualNormalOp& op) {
         bindings.heightSrv[i] = m_device.Rhi().GetTextureSRVIndex(height->texture);
         if (std::find(inputs.begin(), inputs.end(), height->texture) == inputs.end()) inputs.push_back(height->texture);
     }
+    render::TexelEncoding normalEncoding = render::TexelEncoding::Float32;
     if (op.normal.kind == Operand::Kind::Tile) {
         const Tile* normal = Find(op.normal.tile);
         if (normal == nullptr || normal->width != dst->width || normal->height != dst->height ||
-            normal->format.encoding != render::TexelEncoding::Float32 || normal->format.channels != 3) {
-            return EvalFail(EvalErrorKind::Internal, "virtual normal channel tile: three-channel 32-bit float of the tile's size");
+            normal->format.channels != 3 || !normal->format.alpha || normal->format.srgb) {
+            return EvalFail(EvalErrorKind::Internal,
+                            "virtual normal channel tile: a colour tile with coverage of the tile's size");
         }
+        normalEncoding = normal->format.encoding;
         bindings.normalSrv = m_device.Rhi().GetTextureSRVIndex(normal->texture);
         if (std::find(inputs.begin(), inputs.end(), normal->texture) == inputs.end()) inputs.push_back(normal->texture);
     }
+    if (op.mesh.kind == Operand::Kind::Tile) {
+        const Tile* mesh = Find(op.mesh.tile);
+        if (mesh == nullptr || mesh->width != dst->width || mesh->height != dst->height ||
+            mesh->format.encoding != render::TexelEncoding::Float32 || mesh->format.channels != 3) {
+            return EvalFail(EvalErrorKind::Internal, "virtual normal mesh tile: three-channel 32-bit float of the tile's size");
+        }
+        bindings.meshSrv = m_device.Rhi().GetTextureSRVIndex(mesh->texture);
+        if (std::find(inputs.begin(), inputs.end(), mesh->texture) == inputs.end()) inputs.push_back(mesh->texture);
+    }
     render::Result<void> table = EnsureTable16();
     if (!table) return table;
-    render::Result<render::ComputeKernel> kernel = m_context->Kernel(VirtualNormalKernelSource());
+    // A partly covered Normal channel turns its normal with the GPU's sine and cosine tables.
+    const bool rotates = op.normal.kind == Operand::Kind::Tile || op.normal.value[3] < 1.0f;
+    if (rotates) {
+        render::Result<void> pow = EnsurePowTables();
+        if (!pow) return pow;
+        bindings.powSrv = m_device.Rhi().GetBufferSRVIndex(m_pow);
+    }
+    render::Result<render::ComputeKernel> kernel = m_context->Kernel(VirtualNormalKernelSource(normalEncoding));
     if (!kernel) return render::Unexpected(kernel.error());
     bindings.dstUav = m_device.Rhi().GetTextureUAVIndex(dst->texture);
     bindings.table16Srv = m_device.Rhi().GetBufferSRVIndex(m_table16);

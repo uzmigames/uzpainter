@@ -215,6 +215,8 @@ def decision_032_entries() -> list[dict[str, Any]]:
         "tier0/quantisation/thirds",
         "tier0/blend/inputs",
         "tier0/height-normal/method",
+        "tier0/height-normal/combination",
+        "tier0/height-normal/resolution",
     }
     return entries
 

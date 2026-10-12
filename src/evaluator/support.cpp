@@ -33,17 +33,13 @@ Gap SourceGap(const core::Project& project, const core::Source& source, std::opt
               core::Id node) {
     switch (source.kind()) {
         case SourceKind::uniform_color:
-            if (channel == ChannelType::Height) {
-                return Make(node, "a uniform colour on the Height channel", "phase1.12_compositor-height-normal");
-            }
-            return std::nullopt;
-        case SourceKind::bitmap:
             if (channel == ChannelType::Normal &&
                 project.settings.normal_map_format != core::NormalMapFormat::OpenGL) {
-                return Make(node, "a bitmap on the Normal channel of a DirectX project",
+                return Make(node, "a uniform colour on the Normal channel of a DirectX project",
                             "phase1.12_compositor-height-normal");
             }
             return std::nullopt;
+        case SourceKind::bitmap: return std::nullopt;
         case SourceKind::vector: return Make(node, "a vector source", "phase4.1_nodes-vector-font-sources");
         case SourceKind::font: return Make(node, "a font source", "phase4.1_nodes-vector-font-sources");
         case SourceKind::procedural: return Make(node, "a procedural source", "phase3.3_procedural-families");
@@ -98,6 +94,22 @@ Gap FillGap(const core::Project& project, const core::FillContent& fill, core::I
     return std::nullopt;
 }
 
+/// A DirectX project's Normal channel is recorded as one bitmap fill in Normal mode at opacity 1
+/// without mask or effects (decision 079): any other layer with a Normal source is a gap (the
+/// evaluator refuses a root list of several Normal layers itself).
+Gap DirectXNormalGap(const core::Project& project, const core::Layer& layer) {
+    if (project.settings.normal_map_format == core::NormalMapFormat::OpenGL || layer.kind != LayerKind::fill ||
+        !layer.fill || !layer.fill->sources.contains(ChannelType::Normal)) {
+        return std::nullopt;
+    }
+    const auto blending = layer.blending.find(ChannelType::Normal);
+    const bool plain = blending == layer.blending.end() ||
+                       (blending->second.mode == core::BlendingMode::Normal && blending->second.opacity == 1.0);
+    if (plain && !layer.mask && layer.content_effects.empty()) return std::nullopt;
+    return Make(layer.uid, "a Normal-channel layer of a DirectX project other than one bitmap fill at opacity 1",
+                "phase1.12_compositor-height-normal");
+}
+
 Gap LayerGap(const core::Project& project, const core::Layer& layer) {
     switch (layer.kind) {
         case LayerKind::paint: return Make(layer.uid, "a paint layer", "phase4.1_nodes-paint-layers");
@@ -113,10 +125,7 @@ Gap LayerGap(const core::Project& project, const core::Layer& layer) {
         }
         return Make(layer.uid, "a Mesh geometry mask", "phase4.2_remaining-nodes");
     }
-    const auto height = layer.blending.find(ChannelType::Height);
-    if (height != layer.blending.end() && height->second.mode == core::BlendingMode::SignedAddition) {
-        return Make(layer.uid, "SignedAddition on the Height channel", "phase1.12_compositor-height-normal");
-    }
+    if (Gap gap = DirectXNormalGap(project, layer)) return gap;
     if (layer.kind == LayerKind::fill && layer.fill) return FillGap(project, *layer.fill, layer.uid);
     return std::nullopt;
 }

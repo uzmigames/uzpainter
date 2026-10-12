@@ -11,7 +11,7 @@ Comparison run: machine Bolado, Python 3.13.9, numpy 2.4.4, repository commit 17
 - `parity/semantics/ao-mixed.json`: 2 entries (exact 1, calibrated 1, gap 0).
 - `parity/semantics/blend-modes.json`: 34 entries (exact 2, calibrated 31, gap 1).
 - `parity/semantics/evaluator-profile.json`: 4 entries (exact 0, calibrated 4, gap 0).
-- `parity/semantics/height-to-normal.json`: 10 entries (exact 5, calibrated 1, gap 4).
+- `parity/semantics/height-to-normal.json`: 14 entries (exact 10, calibrated 3, gap 1).
 - `parity/semantics/resampling.json`: 4 entries (exact 1, calibrated 3, gap 0).
 - `parity/semantics/srgb-transfer.json`: 3 entries (exact 1, calibrated 2, gap 0).
 - 04 §9 items settled: 0 of 11 (section 6); every other item is an open item.
@@ -1263,10 +1263,14 @@ API-probe readbacks of the project's name, file path or node identity describe t
 | `height-to-normal.json` | `height-normal-height-readout` | The Height channel's read-out (EXR export) of the amplitude sweep and the meshes | exact | 48 | 0 (every covering residual is zero) |
 | `height-to-normal.json` | `height-normal-default-normal-channel-base` | Empty Normal channel (no layer) exported as OpenEXR 32f: its base value | exact | 52 | 0 (every covering residual is zero) |
 | `height-to-normal.json` | `height-normal-save-reopen-divergence` | r2 of the amplitude sweep at opacity 0.75 and 0.1 (after save and reopen) | calibrated | 24 | height-normal-save-reopen-divergence: max \|Δ\| 6.10352e-05 half-float value, 65536 differing values |
-| `height-to-normal.json` | `height-normal-mesh-normal-map` | A Normal mesh map in the virtual maps and the geometry-only pass-through | gap | 0 | 0 (every covering residual is zero) |
-| `height-to-normal.json` | `height-normal-resolution-scaling` | The height-to-normal scale at set resolutions other than 256 | gap | 0 | 0 (every covering residual is zero) |
-| `height-to-normal.json` | `height-signed-addition` | SignedAddition on the Height channel | gap | 0 | 0 (every covering residual is zero) |
-| `height-to-normal.json` | `height-normal-unrecorded-inputs` | Normal-channel coverage, DirectX projects and 8-bit Normal imports | gap | 0 | 0 (every covering residual is zero) |
+| `height-to-normal.json` | `height-normal-mesh-normal-map` | A Normal mesh map in the virtual maps (OpenGL and DirectX projects, both methods) | exact | 120 | 0 (every covering residual is zero) |
+| `height-to-normal.json` | `height-normal-channel-coverage` | The Normal channel at partial coverage: its read-out and its normal in the virtual maps | exact | 61 | 0 (every covering residual is zero) |
+| `height-to-normal.json` | `height-normal-channel-import` | 8- and 16-bit normal maps on the Normal channel of OpenGL and DirectX projects | exact | 64 | 0 (every covering residual is zero) |
+| `height-to-normal.json` | `height-normal-resolution-scaling` | The height-to-normal scale and the magnified Height at 512, 1024 and 2048 px | exact | 126 | 0 (every covering residual is zero) |
+| `height-to-normal.json` | `height-signed-addition` | SignedAddition on the Height channel | exact | 48 | 0 (every covering residual is zero) |
+| `height-to-normal.json` | `height-normal-coverage-save-reopen-divergence` | r2 of height-normal-channel-coverage s2 (a mask-coded Normal fill, after save and reopen) | calibrated | 6 | height-normal-coverage-save-reopen-divergence: max \|Δ\| 61 16-bit code value, 142862 differing values |
+| `height-to-normal.json` | `height-normal-resolution-save-reopen-divergence` | r2 of height-normal-resolution-2048 s2 (opacity 0.25, after save and reopen) | calibrated | 4 | height-normal-resolution-save-reopen-divergence: max \|Δ\| 1 16-bit code value, 5 differing values |
+| `height-to-normal.json` | `height-normal-unrecorded-inputs` | Normal inputs and set sizes the recordings do not cover | gap | 0 | 0 (every covering residual is zero) |
 | `resampling.json` | `resample-bilinearhq-repeat` | UV projection with the BilinearHQ filter, Repeat wrap | calibrated | 16 | resample-bilinearhq-repeat: max \|Δ\| 16286 16-bit code value, 196608 differing values |
 | `resampling.json` | `resample-bilinearsharp` | UV projection with the BilinearSharp filter, Repeat wrap | calibrated | 16 | resample-bilinearsharp: max \|Δ\| 5909 16-bit code value, 119087 differing values |
 | `resampling.json` | `resample-nearest` | UV projection with the Nearest filter, Repeat wrap | exact | 16 | 0 (every covering residual is zero) |

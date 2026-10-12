@@ -2,26 +2,33 @@
 
 // The virtual normal maps `Normal_OpenGL` and `Normal_DirectX` and the geometry-only normal
 // pass-through (docs/architecture/04-layer-stack-and-compositing.md §6, EXP-09; task
-// phase1.12_compositor-height-normal, parity/semantics/height-to-normal.json, decisions 064 and
-// 065). Fitted on the Tier 0 height-normal goldens of Painter 12.1.5, exact on every recorded map:
+// phase1.12_compositor-height-normal, parity/semantics/height-to-normal.json, decisions 064, 065,
+// 079 and 080). Fitted on the Tier 0 height-normal goldens of Painter 12.1.5, exact on every r1
+// map:
 //
-// - Input: the Height channel's read-out before its write rule (the isolated root composited
-//   over the base in float32, not the stored half: opacity 0.75 and 0.1 show it) and the Normal
-//   channel's read-out composited over the flat colour (0.5, 0.5, 1) (an empty Normal channel
-//   acts as the flat normal although it exports its base 127/255).
+// - Inputs: the Height channel's read-out before its write rule (the isolated root composited
+//   over the base in float32, not the stored half: opacity 0.75 and 0.1 show it); the Normal
+//   channel's root list composited from a transparent start, colour X and coverage a (before its
+//   read-out); the bound Normal mesh map's codes as UNORM operands M.
 // - Height-derived vector v per texel (rows top first, wrap-around at the set border), h(dx, dy)
-//   the height at column x + dx, row y + dy:
-//     Sharp:          v = (h(-1, 0) - h(0, 0), h(0, 0) - h(0, -1), 0.390625);
-//     Smooth (Sobel): v = (L - R, B - T, 3.125), L = (h(-1,-1) + 2 h(-1,0)) + h(-1,1), R likewise
+//   the height at column x + dx, row y + dy, W the set width:
+//     Sharp:          v = (h(-1, 0) - h(0, 0), h(0, 0) - h(0, -1), 100 / W);
+//     Smooth (Sobel): v = (L - R, B - T, 800 / W), L = (h(-1,-1) + 2 h(-1,0)) + h(-1,1), R likewise
 //                     at dx = +1, T = (h(-1,-1) + 2 h(0,-1)) + h(1,-1), B likewise at dy = +1
 //                     (this summation order is the implemented convention; the goldens do not
 //                     separate it from others).
-//   0.390625 = 1 / 2.56 (and 3.125 = 8 x 0.390625) at 256 texels; other resolutions are not
-//   recorded and are refused.
-// - Combination (arith.h normal-map steps): H = normalise(v); A = normalise(reoriented(F, H))
-//   with F the flat normal (0, 0, 1); C = decode(Normal-channel read-out); n = normalise(
-//   reoriented(A, C)). Normal_OpenGL stores fma(n, 1/2, 1/2); Normal_DirectX negates n.y first.
-//   A bound Normal mesh map (whose place in the chain is not recorded) is refused.
+//   z is a UV-space gradient: 0.390625 = 100 / 256 and 3.125 = 800 / 256, recorded at 256, 512,
+//   1024 and 2048 texels (square sets; other sizes and shapes are refused).
+// - Combination (arith.h normal-map steps): H = normalise(v); F = decode(M), its y negated when
+//   the mesh map is in the DirectX convention, else the flat normal (0, 0, 1); A = normalise(
+//   reoriented(F, H)) (a mesh map in the project's convention; another one is refused); the
+//   channel normal C = the flat normal where a = 0, else u = decode(X
+//   hw::Rcp(a)) turned toward the flat normal by a: (u.x k, u.y k, cos(t)), t = a acos(z), z =
+//   u.z clamped to [0, 1], k = sin(t) rsqrt(fma(-z, z, 1)) (acos, sin, cos and rsqrt the GPU's,
+//   hwmath.h; u kept at a = 1 or z = 1); n = normalise(reoriented(A, C)). Normal_OpenGL stores fma(n, 1/2, 1/2);
+//   Normal_DirectX negates n.y first. At full coverage C = decode(X). The Normal channel's own
+//   read-out (its export) is X over the flat colour (0.5, 0.5, 1), while an empty channel exports
+//   its template base 127/255 (dag.h ChannelDag::readoutBase).
 // - Results are the float32 encoded normals; an export writes them with its write rule (16-bit
 //   PNG: arith::WriteUnorm).
 //
@@ -55,24 +62,36 @@ namespace uzp::evaluator {
 /// The z component of the height-derived vector at 256 texels: Sharp, Sobel.
 inline constexpr float kSharpZ = 0.390625f;
 inline constexpr float kSobelZ = 3.125f;
-/// The only set resolution whose height-to-normal scaling is recorded.
-inline constexpr uint32_t kRecordedNormalResolution = 256;
+
+/// The z of `method` on a set `width` texels wide: kSharpZ or kSobelZ times 256 / width (exact
+/// for the power-of-two widths it is used with).
+[[nodiscard]] float HeightZ(core::HeightToNormalMethod method, uint32_t width);
 
 /// The heights the stencils read around one texel: index (dy + 1) 3 + dx + 1, dx, dy in [-1, 1].
 using HeightNeighbourhood = std::array<float, 9>;
 
-/// The height-derived vector v (before normalisation) of `method` (see above).
+/// The height-derived vector v (before normalisation) of `method` with z `z` (see above).
 [[nodiscard]] std::array<float, 3> HeightVector(core::HeightToNormalMethod method,
-                                                const HeightNeighbourhood& h);
+                                                const HeightNeighbourhood& h, float z);
 
-/// The encoded normal of one texel: the combination of the height vector `v` with the Normal
-/// channel's read-out colour `channel`, as n / 2 + 1/2 in `convention`.
-[[nodiscard]] std::array<float, 3> VirtualNormalTexel(const std::array<float, 3>& v,
-                                                      const std::array<float, 3>& channel,
-                                                      core::NormalMapFormat convention);
-
-/// The flat colour the virtual maps composite the Normal channel over.
+/// The flat normal colour: the Normal channel's read-out base and an empty channel's input.
 inline constexpr std::array<float, 3> kFlatNormalColour{0.5f, 0.5f, 1.0f};
+
+/// The inputs of one texel of a virtual map besides the height vector.
+struct NormalInputs {
+    /// A Normal mesh map is bound: its operands and its convention (else F is the flat normal).
+    bool hasMesh = false;
+    std::array<float, 3> mesh = kFlatNormalColour;
+    bool meshDirectX = false;
+    /// The Normal channel's colour X and coverage a from a transparent start.
+    std::array<float, 3> channel = kFlatNormalColour;
+    float coverage = 1.0f;
+};
+
+/// The encoded normal of one texel: the combination of the height vector `v` with the mesh map
+/// and the Normal channel of `inputs`, as n / 2 + 1/2 in `convention`.
+[[nodiscard]] std::array<float, 3> VirtualNormalTexel(const std::array<float, 3>& v, const NormalInputs& inputs,
+                                                      core::NormalMapFormat convention);
 
 /// What a virtual normal source is.
 enum class NormalSourceKind : uint8_t {
@@ -126,12 +145,13 @@ struct VirtualNormalResult {
 };
 
 /// Evaluates `request` against `project` (revision `revision`) on `store` with `cache`: the
-/// combined virtual map (the Height and Normal read-outs, one VirtualNormalOp per tile) or the
-/// geometry-only pass-through. Fails with the evaluation failures of the two channels and with
-/// `evaluator:unsupported_source` for what is not recorded: a set resolution other than 256, a
-/// bound Normal mesh map in the combined map, a non-empty Normal channel in a DirectX project,
-/// a profile whose root is not isolated; `missing_resource` for a pass-through without a Normal
-/// mesh map or bytes.
+/// combined virtual map (the Height read-out, the Normal channel's root list and the Normal
+/// mesh map, one VirtualNormalOp per tile) or the geometry-only pass-through. Fails with the
+/// evaluation failures of the two channels and with `evaluator:unsupported_source` for what is
+/// not recorded: a set that is not square of 256, 512, 1024 or 2048 texels, a Normal mesh map in
+/// the combined map that is not a 16-bit RGB image at the set resolution in the project's
+/// convention, a profile whose root is not isolated; `missing_resource` for a Normal mesh map
+/// without a resource provider or bytes.
 [[nodiscard]] render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(
     const core::Project& project, std::int64_t revision, const VirtualNormalRequest& request,
     const TemplateLibrary& templates, ITileStore& store, TileCache& cache);

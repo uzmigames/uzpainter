@@ -9,6 +9,7 @@
 #include "evaluator/dag.h"
 #include "evaluator/error.h"
 #include "evaluator/hash.h"
+#include "evaluator/hwmath.h"
 
 namespace uzp::evaluator {
 
@@ -24,6 +25,30 @@ float Mul(float a, float b) { return a * b; }
 
 /// (a + 2 b) + c: one (1, 2, 1) row or column of the Sobel stencil.
 float Smooth(float a, float b, float c) { return Add(Add(a, Mul(2.0f, b)), c); }
+
+/// The unit normal u turned toward (0, 0, 1) by the coverage a (see the header): t = a acos(z),
+/// (u.x k, u.y k, cos(t)), k = sin(t) rsqrt(fma(-z, z, 1)), z = u.z clamped to [0, 1].
+Vec3 TowardFlatAcos(const Vec3& u, float a) {
+    if (!(a < 1.0f)) return u;
+    const float z = arith::Clamp01(u[2]);
+    const float w = arith::Fma(-z, z, 1.0f);
+    if (!(w > 0.0f)) return u;
+    const float turned = Mul(a, hw::Acos(z));
+    const float k = Mul(hw::Sin(turned), hw::Rsqrt(w));
+    return {Mul(u[0], k), Mul(u[1], k), hw::Cos(turned)};
+}
+
+/// The channel normal C of the Normal channel's colour `x` at coverage `a` (see the header): the
+/// full coverage decodes `x` as it is.
+Vec3 ChannelNormal(const Vec3& x, float a) {
+    if (!(a > 0.0f)) return {0.0f, 0.0f, 1.0f};
+    if (!(a < 1.0f)) return arith::NormalDecode(x);
+    const float inverse = hw::Rcp(a);
+    return TowardFlatAcos(arith::NormalDecode({Mul(x[0], inverse), Mul(x[1], inverse), Mul(x[2], inverse)}), a);
+}
+
+/// The set widths whose height-to-normal scaling is recorded (decision 079).
+bool RecordedResolution(uint32_t width) { return width == 256 || width == 512 || width == 1024 || width == 2048; }
 
 const core::TextureSet* FindSet(const core::Project& project, core::Id set) {
     for (const core::TextureSet& candidate : project.texture_sets) {
@@ -85,6 +110,26 @@ render::Result<void> ReadInto(ITileStore& store, TileHandle tile, uint32_t x0, u
     return {};
 }
 
+/// The convention of a bound Normal mesh map: an imported map's declared one, else the project's.
+core::NormalMapFormat MeshConvention(const core::Project& project, const core::MeshMapBinding& map) {
+    return map.provenance_kind() == core::MeshMapProvenanceKind::imported
+               ? std::get<core::ImportedProvenance>(map.provenance).declared_convention
+               : project.settings.normal_map_format;
+}
+
+/// The bound Normal mesh map's bytes, or `missing_resource`.
+render::Result<std::shared_ptr<const DecodedImage>> MeshImage(const core::MeshMapBinding& map,
+                                                              const VirtualNormalRequest& request) {
+    if (request.resources == nullptr) {
+        return EvalFail(EvalErrorKind::MissingResource, "no resource provider for the Normal mesh map");
+    }
+    std::shared_ptr<const DecodedImage> image = request.resources->Fetch(map.resource);
+    if (!image) {
+        return EvalFail(EvalErrorKind::MissingResource, "Normal mesh map " + map.resource + " is not available");
+    }
+    return image;
+}
+
 /// The geometry-only pass-through: the bound Normal mesh map's codes as their operands, green
 /// inverted when the requested convention differs from the map's.
 render::Result<VirtualNormalResult> PassThrough(const core::Project& project, const core::TextureSet& set,
@@ -94,14 +139,9 @@ render::Result<VirtualNormalResult> PassThrough(const core::Project& project, co
         return EvalFail(EvalErrorKind::MissingResource,
                         "texture set " + std::to_string(set.id) + " has no Normal mesh map to pass through");
     }
-    if (request.resources == nullptr) {
-        return EvalFail(EvalErrorKind::MissingResource, "no resource provider for the Normal mesh map");
-    }
-    std::shared_ptr<const DecodedImage> image = request.resources->Fetch(binding->second.resource);
-    if (!image) {
-        return EvalFail(EvalErrorKind::MissingResource,
-                        "Normal mesh map " + binding->second.resource + " is not available");
-    }
+    render::Result<std::shared_ptr<const DecodedImage>> fetched = MeshImage(binding->second, request);
+    if (!fetched) return render::Unexpected(fetched.error());
+    const std::shared_ptr<const DecodedImage>& image = *fetched;
     const bool unorm = image->encoding == render::TexelEncoding::Unorm16 ||
                        image->encoding == render::TexelEncoding::Unorm8;
     if (!unorm || image->channels < 3 || image->width != static_cast<uint32_t>(set.resolution.width) ||
@@ -110,11 +150,7 @@ render::Result<VirtualNormalResult> PassThrough(const core::Project& project, co
                         "the Normal mesh map must be an 8- or 16-bit RGB image at the set resolution "
                         "(a pass-through does not resample)");
     }
-    const core::MeshMapBinding& map = binding->second;
-    const core::NormalMapFormat own =
-        map.provenance_kind() == core::MeshMapProvenanceKind::imported
-            ? std::get<core::ImportedProvenance>(map.provenance).declared_convention
-            : project.settings.normal_map_format;
+    const core::NormalMapFormat own = MeshConvention(project, binding->second);
     const uint32_t bits = image->encoding == render::TexelEncoding::Unorm16 ? 16u : 8u;
     const uint32_t max = (1u << bits) - 1u;
     VirtualNormalResult result;
@@ -138,24 +174,33 @@ render::Result<VirtualNormalResult> PassThrough(const core::Project& project, co
 
 }  // namespace
 
-std::array<float, 3> HeightVector(HeightToNormalMethod method, const HeightNeighbourhood& h) {
+float HeightZ(HeightToNormalMethod method, uint32_t width) {
+    const float scale = 256.0f / static_cast<float>(width);
+    return Mul(method == HeightToNormalMethod::Sharp ? kSharpZ : kSobelZ, scale);
+}
+
+std::array<float, 3> HeightVector(HeightToNormalMethod method, const HeightNeighbourhood& h, float z) {
     // h[(dy + 1) 3 + dx + 1]
     if (method == HeightToNormalMethod::Sharp) {
-        return {Sub(h[3], h[4]), Sub(h[4], h[1]), kSharpZ};
+        return {Sub(h[3], h[4]), Sub(h[4], h[1]), z};
     }
     const float left = Smooth(h[0], h[3], h[6]);
     const float right = Smooth(h[2], h[5], h[8]);
     const float top = Smooth(h[0], h[1], h[2]);
     const float bottom = Smooth(h[6], h[7], h[8]);
-    return {Sub(left, right), Sub(bottom, top), kSobelZ};
+    return {Sub(left, right), Sub(bottom, top), z};
 }
 
-std::array<float, 3> VirtualNormalTexel(const std::array<float, 3>& v, const std::array<float, 3>& channel,
+std::array<float, 3> VirtualNormalTexel(const std::array<float, 3>& v, const NormalInputs& inputs,
                                         core::NormalMapFormat convention) {
-    constexpr Vec3 kFlat{0.0f, 0.0f, 1.0f};
     const Vec3 heightNormal = arith::NormalNormalise(v);
-    const Vec3 base = arith::NormalNormalise(arith::NormalReoriented(kFlat, heightNormal));
-    const Vec3 detail = arith::NormalDecode(channel);
+    Vec3 mesh{0.0f, 0.0f, 1.0f};
+    if (inputs.hasMesh) {
+        mesh = arith::NormalDecode(inputs.mesh);
+        if (inputs.meshDirectX) mesh[1] = -mesh[1];
+    }
+    const Vec3 base = arith::NormalNormalise(arith::NormalReoriented(mesh, heightNormal));
+    const Vec3 detail = ChannelNormal(inputs.channel, inputs.coverage);
     const Vec3 n = arith::NormalNormalise(arith::NormalReoriented(base, detail));
     const float y = convention == core::NormalMapFormat::DirectX ? -n[1] : n[1];
     return {arith::Fma(n[0], 0.5f, 0.5f), arith::Fma(y, 0.5f, 0.5f), arith::Fma(n[2], 0.5f, 0.5f)};
@@ -180,15 +225,32 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
 
     const uint32_t width = static_cast<uint32_t>(set->resolution.width);
     const uint32_t height = static_cast<uint32_t>(set->resolution.height);
-    if (width != kRecordedNormalResolution || height != kRecordedNormalResolution) {
+    if (width != height || !RecordedResolution(width)) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "the height-to-normal scaling is recorded at 256 x 256 only "
-                        "(phase1.12_compositor-height-normal recording request)");
+                        "the height-to-normal scaling is recorded on square sets of 256, 512, 1024 and 2048 "
+                        "texels only (phase1.12_compositor-height-normal)");
     }
-    if (set->mesh_maps.contains(core::MeshMapUsage::Normal)) {
-        return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "a Normal mesh map in the virtual normal maps is not recorded "
-                        "(phase1.12_compositor-height-normal recording request)");
+    // The bound Normal mesh map: F of the combination, recorded as a 16-bit RGB image at the set
+    // resolution.
+    std::shared_ptr<const DecodedImage> meshImage;
+    bool meshDirectX = false;
+    if (const auto binding = set->mesh_maps.find(core::MeshMapUsage::Normal); binding != set->mesh_maps.end()) {
+        render::Result<std::shared_ptr<const DecodedImage>> fetched = MeshImage(binding->second, request);
+        if (!fetched) return render::Unexpected(fetched.error());
+        meshImage = *fetched;
+        if (meshImage->encoding != render::TexelEncoding::Unorm16 || meshImage->channels < 3 ||
+            meshImage->width != width || meshImage->height != height) {
+            return EvalFail(EvalErrorKind::UnsupportedSource,
+                            "a Normal mesh map in the virtual normal maps is recorded as a 16-bit RGB "
+                            "image at the set resolution only (phase1.12_compositor-height-normal)");
+        }
+        const core::NormalMapFormat own = MeshConvention(project, binding->second);
+        if (own != project.settings.normal_map_format) {
+            return EvalFail(EvalErrorKind::UnsupportedSource,
+                            "a Normal mesh map in a convention other than the project's is not recorded in "
+                            "the virtual normal maps (phase1.12_compositor-height-normal)");
+        }
+        meshDirectX = own == core::NormalMapFormat::DirectX;
     }
     const bool hasHeight = stack->channels.contains(core::ChannelType::Height);
     const bool hasNormal = stack->channels.contains(core::ChannelType::Normal);
@@ -204,11 +266,6 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
         render::Result<ChannelDag> dag = BuildDag(project, set->id, stack->id, core::ChannelType::Normal,
                                                   templates, request.templateId);
         if (!dag) return render::Unexpected(dag.error());
-        if (!dag->root.layers.empty() && project.settings.normal_map_format != core::NormalMapFormat::OpenGL) {
-            return EvalFail(EvalErrorKind::UnsupportedSource,
-                            "a non-empty Normal channel in a DirectX project is not recorded "
-                            "(phase1.12_compositor-height-normal recording request)");
-        }
         normalDag = std::move(*dag);
     }
     // A stack without a Height channel has no relief: a flat height.
@@ -246,6 +303,10 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
     readoutKey.Str("virtual-normal").Sub(heightDag ? heightDag->readoutHash : Digest{}).F32(heightConstant);
     readoutKey.Sub(normalDag ? normalDag->readoutHash : Digest{});
     readoutKey.U32(static_cast<uint32_t>(set->height_to_normal_method)).U32(static_cast<uint32_t>(request.convention));
+    HashWriter meshKey;
+    meshKey.Str("normal-mesh-map").Str(meshImage ? set->mesh_maps.at(core::MeshMapUsage::Normal).resource : std::string());
+    const Digest meshDigest = meshKey.Finish();
+    readoutKey.Sub(meshDigest).U32(meshDirectX ? 1u : 0u).F32(HeightZ(set->height_to_normal_method, width));
     const Digest key = readoutKey.Finish();
     for (uint32_t ty = 0; ty < grid.TilesY(); ++ty) {
         for (uint32_t tx = 0; tx < grid.TilesX(); ++tx) {
@@ -267,13 +328,35 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
             if (!dst) return render::Unexpected(dst.error());
             pins.Hold(Operand::Of(*dst));
             Operand normal = Operand::Constant(kFlatNormalColour, 1.0f);
-            if (normalDag) {
+            if (normalDag && !normalDag->root.layers.empty()) {
                 EvaluationStats stats;
-                render::Result<Operand> readout = EvaluateFloat32Readout(*normalDag, env, tx, ty, kFlatNormalColour, stats);
-                if (!readout) return render::Unexpected(readout.error());
-                pins.Hold(*readout);
+                render::Result<Operand> list = EvaluateIsolatedRoot(*normalDag, env, tx, ty, stats);
+                if (!list) return render::Unexpected(list.error());
+                pins.Hold(*list);
                 Accumulate(result.stats, stats);
-                normal = *readout;
+                normal = *list;
+            }
+            Operand mesh = Operand::Constant(kFlatNormalColour, 1.0f);
+            if (meshImage) {
+                // The mesh map's window as UNORM operands, cached by its content hash.
+                const CacheKey meshKey{stack->id, CacheKind::Content, meshDigest, tx, ty};
+                std::optional<TileHandle> tile = cache.Lookup(meshKey);
+                if (!tile) {
+                    TileFormat meshFormat;
+                    meshFormat.encoding = render::TexelEncoding::Float32;
+                    meshFormat.channels = 3;
+                    render::Result<TileHandle> allocated =
+                        cache.Allocate(meshKey, meshFormat, grid.TileWidth(tx), grid.TileHeight(ty), store);
+                    if (!allocated) return render::Unexpected(allocated.error());
+                    render::Result<void> uploaded = store.Upload(*allocated, *meshImage, tx * kTileSize, ty * kTileSize);
+                    if (!uploaded) {
+                        cache.Unpin(*allocated);
+                        return render::Unexpected(uploaded.error());
+                    }
+                    tile = *allocated;
+                }
+                pins.Hold(Operand::Of(*tile));
+                mesh = Operand::Of(*tile);
             }
             VirtualNormalOp op;
             op.dst = *dst;
@@ -287,7 +370,10 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
                     }
                 }
             }
+            op.z = HeightZ(set->height_to_normal_method, width);
             op.normal = normal;
+            op.mesh = mesh;
+            op.meshDirectX = meshDirectX;
             op.method = set->height_to_normal_method;
             op.convention = request.convention;
             render::Result<void> queued = store.VirtualNormal(op);

@@ -1,6 +1,6 @@
 """Tests of phase1.12_compositor-height-normal (P1-COMPOSITOR,
 `docs/architecture/04-layer-stack-and-compositing.md` §6; `src/evaluator/height_to_normal.h`,
-`parity/semantics/height-to-normal.json`, decisions 064 and 065).
+`parity/semantics/height-to-normal.json`, decisions 064, 065, 079 and 080).
 
 The native cases run `uzp-evaluator-tests.exe` (`tests/evaluator/evaluator_test.cpp`):
 `height-normal` on the CPU anywhere; `height-normal-gpu-vs-cpu` needs the DX12 adapter and skips
@@ -19,7 +19,12 @@ from typing import Any
 import numpy as np
 import pytest
 
-from tests.evaluator.masks_fits import envelope_golden, envelope_manifest, spec_from_steps
+from tests.evaluator.masks_fits import (
+    envelope_golden,
+    envelope_manifest,
+    resource_entry,
+    spec_from_steps,
+)
 from tests.evaluator.test_compositor_tile_dag import (
     REPO_ROOT,
     backends,
@@ -69,9 +74,35 @@ def method_of(manifest: dict[str, Any], texture_set: str) -> str:
 def virtual_spec(
     manifest: dict[str, Any], texture_set: str, workdir: Path, outputs: list[str]
 ) -> dict[str, Any]:
-    spec = spec_from_steps(manifest, texture_set, workdir, outputs)
+    """The evaluator spec of `texture_set` with its method, the project's normal-map format and,
+    when the sequence binds one, the Normal mesh map (an imported resource in the project's
+    convention, as Painter reads a mesh map it is given)."""
+    steps = manifest["instruction_sequence"]["steps"]
+    create = next(s for s in steps if s["call"] == "substance_painter.project.create")
+    convention = str(create["args"].get("normal_map_format", "OpenGL"))
+    inputs = {i["input_id"]: REPO_ROOT / i["path"] for i in manifest["inputs"]}
+    imports = {
+        s["step"]: s["args"]["input"]
+        for s in steps
+        if s["call"].endswith("import_project_resource")
+    }
+    mesh = [s for s in steps if s["call"].endswith("TextureSet.set_mesh_map_resource")]
+    rest = {
+        **manifest,
+        "instruction_sequence": {
+            **manifest["instruction_sequence"],
+            "steps": [s for s in steps if s not in mesh],
+        },
+    }
+    spec = spec_from_steps(rest, texture_set, workdir, outputs)
     spec["height_to_normal_method"] = method_of(manifest, texture_set)
+    spec["normal_map_format"] = convention
     spec["virtual_outputs"] = list(MAPS)
+    for step in mesh:
+        if step["args"]["usage"] != "Normal":
+            raise ValueError(f"step {step['step']}: only a Normal mesh map is modelled")
+        entry = resource_entry(inputs[imports[step["args"]["resource_step"]]], workdir)
+        spec["normal_mesh_map"] = {"sha256": entry["sha256"], "convention": convention}
     return spec
 
 
@@ -102,11 +133,12 @@ def stable(golden: Golden, map_name: str) -> bool:
 
 
 def test_height_normal_on_the_cpu(evaluator_tests: Path) -> None:
-    """2.2-2.4, 3.4: the stencils and the combination, the float32 read-out before the write rule,
-    the Normal-channel import (green inverted), the EXP-09 tags (a combined normal carries
-    `combined` and its relief round, which follows the Height content and the method; the
-    geometry-only pass-through carries `geometry_only`), the flat cases and the explicit failures
-    of what is not recorded."""
+    """2.2-2.4, 3.3, 3.4: the stencils and the combination, z as 100 / W, the GPU's Vulkan acos,
+    the Normal channel at partial coverage, the mesh map as F, the float32 read-out before the
+    write rule, the Normal-channel import (green inverted, both conventions), the EXP-09 tags (a
+    combined normal carries `combined` and its relief round, which follows the Height content and
+    the method; the geometry-only pass-through carries `geometry_only`), the flat cases and the
+    explicit failures of what is not recorded."""
     passed, _ = run_case(evaluator_tests, "height-normal")
     assert {
         "a flat height and an empty Normal channel give the flat normal (32767, 32767, 65535) in "
@@ -118,13 +150,23 @@ def test_height_normal_on_the_cpu(evaluator_tests: Path) -> None:
         "the relief round follows the Height content and the method, not the other channels",
         "the Normal channel stores an imported normal map as (r, 65535 - g, b) / 65535, half "
         "toward zero",
-        "a bitmap on the Normal channel of a DirectX project fails with unsupported_source (not "
-        "recorded)",
+        "a DirectX project's Normal channel stores an imported normal map as an OpenGL project "
+        "does",
+        "z is a UV-space gradient: 100 / W (Sharp) and 800 / W (Sobel)",
+        "hw::Acos equals the recording GPU's Vulkan acos on 48 measured inputs",
+        "a Normal layer at opacity 1/2 is composited over the flat colour (0.5, 0.5, 1)",
+        "a mesh map declared in the other convention fails with unsupported_source (not recorded)",
         "the geometry-only pass-through is the Normal mesh map's codes (8 and 16 bits), green "
         "inverted across conventions, tagged `geometry_only` without a relief round",
     } <= passed
     assert any(p.startswith("the Height read-out before the write rule") for p in passed)
     assert any(p.startswith("unrecorded cases fail explicitly") for p in passed)
+    assert any(p.startswith("the Normal channel at coverage 0 is flat") for p in passed)
+    assert any(p.startswith("a bound Normal mesh map is F of the combination") for p in passed)
+    assert any(
+        p.startswith("a DirectX project's Normal channel other than one bitmap") for p in passed
+    )
+    assert any(p.startswith("a 512 set evaluates") for p in passed)
 
 
 def test_height_normal_gpu_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> None:
@@ -205,6 +247,59 @@ def test_normal_channel_in_the_virtual_map_exact(
             n = differing(ours, theirs, None)
             if n:
                 problems.append(f"{texture_set} {recording}: {n} values differ")
+    assert not problems, problems
+
+
+def normal_export(raster_: np.ndarray, directx: bool) -> np.ndarray:
+    """The exported Normal channel of its stored values: a DirectX project's export inverts the
+    stored green once more (half toward zero of 1 - g; height-to-normal.json
+    height-normal-channel-import)."""
+    values = raster_.astype(np.float32)
+    if directx:
+        values = values.copy()
+        values[..., 1] = normal_fit.half_toward_zero(np.float32(1) - values[..., 1])
+    return values
+
+
+@pytest.mark.parametrize("backend", backends())
+@pytest.mark.parametrize("golden_name", sorted(normal_fit.RECORDED_SETS))
+def test_recorded_inputs_exact(
+    evaluator_tests: Path, tmp_path: Path, backend: str, golden_name: str
+) -> None:
+    """3.1, 3.3, 4.1 (decisions 077, 079): the Normal mesh map in OpenGL and DirectX projects,
+    SignedAddition on Height, Normal-channel coverage, 8- and 16-bit Normal imports in both
+    conventions and the sweep at 512, 1024 and 2048 px: Normal_OpenGL, Normal_DirectX, the Height
+    channel and the Normal channel (where it holds layers; its export in the project's convention)
+    equal r1 on every texel, and r2 wherever r2 equals r1 (decision 032: EXC-004 and EXC-005
+    bound the two r2 divergences)."""
+    needs_store()
+    manifest = envelope_manifest(golden_name)
+    golden = envelope_golden(golden_name)
+    directx = normal_fit.directx_project(manifest)
+    problems = []
+    for texture_set in normal_fit.RECORDED_SETS[golden_name]:
+        workdir = tmp_path / texture_set
+        spec = virtual_spec(manifest, texture_set, workdir, ["Height", "Normal"])
+        result = evaluate(evaluator_tests, spec, workdir, backend)
+        ours: dict[str, np.ndarray] = {m: write16(raster(result, m)) for m in MAPS}
+        ours["height"] = raster(result, "Height")[..., :1]
+        if "constant" not in result["channels"]["Normal"]:
+            ours["normal"] = normal_export(raster(result, "Normal"), directx)
+        for map_name, values in ours.items():
+            key = f"{texture_set}/{map_name}"
+            if key not in golden.maps("r1"):
+                continue
+            for recording in ("r1", "r2"):
+                if recording == "r2" and not stable(golden, key):
+                    continue
+                theirs = golden.map(recording, key).values
+                if map_name == "height":
+                    theirs = theirs[..., :1]
+                unit = "16-bit code value" if map_name in MAPS else "float32 value"
+                observe(golden, key, recording, unit, values, theirs)
+                n = differing(values, theirs, None)
+                if n:
+                    problems.append(f"{key} {recording}: {n} values differ")
     assert not problems, problems
 
 
