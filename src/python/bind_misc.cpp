@@ -1,0 +1,136 @@
+// `uzpainter.logging`, `.application`, `.properties` and the modules whose behaviour arrives in
+// later phases (`.baking`, `.render`, `.display`, `.diagnostics`): importable, every call raising
+// `NotYetSupported` naming its owner task before anything changes (decision 082).
+
+#include "python/bindings.h"
+#include "python/errors.h"
+
+namespace uzp::python {
+
+namespace {
+
+constexpr const char* kLogging = R"PY(
+import sys as _sys
+
+INFO = 0
+WARNING = 1
+ERROR = 2
+DBG_INFO = 3
+DBG_WARNING = 4
+DBG_ERROR = 5
+_NAMES = {INFO: "INFO", WARNING: "WARNING", ERROR: "ERROR",
+          DBG_INFO: "DBG_INFO", DBG_WARNING: "DBG_WARNING", DBG_ERROR: "DBG_ERROR"}
+
+
+def log(severity, channel, message):
+    """Writes `[<severity>] <channel>: <message>` to the script's standard error."""
+    if severity not in _NAMES:
+        raise ValueError(f"unknown severity {severity!r}")
+    _sys.stderr.write(f"[{_NAMES[severity]}] {channel}: {message}\n")
+
+
+def info(message):
+    log(INFO, "Python", message)
+
+
+def warning(message):
+    log(WARNING, "Python", message)
+
+
+def error(message):
+    log(ERROR, "Python", message)
+)PY";
+
+constexpr const char* kProperties = R"PY(
+class Property:
+    """A parameter of procedural content (`source.SourceSubstance.get_properties`). The Phase 1 subset
+    holds no procedural content, so no call returns one yet (phase3.3_procedural-families)."""
+
+    __slots__ = ("name", "label", "short_name", "value", "widget_type", "enum_values", "properties")
+
+    def __init__(self, name, label="", short_name="", value=None, widget_type="", enum_values=None, properties=None):
+        self.name = name
+        self.label = label
+        self.short_name = short_name
+        self.value = value
+        self.widget_type = widget_type
+        self.enum_values = dict(enum_values or {})
+        self.properties = dict(properties or {})
+
+    def enum_value(self, name):
+        return self.enum_values[name]
+)PY";
+
+/// Defines functions `names` in `module` that raise `NotYetSupported` naming `owner`.
+void Gaps(py::module_& module, const std::string& qualified, std::initializer_list<const char*> names, const char* owner) {
+    py::dict scope;
+    scope["NotYetSupported"] = ExceptionClass("NotYetSupported");
+    py::exec(R"PY(
+def _gap(qualified, name, owner):
+    def call(*args, **kwargs):
+        raise NotYetSupported(f"{qualified}.{name} is a release gap ({owner})")
+    call.__name__ = name
+    call.__qualname__ = name
+    call.__doc__ = f"Release gap: raises NotYetSupported before any mutation ({owner})."
+    return call
+)PY",
+             scope);
+    for (const char* name : names) module.attr(name) = scope["_gap"](qualified, name, owner);
+}
+
+}  // namespace
+
+void BindMisc(py::module_& m) {
+    py::module_ sys_modules = py::module_::import("sys");
+    const auto submodule = [&](py::module_& parent, const char* name, const std::string& qualified, const char* doc) {
+        py::module_ child = parent.def_submodule(name, doc);
+        sys_modules.attr("modules")[py::str(qualified)] = child;
+        return child;
+    };
+
+    py::module_ logging = submodule(m, "logging", "uzpainter.logging", "Messages to the script's log (standard error).");
+    py::exec(kLogging, logging.attr("__dict__"));
+
+    py::module_ application = submodule(m, "application", "uzpainter.application", "Application-wide information.");
+    application.def("version", [] { return std::string(kAppVersion); }, "UzPainter's version string.");
+    application.def("version_info", [] {
+        const std::string text = kAppVersion;
+        const std::size_t a = text.find('.');
+        const std::size_t b = text.find('.', a + 1);
+        return py::make_tuple(std::stoi(text.substr(0, a)), std::stoi(text.substr(a + 1, b - a - 1)),
+                              std::stoi(text.substr(b + 1)));
+    });
+
+    py::module_ properties = submodule(m, "properties", "uzpainter.properties", "Parameters of procedural content.");
+    py::exec(kProperties, properties.attr("__dict__"));
+
+    py::module_ baking = submodule(m, "baking", "uzpainter.baking", "Mesh-map baking (phase3.5_embree-bakers).");
+    Gaps(baking, "uzpainter.baking",
+         {"bake_async", "bake_selected_textures_async", "BakingParameters", "set_linked_group",
+          "set_linked_group_common_parameters", "unlink_all", "unlink_all_common_parameters", "get_link_group",
+          "get_link_group_common_parameters", "get_linked_texture_sets", "get_linked_texture_sets_common_parameters"},
+         "phase3.5_embree-bakers");
+
+    py::module_ render = submodule(m, "render", "uzpainter.render", "Renders and captures (phase2.3_realtime-preview).");
+    Gaps(render, "uzpainter.render", {"capture"}, "phase2.3_realtime-preview");
+    py::module_ shader = submodule(render, "shader", "uzpainter.render.shader", "Shader parameters (phase2.3_realtime-preview).");
+    Gaps(shader, "uzpainter.render.shader", {"parameters", "set_parameters"}, "phase2.3_realtime-preview");
+    py::module_ render_display = submodule(render, "display", "uzpainter.render.display",
+                                           "The fixed pipeline's display values (phase2.3_realtime-preview).");
+    Gaps(render_display, "uzpainter.render.display",
+         {"set_exposure", "set_rotation", "set_opacity", "set_blur", "set_shadows", "set_background"},
+         "phase2.3_realtime-preview");
+
+    py::module_ display = submodule(m, "display", "uzpainter.display", "Viewport display state (phase2.3_realtime-preview).");
+    Gaps(display, "uzpainter.display",
+         {"get_environment_resource", "set_environment_resource", "get_color_lut_resource", "set_color_lut_resource",
+          "get_tone_mapping", "set_tone_mapping", "Camera"},
+         "phase2.3_realtime-preview");
+
+    py::module_ diagnostics = submodule(m, "diagnostics", "uzpainter.diagnostics",
+                                        "Diagnostic views of the stack (phase2.2_recipe-and-diagnostics).");
+    Gaps(diagnostics, "uzpainter.diagnostics", {"isolate", "contribution", "material_views", "region_stats"},
+         "phase2.2_recipe-and-diagnostics");
+}
+
+}  // namespace uzp::python

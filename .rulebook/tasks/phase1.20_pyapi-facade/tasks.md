@@ -20,6 +20,7 @@
 - [ ] 3.4 Each inert-state symbol reads back what was set and leaves exports byte-identical
 - [ ] 3.5 `js.evaluate`: each whitelisted expression maps to its typed call; a non-whitelisted expression and a non-literal argument raise `UnsupportedInUzPainter` with the revision unchanged
 - [ ] 3.6 Colour tests: implicit colour space per channel kind; an unsupported configuration (e.g. an unpinned OCIO config) fails before evaluation; the default profile round-trips through save/reopen
+- [ ] 3.7 (decision 106, from phase1.19 item 3.2) The Tier 0 API-probe readbacks that need a facade rule, compared exactly with the goldens in a local run: uniform colours read back in the working space (`fill-layer-readback` s5-s8, s30-s33), `SourceBitmap.list_available_color_spaces` (s43), Painter's resource ids (context and version) and the `.spp` file name; the native-owned readbacks are compared by `tests/python/test_pyapi_tier0.py`
 - [ ] 3.7 `ScopedModification` raising inside the block keeps the calls already committed
 - [ ] 3.8 `substance_painter_plugins.load_startup_modules` loads a non-UI startup module and `close_plugin` unloads it
 

@@ -1,0 +1,14 @@
+{
+  "id": 106,
+  "slug": "the-native-api-compares-its-own-tier0-readbacks-and-hands-the-facade-shaped-ones-to-phase1-20",
+  "title": "The native API compares its own Tier 0 readbacks and hands the facade-shaped ones to phase1.20",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.19_pyapi-native-module",
+    "phase1.20_pyapi-facade",
+    "phase1.24_python-api-facade",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}

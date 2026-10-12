@@ -9,6 +9,7 @@
 - [ ] 2.5 Record the Tier 0 paint goldens through the UzmiGames recorder (twice; blobs private, hashes in `parity/manifests/`); a case Painter's documented routes cannot produce is recorded `not_migratable` with the reason
 - [ ] 2.6 Migration route: paint content exported through Painter's documented export API imported with the whole-bitmap operation, with an equality check on the migrated output
 - [ ] 2.7 Native `uzpainter` paint-content operations and the typed MCP tool `paint_set`; recipe-dump entries for planes and content versions; capability-manifest and operation-matrix entries
+- [ ] 2.8 (decision 105, from phase1.19) `project.create` puts Painter's empty paint layer "Layer 1" at the bottom of every new stack (recorded in both recordings of `tier0/api-probes/fill-layer-readback`); then drop its exclusion from `tests/python/test_pyapi_tier0.py`
 
 ## 3. Tests
 - [ ] 3.1 Tier 0 goldens: empty paint layer and empty paint effect in content and mask stacks, exact
