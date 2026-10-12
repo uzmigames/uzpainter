@@ -659,9 +659,9 @@ def test_refused_formats_raise_before_any_file(export_tests: Path, tmp_path: Pat
 def test_identifiers_are_checked(export_tests: Path, tmp_path: Path) -> None:
     """3.4 (decisions 085, 091): srcMapType, channel letters, destination sets, presets and keys
     are checked with their alternatives; documentMap spellings follow the documented and recorded
-    ones; shader parameters and shelf presets are release gaps. Undocumented keys at the root and
-    in a preset map are ignored as Painter ignores them (probe P10); elsewhere they are not
-    recorded. A legacy name whose pairing the stack lacks makes the dry run raise (probe P13)."""
+    ones; shader parameters are a release gap, and a shelf preset UzPainter ships whose layout no
+    recording confirms is refused (decision 095). Undocumented keys at the root and in a preset map
+    are ignored as Painter ignores them (probe P10); elsewhere they are not recorded. A legacy name whose pairing the stack lacks makes the dry run raise (probe P13)."""
     base = rgb("documentMap", "basecolor")
 
     def with_map(channels: list[dict[str, str]]) -> dict[str, Any]:
@@ -732,7 +732,7 @@ def test_identifiers_are_checked(export_tests: Path, tmp_path: Path) -> None:
     refused(r[12], "ValueError", 'unknown export preset "q"', "valid: p")
     refused(r[13], "ValueError", "defined twice")
     refused(r[14], "ValueError", "no exportPreset and no defaultExportPreset")
-    refused(r[15], "NotYetSupported", "phase1.17_export-presets")
+    refused(r[15], "NotYetSupported", '"pbr-metallic-roughness"', "R-095")
     refused(r[16], "NotYetSupported", "exportShaderParams")
     assert paths(r[17]) == ["s0_x.png"]
     assert paths(r[18]) == ["s0_x.png"]

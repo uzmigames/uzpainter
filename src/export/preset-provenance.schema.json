@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "uzpainter/export-preset-provenance/1",
+  "title": "Provenance record of a shipped export preset",
+  "description": "assets/export-presets/<preset>.provenance.json (docs/architecture/08-export.md §4, docs/licensing-and-clean-room.md §6, decision 095). Every decision of the preset cites its source; observations confirm, they are never a source to copy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "preset", "version", "author", "licence", "date", "reviewer", "answersTo", "sources", "privateRecords", "packing", "parity"],
+  "properties": {
+    "schema": {"const": "uzpainter/export-preset-provenance/1"},
+    "preset": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "description": "The preset's UzPainter id: its file stem and its name."},
+    "version": {"type": "integer", "minimum": 1},
+    "author": {"type": "string", "minLength": 1},
+    "licence": {"const": "Apache-2.0"},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "reviewer": {
+      "description": "The reviewer who accepted the record (licensing §6); null until the owner reviews it.",
+      "type": ["string", "null"]
+    },
+    "answersTo": {
+      "description": "The Painter preset names the alias table resolves to this preset (internal compatibility aliases, CLR-06).",
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "page", "section", "facts"],
+        "properties": {
+          "kind": {"enum": ["public-documentation", "consumer-specification", "pipeline-script", "uzmigames-observation"]},
+          "page": {"type": "string", "minLength": 1},
+          "section": {"type": "string", "minLength": 1},
+          "facts": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "privateRecords": {
+      "description": "Observed-output fixtures in the private oracle store that confirm the preset (SHA-256 only, never their content).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["golden_id", "record_sha256"],
+        "properties": {
+          "golden_id": {"type": "string", "minLength": 1},
+          "record_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "packing": {
+      "description": "One entry per map of the preset, in its order: what the map holds and the source of each decision.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fileName", "decision", "source", "status"],
+        "properties": {
+          "fileName": {"type": "string", "minLength": 1},
+          "decision": {"type": "string", "minLength": 1},
+          "source": {"type": "string", "minLength": 1},
+          "status": {"enum": ["defined", "confirmed", "hypothesis"]}
+        }
+      }
+    },
+    "parity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layout", "status", "pending", "tests"],
+      "properties": {
+        "layout": {
+          "description": "pipeline: defined by a UzmiGames pipeline script; confirmed: by Painter's recorded outputs for the preset it answers to; unconfirmed: refused (NotYetSupported) until a recording confirms it.",
+          "enum": ["pipeline", "confirmed", "unconfirmed"]
+        },
+        "status": {
+          "description": "exact: every file of the output-parity test equals Painter's; pending: the items of `pending` keep it from passing.",
+          "enum": ["exact", "pending"]
+        },
+        "pending": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["recording", "owner", "what"],
+            "properties": {
+              "recording": {"type": "string", "pattern": "^R-[0-9]{3}$"},
+              "owner": {"type": "string", "minLength": 1},
+              "what": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "tests": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      },
+      "allOf": [
+        {"if": {"properties": {"status": {"const": "exact"}}}, "then": {"properties": {"pending": {"maxItems": 0}}}},
+        {"if": {"properties": {"status": {"const": "pending"}}}, "then": {"properties": {"pending": {"minItems": 1}}}},
+        {"if": {"properties": {"layout": {"const": "unconfirmed"}}}, "then": {"properties": {"status": {"const": "pending"}}}}
+      ]
+    }
+  }
+}

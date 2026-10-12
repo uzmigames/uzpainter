@@ -1,0 +1,100 @@
+{
+  "schema": "uzpainter/export-preset-provenance/1",
+  "version": 1,
+  "author": "UzmiGames",
+  "licence": "Apache-2.0",
+  "date": "2026-10-12",
+  "reviewer": null,
+  "preset": "pbr-metallic-roughness",
+  "answersTo": [
+    "PBR Metallic Roughness"
+  ],
+  "sources": [
+    {
+      "kind": "public-documentation",
+      "page": "Adobe Substance 3D Painter user guide, Export > Output templates > Default Output templates",
+      "section": "List of default templates",
+      "facts": "The default template name this preset answers to; the page gives one-line descriptions only (no maps, channels, naming or parameters)."
+    },
+    {
+      "kind": "public-documentation",
+      "page": "Adobe Substance 3D Painter Python API documentation, export.html (substance_painter.export)",
+      "section": "Full json_config dict possibilities; Export path wildcards",
+      "facts": "The preset form {name, maps[].{fileName, channels[].{destChannel, srcChannel, srcMapType, srcMapName}, parameters}}; the documentMap and virtualMap names used here; the $textureSet and $colorSpace wildcards and ( ... ) optional groups."
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "Khronos glTF 2.0 Specification",
+      "section": "3.9.2 Metallic-Roughness Material; 3.9.3 Additional Textures (normal)",
+      "facts": "The metallic-roughness model's inputs: base colour, metalness, roughness; tangent-space normal textures with +Y up (the OpenGL convention)."
+    },
+    {
+      "kind": "uzmigames-observation",
+      "page": "Assets3D Tools/SubstancePainterMCP/CHANGELOG.md",
+      "section": "Tests and validation (guarded texture export)",
+      "facts": "A 256 px PNG export through this preset on a Painter sample scene produced Base Color, Roughness, Metallic, Normal and Height files.",
+      "sha256": "87122d57ba31454c081631cf49110bdbd9a17678c806f65baa48b6d6bb5e1132"
+    }
+  ],
+  "privateRecords": [],
+  "packing": [
+    {
+      "fileName": "$textureSet_BaseColor",
+      "decision": "RGB from documentMap basecolor",
+      "source": "map: MCP changelog observation; content: glTF 2.0 base colour",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Roughness",
+      "decision": "L from documentMap roughness",
+      "source": "map: MCP changelog observation; content: glTF 2.0 roughness",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Metallic",
+      "decision": "L from documentMap metallic",
+      "source": "map: MCP changelog observation; content: glTF 2.0 metalness",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Normal",
+      "decision": "RGB from virtualMap Normal_OpenGL",
+      "source": "map: MCP changelog observation; convention: glTF 2.0 normal texture (+Y up)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Height",
+      "decision": "L from documentMap height",
+      "source": "map: MCP changelog observation",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "(all)",
+      "decision": "Files named $textureSet_<map>, and no per-map parameters: file format, bit depth, padding and dithering come from exportParameters until the recording shows what the preset itself sets",
+      "source": "decision 095",
+      "status": "hypothesis"
+    }
+  ],
+  "parity": {
+    "layout": "unconfirmed",
+    "status": "pending",
+    "pending": [
+      {
+        "recording": "R-095",
+        "owner": "phase1.18_export-engine item 6.2",
+        "what": "Painter's files and dry run for resource://starter_assets/PBR Metallic Roughness on a UzmiGames fixture with every channel the preset reads filled distinctly (emissive and opacity too, to see whether the preset has maps for them), with and without an exportParameters rule: confirms or corrects every map, its channels, its name, the preset's own parameters and the URL's version."
+      },
+      {
+        "recording": "R-090",
+        "owner": "phase1.18_export-engine item 6.1",
+        "what": "BaseColor (sRGB8) is exported sRGB-encoded; the encoding is recorded but not fitted (decision 090), so every export writing it is refused before writing."
+      }
+    ],
+    "tests": [
+      "tests/export/test_export_presets.py::test_painter_names_resolve_to_shipped_presets",
+      "tests/export/test_export_presets.py::test_unconfirmed_presets_are_refused_naming_r095",
+      "tests/export/test_export_presets.py::test_provenance_records_are_complete",
+      "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard"
+    ]
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "schema": "uzpainter/export-preset-provenance/1",
+  "version": 1,
+  "author": "UzmiGames",
+  "licence": "Apache-2.0",
+  "date": "2026-10-12",
+  "reviewer": null,
+  "preset": "assets3d-inline-five-map",
+  "answersTo": [],
+  "sources": [
+    {
+      "kind": "pipeline-script",
+      "page": "Assets3D Pipeline/retopology/staff-v10/painter_export.py",
+      "section": "cfg (the inline preset and its exportParameters)",
+      "facts": "Five maps: BaseColor RGB from documentMap basecolor; Roughness, Metallic and Height L from documentMap roughness, metallic and height; Normal RGB from virtualMap Normal_OpenGL. Parameters png, bitDepth 16, paddingAlgorithm infinite, dithering false; sizeLog2 set per recipe.",
+      "sha256": "2ed7aebc872dc8e15344447300b57a6c35f4595e5f4770ae3277d12163878444"
+    },
+    {
+      "kind": "pipeline-script",
+      "page": "Assets3D Pipeline/retopology/hat-v6/painter_export_v8.py",
+      "section": "cfg",
+      "facts": "The hat v8 variant adds SpecularWeight (documentMap specularweight, L); it is not part of this preset (08-export.md §4: a later package).",
+      "sha256": "39a65742f327f7d37d5251a90b31058a8bb9f457604f2fb3c0330a7ad6bc9153"
+    },
+    {
+      "kind": "public-documentation",
+      "page": "Adobe Substance 3D Painter Python API documentation, export.html (substance_painter.export)",
+      "section": "Full json_config dict possibilities; Export path wildcards",
+      "facts": "The preset form {name, maps[].{fileName, channels[].{destChannel, srcChannel, srcMapType, srcMapName}, parameters}}; the documentMap and virtualMap names used here; the $textureSet and $colorSpace wildcards and ( ... ) optional groups."
+    }
+  ],
+  "privateRecords": [],
+  "packing": [
+    {
+      "fileName": "$textureSet_BaseColor",
+      "decision": "RGB from documentMap basecolor; png 16, infinite padding, no dithering",
+      "source": "painter_export.py",
+      "status": "defined"
+    },
+    {
+      "fileName": "$textureSet_Roughness",
+      "decision": "L from documentMap roughness; png 16, infinite padding, no dithering",
+      "source": "painter_export.py",
+      "status": "defined"
+    },
+    {
+      "fileName": "$textureSet_Metallic",
+      "decision": "L from documentMap metallic; png 16, infinite padding, no dithering",
+      "source": "painter_export.py",
+      "status": "defined"
+    },
+    {
+      "fileName": "$textureSet_Height",
+      "decision": "L from documentMap height; png 16, infinite padding, no dithering",
+      "source": "painter_export.py",
+      "status": "defined"
+    },
+    {
+      "fileName": "$textureSet_Normal",
+      "decision": "RGB from virtualMap Normal_OpenGL (the combined normal); png 16, infinite padding, no dithering",
+      "source": "painter_export.py",
+      "status": "defined"
+    },
+    {
+      "fileName": "(all)",
+      "decision": "Files are named $textureSet_<map>, where the script writes one caller-given prefix for every texture set; sizeLog2 is left to the texture set's size, where the script sets it per recipe through exportParameters. A caller that needs the script's fixed prefix or size keeps passing them inline.",
+      "source": "export.html ($textureSet wildcard); decision 095",
+      "status": "defined"
+    }
+  ],
+  "parity": {
+    "layout": "pipeline",
+    "status": "pending",
+    "pending": [
+      {
+        "recording": "R-090",
+        "owner": "phase1.18_export-engine item 6.1",
+        "what": "BaseColor (sRGB8) is exported sRGB-encoded; the encoding is recorded but not fitted (decision 090), so every export writing it is refused before writing."
+      },
+      {
+        "recording": "R-095",
+        "owner": "phase1.18_export-engine item 6.2",
+        "what": "Painter's output for this preset's configuration on a UzmiGames fixture with all five maps present (basecolor, roughness, metallic, height and normal channels filled), PNG 16, so that every file is compared, not only the normal maps the earlier goldens hold."
+      }
+    ],
+    "tests": [
+      "tests/export/test_export_presets.py::test_five_map_preset_plans_the_pipeline_maps",
+      "tests/export/test_export_presets.py::test_five_map_preset_refuses_basecolor_naming_r090",
+      "tests/export/test_export_presets.py::test_five_map_preset_normal_equals_painter_files",
+      "tests/export/test_export_presets.py::test_provenance_records_are_complete",
+      "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard"
+    ]
+  }
+}

@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "evaluator/diagnostics.h"
+#include "export/preset_aliases.h"
 #include "export/virtual_maps.h"
 #include "uzp_core/types/errors.h"
 
@@ -363,17 +364,6 @@ Filter ParseFilter(const json::Value& value, const std::string& path, bool dataP
     return filter;
 }
 
-/// A preset reference: an inline preset name, or a `resource://` URL of a shelf or predefined
-/// preset (the shipped presets: phase1.17_export-presets).
-std::string ParsePresetReference(const json::Value& value, const std::string& path) {
-    const std::string& name = AsString(value, path);
-    if (name.starts_with("resource://") || name.starts_with("export-preset-generator://")) {
-        throw core::NotYetSupported("export: " + path + ": the preset \"" + name +
-                                    "\" is a shelf or predefined preset; this build resolves inline presets "
-                                    "only (phase1.17_export-presets)");
-    }
-    return name;
-}
 
 size_t EditDistance(std::string_view a, std::string_view b) {
     std::vector<size_t> row(b.size() + 1);
@@ -538,7 +528,19 @@ ExportConfig ParseConfig(std::string_view jsonText) {
     return ParseConfig(value);
 }
 
-ExportConfig ParseConfig(const json::Value& value) {
+PresetSpec ParsePreset(const json::Value& value, const std::string& path) {
+    const json::Object& p = AsObject(value, path);
+    CheckKeys(p, path, {"name", "maps"});
+    PresetSpec preset;
+    preset.name = AsString(Required(p, "name", path), path + ".name");
+    const json::Array& maps = AsArray(Required(p, "maps", path), path + ".maps");
+    for (size_t m = 0; m < maps.size(); ++m) preset.maps.push_back(ParseMap(maps[m], Index(path + ".maps", m)));
+    return preset;
+}
+
+ExportConfig ParseConfig(const json::Value& value) { return ParseConfig(value, DefaultPresetDirectory()); }
+
+ExportConfig ParseConfig(const json::Value& value, const std::filesystem::path& presetDirectory) {
     const std::string root = "config";
     const json::Object& object = AsObject(value, root);
     ExportConfig config;
@@ -550,22 +552,17 @@ ExportConfig ParseConfig(const json::Value& value) {
             "(phase2.3_realtime-preview: the shader instances)");
     }
     if (const json::Value* v = Member(object, "defaultExportPreset")) {
-        config.defaultExportPreset = ParsePresetReference(*v, "defaultExportPreset");
+        config.defaultExportPreset = AsString(*v, "defaultExportPreset");
     }
     if (const json::Value* v = Member(object, "exportPresets")) {
         const json::Array& presets = AsArray(*v, "exportPresets");
         std::set<std::string> names;
         for (size_t i = 0; i < presets.size(); ++i) {
             const std::string path = Index("exportPresets", i);
-            const json::Object& p = AsObject(presets[i], path);
-            CheckKeys(p, path, {"name", "maps"});
-            PresetSpec preset;
-            preset.name = AsString(Required(p, "name", path), path + ".name");
+            PresetSpec preset = ParsePreset(presets[i], path);
             if (!names.insert(preset.name).second) {
                 Invalid(path + ".name", "the preset \"" + preset.name + "\" is defined twice");
             }
-            const json::Array& maps = AsArray(Required(p, "maps", path), path + ".maps");
-            for (size_t m = 0; m < maps.size(); ++m) preset.maps.push_back(ParseMap(maps[m], Index(path + ".maps", m)));
             config.exportPresets.push_back(std::move(preset));
         }
     }
@@ -578,7 +575,7 @@ ExportConfig ParseConfig(const json::Value& value) {
         entry.rootPath = AsString(Required(e, "rootPath", path), path + ".rootPath");
         if (const json::Value* f = Member(e, "filter")) entry.filter = ParseFilter(*f, path + ".filter", false);
         if (const json::Value* p = Member(e, "exportPreset")) {
-            entry.exportPreset = ParsePresetReference(*p, path + ".exportPreset");
+            entry.exportPreset = AsString(*p, path + ".exportPreset");
         }
         config.exportList.push_back(std::move(entry));
     }
@@ -594,19 +591,52 @@ ExportConfig ParseConfig(const json::Value& value) {
             config.exportParameters.push_back(std::move(rule));
         }
     }
-    // Every preset a list entry or the default names must be inline (shelf presets were refused).
+    // Every preset a list entry or the default names: an inline preset, else a shipped one
+    // (decision 095), which joins exportPresets under its id.
     std::vector<std::string> inlineNames;
     for (const PresetSpec& p : config.exportPresets) inlineNames.push_back(p.name);
-    const auto checkPreset = [&](const std::string& name, const std::string& path) {
-        if (std::find(inlineNames.begin(), inlineNames.end(), name) == inlineNames.end()) {
-            Unknown(path, "export preset", name, inlineNames);
-        }
+    const auto isInline = [&](const std::string& name) {
+        return std::find(inlineNames.begin(), inlineNames.end(), name) != inlineNames.end();
     };
-    if (config.defaultExportPreset) checkPreset(*config.defaultExportPreset, "defaultExportPreset");
+    std::set<std::string> shippedJoined;
+    const auto resolvePreset = [&](std::string& name, const std::string& path) {
+        if (isInline(name)) return;
+        const std::optional<std::string> id = ShippedPresetId(name);
+        if (!id) {
+            if (name.starts_with("resource://") || name.starts_with("export-preset-generator://")) {
+                throw core::NotYetSupported("export: " + path + ": the preset \"" + name +
+                                            "\" is a shelf or predefined preset UzPainter does not ship; shipped: " +
+                                            JoinNames({ShippedPresetIds().begin(), ShippedPresetIds().end()}) +
+                                            " (decision 095; the Unreal, glTF and UzEngine presets: phase3.1 to "
+                                            "phase3.4)");
+            }
+            std::vector<std::string> valid = inlineNames;
+            for (std::string_view shipped : ShippedPresetIds()) valid.emplace_back(shipped);
+            for (const PresetAlias& alias : PresetAliases()) valid.emplace_back(alias.painterName);
+            Unknown(path, "export preset", name, std::move(valid));
+        }
+        if (isInline(*id)) {
+            Invalid(path, "the preset \"" + name + "\" is the shipped preset \"" + *id +
+                              "\", which an inline preset of that name would shadow");
+        }
+        if (shippedJoined.insert(*id).second) {
+            ShippedPreset shipped = LoadShippedPreset(presetDirectory, *id);
+            if (shipped.layout == PresetLayout::unconfirmed) {
+                throw core::NotYetSupported("export: " + path + ": the preset \"" + name + "\" (shipped preset \"" +
+                                            *id +
+                                            "\") is written from public sources and no recording of Painter's "
+                                            "output confirms its layout yet (" +
+                                            JoinNames(shipped.pendingRecordings) + "; decision 095)");
+            }
+            config.exportPresets.push_back(std::move(shipped.spec));
+        }
+        name = *id;
+    };
+    if (config.defaultExportPreset) resolvePreset(*config.defaultExportPreset, "defaultExportPreset");
     for (size_t i = 0; i < config.exportList.size(); ++i) {
-        const ExportListEntry& entry = config.exportList[i];
+        ExportListEntry& entry = config.exportList[i];
         if (entry.exportPreset) {
-            checkPreset(*entry.exportPreset, Index("exportList", i) + ".exportPreset");
+            resolvePreset(*entry.exportPreset, Index("exportList", i) + ".exportPreset");
         } else if (!config.defaultExportPreset) {
             Invalid(Index("exportList", i), "no exportPreset and no defaultExportPreset");
         }
