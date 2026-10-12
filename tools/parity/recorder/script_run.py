@@ -48,6 +48,7 @@ from __future__ import annotations
 import argparse
 import ast
 import base64
+import importlib.util
 import json
 import shutil
 import sys
@@ -440,9 +441,10 @@ def run_create(
 def pinned_module(item: PinnedInput, file: Path) -> types.ModuleType:
     """The module an import of `item` gives, executed from its pinned bytes as `file`."""
     assert item.data is not None
-    module = types.ModuleType(item.module)
-    module.__file__ = str(file)
-    exec(compile(item.data, str(file), "exec", dont_inherit=True), module.__dict__)
+    spec = importlib.util.spec_from_file_location(item.module, file)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(item.data, str(file), "exec", dont_inherit=True), vars(module))
     return module
 
 
