@@ -907,7 +907,10 @@ def test_presence_and_sources(export_tests: Path, tmp_path: Path) -> None:
     assert normal["meshMap"] == "Normal" and normal["normal"] == "geometry_only"
     assert ok(r[10])["skipped"][0]["kind"] == "export_error"
     assert "not bound" in r[10]["list_error"] and "P12" in r[10]["list_error"]
-    refused(r[11], "NotYetSupported", "R-090")
+    curvature = ok(r[11])["files"][0]
+    assert curvature["layout"] == "L"
+    assert curvature["channels"][0]["source"]["meshMap"] == "Curvature"
+    assert "normal" not in curvature["channels"][0]["source"]
     assert ok(r[12])["files"][0]["channels"][0]["luma"] is True
     assert ok(r[13])["files"][0]["channels"][0]["component"] == 0
     refused(r[14], "NotYetSupported", "srcChannel A")
@@ -1011,7 +1014,7 @@ def skeleton_of(manifest: dict[str, Any], template: dict[str, Any]) -> dict[str,
     bound: dict[str, set[str]] = {}
     convention = "OpenGL"
     for step in steps:
-        call, args = step["call"], step["args"]
+        call, args = step["call"], step.get("args", {})
         if call.endswith("project.create"):
             convention = str(args.get("normal_map_format", "OpenGL"))
         if call.endswith("set_mesh_map_resource"):

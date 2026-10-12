@@ -36,6 +36,10 @@ void CheckPadding(const PlannedFile& file, const Coverage& coverage) {
                            "gutter is not the nearest covered texel, and its ring around each island blends across "
                            "the UV seams");
     }
+    if (file.layout == FileLayout::LA || file.layout == FileLayout::RGBA) {
+        Unfitted(file, "an alpha layout (L+A, RGB+A) on a texture set whose UV islands do not cover the whole tile "
+                       "is recorded under infinite and transparent padding only, and not fitted");
+    }
     for (const PlannedChannel& channel : file.channels) {
         const SourceType type = channel.source.type;
         if (type == SourceType::meshMap || type == SourceType::virtualMap) {

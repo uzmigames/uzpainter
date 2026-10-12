@@ -75,14 +75,10 @@ COMPARE = (
     "phase4.1_nodes-mask-effects, decision 081)"
 )
 BASECOLOR_EXPORT = (
-    "the export engine refuses the 16-bit PNG export of the sRGB8 BaseColor channel until "
-    "recording R-090 is fitted (phase1.18_export-engine item 6.1, decision 090)"
+    "the export engine refuses the 16-bit PNG export of the sRGB8 BaseColor channel: recorded by "
+    "R-090, not fitted (phase1.25_pilot-wand item 2.6, decision 103)"
 )
-HEIGHT_EXPORT = (
-    "the export engine on main writes Height to PNG as h instead of Painter's (h + 1) / 2; the "
-    "rule is fitted on the unmerged phase1.18_export-engine branch (export-bit-depth exact)"
-)
-EXPORTS = {"uzp_plane/basecolor": BASECOLOR_EXPORT, "uzp_plane/height": HEIGHT_EXPORT}
+EXPORTS = {"uzp_plane/basecolor": BASECOLOR_EXPORT}
 REOPEN = "found_by lists the nodes of the refused steps"
 
 

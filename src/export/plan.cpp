@@ -155,13 +155,20 @@ Resolved ResolveMesh(const ChannelSpec& spec, const Root& root, const std::strin
                          "; Painter's export raises ValueError (probe P12)";
         return r;
     }
-    if (usage != core::MeshMapUsage::Normal) {
-        Gap(what, "exporting the meshMap \"" + spec.name + "\" (a mesh map other than normal_base) is not recorded",
-            "export-processing recording R-090 (decision 090)");
-    }
     r.source.meshMap = usage;
-    r.source.components = 3;
-    r.source.normalRole = core::MeshMapRole::geometry_only;
+    if (usage == core::MeshMapUsage::Normal) {
+        r.source.components = 3;
+        r.source.normalRole = core::MeshMapRole::geometry_only;
+        return r;
+    }
+    const std::optional<uint32_t> components = PassThroughComponents(usage);
+    if (!components) {
+        Gap(what,
+            "exporting the meshMap \"" + spec.name +
+                "\" is not recorded (recording R-090 P7 shows ambient_occlusion, curvature and position)",
+            "decision 103");
+    }
+    r.source.components = *components;
     return r;
 }
 
@@ -726,7 +733,7 @@ ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config,
     const std::string& mode = project.settings.color_management.mode;
     if (!mode.empty() && mode != "legacy") {
         throw core::NotYetSupported("export: the colour-management mode \"" + mode +
-                                    "\" (its $colorSpace and encodings) is a release gap (phase1.20_pyapi-facade)");
+                                    "\" (its $colorSpace and encodings) is a release gap (phase1.18_export-engine)");
     }
     if (project.settings.workflow != core::ProjectWorkflow::Default) {
         throw core::NotYetSupported("export: the " + std::string(core::ToString(project.settings.workflow)) +

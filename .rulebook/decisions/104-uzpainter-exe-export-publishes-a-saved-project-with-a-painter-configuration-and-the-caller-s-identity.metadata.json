@@ -1,0 +1,13 @@
+{
+  "id": 104,
+  "slug": "uzpainter-exe-export-publishes-a-saved-project-with-a-painter-configuration-and-the-caller-s-identity",
+  "title": "UzPainter.exe export publishes a saved project with a Painter configuration and the caller's identity",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.18_export-engine",
+    "phase1.17_export-publication-receipts",
+    "phase1.23_pyapi-pipeline-adapter"
+  ],
+  "supersededBy": null
+}

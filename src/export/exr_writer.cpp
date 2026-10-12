@@ -1,7 +1,9 @@
 #include "export/exr_writer.h"
 
+#include "evaluator/arith.h"
 #include "tinyexr.h"
 
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -19,14 +21,16 @@ struct Channel {
     uint32_t component;
 };
 constexpr Channel kGrey[] = {{"Y", 0}};
+constexpr Channel kGreyAlpha[] = {{"A", 1}, {"Y", 0}};
 constexpr Channel kRgb[] = {{"B", 2}, {"G", 1}, {"R", 0}};
 constexpr Channel kRgba[] = {{"A", 3}, {"B", 2}, {"G", 1}, {"R", 0}};
 
 std::span<const Channel> ChannelsOf(uint32_t channels) {
     if (channels == 1) return kGrey;
+    if (channels == 2) return kGreyAlpha;
     if (channels == 3) return kRgb;
     if (channels == 4) return kRgba;
-    throw std::invalid_argument("exr: only grey, RGB and RGBA are written (decision 090)");
+    throw std::invalid_argument("exr: only grey, grey and alpha, RGB and RGBA are written");
 }
 
 [[noreturn]] void Fail(std::string_view what, const char* err) {
@@ -51,7 +55,15 @@ std::string EncodeExr(const ExrImage& image) {
     std::vector<std::vector<float>> planes(channels.size(), std::vector<float>(pixels));
     std::vector<unsigned char*> planePointers(channels.size());
     std::vector<EXRChannelInfo> infos(channels.size());
+    if (image.half) {
+        for (const float v : image.values) {
+            if (!std::isnan(v) && evaluator::arith::HalfToFloat(evaluator::arith::HalfNearestEven(v)) != v) {
+                throw std::invalid_argument("exr: a half-float image holds a value no half represents");
+            }
+        }
+    }
     std::vector<int> pixelTypes(channels.size(), TINYEXR_PIXELTYPE_FLOAT);
+    std::vector<int> storedTypes(channels.size(), image.half ? TINYEXR_PIXELTYPE_HALF : TINYEXR_PIXELTYPE_FLOAT);
     for (size_t c = 0; c < channels.size(); ++c) {
         for (size_t p = 0; p < pixels; ++p) planes[c][p] = image.values[p * image.channels + channels[c].component];
         planePointers[c] = reinterpret_cast<unsigned char*>(planes[c].data());
@@ -62,7 +74,7 @@ std::string EncodeExr(const ExrImage& image) {
     header.num_channels = static_cast<int>(channels.size());
     header.channels = infos.data();
     header.pixel_types = pixelTypes.data();
-    header.requested_pixel_types = pixelTypes.data();
+    header.requested_pixel_types = storedTypes.data();
     header.compression_type = TINYEXR_COMPRESSIONTYPE_PIZ;
     EXRImage exr;
     InitEXRImage(&exr);
@@ -95,11 +107,13 @@ ExrImage DecodeExr(std::string_view file) {
     }
     const std::unique_ptr<EXRHeader, decltype(&FreeEXRHeader)> headerOwner(&header, &FreeEXRHeader);
     const std::span<const Channel> channels = ChannelsOf(static_cast<uint32_t>(header.num_channels));
+    const int stored = header.num_channels > 0 ? header.pixel_types[0] : TINYEXR_PIXELTYPE_FLOAT;
     for (size_t c = 0; c < channels.size(); ++c) {
-        if (std::strcmp(header.channels[c].name, channels[c].name) != 0 ||
-            header.pixel_types[c] != TINYEXR_PIXELTYPE_FLOAT) {
-            throw std::runtime_error("exr: the channels are not FLOAT Y; B, G, R; or A, B, G, R");
+        if (std::strcmp(header.channels[c].name, channels[c].name) != 0 || header.pixel_types[c] != stored ||
+            (stored != TINYEXR_PIXELTYPE_FLOAT && stored != TINYEXR_PIXELTYPE_HALF)) {
+            throw std::runtime_error("exr: the channels are not all FLOAT or all HALF Y; A, Y; B, G, R; or A, B, G, R");
         }
+        header.requested_pixel_types[c] = TINYEXR_PIXELTYPE_FLOAT;
     }
     EXRImage exr;
     InitEXRImage(&exr);
@@ -111,6 +125,7 @@ ExrImage DecodeExr(std::string_view file) {
     image.width = static_cast<uint32_t>(exr.width);
     image.height = static_cast<uint32_t>(exr.height);
     image.channels = static_cast<uint32_t>(channels.size());
+    image.half = stored == TINYEXR_PIXELTYPE_HALF;
     const size_t pixels = size_t{image.width} * image.height;
     image.values.resize(pixels * image.channels);
     for (size_t c = 0; c < channels.size(); ++c) {

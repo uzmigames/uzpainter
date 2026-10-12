@@ -30,17 +30,14 @@ Supported today (decision 086, `parity/semantics/virtual-maps.json`): `Normal_Op
 | DDS | Own header writer + etcpak BC1/BC3/BC4/BC5/BC7 (CPU, deterministic, behind an encoder adapter; bc7enc_rdo is the replacement candidate) |
 | Not in v1 | TIFF, PSD, WebP, J2K/JP2, PGM, JNG, `sbsar` — listed as release gaps in the capability manifest; requesting them raises before writing anything |
 
-Implemented in `src/export/` (`phase1.16_export-processing-encoders`, decisions 089 and 090; `src/export/EXPORT.md` §4).
+Implemented in `src/export/` (`phase1.16_export-processing-encoders` and `phase1.18_export-engine`, decisions 089, 090 and 103; `src/export/EXPORT.md` §4).
 
 - **Exact in the recorded domain.**
-  - Painter's PNG and OpenEXR files re-encode byte for byte.
+  - Painter's PNG and OpenEXR files re-encode byte for byte (8-bit grey PNGs choose among all five row filters with zlib's default strategy, every other layout among None, Sub and Paeth with Z_FILTERED).
+  - PNG 8 and 16 (UNORM write rule; Height written as v * 0.5 + 0.5), OpenEXR 16f (half rounded toward zero) and 32f; L+A and RGB+A, an alpha of 1 everywhere dropped; dithering at PNG 16 (no change); the AO, Curvature and Position mesh maps passed through.
   - The recorded PNG 16 and OpenEXR 32f exports, written end to end, equal Painter's files where the UV islands cover the tile.
   - `passthrough` on islanded sets writes the evaluated values.
-- **Refused before writing** until recording R-090 and its fit:
-  - PNG 8 values, OpenEXR 16f, dithering, resize;
-  - the `color`, `transparent` and `diffusion` paddings, and `infinite` on islanded sets (seam-following, partially fitted);
-  - the L+A layout, sRGB8 channels in OpenEXR, and mesh maps other than `normal_base`.
-- **Recorded but not fitted**: sRGB8 material channels such as BaseColor (exported sRGB-encoded), and RGB+A, whose alpha sources the plan does not resolve yet.
+- **Recorded but not fitted, refused before writing** (decision 103): dithering at PNG 8 and in OpenEXR, resize (partly fitted), the `color`, `transparent` and `diffusion` paddings, `infinite` on islanded sets, and sRGB8 material channels such as BaseColor (exported sRGB-encoded; PNG 16 not fitted).
 
 ## 4. Presets
 
@@ -85,6 +82,7 @@ Target UzEngine (owner Q10): `.uzmat` plus compressed `.uztexture`. Both formats
 - Implemented in `src/export/` (`phase1.17_export-publication-receipts`, decision 097; `src/export/EXPORT.md` §6).
   - **Layout.** The pointer is `exportPath/current.json`. Each generation is `exportPath/generations/<NNNNNN>/` with `files/`, `plan.json` and `receipt.json`. The lock is `exportPath/publication.lock`.
   - **Recovery.** `UzPainter.exe export --recover <exportPath> [--fixed-names <dir>]...` runs the recovery described above.
+  - **End to end.** `UzPainter.exe export <file.uzp> --config <config.json> --app-version <version> --build <id>` exports a saved project's current revision and publishes it (`phase1.18_export-engine`, decision 104; `src/export/EXPORT.md` §7).
   - **Fixed-name routes.** The pinning adapter hands over the generation's `files/` directory. The alternative is a journalled fixed-name copy read under the lock.
   - **Receipt.** The receipt's ARC-11 `app_version` and `build` come from the caller.
   - **Paths.** The paths of the manifest block are relative to the generation. The pipeline adapter (`phase1.23_pyapi-pipeline-adapter`) rebases them under the Assets3D root.

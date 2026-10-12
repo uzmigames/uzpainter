@@ -2,7 +2,7 @@
   "schema": "uzpainter/parity/semantics/1",
   "record_class": "public_semantics",
   "semantics_id": "export-processing",
-  "description": "The export's processing and encoders (src/export/encode.h, padding.h, png_writer.h, exr_writer.h; decisions 089 and 090): Painter's PNG and OpenEXR files re-encoded byte for byte, the recorded processing written by WriteExport byte-identical to Painter's files, and the processing no recording covers yet.",
+  "description": "The export's processing and encoders (src/export/encode.h, padding.h, png_writer.h, exr_writer.h; decisions 089, 090 and 103): Painter's PNG and OpenEXR files re-encoded byte for byte, the recorded processing written by WriteExport and applied to Painter's own values byte-identical to Painter's files, and the processing not fitted yet.",
   "painter_build_id": "12.1.5+js-api.1.1.20",
   "corpus": [
     "phase0/normal-convention/hemisphere/per-fragment",
@@ -33,6 +33,13 @@
     "tier0/api-probes/active-channel-reset-superset",
     "tier0/api-probes/fill-layer-readback",
     "tier0/api-probes/mask-stack",
+    "tier0/api-probes/phase1-create-settings",
+    "tier0/api-probes/phase1-delete-node",
+    "tier0/api-probes/phase1-execute-when-not-busy",
+    "tier0/api-probes/phase1-reload-mesh",
+    "tier0/api-probes/phase1-reload-resources",
+    "tier0/api-probes/phase1-resource-update",
+    "tier0/api-probes/phase1-save-modes",
     "tier0/recorder-sample/blend-multiply-plane",
     "tier0/semantics-ui/group-passthrough-masks",
     "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
@@ -42,6 +49,9 @@
     "tier0/semantics-ui/height-normal-sobel-plane-strength",
     "tier0/semantics-ui/height-normal-sobel-sphere",
     "tier0/semantics/ao-mixed",
+    "tier0/semantics/ao-mixed-isolation",
+    "tier0/semantics/ao-mixed-isolation-8bit",
+    "tier0/semantics/ao-mixed-isolation-float",
     "tier0/semantics/ao-mixed-opacity",
     "tier0/semantics/ao-mixed-opacity-float",
     "tier0/semantics/base-values-asm-pbr-metallic-roughness",
@@ -85,6 +95,18 @@
     "tier0/semantics/colour-ramps-working",
     "tier0/semantics/coverage-srgb8-ties",
     "tier0/semantics/effect-order",
+    "tier0/semantics/export-alpha-layouts",
+    "tier0/semantics/export-bit-depth",
+    "tier0/semantics/export-dither",
+    "tier0/semantics/export-ocio-encode-legacy",
+    "tier0/semantics/export-padding",
+    "tier0/semantics/export-padding-bevelled-cube",
+    "tier0/semantics/export-padding-seam-1024",
+    "tier0/semantics/export-padding-seam-256",
+    "tier0/semantics/export-padding-seam-field-1024",
+    "tier0/semantics/export-padding-seam-field-256",
+    "tier0/semantics/export-padding-sphere",
+    "tier0/semantics/export-resize",
     "tier0/semantics/group-coverage-order",
     "tier0/semantics/group-masks",
     "tier0/semantics/height-normal-bevelled-cube",
@@ -111,15 +133,29 @@
     "tier0/semantics/resample-uv-lod-boundaries",
     "tier0/semantics/resample-uv-minify",
     "tier0/semantics/resample-uv-rotation",
+    "tier0/semantics/view-2d-state-camera",
+    "tier0/semantics/view-2d-state-default",
+    "tier0/semantics/view-2d-state-default-repeat",
+    "tier0/semantics/view-2d-state-environment",
+    "tier0/semantics/view-2d-state-tone-aces",
+    "tier0/semantics/view-2d-state-tone-linear",
     "tier0/semantics/virtual-maps-converted",
-    "tier0/semantics/virtual-maps-converted-float"
+    "tier0/semantics/virtual-maps-converted-float",
+    "tier0/semantics/virtual-maps-coverage",
+    "tier0/semantics/virtual-maps-coverage-float",
+    "tier0/semantics/virtual-maps-template-openpbr-coat",
+    "tier0/semantics/virtual-maps-template-openpbr-coat-float",
+    "tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend",
+    "tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend-float",
+    "tier0/semantics/virtual-maps-template-pbr-specular-glossiness",
+    "tier0/semantics/virtual-maps-template-pbr-specular-glossiness-float"
   ],
   "entries": [
     {
       "entry_id": "png-encoding",
       "subject": "PNG files: chunks, row filters and compression of Painter's PNG export",
       "status": "exact",
-      "formula": "Signature; IHDR (8 or 16 bits; grey, RGB or RGBA; not interlaced); pHYs 2835 x 2835 per metre; IDAT chunks of 8192 bytes (the last shorter) holding one zlib stream (level 6, window bits 15, memory level 8, strategy Z_FILTERED) of the filtered rows; IEND. Each row takes, among None, Sub and Paeth only, the filter whose bytes have the smallest sum of min(b, 256 - b), ties to the earlier; the row above the first is zero (src/export/png_writer.h, decision 089).",
+      "formula": "Signature; IHDR (8 or 16 bits; grey, grey and alpha, RGB or RGBA; not interlaced); pHYs 2835 x 2835 per metre; IDAT chunks of 8192 bytes (the last shorter) holding one zlib stream (level 6, window bits 15, memory level 8) of the filtered rows; IEND. Each row takes the filter whose bytes have the smallest sum of min(b, 256 - b), ties to the earlier; the row above the first is zero. 8-bit grey chooses among all five filters and compresses with Z_DEFAULT_STRATEGY; every other layout chooses among None, Sub and Paeth and compresses with Z_FILTERED (src/export/png_writer.h, decisions 089 and 103).",
       "public_sources": [
         {
           "source_id": "A-PYDOC",
@@ -133,7 +169,7 @@
       "parameters": [
         {
           "name": "filters",
-          "value": "None, Sub, Paeth",
+          "value": "None, Sub, Paeth; 8-bit grey: all five",
           "origin": "fitted"
         },
         {
@@ -143,7 +179,7 @@
         },
         {
           "name": "zlib_strategy",
-          "value": "Z_FILTERED",
+          "value": "Z_FILTERED; 8-bit grey: Z_DEFAULT_STRATEGY",
           "origin": "fitted"
         },
         {
@@ -160,7 +196,7 @@
         },
         {
           "name": "files",
-          "value": 1027,
+          "value": 1826,
           "origin": "fitted"
         }
       ],
@@ -1006,6 +1042,216 @@
           }
         },
         {
+          "golden_id": "tier0/api-probes/phase1-create-settings",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-create-settings",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-delete-node",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-delete-node",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-execute-when-not-busy",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-execute-when-not-busy",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-reload-mesh",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-reload-mesh",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-reload-resources",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-reload-resources",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-resource-update",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-resource-update",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-save-modes",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-save-modes",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
           "golden_id": "tier0/recorder-sample/blend-multiply-plane",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -1273,6 +1519,66 @@
             "total": 8,
             "affected_texels": 0,
             "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-isolation",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 36,
+            "affected_texels": 0,
+            "texels": 36
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-isolation",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 36,
+            "affected_texels": 0,
+            "texels": 36
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-isolation-8bit",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 32,
+            "affected_texels": 0,
+            "texels": 32
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-isolation-8bit",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 34,
+            "affected_texels": 0,
+            "texels": 34
           }
         },
         {
@@ -2536,6 +2842,336 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 123,
+            "affected_texels": 0,
+            "texels": 123
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 123,
+            "affected_texels": 0,
+            "texels": 123
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-dither",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 56,
+            "affected_texels": 0,
+            "texels": 56
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-dither",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 56,
+            "affected_texels": 0,
+            "texels": 56
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-ocio-encode-legacy",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 28,
+            "affected_texels": 0,
+            "texels": 28
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-ocio-encode-legacy",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 28,
+            "affected_texels": 0,
+            "texels": 28
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 154,
+            "affected_texels": 0,
+            "texels": 154
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 150,
+            "affected_texels": 0,
+            "texels": 150
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-bevelled-cube",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 29,
+            "affected_texels": 0,
+            "texels": 29
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-bevelled-cube",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 27,
+            "affected_texels": 0,
+            "texels": 27
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-1024",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-1024",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-256",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-256",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-field-1024",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-field-1024",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-field-256",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-field-256",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-sphere",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 25,
+            "affected_texels": 0,
+            "texels": 25
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-sphere",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-resize",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 106,
+            "affected_texels": 0,
+            "texels": 106
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-resize",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 106,
+            "affected_texels": 0,
+            "texels": 106
+          }
+        },
+        {
           "golden_id": "tier0/semantics/group-coverage-order",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -3316,6 +3952,66 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/view-2d-state-default",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-default",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-default-repeat",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-default-repeat",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
           "golden_id": "tier0/semantics/virtual-maps-converted",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -3343,6 +4039,126 @@
             "total": 34,
             "affected_texels": 0,
             "texels": 34
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-coverage",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 119,
+            "affected_texels": 0,
+            "texels": 119
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-coverage",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 132,
+            "affected_texels": 0,
+            "texels": 132
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-openpbr-coat",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 61,
+            "affected_texels": 0,
+            "texels": 61
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-openpbr-coat",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65,
+            "affected_texels": 0,
+            "texels": 65
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 62,
+            "affected_texels": 0,
+            "texels": 62
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 66,
+            "affected_texels": 0,
+            "texels": 66
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-pbr-specular-glossiness",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-pbr-specular-glossiness",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
           }
         }
       ]
@@ -3351,7 +4167,7 @@
       "entry_id": "exr-encoding",
       "subject": "OpenEXR files: header, channels and PIZ compression of Painter's OpenEXR export",
       "status": "exact",
-      "formula": "Single-part scanline file, version 2; attributes channels, compression (PIZ), dataWindow, displayWindow, lineOrder (increasing y), pixelAspectRatio 1, screenWindowCenter (0, 0), screenWindowWidth 1; FLOAT channels Y (grey), B, G, R (RGB) or A, B, G, R (RGBA); PIZ as OpenEXR writes it, its Huffman heap breaking frequency ties by symbol (tinyexr with that local change, src/export/exr_writer.h, decision 089).",
+      "formula": "Single-part scanline file, version 2; attributes channels, compression (PIZ), dataWindow, displayWindow, lineOrder (increasing y), pixelAspectRatio 1, screenWindowCenter (0, 0), screenWindowWidth 1; FLOAT (32f) or HALF (16f) channels Y (grey), A, Y (grey and alpha), B, G, R (RGB) or A, B, G, R (RGBA); PIZ as OpenEXR writes it, its Huffman heap breaking frequency ties by symbol (tinyexr with that local change, src/export/exr_writer.h, decisions 089 and 103).",
       "public_sources": [
         {
           "source_id": "S-EXR",
@@ -3370,12 +4186,12 @@
         },
         {
           "name": "pixel_type",
-          "value": "FLOAT",
+          "value": "FLOAT, HALF",
           "origin": "fitted"
         },
         {
           "name": "files",
-          "value": 267,
+          "value": 823,
           "origin": "fitted"
         }
       ],
@@ -3621,6 +4437,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/ao-mixed-isolation-float",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 36,
+            "affected_texels": 0,
+            "texels": 36
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/ao-mixed-isolation-float",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 36,
+            "affected_texels": 0,
+            "texels": 36
+          }
+        },
+        {
           "golden_id": "tier0/semantics/ao-mixed-opacity-float",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -3948,6 +4794,336 @@
             "total": 8,
             "affected_texels": 0,
             "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 127,
+            "affected_texels": 0,
+            "texels": 127
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 127,
+            "affected_texels": 0,
+            "texels": 127
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-dither",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 22,
+            "affected_texels": 0,
+            "texels": 22
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-dither",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 22,
+            "affected_texels": 0,
+            "texels": 22
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-ocio-encode-legacy",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-ocio-encode-legacy",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 29,
+            "affected_texels": 0,
+            "texels": 29
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 29,
+            "affected_texels": 0,
+            "texels": 29
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-bevelled-cube",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 29,
+            "affected_texels": 0,
+            "texels": 29
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-bevelled-cube",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 27,
+            "affected_texels": 0,
+            "texels": 27
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-1024",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-1024",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-256",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-256",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 3,
+            "affected_texels": 0,
+            "texels": 3
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-field-1024",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-field-1024",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-field-256",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-field-256",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-sphere",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 25,
+            "affected_texels": 0,
+            "texels": 25
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-sphere",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-resize",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 45,
+            "affected_texels": 0,
+            "texels": 45
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-resize",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 45,
+            "affected_texels": 0,
+            "texels": 45
           }
         },
         {
@@ -4491,6 +5667,186 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/view-2d-state-camera",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-camera",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-default",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-default",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-default-repeat",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-default-repeat",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-environment",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-environment",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-tone-aces",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-tone-aces",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-tone-linear",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/view-2d-state-tone-linear",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
           "golden_id": "tier0/semantics/virtual-maps-converted-float",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -4518,6 +5874,126 @@
             "total": 38,
             "affected_texels": 0,
             "texels": 38
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-coverage-float",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 123,
+            "affected_texels": 0,
+            "texels": 123
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-coverage-float",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 136,
+            "affected_texels": 0,
+            "texels": 136
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-openpbr-coat-float",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65,
+            "affected_texels": 0,
+            "texels": 65
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-openpbr-coat-float",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 69,
+            "affected_texels": 0,
+            "texels": 69
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend-float",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 65,
+            "affected_texels": 0,
+            "texels": 65
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-pbr-metallic-roughness-alpha-blend-float",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 69,
+            "affected_texels": 0,
+            "texels": 69
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-pbr-specular-glossiness-float",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/virtual-maps-template-pbr-specular-glossiness-float",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
           }
         }
       ]
@@ -6793,6 +8269,156 @@
       ]
     },
     {
+      "entry_id": "png8-write-rule",
+      "subject": "PNG 8: the written code of each exported value",
+      "status": "exact",
+      "formula": "code = (j 255 + 2^11 - 1) >> 12 with j = floor(clamp(v, 0, 1) 2^12) (arith::WriteUnorm at 8 bits) of the OpenEXR 32f value of every channel and mesh map, Height as v 0.5 + 0.5 (decision 103): Painter's own OpenEXR 32f file of each map of export-bit-depth, encoded so, gives its PNG 8 file byte for byte.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.export: Full json_config dict possibilities, exportParameters parameters"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "bits",
+          "value": 8,
+          "origin": "public_documentation"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "png 8 files from Painter's own values",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 128,
+            "affected_texels": 0,
+            "texels": 128
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "png16-height-alpha-dithering",
+      "subject": "PNG 16 from Painter's own values: Height signed, alpha layouts, dithering",
+      "status": "exact",
+      "formula": "The PNG 16 write rule of each value, Height as v 0.5 + 0.5; L+A and RGB+A written as such, an alpha of 1 everywhere dropped (L, RGB); with dithering on, the bytes PNG 16 has without it (export-bit-depth, export-alpha-layouts, export-dither; decision 103).",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.export: Full json_config dict possibilities, exportParameters parameters"
+        },
+        {
+          "source_id": "X-D3D12",
+          "locator": "Data conversion rules: FLOAT to UNORM"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "bits",
+          "value": 16,
+          "origin": "public_documentation"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/export-alpha-layouts",
+          "map": "png 16 files from Painter's own values",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 4,
+            "affected_texels": 0,
+            "texels": 4
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "png 16 files from Painter's own values",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 128,
+            "affected_texels": 0,
+            "texels": 128
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-dither",
+          "map": "png 16 files from Painter's own values",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 20,
+            "affected_texels": 0,
+            "texels": 20
+          }
+        }
+      ]
+    },
+    {
+      "entry_id": "exr16f-values",
+      "subject": "OpenEXR 16f: the written half of each exported value",
+      "status": "exact",
+      "formula": "The float32 value rounded toward zero to a binary16 half (arith::HalfTowardZero; decision 103): Painter's own OpenEXR 32f file of each map of export-bit-depth, encoded so, gives its OpenEXR 16f file byte for byte.",
+      "public_sources": [
+        {
+          "source_id": "A-PYDOC",
+          "locator": "substance_painter.export: Full json_config dict possibilities, exportParameters parameters"
+        },
+        {
+          "source_id": "S-EXR",
+          "locator": "OpenEXR file layout: header attributes, scanline chunks, PIZ compression"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "bits",
+          "value": 16,
+          "origin": "public_documentation"
+        }
+      ],
+      "residuals": [
+        {
+          "golden_id": "tier0/semantics/export-bit-depth",
+          "map": "exr 16f files from Painter's own values",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 128,
+            "affected_texels": 0,
+            "texels": 128
+          }
+        }
+      ]
+    },
+    {
       "entry_id": "padding-complete-coverage",
       "subject": "Padding infinite and passthrough on a texture set whose UV islands cover the tile",
       "status": "exact",
@@ -9054,7 +10680,7 @@
       ],
       "parameters": [],
       "residuals": [],
-      "notes": "Not the nearest covered texel: on tier0/semantics/height-normal-bevelled-cube (Height) 12040 of the 12200 uncovered texels differ from it. Partial fit (decision 090): an 8-neighbour copy dilation (first covered neighbour: right, left, up, down, then the diagonals; x wraps, y does not) is exact on the bevelled cube's virtual normals (12200 gutter texels) and misses 32 to 44 texels per sphere normal map at the poles; a document channel's one-texel ring around each island blends across the UV seam with unidentified weights (2344 ring texels on the cube, 2152 on the sphere). Passthrough on such sets is written as no operation: Painter's r1 and r2 agree inside the islands and differ outside them at up to every uncovered texel."
+      "notes": "Not the nearest covered texel: on tier0/semantics/height-normal-bevelled-cube (Height) 12040 of the 12200 uncovered texels differ from it. Partial fit (decision 090): an 8-neighbour copy dilation (first covered neighbour: right, left, up, down, then the diagonals; x wraps, y does not) is exact on the bevelled cube's virtual normals (12200 gutter texels) and misses 32 to 44 texels per sphere normal map at the poles; a document channel's one-texel ring around each island blends across the UV seam with unidentified weights (2344 ring texels on the cube, 2152 on the sphere). Passthrough on such sets is written as no operation: Painter's r1 and r2 agree inside the islands and differ outside them at up to every uncovered texel. Owner phase1.25_pilot-wand (decision 103)."
     },
     {
       "entry_id": "padding-dilation",
@@ -9072,7 +10698,8 @@
         }
       ],
       "parameters": [],
-      "residuals": []
+      "residuals": [],
+      "notes": "Recorded (export-padding*, R-090 P5, P9), not fitted (decision 103); owner phase3.2_unreal-ue56-packed-preset."
     },
     {
       "entry_id": "resize",
@@ -9090,65 +10717,12 @@
         }
       ],
       "parameters": [],
-      "residuals": []
+      "residuals": [],
+      "notes": "Recorded (export-resize, R-090 P4), partly fitted (decision 103): an upscale is the evaluation at the target size; a downscale is a 2x2 box stored in the channel's format (UNORM16; L16F rounds half away from zero); sRGB8 channels, virtual normals after a downscale and BilinearHQ normal-channel magnification are not reproduced. Owner phase3.2_unreal-ue56-packed-preset."
     },
     {
-      "entry_id": "dithering",
-      "subject": "Dithering on",
-      "status": "gap",
-      "formula": "Release gap (decision 090): no Tier 0 recording shows it; a configuration asking for it is refused with NotYetSupported before anything is written, naming recording R-090.",
-      "public_sources": [
-        {
-          "source_id": "A-PYDOC",
-          "locator": "substance_painter.export: Full json_config dict possibilities, exportParameters parameters"
-        },
-        {
-          "source_id": "A-HELP-EXPORT",
-          "locator": "Export settings: file type, bit depth, padding, dilation, size"
-        }
-      ],
-      "parameters": [],
-      "residuals": []
-    },
-    {
-      "entry_id": "png-8",
-      "subject": "PNG at 8 bits per sample",
-      "status": "gap",
-      "formula": "Release gap (decision 090): no Tier 0 recording shows it; a configuration asking for it is refused with NotYetSupported before anything is written, naming recording R-090.",
-      "public_sources": [
-        {
-          "source_id": "A-PYDOC",
-          "locator": "substance_painter.export: Full json_config dict possibilities, exportParameters parameters"
-        },
-        {
-          "source_id": "A-HELP-EXPORT",
-          "locator": "Export settings: file type, bit depth, padding, dilation, size"
-        }
-      ],
-      "parameters": [],
-      "residuals": []
-    },
-    {
-      "entry_id": "exr-16f",
-      "subject": "OpenEXR at 16-bit half float",
-      "status": "gap",
-      "formula": "Release gap (decision 090): no Tier 0 recording shows it; a configuration asking for it is refused with NotYetSupported before anything is written, naming recording R-090.",
-      "public_sources": [
-        {
-          "source_id": "A-PYDOC",
-          "locator": "substance_painter.export: Full json_config dict possibilities, exportParameters parameters"
-        },
-        {
-          "source_id": "A-HELP-EXPORT",
-          "locator": "Export settings: file type, bit depth, padding, dilation, size"
-        }
-      ],
-      "parameters": [],
-      "residuals": []
-    },
-    {
-      "entry_id": "alpha-layouts",
-      "subject": "The L+A and RGB+A layouts (an alpha channel) in PNG and OpenEXR",
+      "entry_id": "dithering-png8-exr",
+      "subject": "Dithering at PNG 8 bits, and dithering in OpenEXR",
       "status": "gap",
       "formula": "Release gap (decision 090): no Tier 0 recording shows it; a configuration asking for it is refused with NotYetSupported before anything is written, naming recording R-090.",
       "public_sources": [
@@ -9163,11 +10737,11 @@
       ],
       "parameters": [],
       "residuals": [],
-      "notes": "RGB+A is recorded (R-085 P6, P7: an alpha of 1 everywhere is dropped) and its files re-encode byte for byte; it is written once the plan resolves its alpha sources."
+      "notes": "PNG 8: deterministic within and across sessions, not a threshold matrix (decision 103); OpenEXR: no recording compares it with dithering off. Owner phase3.2_unreal-ue56-packed-preset."
     },
     {
       "entry_id": "srgb8-material-channels",
-      "subject": "sRGB8 material channels (BaseColor and the other material colours) in PNG and any sRGB8 channel in OpenEXR",
+      "subject": "sRGB8 material channels (BaseColor, Specular, Emissive)",
       "status": "gap",
       "formula": "Release gap (decision 090): no Tier 0 recording shows it; a configuration asking for it is refused with NotYetSupported before anything is written, naming recording R-090.",
       "public_sources": [
@@ -9182,7 +10756,7 @@
       ],
       "parameters": [],
       "residuals": [],
-      "notes": "sRGB8 User channels are exported linear (their decoded operand); BaseColor is exported sRGB-encoded and the evaluator's template constants of material colours are already export values: recorded, not fitted here."
+      "notes": "Exported sRGB-encoded: PNG 8 is the UNORM write of the IEC encoding of the linear value (exact on export-bit-depth); PNG 16 misses by up to one code on about 70 of 258 values under every model tried, and the evaluator holds these channels' template constants as export values (decision 103). Owner phase1.25_pilot-wand."
     }
   ]
 }

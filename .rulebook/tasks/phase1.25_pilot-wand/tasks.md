@@ -8,6 +8,9 @@
 - [ ] 2.4 Write the Tier 1 runner that rebuilds Wand v1 through the pipeline adapter (`painter_create`, `sync`, `painter_export` unchanged, pinned by SHA-256) on DX12 with the same external mesh maps
 - [ ] 2.5 Write the comparison step: decode both sides at native depth, classify channels by measured storage format, compute the `docs/architecture/14-parity-testing.md` §4 diagnostics and write `parity/reports/phase1/tier1-wand-v1.json`
 
+- [ ] 2.6 (decision 103, from phase1.18_export-engine item 6.1) Fit and implement the export of sRGB8 material channels (BaseColor, Specular, Emissive) exactly: the PNG 16 encode (PNG 8 is fitted: the UNORM write of the IEC encoding of the linear value) and the evaluator's linear read-out of their export-valued template constants, against recording R-090 `export-bit-depth` (and R-090 P10); until then the export refuses them before writing
+- [ ] 2.7 (decision 103, from phase1.18_export-engine item 6.1) Fit and implement `infinite` padding on UV-islanded texture sets exactly (the seam ring and the copy dilation of decision 090's partial fit) against recordings `export-padding`, `export-padding-bevelled-cube`, `export-padding-sphere` and `export-padding-seam-*` (R-090 P5, P9); until then the export refuses it before writing
+
 ## 3. Tests
 - [ ] 3.1 Tier 1 equality: every exported Wand v1 map per set equal to its private golden in a local DX12 run on the owner's machine (decision 028; the local run report is the evidence)
 - [ ] 3.2 Repeatability: run the rebuild and export twice in separate processes; every file byte-identical

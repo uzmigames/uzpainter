@@ -18,7 +18,8 @@ Task `phase1.15_export-plan-compiler` (child of `phase1.18_export-engine`, P1-EX
 | `publish.{h,cpp}` | (phase1.17, decision 097) `PublishExport`: the encoded files, the plan and the receipt published as a new generation by an atomic pointer update; `PublicationLock`; `RecoverExport` (`export --recover`). |
 | `fixed_names.{h,cpp}` | (phase1.17) `OpenPinnedDelivery` (the generation-pinning adapter), `CopyFixedNames` (the journalled fixed-name copy), `LockedFixedNames` (the reader under the publication lock), `RecoverFixedNames`. |
 | `receipt.{h,cpp}`, `schema/receipt.schema.json` | (phase1.17) `BuildReceipt`, `ReadReceipt`, `ReadResourceHashes`: the receipt (ARC-11 header, per-file fields, normal tags, consumer gaps, the Assets3D v2 export block). |
-| `cli.{h,cpp}` | (phase1.17) `UzPainter.exe export --recover <exportPath> [--fixed-names <dir>]...`. |
+| `project_export.{h,cpp}` | (phase1.18, decision 104) `ExportProject`: a `.uzp` project's current revision exported end to end with a `json_config` and published (§7). |
+| `cli.{h,cpp}` | (phase1.17, phase1.18) `UzPainter.exe export <file.uzp> --config <config.json> --app-version <v> --build <id>` and `export --recover <exportPath> [--fixed-names <dir>]...`. |
 | `fault.{h,cpp}` | (phase1.17) Test-only fault hooks between every publication step, compiled into `uzp-export-tests.exe` only (`UZP_EXPORT_FAULT_HOOKS`). |
 
 Both `uzp-export-tests.exe` and `UzPainter.exe` compile these sources (`build.zig`, `export_sources`). The Python bindings (`uzpainter.export.plan`, `substance_painter.export.list_project_textures`) are `phase1.19_pyapi-native-module` item 2.7.
@@ -41,7 +42,7 @@ Painter's documented semantics, with the Tier 0 recordings and the export probes
   - not recorded (R-091): a mesh or project file name with more than one dot, a renamed set's `$sceneMaterial`, a group with both empty and non-empty wildcards, a `)` after no literal `(`, a third equal path;
   - two entries' files with one path, and paths equal only ignoring case: Painter lists both, but the file a case-insensitive file system keeps depends on a write order not recorded. Both are named.
 - **Channels.** The destination sets are L, L+A, R+G+B and R+G+B+A. `srcChannel` L, R, G or B of a one-component source reads its value. R, G or B of a three-component source reads that component. L of a three-component source reads the Rec. 601 luma of its linear components, `fma(0.114, b, fma(0.299, r, 0.587 g))` in float32 (probe P5; the luma of an sRGB8 channel's base value is refused at evaluation, the evaluator holding its export value). Any letter of a `defaultMap` reads its constant. A of any other source is recorded only at full and no coverage (probe P6) and is refused.
-- **Normal sources.** `Normal_OpenGL` and `Normal_DirectX` need a Height and a Normal channel at plan time. Their other limits (set size, a bound Normal mesh map) belong to the evaluator, which refuses them with `unsupported_source` (`NotYetSupported`) when the export evaluates every file, before any write. `meshMap normal_base` is the geometry-only pass-through. Other mesh maps are refused until recording R-090 (decision 090).
+- **Normal sources.** `Normal_OpenGL` and `Normal_DirectX` need a Height and a Normal channel at plan time. Their other limits (set size, a bound Normal mesh map) belong to the evaluator, which refuses them with `unsupported_source` (`NotYetSupported`) when the export evaluates every file, before any write. `meshMap normal_base` is the geometry-only pass-through. `ambient_occlusion`, `curvature` (L) and `position` (RGB) pass their bound 8- or 16-bit image through at the set's resolution, each code as its UNORM operand (recording R-090 P7, decision 103). The other mesh maps (`id`, `world_space_normals`, `thickness`) are refused (`NotYetSupported`, no recording).
 - **Diagnostics** (decision 076, `08-export.md` §6). A `diagnosticMap` source resolves in the stacks that hold its node and is absent in the others. A node in no exported stack is invalid, and so is a channel the stack lacks. A `regionStats` source is a statistics file: the map's only channel (destination L), written as canonical JSON (`<name>.json`). Anywhere else it is invalid.
 - **Plan hash.** The SHA-256 of the canonical JSON of the plan without its `hash` member (`core::json::WriteCanonical`): the same project and configuration give the same bytes.
 
@@ -53,26 +54,33 @@ Painter's documented semantics, with the Tier 0 recordings and the export probes
 - `Diffuse`, `Specular`, `Glossiness`, `Glossiness2`, `Unity4Diff`, `Unity4Gloss`, `reflection`, `1/ior`, `f0`: fitted exactly on recording R-086b at PNG 16 and OpenEXR 32f. They read each channel's per-texel coverage, which the evaluator does not give, and fixed inputs where a channel has no layer, seen on one template only (recording R-092).
 - `View_2D`: a shaded render of the 2D view, not an operator on the channels.
 
-## 4. Processing and encoders (decisions 089 and 090)
+## 4. Processing and encoders (decisions 089, 090 and 103)
 
-Task `phase1.16_export-processing-encoders`. Local run report: `parity/reports/phase1/export-processing-encoders.md`. Published semantics: `parity/semantics/export-processing.json` (re-derived by `python tests/export/encoders_tier0.py`). Tests: `tests/export/test_export_encoders.py`.
+Tasks `phase1.16_export-processing-encoders` and `phase1.18_export-engine` item 6.1. Local run reports: `parity/reports/phase1/export-processing-encoders.md`, `parity/reports/phase1/export-engine.md`. Published semantics: `parity/semantics/export-processing.json` (re-derived by `python tests/export/encoders_tier0.py`). Tests: `tests/export/test_export_encoders.py`.
 
-- **Writers (decision 089).**
-  - PNG: UzPainter's own encoder over zlib. Chunks IHDR, pHYs (2835 per metre), IDAT and IEND. Rows are filtered with None, Sub or Paeth by the minimum sum of min(b, 256 - b), ties to the earlier. One zlib stream (level 6, window bits 15, memory level 8, Z_FILTERED) is split into 8192-byte IDATs.
-  - OpenEXR: tinyexr, single-part scanline, PIZ, FLOAT channels `Y`, `B G R` or `A B G R`, with OpenEXR's Huffman heap tie-break as its one local change.
-  - Every distinct PNG (1027) and OpenEXR (267) file Painter exported in the current envelope, decoded and encoded again, is byte-identical. That covers grey, RGB and RGBA, PNG 8 and 16, and OpenEXR 32f.
+- **Writers (decisions 089 and 103).**
+  - PNG: UzPainter's own encoder over zlib. Chunks IHDR, pHYs (2835 per metre), IDAT and IEND. Each row takes the filter whose bytes have the minimum sum of min(b, 256 - b), ties to the earlier, from all five filters for 8-bit grey and from None, Sub and Paeth for every other layout. One zlib stream (level 6, window bits 15, memory level 8; Z_DEFAULT_STRATEGY for 8-bit grey, Z_FILTERED otherwise) is split into 8192-byte IDATs. Layouts: grey, RGB and RGBA at 8 or 16 bits, grey and alpha at 16 bits.
+  - OpenEXR: tinyexr, single-part scanline, PIZ, FLOAT (32f) or HALF (16f) channels `Y`, `A Y`, `B G R` or `A B G R`, with OpenEXR's Huffman heap tie-break as its one local change.
+  - Every distinct PNG (1826) and OpenEXR (823) file Painter exported in the current envelope, decoded and encoded again, is byte-identical.
 - **Values.**
-  - The evaluator's read-out of each channel (an sRGB8 User channel as its linear operand).
-  - PNG 16: the UNORM write rule (`arith::WriteUnorm`).
-  - OpenEXR 32f: the float unchanged.
+  - The evaluator's read-out of each channel (an sRGB8 User channel as its linear operand, in every format).
+  - PNG 8 and 16: the UNORM write rule at the file's depth (`arith::WriteUnorm`). A Height channel is written as v * 0.5 + 0.5.
+  - OpenEXR 32f: the float unchanged. OpenEXR 16f: the half rounded toward zero (`arith::HalfTowardZero`).
+  - L+A and RGB+A: written as such; an alpha of exactly 1 at every texel is dropped (the file is L or RGB, and the receipt says so).
+  - Dithering: no change at PNG 16.
+  - Painter's own OpenEXR 32f file of each map of `export-bit-depth`, `export-alpha-layouts` and `export-dither`, encoded with the processing of its other files, gives those files byte for byte: 384 of 384 bit-depth cases (PNG 8, PNG 16, OpenEXR 16f), 4 of 4 alpha layouts, 20 of 20 dithered PNG 16 (`test_processing_reproduces_painter_files`).
   - Written end to end by `WriteExport`, the recorded export steps of the height-normal plane goldens give Painter's bytes: 148 of 148 files.
 - **Padding.**
   - With complete UV coverage, `infinite` and `passthrough` change nothing.
   - With incomplete coverage, `passthrough` is no operation; Painter's own texels outside the islands are session state.
-  - Refused with incomplete coverage: `infinite`, and `passthrough` of meshMap and virtualMap sources (recording R-090).
-- **Refused before anything is written** (`NotYetSupported`):
-  - naming R-090: PNG 8, OpenEXR 16f, the L+A layout, an sRGB8 channel in OpenEXR, dithering, resize, and the `color`, `transparent` and `diffusion` paddings;
-  - naming decision 090, recorded but not fitted: sRGB8 material channels such as BaseColor (sRGB-encoded on export) and the RGB+A layout.
+  - Refused with incomplete coverage: `infinite`, `passthrough` of meshMap and virtualMap sources, and the alpha layouts.
+- **Refused before anything is written** (`NotYetSupported`, recorded by R-090 but not fitted, decision 103):
+  - dithering at PNG 8 (deterministic, not a threshold matrix) and in OpenEXR (no recording compares it with off);
+  - resize (a sizeLog2 other than the set's size): partly fitted, `parity/semantics/export-processing.json` `resize`;
+  - the `color`, `transparent` and `diffusion` paddings, and `infinite` on islanded sets;
+  - sRGB8 material channels such as BaseColor: PNG 8 is the UNORM write of the IEC encoding of the linear value, PNG 16 is not fitted, and the evaluator's template constants of these channels hold export values.
+
+  Their owners: `phase1.25_pilot-wand` (sRGB8 material channels, `infinite` on islands) and `phase3.2_unreal-ue56-packed-preset` (dithering, resize, dilation paddings).
 - **Order.** `WriteExport` checks every file's processing and padding, then evaluates, pads and encodes every file in memory, and only then writes. A refusal or an evaluation failure leaves nothing written. Two runs in two processes write identical bytes.
 
 ## 5. Shipped presets (decision 095)
@@ -86,8 +94,8 @@ Task `phase1.17_export-presets`. Local run report: `parity/reports/phase1/export
 - **Resolution.** A reference that names an inline preset is that preset. Otherwise `ShippedPresetId` reads it as a shipped id, a Painter name of the alias table (`PBR Metallic Roughness`, `Blender (Principled BSDF)`), or `resource://starter_assets/<Painter name>` with no query or a recorded `?version=` (an unrecorded query: `NotYetSupported`, R-095). The shipped preset joins `exportPresets` under its id, and the reference becomes that id. Painter names are aliases only (CLR-06). An inline preset named like the shipped id a reference resolves to is a `ValueError`. Any other `resource://` or `export-preset-generator://` reference is `NotYetSupported` (the Unreal, glTF and UzEngine presets are Phase 3).
 - **Refusals.**
   - A preset whose layout is `unconfirmed` is refused (`NotYetSupported`) before anything is planned, naming its pending recordings (R-095).
-  - The five-map preset writes BaseColor, an sRGB8 channel whose export encoding is not fitted. Its export is refused before writing, naming recording R-090 and `phase1.18_export-engine` item 6.1. Without BaseColor (an `outputMaps` filter) it writes.
-- **Parity.** The five-map preset's Normal map, written on the recorded plane goldens, is byte-identical to Painter's `Normal_OpenGL` PNG 16 files. Every preset's full output parity waits on recording R-095 (and R-090 for BaseColor): `phase1.18_export-engine` item 6.2.
+  - The five-map preset writes BaseColor, an sRGB8 channel whose PNG 16 export encoding is not fitted. Its export is refused before writing, naming recording R-090 and decision 103 (owner `phase1.25_pilot-wand`). Without BaseColor (an `outputMaps` filter) it writes.
+- **Parity.** The five-map preset's Normal map, written on the recorded plane goldens, is byte-identical to Painter's `Normal_OpenGL` PNG 16 files. Every preset's full output parity waits on recording R-095 (not recorded: `export-presets-legacy` crashed Painter) and on BaseColor's fit: a scope split to `phase3.3_unreal-gltf-presets` (decision 103).
 
 ## 6. Publication and receipts (decision 097)
 
@@ -121,3 +129,16 @@ Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_p
   - **Identity.** `app_version` and `build` come from the caller (`PublishRequest::identity`).
   - **Colour space.** Every image file written today is `linear`.
   - **Consumer gaps.** A SpecularWeight map carries the consumer gap of `08-export.md` §4.
+
+## 7. The end-to-end export (decision 104)
+
+Task `phase1.18_export-engine`. Tests: `tests/export/test_export_engine.py`.
+
+`UzPainter.exe export <file.uzp> --config <config.json> --app-version <version> --build <id>` (`ExportProject`):
+
+1. The project file is opened through the project store, its lock taken and its current revision read. A file whose integrity report finds corrupt content or a missing dependency is refused (`ValueError`).
+2. The configuration is compiled against that revision, with the file's path as `$project`; `CheckExportable` runs as for the dry run.
+3. The evaluator runs on the CPU store (bounded by the machine's physical memory) with the templates beside the executable, reading the project's resources from the file and the texturing mesh re-derived from its stored bytes (`mesh::RederiveMesh`). A resource the file cannot give is `evaluator:missing_resource`.
+4. `PublishExport` publishes the files, the plan and the receipt as a new generation; the receipt carries the given version and build (ARC-11).
+
+A refusal prints `ValueError: ...` or `NotYetSupported: ...` and writes nothing (exit 1); a failure prints its reason with the previous generation still selected (exit 1); a usage error exits 2. Two processes exporting the same file with the same configuration into one exportPath publish generations whose files and plans are byte-identical and whose receipts differ only in `generation` and `moment`.

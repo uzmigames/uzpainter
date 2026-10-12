@@ -293,6 +293,8 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
         const std::string key = ManifestKey(file.relativePath, used);
         json::Array channels;
         for (const PlannedChannel& c : file.channels) {
+            // A dropped all-opaque alpha is not a channel of the file.
+            if (c.dest == ChannelLetter::A && encoded.layout != file.layout) continue;
             channels.push_back(json::Object{{"dest_channel", std::string(ChannelLetterName(c.dest))},
                                             {"src_channel", std::string(ChannelLetterName(c.src))},
                                             {"src_map_type", std::string(SourceTypeName(c.source.type))},
@@ -315,7 +317,7 @@ json::Object BuildReceipt(const ReceiptInputs& in) {
             {"bit_depth", statistics ? json::Value(nullptr) : json::Value(BitDepthOf(file))},
             {"colour_space", statistics ? json::Value(nullptr) : json::Value(kWrittenColourSpace)},
             {"size", size},
-            {"layout", std::string(FileLayoutName(file.layout))},
+            {"layout", std::string(FileLayoutName(encoded.layout))},
             {"channels", std::move(channels)},
             {"normal", NormalJson(encoded.normalTag)},
             {"consumer_gaps", std::move(gaps)},

@@ -96,10 +96,22 @@ struct VirtualMapResult {
                                                                     evaluator::ITileStore& store,
                                                                     evaluator::TileCache& cache);
 
+/// The components a pass-through mesh map other than `normal_base` exports: AO and Curvature 1,
+/// Position 3; nullopt for the mesh maps no recording shows (decision 103).
+[[nodiscard]] std::optional<uint32_t> PassThroughComponents(core::MeshMapUsage usage);
+
+/// The AO, Curvature or Position mesh map bound to the request's texture set, passed through:
+/// every code of its 8- or 16-bit image (grey for AO and Curvature, RGB for Position, at the set's
+/// resolution) as its UNORM operand (recording R-090 P7, decision 103). Any other mesh map, image
+/// layout or size fails with `evaluator:unsupported_source`.
+[[nodiscard]] render::Result<VirtualMapResult> PassThroughMeshMap(const core::Project& project,
+                                                                  core::MeshMapUsage usage,
+                                                                  const VirtualMapRequest& request);
+
 /// The meshMap pass-through of revision `revision`: `normal_base` (MeshMapUsage::Normal) is the
 /// geometry-only normal in the project's convention (height_to_normal.h), tagged
-/// `geometry_only`. Every other mesh map fails with `evaluator:unsupported_source`: no recording
-/// shows Painter exporting one (recording R-090, decision 090).
+/// `geometry_only`; AO, Curvature and Position are PassThroughMeshMap. Every other mesh map fails
+/// with `evaluator:unsupported_source`.
 [[nodiscard]] render::Result<VirtualMapResult> EvaluateMeshMapOn(const core::Project& project, std::int64_t revision,
                                                                  core::MeshMapUsage usage,
                                                                  const VirtualMapRequest& request,
