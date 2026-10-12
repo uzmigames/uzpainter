@@ -215,6 +215,25 @@ std::optional<std::string> StringField(const json::Object& object, std::string_v
     return std::get<std::string>(value->data);
 }
 
+/// The absolute path of the store that durably holds `open`: the file a saved project was
+/// opened or saved as (resolved when that call ran), or the temporary store of an untitled one.
+std::string DurableStore(const python::OpenProject& open) {
+    return python::Utf8(open.untitled_dir.empty() ? open.project_source : std::filesystem::absolute(open.store->path()));
+}
+
+/// `{"event": "revision", "revision", "project", "untitled"}`: the open project's revision and
+/// durable store (null, null and false when none is open).
+json::Object RevisionEvent() {
+    python::Session& session = python::Session::Get();
+    json::Object event{{"event", "revision"}, {"revision", nullptr}, {"project", nullptr}, {"untitled", false}};
+    if (const std::shared_ptr<python::OpenProject> open = session.IsOpen() ? session.Current() : nullptr) {
+        event["revision"] = open->document->revision();
+        event["project"] = DurableStore(*open);
+        event["untitled"] = !open->untitled_dir.empty();
+    }
+    return event;
+}
+
 class Worker {
 public:
     Worker(const Options& options, render::Engine& engine) : m_options(options), m_engine(engine) { DefineTools(); }
@@ -230,6 +249,7 @@ private:
 
     void DefineTools();
     json::Object Call(const json::Value& id, const json::Object& request);
+    json::Object Reopen(const json::Value& id, const json::Object& request);
     json::Object ListTools() const;
     std::optional<std::int64_t> CommittedRevision() const;
 
@@ -326,6 +346,7 @@ json::Object Worker::Handle(const json::Object& request) {
     const std::optional<std::string> method = StringField(request, "method");
     if (method == "tools/list") return ResultReply(*id, ListTools(), CommittedRevision());
     if (method == "tools/call") return Call(*id, request);
+    if (method == "worker/reopen") return Reopen(*id, request);
     return ErrorReply(*id, "unknown_method", "unknown method " + method.value_or("(none)"),
                       json::Object{{"method", method ? json::Value(*method) : json::Value(nullptr)}});
 }
@@ -393,6 +414,27 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
     }
 }
 
+/// `worker/reopen {path, untitled}`: the supervisor's recovery reopens the store the dead worker
+/// held (its last `revision` event), an untitled project as untitled. Not a tool.
+json::Object Worker::Reopen(const json::Value& id, const json::Object& request) {
+    const std::optional<std::string> path = StringField(request, "path");
+    const json::Value* untitled = Field(request, "untitled");
+    if (!path || !untitled || !untitled->IsBool()) {
+        return ErrorReply(id, "invalid_request", "worker/reopen needs path (string) and untitled (boolean)");
+    }
+    try {
+#if defined(UZP_WORKER_FAULT_HOOKS)
+        if (m_options.test_faults) fault::MaybeKillOnOpen();
+#endif
+        python::Session& session = python::Session::Get();
+        session.Open(python::PathFromUtf8(*path), std::get<bool>(untitled->data));
+        return ResultReply(id, {{"path", DurableStore(*session.Current())}, {"revision", session.Revision()}},
+                           CommittedRevision());
+    } catch (const std::exception& error) {
+        return ErrorReply(id, "reopen_failed", error.what(), json::Object{{"path", *path}});
+    }
+}
+
 void Worker::FailRender(const render::Error& error) {
     // A removed device or a stalled GPU leaves the engine unusable: the call fails and the worker
     // exits after the reply (02 §5).
@@ -409,7 +451,7 @@ json::Object Worker::ProjectOpen(const json::Object& arguments) {
     if (!path) throw CallError{"invalid_arguments", "project_open needs a path", {}};
     python::Session& session = python::Session::Get();
     session.Open(python::PathFromUtf8(*path));
-    return {{"path", python::Utf8(std::filesystem::absolute(python::PathFromUtf8(*path)))}, {"revision", session.Revision()}};
+    return {{"path", DurableStore(*session.Current())}, {"revision", session.Revision()}};
 }
 
 json::Object Worker::ProjectClose(const json::Object&) {
@@ -694,6 +736,12 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
             for (json::Object& frame : decoded.frames) inbox.Push(std::move(frame));
         }
     }).detach();
+
+    // What the worker durably holds goes to the supervisor after every commit and project switch,
+    // before the call that caused it can reply: a reply lost to a crash loses neither.
+    python::Session::Get().on_durable_change = [reader_pipe] {
+        if (!reader_pipe->Write(EncodeFrame(RevisionEvent()))) Exit(kWorkerExitSupervisorGone);
+    };
 
     Worker worker(options, engine);
     // The interpreter's thread holds the GIL only while Python runs (`run_python`).

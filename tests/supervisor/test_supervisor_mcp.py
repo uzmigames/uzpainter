@@ -16,9 +16,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from tests.supervisor.conftest import (
     INSERT_FILL,
+    PLANE,
     Mcp,
     Pipe,
     kill_pid,
@@ -30,10 +32,12 @@ from tests.supervisor.conftest import (
 BASE = ("--gpu-backend", "vulkan", "--allow-python", "--test-faults")
 
 
-def opened_session(painter: Path, tmp_path: Path, sessions: list[Mcp]) -> tuple[Mcp, int]:
+def opened_session(
+    painter: Path, tmp_path: Path, sessions: list[Mcp], env: dict[str, str] | None = None
+) -> tuple[Mcp, int]:
     """A supervisor with the plane project open and one committed mutation; its revision."""
     project = make_project(painter, tmp_path)
-    session = Mcp(painter, tmp_path, *BASE)
+    session = Mcp(painter, tmp_path, *BASE, env=env)
     sessions.append(session)
     revision = session.call("project_open", {"path": str(project)})["result"]["revision"]
     reply = session.call(
@@ -212,6 +216,206 @@ def test_lost_acknowledgement_reports_the_durable_revision(
     assert reply["error"]["code"] == "interrupted"
     assert reply["error"]["details"]["committed_revision"] == revision + 1
     assert session.call("project_inspect")["result"]["revision"] == revision + 1
+
+
+def lost_reply_after(session: Mcp, revision: int, code: str) -> dict[str, Any]:
+    """Runs `code` as a mutation whose reply is lost (`kill_before_reply`); its `interrupted`
+    error."""
+    assert "result" in session.call("test_fault", {"fault": "kill_before_reply"})
+    reply = session.call(
+        "run_python", {"code": code, "idempotency_key": "k-2", "expected_revision": revision}
+    )
+    error = reply["error"]
+    assert error["code"] == "interrupted", reply
+    assert isinstance(error, dict)
+    return error
+
+
+def test_lost_reply_after_save_as_recovers_the_new_file(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """2.8: the script saves A as B, commits to B and loses its reply: the supervisor reopens B,
+    which the worker reported before the reply was lost, at B's committed revision."""
+    session, revision = opened_session(painter, tmp_path, sessions)
+    a = Path(session.status()["project"])
+    b = tmp_path / "saved-as" / "b.uzp"
+    code = f"from uzpainter import project\nproject.save_as({b.as_posix()!r})\n" + INSERT_FILL
+    error = lost_reply_after(session, revision, code)
+    assert error["details"]["committed_revision"] == revision + 1
+    status = session.status()
+    assert Path(status["project"]) == b and status["revision"] == revision + 1
+    inspected = session.call("project_inspect")["result"]
+    assert Path(inspected["path"]) == b and inspected["revision"] == revision + 1
+    assert Path(status["recoveries"][-1]["project"]) == b
+    assert a != b
+
+
+def test_lost_reply_after_switching_projects_recovers_the_new_project(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """2.8: the script closes A, opens B, commits to B and loses its reply: the supervisor
+    reopens B at its committed revision, not A at A's."""
+    other = tmp_path / "other"
+    other.mkdir()
+    b = make_project(painter, other)
+    session, revision = opened_session(painter, tmp_path, sessions)
+    a = Path(session.status()["project"])
+    b_revision = run_revision(session, b)
+    code = (
+        f"from uzpainter import project\nproject.close()\nproject.open({b.as_posix()!r})\n"
+        + INSERT_FILL
+    )
+    error = lost_reply_after(session, revision, code)
+    assert error["details"]["committed_revision"] == b_revision + 1
+    status = session.status()
+    assert Path(status["project"]) == b and status["revision"] == b_revision + 1
+    inspected = session.call("project_inspect")["result"]
+    assert Path(inspected["path"]) == b and inspected["revision"] == b_revision + 1
+    assert a != b
+
+
+def test_lost_reply_of_an_untitled_project_recovers_it_untitled(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """2.8: a script creates an untitled project, commits to it and loses its reply: the
+    supervisor reopens its temporary store as the same untitled project at its revision."""
+    session = Mcp(painter, tmp_path, *BASE)
+    sessions.append(session)
+    assert "result" in session.call("test_fault", {"fault": "kill_before_reply"})
+    code = (
+        "from uzpainter import project\n"
+        f"project.create({PLANE.as_posix()!r}, project.Settings(default_texture_resolution=256))\n"
+        + INSERT_FILL
+    )
+    reply = session.call(
+        "run_python", {"code": code, "idempotency_key": "k-1", "expected_revision": 0}
+    )
+    error = reply["error"]
+    assert error["code"] == "interrupted", reply
+    assert error["details"]["committed_revision"] == 2  # create, then the fill
+    status = session.status()
+    assert status["untitled"] is True and status["revision"] == 2
+    assert Path(status["project"]).name == "Untitled.uzp"
+    inspected = session.call("project_inspect")["result"]
+    assert inspected["open"] and inspected["path"] is None and inspected["revision"] == 2
+    still_untitled = session.call(
+        "run_python",
+        {
+            "code": "from uzpainter import project\nresult = project.file_path()",
+            "idempotency_key": "k-2",
+            "expected_revision": 2,
+        },
+    )
+    assert still_untitled["result"]["result"] is None
+
+
+def test_lost_reply_after_a_relative_save_as_keeps_the_path_it_resolved_to(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """2.8: `save_as` with a relative path, then a change of directory: the durable store is the
+    file the call resolved to, not one under the final working directory."""
+    session, revision = opened_session(painter, tmp_path, sessions)
+    first = tmp_path / "first"
+    later = tmp_path / "later"
+    first.mkdir()
+    later.mkdir()
+    code = (
+        "import os\nfrom uzpainter import project\n"
+        f"os.chdir({first.as_posix()!r})\n"
+        "project.save_as('relative.uzp')\n"
+        f"os.chdir({later.as_posix()!r})\n" + INSERT_FILL
+    )
+    error = lost_reply_after(session, revision, code)
+    assert error["details"]["committed_revision"] == revision + 1
+    status = session.status()
+    assert Path(status["project"]) == first / "relative.uzp"
+    assert not (later / "relative.uzp").exists()
+    assert session.call("project_inspect")["result"]["revision"] == revision + 1
+
+
+def run_revision(session: Mcp, path: Path) -> int:
+    """The revision of the project file `path`, read through the session's worker without
+    disturbing what it holds (opened and closed inside one script that reopens the original)."""
+    current = session.status()["project"]
+    code = (
+        "from uzpainter import project\n"
+        "project.close()\n"
+        f"project.open({path.as_posix()!r})\n"
+        "result = project.revision()\n"
+        "project.close()\n"
+        f"project.open({current!r})\n"
+    )
+    status_before = session.status()
+    reply = session.call(
+        "run_python",
+        {"code": code, "idempotency_key": "k-read", "expected_revision": status_before["revision"]},
+    )
+    revision = reply["result"]["result"]
+    assert isinstance(revision, int)
+    return revision
+
+
+def test_mutating_tools_publish_their_key_and_precondition(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """2.5: the MCP schema of a mutating tool requires `idempotency_key` and
+    `expected_revision`, so a schema-valid call is one the worker admits; GPU-free reads do not
+    take them."""
+    session = Mcp(painter, tmp_path, *BASE)
+    sessions.append(session)
+    tools = {tool["name"]: tool for tool in session.request("tools/list", {})["tools"]}
+    schema = tools["run_python"]["inputSchema"]
+    assert schema["required"] == ["code", "idempotency_key", "expected_revision"]
+    validator = Draft202012Validator(schema)
+    call = {"code": "result = 1", "idempotency_key": "k-1", "expected_revision": 0}
+    assert list(validator.iter_errors(call)) == []
+    assert list(validator.iter_errors({"code": "result = 1"}))
+    reply = session.call("run_python", call)
+    assert reply["result"]["result"] == 1
+    assert "idempotency_key" not in tools["project_open"]["inputSchema"]["properties"]
+    assert tools["run_python"]["annotations"]["readOnlyHint"] is False
+    assert tools["project_inspect"]["annotations"]["readOnlyHint"] is True
+
+
+def test_a_worker_dying_during_the_reopen_is_replaced(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """2.8: the relaunched worker dies while it reopens the project; the supervisor races the
+    reopen against its end, launches another and recovers on the last committed revision."""
+    counter = tmp_path / "kill-on-open.txt"
+    session, revision = opened_session(
+        painter, tmp_path, sessions, env={"UZP_TEST_KILL_ON_OPEN": str(counter)}
+    )
+    counter.write_text("1", encoding="utf-8")
+    old = session.status()["worker_pid"]
+    kill_pid(old)
+    assert wait_until_gone(old)
+    inspected = session.call("project_inspect")
+    if "error" in inspected:  # the call raced the kill and reached the dying worker
+        assert inspected["error"]["code"] == "interrupted"
+        inspected = session.call("project_inspect")
+    assert inspected["result"]["revision"] == revision
+    recovery = recovery_after(session, 1)
+    assert recovery["attempts"] == 2 and recovery["revision"] == revision
+    (failed,) = recovery["failed_attempts"]
+    assert failed["exit_code"] == 77 and failed["cause"] == "terminated"
+    assert counter.read_text(encoding="utf-8") == "0"
+
+
+def test_recovery_gives_up_after_bounded_attempts(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """2.8: when every relaunched worker dies during the reopen, the supervisor stops after three
+    launches with a fatal error instead of waiting or looping."""
+    counter = tmp_path / "kill-on-open.txt"
+    session, _ = opened_session(
+        painter, tmp_path, sessions, env={"UZP_TEST_KILL_ON_OPEN": str(counter)}
+    )
+    counter.write_text("99", encoding="utf-8")
+    kill_pid(session.status()["worker_pid"])
+    assert session.process.wait(120) == 4
+    assert "recovery failed: 3 relaunched workers ended before they reopened" in session.log()
+    assert counter.read_text(encoding="utf-8") == "96"
 
 
 def test_calls_arriving_during_a_relaunch_wait_for_it(

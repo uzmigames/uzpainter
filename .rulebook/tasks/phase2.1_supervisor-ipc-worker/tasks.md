@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.25_pilot-wand — still open: Phase 1 is functionally complete on main (compositor, export, Python API, adapter) and stays open only on Painter recordings and the hosted CI; this task builds on the merged code
+- [ ] 1.1 Prerequisites accepted: phase1.25_pilot-wand — still open, with implementation items of its own outstanding (among them 2.6, the 16-bit export of the sRGB8 material channels, and 2.7, `infinite` padding on UV-islanded texture sets; both refused before writing until fitted). This task builds on the compositor, export, Python API and adapter code merged on main
 
 ## 2. Implementation
 - [x] 2.1 Role dispatch in `UzPainter.exe`: `--mcp` supervisor (no GPU device, no editable document, no user Python), `--worker --pipe … --gpu-backend … [--allow-python]` worker, single-process `run`/CLI verbs/`--preview` hosting the worker role (02 §1)
@@ -36,6 +36,8 @@
 - 2.6: the GPU operations are the tools that use the device; the Phase 1 export runs on the CPU evaluator and is not refused (decision 120; the spec scenario is amended).
 - 2.9, 2.11: DX12 implemented (`remove_device`, `gpu_stall` hooks, deliberate exit 5). The Vulkan device-loss hook is a recorded scope split to phase3.1_vulkan-compute-parity items 2.2 and 3.4 (decision 121): no Vulkan device exists before them.
 - 2.11: hooks compiled only in Debug builds (`UZP_WORKER_FAULT_HOOKS`, build.zig); ReleaseFast/Safe/Small contain none and refuse `--test-faults` (decision 120).
+- 2.8: the worker reports `{"event": "revision", "revision", "project"}` after every commit and project switch, before the call's reply, so a lost reply after `save_as` or close/open still recovers the project the worker really held. The reopen after a relaunch is raced against the new worker's end, with at most three launches before the fatal `recovery failed` (exit 4).
+- 2.5: the MCP schema of a mutating tool requires `idempotency_key` and `expected_revision`, which the supervisor lifts into the pipe request.
 - 3.2: a worker terminated from outside cannot write a minidump of itself (`minidump: null`); `abort()` and SEH write one through the vendored crash handler, asserted by the test.
 - 3.3, 3.4: open, pending the coordinator's GPU batch. The DX12 tests are written in `tests/supervisor/test_supervisor_gpu.py` (device only in the worker, evaluation payload hash, `remove_device`, `gpu_stall`) and have not run; they skip under `UZP_NO_GPU=1`. The Vulkan variant of 3.3 waits for phase3.1_vulkan-compute-parity items 2.2 and 3.4 (decision 121).
 - 4.1: open, pending the coordinator's GPU batch. CPU lane green locally 2026-10-12 (`UZP_NO_GPU=1 python -m pytest tests/supervisor`: 44 passed, 4 GPU cases skipped with the decision-028 reason); the 4 DX12 cases have not run.

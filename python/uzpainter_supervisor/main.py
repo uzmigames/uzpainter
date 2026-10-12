@@ -1,16 +1,18 @@
 """`UzPainter.exe --mcp`: the command line and the stdio MCP server (src/supervisor/supervisor.h).
 
 The MCP surface of this task is the forwarding path only (phase2.1): the tools are the worker's
-own (`tools/list` asks the worker) plus `supervisor_status`. A mutating call carries its
-`idempotency_key` and `expected_revision` among the arguments; the supervisor lifts them into the
-pipe request. The tool registry with its schemas, the omission rule for the key and the
-precondition, HTTP mode, roots, resources and prompts come with phase2.5-phase2.8.
+own (`tools/list` asks the worker) plus `supervisor_status`. A mutating tool's schema requires
+its `idempotency_key` and `expected_revision` among the arguments (`public_schema`); the
+supervisor lifts them into the pipe request. The tool registry with its schemas, the omission
+rule for the key and the precondition, HTTP mode, roots, resources and prompts come with
+phase2.5-phase2.8.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -27,6 +29,29 @@ EXIT_FATAL = 4
 
 STATUS_TOOL = "supervisor_status"
 LIFTED = ("idempotency_key", "expected_revision")
+# The MCP arguments of a mutating tool carry its key and precondition (02 §2); the supervisor
+# lifts them into the pipe request, so the worker's own schema does not list them.
+MUTATION_PROPERTIES: dict[str, Any] = {
+    "idempotency_key": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The mutation's idempotency key, kept for every retry of it.",
+    },
+    "expected_revision": {
+        "type": "integer",
+        "description": "The revision the mutation is based on (its precondition).",
+    },
+}
+
+
+def public_schema(tool: dict[str, Any]) -> dict[str, Any]:
+    """The MCP input schema of a worker tool: a mutating tool also requires `LIFTED`."""
+    schema: dict[str, Any] = copy.deepcopy(tool["inputSchema"])
+    if tool["mutating"]:
+        schema.setdefault("properties", {}).update(copy.deepcopy(MUTATION_PROPERTIES))
+        schema["required"] = [*schema.get("required", []), *LIFTED]
+    return schema
+
 
 log = logging.getLogger("uzpainter.supervisor")
 
@@ -127,7 +152,7 @@ async def _run_mcp(supervisor: worker_module.Supervisor, build: str) -> None:
                 types.Tool(
                     name=tool["name"],
                     description=tool["description"],
-                    input_schema=tool["inputSchema"],
+                    input_schema=public_schema(tool),
                     annotations=types.ToolAnnotations(read_only_hint=not tool["mutating"]),
                 )
             )

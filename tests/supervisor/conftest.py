@@ -156,6 +156,7 @@ class Pipe:
         self.file = self._open()
         self._buffer = b""
         self._ids = itertools.count(1)
+        self.events: list[dict[str, Any]] = []  # notifications, in arrival order
         self.handshake = self.frame()
 
     def _open(self) -> IO[bytes]:
@@ -194,6 +195,9 @@ class Pipe:
         request_id = f"t{next(self._ids)}"
         self.send_raw((json.dumps({**frame, "id": request_id}) + "\n").encode())
         reply = self.frame()
+        while "event" in reply and "id" not in reply:
+            self.events.append(reply)
+            reply = self.frame()
         assert reply.get("id") == request_id, reply
         return reply
 

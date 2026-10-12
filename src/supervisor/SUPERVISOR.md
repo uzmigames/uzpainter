@@ -50,11 +50,11 @@ The supervisor then:
 
 1. Takes the minidump from `<crash-dir>/<supervisor-pid>-<n>/crashes/<time>/crash.dmp`, if there is one. A process terminated from outside writes none, and its record says `minidump: null`.
 2. Launches generation `n+1` with the same backend and Python policy.
-3. Reopens the project the worker held. Because every commit is a durable revision, the file holds the last committed revision.
+3. Reopens the store the worker held with the pipe method `worker/reopen {path, untitled}` (not a tool). That is the saved file, or an untitled project's temporary store, which is reopened as untitled. Because every commit is a durable revision, the store holds the last committed revision. The reopen is raced against the new worker's end. A worker that dies during the reopen is replaced, up to three launches; after that the supervisor stops with the fatal error `recovery failed` (exit 4).
 4. Answers every call that was in flight with `interrupted {cause, exit_code, fault_code, committed_revision}`. Such a call is never re-sent: recovery is never a silent replay. The idempotent retry rules come with phase2.2.
-5. Records `{generation, cause, exit_code, fault_code, minidump, old_pid, new_pid, project, revision, recovery_ms}`. `recovery_ms` runs from the detected death to the reopened project.
+5. Records `{generation, cause, exit_code, fault_code, minidump, old_pid, new_pid, project, revision, recovery_ms, attempts, failed_attempts}`. `recovery_ms` runs from the detected death to the reopened project.
 
-The supervisor tracks which project to reopen from the replies of `project_open`, `project_close` and `project_inspect`. After `run_python` it asks the worker with `project_inspect`, because a script may open or close projects itself.
+The supervisor learns which project to reopen from the worker's `revision` events: `{"event": "revision", "revision", "project", "untitled"}`. `project` is the absolute durable store: the file a saved project was opened or saved as, resolved when that call ran, or the temporary store of an untitled project. It is null when no project is open. The worker sends one after every committed call and every project switch (create, open, close, `save_as`), from `Session::on_durable_change`, before the call that caused it returns. So a script that switches projects and commits, then loses its reply to a crash, is recovered on the project it really holds.
 
 ## Worker
 
@@ -80,7 +80,7 @@ It then answers one request at a time on the interpreter's thread. The GIL is he
 | `project_save {mode?: incremental\|full}` | GPU-free, names a checkpoint | `{current, named, previous}` |
 | `project_inspect` | GPU-free | `{open, path, revision, texture_sets: [{name, stacks}]}` |
 | `evaluate_channel {channel, texture_set?, stack?}` | GPU (the GPU evaluator on the engine thread) | `{revision, texture_set, stack, channel, format, width, height, tiles, payload: {path, sha256, size}}`; the texels go to a file under `--output-root` |
-| `run_python {code, args?}` | mutating; listed and run only with `--allow-python` | the `RunScript` report; a raising script is `script_failed`, with the calls it committed in `details` |
+| `run_python {code, args?}` | mutating; listed and run only with `--allow-python`; its MCP schema also requires `idempotency_key` and `expected_revision` | the `RunScript` report; a raising script is `script_failed`, with the calls it committed in `details` |
 | `test_fault {fault}` | Debug builds under `--test-faults` only | `{armed}` |
 
 The checks run in this order, and every refusal comes before the call runs:
@@ -115,7 +115,7 @@ The hooks are compiled only when `UZP_WORKER_FAULT_HOOKS` is defined. `build.zig
 | `gpu_stall` | The next GPU call first makes the direct queue wait on a fence nothing signals, so the deadline wait returns `timeout`. |
 | `kill_before_reply` | The next call runs and commits, then the worker dies before its reply. |
 
-`UZP_TEST_HANDSHAKE`, a JSON object in the environment, replaces handshake fields for the mismatch tests. The Vulkan device-loss hook waits for the Vulkan device, which phase3.1_vulkan-compute-parity items 2.2 and 3.4 deliver (decision 121).
+`UZP_TEST_HANDSHAKE`, a JSON object in the environment, replaces handshake fields for the mismatch tests. `UZP_TEST_KILL_ON_OPEN`, a file holding a count, makes `worker/reopen` terminate the worker while the count is above zero (decrementing it), so a worker can die while the supervisor reopens the project. The Vulkan device-loss hook waits for the Vulkan device, which phase3.1_vulkan-compute-parity items 2.2 and 3.4 deliver (decision 121).
 
 ## Tests
 

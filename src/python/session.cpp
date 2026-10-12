@@ -232,9 +232,10 @@ void Session::Create(const std::filesystem::path& mesh_path, const CreateSetting
         if (current_) ThrowProjectError("a project is already open");
         current_ = std::move(project);
     }
+    NotifyDurableChange();
 }
 
-void Session::Open(const std::filesystem::path& path) {
+void Session::Open(const std::filesystem::path& path, bool untitled) {
     if (IsOpen()) ThrowProjectError("a project is already open");
     if (!std::filesystem::exists(path)) ThrowProjectError("cannot open " + Utf8(path) + ": no such file");
     store::ProjectStore::Opened opened = store::ProjectStore::Open(path);
@@ -250,11 +251,18 @@ void Session::Open(const std::filesystem::path& path) {
         // has none, and its mesh source stays unknown rather than resolved against this directory.
         if (!snapshot.project->mesh->source.empty()) project->mesh_path = snapshot.project->mesh->source;
     }
-    project->project_source = std::filesystem::absolute(path);
+    if (untitled) {
+        project->untitled_dir = std::filesystem::absolute(path).parent_path();
+    } else {
+        project->project_source = std::filesystem::absolute(path);
+    }
     SetActiveDefault(*project);
-    std::lock_guard lock(mutex_);
-    if (current_) ThrowProjectError("a project is already open");
-    current_ = std::move(project);
+    {
+        std::lock_guard lock(mutex_);
+        if (current_) ThrowProjectError("a project is already open");
+        current_ = std::move(project);
+    }
+    NotifyDurableChange();
 }
 
 void Session::Close() {
@@ -262,6 +270,7 @@ void Session::Close() {
     if (Thread().transaction) throw ApiError("RuntimeError", "close() inside an open Transaction");
     RequireNotBusy("close()");
     SetCurrent(nullptr);
+    NotifyDurableChange();
 }
 
 core::Checkpoints Session::Save(store::SaveMode mode) {
@@ -285,6 +294,7 @@ core::Checkpoints Session::SaveAs(const std::filesystem::path& path, store::Save
         std::filesystem::remove_all(project->untitled_dir, ignored);
         project->untitled_dir.clear();
     }
+    NotifyDurableChange();
     return checkpoints;
 }
 
@@ -336,6 +346,11 @@ void Session::Record(const CallResult& result) {
         thread.log->last_committed_revision = result.revision;
         thread.log->committed.push_back(result);
     }
+    if (result.status == "committed") NotifyDurableChange();
+}
+
+void Session::NotifyDurableChange() const {
+    if (on_durable_change) on_durable_change();
 }
 
 CallResult Session::Mutate(const std::string& tool, core::json::Object arguments,

@@ -3,13 +3,17 @@
 One `Supervisor` owns at most one worker at a time. Each launch (a generation `n`) runs
 `UzPainter.exe --worker --pipe \\\\.\\pipe\\uzpainter-<supervisor-pid>-<n>` with the backend,
 the Python policy and the deadline the supervisor was started with; the supervisor connects,
-checks the handshake (a mismatch is fatal) and then forwards requests.
+checks the handshake (a mismatch is fatal) and then forwards requests. The worker reports the
+project it holds and its revision in a `revision` event after every commit and project switch,
+before the reply of the call that caused it.
 
 When the worker ends (process exit, or a broken pipe followed by the exit), the supervisor:
 1. notes the cause (`ipc.classify_exit`, refined by a `device_removed` / `timeout` reply just
    before the exit) and the minidump the crash handler wrote, if any;
 2. launches the next generation with the same backend and Python policy and reopens the project
-   that was open: the file at rest holds the last committed revision (02 §6);
+   the last `revision` event named: the file at rest holds the last committed revision (02 §6).
+   The reopen is raced against the new worker's end; a worker that dies during it is replaced, up
+   to `RECOVERY_ATTEMPTS` launches, after which the supervisor stops with a fatal error;
 3. answers each call that was in flight with `interrupted {cause, committed_revision}`: it is
    never re-sent (recovery is never a silent replay); calls that arrived meanwhile were held and
    are forwarded to the new worker;
@@ -27,6 +31,7 @@ import subprocess
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -37,6 +42,7 @@ log = logging.getLogger("uzpainter.supervisor")
 
 CONNECT_TIMEOUT_S = 120.0  # pipe connection and handshake (the worker creates its device first)
 EXIT_GRACE_S = 10.0  # a worker whose pipe broke must exit within this, or it is killed
+RECOVERY_ATTEMPTS = 3  # relaunches that may end before the project is reopened, then fatal
 ERROR_PIPE_BUSY = 231
 
 
@@ -92,6 +98,7 @@ class _Generation:
     crash_dir: Path
     process: asyncio.subprocess.Process
     handshake_future: asyncio.Future[dict[str, Any]]
+    on_event: Callable[[dict[str, Any]], None]
     pending: dict[str, asyncio.Future[dict[str, Any]]] = field(default_factory=dict)
     transport: asyncio.BaseTransport | None = None
     handshake: ipc.Handshake | None = None
@@ -113,7 +120,9 @@ class _Generation:
                 future.set_result(frame)
         elif "id" in frame:
             log.error("worker %d replied to an unknown request: %s", self.number, frame)
-        # Notifications (jobs, revisions) are delivered by phase2.3; nothing subscribes yet.
+        elif "event" in frame:
+            self.on_event(frame)
+        # Job notifications are delivered by phase2.3; nothing subscribes to them yet.
 
     def on_pipe_lost(self) -> None:
         self.pipe_lost.set()
@@ -139,6 +148,8 @@ class Recovery:
     project: str | None
     revision: int | None
     recovery_ms: float
+    attempts: int = 1
+    failed_attempts: list[dict[str, Any]] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         return dict(self.__dict__)
@@ -150,7 +161,11 @@ class Supervisor:
     def __init__(self, config: WorkerConfig) -> None:
         self.config = config
         self.recoveries: list[Recovery] = []
+        # What the worker durably holds, from its `revision` events: they arrive before the
+        # reply of the call that caused them, so a lost reply loses neither (02 §5).
         self.project_path: str | None = None
+        self.project_untitled = False
+        self.durable_revision: int | None = None
         self._numbers = itertools.count(1)
         self._current: _Generation | None = None
         self._ready = asyncio.Event()
@@ -192,7 +207,9 @@ class Supervisor:
             *self.config.argv(pipe, crash_dir), stdin=subprocess.DEVNULL, stdout=stdout, stderr=None
         )
         loop = asyncio.get_running_loop()
-        generation = _Generation(number, pipe, crash_dir, process, loop.create_future())
+        generation = _Generation(
+            number, pipe, crash_dir, process, loop.create_future(), self._on_event
+        )
         try:
             await asyncio.wait_for(self._connect(generation), CONNECT_TIMEOUT_S)
             frame = await asyncio.wait_for(generation.handshake_future, CONNECT_TIMEOUT_S)
@@ -277,21 +294,36 @@ class Supervisor:
             returncode,
             minidump,
         )
-        try:
-            fresh = await self._launch()
-        except FatalSupervisorError as error:
-            self._fatal(str(error))
-            return
+        attempts = 0
+        failed: list[dict[str, Any]] = []
+        while True:
+            attempts += 1
+            try:
+                fresh = await self._launch()
+            except FatalSupervisorError as error:
+                self._fatal(str(error))
+                return
+            alive, revision = await self._reopen(fresh)
+            if alive:
+                break
+            code = fresh.process.returncode if fresh.process.returncode is not None else -1
+            failed.append(
+                {
+                    "generation": fresh.number,
+                    "cause": ipc.classify_exit(code),
+                    "exit_code": code,
+                    "minidump": _newest_minidump(fresh.crash_dir),
+                }
+            )
+            log.error("worker %d ended while reopening the project: %s", fresh.number, failed[-1])
+            if attempts >= RECOVERY_ATTEMPTS:
+                self._fatal(
+                    f"recovery failed: {attempts} relaunched workers ended before they reopened "
+                    f"{self.project_path}"
+                )
+                return
         self._current = fresh
         dead.replaced.set()
-        revision: int | None = None
-        if self.project_path is not None:
-            reply = await self._send(fresh, _call("project_open", {"path": self.project_path}))
-            if "error" in reply:
-                log.error("the relaunched worker could not reopen %s: %s", self.project_path, reply)
-                self.project_path = None
-            else:
-                revision = reply["result"]["revision"]
         recovery = Recovery(
             generation=fresh.number,
             cause=cause,
@@ -303,6 +335,8 @@ class Supervisor:
             project=self.project_path,
             revision=revision,
             recovery_ms=round((time.perf_counter() - detected) * 1000.0, 3),
+            attempts=attempts,
+            failed_attempts=failed,
         )
         self.recoveries.append(recovery)
         log.info("recovered: %s", recovery.to_json())
@@ -311,6 +345,59 @@ class Supervisor:
                 future.set_result(_interrupted(request_id, recovery))
         dead.pending.clear()
         self._ready.set()
+
+    async def _reopen(self, fresh: _Generation) -> tuple[bool, int | None]:
+        """Reopens the project the dead worker held in `fresh`: whether `fresh` is still alive,
+        and the revision it reopened. The reply is raced against `fresh`'s end, so a worker that
+        dies during the reopen cannot leave the recovery waiting."""
+        if self.project_path is None:
+            return True, None
+        reply = self._post(
+            fresh,
+            {
+                "method": "worker/reopen",
+                "path": self.project_path,
+                "untitled": self.project_untitled,
+            },
+        )
+        exited = asyncio.ensure_future(fresh.process.wait())
+        lost = asyncio.ensure_future(fresh.pipe_lost.wait())
+        waiters: set[asyncio.Future[Any]] = {reply, exited, lost}
+        await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+        lost.cancel()
+        if not reply.done():
+            reply.cancel()
+            fresh.pending.clear()
+            try:
+                await asyncio.wait_for(exited, EXIT_GRACE_S)
+            except TimeoutError:
+                fresh.process.kill()
+                await fresh.process.wait()
+            if fresh.transport:
+                fresh.transport.close()
+            return False, None
+        exited.cancel()
+        frame = reply.result()
+        if "error" in frame:
+            log.error("the relaunched worker could not reopen %s: %s", self.project_path, frame)
+            self.project_path = None
+            self.project_untitled = False
+            self.durable_revision = None
+            return True, None
+        revision = frame["result"]["revision"]
+        assert isinstance(revision, int)
+        return True, revision
+
+    def _on_event(self, frame: dict[str, Any]) -> None:
+        """A worker's `revision` event: the absolute store it holds (the saved file, or an
+        untitled project's temporary store; None when none is open), whether it is untitled, and
+        its revision, sent after every commit and switch."""
+        if frame.get("event") == "revision":
+            project = frame.get("project")
+            revision = frame.get("revision")
+            self.project_path = project if isinstance(project, str) else None
+            self.project_untitled = frame.get("untitled") is True and self.project_path is not None
+            self.durable_revision = revision if isinstance(revision, int) else None
 
     def _fatal(self, message: str) -> None:
         """A fatal supervisor error after the session started: no call reaches a worker again."""
@@ -332,44 +419,17 @@ class Supervisor:
                 break
             # The worker is known to be gone, so the call was not sent: hold it for the relaunch.
             await generation.replaced.wait()
-        reply = await self._send(generation, frame)
-        if frame.get("method") == "tools/call" and frame.get("name") == "run_python":
-            # A script may open, save or close projects itself, and keeps what it did before it
-            # raised: ask the worker what it holds now.
-            await self._refresh_project(generation)
-        else:
-            self._track_project(frame, reply)
-        return reply
+        return await self._post(generation, frame)
 
-    async def _send(self, generation: _Generation, frame: dict[str, Any]) -> dict[str, Any]:
+    def _post(
+        self, generation: _Generation, frame: dict[str, Any]
+    ) -> asyncio.Future[dict[str, Any]]:
+        """Sends `frame` with a fresh `id`; the future of its reply."""
         request_id = str(uuid.uuid4())
         future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
         generation.pending[request_id] = future
         generation.send({**frame, "id": request_id})
-        return await future
-
-    def _track_project(self, frame: dict[str, Any], reply: dict[str, Any]) -> None:
-        """The project the worker holds, for the relaunch."""
-        if frame.get("method") != "tools/call":
-            return
-        name = frame.get("name")
-        result = reply.get("result")
-        if not isinstance(result, dict):
-            return
-        if name == "project_open":
-            self.project_path = str(result["path"])
-        elif name == "project_close":
-            self.project_path = None
-        elif name == "project_inspect":
-            self.project_path = result.get("path") if result.get("open") else None
-
-    async def _refresh_project(self, generation: _Generation) -> None:
-        if generation is not self._current or not self._ready.is_set():
-            return  # the worker died meanwhile; the relaunch reopened what it knew
-        reply = await self._send(generation, _call("project_inspect", {}))
-        result = reply.get("result")
-        if isinstance(result, dict) and generation is self._current:
-            self.project_path = result.get("path") if result.get("open") else None
+        return future
 
     def status(self) -> dict[str, Any]:
         generation = self._current
@@ -384,13 +444,11 @@ class Supervisor:
             else None,
             "python": "allowed" if self.config.allow_python else "disabled",
             "project": self.project_path,
+            "untitled": self.project_untitled,
+            "revision": self.durable_revision,
             "crash_dir": str(generation.crash_dir) if generation else None,
             "recoveries": [recovery.to_json() for recovery in self.recoveries],
         }
-
-
-def _call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    return {"method": "tools/call", "name": name, "arguments": arguments}
 
 
 def _interrupted(request_id: str, recovery: Recovery) -> dict[str, Any]:

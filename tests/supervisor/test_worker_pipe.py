@@ -109,7 +109,17 @@ def test_mutating_calls_need_key_and_current_precondition(
         "message": "the project is at another revision than the call expected",
         "details": {"expected": revision - 1, "current": revision},
     }
+    pipe.events.clear()
     done = pipe.call("run_python", {"code": INSERT_FILL}, expected_revision=revision, **KEY)
+    # The durable state is reported before the reply: the absolute store and its new revision.
+    assert pipe.events == [
+        {
+            "event": "revision",
+            "revision": revision + 1,
+            "project": project.as_posix(),
+            "untitled": False,
+        }
+    ]
     assert done["result"]["status"] == "ok"
     assert done["committed_revision"] == revision + 1
     assert done["result"]["last_committed_revision"] == revision + 1

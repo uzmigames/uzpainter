@@ -20,6 +20,10 @@
 //
 // `UZP_TEST_HANDSHAKE`, a JSON object in the worker's environment, replaces fields of the
 // handshake frame (the supervisor's mismatch tests).
+//
+// `UZP_TEST_KILL_ON_OPEN`, a file path in the worker's environment: while that file holds a
+// count above zero, `worker/reopen` (the supervisor's recovery) decrements it and terminates the
+// worker before opening (a worker dying while the supervisor reopens the project).
 
 #if defined(UZP_WORKER_FAULT_HOOKS)
 
@@ -53,6 +57,9 @@ void Trigger(Fault fault);
 [[nodiscard]] bool TakeKillBeforeReply();
 /// Terminates the process with `kKillExitCode`.
 [[noreturn]] void KillNow();
+
+/// Under `UZP_TEST_KILL_ON_OPEN` (above): decrements the count and terminates the process.
+void MaybeKillOnOpen();
 
 /// The handshake with the fields of `UZP_TEST_HANDSHAKE` replaced; unchanged without it.
 [[nodiscard]] core::json::Object OverrideHandshake(core::json::Object handshake);

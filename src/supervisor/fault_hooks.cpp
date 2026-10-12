@@ -12,6 +12,7 @@
 #include <wrl/client.h>
 
 #include <atomic>
+#include <fstream>
 #include <cstdlib>
 
 namespace uzp::supervisor::fault {
@@ -97,6 +98,21 @@ render::Result<void> InjectGpuFault(render::EngineContext& context) {
 }
 
 bool TakeKillBeforeReply() { return g_kill_before_reply.exchange(false); }
+
+void MaybeKillOnOpen() {
+    const char* path = std::getenv("UZP_TEST_KILL_ON_OPEN");
+    if (!path || !*path) return;
+    long count = 0;
+    {
+        std::ifstream in(path);
+        if (!(in >> count) || count <= 0) return;
+    }
+    {
+        std::ofstream out(path, std::ios::trunc);
+        out << (count - 1);
+    }
+    KillNow();
+}
 
 core::json::Object OverrideHandshake(core::json::Object handshake) {
     const char* text = std::getenv("UZP_TEST_HANDSHAKE");
