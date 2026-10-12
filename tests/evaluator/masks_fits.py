@@ -39,6 +39,7 @@ from tests.evaluator.sources_fits import channel_formats, export16, pooled, srgb
 from tests.evaluator.test_compositor_tile_dag import (
     REPO_ROOT,
     TEMPLATES_DIR,
+    bitmap_color_space,
     evaluate,
     raster,
 )
@@ -222,9 +223,11 @@ def spec_from_steps(
             node["active"] = list(args["channels"])
         elif name == "set_source":
             if "resource_step" in args:
+                resource = resources[args["resource_step"]]
+                png = (workdir / resource["png"]).read_bytes()
                 item: dict[str, Any] = {
-                    "bitmap": resources[args["resource_step"]]["sha256"],
-                    "color_space": "Raw",
+                    "bitmap": resource["sha256"],
+                    "color_space": bitmap_color_space(args, channel, png),
                 }
             else:
                 space = args.get("color_space", "Working")

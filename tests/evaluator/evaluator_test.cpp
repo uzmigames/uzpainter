@@ -2655,7 +2655,7 @@ core::Source AliasedBitmap(const std::string& sha256, const std::string& alias) 
     core::BitmapSource source;
     source.resource.sha256 = sha256;
     source.resource.alias = alias;
-    source.color_space = "sRGB";
+    source.color_space = "Data";
     return core::Source{source};
 }
 
@@ -2741,6 +2741,67 @@ int RunSources(const fs::path& assets) {
         CpuEvaluator cpu(templates, kWideLimits);
         render::Result<ChannelResult> result = evaluate(builder, ChannelType::User0, cpu);
         Check(result && Samples(*result) == image16->values, "the Fill projection matches the bitmap to the UV tile (a 1:1 copy)", Describe(result));
+    }
+
+    // sRGB bitmaps (sources.h): decoded onto an sRGB8 channel at 1:1; every other use is refused.
+    {
+        // The stored code does not depend on the decode's arithmetic: the double-precision decode and the GPU's
+        // float32 one (x / 12.92 as a product, ((x + 0.055) / 1.055)^2.4 through the measured pow) agree on every code.
+        size_t differing = 0;
+        for (uint32_t code = 0; code <= 0xFFFFu; ++code) {
+            const float x = arith::UnormOperand(code, 16);
+            const float gpu = x <= 0.04045f ? x * static_cast<float>(1.0 / 12.92)
+                                            : hw::Pow((x + 0.055f) * static_cast<float>(1.0 / 1.055), 2.4f);
+            if (arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x))) != arith::Srgb8Store(gpu)) ++differing;
+        }
+        Check(differing == 0, "on an sRGB8 channel the double-precision and the GPU's float32 sRGB decode store the same code "
+                              "for each of the 65 536 16-bit codes",
+              std::to_string(differing) + " differ");
+        auto srgb = [&](ChannelFormat format, const std::string& sha, double scale) {
+            Builder builder(kSize, kSize, {{ChannelType::User0, format}});
+            core::Layer layer = builder.Fill("bitmap", SameSource(user0, Bitmap(sha, "sRGB")), Same(user0, BlendingMode::Normal, 1.0));
+            if (scale == 1.0) {
+                layer.fill->projection.mode = core::ProjectionMode::Fill;
+            } else {
+                SetUv(layer, core::FilteringMode::Nearest, core::UVWrapMode::Repeat, {scale, scale}, 0.0, {0.0, 0.0});
+            }
+            single(format, layer, builder);
+            CpuEvaluator cpu(templates, kWideLimits);
+            return evaluate(builder, ChannelType::User0, cpu);
+        };
+        render::Result<ChannelResult> decoded = srgb(ChannelFormat::sRGB8, sha16, 1.0);
+        bool ok = decoded.has_value();
+        if (ok) {
+            const std::vector<uint32_t> samples = Samples(*decoded);
+            for (size_t k = 0; k < samples.size() && ok; ++k) {
+                const float x = arith::UnormOperand(image16->values[k], 16);
+                ok = samples[k] == arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x)));
+            }
+        }
+        Check(ok, "a 16-bit colour sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code", Describe(decoded));
+        bool refused = true;
+        std::string detail;
+        for (const auto& [name, result] :
+             {std::pair{"RGB16 channel", srgb(ChannelFormat::RGB16, sha16, 1.0)}, std::pair{"8-bit bitmap", srgb(ChannelFormat::sRGB8, sha8, 1.0)},
+              std::pair{"grey bitmap", srgb(ChannelFormat::sRGB8, shaGrey, 1.0)},
+              std::pair{"Nearest at scale 0.5", srgb(ChannelFormat::sRGB8, sha16, 0.5)}}) {
+            if (result || KindName(result.error()) != "unsupported_source") {
+                refused = false;
+                detail += std::string(name) + ": " + Describe(result) + " ";
+            }
+        }
+        Builder working(kSize, kSize, {{ChannelType::User0, ChannelFormat::sRGB8}});
+        working.SetRoot({working.Fill("bitmap", SameSource(user0, Bitmap(sha16, "Working")), Same(user0, BlendingMode::Normal, 1.0))});
+        working.AddResource(sha16, 100);
+        CpuEvaluator cpu(templates, kWideLimits);
+        render::Result<ChannelResult> unrecorded = evaluate(working, ChannelType::User0, cpu);
+        if (unrecorded || KindName(unrecorded.error()) != "unsupported_source") {
+            refused = false;
+            detail += "Working: " + Describe(unrecorded);
+        }
+        Check(refused, "an sRGB bitmap on a channel that is not sRGB8, 8-bit or grey, or resampled, and a bitmap in the Working "
+                       "colour space fail with unsupported_source",
+              detail);
     }
 
     // Transforms on RGB16 against direct texel arithmetic.
@@ -6765,6 +6826,14 @@ std::vector<ExcludedFeature> ExcludedFeatures() {
                             geometry.inclusion_list = false;
                             geometry.items = {"other"};
                         }});
+    features.push_back({"an sRGB bitmap on an RGB16 channel", "phase1.20_pyapi-facade", ChannelType::User0,
+                        [](core::Project& p, core::Id fill) {
+                            FillOf(p, fill).sources[ChannelType::User0] = Bitmap(std::string(64, 'd'), "sRGB");
+                        }});
+    features.push_back({"a bitmap in the Working colour space", "phase1.20_pyapi-facade", ChannelType::User0,
+                        [](core::Project& p, core::Id fill) {
+                            FillOf(p, fill).sources[ChannelType::User0] = Bitmap(std::string(64, 'e'), "Working");
+                        }});
     // SignedAddition and uniform colours on Height are recorded (height-signed-addition, decision
     // 079); a DirectX project's Normal channel only as one bitmap fill at opacity 1.
     features.push_back({"a Normal-channel bitmap at opacity 1/2 in a DirectX project", "phase1.12_compositor-height-normal",
@@ -6863,7 +6932,7 @@ int RunNotYetSupported(const fs::path& assets) {
               ": 3D, warp and UV-set projections, symmetry, physical-size scale, one-axis wrap, Material mode, vector, "
               "font, procedural and reference sources, OCIO, generator, filter, paint, anchor, compare-mask, "
               "colour-selection effects, content fill and mask levels effects, paint and instance layers, geometry "
-              "masks, Height and DirectX Normal cases) fails its transaction with NotYetSupported naming its owner "
+              "masks, Height and DirectX Normal cases, unrecorded bitmap colour spaces) fails its transaction with NotYetSupported naming its owner "
               "task; the document, its revision, records and save state are unchanged",
           transactionFailures);
     Check(evaluatorFailures.empty(),

@@ -307,10 +307,11 @@ def colour_transfer(ev: Evaluations, decode: np.ndarray) -> dict[str, Any]:
             "bitmap-import-linear",
             "16-bit bitmap source on RGB16, sRGB8, RGB8 and L16 channels",
             "A bitmap code c of an n-bit image is taken as the linear value float32(c / (2^n - 1)) "
-            "whatever the colour-space tag (untagged PNG 16 here) and stored with the channel's "
-            "write rule: RGB16/L16 the code itself, RGB8 the 8-bit write rule, sRGB8 the GPU "
-            "float-to-sRGB8 conversion (entry uniform-colour-srgb8-store). A grey bitmap feeds the "
-            "grey channel. Bound by the SHA-256 of the file bytes, decoded once per resource.",
+            "in the colour spaces Raw, Data, DataSigned and NormalXYZLeft (Painter reports Data "
+            "here) and stored with the channel's write rule: RGB16/L16 the code itself, RGB8 the "
+            "8-bit write rule, sRGB8 the GPU float-to-sRGB8 conversion (entry "
+            "uniform-colour-srgb8-store). A grey bitmap feeds the grey channel. Bound by the "
+            "SHA-256 of the file bytes, decoded once per resource.",
             [D3D_UNORM, D3D_SRGB, PYDOC_RESOURCE],
             [parameter("bitmap_bits", 16, "authored", "bits")],
             [
@@ -325,7 +326,8 @@ def colour_transfer(ev: Evaluations, decode: np.ndarray) -> dict[str, Any]:
             ],
             notes="Fields A and B (s0, s1) hold every 16-bit code in their blue channel. s2 "
             "(opacity 0.5) is an unstable golden (tier0-stability.md section 4) and not compared. "
-            "8-bit and sRGB-tagged bitmaps follow the same rule without a golden yet.",
+            "8-bit bitmaps follow the same rule without a golden yet; sRGB bitmaps are decoded "
+            "(src/evaluator/sources.h).",
         ),
         entry(
             "srgb8-stack",
@@ -379,10 +381,12 @@ def colour_transfer(ev: Evaluations, decode: np.ndarray) -> dict[str, Any]:
         ),
         entry(
             "uniform-colour-height-and-8-bit-bitmaps",
-            "Uniform colours on Height, 8-bit and sRGB-tagged bitmaps, OCIO colour management",
+            "Uniform colours on Height, 8-bit bitmaps, unrecorded sRGB bitmaps, OCIO colour "
+            "management",
             "Not observed. Uniform colours on Height are stored like any channel value (no "
-            "remap); 8-bit and sRGB-tagged bitmaps follow bitmap-import-linear; an OCIO project "
-            "fails with evaluator:unsupported_source.",
+            "remap); 8-bit bitmaps follow bitmap-import-linear; an sRGB bitmap other than a 16-bit "
+            "colour bitmap sampled 1:1 onto an sRGB8 channel, the Working and Linear bitmap colour "
+            "spaces and an OCIO project fail with evaluator:unsupported_source.",
             [PYDOC_COLOUR, source("S-OCIO", "Colour transforms")],
             [],
             [],

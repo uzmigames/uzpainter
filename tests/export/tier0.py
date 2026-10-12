@@ -307,21 +307,103 @@ def _hw_exp2(y: np.ndarray) -> np.ndarray:
     return result
 
 
-def srgb16(values: np.ndarray) -> np.ndarray:
-    """Painter 12.1.5's 16-bit export of a linear colour value (probe P5, decision 091): the sRGB
-    encode with exponent 0.41666 through the GPU's exp2 and log2, its last step fused, then the
-    16-bit write rule."""
+def srgb_encode(values: np.ndarray) -> np.ndarray:
+    """Painter 12.1.5's sRGB encode of a linear colour value (probe P5, decision 091), float32:
+    exponent 0.41666 through the GPU's exp2 and log2, its last step fused."""
     f32 = np.float32
     x = np.asarray(values, f32)
     wide = np.asarray(x, np.float64)
     power = float(f32(0.41666)) * np.asarray(_hw_log2(np.maximum(x, f32(1e-30))), np.float64)
     t = np.asarray(_hw_exp2(power.astype(f32)), np.float64)
-    encoded = np.where(
+    encoded: np.ndarray = np.where(
         x <= f32(0.0031308),
         (float(f32(12.92)) * wide).astype(f32),
         (float(f32(1.055)) * t + float(f32(-0.055))).astype(f32),
     )
-    return write16(encoded)
+    return encoded
+
+
+def srgb16(values: np.ndarray) -> np.ndarray:
+    """Painter 12.1.5's 16-bit export of a linear colour value (probe P5, decision 091): the sRGB
+    encode (`srgb_encode`), then the 16-bit write rule."""
+    return write16(srgb_encode(values))
+
+
+# The goldens with an sRGB bitmap: field A on BaseColor in the colour space Painter gives it by
+# default (sources.h), with their files holding BaseColor's RGB sRGB-encoded (`srgb_encode`) per
+# texture set. The converted maps hold it as Unity4Diff (decision 092: RGB enc(L) on a filled
+# set), written at 16 bits or as OpenEXR 32f.
+SRGB_BITMAP_FILES: dict[str, dict[str, tuple[str, ...]]] = {
+    "semantics/export-probes-config": {"s0": ("probe/s12/s0_basecolor.png",)},
+    "semantics/export-probes-naming": {"s0": ("probe/s12/s0_ctl_basecolor.png",)},
+    "semantics/virtual-maps-converted": {
+        ts: (f"{ts}/Unity4Diff/step51", f"{ts}/Unity4Diff/step52") for ts in ("s0", "s1")
+    },
+    "semantics/virtual-maps-converted-float": {
+        ts: (f"{ts}/Unity4Diff/step51", f"{ts}/Unity4Diff/step52") for ts in ("s0", "s1")
+    },
+}
+
+
+def srgb_bitmap_probe(exe: Path, tmp: Path) -> dict[str, int]:
+    """The sRGB bitmap through the plan: each texture set of `SRGB_BITMAP_FILES` built from its
+    instruction sequence (`export_spec`), BaseColor's RGB evaluated by `EvaluateFileOn` and
+    sRGB-encoded, against every listed file of r1 and r2 (16-bit files through the write rule):
+    differing values per file."""
+    needs_store()
+    cfg: dict[str, Any] = {
+        "defaultExportPreset": "uzp_recorder",
+        "exportParameters": [
+            {
+                "parameters": {
+                    "bitDepth": "16",
+                    "dithering": False,
+                    "fileFormat": "png",
+                    "paddingAlgorithm": "infinite",
+                }
+            }
+        ],
+        "exportPresets": [
+            {
+                "maps": [
+                    {
+                        "channels": [
+                            {
+                                "destChannel": c,
+                                "srcChannel": c,
+                                "srcMapName": "basecolor",
+                                "srcMapType": "documentMap",
+                            }
+                            for c in "RGB"
+                        ],
+                        "fileName": "$textureSet_rgb",
+                    }
+                ],
+                "name": "uzp_recorder",
+            }
+        ],
+        "exportShaderParams": False,
+    }
+    report: dict[str, int] = {}
+    for name, files in SRGB_BITMAP_FILES.items():
+        manifest, golden = envelope_manifest(name), envelope_golden(name)
+        for texture_set, keys in files.items():
+            workdir = tmp / "srgb" / name.rsplit("/", 1)[-1] / texture_set
+            spec = export_spec(manifest, texture_set, workdir)
+            rasters = evaluate_files(
+                exe,
+                spec,
+                cfg | {"exportPath": "C:/export", "exportList": [{"rootPath": texture_set}]},
+                workdir,
+            )
+            encoded = srgb_encode(rasters[f"{texture_set}_rgb.png"])
+            for recording in sorted(golden.recordings):
+                for key in keys:
+                    theirs = golden.map(recording, key)
+                    ours = write16(encoded) if theirs.integer else encoded
+                    differing = ours != theirs.values[..., :3]
+                    report[f"{name} {recording} {key}"] = int(differing.sum())
+    return report
 
 
 def luma_probe(exe: Path, tmp: Path) -> tuple[dict[str, int], dict[str, str]]:

@@ -29,6 +29,23 @@ render::Result<std::shared_ptr<const DecodedImage>> GreenInverted(const DecodedI
     return std::shared_ptr<const DecodedImage>(std::move(inverted));
 }
 
+/// An sRGB bitmap as an sRGB8 channel stores it (sources.h): every 16-bit code c becomes the
+/// sRGB8 code of the sRGB decode of float32(c / 65535), an 8-bit image the size of the bitmap.
+/// Only a 16-bit colour bitmap is recorded.
+render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedImage& image, core::Id node) {
+    if (image.channels != 3 || image.encoding != render::TexelEncoding::Unorm16) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        "an sRGB bitmap is recorded as a 16-bit colour image only (phase1.20_pyapi-facade)", node);
+    }
+    auto decoded = std::make_shared<DecodedImage>(image);
+    decoded->encoding = render::TexelEncoding::Unorm8;
+    for (uint32_t& value : decoded->values) {
+        const double x = arith::UnormOperand(value, 16);
+        value = arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x)));
+    }
+    return std::shared_ptr<const DecodedImage>(std::move(decoded));
+}
+
 /// One tile evaluation: pins, deferred unpins and the retry that flushes the store when the
 /// budget is full of tiles whose operations are only queued.
 class TileEvaluation {
@@ -221,7 +238,36 @@ private:
         // A wrap mode that can leave texels uncovered gives the content a coverage plane: the
         // fill keeps the value below there (resampling.json, RepeatNone).
         format.alpha = source.projection.MayUncover();
+        if (source.srgbDecode) return SrgbUploaded(key, format, *image, source, node);
         return Projected(key, format, image, imageKey, source.projection, source.signedRange);
+    }
+
+    /// An sRGB bitmap sampled 1:1 (the bitmap the size of the set, the identity transform: every
+    /// texel covered, each filter returning the texel's own code): its decoded sRGB8 codes copied
+    /// into the tile. Any other sampling is not recorded (sources.h).
+    render::Result<Operand> SrgbUploaded(const CacheKey& key, const TileFormat& format, const DecodedImage& image,
+                                         const DagSource& source, core::Id node) {
+        const UvProjection& p = source.projection;
+        const bool identity = p.cosR == 1.0 && p.sinR == 0.0 && p.scale == std::array<double, 2>{1.0, 1.0} &&
+                              p.offset == std::array<double, 2>{0.0, 0.0};
+        if (!identity || image.width != m_dag.grid.width || image.height != m_dag.grid.height) {
+            return EvalFail(EvalErrorKind::UnsupportedSource,
+                            "an sRGB bitmap is recorded sampled 1:1 only (the bitmap the size of the set, the "
+                            "identity transform; phase1.20_pyapi-facade)",
+                            node);
+        }
+        std::shared_ptr<const DecodedImage>& decoded = m_env.srgbDecoded[source.sha256];
+        if (!decoded) {
+            render::Result<std::shared_ptr<const DecodedImage>> made = SrgbDecoded(image, node);
+            if (!made) return render::Unexpected(made.error());
+            decoded = *made;
+        }
+        render::Result<TileHandle> tile = Allocate(key, format);
+        if (!tile) return render::Unexpected(tile.error());
+        render::Result<void> uploaded = m_env.store.Upload(*tile, *decoded, m_tx * kTileSize, m_ty * kTileSize);
+        if (!uploaded) return render::Unexpected(uploaded.error());
+        ++m_stats.uploads;
+        return Operand::Of(*tile);
     }
 
     render::Result<Operand> Projected(const CacheKey& key, const TileFormat& format,

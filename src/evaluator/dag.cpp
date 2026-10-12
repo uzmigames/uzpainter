@@ -107,9 +107,28 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
                 // inverts the stored green again).
                 result.invertGreen = true;
             }
-            // Bound by content hash (LAY-13): the alias and, under legacy colour management, the
-            // colour-space tag do not change the samples (sources.h).
+            switch (BitmapColourSpaceOf(bitmap.color_space)) {
+                case BitmapColourSpace::Linear: break;
+                case BitmapColourSpace::Srgb:
+                    // Recorded on sRGB8 channels only (sources.h).
+                    if (mask || !ctx.tileFormat.srgb) {
+                        return EvalFail(EvalErrorKind::UnsupportedSource,
+                                        "an sRGB bitmap on a channel that is not sRGB8 is not recorded "
+                                        "(phase1.20_pyapi-facade)",
+                                        uid);
+                    }
+                    result.srgbDecode = true;
+                    break;
+                case BitmapColourSpace::Unrecorded:
+                    return EvalFail(EvalErrorKind::UnsupportedSource,
+                                    "the bitmap colour space '" + bitmap.color_space +
+                                        "' is not recorded (phase1.20_pyapi-facade)",
+                                    uid);
+            }
+            // Bound by content hash (LAY-13: the alias plays no part); the linear colour spaces
+            // give the same samples (sources.h).
             writer.Str("bitmap").Str(result.sha256);
+            if (result.srgbDecode) writer.Str("srgb");
             writer.U32(static_cast<uint32_t>(result.projection.filter));
             writer.U32(static_cast<uint32_t>(result.projection.wrap));
             for (const double value : {result.projection.cosR, result.projection.sinR,

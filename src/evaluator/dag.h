@@ -78,6 +78,9 @@ struct DagSource {
     /// The Normal channel imports a bitmap with its green codes inverted (max - g;
     /// blend-modes.json `blend-normal-channel-import`, height_to_normal.h).
     bool invertGreen = false;
+    /// An sRGB bitmap (sources.h): its codes are decoded with the sRGB transfer function onto an
+    /// sRGB8 channel.
+    bool srgbDecode = false;
     /// Hash of the content (source, projection, channel, format, profile).
     Digest hash{};
 };
