@@ -1,0 +1,17 @@
+{
+  "id": 110,
+  "slug": "the-host-behaviour-painter-has-not-been-recorded-doing-is-a-named-gap-with-the-recording-that-settles-it",
+  "title": "The host behaviour Painter has not been recorded doing is a named gap with the recording that settles it",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.21_pyapi-dispatcher-lifecycle",
+    "phase1.20_pyapi-facade",
+    "phase1.24_python-api-facade",
+    "phase1.22_pyapi-cli-capabilities",
+    "phase2.3_realtime-preview",
+    "phase3.3_procedural-families",
+    "phase3.5_embree-bakers"
+  ],
+  "supersededBy": null
+}

@@ -5,11 +5,14 @@
 // (03-project-model.md §3). Importing identical bytes again under the same name changes nothing
 // (the hash is reported as skipped); under another name it adds a named entry for the stored
 // bytes. `replace_node_resource` rebinds one source of one node and keeps the node's uid; nothing
-// else changes.
+// else changes. `list_used_resources` lists the entries the layer stacks and mesh maps bind, and
+// `resource_origin` the file an entry was imported from (the resource reload of the facade,
+// phase1.21).
 
 #include <algorithm>
 #include <fstream>
 #include <iterator>
+#include <set>
 
 #include "python/bindings.h"
 #include "python/errors.h"
@@ -87,6 +90,28 @@ void Rebind(std::vector<core::Layer>& layers, const std::string& sha256, const s
             for (core::Effect& effect : layer.mask->effects) rebind(effect.fill, effect.uid);
         }
         Rebind(layer.children, sha256, replacement, nodes);
+    }
+}
+
+/// The resource hashes the fills and effects of `layers` bind.
+void CollectBound(const std::vector<core::Layer>& layers, std::set<std::string>& hashes) {
+    const auto visit = [&](const std::optional<core::FillContent>& fill) {
+        if (!fill) return;
+        const auto bound = [&](const core::Source& source) {
+            if (source.kind() == core::SourceKind::bitmap) {
+                hashes.insert(std::get<core::BitmapSource>(source.value).resource.sha256);
+            }
+        };
+        for (const auto& [channel, source] : fill->sources) bound(source);
+        if (fill->mono_source) bound(*fill->mono_source);
+    };
+    for (const core::Layer& layer : layers) {
+        visit(layer.fill);
+        for (const core::Effect& effect : layer.content_effects) visit(effect.fill);
+        if (layer.mask) {
+            for (const core::Effect& effect : layer.mask->effects) visit(effect.fill);
+        }
+        CollectBound(layer.children, hashes);
     }
 }
 
@@ -183,6 +208,37 @@ void BindResource(py::module_& m) {
         }
         return ids;
     });
+
+    m.def(
+        "list_used_resources",
+        [] {
+            const auto project = Read();
+            std::set<std::string> hashes;
+            for (const core::TextureSet& set : project->texture_sets) {
+                for (const auto& [usage, binding] : set.mesh_maps) hashes.insert(binding.resource);
+                for (const core::Stack& stack : set.stacks) CollectBound(stack.root_layers, hashes);
+            }
+            std::vector<ResourceIdHandle> ids;
+            for (const std::string& sha256 : hashes) {
+                const auto entries = project->resources.find(sha256);
+                if (entries == project->resources.end()) continue;
+                for (const core::ResourceMeta& meta : entries->second) ids.push_back({"project", meta.name, sha256});
+            }
+            return ids;
+        },
+        "The project resource entries the layer stacks and mesh maps bind.");
+
+    m.def(
+        "resource_origin",
+        [](const ResourceIdHandle& id) -> py::object {
+            const auto project = Read();
+            const std::string sha256 = ResolveResource(*project, id);
+            for (const core::ResourceMeta& meta : project->resources.at(sha256)) {
+                if (meta.name == id.name && !meta.origin.empty()) return py::str(meta.origin);
+            }
+            return py::none();
+        },
+        py::arg("resource_id"), "The file the entry was imported from, or None.");
 
     m.def(
         "replace_node_resource",

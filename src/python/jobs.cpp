@@ -144,12 +144,23 @@ std::optional<std::string> JobEngine::Busy() const {
     return std::nullopt;
 }
 
+void JobEngine::SetPaused(bool paused) {
+    std::lock_guard lock(mutex_);
+    paused_ = paused;
+    if (!paused) queued_.notify_all();
+}
+
+bool JobEngine::Paused() const {
+    std::lock_guard lock(mutex_);
+    return paused_;
+}
+
 void JobEngine::Work() {
     for (;;) {
         std::shared_ptr<Job> job;
         {
             std::unique_lock lock(mutex_);
-            queued_.wait(lock, [this] { return !queue_.empty(); });
+            queued_.wait(lock, [this] { return !queue_.empty() && !paused_; });
             job = std::move(queue_.front());
             queue_.pop_front();
         }

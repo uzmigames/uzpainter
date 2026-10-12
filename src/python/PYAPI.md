@@ -1,6 +1,6 @@
 # The native Python API (`src/python/`)
 
-Task `phase1.19_pyapi-native-module` (child of `phase1.24_python-api-facade`, P1-PYAPI). Implements the native `uzpainter` module of `docs/architecture/10-python-api.md` §1, §5 and §7 under decisions 082, 085, 105 and 106. Tests: `tests/python/` (`zig build pyapi-tests`, `python -m pytest tests/python`). Local run report: `parity/reports/phase1/pyapi-native-module.md`.
+Task `phase1.19_pyapi-native-module` (child of `phase1.24_python-api-facade`, P1-PYAPI). Implements the native `uzpainter` module of `docs/architecture/10-python-api.md` §1, §5 and §7 under decisions 082, 085, 105 and 106. Task `phase1.21_pyapi-dispatcher-lifecycle` (decisions 109 and 110) adds the dispatcher thread, the engine-computation state, the mesh reload and the resource queries of §6. Tests: `tests/python/` (`zig build pyapi-tests`, `python -m pytest tests/python`). Local run report: `parity/reports/phase1/pyapi-native-module.md`.
 
 ## 1. Shape
 
@@ -10,12 +10,13 @@ Task `phase1.19_pyapi-native-module` (child of `phase1.24_python-api-facade`, P1
 | `uzpainter_module.cpp` | `PYBIND11_EMBEDDED_MODULE(uzpainter)`: creates the submodules, registers each in `sys.modules`, and keeps `uzpainter._selftest` for `selftest`. |
 | `session.{h,cpp}` | The open project (a `store::ProjectStore` bound to a `core::Document`) and the mutation contract: `Mutate`, the native `Transaction`, the script log. |
 | `errors.{h,cpp}` | `uzpainter.exception` and the translation of every C++ error into it. |
-| `jobs.{h,cpp}` | Worker jobs: one worker thread, `Job.wait` / `cancel`, `BusyError` checks. |
+| `jobs.{h,cpp}` | Worker jobs: one worker thread, `Job.wait` / `cancel`, `BusyError` checks; paused while engine computations are disabled. |
+| `dispatcher.{h,cpp}` | The Python dispatcher thread of `02-runtime-topology.md` §4 (§6 below). |
 | `stack_sync.{h,cpp}` | The `sync_stack` composite (LAY-07), `RemoveNode`, `ImportResource`. |
 | `script.{h,cpp}` | `RunScript`: a script file as `__main__`, its `result`, output, error, and the revisions it committed. |
 | `bindings.h`, `bind_*.cpp` | The modules: `bind_core` (`Result`, `last_result`, `Transaction`), `bind_color`, `bind_textureset`, `bind_resource`, `bind_layerstack` (with `source` and `levels`), `bind_project`, `bind_export` (with `jobs`), `bind_misc` (`logging`, `application`, `properties` and the later-phase modules). |
 
-`UzPainter.exe` links all of it statically, with the mesh importers. `uzp-pyapi-tests.exe` (`tests/python/pyapi_runner.cpp`) is the test runner: it runs one script and prints the `RunScript` report. It is installed beside the embeddable package, `assets/templates/` and `assets/export-presets/`. The `UzPainter.exe run` verb is phase1.22.
+`UzPainter.exe` links all of it statically, with the mesh importers. `uzp-pyapi-tests.exe` (`tests/python/pyapi_runner.cpp`) is the test runner: it runs one script, prints the `RunScript` report, then drains the dispatcher (§6) before the process ends. It is installed beside the embeddable package, `assets/templates/` and `assets/export-presets/`. The `UzPainter.exe run` verb is phase1.22.
 
 ## 2. Modules
 
@@ -23,6 +24,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 
 - **`project`.**
   - Lifecycle: `create(mesh_file_path, Settings(...))`, `open`, `close`, `is_open`.
+  - `reload_mesh(path, import_cameras=None, material_mapping={})`: one transaction over `mesh/reload.h`. Texture sets are matched by material, added sets get the default template's channels, and the new mesh's bytes are stored with the commit. Renamed, split or merged materials raise `MaterialMappingError` (a `ProjectError` whose `details` hold the proposal and the renames to pass back).
   - Saving: `save(ProjectSaveMode)`, `save_as`, `save_as_copy`, `revert(revision | checkpoint)`.
   - State: `revision()`, `checkpoints()`, `needs_saving()`, `file_path()`, `name()`, `get_uuid()`, `last_imported_mesh_path()`, `Metadata(context)`.
   - `dump_recipe()` raises `NotYetSupported` (phase2.2).
@@ -43,11 +45,14 @@ Module and class names follow Painter's documented API wherever a Painter symbol
   - `ResourceID` is `resource://project/<name>?version=<sha256>`; `Resource` and `Usage` go with it.
   - `import_project_resource` imports PNG files of usage TEXTURE; other usages and formats raise `NotYetSupported` naming their owner.
   - `list_project_resources`, `replace_node_resource(node, resource, channel=None)` (LAY-08), `update_layer_stack_resource`.
+  - `list_used_resources()`: the entries the layer stacks and mesh maps bind. `resource_origin(id)`: the file an entry was imported from.
 - **`export`.** `plan(config)` is the typed dry run. `list_project_textures(config)`, `start(config, fixed_names=[])` returns a `jobs.Job`, and `export_project_textures(config, fixed_names=[])` starts and waits (decision 105 §5).
-- **`jobs`.** `Job.id`, `.kind`, `.status`, `.progress`, `.wait(timeout=None)`, `.cancel()`, and `list()`.
+- **`jobs`.** `Job.id`, `.kind`, `.status`, `.progress`, `.wait(timeout=None)`, `.cancel()`, `list()`, and `busy()` (the id of a queued or running job, or None).
 - **`colormanagement`.** `Color(r, g, b, color_space=None)` keeps `value_raw` and the space as given. `GenericColorSpace`. `get_color_management()`.
 - **`exception`.** Painter's `ProjectError`, `ServiceNotFoundError`, `ResourceNotFoundError` and `EditionContextException`, plus `UnsupportedInUzPainter(symbol, reason, alternative)`, `NotYetSupported`, `UnsupportedProcedural`, `BusyError(job_id)`, `StaleRevisionError(expected, current)`, `AmbiguousNameError(message, candidates)` (a `ValueError`) and the mesh-import classes (`MeshParseError`, `UnsupportedFormat`, `DuplicateMaterialNames`, `UVOutsideTile`, `ReleaseGap`). Each is also exported by `uzpainter`.
 - **`logging`, `application`, `properties`.** Log lines go to the script's standard error; `version()` and `version_info()`; the `Property` type of procedural parameters, which no Phase 1 call returns.
+- **Engine computations (`application`).** `enable_engine_computations(enable)`, `engine_computations_status()` and the context manager `disable_engine_computations()`. While computations are disabled the job worker starts no queued job: an export is deferred, not dropped, and `jobs.busy()` names it until it ran.
+- **`event`.** The dispatcher thread (§6): `post(task)`, `flush()`, `drain()`, `hold()` / `release()`, `on_dispatcher_thread()` and `dispatcher_thread_id()`.
 - **Later phases.** `baking` (phase3.5), `render`, `render.shader`, `render.display`, `display` (phase2.3) and `diagnostics` (phase2.2) are importable. Every call raises `NotYetSupported` naming the owner before anything changes.
 - **Top level.** `Result`, `last_result()`, `Transaction(name)`.
 
@@ -96,3 +101,14 @@ The result's `returned["sync"]` lists the groups, layers, imported and skipped i
 - the export dry run, job errors and `BusyError`.
 
 `tests/python/test_pyapi_tier0.py` compares the native-owned Tier 0 readbacks with the private goldens on the owner's machine (decision 106).
+
+## 6. The dispatcher thread (phase1.21)
+
+`dispatcher.{h,cpp}` is the Python dispatcher thread of `02-runtime-topology.md` §4. The facade delivers `substance_painter.event` events and its callbacks through it (`python/FACADE.md` §9).
+
+- **Tasks.** `event.post(task)` queues a Python callable. The thread takes the GIL, calls the tasks in queue order and prints a task's error on the standard error. It never takes the document lock itself: a task that calls back into the API takes the lock inside that call, like any other thread.
+- **`flush()`.** Returns once every task queued before the call has run, with the GIL released while it waits. A synchronous operation posts its event and flushes, so the handlers run on the dispatcher thread before the operation returns. On the dispatcher thread itself (a handler that starts such an operation), `flush()` runs the queued tasks inline.
+- **`hold()` / `release()`.** An asynchronous operation in flight that will post later. `drain()` returns once the queue is empty and nothing is held. The host drains after the script returned, so deliveries of operations the script started outlive it.
+- **Lifetime.** The thread starts with the first task and lives as long as the process.
+
+Tests: `tests/python/test_pyapi_dispatcher.py` (every lane) and `tests/python/test_pyapi_lifecycle_tier0.py` (owner's machine). Local run report: `parity/reports/phase1/pyapi-dispatcher-lifecycle.md`.

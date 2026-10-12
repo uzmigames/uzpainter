@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "mesh/import_error.h"
+#include "mesh/reload.h"
 #include "store/container.h"
 #include "uzp_core/naming/naming.h"
 #include "uzp_core/types/errors.h"
@@ -96,6 +97,15 @@ class DuplicateMaterialNames(MeshParseError):
 
 class UVOutsideTile(MeshParseError):
     """UVs outside tile 1001 in the Default workflow."""
+
+
+class MaterialMappingError(ProjectError):
+    """A mesh reload found materials renamed, split or merged: details holds the proposal and the
+    renames to pass back as `material_mapping`."""
+
+    def __init__(self, message, details=None):
+        super().__init__(message)
+        self.details = details or {}
 
 
 class ReleaseGap(NotYetSupported):
@@ -193,6 +203,8 @@ void RegisterExceptions(py::module_& exception) {
             Raise(Class("ProjectError")(error.what()));
         } catch (const mesh::ImportError& error) {
             RaiseApiError(FromImportError(error));
+        } catch (const mesh::MaterialMappingError& error) {
+            Raise(Class(std::string(mesh::kMaterialMappingErrorClass))(error.what(), FromJson(error.details())));
         } catch (const store::StoreError& error) {
             const std::string message = "project store: " + std::string(store::CodeName(error.code())) + ": " + error.what();
             Raise(Class(error.code() == store::StoreError::Code::missing_resource ? "ResourceNotFoundError" : "ProjectError")(

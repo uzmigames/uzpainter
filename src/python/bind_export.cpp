@@ -169,6 +169,12 @@ void BindExport(py::module_& m, py::module_& jobs) {
             return "Job(" + j.job->id() + ", " + j.job->kind() + ", " + std::string(JobStatusName(j.job->status())) + ")";
         });
     SealClass(job);
+    jobs.def(
+        "busy", []() -> py::object {
+            const std::optional<std::string> job = JobEngine::Get().Busy();
+            return job ? py::object(py::str(*job)) : py::none();
+        },
+        "The id of a job that is queued (deferred included) or running, else None.");
     jobs.def("list", [] {
         std::vector<JobHandle> handles;
         for (auto& j : JobEngine::Get().List()) handles.push_back({j});

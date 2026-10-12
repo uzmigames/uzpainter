@@ -1,9 +1,9 @@
 # The `substance_painter` compatibility facade (`python/`)
 
-Task `phase1.20_pyapi-facade` (child of `phase1.24_python-api-facade`, P1-PYAPI). It implements the facade of `docs/architecture/10-python-api.md` §0, §1, §3 and §4 under decisions 107 and 108.
+Task `phase1.20_pyapi-facade` (child of `phase1.24_python-api-facade`, P1-PYAPI). It implements the facade of `docs/architecture/10-python-api.md` §0, §1, §3 and §4 under decisions 107 and 108. Task `phase1.21_pyapi-dispatcher-lifecycle` adds Painter's asynchronous host (§9; decisions 109 and 110).
 
-- Tests: `tests/python/test_pyapi_facade.py` runs in every lane. `tests/python/test_pyapi_facade_tier0.py` runs on the owner's machine.
-- Local run report: `parity/reports/phase1/pyapi-facade.md`.
+- Tests: `tests/python/test_pyapi_facade.py` and `test_pyapi_dispatcher.py` run in every lane. `tests/python/test_pyapi_facade_tier0.py` and `test_pyapi_lifecycle_tier0.py` run on the owner's machine.
+- Local run reports: `parity/reports/phase1/pyapi-facade.md`, `parity/reports/phase1/pyapi-dispatcher-lifecycle.md`.
 
 ## 1. Shape
 
@@ -11,7 +11,7 @@ Task `phase1.20_pyapi-facade` (child of `phase1.24_python-api-facade`, P1-PYAPI)
 |---|---|
 | `substance_painter/` | Painter's documented modules. Each one only re-exports names, so a module holds documented symbols and nothing else. `__version__ = "0.3.7"` and `_version.py` give the API level (10 §4 Versions row). `_version` is the one private name. |
 | `substance_painter_plugins/` | `path`, `plugins`, `start_plugin`, `close_plugin`, `is_plugin_started`, `reload_plugin`, `startup_module_names`, `plugin_module_names`, `load_startup_modules`, `close_all_plugins`, `update_sys_path`. They load non-UI `startup/`, `plugins/` and `modules/` folders (`uzpainter_facade/plugins.py`). |
-| `uzpainter_facade/` | The implementation, pure Python over the native `uzpainter` (`src/python/PYAPI.md`): `state` (per-interpreter state, one transaction per call), `colour`, `nodes` (layerstack and source), `textureset`, `resource`, `project`, `export`, `levels`, `js`, `ui`, `event`, `plugins`. |
+| `uzpainter_facade/` | The implementation, pure Python over the native `uzpainter` (`src/python/PYAPI.md`): `state` (per-interpreter state, one transaction per call), `host` (busy, edition and engine-computation state, §9), `event` (the event classes and the dispatcher), `colour`, `nodes` (layerstack and source), `textureset`, `resource`, `project`, `export`, `levels`, `js`, `ui`, `async_utils`, `plugins`. |
 
 `zig build pyapi-tests` and `zig build painter` install the `.py` files into `bin/python/`. That folder is on the embedded interpreter's search path (`src/python/python313._pth`).
 
@@ -91,7 +91,30 @@ These raise `UnsupportedInUzPainter(symbol, reason, alternative)`:
 
 ## 8. Not here
 
-These belong to `phase1.21_pyapi-dispatcher-lifecycle`:
-- the asynchronous lifecycle, events, `is_busy`, `execute_when_not_busy` and the computation state;
-- Painter's discard-on-close;
-- the `create` arguments the native project does not take yet.
+- `create(mesh_map_file_paths=...)`: Painter's binding of a map file name to a texture set and usage is unrecorded (recording P21-A, decision 110).
+- `create(template_file_path=...)`: a project does not record its template, so exports would use the default template's base values (phase1.24_python-api-facade, decision 110).
+- `Settings.default_save_path` and `export_path`: no documented call reads them back and what an export without `exportPath` writes is unrecorded (recording P21-B).
+
+## 9. Painter's asynchronous host (phase1.21; decisions 109 and 110)
+
+Each row comes from a Tier 0 recording and is compared exactly by `test_pyapi_lifecycle_tier0.py`. Handlers and facade callbacks run on the native dispatcher thread (`src/python/PYAPI.md` §6), never under the document lock. A transition changes the state first and then delivers its event, so each handler reads the state Painter's handler read.
+
+| Operation | Events, with what a handler reads (open, edition, busy) | Returns |
+|---|---|---|
+| `create`, `open` | `BusyStatusChanged(1)` (F, F, T) → `BusyStatusChanged(0)` (T, F, F) → `ProjectCreated` / `ProjectOpened` (T, F, F) → `ProjectEditionEntered` (T, T, F) | Once in edition. Painter's polls saw the project ready right after the call, 4 times out of 4 (`lifecycle-events`); whether Painter's call itself waits is unrecorded (recording P21-F, decision 109). |
+| `close` | `ProjectEditionLeft` (T, F, F) → `BusyStatusChanged(1)` (T, F, T) → `ProjectAboutToClose` (T, F, T) → `ProjectClosed` (F, F, T) → `BusyStatusChanged(0)` (F, F, F) | After the events. What was not saved is discarded: the project returns to its last save, so reopening gives the saved content with nothing to save. |
+| `save`, `save_as`, `save_as_copy` | `ProjectAboutToSave(file_path)` → `ProjectSaved`, delivered during the call | After the events. Refused with `ProjectError` while busy. |
+| `export_project_textures` | `BusyStatusChanged(1)` → `ExportTexturesAboutToStart` → `ExportTexturesEnded` → `BusyStatusChanged(0)` | After the events. The export events' place in that window is unrecorded (decision 110). |
+| `reload_mesh` | After the call: `ProjectEditionLeft` → `BusyStatusChanged(1)` → `BusyStatusChanged(0)` → `ProjectEditionEntered`, then `loading_status_cb(ReloadMeshStatus.SUCCESS / ERROR)`. A missing file gives only `ERROR`. | At once (`phase1-reload-mesh`). |
+| `execute_when_not_busy(cb)` | Idle: `cb()` during the call. Busy: right after `BusyStatusChanged(0)`, before anything else the operation delivers. | `phase1-execute-when-not-busy` s8 and s10. |
+| `reload_modified_resources_async(filter)` | `ReloadResourcesStarted(filter)` during the call; `ReloadResourcesEnded(filter, reloaded, errors)` after it. Returns False while a reload runs. | True at once (`phase1-reload-resources`). |
+| `enable_engine_computations`, `disable_engine_computations()` | `EngineComputationsStatusChanged(enabled)` on each change. While disabled, an export waits, busy, until computations are enabled again. | After the event. |
+| `insert_fill` (layer or effect), `insert_group`, `set_name`, `delete_node`, `add_mask` | `LayerStacksModelDataChanged`, during the call. `active_channels` and `set_source` emit nothing, as recorded. Every other edit call is unrecorded and emits nothing (recording P21-E, decision 110). | — |
+
+- **`is_busy()`** is true from the first `BusyStatusChanged(1)` to the last `BusyStatusChanged(0)`. Busy sections nest: a create, open or close, a mesh reload, an export.
+- **`is_in_edition_state()`** is true from `ProjectEditionEntered` to `ProjectEditionLeft`, and false (not an error) while no project is open, as Painter answers.
+- **`BusyStatusChanged.busy`** is `1` or `0`, as Painter delivers it (`busy_argument` of every recording).
+- **Resource reload.** A resource is modified when the bytes of the file it was imported from match none of the versions its name holds. The reload imports them as a new version under the same name and leaves every binding as it was. Painter's second recording also reloads unchanged bytes; that residual is named in decision 110.
+- **Shelves.** `Shelves.add(name, path)` adds a folder of user files for the session. `Shelf.refresh()` and `Shelves.refresh_all()` crawl it on a worker thread between `ShelfCrawlingStarted` and `ShelfCrawlingEnded`, and `is_crawling()` is true meanwhile. `application_shelf`, `user_shelf` (recording P21-D), `resources`, `import_resource` and `can_import_resources` (phase3.3_procedural-families) raise `NotYetSupported`.
+- **Connectable, emitted later.** `BakingProcessAboutToStart/Progress/Ended` (phase3.5_embree-bakers), `CameraPropertiesChanged` and `TextureStateEvent` (phase2.3_realtime-preview). `TextureStateEvent`'s throttling period reads back what was set; its default is unrecorded (recording P21-C).
+- **`async_utils.StopSource`**: `request_stop()` and `stop_requested()` over a state its operation shares.

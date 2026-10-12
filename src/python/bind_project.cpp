@@ -1,13 +1,25 @@
-// `uzpainter.project`: create, open, close, the save modes, revert, revisions and metadata over the
-// project store (session.h).
+// `uzpainter.project`: create, open, close, the save modes, revert, the mesh reload, revisions and
+// metadata over the project store (session.h).
 //
 // The store commits every call durably (09-project-file-format.md §4): `save` marks the current
 // revision as a named checkpoint (`ProjectSaveMode.Full` also compacts the file), `needs_saving()`
 // is "the current revision is not the last named checkpoint", and reopening a file gives its
 // current revision. A project created from a mesh has no file path until `save_as`.
+//
+// `reload_mesh(path)` is one transaction (`mesh/reload.h`): the current mesh is re-derived from its
+// stored bytes, the new file is imported and the texture sets are matched by material; the new
+// mesh's bytes are stored with the commit. Texture sets the reload adds get the default template's
+// channels, as `create` gives them. A refused reload commits nothing and raises its typed error.
 
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <map>
+#include <optional>
 
+#include "evaluator/templates.h"
+#include "mesh/mesh_import.h"
+#include "mesh/reload.h"
 #include "python/bindings.h"
 #include "python/errors.h"
 
@@ -27,6 +39,44 @@ std::filesystem::path PathOf(const std::string& text) { return PathFromUtf8(text
 struct Metadata {
     std::string context;
 };
+
+/// `reload_mesh`: see above. Returns the call's result (`returned["reload"]` is the report).
+CallResult ReloadMesh(const std::string& mesh_file_path, std::optional<bool> import_cameras,
+                      const std::map<std::string, std::string>& material_mapping) {
+    if (Session::Get().TransactionOpen()) {
+        throw ApiError("RuntimeError", "reload_mesh replaces the committed mesh: commit the open Transaction first");
+    }
+    const std::shared_ptr<OpenProject> project = Session::Get().Current();
+    const std::filesystem::path path = PathOf(mesh_file_path);
+    std::ifstream file(path, std::ios::binary);
+    if (!file) ThrowProjectError("cannot read " + mesh_file_path);
+    const std::string bytes{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+
+    const evaluator::TemplateLibrary templates =
+        evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
+    const evaluator::ProjectTemplate* fresh = templates.Find(evaluator::kDefaultTemplateId);
+    if (fresh == nullptr) throw ApiError("RuntimeError", "the default project template is not installed");
+    mesh::ReloadSettings settings;
+    settings.import.mesh_unit_scale = project->document->snapshot().project->settings.mesh_unit_scale;
+    settings.material_mapping = material_mapping;
+    settings.new_set_channels = fresh->StackChannels();
+
+    store::ProjectStore* store = project->store.get();
+    const mesh::ResourceReader read = [store](const std::string& sha256) { return store->ReadResource(sha256); };
+    const mesh::MeshSource source{Utf8(path), NowUtc()};
+    core::json::Object arguments{{"mesh", Utf8(path.filename())}};
+    if (import_cameras) arguments["import_cameras"] = *import_cameras;
+    CallResult result = Mutate("project.reload_mesh", std::move(arguments), [&](core::Edit& edit) {
+        const mesh::ImportResult current = mesh::RederiveMesh(edit.base(), read);
+        const mesh::ImportResult next =
+            mesh::ImportMesh(bytes, Utf8(path.filename()), settings.import, path.parent_path());
+        store->StageResource(bytes, std::string(mesh::MimeOf(next.format)));
+        mesh::ApplyReload(edit, current, next, source, settings);
+        if (import_cameras) edit.project().settings.import_cameras = *import_cameras;
+    });
+    project->mesh_path = Utf8(path);
+    return result;
+}
 
 py::dict CheckpointsDict(const core::Checkpoints& c) {
     py::dict out;
@@ -84,6 +134,17 @@ void BindProject(py::module_& m) {
         Session::Get().Close();
     });
     m.def("is_open", [] { return Session::Get().IsOpen(); });
+    m.def(
+        "reload_mesh",
+        [](const std::string& path, std::optional<bool> import_cameras,
+           const std::map<std::string, std::string>& material_mapping) {
+            return ResultObject(ReloadMesh(path, import_cameras, material_mapping));
+        },
+        py::arg("mesh_file_path"), py::arg("import_cameras") = py::none(),
+        py::arg("material_mapping") = std::map<std::string, std::string>{},
+        "Replaces the project's mesh, keeping the texture sets matched by material (one transaction); "
+        "`material_mapping` accepts renames (current name -> new name). Returns the Result; "
+        "`returned['reload']` is the report.");
     m.def(
         "save",
         [](ProjectSaveMode mode) {

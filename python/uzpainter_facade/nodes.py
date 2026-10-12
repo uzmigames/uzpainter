@@ -20,20 +20,40 @@ Painter's quirks reproduced here, each from a Tier 0 api-probe golden:
 Each facade call commits one revision (`state.one_transaction`); `ScopedModification` groups calls
 without rolling back. Nothing evaluates until an export asks for it, so there is no per-call
 invalidation to batch.
+
+`LayerStacksModelDataChanged` is delivered before the call returns by the calls the Tier 0 R10
+probes record emitting it: `insert_fill` (layer or effect), `insert_group`, `set_name`,
+`delete_node` and `add_mask` (`structural`). The recorded silent ones stay silent
+(`active_channels`, `set_source`); every other edit call is unrecorded, emits nothing, and is
+named with its recording P21-E in decision 110.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import enum
-from collections.abc import Iterable
+import functools
+from collections.abc import Callable, Iterable
 from typing import Any
 
 import uzpainter
 
-from uzpainter_facade import colour, levels, resource
+from uzpainter_facade import colour, event, levels, resource
 from uzpainter_facade.state import SESSION, edits, one_transaction
 from uzpainter_facade.textureset import Stack, TextureSet, native_of
+
+
+def structural[F: Callable[..., Any]](function: F) -> F:
+    """Marks a call Painter answers with `LayerStacksModelDataChanged` once it is committed."""
+
+    @functools.wraps(function)
+    def call(*args: Any, **kwargs: Any) -> Any:
+        result = function(*args, **kwargs)
+        event.emit_sync(event.LayerStacksModelDataChanged())
+        return result
+
+    return call  # type: ignore[return-value]
+
 
 LAYERSTACK = "substance_painter.layerstack"
 SOURCE = "substance_painter.source"
@@ -296,6 +316,7 @@ class Node:
         return str(self._native().get_name())
 
     @edits
+    @structural
     def set_name(self, name: str) -> None:
         self._native().set_name(name)
 
@@ -358,6 +379,7 @@ class LayerNode(Node):
         return bool(self._native().has_mask())
 
     @edits
+    @structural
     def add_mask(self, mask_background: Any) -> None:
         native = self._native()
         if native.has_mask():
@@ -791,6 +813,7 @@ def insert(
 
 
 @edits
+@structural
 def insert_fill(position: Any) -> Any:
     stack = check_position(position, Kind.EITHER)
     with one_transaction("layerstack.insert_fill"):
@@ -813,6 +836,7 @@ def insert_paint(position: Any) -> Any:
 
 
 @edits
+@structural
 def insert_group(position: Any) -> Any:
     check_position(position, Kind.LAYER)
     with one_transaction("layerstack.insert_group"):
@@ -875,6 +899,7 @@ def insert_smart_mask(position: Any, smart_mask: Any) -> Any:
 
 
 @edits
+@structural
 def delete_node(node: Any) -> None:
     uid = node.uid()
     _ls.delete_node(native_node(node))

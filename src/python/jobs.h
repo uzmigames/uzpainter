@@ -13,6 +13,10 @@
 //
 // Statuses: `queued`, `running`, `succeeded`, `failed`, `cancelled`. `progress` is 0 until the job
 // reports otherwise and 1 when it succeeded.
+//
+// Engine computations (`application.enable_engine_computations`, phase1.21): while they are
+// disabled the worker starts no queued job, so an evaluation request is deferred, not dropped, and
+// `Busy` keeps naming it; enabling them again releases the backlog in submission order.
 
 #include <chrono>
 #include <condition_variable>
@@ -97,6 +101,9 @@ public:
     std::vector<std::shared_ptr<Job>> List() const;
     /// A job that is queued or running, if any.
     std::optional<std::string> Busy() const;
+    /// Engine computations: while paused, queued jobs wait (see above).
+    void SetPaused(bool paused);
+    bool Paused() const;
 
 private:
     JobEngine() = default;
@@ -108,6 +115,7 @@ private:
     std::vector<std::shared_ptr<Job>> jobs_;
     std::uint64_t next_ = 1;
     bool started_ = false;
+    bool paused_ = false;
 };
 
 }  // namespace uzp::python

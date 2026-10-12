@@ -13,6 +13,7 @@
 
 #include <pybind11/embed.h>
 
+#include "python/dispatcher.h"
 #include "python/interpreter.h"
 #include "python/script.h"
 #include "python/session.h"
@@ -36,6 +37,10 @@ int main(int argc, char** argv) {
         std::printf("%s\n", uzp::core::json::WriteCanonical(report).c_str());
         std::fflush(stdout);
         status = std::get<std::string>(report.at("status").data) == "ok" ? 0 : 1;
+        // Events and callbacks of operations the script started are still delivered after it
+        // returned (10-python-api.md §4): the process ends once the dispatcher has drained.
+        pybind11::gil_scoped_release release;
+        uzp::python::Dispatcher::Get().Drain();
     }
     // A project the script left open is closed (its lock released, an untitled folder removed)
     // unless a job still uses it; the process then ends without finalizing the interpreter, whose

@@ -12,17 +12,34 @@ imports a file and keeps it in the project Metadata context `uzpainter.facade` (
 save and reopen. A binding keeps, for this session, the context of the identifier it was given
 (Painter's `textureset-project-readback` s11 after reopen); a reopened project's resources read
 back in the new context.
+
+Resource reload and shelves (phase1.21, decision 110):
+- `reload_modified_resources_async(filter)` delivers `ReloadResourcesStarted(filter)` before it
+  returns True, then reloads on a worker thread and delivers `ReloadResourcesEnded(filter,
+  reloaded_resources, resource_errors)` (Tier 0 `phase1-reload-resources`). A resource is modified
+  when the bytes of the file it was imported from match none of the versions its name holds; the
+  reload imports them as a new version under the same name and leaves every binding as it was
+  ("this does not update the resources currently used in the project document"). Painter also
+  reported a reload of unchanged bytes after save and reopen; that residual is named in decision
+  110, not reproduced.
+- Shelves are folders of user files the script adds (`Shelves.add`). `refresh` crawls the folder
+  on a worker thread between `ShelfCrawlingStarted` and `ShelfCrawlingEnded`. The application and
+  user shelves, whose Painter names are unrecorded, and the resources of a shelf are release gaps.
 """
 
 from __future__ import annotations
 
 import hashlib
+import os
+import re
+import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import uzpainter
 
+from uzpainter_facade import event
 from uzpainter_facade.state import RESOURCE_KEY, RESOURCE_METADATA, SESSION, edits, one_transaction
 
 MODULE = "substance_painter.resource"
@@ -196,3 +213,282 @@ def show_resources_in_ui(resources: Any) -> None:
         "script-visible state, and UzPainter has no desktop UI",
         "resource.list_project_resources() to enumerate them",
     )
+
+
+# ── Resource reload ─────────────────────────────────────────────────────────────────────────────
+
+
+class AllResourcesFilter:
+    """Filter used to reload all modified resources known to UzPainter."""
+
+
+class ProjectFilter:
+    """Filter used to reload modified resources contained in the project context."""
+
+
+class ResourcesListFilter:
+    """Filter used to reload modified resources amongst a given list of resources."""
+
+    def __init__(self, resources: list[ResourceID]) -> None:
+        self.resources = list(resources)
+
+
+class ResourcesUsedByProjectFilter:
+    """Filter used to reload modified resources currently in use by the project."""
+
+
+class SessionFilter:
+    """Filter used to reload modified resources contained in the session."""
+
+
+class ShelvesListFilter:
+    """Filter used to reload modified resources contained in designated shelves."""
+
+    def __init__(self, shelves: list[Any]) -> None:
+        self.shelves = list(shelves)
+
+
+FILTERS = (
+    AllResourcesFilter,
+    ProjectFilter,
+    ResourcesListFilter,
+    ResourcesUsedByProjectFilter,
+    SessionFilter,
+    ShelvesListFilter,
+)
+_RELOAD = {"running": False}
+_RELOAD_LOCK = threading.Lock()
+
+
+def is_reload_modified_resources_running() -> bool:
+    """Whether a reload modified resources operation is currently running."""
+    return _RELOAD["running"]
+
+
+def _candidates(resource_filter: Any) -> list[Any]:
+    """The imported project resources `resource_filter` names (the mesh is reloaded by
+    `project.reload_mesh`; session and shelf resources are not project resources, and UzPainter
+    holds none to reload)."""
+    if not uzpainter.project.is_open():
+        return []
+    if isinstance(resource_filter, (AllResourcesFilter, ProjectFilter)):
+        natives = list(uzpainter.resource.list_project_resources())
+    elif isinstance(resource_filter, ResourcesUsedByProjectFilter):
+        natives = list(uzpainter.resource.list_used_resources())
+    elif isinstance(resource_filter, ResourcesListFilter):
+        natives = [to_native(identifier) for identifier in resource_filter.resources]
+    else:
+        return []
+    imported = facts()
+    return [native for native in natives if native.version in imported]
+
+
+def reload_modified_resources_async(resource_filter: Any) -> bool:
+    """Reload the modified resources the filter names; False when a reload already runs."""
+    if not isinstance(resource_filter, FILTERS):
+        raise ValueError("the resource filter is not of a known type")
+    if isinstance(resource_filter, ResourcesListFilter):
+        problems = []
+        for identifier in resource_filter.resources:
+            try:
+                to_native(identifier)
+            except (TypeError, uzpainter.ResourceNotFoundError) as error:
+                problems.append(str(error))
+        if problems:
+            raise ValueError(problems)
+    with _RELOAD_LOCK:
+        if _RELOAD["running"]:
+            return False
+        _RELOAD["running"] = True
+    try:
+        candidates = _candidates(resource_filter)
+        context = SESSION.context()
+        event.emit_sync(event.ReloadResourcesStarted(resource_filter))
+        uzpainter.event.hold()
+        worker = threading.Thread(
+            target=_reload_resources,
+            args=(resource_filter, candidates, context),
+            name="uzpainter-reload-resources",
+            daemon=True,
+        )
+        worker.start()
+    except BaseException:
+        _RELOAD["running"] = False
+        raise
+    return True
+
+
+def _reload_resources(resource_filter: Any, candidates: list[Any], context: str) -> None:
+    """The reload's worker: one import per modified resource, then `ReloadResourcesEnded`."""
+    reloaded: list[event.ReloadedResourceResult] = []
+    errors: list[event.ReloadedResourceError] = []
+    try:
+        versions: dict[str, set[str]] = {}
+        for native in uzpainter.resource.list_project_resources():
+            versions.setdefault(native.name, set()).add(native.version)
+        seen: set[tuple[str, str]] = set()
+        for native in candidates:
+            old = from_native(native, context)
+            origin = uzpainter.resource.resource_origin(native)
+            if origin is None or (native.name, origin) in seen:
+                continue
+            seen.add((native.name, origin))
+            try:
+                data = Path(origin).read_bytes()
+            except OSError as error:
+                errors.append(event.ReloadedResourceError(old, f"cannot read {origin}: {error}"))
+                continue
+            if hashlib.sha256(data).hexdigest() in versions.get(native.name, set()):
+                continue
+            try:
+                new = import_project_resource(origin, Usage.TEXTURE, native.name)
+            except Exception as error:  # reported in the event, as Painter
+                errors.append(event.ReloadedResourceError(old, f"{type(error).__name__}: {error}"))
+                continue
+            reloaded.append(event.ReloadedResourceResult(old, new.identifier()))
+    finally:
+        _RELOAD["running"] = False
+        try:
+            event.emit_sync(event.ReloadResourcesEnded(resource_filter, reloaded, errors))
+        finally:
+            uzpainter.event.release()
+
+
+# ── Shelves ─────────────────────────────────────────────────────────────────────────────────────
+
+SHELF_NAME = re.compile(r"^[a-z0-9_-]+$")
+SHELF_GAP = "phase3.3_procedural-families: shelf resources are procedural content"
+# Shelves the script added: name -> {"path": folder, "crawling": bool}.
+_SHELVES: dict[str, dict[str, Any]] = {}
+
+
+def _crawl(name: str) -> None:
+    """Walks a shelf's folder on a worker thread between the crawling events."""
+    shelf = _SHELVES[name]
+    shelf["crawling"] = True
+    uzpainter.event.hold()
+
+    def walk() -> None:
+        try:
+            event.emit_sync(event.ShelfCrawlingStarted(name))
+            shelf["files"] = sorted(
+                os.path.relpath(os.path.join(folder, file), shelf["path"])
+                for folder, _, files in os.walk(shelf["path"])
+                for file in files
+            )
+        finally:
+            shelf["crawling"] = False
+            try:
+                event.emit_sync(event.ShelfCrawlingEnded(name))
+            finally:
+                uzpainter.event.release()
+
+    try:
+        threading.Thread(target=walk, name=f"uzpainter-shelf-{name}", daemon=True).start()
+    except BaseException:
+        shelf["crawling"] = False
+        uzpainter.event.release()
+        raise
+
+
+class Shelf:
+    """A shelf of resources, identified by a unique name."""
+
+    __slots__ = ("_name",)
+
+    def __init__(self, _name: str) -> None:
+        self._name = _name
+
+    def name(self) -> str:
+        return self._name
+
+    def path(self) -> str:
+        if self._name not in _SHELVES:
+            raise ValueError(f"the shelf {self._name!r} doesn't exist")
+        return str(_SHELVES[self._name]["path"])
+
+    def is_crawling(self) -> bool:
+        return bool(self._name in _SHELVES and _SHELVES[self._name]["crawling"])
+
+    def refresh(self) -> None:
+        """Forces discovering of resources in the shelf's folder."""
+        if self._name not in _SHELVES:
+            raise ValueError(f"the shelf {self._name!r} doesn't exist")
+        _crawl(self._name)
+
+    def can_import_resources(self) -> bool:
+        raise uzpainter.NotYetSupported(
+            f"Shelf.can_import_resources is a release gap ({SHELF_GAP})"
+        )
+
+    def import_resource(self, *args: Any, **kwargs: Any) -> Resource:
+        raise uzpainter.NotYetSupported(f"Shelf.import_resource is a release gap ({SHELF_GAP})")
+
+    def resources(self, query: str = "") -> list[Resource]:
+        raise uzpainter.NotYetSupported(f"Shelf.resources is a release gap ({SHELF_GAP})")
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Shelf) and other._name == self._name
+
+    def __hash__(self) -> int:
+        return hash(self._name)
+
+    def __repr__(self) -> str:
+        return f"Shelf({self._name!r})"
+
+
+class Shelves:
+    """Collection of static methods to manipulate shelves."""
+
+    @staticmethod
+    def add(name: str, path: str) -> Shelf:
+        """Add a shelf of the folder `path` for this session."""
+        if not isinstance(name, str) or not SHELF_NAME.match(name):
+            raise ValueError(
+                f"invalid shelf name {name!r}: lowercase letters, numbers, underscores or hyphens"
+            )
+        if name in _SHELVES:
+            raise ValueError(f"a shelf named {name!r} already exists")
+        if not os.path.isdir(path):
+            raise ValueError(f"the shelf folder {path!r} does not exist")
+        _SHELVES[name] = {"path": os.path.abspath(path), "crawling": False, "files": []}
+        return Shelf(name)
+
+    @staticmethod
+    def all() -> list[Shelf]:
+        return [Shelf(name) for name in _SHELVES]
+
+    @staticmethod
+    def application_shelf() -> Shelf:
+        raise uzpainter.NotYetSupported(
+            "Shelves.application_shelf is a release gap: Painter's shelf names are unrecorded "
+            "(recording P21-D, decision 110)"
+        )
+
+    @staticmethod
+    def user_shelf() -> Shelf:
+        raise uzpainter.NotYetSupported(
+            "Shelves.user_shelf is a release gap: Painter's shelf names are unrecorded "
+            "(recording P21-D, decision 110)"
+        )
+
+    @staticmethod
+    def exists(name: str) -> bool:
+        return name in _SHELVES
+
+    @staticmethod
+    def refresh_all() -> None:
+        for name in list(_SHELVES):
+            _crawl(name)
+
+    @staticmethod
+    def remove(name: str) -> None:
+        if uzpainter.project.is_open():
+            raise uzpainter.ProjectError("a shelf cannot be removed while a project is open")
+        if name not in _SHELVES:
+            raise ValueError(f"the shelf {name!r} doesn't exist")
+        del _SHELVES[name]
+
+
+for _shelf_cls in (*FILTERS, Shelf, Shelves):
+    _shelf_cls.__module__ = MODULE

@@ -1,0 +1,14 @@
+{
+  "id": 109,
+  "slug": "the-facade-reproduces-painter-s-recorded-host-create-and-open-return-in-edition-and-every-event-is-delivered-on-the-dispatcher-thread",
+  "title": "The facade reproduces Painter's recorded host: create and open return in edition, and every event is delivered on the dispatcher thread",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.21_pyapi-dispatcher-lifecycle",
+    "phase1.20_pyapi-facade",
+    "phase1.19_pyapi-native-module",
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}
