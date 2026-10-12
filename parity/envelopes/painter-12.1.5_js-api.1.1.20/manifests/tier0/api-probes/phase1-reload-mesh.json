@@ -193,5 +193,90 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "ce7a4c2f59e36a6d7e7991e216376d5cd2aa87ebcd997c7812ba5f26e65ed8a1",
+      "size_bytes": 30218
+    },
+    {
+      "record_id": "r1-s0-basecolor",
+      "kind": "exported_map",
+      "sha256": "3901718d3ecae40616f1aa3857ccc11dcd0bd382313bf4aac24ce12f1153110e",
+      "size_bytes": 1013
+    },
+    {
+      "record_id": "r1-s1-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r1-s2-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r1-s3-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r2-s0-basecolor",
+      "kind": "exported_map",
+      "sha256": "3901718d3ecae40616f1aa3857ccc11dcd0bd382313bf4aac24ce12f1153110e",
+      "size_bytes": 1013
+    },
+    {
+      "record_id": "r2-s1-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r2-s2-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r2-s3-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r2-s4-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r2-s5-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r2-s6-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "r2-s7-basecolor",
+      "kind": "exported_map",
+      "sha256": "6ae3f30315b8fa556cd1989c4ecac6b817d1ba51b3961ed1aa19858e5cc032aa",
+      "size_bytes": 1008
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "6c93cbf6b1fa3bab4d30f7987be851c8371b662e452b63222b07858feba71eea",
+      "size_bytes": 402
+    }
+  ]
 }
