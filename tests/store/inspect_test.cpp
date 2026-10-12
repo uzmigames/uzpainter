@@ -434,7 +434,9 @@ void InspectWhileLocked() {
 
     // The recipe dump of the current revision, read the same way (phase2.1_recipe-dump-manifest-blocks
     // 3.3): the report's digest is the dump's, and `inspect --recipe` prints the dump.
-    const RecipeHost host{"0.0.0-test", [](std::string_view, ChannelType) { return std::array<float, 3>{0.5f, 0.5f, 0.5f}; }};
+    const RecipeHost host{"0.0.0-test", [](std::string_view, ChannelType, ChannelFormat) {
+                              return std::array<float, 3>{0.5f, 0.5f, 0.5f};
+                          }};
     const json::Object dump = InspectRecipe(f.path, std::nullopt, host);
     CHECK(dump.at("revision") == At(plain, "revision.current"));
     CHECK(dump.at("digest") == json::Value(RecipeDigest(std::get<json::Object>(dump.at("recipe").data))));

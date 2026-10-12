@@ -696,12 +696,18 @@ void ResultHeader() {
 
 // ── Recipe dump and rebuild (phase2.1_recipe-dump-manifest-blocks, decision 122) ────────────
 
-/// A host whose base values differ per channel and template, with a float32 third.
+/// A host whose base values differ per channel, format and template, with a float32 third, and
+/// which knows no Metallic default outside L8 (a format-restricted default, decision 126).
 RecipeHost TestHost() {
-    return {"9.9.9-test", [](std::string_view template_id, ChannelType type) -> std::array<float, 3> {
+    return {"9.9.9-test",
+            [](std::string_view template_id, ChannelType type, ChannelFormat format) -> std::array<float, 3> {
                 if (template_id == "unknown") throw ValueError("no project template 'unknown' is installed");
+                if (type == ChannelType::Metallic && format != ChannelFormat::L8) {
+                    throw ValueError("no Metallic default outside L8");
+                }
                 const float k = static_cast<float>(static_cast<int>(type)) / 7.0f;
-                return {k, template_id == "default" ? 0.5f : 0.25f, 1.0f / 3.0f};
+                const float f = format == ChannelFormat::sRGB8 ? 1.0f / 3.0f : 1.0f / 5.0f;
+                return {k, template_id == "default" ? 0.5f : 0.25f, f};
             }};
 }
 
@@ -801,9 +807,14 @@ void RecipeDumpFields() {
     // Effective defaults: every stack channel carries the host's float32 base value.
     const json::Object& channels = O(Stack0(body).at("channels"));
     CHECK(channels.size() == 6);
-    const json::Array& roughness = A(O(channels.at("Roughness")).at("base"));
+    const json::Array& roughness = A(O(channels.at("Roughness")).at("base"));  // L8
     CHECK(roughness[1] == json::Value(0.5));
-    CHECK(roughness[2] == json::Value(static_cast<double>(1.0f / 3.0f)));
+    CHECK(roughness[2] == json::Value(static_cast<double>(1.0f / 5.0f)));
+    // The host saw each channel's format: sRGB8 BaseColor, and a Metallic default it knows for L8 only.
+    CHECK(A(O(channels.at("BaseColor")).at("base"))[2] == json::Value(static_cast<double>(1.0f / 3.0f)));
+    Project metallic16 = BuildFixture(false);
+    metallic16.texture_sets[0].stacks[0].channels.at(ChannelType::Metallic).format = ChannelFormat::L16;
+    CHECK(Contains(EXPECT_THROW(ValueError, RecipeBody(metallic16, TestHost().base_value)), "outside L8"));
 
     // References are pointers inside the texture set: root 0 instances root 1, root 3 references
     // Base's anchor (root 5, content effect 5).
@@ -971,7 +982,7 @@ void RecipeRebuild() {
     MO(MO(tampered)["recipe"])["evaluator_profile"] = "painter-12.1-isolated-linear";
     CHECK(Contains(EXPECT_THROW(ManifestError, ProjectFromRecipe(tampered, host)), "digest"));
     RecipeHost other = host;
-    other.base_value = [](std::string_view, ChannelType) { return std::array<float, 3>{0.0f, 0.0f, 0.0f}; };
+    other.base_value = [](std::string_view, ChannelType, ChannelFormat) { return std::array<float, 3>{0.0f, 0.0f, 0.0f}; };
     CHECK(Contains(EXPECT_THROW(ValueError, ProjectFromRecipe(json::Value(dump), other)), "base value"));
     json::Value dangling = dump;
     json::Object& body = MO(MO(dangling)["recipe"]);

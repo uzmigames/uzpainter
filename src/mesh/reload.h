@@ -144,11 +144,12 @@ struct ReloadOutcome {
 ReloadReport ApplyReload(core::Edit& edit, const ImportResult& current, const ImportResult& next,
                          const MeshSource& source, const ReloadSettings& settings);
 
-/// A file the current mesh reads beside it is neither stored nor readable: the mesh is a glTF of a
-/// project written before a mesh's external files were stored (its import report has no
-/// `core::kMeshExternalFiles`), and the file is gone from beside its origin, or the caller reads
-/// stored files only. `ReloadMesh` then replaces the mesh without re-deriving it
-/// (`ApplyReloadWithoutCurrent`).
+/// The old geometry cannot be recovered: the current mesh is a glTF of a project written before a
+/// mesh's external files were stored (its import report has no `core::kMeshExternalFiles`), and a
+/// file it reads beside its origin is gone, or altered so that the mesh no longer gives the
+/// recorded geometry, or the caller reads stored files only. `ReloadMesh` then replaces the mesh
+/// without re-deriving it (`ApplyReloadWithoutCurrent`). A stored file or mesh whose bytes do not
+/// give the recorded geometry is corruption: `core::ValueError`.
 class MeshFileMissing : public core::ValueError {
 public:
     using core::ValueError::ValueError;
@@ -159,7 +160,8 @@ public:
 /// buffers are the stored resources its report lists (`core::kMeshExternalFiles`). A report
 /// written before they were stored lists none: its files are read beside the resource's `origin`,
 /// as that version did, when `beside_origin` (`MeshFileMissing` when one is gone, or always
-/// without `beside_origin`); the re-derived hashes are checked either way. Throws
+/// without `beside_origin`, or when such a file no longer gives the recorded hashes); the
+/// re-derived hashes are checked either way. Throws
 /// `core::ValueError` when the project has no mesh, a listed file is not stored, or the bytes do
 /// not give the stored hashes.
 ImportResult RederiveMesh(const core::Project& project, const ResourceReader& read, bool beside_origin = true);

@@ -637,9 +637,30 @@ void GltfExternalBuffer() {
     };
     CHECK(missing_message(false).find("quad.bin") != std::string::npos);
 
+    // An altered file beside the origin: the old geometry is unavailable (not corruption), and a
+    // reload still replaces the mesh (below); the same change to a stored file is corruption.
+    std::string altered_bin = imported.external_files[0].bytes;
+    const float moved_uvs[2] = {0.25f, 0.75f};
+    std::memcpy(altered_bin.data() + 48, moved_uvs, sizeof(moved_uvs));
+    WriteFile(dir / "source" / "quad.bin", altered_bin);
+    CHECK(missing_message(true).find("no longer gives the recorded geometry") != std::string::npos);
+    WriteFile(dir / "source" / "quad.bin", altered_bin.substr(0, 40));  // shorter than the buffer
+    CHECK(missing_message(true).find("no longer gives the recorded geometry") != std::string::npos);
+    std::map<std::string, std::string> corrupt = blobs;
+    corrupt[bin_sha] = altered_bin;  // a stored blob that does not hold its hash's bytes
+    try {
+        RederiveMesh(*current->snapshot().project, [&](const std::string& sha) { return corrupt.at(sha); });
+        throw Failure{"expected a ValueError for a corrupt stored file"};
+    } catch (const MeshFileMissing&) {
+        throw Failure{"a corrupt stored file is not MeshFileMissing"};
+    } catch (const core::ValueError& error) {
+        CHECK(std::string(error.what()).find("do not match its hash") != std::string::npos);
+    }
+
     std::filesystem::remove(dir / "source" / "quad.bin");
     CHECK(RederiveMesh(*current->snapshot().project, read).mesh.hashes == imported.mesh.hashes);
     CHECK(missing_message(true).find("gone") != std::string::npos);
+    WriteFile(dir / "source" / "quad.bin", altered_bin);  // the reload below meets the altered file
 
     // The legacy project's mesh is replaced without re-deriving it: its set kept by material,
     // its bindings invalidated with the reason; the new mesh re-derives afterwards.

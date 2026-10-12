@@ -11,6 +11,7 @@
 #include <utility>
 #include <variant>
 
+#include "mesh/import_error.h"
 #include "uzp_core/manifest/recipe.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
@@ -483,7 +484,9 @@ ImportResult RederiveMesh(const core::Project& project, const ResourceReader& re
             if (e.name == file_name && !e.origin.empty()) origin_dir = std::filesystem::path(e.origin).parent_path();
         }
     }
+    bool read_beside = false;  // a file was read beside the origin (a project written before they were stored)
     const ExternalFileReader beside = [&](const std::string& uri, const std::filesystem::path& path) {
+        read_beside = true;
         const std::string legacy = "the mesh '" + file_name + "' reads the file '" + uri +
                                    "' beside it, which a project written before a mesh's files were stored does not hold";
         if (!beside_origin) throw MeshFileMissing(legacy + " (reload the mesh to store it)");
@@ -521,12 +524,25 @@ ImportResult RederiveMesh(const core::Project& project, const ResourceReader& re
     if (core::Sha256Hex(bytes) != ref.resource) {
         throw core::ValueError("the stored bytes of the mesh '" + file_name + "' do not match its hash " + ref.resource);
     }
-    ImportResult current = ImportMesh(bytes, file_name, settings, list != nullptr ? stored : beside);
+    // A file read beside the origin is not the project's: when it no longer gives the recorded
+    // geometry (it was altered), the old geometry is unavailable, not corrupt. A stored file that
+    // does is corruption.
+    const std::string altered = "the mesh '" + file_name +
+                                "' reads a file beside its origin, which a project written before a mesh's files were "
+                                "stored does not hold, and that file no longer gives the recorded geometry";
+    std::optional<ImportResult> current;
+    try {
+        current = ImportMesh(bytes, file_name, settings, list != nullptr ? stored : beside);
+    } catch (const ImportError& error) {
+        if (read_beside) throw MeshFileMissing(altered + " (" + error.what() + "; reload the mesh to store it)");
+        throw;
+    }
     const json::Value* hashes = Member(report, "hashes");
-    if (hashes == nullptr || !(*hashes == json::Value(HashesToJson(current.mesh.hashes)))) {
+    if (hashes == nullptr || !(*hashes == json::Value(HashesToJson(current->mesh.hashes)))) {
+        if (read_beside) throw MeshFileMissing(altered + " (reload the mesh to store it)");
         throw core::ValueError("the mesh '" + file_name + "' no longer re-derives to the hashes its import report records");
     }
-    return current;
+    return std::move(*current);
 }
 
 /// The texture set a material of the new mesh adds: named after it, the project's default

@@ -21,7 +21,7 @@ core::RecipeHost HostRecipe() {
     auto library = std::make_shared<Library>();
     core::RecipeHost host;
     host.app_version = kAppVersion;
-    host.base_value = [library](std::string_view template_id, core::ChannelType type) {
+    host.base_value = [library](std::string_view template_id, core::ChannelType type, core::ChannelFormat format) {
         std::call_once(library->once, [&] {
             try {
                 library->templates = std::make_unique<evaluator::TemplateLibrary>(
@@ -31,7 +31,15 @@ core::RecipeHost HostRecipe() {
             }
         });
         if (!library->templates) throw core::ValueError("recipe: the project templates do not load: " + library->error);
-        const render::Result<std::array<float, 3>> base = library->templates->BaseValue(template_id, type);
+        // The library takes the channel's format once its defaults depend on it (decision 126); the
+        // format reaches it whenever its BaseValue accepts one.
+        const render::Result<std::array<float, 3>> base = [&](const auto& templates) {
+            if constexpr (requires { templates.BaseValue(template_id, type, format); }) {
+                return templates.BaseValue(template_id, type, format);
+            } else {
+                return templates.BaseValue(template_id, type);
+            }
+        }(*library->templates);
         if (!base) throw core::ValueError("recipe: " + base.error().reason);
         return *base;
     };

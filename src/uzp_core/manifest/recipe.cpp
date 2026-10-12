@@ -377,7 +377,9 @@ json::Object Document(const Project& project, const BaseValueFn& base_value) {
             json::Object& stack = Obj(stack_value);
             stack.erase("id");
             for (auto& [type, channel] : Obj(stack.at("channels"))) {
-                Obj(channel)["base"] = BaseJson(base_value(project.settings.template_id, *FromString<ChannelType>(type)));
+                const ChannelFormat format = *FromString<ChannelFormat>(std::get<std::string>(Obj(channel).at("format").data));
+                Obj(channel)["base"] =
+                    BaseJson(base_value(project.settings.template_id, *FromString<ChannelType>(type), format));
             }
         }
         std::map<std::int64_t, std::string> pointers;
@@ -592,7 +594,11 @@ json::Value RebuildManifest(json::Object doc, const RecipeHost& host) {
                 json::Object& channel = Obj(channel_value);
                 const std::optional<ChannelType> channel_type = FromString<ChannelType>(type);
                 if (!channel_type) Fail(path + ".channels." + type, "unknown channel type");
-                const json::Value expected = BaseJson(host.base_value(template_id, *channel_type));
+                const std::string& format_name = AsString(Need(channel, "format", path + ".channels." + type),
+                                                          path + ".channels." + type + ".format");
+                const std::optional<ChannelFormat> format = FromString<ChannelFormat>(format_name);
+                if (!format) Fail(path + ".channels." + type + ".format", "unknown member '" + format_name + "'");
+                const json::Value expected = BaseJson(host.base_value(template_id, *channel_type, *format));
                 if (Need(channel, "base", path + ".channels." + type) != expected) {
                     throw ValueError("recipe: the base value of channel " + type + " differs from this build's template '" +
                                      template_id + "' (" + json::WriteCanonical(channel.at("base")) + " recorded, " +
