@@ -228,6 +228,78 @@ No truncation, rounding or alignment rule that was tried fits every dataset (dec
 - the next step is a focused measurement of the multi-probe accumulator;
 - the validation goldens of decision 078 stay unused until a replica exists.
 
+## 8. The accumulator is identified; gate 3 passes (decision 083)
+
+`python -m tools.parity.vk_sampler_probe.replica_gates <work-dir> 3` reprints the gate-3 counts (synthetic textures, RTX 4090, driver 617.14, Vulkan).
+
+Each probe keeps decision 071's arithmetic: E of its largest weighed texel, S = sum of w floor(t 2^(28 - E)) with w in 1/1024, value S 2^(E - 38). The probes are summed as follows, with coarse(E) = E - ((E + 126) mod 4):
+
+| Step | Rule |
+|---|---|
+| Probe | truncated to a multiple of 2^(coarse(E) - 36) |
+| Order | lower level first; within a level by offset along the major-axis gradient (ascending for a positive gradient) |
+| Running sum | the probes of a level form consecutive pairs; before each addition after the first, truncated to a multiple of 2^(coarse(G) - 36), G the largest E of every pair up to the incoming probe's |
+| Offset-0 pair | one probe of the pair's weight |
+| Result | rounded to the nearest float32, ties up |
+
+| Data | Samples | Exact sum | Accumulator |
+|---|---|---|---|
+| Decision 071's datasets (same seeds) | 1 170 000 | 1 169 944 | 1 170 000 |
+| Decision 071's dial (613 cases) | 58 848 steps | 559 cases | every step |
+| 23 footprints the rule was found on | 1 840 000 | 0-329 misses each | 1 840 000 |
+| 10 held-out footprints, five texture families | 800 000 | 0-225 misses each | 800 000 |
+
+Running maxima over single probes, per-level or global maxima, pairwise or per-level partial sums and grids one to four bits off all miss (3 to 832 per footprint).
+
+Gate 3 therefore passes. Gate 4 comes next: acquire the LOD and geometry tables, build the replica, and validate it sample for sample against the hardware. The refusal stays until that validation is exact.
+
+## 9. The tabulated replica is exact; axis-aligned minification is lifted (decision 084)
+
+### 9.1 The tables and gate 4
+
+`python -m tools.parity.vk_sampler_probe.tables measure <work-dir>` writes `src/evaluator/tables/tu-lod.zlib` and `tu-geometry.zlib` (about 25 minutes, byte for byte reproducible). `... tables validate <work-dir> <uzp-evaluator-tests.exe>` compares the C++ replica (`src/evaluator/texture_unit.h`) with the GPU.
+
+| Table | Content |
+|---|---|
+| LOD | lambda in 1/256 over (major mantissa, minor mantissa, exponent difference 0-2) at one exponent, and lambda_major |
+| Geometry | probe pairs (offset in 1/256 texel, weights) per level for 69 169 cells (rho, f < 147, sign), and the full-weight upper level per (rho, sign) |
+
+Corrections to the column-weight decoder, each measured:
+- 12 cells whose last probe (by the gradient's sign) has weight 0;
+- 407 cells where a pair at +-p with p w = 64 is one merged probe (row weights decide; checked on all 276 860 level geometries);
+- 92 rho values reached only with a clamped LOD (measured at bias -8 on level 0; 934 others equal the cell (rho, 0)).
+
+Rules found while validating: the minor-axis LOD is clamped at 0 before rho is taken; the major axis is the gradient with the larger exponent and 9-bit mantissa (ddx on a tie); clamp-to-edge clamps the fixed-point probe position.
+
+| Validation | Samples | Differing |
+|---|---|---|
+| 48 designed sets: sides 32-1024, three texel families, biases 0 and -1.5, repeat and clamp, random, near-isotropic and bin-edge footprints, ratios 1-11, both signs and axes, ddx/ddy swapped | 960 000 | 0 |
+
+Gate 4 passes.
+
+### 9.2 Painter's arithmetic around the unit, refined
+
+The decision-078 recordings separated what decision 060's captures could not. With the GPU's sampler in the loop, every value of the seven minifying goldens fits (BilinearHQ at 7.3 degrees keeps 9 one-code values; rotated footprints stay refused):
+
+| Piece | Rule | What it fixed |
+|---|---|---|
+| Rotation | the linear part is S R; the angle float32(degrees) float32(pi/180), its cosine and sine float32 | rotated non-uniform scales (all values off) and the 90 and 180 degree cases |
+| Translation | m02 = (m00 t_u + m01 t_v) + 1/2 in float32 operations, t = (-1/2 - o_u, -1/2 - o_v) | rotation-0 maps with offsets (up to 4 354 values) |
+| Gradients | ddx = (m00, m10)/W, ddy = (m01, m11)/W: v counts upwards | the v-major control (193 642 values) |
+| Mips | each texel the GPU's linear filter at its 2 x 2 block's centre (operands truncated below the largest texel's exponent) | 2 one-code values at LOD boundaries |
+
+The angle's rounding (three variants) and the order of the elements' products are not separated.
+
+### 9.3 Results
+
+| Goldens (all axis-aligned users, four sets) | CPU | GPU |
+|---|---|---|
+| `resample-uv-minify`, `-impulse` | exact | exact |
+| `resample-uv-anisotropic`, `-anisotropic-impulse`, `-lod`, `-lod-boundaries`, `-rotation` (90, 180, 270, controls) | exact | exact |
+| `resample-uv` (user 6 held out of every fit) | exact | exact |
+
+Bilinear minification evaluates for rotations that are multiples of 90 degrees, square power-of-two bitmaps on square sets, Repeat and RepeatNone. Every other minifying case stays refused with `evaluator:unsupported_source`. The magnifying path keeps its double UV.
+
 ## Reproduce
 
 ```
@@ -236,5 +308,7 @@ python -m pytest tests/evaluator/test_compositor_sources_projection.py
 python tests/evaluator/sources_fits.py zig-out/bin/uzp-evaluator-tests.exe <work-dir>
 python -m tools.parity.vk_sampler_probe.measure <work-dir>
 python -m tools.parity.vk_sampler_probe.texture_unit <work-dir>
-python -m tools.parity.vk_sampler_probe.replica_gates <work-dir>
+python -m tools.parity.vk_sampler_probe.replica_gates <work-dir> [gate ...]
+python -m tools.parity.vk_sampler_probe.tables measure <work-dir>
+python -m tools.parity.vk_sampler_probe.tables validate <work-dir> zig-out/bin/uzp-evaluator-tests.exe
 ```

@@ -1,0 +1,9 @@
+{
+  "id": 84,
+  "slug": "the-tabulated-texture-unit-replica-is-exact-and-axis-aligned-bilinear-minification-is-supported",
+  "title": "The tabulated texture-unit replica is exact and axis-aligned bilinear minification is supported",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": ["phase1.9_compositor-resample-gaps"],
+  "supersededBy": null
+}

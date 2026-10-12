@@ -10,6 +10,7 @@
 // (evaluate.h), not a store.
 
 #include "evaluator/formats.h"
+#include "evaluator/texture_unit.h"
 #include "evaluator/tile_store.h"
 #include "render/kernel_cache.h"
 
@@ -150,7 +151,17 @@ struct ProjectBindings {
     uint32_t height = 0;
     uint32_t dstUav = 0;
     uint32_t imageSrv = 0;  ///< The packed bitmap codes (`PackBitmapCodes`).
+    /// A minified bitmap's mip chain (`ChainWords`) and the texture-unit tables
+    /// (`TextureUnitWords`); 0 when the projection does not minify.
+    uint32_t chainSrv = 0;
+    uint32_t tablesSrv = 0;
 };
+
+/// The float32 RGB mip chain as uint32 words (three per texel, level after level).
+[[nodiscard]] std::vector<uint32_t> ChainWords(const tu::Chain& chain);
+/// The texture unit's tables for the projection kernel: the LOD table, two uint16 per word (the
+/// lower index in the low half), then the geometry words (texture_unit.h).
+[[nodiscard]] std::vector<uint32_t> TextureUnitWords();
 
 /// The parameter block of `op` with the descriptor indices of `bindings`.
 [[nodiscard]] std::array<uint32_t, kBlendParamsStride> EncodeProjectParams(

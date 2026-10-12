@@ -102,6 +102,7 @@
 #include "evaluator/sources.h"
 #include "evaluator/support.h"
 #include "evaluator/templates.h"
+#include "evaluator/texture_unit.h"
 #include "render/capabilities.h"
 #include "render/engine_thread.h"
 #include "render/image_pass.h"
@@ -2675,6 +2676,7 @@ int RunSources(const fs::path& assets) {
     const std::string sha16 = std::string(63, '1') + "6";
     const std::string sha8 = std::string(63, '0') + "8";
     const std::string shaGrey = std::string(63, '9') + "1";
+    const std::string shaOblong = std::string(63, '7') + "2";
     auto provider = std::make_shared<MapResourceProvider>();
     std::shared_ptr<DecodedImage> image16 = PatternImage(kSize, kSize, 3, render::TexelEncoding::Unorm16, 11);
     std::shared_ptr<DecodedImage> image8 = PatternImage(kSize, kSize, 3, render::TexelEncoding::Unorm8, 12);
@@ -2682,6 +2684,7 @@ int RunSources(const fs::path& assets) {
     provider->Add(sha16, image16);
     provider->Add(sha8, image8);
     provider->Add(shaGrey, grey);
+    provider->Add(shaOblong, PatternImage(kSize, kSize / 2, 3, render::TexelEncoding::Unorm16, 14));
     const std::vector<ChannelType> user0{ChannelType::User0};
     auto evaluate = [&](Builder& builder, ChannelType channel, CpuEvaluator& cpu) {
         EvaluateRequest request;
@@ -2696,6 +2699,7 @@ int RunSources(const fs::path& assets) {
         builder.AddResource(sha16, 100);
         builder.AddResource(sha8, 100);
         builder.AddResource(shaGrey, 100);
+        builder.AddResource(shaOblong, 100);
         builder.SetRoot({prototype});
     };
 
@@ -2889,9 +2893,48 @@ int RunSources(const fs::path& assets) {
 
     // Explicit failures.
     {
-        render::Result<ChannelResult> minified = project(core::FilteringMode::BilinearHQ, core::UVWrapMode::Repeat, {3.3, 3.3}, 0.0, {0.0, 0.0}, sha16);
-        Check(!minified && KindName(minified.error()) == "unsupported_source", "bilinear minification fails with unsupported_source (release gap)",
-              Describe(minified));
+        // Bilinear minification goes through the texture unit (texture_unit.h, decision 084) for a
+        // rotation that is a multiple of 90 degrees and a square power-of-two bitmap; the goldens
+        // check its values (test_compositor_sources_projection.py).
+        bool axisAligned = true;
+        std::string axisDetail;
+        for (const core::FilteringMode filter : {core::FilteringMode::BilinearHQ, core::FilteringMode::BilinearSharp}) {
+            for (const double rotation : {0.0, 90.0, 180.0, 270.0}) {
+                render::Result<ChannelResult> minified =
+                    project(filter, core::UVWrapMode::Repeat, {3.3, 2.1}, rotation, {0.0123, 0.0456}, sha16);
+                if (!minified) {
+                    axisAligned = false;
+                    axisDetail = Describe(minified);
+                }
+            }
+        }
+        Check(axisAligned, "bilinear minification at rotations 0, 90, 180 and 270 evaluates through the texture unit", axisDetail);
+        render::Result<ChannelResult> rotated =
+            project(core::FilteringMode::BilinearHQ, core::UVWrapMode::Repeat, {3.3, 3.3}, 30.0, {0.0, 0.0}, sha16);
+        Check(!rotated && KindName(rotated.error()) == "unsupported_source" &&
+                  rotated.error().reason.find("rotation") != std::string::npos,
+              "bilinear minification at a rotation that is not a multiple of 90 degrees fails with unsupported_source "
+              "(release gap)",
+              Describe(rotated));
+        render::Result<ChannelResult> oblong =
+            project(core::FilteringMode::BilinearSharp, core::UVWrapMode::Repeat, {3.3, 3.3}, 0.0, {0.0, 0.0}, shaOblong);
+        Check(!oblong && KindName(oblong.error()) == "unsupported_source",
+              "bilinear minification of a bitmap that is not square fails with unsupported_source (release gap)",
+              Describe(oblong));
+        {
+            // Painter filters the signed heights (ProjectTexel); their minification is unmeasured.
+            const std::vector<ChannelType> heightOnly{ChannelType::Height};
+            Builder builder(kSize, kSize, {{ChannelType::Height, ChannelFormat::L16F}});
+            core::Layer layer = builder.Fill("bitmap", SameSource(heightOnly, Bitmap(sha16)), Same(heightOnly, BlendingMode::Normal, 1.0));
+            SetUv(layer, core::FilteringMode::BilinearHQ, core::UVWrapMode::Repeat, {3.3, 3.3}, 0.0, {0.0, 0.0});
+            single(ChannelFormat::L16F, layer, builder);
+            CpuEvaluator cpu(templates, kWideLimits);
+            render::Result<ChannelResult> height = evaluate(builder, ChannelType::Height, cpu);
+            Check(!height && KindName(height.error()) == "unsupported_source" &&
+                      height.error().reason.find("Height") != std::string::npos,
+                  "bilinear minification on the Height channel fails with unsupported_source (release gap)",
+                  Describe(height));
+        }
         render::Result<ChannelResult> nearest = project(core::FilteringMode::Nearest, core::UVWrapMode::Repeat, {3.3, 3.3}, 0.0, {0.0, 0.0}, sha16);
         Check(nearest.has_value(), "Nearest evaluates at any scale", Describe(nearest));
         Builder builder(kSize, kSize, {{ChannelType::User0, ChannelFormat::RGB16}});
@@ -3058,6 +3101,68 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
             }
         }
     }
+    // Minifying stacks through the texture unit (texture_unit.h, decision 084): square sets and
+    // bitmaps, rotations by multiples of 90 degrees, Repeat and RepeatNone, footprints from one to
+    // twelve texels with anisotropy up to 4 on either axis.
+    size_t minified = 0;
+    for (int variant = 0; variant < 8; ++variant) {
+        const ChannelFormat format = variant % 2 == 0 ? ChannelFormat::RGB16 : ChannelFormat::RGB32F;
+        Builder builder(256, 256, {{ChannelType::User0, format}});
+        auto provider = std::make_shared<MapResourceProvider>();
+        const std::vector<ChannelType> channels{ChannelType::User0};
+        std::vector<core::Layer> layers;
+        for (int i = 0; i < 2; ++i) {
+            const bool sixteen = (rng() & 1) != 0;
+            const uint32_t side = (rng() & 1) != 0 ? 64 : 256;
+            char buffer[65];
+            std::snprintf(buffer, sizeof(buffer), "%064d", ++serial);
+            const std::string sha(buffer);
+            provider->Add(sha, PatternImage(side, side, 3, sixteen ? render::TexelEncoding::Unorm16 : render::TexelEncoding::Unorm8, rng()));
+            builder.AddResource(sha, 100);
+            core::Layer layer = builder.Fill("minified" + std::to_string(i), SameSource(channels, Bitmap(sha)),
+                                             Same(channels, i == 0 ? BlendingMode::Normal : modes[rng() % modes.size()], 0.3 + 0.7 * unit()));
+            const core::FilteringMode filter = (rng() & 1) != 0 ? core::FilteringMode::BilinearHQ : core::FilteringMode::BilinearSharp;
+            const double fit = 256.0 / side;
+            const double major = fit * (1.1 + 11.0 * unit());
+            const double minor = major / (1.0 + 3.0 * unit());
+            const bool uMajor = (rng() & 1) != 0;
+            SetUv(layer, filter, (rng() & 1) != 0 ? core::UVWrapMode::Repeat : core::UVWrapMode::RepeatNone,
+                  {uMajor ? major : minor, uMajor ? minor : major}, 90.0 * static_cast<double>(rng() % 4),
+                  {unit() - 0.5, unit() - 0.5});
+            layers.push_back(std::move(layer));
+        }
+        builder.SetRoot(layers);
+        if (!builder.Validate("minifying projection stack")) return Finish();
+        EvaluateRequest request;
+        request.textureSet = builder.SetId();
+        request.stack = builder.StackId();
+        request.channel = ChannelType::User0;
+        request.resources = provider;
+        CpuEvaluator cpu(templates, kWideLimits);
+        render::Result<ChannelResult> cpuResult = cpu.Evaluate(builder.project, request);
+        auto project = std::make_shared<const core::Project>(builder.project);
+        std::future<render::Result<ChannelResult>> future = gpu.Evaluate(core::Snapshot{1, project}, request);
+        render::Result<ChannelResult> gpuResult = Get(future);
+        const std::string label = std::string(core::ToString(format)) + " minifying projection stack " + std::to_string(variant);
+        if (!cpuResult || !gpuResult) {
+            allEqual = false;
+            Check(false, label + " evaluates on both stores", Describe(cpuResult) + " / " + Describe(gpuResult));
+            continue;
+        }
+        std::string first;
+        const std::vector<uint32_t> expected = Samples(*cpuResult);
+        const size_t mismatches = Mismatches(expected, Samples(*gpuResult), first, cpuResult->tileFormat.encoding);
+        minified += expected.size();
+        if (mismatches != 0) {
+            allEqual = false;
+            Check(false, label + ": GPU equals CPU", std::to_string(mismatches) + " mismatches; " + first);
+        }
+    }
+    Check(minified > 0 && allEqual,
+          "every random minifying projection stack (BilinearHQ and BilinearSharp through the texture unit, rotations by "
+          "multiples of 90 degrees, Repeat and RepeatNone) evaluates to the same bytes on the GPU and on the CPU (" +
+              std::to_string(minified) + " samples)",
+          "");
     Check(allEqual, "every random projection stack (filters, wrap modes, transforms, 8/16-bit grey and colour bitmaps) evaluates "
                     "to the same bytes on the GPU and on the CPU (" + std::to_string(compared) + " samples, " +
                     std::to_string(stacks) + " stacks over 9 formats)");
@@ -6829,6 +6934,52 @@ int RunNotYetSupported(const fs::path& assets) {
     return Finish();
 }
 
+
+/// `texture-unit <assets> <work-dir>`: the texture-unit replica (texture_unit.h) on designed
+/// inputs written by `tools/parity/vk_sampler_probe/tables.py`, for its sample-for-sample
+/// comparison with the recording GPU. `tu-in.bin`: uint32 side W, then the texels of every level
+/// of the mip chain (W x W, W/2 x W/2, ... 1 x 1; three float32 each, rows bottom up), uint32 N,
+/// then N records of six float32 (u, v, ddx.x, ddx.y, ddy.x, ddy.y), int32 bias (1/256) and
+/// uint32 flags (1 repeat u, 2 repeat v). Writes `tu-out.bin`, N x 3 float32.
+int RunTextureUnit(const fs::path& dir) {
+    std::ifstream in(dir / "tu-in.bin", std::ios::binary);
+    uint32_t side = 0;
+    in.read(reinterpret_cast<char*>(&side), sizeof side);
+    if (!in || side == 0 || (side & (side - 1)) != 0) {
+        Check(false, "texture-unit input", "unreadable tu-in.bin");
+        return Finish();
+    }
+    tu::Chain chain;
+    chain.size = side;
+    size_t texels = 0;
+    for (uint32_t level = side; level >= 1; level /= 2) {
+        chain.offsets.push_back(static_cast<uint32_t>(texels));
+        texels += size_t{level} * level;
+    }
+    chain.texels.resize(texels * 3);
+    in.read(reinterpret_cast<char*>(chain.texels.data()), static_cast<std::streamsize>(chain.texels.size() * sizeof(float)));
+    uint32_t count = 0;
+    in.read(reinterpret_cast<char*>(&count), sizeof count);
+    std::vector<uint32_t> records(size_t{count} * 8);
+    in.read(reinterpret_cast<char*>(records.data()), static_cast<std::streamsize>(records.size() * sizeof(uint32_t)));
+    if (!in) {
+        Check(false, "texture-unit input", "truncated tu-in.bin");
+        return Finish();
+    }
+    std::vector<float> out(size_t{count} * 3);
+    for (uint32_t k = 0; k < count; ++k) {
+        const uint32_t* r = &records[size_t{k} * 8];
+        const auto f = [&](uint32_t i) { return std::bit_cast<float>(r[i]); };
+        const std::array<float, 3> value = tu::Sample(chain, f(0), f(1), {f(2), f(3)}, {f(4), f(5)},
+                                                      static_cast<int32_t>(r[6]), (r[7] & 1u) != 0, (r[7] & 2u) != 0);
+        for (uint32_t c = 0; c < 3; ++c) out[size_t{k} * 3 + c] = value[c];
+    }
+    std::ofstream file(dir / "tu-out.bin", std::ios::binary);
+    file.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(out.size() * sizeof(float)));
+    Info("texture-unit: " + std::to_string(count) + " samples on a " + std::to_string(side) + " texture");
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -6838,7 +6989,7 @@ int main(int argc, char** argv) {
                      "usage: uzp-evaluator-tests arith|templates|order|cache|admission|sources|masks|height-normal|"
                      "not-yet-supported <assets-dir> | "
                      "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
-                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|masks-gpu-vs-cpu|"
+                     "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|texture-unit|masks-gpu-vs-cpu|"
                      "height-normal-gpu-vs-cpu|diagnostics|diagnostics-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
         return 2;
@@ -6887,6 +7038,7 @@ int main(int argc, char** argv) {
         else if (mode == "tables") code = RunTables(dir);
         else if (mode == "fp-hardware") code = RunFpHardware(dir);
         else if (mode == "bilinear-hardware") code = RunBilinearHardware(dir);
+        else if (mode == "texture-unit") code = RunTextureUnit(dir);
         else if (mode == "pow-hardware") code = RunPowHardware(dir);
         else if (mode == "trig-hardware") code = RunTrigHardware(dir);
         else if (mode == "masks-gpu-vs-cpu") code = RunMasksGpuVsCpu(assets, dir);

@@ -10,9 +10,9 @@
 // evaluates without a Tier 0 golden (instance layers, `Mesh` geometry masks, the one-axis wrap
 // modes, content-stack fill effects, mask-stack levels, a DirectX project's Normal channel beyond
 // one bitmap fill at opacity 1). Refusals that need decoded bitmaps, the whole stack or the virtual
-// normal maps (bilinear minification, height-to-normal resolutions, Normal mesh maps, several
-// DirectX Normal layers) are raised by the evaluation request, with the same class, before any
-// tile is allocated.
+// normal maps (bilinear minification outside the texture unit's measured domain, height-to-normal
+// resolutions, Normal mesh maps, several DirectX Normal layers) are raised by the evaluation
+// request, with the same class, before any tile is allocated.
 
 #include <optional>
 #include <string>

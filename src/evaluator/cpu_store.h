@@ -4,9 +4,12 @@
 // reference the GPU store must equal bit for bit (tests/evaluator/), and the evaluation path on
 // a machine without a GPU (hosted CI, `UZP_NO_GPU=1`).
 
+#include "evaluator/texture_unit.h"
 #include "evaluator/tile_store.h"
 
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -42,6 +45,8 @@ private:
     const Tile* Find(TileHandle tile) const;
 
     std::unordered_map<TileHandle, Tile> m_tiles;
+    /// The mip chains of minified bitmaps (projection_uv.h `BitmapChain`), by image key.
+    std::unordered_map<std::string, std::shared_ptr<const tu::Chain>> m_chains;
     TileHandle m_next = 1;
     uint64_t m_bytes = 0;
 };

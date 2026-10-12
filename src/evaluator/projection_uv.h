@@ -24,8 +24,30 @@
 //   float32(c / M) (M = 255 or 65535): the GPU's linear filter of a float32 texture (measured,
 //   `uzp-evaluator-tests bilinear-hardware`), with the bitmap stored bottom-up, which turns the
 //   GPU's w11 rounding (ties up) into ties down here (uv-sampling.json `uv-bilinear-repeat`).
-//   Both filters are single-level bilinear: magnification and 1:1 only (minification is a
-//   release gap, `CheckSampling`).
+//   That is magnification and 1:1 (a footprint of at most one texel).
+// - Bilinear minification (a footprint above one texel) goes through the recording GPU's
+//   anisotropic texture unit (texture_unit.h, decisions 060, 083, 084) on the bitmap's float32
+//   mip chain stored bottom-up (`BitmapChain`), with Painter's arithmetic around it (decision
+//   060), all for a square power-of-two bitmap on a square set and a rotation that is a multiple
+//   of 90 degrees (other cases fail in `CheckSampling`):
+//   - the UV in float32 (decisions 060, 084): the angle t = float32(r) float32(pi / 180), c =
+//     float32(cos t), s = float32(sin t), the linear part S R in float32 products m00 = s_u c,
+//     m01 = s_u s, m10 = -s_v s, m11 = s_v c, the translation in float32 operations m02 = (m00
+//     t_u + m01 t_v) + 1/2 and m12 = (m10 t_u + m11 t_v) + 1/2 with t = (-1/2 - o_u, -1/2 - o_v);
+//     u = float32((i + 1/2) / W), v = float32(1 - (j + 1/2) / H), u' = fma(m00, u, m01 v) + m02
+//     and v' = fma(m10, u, m11 v) + m12 (fma one rounding);
+//   - the gradients ddx = (m00, m10) / W and ddy = (m01, m11) / W (v counted upwards);
+//   - BilinearSharp: one sample at LOD bias -1.5;
+//   - BilinearHQ: dux, dvx, duy, dvy the fine derivatives of u' and v' in the 2 x 2 quad of
+//     (i, j); nine samples at ((u' + DX dux) + DY duy, (v' + DX dvx) + DY dvy) with DX, DY in
+//     {-1/3, 0, 1/3} (float32(1/3) times -1, 0, 1), gradients float32(1/3) ddx and float32(1/3)
+//     ddy, LOD bias 0, summed in float32 as acc = acc + float32(w / 16) sample in the order centre
+//     (4), (+, 0), (-, 0), (0, -), (0, +) (2 each), (+, -), (-, -), (-, +) (1 each) and the centre
+//     again (1); C1 the level-0 bilinear sample at (u', v'); alpha = clamp(min(|(dux, dvx)|,
+//     |(duy, dvy)|) w - 1, 0, 1) in float32 (w the bitmap width); the value fma(C1, 1 - alpha,
+//     acc alpha).
+//   The magnifying path keeps the double UV above: both give the same fixed-point coordinates on
+//   every magnifying golden (decision 060).
 // - Nearest samples float32(c / M) of the texel.
 //
 // The channel stores the sampled value with its own write rule (cpu_store.h `StoreValue`): at
@@ -39,6 +61,7 @@
 // with the fill's filter.
 
 #include "evaluator/formats.h"
+#include "evaluator/texture_unit.h"
 #include "evaluator/tile_store.h"
 #include "render/backend.h"
 
@@ -59,6 +82,8 @@ struct UvProjection {
     core::UVWrapMode wrap = core::UVWrapMode::Repeat;
     double cosR = 1.0;
     double sinR = 0.0;
+    /// The rotation in degrees (minification needs a multiple of 90).
+    double rotation = 0.0;
     std::array<double, 2> scale{1.0, 1.0};
     std::array<double, 2> offset{0.0, 0.0};
 
@@ -79,13 +104,21 @@ struct UvProjection {
 [[nodiscard]] double Footprint(const UvProjection& projection, uint32_t setWidth,
                                uint32_t setHeight, uint32_t bitmapWidth, uint32_t bitmapHeight);
 
+/// Whether a bilinear projection of `image` minifies (a footprint above one texel): it then
+/// samples through the texture unit.
+[[nodiscard]] bool Minifies(const UvProjection& projection, uint32_t setWidth, uint32_t setHeight,
+                            const DecodedImage& image);
+
 /// Fails with `evaluator:unsupported_source` when the set resolution is not a power of two on
 /// each axis (the texel centres are computed by exact power-of-two scaling) or when a bilinear
-/// filter minifies (a footprint above one texel: Painter samples it with the GPU's anisotropic
-/// texture unit, not modelled bit for bit, decision 056).
+/// filter minifies outside the texture unit's measured domain: a rotation that is not a multiple
+/// of 90 degrees, a bitmap that is not square with a power-of-two side, a non-square set, or
+/// `signedRange` (the Height channel: Painter filters the signed heights, `ProjectTexel`, and its
+/// minification of them is not measured).
 [[nodiscard]] render::Result<void> CheckSampling(const UvProjection& projection,
                                                  uint32_t setWidth, uint32_t setHeight,
-                                                 const DecodedImage& image, core::Id node);
+                                                 const DecodedImage& image, bool signedRange,
+                                                 core::Id node);
 
 /// One projected texel: whether it is covered and, per channel, the sampled value.
 struct ProjectedTexel {
@@ -106,14 +139,24 @@ inline constexpr int kFilterOperandBits = 28;
 [[nodiscard]] float BilinearFilter(const std::array<uint32_t, 4>& weights,
                                    const std::array<float, 4>& texels);
 
+/// The bitmap's float32 RGB mip chain for the texture unit: level 0 holds float32(c / M), rows
+/// bottom up (the GPU's orientation); a grey bitmap feeds all three channels.
+[[nodiscard]] tu::Chain BitmapChain(const DecodedImage& image);
+
+/// Painter's float32 UV matrix (m00, m01, m02, m10, m11, m12) of a projection (decision 060).
+[[nodiscard]] std::array<float, 6> PainterMatrix(const UvProjection& projection);
+
 /// The texel (i, j) of the set (whole-set indices) projected from `image`; a grey bitmap feeds
 /// all three channels, a colour bitmap its first three. With `signedRange` (the Height channel)
 /// every bitmap texel is its signed value RangeValue(t, true) before the filter: Painter filters
 /// the signed heights (height-to-normal.json `height-normal-resolution`; filtering t and then
-/// taking 2 v - 1 leaves 16 values of the 512 set one half step off).
+/// taking 2 v - 1 leaves 16 values of the 512 set one half step off). `chain` is the bitmap's
+/// `BitmapChain` when the projection minifies (`Minifies`), else null; `CheckSampling` refuses a
+/// minifying projection with `signedRange`.
 [[nodiscard]] ProjectedTexel ProjectTexel(const UvProjection& projection, const DecodedImage& image,
                                           uint32_t i, uint32_t j, uint32_t setWidth,
-                                          uint32_t setHeight, bool signedRange = false);
+                                          uint32_t setHeight, bool signedRange = false,
+                                          const tu::Chain* chain = nullptr);
 
 /// The full description of a projection operation on a tile store.
 struct ProjectOp {

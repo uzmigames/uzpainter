@@ -216,7 +216,7 @@ private:
             image = inverted;
         }
         render::Result<void> sampling = CheckSampling(source.projection, m_dag.grid.width,
-                                                      m_dag.grid.height, *image, node);
+                                                      m_dag.grid.height, *image, source.signedRange, node);
         if (!sampling) return render::Unexpected(sampling.error());
         // A wrap mode that can leave texels uncovered gives the content a coverage plane: the
         // fill keeps the value below there (resampling.json, RepeatNone).

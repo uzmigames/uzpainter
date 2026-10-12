@@ -288,6 +288,7 @@ const evaluator_sources = [_][]const u8{
     "evaluator/sources.cpp",
     "evaluator/support.cpp",
     "evaluator/templates.cpp",
+    "evaluator/texture_unit.cpp",
 };
 /// The export plan compiler (`src/export/`, P1-EXPORT, `08-export.md` §1, §2, §6), relative to
 /// `src/`: compiled with the evaluator into `UzPainter.exe` and into `uzp-export-tests.exe`.
