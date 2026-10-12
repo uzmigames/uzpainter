@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <map>
 #include <set>
 #include <utility>
@@ -20,8 +21,8 @@ namespace {
 
 using core::ChannelType;
 
-/// The Painter recording a refusal of an unrecorded behaviour asks for (decision 085).
-constexpr std::string_view kRecording = "export-semantics recording R-085 (decision 085)";
+/// The Painter recording a refusal of an unrecorded behaviour asks for (decisions 085 and 091).
+constexpr std::string_view kRecording = "export-semantics recording R-091 (decision 091)";
 
 [[noreturn]] void Invalid(const std::string& what, const std::string& problem) {
     throw core::ValueError("export: " + what + ": " + problem);
@@ -84,12 +85,14 @@ bool NodeInStack(const core::Project& project, const Root& root, core::Id uid) {
     return found;
 }
 
-/// How a source stands in one stack.
-enum class Presence : uint8_t { Present, Absent, Constant };
+/// How a source stands in one stack: `ExportError` is a source Painter lists but whose export
+/// raises ValueError (decision 091).
+enum class Presence : uint8_t { Present, Absent, Constant, ExportError };
 
 struct Resolved {
     Presence presence = Presence::Present;
     PlannedSource source;
+    /// Absent and ExportError: why.
     std::string absentReason;
 };
 
@@ -105,7 +108,7 @@ void CheckVirtualNormal(const Root& root, const std::string& what) {
     }
 }
 
-Resolved ResolveDocument(const ChannelSpec& spec, const Root& root, const std::string& what) {
+Resolved ResolveDocument(const ChannelSpec& spec, const Root& root) {
     Resolved r;
     r.source.type = spec.type;
     r.source.name = spec.name;
@@ -117,14 +120,19 @@ Resolved ResolveDocument(const ChannelSpec& spec, const Root& root, const std::s
                target && HasChannel(*root.stack, *target)) {
         read = target;
     } else {
-        // The same pairing read the other way: the stack holds the alias member itself.
+        // The same pairing read the other way: the stack holds the alias member itself (recorded
+        // for the pairings of decision 085 only).
         for (const auto& [type, _] : root.stack->channels) {
-            if (RecordedAliasTarget(type) == member) read = type;
+            if (RecordedAliasTarget(type) == member && !RaisesWhenAbsent(type)) read = type;
         }
     }
-    if (!read && IsUnrecordedAlias(member)) {
-        Gap(what, "the documentMap \"" + spec.name + "\" names a legacy alias whose OpenPBR pairing is not recorded",
-            kRecording);
+    if (!read && RaisesWhenAbsent(member)) {
+        r.presence = Presence::ExportError;
+        const std::optional<ChannelType> target = RecordedAliasTarget(member);
+        r.absentReason = "the stack has no " + std::string(core::ToString(member)) + " channel" +
+                         (target ? " and no " + std::string(core::ToString(*target)) + " channel it pairs with" : "") +
+                         "; Painter's export of the legacy name \"" + spec.name + "\" raises ValueError (probe P13)";
+        return r;
     }
     if (!read) {
         r.presence = Presence::Absent;
@@ -142,8 +150,10 @@ Resolved ResolveMesh(const ChannelSpec& spec, const Root& root, const std::strin
     r.source.name = spec.name;
     const core::MeshMapUsage usage = *MeshMapOf(spec.name);
     if (!root.set->mesh_maps.contains(usage)) {
-        Gap(what, "the meshMap \"" + spec.name + "\" is not bound to the texture set; what Painter exports then is not "
-                  "recorded", kRecording);
+        r.presence = Presence::ExportError;
+        r.absentReason = "the meshMap \"" + spec.name + "\" is not bound to the texture set " + root.set->name +
+                         "; Painter's export raises ValueError (probe P12)";
+        return r;
     }
     if (usage != core::MeshMapUsage::Normal) {
         Gap(what, "exporting the meshMap \"" + spec.name + "\" at its native precision is not implemented",
@@ -230,7 +240,7 @@ Resolved ResolveDiagnostic(const core::Project& project, const ChannelSpec& spec
 
 Resolved Resolve(const core::Project& project, const ChannelSpec& spec, const Root& root, const std::string& what) {
     switch (spec.type) {
-        case SourceType::documentMap: return ResolveDocument(spec, root, what);
+        case SourceType::documentMap: return ResolveDocument(spec, root);
         case SourceType::meshMap: return ResolveMesh(spec, root, what);
         case SourceType::virtualMap: return ResolveVirtual(spec, root, what);
         case SourceType::defaultMap: {
@@ -259,14 +269,10 @@ uint32_t LetterIndex(ChannelLetter letter) {
 uint32_t ComponentRead(const ChannelSpec& spec, const PlannedSource& source, const std::string& what) {
     if (source.type == SourceType::defaultMap) return 0;
     if (spec.src == ChannelLetter::A) {
-        Gap(what, "srcChannel A of a " + std::string(SourceTypeName(source.type)) + " is not recorded", kRecording);
+        Gap(what, "srcChannel A of a " + std::string(SourceTypeName(source.type)) +
+                      " is recorded only at full and no coverage (probe P6)", kRecording);
     }
-    if (source.components == 1) return 0;
-    if (spec.src == ChannelLetter::L) {
-        Gap(what, "srcChannel L of a three-component map (an undocumented mix of R, G and B) is not recorded",
-            kRecording);
-    }
-    return LetterIndex(spec.src);
+    return source.components == 1 ? 0 : LetterIndex(spec.src);
 }
 
 FileLayout LayoutOf(const std::vector<ChannelSpec>& channels) {
@@ -290,15 +296,15 @@ bool Contains(const std::vector<std::string>& list, std::string_view item) {
     return std::find(list.begin(), list.end(), item) != list.end();
 }
 
-/// Whether `filter` selects the map `fileName` of `root`; `uvTiles` (not recorded in the Default
-/// workflow) is refused once the other members select the file.
-bool Selects(const Filter& filter, const Root& root, const std::string& fileName, const std::string& what) {
+/// Whether `filter` selects the map `fileName` of `root`. A texture set of the Default workflow is
+/// the single tile [0, 0] (probe P4, decision 091).
+bool Selects(const Filter& filter, const Root& root, const std::string& fileName) {
     if (filter.dataPaths && !Contains(*filter.dataPaths, root.rootPath) && !Contains(*filter.dataPaths, root.set->name)) {
         return false;
     }
     if (filter.outputMaps && !Contains(*filter.outputMaps, fileName)) return false;
-    if (filter.uvTiles) {
-        Gap(what, "a uvTiles filter on a texture set of the Default workflow (no UV tiles) is not recorded", kRecording);
+    if (filter.uvTiles && std::find(filter.uvTiles->begin(), filter.uvTiles->end(), UvTile{0, 0}) == filter.uvTiles->end()) {
+        return false;
     }
     return true;
 }
@@ -357,11 +363,47 @@ std::pair<uint32_t, uint32_t> SizeOf(const core::TextureSet& set, const std::opt
 constexpr std::array<std::string_view, 7> kWildcards{"colorSpace", "mesh",   "project",   "sceneMaterial",
                                                      "textureSet", "udim", "uvTileName"};
 
-/// The value of a wildcard in `root` (nullopt: refused, see the header).
-std::string WildcardValue(std::string_view token, const Root& root, const std::string& what) {
+/// The name of `path`'s last component without its extension; a name with more than one dot is
+/// not recorded (which dot ends the stem is unknown) and is refused.
+std::string Stem(const std::string& path, std::string_view wildcard, const std::string& what) {
+    const size_t slash = path.find_last_of("/\\");
+    const std::string name = slash == std::string::npos ? path : path.substr(slash + 1);
+    const size_t dot = name.find('.');
+    if (dot != std::string::npos && name.find('.', dot + 1) != std::string::npos) {
+        Gap(what, "$" + std::string(wildcard) + " of the file name \"" + name + "\", which holds more than one dot, is not recorded",
+            kRecording);
+    }
+    return name.substr(0, dot);
+}
+
+/// The imported mesh's file name (its import report's source name).
+std::string MeshFileName(const core::Project& project, const std::string& what) {
+    if (project.mesh) {
+        const auto source = project.mesh->import_report.find("source");
+        if (source != project.mesh->import_report.end() && source->second.IsObject()) {
+            const json::Object& o = std::get<json::Object>(source->second.data);
+            const auto name = o.find("name");
+            if (name != o.end() && name->second.IsString()) return std::get<std::string>(name->second.data);
+        }
+    }
+    Invalid(what, "$mesh needs the imported mesh's file name, and the project has none");
+}
+
+/// The value of a wildcard in `root` (probe P1, decision 091).
+std::string WildcardValue(std::string_view token, const core::Project& project, const PlanContext& context,
+                          const Root& root, const std::string& what) {
     if (token == "textureSet") return root.set->name;
-    if (token == "colorSpace" || token == "udim" || token == "uvTileName") return {};
-    Gap(what, "the wildcard $" + std::string(token) + " is not recorded", kRecording);
+    if (token == "sceneMaterial") {
+        // Recorded on a set named after its material only (probe P1).
+        if (root.set->original_name != root.set->name) {
+            Gap(what, "$sceneMaterial of the texture set " + root.set->name + ", renamed from its material " +
+                          root.set->original_name + ", is not recorded", kRecording);
+        }
+        return root.set->original_name;
+    }
+    if (token == "mesh") return Stem(MeshFileName(project, what), token, what);
+    if (token == "project") return context.projectPath.empty() ? "Untitled" : Stem(context.projectPath, token, what);
+    return {};  // colorSpace (legacy colour management), udim and uvTileName (Default workflow)
 }
 
 bool ForbiddenCharacter(char c) {
@@ -388,63 +430,67 @@ void CheckComponent(const std::string& component, const std::string& name, const
     if (reserved.contains(stem)) Invalid(what, "the file name \"" + name + "\" uses a reserved Windows device name");
 }
 
-/// Expands `pattern` for `root` (wildcards and optional groups) into a `/`-separated name.
-std::string ExpandName(const std::string& pattern, const Root& root, const std::string& what) {
-    std::string out;
-    std::string group;
-    bool inGroup = false;
-    bool groupHasWildcard = false;
-    bool groupEmpty = false;
-    for (size_t i = 0; i < pattern.size();) {
-        const char c = pattern[i];
-        if (c == '(') {
-            if (inGroup) Gap(what, "nested ( … ) groups in \"" + pattern + "\" are not recorded", kRecording);
-            inGroup = true;
-            groupHasWildcard = false;
-            groupEmpty = false;
-            group.clear();
-            ++i;
-            continue;
-        }
-        if (c == ')') {
-            if (!inGroup) Invalid(what, "the file name \"" + pattern + "\" closes a group it never opened");
-            if (!groupHasWildcard) {
-                Gap(what, "a ( … ) group without a wildcard in \"" + pattern + "\" is not recorded", kRecording);
+/// Expands `pattern` for `root` into a `/`-separated name. A `( … )` holding no parenthesis and
+/// at least one wildcard is a group: dropped when its wildcards are empty, written without its
+/// parentheses when they are not. Every other parenthesis is literal (probe P3, decision 091). A
+/// group with both empty and non-empty wildcards, and a `)` after no literal `(`, are not
+/// recorded and are refused.
+std::string ExpandName(const std::string& pattern, const core::Project& project, const PlanContext& context,
+                       const Root& root, const std::string& what) {
+    // Expands the wildcards of `text`; returns whether they were empty (in a group: all or none).
+    const auto expand = [&](std::string_view text, std::string& out, bool group) {
+        bool empty = false;
+        bool filled = false;
+        for (size_t i = 0; i < text.size();) {
+            if (text[i] != '$') {
+                out += text[i++];
+                continue;
             }
-            if (!groupEmpty) out += group;
-            inGroup = false;
-            ++i;
-            continue;
-        }
-        if (c == '$') {
             size_t end = i + 1;
-            while (end < pattern.size() && std::isalpha(static_cast<unsigned char>(pattern[end]))) ++end;
-            const std::string token = pattern.substr(i + 1, end - i - 1);
+            while (end < text.size() && std::isalpha(static_cast<unsigned char>(text[end]))) ++end;
+            const std::string token(text.substr(i + 1, end - i - 1));
             if (std::find(kWildcards.begin(), kWildcards.end(), token) == kWildcards.end()) {
                 std::vector<std::string> valid;
                 for (std::string_view w : kWildcards) valid.push_back("$" + std::string(w));
                 Invalid(what, "unknown wildcard \"$" + token + "\" in \"" + pattern + "\"; valid: " +
                                   JoinNames(Nearest("$" + token, valid)));
             }
-            const std::string value = WildcardValue(token, root, what);
-            if (inGroup) {
-                groupHasWildcard = true;
-                groupEmpty = groupEmpty || value.empty();
-                group += value;
-            } else {
-                if (value.empty()) {
-                    Gap(what, "the wildcard $" + token + " is empty here and stands outside a ( … ) group in \"" +
-                                  pattern + "\"; that name is not recorded", kRecording);
-                }
-                out += value;
-            }
+            const std::string value = WildcardValue(token, project, context, root, what);
+            empty = empty || value.empty();
+            filled = filled || !value.empty();
+            out += value;
             i = end;
+        }
+        if (group && empty && filled) {
+            Gap(what, "a ( … ) group of \"" + pattern + "\" with both an empty and a non-empty wildcard is not recorded",
+                kRecording);
+        }
+        return empty;
+    };
+    std::string out;
+    size_t open = 0;  // literal '(' written so far, less the literal ')' matched with them
+    for (size_t i = 0; i < pattern.size();) {
+        const size_t paren = pattern.find_first_of("()", i);
+        expand(std::string_view(pattern).substr(i, (paren == std::string::npos ? pattern.size() : paren) - i), out,
+               false);
+        if (paren == std::string::npos) break;
+        const size_t next = pattern.find_first_of("()", paren + 1);
+        const bool group = pattern[paren] == '(' && next != std::string::npos && pattern[next] == ')' &&
+                           pattern.find('$', paren) < next;
+        if (!group) {
+            if (pattern[paren] == '(') {
+                ++open;
+            } else if (open-- == 0) {
+                Gap(what, "a \")\" after no literal \"(\" in \"" + pattern + "\" is not recorded", kRecording);
+            }
+            out += pattern[paren];
+            i = paren + 1;
             continue;
         }
-        (inGroup ? group : out) += c;
-        ++i;
+        std::string content;
+        if (!expand(std::string_view(pattern).substr(paren + 1, next - paren - 1), content, true)) out += content;
+        i = next + 1;
     }
-    if (inGroup) Invalid(what, "the file name \"" + pattern + "\" leaves a group open");
     size_t start = 0;
     while (true) {
         const size_t slash = out.find('/', start);
@@ -478,12 +524,12 @@ std::string Describe(const Root& root, const PresetSpec& preset, size_t mapIndex
 }
 
 /// Compiles one preset map for one stack: a file, a skipped map, or nothing (filtered out).
-void CompileMap(const core::Project& project, const ExportConfig& config, const ExportListEntry& entry,
-                const Root& root, const PresetSpec& preset, size_t mapIndex, ExportPlan& plan,
-                std::set<std::string>& diagnosticsNamed, std::set<std::string>& diagnosticsSeen) {
+void CompileMap(const core::Project& project, const PlanContext& context, const ExportConfig& config,
+                const ExportListEntry& entry, const Root& root, const PresetSpec& preset, size_t mapIndex,
+                ExportPlan& plan, std::set<std::string>& diagnosticsNamed, std::set<std::string>& diagnosticsSeen) {
     const MapSpec& map = preset.maps[mapIndex];
     const std::string what = Describe(root, preset, mapIndex, map);
-    if (entry.filter && !Selects(*entry.filter, root, map.fileName, what)) return;
+    if (entry.filter && !Selects(*entry.filter, root, map.fileName)) return;
     for (const ChannelSpec& c : map.channels) {
         if (c.type == SourceType::diagnosticMap) diagnosticsNamed.insert(c.name);
     }
@@ -506,45 +552,69 @@ void CompileMap(const core::Project& project, const ExportConfig& config, const 
     file.layout = statistics ? FileLayout::Statistics : LayoutOf(map.channels);
 
     // Sources and presence.
+    std::vector<ChannelSpec> specs = map.channels;
     std::vector<Resolved> resolved;
-    for (const ChannelSpec& spec : map.channels) resolved.push_back(Resolve(project, spec, root, what));
-    size_t present = 0;
-    size_t absent = 0;
-    bool black = false;
-    std::string reason;
-    for (size_t i = 0; i < resolved.size(); ++i) {
-        const Resolved& r = resolved[i];
-        if (r.presence == Presence::Present) ++present;
-        if (r.presence == Presence::Absent) {
-            ++absent;
-            if (reason.empty()) reason = r.absentReason;
+    for (const ChannelSpec& spec : specs) resolved.push_back(Resolve(project, spec, root, what));
+    const auto skip = [&](std::string reason, SkipKind kind) {
+        plan.skipped.push_back(
+            {file.textureSet, file.stack, file.rootPath, file.preset, mapIndex, map.fileName, std::move(reason), kind});
+    };
+    for (const Resolved& r : resolved) {
+        if (r.presence == Presence::ExportError) return skip(r.absentReason, SkipKind::export_error);
+    }
+    const auto count = [&](Presence presence) {
+        return std::count_if(resolved.begin(), resolved.end(), [&](const Resolved& r) { return r.presence == presence; });
+    };
+    const auto absentAt = [&](ChannelLetter dest) {
+        for (size_t i = 0; i < specs.size(); ++i) {
+            if (specs[i].dest == dest) return resolved[i].presence == Presence::Absent;
         }
-        if (r.presence == Presence::Constant && map.channels[i].name == "black") black = true;
+        return false;
+    };
+    // An absent documentMap as the alpha of present R, G and B: the file is R+G+B (probe P7).
+    if (file.layout == FileLayout::RGBA && count(Presence::Present) == 3 && count(Presence::Absent) == 1 &&
+        absentAt(ChannelLetter::A)) {
+        for (size_t i = specs.size(); i-- > 0;) {
+            if (specs[i].dest != ChannelLetter::A) continue;
+            specs.erase(specs.begin() + static_cast<std::ptrdiff_t>(i));
+            resolved.erase(resolved.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+        file.layout = FileLayout::RGB;
+    }
+    std::string reason;
+    for (const Resolved& r : resolved) {
+        if (r.presence == Presence::Absent && reason.empty()) reason = r.absentReason;
         if (r.source.type == SourceType::diagnosticMap && r.presence == Presence::Present) {
             diagnosticsSeen.insert(r.source.name);
         }
     }
+    const auto present = count(Presence::Present);
+    const auto absent = count(Presence::Absent);
     if (present > 0 && absent > 0) {
         Gap(what, "a map with a present source and an absent one (" + reason + ") is not recorded", kRecording);
     }
     if (present == 0 && absent == 0) {
-        if (black) Gap(what, "a map of default maps only, black among them, is not recorded", kRecording);
-        plan.skipped.push_back({file.textureSet, file.stack, file.rootPath, file.preset, mapIndex, map.fileName,
-                                "every channel reads a defaultMap"});
-        return;
+        const auto black = std::count_if(specs.begin(), specs.end(), [](const ChannelSpec& c) { return c.name == "black"; });
+        if (black == static_cast<std::ptrdiff_t>(specs.size())) {
+            return skip("every channel reads defaultMap black; Painter lists the map and writes nothing (probe P8)",
+                        SkipKind::not_written);
+        }
+        if (black > 0) Gap(what, "a map of black and white default maps is not recorded", kRecording);
+        return skip("every channel reads defaultMap white", SkipKind::absent);
     }
-    if (present == 0) {
-        plan.skipped.push_back({file.textureSet, file.stack, file.rootPath, file.preset, mapIndex, map.fileName, reason});
-        return;
-    }
+    if (present == 0) return skip(reason, SkipKind::absent);
 
-    for (size_t i = 0; i < map.channels.size(); ++i) {
-        const ChannelSpec& spec = map.channels[i];
+    for (size_t i = 0; i < specs.size(); ++i) {
+        const ChannelSpec& spec = specs[i];
         PlannedChannel channel;
         channel.dest = spec.dest;
         channel.src = spec.src;
         channel.source = resolved[i].source;
-        if (!statistics) channel.component = ComponentRead(spec, channel.source, what);
+        if (!statistics) {
+            channel.component = ComponentRead(spec, channel.source, what);
+            channel.luma = channel.source.type != SourceType::defaultMap && channel.source.components == 3 &&
+                           spec.src == ChannelLetter::L;
+        }
         file.channels.push_back(std::move(channel));
     }
     std::stable_sort(file.channels.begin(), file.channels.end(),
@@ -557,13 +627,13 @@ void CompileMap(const core::Project& project, const ExportConfig& config, const 
     } else {
         Parameters parameters = map.parameters;
         for (const ParameterRule& rule : config.exportParameters) {
-            if (!rule.filter || Selects(*rule.filter, root, map.fileName, what)) Override(parameters, rule.parameters);
+            if (!rule.filter || Selects(*rule.filter, root, map.fileName)) Override(parameters, rule.parameters);
         }
         file.parameters = Require(parameters, what);
         std::tie(file.width, file.height) = SizeOf(*root.set, file.parameters->sizeLog2);
     }
 
-    file.relativePath = ExpandName(map.fileName, root, what) + "." + Extension(file);
+    file.relativePath = ExpandName(map.fileName, project, context, root, what) + "." + Extension(file);
     file.path = JoinPath(config.exportPath, file.relativePath);
     plan.files.push_back(std::move(file));
 }
@@ -591,6 +661,7 @@ json::Value FileJson(const PlannedFile& f) {
         channels.push_back(json::Object{{"destChannel", std::string(ChannelLetterName(c.dest))},
                                         {"srcChannel", std::string(ChannelLetterName(c.src))},
                                         {"component", static_cast<std::int64_t>(c.component)},
+                                        {"luma", c.luma},
                                         {"source", SourceJson(c.source)}});
     }
     json::Value parameters = nullptr;
@@ -630,7 +701,8 @@ json::Value PlanBody(const ExportPlan& plan) {
                                        {"preset", s.preset},
                                        {"map", static_cast<std::int64_t>(s.mapIndex)},
                                        {"fileName", s.fileName},
-                                       {"reason", s.reason}});
+                                       {"reason", s.reason},
+                                       {"kind", std::string(SkipKindName(s.kind))}});
     }
     return json::Object{{"schema", std::string(kPlanSchema)},
                         {"exportPath", plan.exportPath},
@@ -645,7 +717,12 @@ std::string_view FileLayoutName(FileLayout layout) {
     return names[static_cast<size_t>(layout)];
 }
 
-ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config) {
+std::string_view SkipKindName(SkipKind kind) {
+    static constexpr std::array<std::string_view, 3> names{"absent", "not_written", "export_error"};
+    return names[static_cast<size_t>(kind)];
+}
+
+ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config, const PlanContext& context) {
     const std::string& mode = project.settings.color_management.mode;
     if (!mode.empty() && mode != "legacy") {
         throw core::NotYetSupported("export: the colour-management mode \"" + mode +
@@ -664,8 +741,30 @@ ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config)
         const std::string what = "exportList[" + std::to_string(i) + "]";
         const Root root = ResolveRoot(project, entry.rootPath, what + ".rootPath");
         const PresetSpec& preset = PresetNamed(config, entry.exportPreset ? *entry.exportPreset : *config.defaultExportPreset);
+        const size_t first = plan.files.size();
         for (size_t m = 0; m < preset.maps.size(); ++m) {
-            CompileMap(project, config, entry, root, preset, m, plan, diagnosticsNamed, diagnosticsSeen);
+            CompileMap(project, context, config, entry, root, preset, m, plan, diagnosticsNamed, diagnosticsSeen);
+        }
+        // Two maps of one entry resolving to one path: the later one gets `_1` before its
+        // extension (probe P9, decision 091).
+        std::map<std::string, bool> seen;  // path -> made by a rename
+        for (size_t f = first; f < plan.files.size(); ++f) {
+            PlannedFile& file = plan.files[f];
+            const auto existing = seen.find(file.relativePath);
+            if (existing == seen.end()) {
+                seen.emplace(file.relativePath, false);
+                continue;
+            }
+            const size_t dot = file.relativePath.rfind('.');
+            const std::string renamed = file.relativePath.substr(0, dot) + "_1" + file.relativePath.substr(dot);
+            if (existing->second || seen.contains(renamed)) {
+                Gap(file.rootPath + " map \"" + file.fileName + "\"",
+                    "a third map resolving to \"" + file.relativePath + "\" (after a `_1` rename) is not recorded",
+                    kRecording);
+            }
+            file.relativePath = renamed;
+            file.path = JoinPath(config.exportPath, file.relativePath);
+            seen.emplace(renamed, true);
         }
     }
     for (const std::string& name : diagnosticsNamed) {
@@ -683,16 +782,27 @@ ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config)
                 "\"; what Painter does on such a collision is not recorded (" + std::string(kRecording) + ")");
         }
     }
-    if (plan.files.empty()) {
-        throw core::ValueError("export: the configuration writes no file (every requested map is absent or filtered "
-                               "out); Painter refuses such an export");
-    }
     plan.hash = core::Sha256Hex(json::WriteCanonical(PlanBody(plan)));
     return plan;
 }
 
-ExportPlan CompilePlan(const core::Project& project, std::string_view configJson) {
-    return CompilePlan(project, ParseConfig(configJson));
+ExportPlan CompilePlan(const core::Project& project, std::string_view configJson, const PlanContext& context) {
+    return CompilePlan(project, ParseConfig(configJson), context);
+}
+
+void CheckExportable(const ExportPlan& plan) {
+    for (const SkippedMap& s : plan.skipped) {
+        if (s.kind != SkipKind::export_error) continue;
+        const std::string what = "export: " + s.rootPath + ": preset \"" + s.preset + "\" map " +
+                                 std::to_string(s.mapIndex) + " (\"" + s.fileName + "\"): " + s.reason;
+        // Recorded only where no other file is written (probes P12, P13): whether Painter writes
+        // the other files before it raises is not known.
+        if (!plan.files.empty()) {
+            throw core::NotYetSupported(what + "; an export that also writes other files is not recorded (" +
+                                        std::string(kRecording) + ")");
+        }
+        throw core::ValueError(what);
+    }
 }
 
 json::Value PlanJson(const ExportPlan& plan) {
@@ -716,8 +826,11 @@ std::vector<StackFiles> FilesByStack(const ExportPlan& plan) {
     return out;
 }
 
-std::vector<StackFiles> ListProjectTextures(const core::Project& project, std::string_view configJson) {
-    return FilesByStack(CompilePlan(project, configJson));
+std::vector<StackFiles> ListProjectTextures(const core::Project& project, std::string_view configJson,
+                                            const PlanContext& context) {
+    const ExportPlan plan = CompilePlan(project, configJson, context);
+    CheckExportable(plan);
+    return FilesByStack(plan);
 }
 
 render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int64_t revision, const PlannedFile& file,
@@ -745,6 +858,21 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
                 r.geometry = inputs.geometry;
                 render::Result<evaluator::ChannelResult> result = evaluator::EvaluateOn(project, r, templates, store, cache);
                 if (!result) return render::Unexpected(result.error());
+                // The luma reads linear components. A base constant of an sRGB8 channel holds its
+                // export value, not its linear one (evaluator/templates.h): its luma is not
+                // reproduced (probe P5 records Painter's luma of the empty BaseColor as the
+                // channel's linear 0.8).
+                const bool luma = std::any_of(file.channels.begin(), file.channels.end(), [&](const PlannedChannel& c) {
+                    return c.luma && c.source.type == s.type && c.source.name == s.name;
+                });
+                if (luma && result->format == core::ChannelFormat::sRGB8 &&
+                    std::any_of(result->tiles.begin(), result->tiles.end(),
+                                [](const evaluator::TileResult& t) { return t.constant.has_value(); })) {
+                    return evaluator::EvalFail(evaluator::EvalErrorKind::UnsupportedSource,
+                                               "the luma of the sRGB8 channel " + s.name +
+                                                   " where it holds its base value (no layer) needs the base's linear "
+                                                   "value (phase1.16_export-processing-encoders)");
+                }
                 evaluated[key] = evaluator::MapOf(*result);
                 break;
             }
@@ -795,6 +923,16 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
         if (map.width != raster.width || map.height != raster.height || channel.component >= map.components) {
             return evaluator::EvalFail(evaluator::EvalErrorKind::Internal,
                                        "the sources of " + file.relativePath + " disagree in size or components");
+        }
+        if (channel.luma) {
+            // Rec. 601 luma of the linear components, Painter 12.1.5's order of operations (probe
+            // P5): the green product, then fused into red, then into blue.
+            for (size_t t = 0; t < texels; ++t) {
+                const float* rgb = &map.values[t * map.components];
+                raster.values[t * raster.channels + c] =
+                    std::fma(0.114f, rgb[2], std::fma(0.299f, rgb[0], 0.587f * rgb[1]));
+            }
+            continue;
         }
         for (size_t t = 0; t < texels; ++t) {
             raster.values[t * raster.channels + c] = map.values[t * map.components + channel.component];

@@ -2,16 +2,19 @@
 // and 086; src/export/). Driven by tests/export/test_export_plan.py:
 //
 //   uzp-export-tests plan <cases.json>
-//       Each case {"project": <skeleton>, "config": <json_config>} is compiled; prints one JSON
-//       line per case: {"plan": PlanJson, "list": [[set, stack, [paths]]]} or {"error": class,
-//       "message": text}, class `ValueError` or `NotYetSupported`.
+//       Each case {"project": <skeleton>, "config": <json_config>, "project_path"?: <path>} is
+//       compiled; prints one JSON line per case: {"plan": PlanJson, "list": [[set, stack,
+//       [paths]]]} (the dry run), {"plan": PlanJson, "list_error": text} (the dry run raises
+//       ValueError: CheckExportable) or {"error": class, "message": text}, class `ValueError` or
+//       `NotYetSupported`.
 //   uzp-export-tests files <templates dir> <spec.json> <config.json> <out dir>
 //       Builds the project of an evaluator spec, compiles the configuration and evaluates every
 //       planned file on the CPU store (`EvaluateFileOn`); writes <out>/index.json and one raw
 //       float32 file per planned file (<out>/<n>.f32).
 //
-// A project skeleton: {"color_management"?, "workflow"?, "normal_map_format"?, "texture_sets":
-// [{"name", "resolution"?: [w, h], "mesh_maps"?: [usage...], "stacks": [{"name", "channels":
+// A project skeleton: {"color_management"?, "workflow"?, "normal_map_format"?, "mesh"?: <mesh file
+// name>, "texture_sets": [{"name", "original_name"?, "resolution"?: [w, h], "mesh_maps"?:
+// [usage...], "stacks": [{"name", "channels":
 // {type: format}, "layers"?: [uid...]}]}]}. A spec is the evaluator test spec
 // (tests/evaluator/evaluator_test.cpp, `evaluate`) restricted to fill and group layers, plus
 // "name" (the texture set's name) and "mesh_maps" ({usage: resource sha256}).
@@ -119,13 +122,18 @@ core::Project ParseSkeleton(const json::Value& value) {
         project.settings.normal_map_format =
             EnumOf<core::NormalMapFormat>(Str(o.at("normal_map_format"), "normal_map_format"), "normal map format");
     }
+    if (o.contains("mesh")) {
+        // The imported mesh's file name, as its import report records it.
+        project.mesh = core::MeshReference{
+            std::string(64, 'b'), json::Object{{"source", json::Object{{"name", Str(o.at("mesh"), "mesh")}}}}, {}};
+    }
     core::Id next = 1;
     for (const json::Value& s : Arr(Key(o, "texture_sets"), "texture_sets")) {
         const json::Object& so = Obj(s, "texture set");
         core::TextureSet set;
         set.id = next++;
         set.name = Str(Key(so, "name"), "name");
-        set.original_name = set.name;
+        set.original_name = so.contains("original_name") ? Str(so.at("original_name"), "original_name") : set.name;
         set.material_id = set.name;
         set.resolution.width = 256;
         set.resolution.height = 256;
@@ -182,11 +190,18 @@ int RunPlan(const fs::path& casesPath) {
         try {
             const core::Project project = ParseSkeleton(Key(o, "project"));
             const json::Value& config = Key(o, "config");
+            exporter::PlanContext context;
+            if (o.contains("project_path")) context.projectPath = Str(o.at("project_path"), "project_path");
             const exporter::ExportPlan plan =
-                config.IsString() ? exporter::CompilePlan(project, Str(config, "config"))
-                                  : exporter::CompilePlan(project, exporter::ParseConfig(config));
+                config.IsString() ? exporter::CompilePlan(project, Str(config, "config"), context)
+                                  : exporter::CompilePlan(project, exporter::ParseConfig(config), context);
             result["plan"] = exporter::PlanJson(plan);
-            result["list"] = ListJson(exporter::FilesByStack(plan));
+            try {
+                exporter::CheckExportable(plan);
+                result["list"] = ListJson(exporter::FilesByStack(plan));
+            } catch (const core::ValueError& e) {
+                result["list_error"] = std::string(e.what());
+            }
             result["canonical_sha256"] = core::Sha256Hex(json::WriteCanonical(exporter::PlanJson(plan)));
         } catch (const core::ValueError& e) {
             result["error"] = "ValueError";

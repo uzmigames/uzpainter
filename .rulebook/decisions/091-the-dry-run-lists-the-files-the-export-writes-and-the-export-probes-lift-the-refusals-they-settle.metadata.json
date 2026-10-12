@@ -1,0 +1,14 @@
+{
+  "id": 91,
+  "slug": "the-dry-run-lists-the-files-the-export-writes-and-the-export-probes-lift-the-refusals-they-settle",
+  "title": "The dry run lists the files the export writes, and the export probes lift the refusals they settle",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.15_export-plan-compiler",
+    "phase1.16_export-processing-encoders",
+    "phase1.19_pyapi-native-module",
+    "phase1.20_pyapi-facade"
+  ],
+  "supersededBy": null
+}
