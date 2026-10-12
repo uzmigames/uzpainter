@@ -51,6 +51,11 @@
 //!   (`tests/mesh/normal_bake.cpp`) and `uzp-mesh-reload-tests.exe`, the mesh reload
 //!   (`tests/mesh/reload_test.cpp`)
 //!
+//! - `zig build preview-tests` `uzp-preview-tests.exe`, the native tests of the preview viewport
+//!   (`src/preview/`, `tests/preview/preview_test.cpp`): display transform, environment
+//!   precomputation, the hand-over buffer and the `painter_viewport` regression goldens, with the DX
+//!   run-time files beside it
+//!
 //! - `zig build pyapi-tests` `uzp-pyapi-tests.exe`, the script runner of the native Python API
 //!   tests (`src/python/`, `tests/python/`; the host of `UzPainter.exe run`) with the embedded
 //!   CPython, `assets/templates/`, `assets/export-presets/` and `capabilities.json` beside it
@@ -242,6 +247,21 @@ const render_sources = [_][]const u8{
     "render/texture_readback.cpp",
     "render/uv_raster.cpp",
     "render/xxhash64.cpp",
+};
+/// The preview viewport (`src/preview/`, phase2.1_preview-viewport-window), relative to `src/`: the
+/// `painter_viewport` pass with its environment precomputation and display transform, compiled
+/// with `evaluator_flags` (no contraction, so the CPU precomputation is one IEEE operation per
+/// step) into `UzPainter.exe` and into `uzp-preview-tests.exe`.
+const preview_sources = [_][]const u8{
+    "preview/display_transform.cpp",
+    "preview/environment.cpp",
+    "preview/viewport.cpp",
+};
+/// The preview window, its thread and `UzPainter.exe --preview` (`src/preview/`), relative to
+/// `src/`: `UzPainter.exe` only (they read the evaluator and the session).
+const preview_host_sources = [_][]const u8{
+    "preview/preview.cpp",
+    "preview/cli.cpp",
 };
 /// Warnings are errors in UzPainter's render layer and its tests (never in vendored code).
 const own_warning_flags = [_][]const u8{ "-Wall", "-Wextra", "-Werror" };
@@ -1185,6 +1205,8 @@ pub fn build(b: *std.Build) void {
     const worker_hook_flags: []const []const u8 = if (optimize == .Debug) &.{"-DUZP_WORKER_FAULT_HOOKS=1"} else &.{};
     const supervisor_flags = std.mem.concat(b.allocator, []const u8, &.{ &pyapi_flags, worker_hook_flags }) catch @panic("OOM");
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &supervisor_sources, .flags = supervisor_flags });
+    // The preview viewport and window (phase2.1_preview-viewport-window).
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &(preview_sources ++ preview_host_sources), .flags = &pyapi_flags });
     app_mod.linkLibrary(mesh_lib);
     const install_templates = b.addInstallDirectory(.{
         .source_dir = b.path(templates_dir),
@@ -1377,6 +1399,50 @@ pub fn build(b: *std.Build) void {
     // `uzpainter.capabilities` reads the manifest beside the executable, as in `zig build painter`.
     pyapi_tests_step.dependOn(capabilities_step);
     b.getInstallStep().dependOn(pyapi_tests_step);
+
+    // ── The preview viewport (phase2.1_preview-viewport-window) ───────────────────────────────
+    // `uzp-preview-tests.exe <case> <work-dir>` (`tests/preview/preview_test.cpp`): the display
+    // transform, the environment precomputation, the hand-over buffer and, on a DX12 adapter, the
+    // `painter_viewport` pass and its regression goldens on the render-reference fixtures.
+    const preview_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, preview_tests_mod);
+    preview_tests_mod.addIncludePath(b.path("src"));
+    for (app_thirdparty_include_dirs) |dir| preview_tests_mod.addIncludePath(b.path(dir));
+    preview_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/preview"),
+        .files = &.{"preview_test.cpp"},
+        .flags = &evaluator_flags,
+    });
+    preview_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &preview_sources, .flags = &evaluator_flags });
+    preview_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
+    preview_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &render_sources,
+        .flags = &(cxx_flags ++ own_warning_flags),
+    });
+    preview_tests_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    preview_tests_mod.linkLibrary(core_lib);
+    preview_tests_mod.linkLibrary(mesh_lib);
+    preview_tests_mod.linkLibrary(uzp_core_lib);
+    for (system_libraries) |name| preview_tests_mod.linkSystemLibrary(name, .{});
+    preview_tests_mod.linkSystemLibrary("version", .{});
+    const preview_tests_exe = b.addExecutable(.{
+        .name = "uzp-preview-tests",
+        .root_module = preview_tests_mod,
+    });
+    const preview_tests_step = b.step("preview-tests", "Build the native tests of the preview viewport");
+    preview_tests_step.dependOn(&b.addInstallArtifact(preview_tests_exe, .{}).step);
+    for (dx_runtime) |step| preview_tests_step.dependOn(step);
+    b.getInstallStep().dependOn(preview_tests_step);
 }
 
 /// The project store's sources (`store_sources`, compiled with `flags`) with SQLite and zstd.

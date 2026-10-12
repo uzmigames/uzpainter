@@ -5,7 +5,7 @@
 //
 //   UzPainter.exe --worker --pipe \\.\pipe\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12|vulkan
 //                 [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>]
-//                 [--crash-dir <dir>] [--connect-timeout-ms <ms>] [--test-faults]
+//                 [--crash-dir <dir>] [--connect-timeout-ms <ms>] [--test-faults] [--preview]
 //
 // The worker owns the one open document, the project store, the engine thread with the device of
 // the requested backend and the embedded interpreter. It creates the pipe, accepts only its
@@ -16,6 +16,8 @@
 // - `tools/call`: `project_open`, `project_close`, `project_save`, `project_inspect` (GPU-free),
 //   `evaluate_channel` (GPU), `run_python` (mutating; refused with `python_disabled` without
 //   `--allow-python`) and, in a build with the fault hooks and under `--test-faults`, `test_fault`.
+//   With `--preview` the worker hosts the preview window (src/preview/preview.h): every
+//   `evaluate_channel` result is published to it without waiting, and `preview_status` is listed.
 //   A mutating call needs `idempotency_key` and `expected_revision` (`invalid_request` otherwise)
 //   and is refused with `stale_revision {expected, current}` when the open project moved on. A GPU
 //   call on a worker without a device fails with `gpu_backend_unavailable {backend, reason}`

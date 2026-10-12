@@ -4,8 +4,8 @@ This folder holds the process boundary of `docs/architecture/02-runtime-topology
 
 | Role | Command | Code |
 |---|---|---|
-| Supervisor | `UzPainter.exe --mcp [--gpu-backend dx12\|vulkan] [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>] [--test-faults]` | `supervisor.{h,cpp}` starts the embedded interpreter and calls `uzpainter_supervisor.main.main` |
-| Worker | `UzPainter.exe --worker --pipe \\.\pipe\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12\|vulkan [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>] [--connect-timeout-ms <ms>] [--test-faults]` | `worker.{h,cpp}`, `pipe.{h,cpp}`, `ipc.{h,cpp}`, `fault_hooks.{h,cpp}` |
+| Supervisor | `UzPainter.exe --mcp [--gpu-backend dx12\|vulkan] [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>] [--test-faults] [--preview]` | `supervisor.{h,cpp}` starts the embedded interpreter and calls `uzpainter_supervisor.main.main` |
+| Worker | `UzPainter.exe --worker --pipe \\.\pipe\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12\|vulkan [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>] [--connect-timeout-ms <ms>] [--test-faults] [--preview]` | `worker.{h,cpp}`, `pipe.{h,cpp}`, `ipc.{h,cpp}`, `fault_hooks.{h,cpp}` |
 | Single process | `UzPainter.exe run`, the CLI verbs | hosts the worker's state (the `Session`, the interpreter) directly, `src/python/run.h` |
 
 `--mcp-http` and `--roots` are refused with a usage error that names `phase2.5_mcp-transport-registry`, the task that delivers them.
@@ -81,7 +81,8 @@ It then answers one request at a time on the interpreter's thread. The GIL is he
 | `project_inspect` | GPU-free | `{open, path, revision, texture_sets: [{name, stacks}]}` |
 | `evaluate_channel {channel, texture_set?, stack?}` | GPU (the GPU evaluator on the engine thread) | `{revision, texture_set, stack, channel, format, width, height, tiles, payload: {path, sha256, size}}`; the texels go to a file under `--output-root` |
 | `run_python {code, args?}` | mutating; listed and run only with `--allow-python`; its MCP schema also requires `idempotency_key` and `expected_revision` | the `RunScript` report; a raising script is `script_failed`, with the calls it committed in `details` |
-| `test_fault {fault}` | Debug builds under `--test-faults` only | `{armed}` |
+| `preview_status` | GPU-free; listed only with `--preview` | `{window_open, stalled, frames_published, frames_taken, frames_rendered, revision_shown, last_error}` of the attached preview (`src/preview/PREVIEW.md`) |
+| `test_fault {fault}` | Debug builds under `--test-faults` only; `preview_stall` and `preview_resume` only with `--preview` (the stall hook of the preview thread) | `{armed}` |
 
 The checks run in this order, and every refusal comes before the call runs:
 

@@ -59,6 +59,7 @@ class WorkerConfig:
     output_root: Path
     crash_root: Path
     test_faults: bool
+    preview: bool = False
     protocol: str = ipc.PROTOCOL
 
     def argv(self, pipe: str, crash_dir: Path) -> list[str]:
@@ -70,6 +71,8 @@ class WorkerConfig:
         args += ["--output-root", str(self.output_root), "--crash-dir", str(crash_dir)]
         if self.test_faults:
             args.append("--test-faults")
+        if self.preview:
+            args.append("--preview")
         return args
 
 
