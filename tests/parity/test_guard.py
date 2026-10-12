@@ -433,6 +433,64 @@ def test_repository_store_census_report_passes() -> None:
     assert run_guard(REPO_ROOT, snapshot, None) == []
 
 
+REBUILD_PATH = "parity/reports/phase2/recipe-rebuild-wand.json"
+
+
+def _rebuild_report() -> dict[str, Any]:
+    side = {
+        "recipe_digest": "a" * 64,
+        "revision": 7,
+        "export": {
+            "status": "written",
+            "files": [{"name": "w_BaseColor.png", "sha256": "b" * 64, "bytes": 1024}],
+        },
+    }
+    return {
+        "schema": "uzpainter/parity/recipe-rebuild-report/1",
+        "golden_id": "phase1/tier1/wand-v1",
+        "manifest_sha256": "c" * 64,
+        "run": {
+            "uzpainter_build_hash": "d" * 64,
+            "compat_profile": "painter-12.1-api-0.3.7",
+            "app_version": "0.1.0",
+        },
+        "resources": ["e" * 64],
+        "original": side,
+        "rebuilt": side,
+        "equality": {
+            "digests_equal": True,
+            "files": "identical",
+            "differing": [],
+            "missing": [],
+            "extra": [],
+            "outcome": "pass",
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("change", "allowed"),
+    [
+        (lambda r: r, True),
+        (lambda r: {**r, "schema": "uzpainter/parity/recipe-rebuild-report/2"}, False),
+        (lambda r: {**r, "note": "free text"}, False),
+        (lambda r: {**r, "original": {**r["original"], "pixels": [0.25, 0.5]}}, False),
+        (
+            lambda r: {
+                **r,
+                "rebuilt": {**r["rebuilt"], "export": {"status": "refused", "refusal": "a b"}},
+            },
+            False,
+        ),
+    ],
+)
+def test_recipe_rebuild_report_holds_digests_hashes_and_names_only(
+    repo: Path, change: Any, allowed: bool
+) -> None:
+    put(repo, REBUILD_PATH, json.dumps(change(_rebuild_report())).encode())
+    assert blocked(repo, None) == ({} if allowed else {REBUILD_PATH: {"public-schema"}})
+
+
 # --- 3.4 CI ----------------------------------------------------------------------------------
 
 

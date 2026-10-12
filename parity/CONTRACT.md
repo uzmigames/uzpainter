@@ -138,6 +138,7 @@ All schemas are JSON Schema draft 2020-12 under `parity/schema/`; `tools/parity/
 | `comparison-report.json` | The comparison-tool output (§8) | Numbers and hashes only |
 | `envelope-registry.json` | The envelope registry (§6.5): current, candidate, every promoted envelope with its manifest root, quarantine | Builds, hashes, paths and dates only |
 | `oracle-envelope.json` | Published envelope results: stability study, canary and corpus drift (§6.5) | Numbers and hashes only |
+| `recipe-rebuild-report.json` | A rebuild-from-dump report (P2-RECIPE): the recipe digest and export of a project and of its rebuild from the dump, and their equality. UzPainter against itself, no oracle data | Numbers, hashes and file names only |
 | `semantics.json` | Fitted formulas `parity/semantics/*.json`: each entry cites approved public sources (`A-OBSERVE` refused), lists authored or fitted constants and its residuals against named goldens | Closed objects; short scalars or lists of at most 16 numbers; the corpus by golden id only |
 
 Samples under `parity/schema/samples/` are synthetic (invented values and hashes; nothing recorded from Painter): `public/` (valid manifests), `private/` (private-shaped records: exported map, JSON readback, default and template capture, Iray reference), `exceptions/` (register entries), `reports/` (a report). The repository guard of P0-STORE (`parity/GUARD.md`) must accept `samples/private/` only as these synthetic test inputs. Tests: `tests/parity/test_schemas.py`.

@@ -34,6 +34,7 @@ First match wins; any other JSON under `parity/` is blocked until a rule for its
 | `parity/reports/<phase>/tier<tier>-*.json` | Valid `comparison-report.json`: a golden's comparison report (numbers and hashes only; Tier 1 pilots, `parity/RECORDER.md` §11) |
 | `parity/semantics/*.json` | Valid `semantics.json` (fitted formulas: public sources, constants, residuals as numbers) |
 | `parity/fixtures/**` | An authored input (fixture description, authored recipe) that a valid manifest under `parity/manifests/`, under an envelope's `parity/envelopes/<envelope id>/manifests/` or among its requested goldens (`requests/`) declares by this path and SHA-256 (decision 087) |
+| `parity/reports/<phase>/recipe-rebuild-*.json` | Valid `recipe-rebuild-report.json`: a rebuild-from-dump report (`phase2.2_recipe-and-diagnostics`): recipe digests, file names, SHA-256 and sizes, the outcome; no oracle data |
 | `parity/reports/<phase>/store-census.json` | The project store's size census (`src/store/census.h`, `phase1.7_store-inspect-census`): `schema` `uzpainter/store-census/1`, a non-empty `projects` list of objects with an `id`, numbers everywhere else; text only in `schema`, `task`, `date`, `id`, `format`, `raster_plane_format` and the `not_measured` lists, each an identifier (no paths) |
 
 ## 3. Running it

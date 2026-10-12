@@ -36,7 +36,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from tests.adapters.assets3d.wand import REQUEST, Wand
+from tests.adapters.assets3d.wand import REQUEST, Call, Wand
 from tools.parity.recorder.environment import video_controllers
 from tools.parity.recorder.script_run import texture_set_of
 from tools.parity.schemas import REGISTER_PATH, load_json
@@ -68,20 +68,30 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def rebuild(painter: Path, work: Path, manifest: Path) -> tuple[Wand, CandidateRun]:
-    """create, sync and export through the adapter in `work`; the exported files by (texture set,
-    map name), or the export's refusal."""
-    work.mkdir(parents=True)  # a fresh directory per rebuild
+def built(painter: Path, work: Path, manifest: Path) -> Wand:
+    """create and sync through the adapter in `work`, a fresh directory."""
+    work.mkdir(parents=True)
     wand = Wand(painter, work, manifest)
     for step, call in (("create", wand.create()), ("sync", wand.sync())):
         if call.status != 0:
             raise RunError(f"{step} failed ({call.status}): {call.stdout}{call.stderr}")
-    call = wand.export()
+    return wand
+
+
+def rebuild(painter: Path, work: Path, manifest: Path) -> tuple[Wand, CandidateRun]:
+    """create, sync and export through the adapter in `work`; the exported files by (texture set,
+    map name), or the export's refusal."""
+    wand = built(painter, work, manifest)
+    return wand, exported(wand, wand.export())
+
+
+def exported(wand: Wand, call: Call) -> CandidateRun:
+    """The files of a finished export call by (texture set, map name), or its explicit refusal."""
     out = wand.argument("export", "out")
     if call.status != 0:
         written = sorted(p.name for p in out.iterdir()) if out.is_dir() else []
         if call.status == 1 and REFUSAL in call.stderr and not written:
-            return wand, CandidateRun(refused=True)
+            return CandidateRun(refused=True)
         raise RunError(f"export failed ({call.status}), wrote {written}: {call.stderr}")
     result: dict[str, Any] = call.document()
     if str(result.get("status", "")).rsplit(".", 1)[-1] != "Success":
@@ -91,7 +101,7 @@ def rebuild(painter: Path, work: Path, manifest: Path) -> tuple[Wand, CandidateR
         for key, names in result["files"].items()
         for name in names
     }
-    return wand, CandidateRun(files)
+    return CandidateRun(files)
 
 
 def run(painter: Path, work: Path) -> dict[str, Any]:
