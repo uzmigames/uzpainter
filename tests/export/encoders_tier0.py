@@ -150,7 +150,9 @@ BIT_DEPTH_STEPS = {
 
 
 def processing_cases(store: OracleStore) -> list[dict[str, Any]]:
-    """The cases of `uzp-export-tests process` (decision 103), r1 of each golden (decision 032):
+    """The cases of `uzp-export-tests process` (decision 103), on r1 and on r2 of each golden, each
+    case's source and target from the same recording (decision 032: r1 is the exact target, the
+    residuals against r2 are published):
 
     - export-bit-depth: every map's OpenEXR 32f file (sRGB8 material channels excepted) as the
       raster of its PNG 8, PNG 16 and OpenEXR 16f files (R-090 P1, P2, P7);
@@ -161,65 +163,72 @@ def processing_cases(store: OracleStore) -> list[dict[str, Any]]:
     root = manifest_root(current_envelope()) / "tier0" / "semantics"
     cases: list[dict[str, Any]] = []
 
-    def path(golden: Golden, output_id: str) -> str:
-        return str(_blob_path(store, golden, golden.output("r1", output_id)["blob"]))
+    def path(golden: Golden, recording: str, output_id: str) -> str:
+        return str(_blob_path(store, golden, golden.output(recording, output_id)["blob"]))
 
     bit_depth = load(store, root / "export-bit-depth.json")
-    for output_id in bit_depth.maps("r1"):
-        texture_set, name, step = output_id.split("/")
-        group = BIT_DEPTH_STEPS.get(int(step.removeprefix("step")))
-        if group is None or name in SRGB8_MATERIAL:
-            continue
-        for target_step, fmt, depth in group:
+    dither = load(store, root / "export-dither.json")
+    alpha = load(store, root / "export-alpha-layouts.json")
+    for recording in ("r1", "r2"):
+        for output_id in bit_depth.maps(recording):
+            texture_set, name, step = output_id.split("/")
+            group = BIT_DEPTH_STEPS.get(int(step.removeprefix("step")))
+            if group is None or name in SRGB8_MATERIAL:
+                continue
+            for target_step, fmt, depth in group:
+                cases.append(
+                    {
+                        "golden": bit_depth.golden_id,
+                        "recording": recording,
+                        "source": path(bit_depth, recording, output_id),
+                        "target": path(
+                            bit_depth, recording, f"{texture_set}/{name}/step{target_step}"
+                        ),
+                        "format": fmt,
+                        "bit_depth": depth,
+                        "height": name == "height",
+                    }
+                )
+        for output_id in dither.maps(recording):
+            texture_set, name, step = output_id.split("/")
+            if step != "step106" or name in SRGB8_MATERIAL:
+                continue
             cases.append(
                 {
-                    "golden": bit_depth.golden_id,
-                    "source": path(bit_depth, output_id),
-                    "target": path(bit_depth, f"{texture_set}/{name}/step{target_step}"),
-                    "format": fmt,
-                    "bit_depth": depth,
-                    "height": name == "height",
+                    "golden": dither.golden_id,
+                    "recording": recording,
+                    "source": path(dither, recording, output_id),
+                    "target": path(dither, recording, f"{texture_set}/{name}/step104"),
+                    "format": "png",
+                    "bit_depth": "16",
+                    "dithering": True,
+                    # The PNG 16 source of a Height map already holds its written values.
+                    "height": False,
                 }
             )
-    dither = load(store, root / "export-dither.json")
-    for output_id in dither.maps("r1"):
-        texture_set, name, step = output_id.split("/")
-        if step != "step106" or name in SRGB8_MATERIAL:
-            continue
-        cases.append(
-            {
-                "golden": dither.golden_id,
-                "source": path(dither, output_id),
-                "target": path(dither, f"{texture_set}/{name}/step104"),
-                "format": "png",
-                "bit_depth": "16",
-                "dithering": True,
-                # The PNG 16 source of a Height map already holds its written values.
-                "height": False,
-            }
-        )
-    alpha = load(store, root / "export-alpha-layouts.json")
-    for output_id in alpha.maps("r1"):
-        if not output_id.endswith(".exr"):
-            continue
-        source = alpha.map("r1", output_id)
-        layout = output_id.rsplit("_", 1)[1].removesuffix(".exr")
-        cases.append(
-            {
-                "golden": alpha.golden_id,
-                "source": path(alpha, output_id),
-                "target": path(alpha, output_id.replace("s19", "s18").replace(".exr", ".png")),
-                "format": "png",
-                "bit_depth": "16",
-                "append_opaque_alpha": source.values.shape[2] == {"la": 1, "rgba": 3}[layout],
-            }
-        )
+        for output_id in alpha.maps(recording):
+            if not output_id.endswith(".exr"):
+                continue
+            source = alpha.map(recording, output_id)
+            layout = output_id.rsplit("_", 1)[1].removesuffix(".exr")
+            target = output_id.replace("s19", "s18").replace(".exr", ".png")
+            cases.append(
+                {
+                    "golden": alpha.golden_id,
+                    "recording": recording,
+                    "source": path(alpha, recording, output_id),
+                    "target": path(alpha, recording, target),
+                    "format": "png",
+                    "bit_depth": "16",
+                    "append_opaque_alpha": source.values.shape[2] == {"la": 1, "rgba": 3}[layout],
+                }
+            )
     return cases
 
 
 def process_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
-    """Runs `processing_cases` through `uzp-export-tests process`. Returns per golden the cases and
-    the identical ones, the differing targets, and the written layouts."""
+    """Runs `processing_cases` through `uzp-export-tests process`. Returns per golden and recording
+    the cases and the identical ones, the differing targets, and the written layouts."""
     needs_store()
     store = locate()
     assert store is not None
@@ -237,7 +246,7 @@ def process_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
     }
     for case, line in zip(cases, lines, strict=True):
         result = json.loads(line)
-        kind = f"{case['golden']} {case['format']} {case['bit_depth']}"
+        kind = f"{case['golden']} {case['format']} {case['bit_depth']} {case['recording']}"
         report["cases"][kind] += 1
         report["identical"][kind] += int(result["equal"])
         report["layouts"][str(result["layout"])] += 1
@@ -417,17 +426,18 @@ def _byte_residual(
 
 
 def _processed_residuals(processed: dict[str, Any], kind: str) -> list[dict[str, Any]]:
-    """The cases of one processing (`<format> <depth>`) per golden as byte residuals."""
+    """The cases of one processing (`<format> <depth>`) per golden and recording as byte
+    residuals."""
     out = []
     for name, cases in sorted(processed["cases"].items()):
-        golden_id, fmt, depth = name.split(" ")
+        golden_id, fmt, depth, recording = name.split(" ")
         if f"{fmt} {depth}" != kind:
             continue
         differs = np.zeros((1, cases), np.int64)
         differs[0, processed["identical"][name] :] = 1
         diff = difference(np.zeros((1, cases), np.int64), differs)
         label = f"{fmt} {depth} files from Painter's own values"
-        out.append(residual(golden_id, label, "r1", "file (bytes identical)", diff))
+        out.append(residual(golden_id, label, recording, "file (bytes identical)", diff))
     return out
 
 
