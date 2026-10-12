@@ -345,11 +345,40 @@ void ParseProjection(const json::Object& p, core::Projection& projection) {
     }
 }
 
+/// A spec mask {"background", "effects"?: [mask fill effect {"kind": "fill", "uid"?, "source"?,
+/// "mode"?, "opacity"?, "projection"?}], top first} (as uzp-evaluator-tests reads it); other mask
+/// effects are not modelled here.
+core::Mask ParseMask(const json::Object& m, core::Project& project) {
+    core::Mask mask;
+    mask.background = EnumOf<core::MaskBackground>(Str(Key(m, "background"), "background"), "background");
+    if (!m.contains("effects")) return mask;
+    for (const json::Value& value : Arr(m.at("effects"), "mask.effects")) {
+        const json::Object& e = Obj(value, "mask effect");
+        if (Str(Key(e, "kind"), "effect.kind") != "fill") {
+            throw core::ManifestError("mask effects other than fill are not modelled by the export tests");
+        }
+        core::Effect effect;
+        effect.uid = e.contains("uid") ? static_cast<core::Id>(Num(e.at("uid"), "uid")) : project.AllocateId();
+        effect.name = "fill";
+        effect.kind = core::EffectKind::fill;
+        core::FillContent fill;
+        if (e.contains("projection")) ParseProjection(Obj(e.at("projection"), "projection"), fill.projection);
+        if (e.contains("source")) fill.mono_source = ParseSource(Obj(e.at("source"), "source"));
+        core::Blending blending;
+        if (e.contains("mode")) blending.mode = EnumOf<core::BlendingMode>(Str(e.at("mode"), "mode"), "mode");
+        if (e.contains("opacity")) blending.opacity = Num(e.at("opacity"), "opacity");
+        effect.mono_blending = blending;
+        effect.fill = std::move(fill);
+        mask.effects.push_back(std::move(effect));
+    }
+    return mask;
+}
+
 core::Layer ParseLayer(const json::Value& value, core::Project& project) {
     const json::Object& o = Obj(value, "layer");
     const std::string kind = Str(Key(o, "kind"), "layer.kind");
-    if (o.contains("mask") || o.contains("effects")) {
-        throw core::ManifestError("masks and effects are not modelled by the export tests (phase1.11's tests cover them)");
+    if (o.contains("effects")) {
+        throw core::ManifestError("content effects are not modelled by the export tests (phase1.11's tests cover them)");
     }
     core::Layer layer;
     layer.uid = o.contains("uid") ? static_cast<core::Id>(Num(o.at("uid"), "uid")) : project.AllocateId();
@@ -381,6 +410,7 @@ core::Layer ParseLayer(const json::Value& value, core::Project& project) {
     } else {
         throw core::ManifestError("layer kind '" + kind + "' is not modelled by the export tests");
     }
+    if (o.contains("mask")) layer.mask = ParseMask(Obj(o.at("mask"), "mask"), project);
     return layer;
 }
 

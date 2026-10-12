@@ -252,6 +252,7 @@ def decision_032_entries() -> list[dict[str, Any]]:
         "tier0/height-normal/method",
         "tier0/height-normal/combination",
         "tier0/height-normal/resolution",
+        "tier0/colour/ocio-encode",
     }
     return entries
 

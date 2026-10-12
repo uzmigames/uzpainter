@@ -1,0 +1,11 @@
+{
+  "id": 152,
+  "slug": "r5-legacy-twin-s5-is-exact-against-r1-and-its-r2-is-judged-through-exception-exc-006",
+  "title": "R5 Legacy twin s5 is exact against r1, and its r2 is judged through exception EXC-006",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}
