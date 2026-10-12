@@ -488,7 +488,7 @@ def record_iray_reference(
     background reads the same 89,89,89, so the mode is checked before anything is recorded."""
     if job.tier != "3":
         raise RecorderError("Iray references are Tier 3 goldens")
-    if job.exports:
+    if job.exports or job.export_probes:
         raise RecorderError("a Tier 3 job captures with Save Render, not texture exports")
     sheet = settings_sheet(job)
     mesh_id = mesh_input(job)

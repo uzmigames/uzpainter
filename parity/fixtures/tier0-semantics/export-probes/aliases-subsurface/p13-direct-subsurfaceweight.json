@@ -1,0 +1,52 @@
+{
+  "defaultExportPreset": "uzp_recorder",
+  "exportList": [
+    {
+      "rootPath": "s0"
+    },
+    {
+      "rootPath": "s1"
+    }
+  ],
+  "exportParameters": [
+    {
+      "parameters": {
+        "bitDepth": "16",
+        "dithering": false,
+        "fileFormat": "png",
+        "paddingAlgorithm": "infinite"
+      }
+    }
+  ],
+  "exportPresets": [
+    {
+      "maps": [
+        {
+          "channels": [
+            {
+              "destChannel": "R",
+              "srcChannel": "R",
+              "srcMapName": "subsurfaceweight",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "G",
+              "srcChannel": "G",
+              "srcMapName": "subsurfaceweight",
+              "srcMapType": "documentMap"
+            },
+            {
+              "destChannel": "B",
+              "srcChannel": "B",
+              "srcMapName": "subsurfaceweight",
+              "srcMapType": "documentMap"
+            }
+          ],
+          "fileName": "$textureSet_subsurfaceweight"
+        }
+      ],
+      "name": "uzp_recorder"
+    }
+  ],
+  "exportShaderParams": false
+}

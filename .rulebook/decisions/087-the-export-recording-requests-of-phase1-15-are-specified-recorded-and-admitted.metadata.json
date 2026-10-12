@@ -1,0 +1,11 @@
+{
+  "id": 87,
+  "slug": "the-export-recording-requests-of-phase1-15-are-specified-recorded-and-admitted",
+  "title": "The export recording requests of phase1.15 are specified, recorded and admitted",
+  "status": "accepted",
+  "date": "2026-10-11",
+  "relatedTasks": [
+    "phase1.15_export-plan-compiler"
+  ],
+  "supersededBy": null
+}

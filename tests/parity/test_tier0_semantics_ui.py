@@ -7,13 +7,14 @@ group `Passthrough` mode, set through Painter's UI and named in each manifest's 
 recorded with task `phase0.9_render-reference-capture`'s Painter session, `blend-component-hue`,
 `blend-normal-opacity` and `coverage-srgb8-ties` (decision 067); phase1.12's height-to-normal
 requests (decision 077, two with UI-set Sobel sets) and phase1.9's texture-unit validation
-recordings (decision 078). Store
+recordings (decision 078); phase1.15's export recordings R-085 and R-086 (decision 087). Store
 and guard checks that need the owner's private store skip, saying so, without one (decision 028).
 """
 
 from __future__ import annotations
 
 import json
+import re
 import struct
 import zlib
 from pathlib import Path
@@ -26,6 +27,7 @@ from tools.parity.guard.guard import Snapshot, load_index, run_guard, worktree_s
 from tools.parity.recorder.capture import decode_png
 from tools.parity.recorder.job import load_job
 from tools.parity.recorder.texture_sheet import texture_sheet
+from tools.parity.recorder.vocabulary import LIST_TEXTURES
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
 from tools.parity.store.manifest import verify
 from tools.parity.store.store import Status, load_oracle, locate
@@ -34,6 +36,7 @@ from tools.parity.tier0_semantics.corpus import FIXTURE_DIR, MESH_SETS
 from tools.parity.tier0_semantics.current import (
     AMPLITUDES,
     ANISOTROPIC_CHANNELS,
+    CONVERTED_MAPS,
     FLAT_CASES,
     GROUP_MASKS,
     HEIGHT_METHODS,
@@ -50,6 +53,7 @@ from tools.parity.tier0_semantics.current import (
     TIE_MULTI,
     UI_DIR,
     api_goldens,
+    export_goldens,
     request_goldens,
     ui_goldens,
     validation_goldens,
@@ -78,6 +82,18 @@ def test_the_ui_corpus_is_committed() -> None:
     assert all(p.is_file() for p in api_paths())
 
 
+def output_key(record_id: str) -> str:
+    """A record id without its recording; an export probe's file only by its probe step, since
+    the file name is the observation and may depend on the condition (`$project` names the
+    unsaved project in r1 and the saved one in r2; decision 087)."""
+    probe = re.match(r"probe-s\d+-", record_id)
+    return (
+        probe.group(0) + "file"
+        if probe and not record_id.endswith(("-list", "-export"))
+        else record_id
+    )
+
+
 @pytest.mark.parametrize("path", [*ui_paths(), *api_paths()], ids=lambda p: p.stem)
 def test_manifest_validates_and_lists_two_recordings(path: Path) -> None:
     """Item 3.1: schema, the current envelope's build, and `r1`/`r2` of every exported map."""
@@ -86,8 +102,8 @@ def test_manifest_validates_and_lists_two_recordings(path: Path) -> None:
     assert manifest["software"]["painter"]["build_id"] == current_envelope()["painter_build"]
     records = manifest["private_records"]
     assert any(r["kind"] == "private_oracle_record" for r in records)
-    r1 = sorted(r["record_id"][3:] for r in records if r["record_id"].startswith("r1-"))
-    r2 = sorted(r["record_id"][3:] for r in records if r["record_id"].startswith("r2-"))
+    r1 = sorted(output_key(r["record_id"][3:]) for r in records if r["record_id"][:3] == "r1-")
+    r2 = sorted(output_key(r["record_id"][3:]) for r in records if r["record_id"][:3] == "r2-")
     assert r1 and r1 == r2, "both recordings carry the same outputs"
     kinds = {r["kind"] for r in records}
     assert "exported_map" in kinds
@@ -396,3 +412,44 @@ def test_the_lod_boundary_scales_sit_on_integer_lods() -> None:
         assert sum(s["call"].endswith("set_projection_parameters") for s in steps) == 4 * len(
             [s for s in steps if s["call"].endswith("add_channel")]
         )
+
+
+def test_the_export_recordings_follow_decision_087() -> None:
+    """R-086: each export step repeated once in the same session (outputs keyed by step), the
+    twin only in OpenEXR 32f; R-085: every probe step names a hash-pinned recipe_json input,
+    the generator's configuration without exportPath."""
+    names = [g.name for g in export_goldens()]
+    for name in ("ao-mixed-opacity", "virtual-maps-converted"):
+        for twin, (file_format, depth) in ((name, ("png", 16)), (f"{name}-float", ("exr", "32f"))):
+            steps = manifest_of(twin)["instruction_sequence"]["steps"]
+            exports = [s["args"] for s in steps if s["call"].endswith("export_project_textures")]
+            assert len(exports) == 2 and exports[0] == exports[1]
+            assert (exports[0]["file_format"], exports[0]["bit_depth"]) == (file_format, depth)
+            job = load_job(ENVELOPE_ROOT / SEMANTICS_DIR / f"{twin}.json")
+            assert job.maps_exported_twice == {m.name for m in job.exports[0].maps}
+            ids = {r["record_id"] for r in manifest_of(twin)["private_records"]}
+            for step in (e.step for e in job.exports):
+                assert any(i.startswith("r1-") and i.endswith(f"-step{step}") for i in ids)
+        plain, float_twin = (
+            manifest_of(n)["instruction_sequence"]["steps"] for n in (name, f"{name}-float")
+        )
+        assert [s for s in plain if "file_format" not in s["args"]] == [
+            s for s in float_twin if "file_format" not in s["args"]
+        ]
+    assert "virtualMap/1/ior:L" in CONVERTED_MAPS and len(CONVERTED_MAPS) == 10
+    probes = fixtures.export_probes()
+    for name in names:
+        if not name.startswith("export-probes-"):
+            continue
+        manifest = manifest_of(name)
+        inputs = {i["input_id"]: i for i in manifest["inputs"]}
+        steps = [s for s in manifest["instruction_sequence"]["steps"] if s["call"] == LIST_TEXTURES]
+        group = name.removeprefix("export-probes-")
+        assert [s["args"]["config"] for s in steps] == [f"probe-{group}-{p}" for p in probes[group]]
+        for step in steps:
+            item = inputs[step["args"]["config"]]
+            assert item["kind"] == "recipe_json"
+            data = (REPO_ROOT / item["path"]).read_bytes()
+            config = json.loads(data)
+            assert "exportPath" not in config
+            assert config == probes[group][item["input_id"].removeprefix(f"probe-{group}-")]

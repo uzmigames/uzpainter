@@ -4,9 +4,11 @@ the two-recording rule and stale-capture refusal (task items 2.1-2.3, 2.6)."""
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import types
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -14,9 +16,11 @@ from typing import Any
 import pytest
 
 from tools.parity.recorder.capture import StaleCaptureError
-from tools.parity.recorder.job import Job, job_from_manifest
+from tools.parity.recorder.job import EXPORT, Job, job_from_manifest, parse_output_map
+from tools.parity.recorder.output import slug
 from tools.parity.recorder.session import PainterSession, RecorderError, bootstrap_code
 from tools.parity.recorder.texture import record_texture_golden
+from tools.parity.recorder.vocabulary import LIST_TEXTURES
 from tools.parity.schemas import REPO_ROOT
 
 MakeSession = Callable[[Any], PainterSession]
@@ -257,3 +261,270 @@ def test_input_hash_mismatch_is_refused(sample_job: Job, tmp_path: Path) -> None
     )
     with pytest.raises(RecorderError, match="differs from the manifest"):
         job_from_manifest(sample_job.manifest, repo_root=tmp_path)
+
+
+# ── Decision 087: step keying, map names with a slash, export probes ─────────
+
+
+def with_steps(
+    manifest: dict[str, Any], extra: list[dict[str, Any]], repo_root: Path = REPO_ROOT
+) -> Job:
+    steps = manifest["instruction_sequence"]["steps"]
+    for item in extra:
+        steps.append({**item, "step": len(steps) + 1})
+    return job_from_manifest(manifest, repo_root=repo_root)
+
+
+def test_a_map_exported_by_two_steps_is_keyed_by_step(
+    fake: types.ModuleType, make_session: MakeSession, sample_job: Job, work: Path, inbox: Path
+) -> None:
+    manifest = copy.deepcopy(sample_job.manifest)
+    export = copy.deepcopy(manifest["instruction_sequence"]["steps"][-1])
+    job = with_steps(manifest, [export])
+    assert job.maps_exported_twice == {"basecolor"}
+    run = record_texture_golden(make_session(fake.FakeWorld()), job, work, inbox)
+    record = record_of(run)
+    for index in (0, 1):
+        ids = [o["output_id"] for o in outputs(record, index, "exported_map")]
+        assert ids == ["uzp_plane/basecolor/step10", "uzp_plane/basecolor/step11"]
+    published = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    record_ids = [r["record_id"] for r in published["private_records"]]
+    assert "r1-uzp_plane-basecolor-step10" in record_ids
+    assert "r2-uzp_plane-basecolor-step11" in record_ids
+    assert len(record_ids) == len(set(record_ids))
+
+
+def test_a_map_exported_once_keeps_its_record_id(
+    fake: types.ModuleType, make_session: MakeSession, sample_job: Job, work: Path, inbox: Path
+) -> None:
+    assert sample_job.maps_exported_twice == frozenset()
+    run = record_texture_golden(make_session(fake.FakeWorld()), sample_job, work, inbox)
+    published = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    ids = {r["record_id"] for r in published["private_records"] if r["kind"] == "exported_map"}
+    assert ids == {"r1-uzp_plane-basecolor", "r2-uzp_plane-basecolor"}
+
+
+def test_a_virtual_map_name_with_a_slash_is_one_file() -> None:
+    ior = parse_output_map("virtualMap/1/ior:L")
+    assert (ior.map_type, ior.name, ior.stem) == ("virtualMap", "1/ior", "1_over_ior")
+    assert ior.file_name == "$textureSet_1_over_ior"
+    assert ior.preset_map()["channels"][0]["srcMapName"] == "1/ior"
+    base = parse_output_map("documentMap/basecolor:RGB")
+    assert (base.map_type, base.name, base.file_name) == (
+        "documentMap",
+        "basecolor",
+        "$textureSet_basecolor",
+    )
+    assert parse_output_map("basecolor:RGB").map_type == "documentMap"
+
+
+def recorded_manifests() -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    for root in (REPO_ROOT / "parity" / "manifests", REPO_ROOT / "parity" / "envelopes"):
+        for path in sorted(root.rglob("*.json")):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("record_class") == "public_manifest" and data["private_records"]:
+                found.append(data)
+    return found
+
+
+def test_every_recorded_manifest_keeps_its_record_ids() -> None:
+    """Decision 087 changes an exported map's output id only for a map that two export steps
+    of the golden name, or whose name holds a `/`. No golden recorded before the change has an
+    output of such a map under the earlier id (two outputs under one id were refused, and the
+    base-values goldens' repeated `defaultMap/white` is never written), so every record id
+    already in a manifest is the id the recorder now gives."""
+    manifests = recorded_manifests()
+    assert len(manifests) > 100
+    for data in manifests:
+        steps = [
+            s
+            for s in data["instruction_sequence"]["steps"]
+            if s["call"] == EXPORT and "maps" in s.get("args", {})
+        ]
+        named = [{parse_output_map(str(m)).name for m in s["args"]["maps"]} for s in steps]
+        counts = Counter(name for names in named for name in names)
+        twice = {name for name, count in counts.items() if count > 1}
+        slashed = {name for ns in named for name in ns if "/" in name}
+        ids = [r["record_id"] for r in data["private_records"] if r["kind"] == "exported_map"]
+        for name in twice | slashed:
+            earlier = f"-{slug(name)}"
+            assert not any(i.endswith(earlier) for i in ids), (data["golden_id"], name)
+
+
+PROBE_CONFIG = {
+    "exportShaderParams": False,
+    "defaultExportPreset": "uzp_recorder",
+    "exportPresets": [
+        {
+            "name": "uzp_recorder",
+            "maps": [
+                {
+                    "fileName": "$textureSet_lum",
+                    "channels": [
+                        {
+                            "destChannel": "L",
+                            "srcChannel": "L",
+                            "srcMapType": "documentMap",
+                            "srcMapName": "basecolor",
+                        }
+                    ],
+                }
+            ],
+        }
+    ],
+    "exportList": [{"rootPath": "uzp_plane"}],
+    "exportParameters": [
+        {
+            "parameters": {
+                "fileFormat": "png",
+                "bitDepth": "16",
+                "dithering": False,
+                "paddingAlgorithm": "infinite",
+            }
+        }
+    ],
+}
+
+
+def probe_manifest(
+    sample_job: Job, root: Path, configs: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """The sample manifest without its export, in a scratch repository root holding its mesh
+    and one authored `recipe_json` input per probe configuration."""
+    manifest = copy.deepcopy(sample_job.manifest)
+    del manifest["instruction_sequence"]["steps"][-1]
+    mesh = Path("parity/fixtures/meshes/plane.obj")
+    (root / mesh).parent.mkdir(parents=True, exist_ok=True)
+    (root / mesh).write_bytes((REPO_ROOT / mesh).read_bytes())
+    for input_id, config in configs.items():
+        path = Path(f"parity/fixtures/probes/{input_id}.json")
+        (root / path).parent.mkdir(parents=True, exist_ok=True)
+        data = json.dumps(config).encode("utf-8")
+        (root / path).write_bytes(data)
+        manifest["inputs"].append(
+            {
+                "input_id": input_id,
+                "kind": "recipe_json",
+                "path": path.as_posix(),
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "provenance": {"origin": "uzmigames_authored", "licence": "Apache-2.0"},
+            }
+        )
+    return manifest
+
+
+def test_export_probes_record_the_dry_run_the_export_and_the_refusal(
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    sample_job: Job,
+    work: Path,
+    inbox: Path,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    invalid = {**PROBE_CONFIG, "exportPathh": "x"}
+    manifest = probe_manifest(sample_job, root, {"lum": PROBE_CONFIG, "typo": invalid})
+    job = with_steps(
+        manifest,
+        [
+            {"call": LIST_TEXTURES, "args": {"config": "lum"}},
+            {"call": LIST_TEXTURES, "args": {"config": "typo"}},
+        ],
+        root,
+    )
+    assert not job.exports and [p.step for p in job.export_probes] == [10, 11]
+    run = record_texture_golden(make_session(fake.FakeWorld()), job, work, inbox)
+    record = record_of(run)
+    for index in (0, 1):
+        by_id = {o["output_id"]: o for o in record["recordings"][index]["outputs"]}
+        assert by_id["probe/s10/list"]["value"] == {"uzp_plane": ["uzp_plane_lum.png"]}
+        assert by_id["probe/s10/list"]["args"] == {"config": "lum"}
+        exported = by_id["probe/s10/export"]["value"]
+        assert exported["status"] == "Success"
+        assert exported["textures"] == {"uzp_plane": ["uzp_plane_lum.png"]}
+        assert exported["directory"] == {"missing": [], "unlisted": []}
+        blob = by_id["probe/s10/uzp_plane_lum.png"]
+        assert blob["kind"] == "exported_map" and blob["texture_set"] == "uzp_plane"
+        assert blob["storage_format"]["encoding"] == "undetermined"
+        assert blob["export_settings"] == {
+            "step": 10,
+            "probe": True,
+            "encoding_basis": "export_probe",
+        }
+        refused = by_id["probe/s11/list"]
+        assert refused["value"] is None and refused["raised"]["type"] == "ValueError"
+        assert "exportPathh" in refused["raised"]["message"]
+        assert "probe/s11/export" not in by_id
+
+
+def test_export_probes_are_checked_before_painter_is_touched(
+    sample_job: Job, tmp_path: Path
+) -> None:
+    root = tmp_path / "repo"
+    placed = {**PROBE_CONFIG, "exportPath": "C:/anywhere"}
+    manifest = probe_manifest(sample_job, root, {"lum": PROBE_CONFIG, "placed": placed})
+    with pytest.raises(RecorderError, match="sets `exportPath`"):
+        with_steps(
+            copy.deepcopy(manifest), [{"call": LIST_TEXTURES, "args": {"config": "placed"}}], root
+        )
+    with pytest.raises(RecorderError, match="takes only `config`, an input"):
+        with_steps(
+            copy.deepcopy(manifest), [{"call": LIST_TEXTURES, "args": {"config": "x"}}], root
+        )
+    probe = {"call": LIST_TEXTURES, "args": {"config": "lum"}}
+    fill = copy.deepcopy(manifest["instruction_sequence"]["steps"][1])
+    with pytest.raises(RecorderError, match="must precede the captures"):
+        with_steps(copy.deepcopy(manifest), [probe, fill], root)
+
+
+def test_a_bitmap_source_takes_its_colour_space(
+    fake: types.ModuleType, make_session: MakeSession, sample_job: Job, work: Path, inbox: Path
+) -> None:
+    manifest = copy.deepcopy(sample_job.manifest)
+    export = manifest["instruction_sequence"]["steps"].pop()
+    imported = {
+        "call": "substance_painter.resource.import_project_resource",
+        "args": {"input": "plane", "usage": "TEXTURE"},
+    }
+    bitmap = {
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {"node_step": 2, "channel": "BaseColor", "resource_step": 10, "color_space": "Raw"},
+    }
+    job = with_steps(manifest, [imported, bitmap, export])
+    record = record_of(record_texture_golden(make_session(fake.FakeWorld()), job, work, inbox))
+    for index in (0, 1):
+        source = next(
+            o["value"]
+            for o in outputs(record, index, "api_readback")
+            if o["call"].endswith("get_source") and o["args"]["node_step"] == 2
+        )
+        assert source["bitmap"]["color_space"] == "Raw"
+
+
+def test_a_converted_virtual_map_exported_twice_is_one_file_per_step(
+    fake: types.ModuleType, make_session: MakeSession, sample_job: Job, work: Path, inbox: Path
+) -> None:
+    """The output id grammar `<set>[/<stack>]/<stem>[/step<n>]`: `1/ior` exported by two steps
+    is `<set>/1_over_ior/step<n>`, one file `<set>_1_over_ior` per step (no sub-folder), with
+    no encoding claimed (decision 087)."""
+    manifest = copy.deepcopy(sample_job.manifest)
+    export = copy.deepcopy(manifest["instruction_sequence"]["steps"].pop())
+    export["args"]["maps"] = ["virtualMap/1/ior:L"]
+    job = with_steps(manifest, [export, copy.deepcopy(export)])
+    run = record_texture_golden(make_session(fake.FakeWorld()), job, work, inbox)
+    record = record_of(run)
+    for index in (0, 1):
+        maps = outputs(record, index, "exported_map")
+        assert [o["output_id"] for o in maps] == [
+            "uzp_plane/1_over_ior/step10",
+            "uzp_plane/1_over_ior/step11",
+        ]
+        assert {o["map"] for o in maps} == {"1/ior"}
+        assert {o["storage_format"]["encoding"] for o in maps} == {"undetermined"}
+        assert {o["export_settings"]["encoding_basis"] for o in maps} == {"converted_virtual_map"}
+    files = sorted(p.name for p in work.rglob("*_1_over_ior.png"))
+    assert files == ["uzp_plane_1_over_ior.png"] * 4
+    published = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    record_ids = {r["record_id"] for r in published["private_records"]}
+    assert "r2-uzp_plane-1_over_ior-step11" in record_ids

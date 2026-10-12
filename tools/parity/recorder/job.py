@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -148,8 +149,14 @@ class OutputMap:
     channels: str
 
     @property
+    def stem(self) -> str:
+        """The map name as a file-name and output-id component: a `/` (Painter's `1/ior`) would
+        make Painter write a sub-folder, so it reads `_over_` (`1_over_ior`)."""
+        return self.name.replace("/", "_over_")
+
+    @property
     def file_name(self) -> str:
-        return f"$textureSet_{self.name}"
+        return f"$textureSet_{self.stem}"
 
     def preset_map(self) -> dict[str, Any]:
         return {
@@ -168,7 +175,10 @@ class OutputMap:
 
 def parse_output_map(spec: str) -> OutputMap:
     kind_name, _, channels = spec.partition(":")
-    map_type, _, name = kind_name.rpartition("/")
+    # The map type ends at the first `/`: a virtual map's name may hold one (`1/ior`).
+    map_type, slash, name = kind_name.partition("/")
+    if not slash:
+        map_type, name = "", kind_name
     if not name or channels not in MAP_CHANNELS:
         raise RecorderError(f"export map {spec!r} is not `<mapType>/<name>:<RGB|RGBA|L>`")
     return OutputMap(map_type or "documentMap", name, channels)
@@ -208,6 +218,37 @@ def export_step(step: Step) -> ExportStep:
     if "size_log2" in args:
         parameters["sizeLog2"] = int(args["size_log2"])
     return ExportStep(step.step, tuple(parse_output_map(str(m)) for m in maps), parameters)
+
+
+@dataclass(frozen=True)
+class ExportProbe:
+    """An export probe (decision 087): a literal `json_config`, an authored input of the golden
+    (`recipe_json`), listed with the documented `list_project_textures` and, when that
+    succeeds, exported with `export_project_textures`. Its outcome, a refusal included, is the
+    observation."""
+
+    step: int
+    config_id: str
+    config: dict[str, Any]
+
+    def config_at(self, export_path: Path) -> dict[str, Any]:
+        return {**self.config, "exportPath": export_path.as_posix()}
+
+
+def export_probe(step: Step, inputs: dict[str, Path]) -> ExportProbe:
+    config_id = step.args.get("config")
+    if set(step.args) != {"config"} or config_id not in inputs:
+        raise RecorderError(
+            f"step {step.step}: an export probe takes only `config`, an input with a path"
+        )
+    config = json.loads(inputs[str(config_id)].read_text(encoding="utf-8"))
+    if not isinstance(config, dict):
+        raise RecorderError(f"step {step.step}: the export probe's config is not a JSON object")
+    if "exportPath" in config:
+        raise RecorderError(
+            f"step {step.step}: the recorder sets `exportPath` (a fresh private directory)"
+        )
+    return ExportProbe(step.step, str(config_id), config)
 
 
 def baking_readback(step: Step) -> dict[str, Any]:
@@ -270,6 +311,7 @@ class Job:
     state_steps: tuple[Step, ...]
     exports: tuple[ExportStep, ...]
     captures: tuple[Step, ...] = ()
+    export_probes: tuple[ExportProbe, ...] = ()
 
     @property
     def golden_id(self) -> str:
@@ -285,6 +327,13 @@ class Job:
 
     def input_hashes(self) -> list[dict[str, str]]:
         return [{"input_id": i["input_id"], "sha256": i["sha256"]} for i in self.manifest["inputs"]]
+
+    @property
+    def maps_exported_twice(self) -> frozenset[str]:
+        """Maps more than one export step exports: their outputs are keyed by step (a second
+        export in one session measures Painter's run-to-run noise, decision 087)."""
+        steps = Counter(name for export in self.exports for name in {m.name for m in export.maps})
+        return frozenset(name for name, count in steps.items() if count > 1)
 
     def readback_specs(self) -> list[dict[str, Any]]:
         specs: list[dict[str, Any]] = []
@@ -343,14 +392,18 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
     state: list[Step] = []
     exports: list[ExportStep] = []
     captures: list[Step] = []
+    probes: list[ExportProbe] = []
     for step in steps:
         if step.call == EXPORT:
             exports.append(export_step(step))
             continue
+        if step.call == ps.LIST_TEXTURES:
+            probes.append(export_probe(step, inputs))
+            continue
         if step.call in BAKING_CAPTURES:
             captures.append(step)
             continue
-        if exports or captures:
+        if exports or captures or probes:
             raise RecorderError(f"step {step.step}: state steps must precede the captures")
         if step.call not in STATE_CALLS:
             raise RecorderError(f"step {step.step}: {step.call} is not in the recorder vocabulary")
@@ -376,4 +429,4 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
             raise RecorderError(
                 f"step {step.step}: baking settings must precede the last bake_async step"
             )
-    return Job(manifest, inputs, tuple(state), tuple(exports), tuple(captures))
+    return Job(manifest, inputs, tuple(state), tuple(exports), tuple(captures), tuple(probes))

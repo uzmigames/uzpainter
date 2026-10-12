@@ -1,5 +1,5 @@
-"""UzmiGames-authored Tier 0 fixtures: synthetic meshes (OBJ) and 16-bit (one 8-bit) bitmaps
-(PNG).
+"""UzmiGames-authored Tier 0 fixtures: synthetic meshes (OBJ), 16-bit (one 8-bit) bitmaps (PNG)
+and the export probes' configurations (JSON recipes).
 
 Every byte is computed here from closed-form definitions, so the fixtures are reproducible and
 carry no third-party data. Conventions: OBJ in centimetres, +Y up, counter-clockwise faces;
@@ -8,10 +8,12 @@ bitmap texel (x, y) is column x, row y counted from the top row of the PNG.
 
 from __future__ import annotations
 
+import json
 import math
 import struct
 import zlib
 from collections.abc import Callable, Sequence
+from typing import Any
 
 HEADER = "# UzPainter Tier 0 semantics fixture, authored by UzmiGames (Apache-2.0).\n"
 
@@ -345,3 +347,256 @@ def bevelled_cube(half: float = 10.0, bevel: float = 2.0, cells: int = 8) -> byt
         [("uzp_bevelled_cube", faces)],
         "".join(data),
     )
+
+
+# ── Export probe configurations (recording request R-085, decision 087) ─────
+#
+# Each probe of `parity/reports/phase1/export-plan-compiler.md` section 4 is one documented
+# `json_config` without `exportPath` (the recorder sets a fresh private directory): the recorder's
+# preset `uzp_recorder` with PNG 16, no dithering, infinite padding, on the root paths s0 and s1,
+# changed only as the probe says. Every variant of a probe is its own configuration, so a
+# ValueError of one cannot hide another's outcome.
+
+PROBE_PRESET = "uzp_recorder"
+PROBE_ROOTS = ("s0", "s1")
+PROBE_PARAMETERS = {
+    "fileFormat": "png",
+    "bitDepth": "16",
+    "dithering": False,
+    "paddingAlgorithm": "infinite",
+}
+Config = dict[str, Any]
+
+
+def probe_channel(dest: str, src: str, map_type: str, name: str) -> dict[str, str]:
+    return {"destChannel": dest, "srcChannel": src, "srcMapType": map_type, "srcMapName": name}
+
+
+def probe_rgb(map_type: str, name: str) -> list[dict[str, str]]:
+    return [probe_channel(c, c, map_type, name) for c in "RGB"]
+
+
+def probe_grey(map_type: str, name: str) -> list[dict[str, str]]:
+    return [probe_channel("L", "L", map_type, name)]
+
+
+def probe_map(file_name: str, channels: list[dict[str, str]], **extra: Any) -> dict[str, Any]:
+    return {"fileName": file_name, "channels": channels, **extra}
+
+
+def probe_config(
+    maps: list[dict[str, Any]],
+    rules: list[dict[str, Any]] | None = None,
+    filters: dict[int, dict[str, Any]] | None = None,
+) -> Config:
+    """The base configuration over `maps`; `rules` follow the base parameter rule and
+    `filters` gives an `exportList` entry (by index) its filter."""
+    export_list: list[dict[str, Any]] = [{"rootPath": root} for root in PROBE_ROOTS]
+    for index, entry_filter in (filters or {}).items():
+        export_list[index]["filter"] = entry_filter
+    return {
+        "exportShaderParams": False,
+        "defaultExportPreset": PROBE_PRESET,
+        "exportPresets": [{"name": PROBE_PRESET, "maps": maps}],
+        "exportList": export_list,
+        "exportParameters": [{"parameters": dict(PROBE_PARAMETERS)}, *(rules or [])],
+    }
+
+
+BASE_RGB = probe_rgb("documentMap", "basecolor")
+ROUGH_L = probe_grey("documentMap", "specularroughness")
+
+
+def naming_probes() -> dict[str, Config]:
+    """P1-P4 and P9 (with a non-colliding control of the two sources the collisions use)."""
+    base = probe_config([probe_map("$textureSet_basecolor", BASE_RGB)])
+    probes: dict[str, Config] = {
+        "p0-control": probe_config(
+            [
+                probe_map("$textureSet_ctl_basecolor", BASE_RGB),
+                probe_map("$textureSet_ctl_roughness", ROUGH_L),
+            ]
+        ),
+        "p1-mesh": probe_config([probe_map("$mesh_$textureSet_a", BASE_RGB)]),
+        "p1-project": probe_config([probe_map("$project_$textureSet_b", BASE_RGB)]),
+        "p1-scene-material": probe_config([probe_map("$textureSet_$sceneMaterial_c", BASE_RGB)]),
+        "p2-udim": probe_config([probe_map("$textureSet_$udim_d", BASE_RGB)]),
+        "p2-colour-space": probe_config([probe_map("$textureSet_$colorSpace_e", BASE_RGB)]),
+        "p3-group-no-wildcard": probe_config([probe_map("$textureSet(_v2)", BASE_RGB)]),
+        "p3-group-nested": probe_config([probe_map("$textureSet((_$udim))", BASE_RGB)]),
+        "p3-group-unclosed": probe_config([probe_map("$textureSet(_$udim", BASE_RGB)]),
+        "p4-filter-tile-0-0": {
+            **base,
+            "exportList": [{"rootPath": "s0", "filter": {"uvTiles": [[0, 0]]}}, {"rootPath": "s1"}],
+        },
+        "p4-filter-tile-1-0": {
+            **base,
+            "exportList": [{"rootPath": "s0", "filter": {"uvTiles": [[1, 0]]}}, {"rootPath": "s1"}],
+        },
+        "p4-rule-tile-0-0": probe_config(
+            [probe_map("$textureSet_basecolor", BASE_RGB)],
+            rules=[{"filter": {"uvTiles": [[0, 0]]}, "parameters": {"bitDepth": "8"}}],
+        ),
+        "p9-same-name": probe_config(
+            [
+                probe_map("$textureSet_collide", BASE_RGB),
+                probe_map("$textureSet_collide", ROUGH_L),
+            ]
+        ),
+        "p9-case-only": probe_config(
+            [probe_map("$textureSet_A", BASE_RGB), probe_map("$textureSet_a", ROUGH_L)]
+        ),
+    }
+    return probes
+
+
+def channel_probes() -> dict[str, Config]:
+    """P5-P8 and P12."""
+    return {
+        "p5-luminance": probe_config(
+            [probe_map("$textureSet_lum", [probe_channel("L", "L", "documentMap", "basecolor")])]
+        ),
+        "p6-alpha-of-roughness": probe_config(
+            [
+                probe_map(
+                    "$textureSet_rgba_rough",
+                    [*BASE_RGB, probe_channel("A", "A", "documentMap", "specularroughness")],
+                )
+            ]
+        ),
+        "p6-alpha-of-basecolor": probe_config(
+            [
+                probe_map(
+                    "$textureSet_rgba_base",
+                    [*BASE_RGB, probe_channel("A", "A", "documentMap", "basecolor")],
+                )
+            ]
+        ),
+        "p7-absent-alpha": probe_config(
+            [
+                probe_map(
+                    "$textureSet_rgba_opacity",
+                    [*BASE_RGB, probe_channel("A", "L", "documentMap", "opacity")],
+                )
+            ]
+        ),
+        "p8-black-l": probe_config(
+            [probe_map("$textureSet_black_l", probe_grey("defaultMap", "black"))]
+        ),
+        "p8-black-rgb": probe_config(
+            [probe_map("$textureSet_black_rgb", probe_rgb("defaultMap", "black"))]
+        ),
+        "p12-unbound-curvature": probe_config(
+            [probe_map("$textureSet_curvature", probe_grey("meshMap", "curvature"))]
+        ),
+    }
+
+
+def config_probes() -> dict[str, Config]:
+    """P10 and P11, with the valid configuration they change as the control."""
+    base = probe_config([probe_map("$textureSet_basecolor", BASE_RGB)])
+    integer_depth = probe_config([probe_map("$textureSet_basecolor", BASE_RGB)])
+    integer_depth["exportParameters"][0]["parameters"]["bitDepth"] = 16
+    return {
+        "p0-control": base,
+        "p10-top-level-key": {**base, "exportPathh": "x"},
+        "p10-map-key": probe_config([probe_map("$textureSet_basecolor", BASE_RGB, comment="x")]),
+        "p11-integer-bit-depth": integer_depth,
+    }
+
+
+# P13: the legacy names never observed, and each template's own channels by their lower-case
+# ChannelType names (the direct controls the aliases are paired against).
+LEGACY_ALIASES = (
+    "sheencolor",
+    "sheenroughness",
+    "sheenopacity",
+    "coatopacity",
+    "translucency",
+    "absorptioncolor",
+    "scatteringcolor",
+    "specularedgecolor",
+)
+# Template -> its channels other than Normal, Height and CoatNormal (the base-values goldens'
+# template captures), filled with distinct uniform values in s0.
+ALIAS_TEMPLATES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "coat": (
+        "templates/OpenPBR - Coat.spt",
+        (
+            "BaseColor",
+            "BaseMetalness",
+            "SpecularRoughness",
+            "CoatColor",
+            "CoatRoughness",
+            "CoatWeight",
+        ),
+    ),
+    "fuzz": (
+        "templates/OpenPBR - Fuzz.spt",
+        (
+            "BaseColor",
+            "BaseMetalness",
+            "SpecularRoughness",
+            "FuzzColor",
+            "FuzzRoughness",
+            "FuzzWeight",
+        ),
+    ),
+    "subsurface": (
+        "templates/OpenPBR - Subsurface Scattering.spt",
+        (
+            "BaseColor",
+            "BaseMetalness",
+            "SpecularRoughness",
+            "SubsurfaceColor",
+            "SubsurfaceRadiusScale",
+            "SubsurfaceWeight",
+        ),
+    ),
+}
+# Distinct, well separated uniform values (Working): colours per colour channel, greys per L
+# channel, all different within a template.
+ALIAS_COLOURS = {
+    "BaseColor": (0.8, 0.3, 0.1),
+    "CoatColor": (0.2, 0.6, 0.9),
+    "FuzzColor": (0.2, 0.6, 0.9),
+    "SubsurfaceColor": (0.2, 0.6, 0.9),
+    "SubsurfaceRadiusScale": (0.5, 0.9, 0.4),
+}
+ALIAS_GREYS = {
+    "BaseMetalness": 0.15,
+    "SpecularRoughness": 0.35,
+    "CoatRoughness": 0.55,
+    "FuzzRoughness": 0.55,
+    "CoatWeight": 0.75,
+    "FuzzWeight": 0.75,
+    "SubsurfaceWeight": 0.75,
+}
+
+
+def alias_probes(template: str) -> dict[str, Config]:
+    _, channels = ALIAS_TEMPLATES[template]
+    probes = {
+        f"p13-{alias}": probe_config(
+            [probe_map(f"$textureSet_{alias}", probe_rgb("documentMap", alias))]
+        )
+        for alias in LEGACY_ALIASES
+    }
+    for channel in channels:
+        name = channel.lower()
+        probes[f"p13-direct-{name}"] = probe_config(
+            [probe_map(f"$textureSet_{name}", probe_rgb("documentMap", name))]
+        )
+    return probes
+
+
+def export_probes() -> dict[str, dict[str, Config]]:
+    """Probe group -> probe id -> configuration."""
+    groups = {"naming": naming_probes(), "channels": channel_probes(), "config": config_probes()}
+    groups |= {f"aliases-{template}": alias_probes(template) for template in ALIAS_TEMPLATES}
+    return groups
+
+
+def export_probe(group: str, probe: str) -> bytes:
+    """One probe configuration as an authored recipe (JSON, LF, sorted keys)."""
+    return (json.dumps(export_probes()[group][probe], indent=2, sort_keys=True) + "\n").encode()
