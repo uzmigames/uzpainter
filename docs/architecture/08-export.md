@@ -14,7 +14,7 @@ Implemented in `src/export/` (`phase1.15_export-plan-compiler`, decision 085; `s
 
 `Normal_OpenGL`, `Normal_DirectX` (mesh normal ⊕ channel normal ⊕ height-derived normal, `04-layer-stack-and-compositing.md` §6, tagged `combined`), `AO_Mixed`, `Diffuse`, `Specular`, `Glossiness`, `Glossiness2`, `Unity4Diff`, `Unity4Gloss`, `reflection`, `1/ior`, `f0`, `View_2D` — definitions from Adobe's public output-template documentation (the `export.html` API page and the help pages), operators fitted and confirmed in Tier 0 against private oracles. A geometry-only normal pass-through is exported through `meshMap normal_base` (EXP-01).
 
-Supported today (decision 086, `parity/semantics/virtual-maps.json`): `Normal_OpenGL` and `Normal_DirectX`, exact through the plan. `AO_Mixed` and the ten converted maps are release gaps, refused before writing until recording R-086 and its fit: `AO_Mixed`'s calibrated operator (`ao-mixed.json`) misses its opacity-0.5 golden set, and the converted maps have no golden.
+Supported today (decisions 086, 092, `parity/semantics/virtual-maps.json`): `Normal_OpenGL` and `Normal_DirectX`, exact through the plan. `AO_Mixed` and the ten converted maps are release gaps, refused before writing. `AO_Mixed`'s best model misses r1 at 31 values of recording R-086a; its exact fit is `phase3.2_unreal-ue56-packed-preset` item 2.10 (decision 131). Nine converted maps are fitted exactly but wait on per-texel channel coverage from the evaluator; `View_2D` has no operator (decision 092).
 
 ## 3. Formats and processing
 

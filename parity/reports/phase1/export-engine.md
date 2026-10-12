@@ -15,7 +15,7 @@ Run on 2026-10-12, branch `wt/phase1.18-engine`, with main merged through decisi
 | Byte determinism (item 3.2) | `UzPainter.exe export` of one `.uzp` project in two processes: files and plans byte-identical, receipts equal except `generation` and `moment` (`test_project_export_is_deterministic_across_processes`) |
 | Publication interruption (item 3.3) | phase1.17's suite over the same `PublishExport` (`tests/export/test_export_publication.py`): every interruption point leaves one complete generation visible |
 
-The plan compiler's Tier 0 evidence (dry runs of every exporting golden, the R-085 and R-091 probes, the virtual-map goldens) is `parity/reports/phase1/export-plan-compiler.md`. AO_Mixed and the converted virtual maps are still refused there (R-092, phase1.15). The presets' evidence is `parity/reports/phase1/export-presets.md`.
+The plan compiler's Tier 0 evidence (dry runs of every exporting golden, the R-085 and R-091 probes, the virtual-map goldens) is `parity/reports/phase1/export-plan-compiler.md`. AO_Mixed and the converted virtual maps are still refused there (decisions 092, 131; AO_Mixed's fit is `phase3.2_unreal-ue56-packed-preset` item 2.10). The presets' evidence is `parity/reports/phase1/export-presets.md`.
 
 ## What item 6.1 adds (decision 103)
 
