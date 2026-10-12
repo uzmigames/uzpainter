@@ -6,8 +6,9 @@ under `tier0/semantics/` (decision 099). Their manifests are requested goldens: 
 the current envelope's `requests/` root with `private_records` empty, because every manifest
 under `manifests/` must name its records (the Tier 0 gate, the refresh and the store verify read
 them all). After the Painter session admits a golden (`python -m tools.parity.store record
-<manifests path> --run <run>`), it moves from `requested_goldens` to `current.api_goldens` and
-its request file is deleted.
+<manifests path> --run <run>`), its name joins `ADMITTED`: its request file is deleted and the
+generator plans its manifest under `manifests/` instead (`current.api_goldens` cannot take it,
+because its inputs are the request fixtures).
 
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
 two that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`), which
@@ -775,8 +776,28 @@ def export_presets(ocio: bool) -> Golden:
     )
 
 
-def requested_goldens() -> list[Golden]:
-    """Every requested golden of decision 100, in the order of the runbook (parity/RECORDER.md
+# Goldens of decision 100 that the Painter session of 2026-10-12 recorded and the store admitted:
+# their manifests live under the envelope's `manifests/`, and their requests are deleted.
+ADMITTED = frozenset(
+    {
+        "export-bit-depth",
+        "export-padding",
+        "export-padding-bevelled-cube",
+        "export-padding-sphere",
+        "export-padding-seam-256",
+        "export-padding-seam-field-256",
+        "export-padding-seam-1024",
+        "export-padding-seam-field-1024",
+        "export-alpha-layouts",
+        "export-resize",
+        "export-dither",
+        "export-ocio-encode-legacy",
+    }
+)
+
+
+def decision_100_goldens() -> list[Golden]:
+    """Every golden of decision 100, in the order of the runbook (parity/RECORDER.md
     section 11)."""
     return [
         export_bit_depth(),
@@ -794,8 +815,17 @@ def requested_goldens() -> list[Golden]:
     ]
 
 
+def requested_goldens() -> list[Golden]:
+    """The goldens of decision 100 still waiting for their recording."""
+    return [g for g in decision_100_goldens() if g.name not in ADMITTED]
+
+
+def admitted_goldens() -> list[Golden]:
+    return [g for g in decision_100_goldens() if g.name in ADMITTED]
+
+
 def ocio_goldens() -> frozenset[str]:
-    return frozenset(g.name for g in requested_goldens() if OCIO_SETTING in g.settings)
+    return frozenset(g.name for g in decision_100_goldens() if OCIO_SETTING in g.settings)
 
 
 # --- Manifests --------------------------------------------------------------------------------
@@ -893,12 +923,18 @@ def request_root(root: Path) -> Path:
 
 
 def planned_requests(hashes: dict[str, str], root: Path) -> dict[Path, dict[str, Any]]:
-    """Request path -> manifest of every requested golden, under the current envelope."""
+    """Request path -> manifest of every requested golden, and manifest path -> manifest of every
+    admitted one, under the current envelope."""
     entry = current_envelope(root)
     base = request_root(root) / "tier0" / "semantics"
-    return {
+    admitted = manifest_root(entry, root) / "tier0" / "semantics"
+    planned = {
         base / f"{g.name}.json": request_manifest(g, hashes, entry) for g in requested_goldens()
     }
+    planned |= {
+        admitted / f"{g.name}.json": request_manifest(g, hashes, entry) for g in admitted_goldens()
+    }
+    return planned
 
 
 def request_dir(root: Path) -> Path:

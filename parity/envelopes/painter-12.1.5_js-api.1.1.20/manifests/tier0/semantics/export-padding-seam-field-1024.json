@@ -1,10 +1,10 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/semantics/export-padding-seam-field-256",
+  "golden_id": "tier0/semantics/export-padding-seam-field-1024",
   "tier": "0",
   "domain": "tier0/export/processing",
-  "description": "The infinite padding ring across a UV seam (R-090 P9, decision 090's partial fit, decision 100) at 256 px: the authored seam mesh (two quads sharing one 3D edge, island A at scale 0.375 on the tile's left border, island B at scale 0.25 turned 90 degrees); Height grey A and User0 (RGB16) field A. Infinite padding, PNG 16 and OpenEXR 32f, every export step done twice in the session.",
+  "description": "The infinite padding ring across a UV seam (R-090 P9, decision 090's partial fit, decision 100) at 1024 px: the authored seam mesh (two quads sharing one 3D edge, island A at scale 0.375 on the tile's left border, island B at scale 0.25 turned 90 degrees); Height grey A and User0 (RGB16) field A. Infinite padding, PNG 16 and OpenEXR 32f, every export step done twice in the session.",
   "inputs": [
     {
       "input_id": "seam",
@@ -61,7 +61,7 @@
         "args": {
           "mesh": "seam",
           "normal_map_format": "OpenGL",
-          "default_texture_resolution": 256
+          "default_texture_resolution": 1024
         }
       },
       {
@@ -243,7 +243,7 @@
     },
     {
       "name": "texture_set.resolution",
-      "value": 256,
+      "value": 1024,
       "unit": "px",
       "applied_by": "recorder_api"
     },
@@ -277,5 +277,114 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "70c399ad26bf4121310efcb39e3cf2a3b37c4a8a9362632019a1fc22e22806f2",
+      "size_bytes": 16385
+    },
+    {
+      "record_id": "r1-uzp_seam-height-step15",
+      "kind": "exported_map",
+      "sha256": "a4730198c02cb74806d549691aff2523e138c2f0e08c9817944add32b5129fc0",
+      "size_bytes": 12716
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step15",
+      "kind": "exported_map",
+      "sha256": "1bc17331761bcf546785f0e6955f17e133fd4a9a56d62dafce9abfe9997cfced",
+      "size_bytes": 29103
+    },
+    {
+      "record_id": "r1-uzp_seam-height-step16",
+      "kind": "exported_map",
+      "sha256": "a4730198c02cb74806d549691aff2523e138c2f0e08c9817944add32b5129fc0",
+      "size_bytes": 12716
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step16",
+      "kind": "exported_map",
+      "sha256": "1bc17331761bcf546785f0e6955f17e133fd4a9a56d62dafce9abfe9997cfced",
+      "size_bytes": 29103
+    },
+    {
+      "record_id": "r1-uzp_seam-height-step17",
+      "kind": "exported_map",
+      "sha256": "6b246619c6293ed799fa7e6f6920446ce4c50e5c3e63a3c08a61f567577932a4",
+      "size_bytes": 471248
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step17",
+      "kind": "exported_map",
+      "sha256": "cd8886aed1a4064456717cbe75379a9524c41b0ec34b3d03072cde0ec6bbd7e2",
+      "size_bytes": 1348757
+    },
+    {
+      "record_id": "r1-uzp_seam-height-step18",
+      "kind": "exported_map",
+      "sha256": "6b246619c6293ed799fa7e6f6920446ce4c50e5c3e63a3c08a61f567577932a4",
+      "size_bytes": 471248
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step18",
+      "kind": "exported_map",
+      "sha256": "cd8886aed1a4064456717cbe75379a9524c41b0ec34b3d03072cde0ec6bbd7e2",
+      "size_bytes": 1348757
+    },
+    {
+      "record_id": "r2-uzp_seam-height-step15",
+      "kind": "exported_map",
+      "sha256": "a4730198c02cb74806d549691aff2523e138c2f0e08c9817944add32b5129fc0",
+      "size_bytes": 12716
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step15",
+      "kind": "exported_map",
+      "sha256": "1bc17331761bcf546785f0e6955f17e133fd4a9a56d62dafce9abfe9997cfced",
+      "size_bytes": 29103
+    },
+    {
+      "record_id": "r2-uzp_seam-height-step16",
+      "kind": "exported_map",
+      "sha256": "a4730198c02cb74806d549691aff2523e138c2f0e08c9817944add32b5129fc0",
+      "size_bytes": 12716
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step16",
+      "kind": "exported_map",
+      "sha256": "1bc17331761bcf546785f0e6955f17e133fd4a9a56d62dafce9abfe9997cfced",
+      "size_bytes": 29103
+    },
+    {
+      "record_id": "r2-uzp_seam-height-step17",
+      "kind": "exported_map",
+      "sha256": "6b246619c6293ed799fa7e6f6920446ce4c50e5c3e63a3c08a61f567577932a4",
+      "size_bytes": 471248
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step17",
+      "kind": "exported_map",
+      "sha256": "cd8886aed1a4064456717cbe75379a9524c41b0ec34b3d03072cde0ec6bbd7e2",
+      "size_bytes": 1348757
+    },
+    {
+      "record_id": "r2-uzp_seam-height-step18",
+      "kind": "exported_map",
+      "sha256": "6b246619c6293ed799fa7e6f6920446ce4c50e5c3e63a3c08a61f567577932a4",
+      "size_bytes": 471248
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step18",
+      "kind": "exported_map",
+      "sha256": "cd8886aed1a4064456717cbe75379a9524c41b0ec34b3d03072cde0ec6bbd7e2",
+      "size_bytes": 1348757
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "6c93cbf6b1fa3bab4d30f7987be851c8371b662e452b63222b07858feba71eea",
+      "size_bytes": 402
+    }
+  ]
 }

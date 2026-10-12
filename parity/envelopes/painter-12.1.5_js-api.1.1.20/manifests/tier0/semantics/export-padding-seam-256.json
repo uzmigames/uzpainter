@@ -422,5 +422,162 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "46857629937dd9e2f4b543baf97b8393cd2e8802313bc0fb6a817e6311cec54d",
+      "size_bytes": 25278
+    },
+    {
+      "record_id": "r1-uzp_seam-height-step29",
+      "kind": "exported_map",
+      "sha256": "b58f4a31d5764d8f0a7c62e5d5d17170d9dd922e555951feed3e8e8081845b7a",
+      "size_bytes": 1833
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step29",
+      "kind": "exported_map",
+      "sha256": "753f88db18c232e3cdcdd19d9071604fda837d0b3c38636eb5575721571783c0",
+      "size_bytes": 2502
+    },
+    {
+      "record_id": "r1-uzp_seam-user1-step29",
+      "kind": "exported_map",
+      "sha256": "360d1dcd5a7b22d409fdd0268810c6a05cba27fd7dca5459ff967299b7359fdb",
+      "size_bytes": 5755
+    },
+    {
+      "record_id": "r1-uzp_seam-height-step30",
+      "kind": "exported_map",
+      "sha256": "b58f4a31d5764d8f0a7c62e5d5d17170d9dd922e555951feed3e8e8081845b7a",
+      "size_bytes": 1833
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step30",
+      "kind": "exported_map",
+      "sha256": "753f88db18c232e3cdcdd19d9071604fda837d0b3c38636eb5575721571783c0",
+      "size_bytes": 2502
+    },
+    {
+      "record_id": "r1-uzp_seam-user1-step30",
+      "kind": "exported_map",
+      "sha256": "360d1dcd5a7b22d409fdd0268810c6a05cba27fd7dca5459ff967299b7359fdb",
+      "size_bytes": 5755
+    },
+    {
+      "record_id": "r1-uzp_seam-height-step31",
+      "kind": "exported_map",
+      "sha256": "e6092cb2aa37137c92ec697157d07c51462b27ccaa55d36415413e54047e06c2",
+      "size_bytes": 40334
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step31",
+      "kind": "exported_map",
+      "sha256": "8cfb85b49165a87c4a9fba7f9cb1783c880a6e40b7e5659ed95224896fed9844",
+      "size_bytes": 75489
+    },
+    {
+      "record_id": "r1-uzp_seam-user1-step31",
+      "kind": "exported_map",
+      "sha256": "f0cbf5aa0f80b955f6089acf02ed6d1b2eb61c2e452250a8cddee31543fd6fa7",
+      "size_bytes": 162288
+    },
+    {
+      "record_id": "r1-uzp_seam-height-step32",
+      "kind": "exported_map",
+      "sha256": "e6092cb2aa37137c92ec697157d07c51462b27ccaa55d36415413e54047e06c2",
+      "size_bytes": 40334
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step32",
+      "kind": "exported_map",
+      "sha256": "8cfb85b49165a87c4a9fba7f9cb1783c880a6e40b7e5659ed95224896fed9844",
+      "size_bytes": 75489
+    },
+    {
+      "record_id": "r1-uzp_seam-user1-step32",
+      "kind": "exported_map",
+      "sha256": "f0cbf5aa0f80b955f6089acf02ed6d1b2eb61c2e452250a8cddee31543fd6fa7",
+      "size_bytes": 162288
+    },
+    {
+      "record_id": "r2-uzp_seam-height-step29",
+      "kind": "exported_map",
+      "sha256": "b58f4a31d5764d8f0a7c62e5d5d17170d9dd922e555951feed3e8e8081845b7a",
+      "size_bytes": 1833
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step29",
+      "kind": "exported_map",
+      "sha256": "753f88db18c232e3cdcdd19d9071604fda837d0b3c38636eb5575721571783c0",
+      "size_bytes": 2502
+    },
+    {
+      "record_id": "r2-uzp_seam-user1-step29",
+      "kind": "exported_map",
+      "sha256": "360d1dcd5a7b22d409fdd0268810c6a05cba27fd7dca5459ff967299b7359fdb",
+      "size_bytes": 5755
+    },
+    {
+      "record_id": "r2-uzp_seam-height-step30",
+      "kind": "exported_map",
+      "sha256": "b58f4a31d5764d8f0a7c62e5d5d17170d9dd922e555951feed3e8e8081845b7a",
+      "size_bytes": 1833
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step30",
+      "kind": "exported_map",
+      "sha256": "753f88db18c232e3cdcdd19d9071604fda837d0b3c38636eb5575721571783c0",
+      "size_bytes": 2502
+    },
+    {
+      "record_id": "r2-uzp_seam-user1-step30",
+      "kind": "exported_map",
+      "sha256": "360d1dcd5a7b22d409fdd0268810c6a05cba27fd7dca5459ff967299b7359fdb",
+      "size_bytes": 5755
+    },
+    {
+      "record_id": "r2-uzp_seam-height-step31",
+      "kind": "exported_map",
+      "sha256": "e6092cb2aa37137c92ec697157d07c51462b27ccaa55d36415413e54047e06c2",
+      "size_bytes": 40334
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step31",
+      "kind": "exported_map",
+      "sha256": "8cfb85b49165a87c4a9fba7f9cb1783c880a6e40b7e5659ed95224896fed9844",
+      "size_bytes": 75489
+    },
+    {
+      "record_id": "r2-uzp_seam-user1-step31",
+      "kind": "exported_map",
+      "sha256": "f0cbf5aa0f80b955f6089acf02ed6d1b2eb61c2e452250a8cddee31543fd6fa7",
+      "size_bytes": 162288
+    },
+    {
+      "record_id": "r2-uzp_seam-height-step32",
+      "kind": "exported_map",
+      "sha256": "e6092cb2aa37137c92ec697157d07c51462b27ccaa55d36415413e54047e06c2",
+      "size_bytes": 40334
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step32",
+      "kind": "exported_map",
+      "sha256": "8cfb85b49165a87c4a9fba7f9cb1783c880a6e40b7e5659ed95224896fed9844",
+      "size_bytes": 75489
+    },
+    {
+      "record_id": "r2-uzp_seam-user1-step32",
+      "kind": "exported_map",
+      "sha256": "f0cbf5aa0f80b955f6089acf02ed6d1b2eb61c2e452250a8cddee31543fd6fa7",
+      "size_bytes": 162288
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "6c93cbf6b1fa3bab4d30f7987be851c8371b662e452b63222b07858feba71eea",
+      "size_bytes": 402
+    }
+  ]
 }

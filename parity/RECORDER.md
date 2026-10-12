@@ -323,7 +323,7 @@ $exe = "C:\Program Files\Adobe\Adobe Substance 3D Painter\Adobe Substance 3D Pai
 
 ### 11.3 After the sessions
 
-- For each admitted Tier 0 golden, move its function call from `recording_requests.requested_goldens` to `current.api_goldens` and delete its request file. `python -m tools.parity.tier0_semantics check` must pass.
+- For each admitted Tier 0 golden, add its name to `recording_requests.ADMITTED` (the generator then plans its manifest under `manifests/`) and delete its request file. `python -m tools.parity.tier0_semantics check` must pass.
 - Admitted probe and Tier 1 manifests move the same way: delete the request file once the store has written the manifest under `manifests/`.
 - Keep a refused golden's request and record the refusal and its cause in the batch report. A state step Painter refuses (for example an `add_channel` of a channel the default project already has) refuses the whole golden; fix the request under a new name. A recorded golden is immutable.
 - Run `python -m pytest tests/parity/test_tier0_gate.py tests/parity/test_tier0_semantics_ui.py tests/parity/test_recording_requests.py tests/parity/recorder/test_api_probes.py`.

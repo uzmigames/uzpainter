@@ -1,10 +1,10 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/api-probes/phase1-create-settings",
+  "golden_id": "tier0/api-probes/phase1-execute-when-not-busy",
   "tier": "0",
-  "domain": "tier0/api-probes/phase1-create-settings",
-  "description": "API probe (R10): project.create with Settings(normal_map_format=DirectX, default_texture_resolution=512, import_cameras=True); the texture set resolution and the texture sets read back (no documented getter reads the normal map format back), with the events and the BaseColor export.",
+  "domain": "tier0/api-probes/phase1-execute-when-not-busy",
+  "description": "API probe (R10): project.execute_when_not_busy when idle, then right after a reload_mesh (plane onto itself) that makes Painter busy; when each callback runs relative to the BusyStatusChanged events and the reload callback, in both recordings, with the BaseColor export.",
   "inputs": [
     {
       "input_id": "plane",
@@ -26,9 +26,8 @@
         "call": "substance_painter.project.create",
         "args": {
           "mesh": "plane",
-          "normal_map_format": "DirectX",
-          "default_texture_resolution": 512,
-          "import_cameras": true
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
         }
       },
       {
@@ -36,8 +35,9 @@
         "call": "substance_painter.event.Dispatcher.connect",
         "args": {
           "events": [
-            "LayerStacksModelDataChanged",
-            "BusyStatusChanged"
+            "BusyStatusChanged",
+            "ProjectEditionEntered",
+            "ProjectEditionLeft"
           ]
         }
       },
@@ -82,14 +82,37 @@
       },
       {
         "step": 7,
-        "call": "substance_painter.textureset.TextureSet.get_resolution"
+        "call": "substance_painter.project.is_busy"
       },
       {
         "step": 8,
-        "call": "substance_painter.textureset.all_texture_sets"
+        "call": "substance_painter.project.execute_when_not_busy",
+        "args": {
+          "probe": true
+        }
       },
       {
         "step": 9,
+        "call": "substance_painter.project.reload_mesh",
+        "args": {
+          "mesh": "plane",
+          "probe": true,
+          "wait": false
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.project.execute_when_not_busy",
+        "args": {
+          "probe": true
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.project.is_busy"
+      },
+      {
+        "step": 12,
         "call": "substance_painter.export.export_project_textures",
         "args": {
           "maps": [
@@ -106,12 +129,12 @@
   "applied_settings": [
     {
       "name": "project.normal_map_format",
-      "value": "DirectX",
+      "value": "OpenGL",
       "applied_by": "recorder_api"
     },
     {
       "name": "texture_set.resolution",
-      "value": 512,
+      "value": 256,
       "unit": "px",
       "applied_by": "recorder_api"
     },
@@ -145,5 +168,30 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "d3bedea4eb97f30aed4fa051f0db03f9ed5b00560983a763b1f7b1d8a6f26c48",
+      "size_bytes": 14680
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "3901718d3ecae40616f1aa3857ccc11dcd0bd382313bf4aac24ce12f1153110e",
+      "size_bytes": 1013
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "3901718d3ecae40616f1aa3857ccc11dcd0bd382313bf4aac24ce12f1153110e",
+      "size_bytes": 1013
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "6c93cbf6b1fa3bab4d30f7987be851c8371b662e452b63222b07858feba71eea",
+      "size_bytes": 402
+    }
+  ]
 }

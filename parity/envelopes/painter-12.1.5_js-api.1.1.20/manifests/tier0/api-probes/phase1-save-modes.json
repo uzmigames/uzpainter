@@ -1,10 +1,10 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/api-probes/phase1-execute-when-not-busy",
+  "golden_id": "tier0/api-probes/phase1-save-modes",
   "tier": "0",
-  "domain": "tier0/api-probes/phase1-execute-when-not-busy",
-  "description": "API probe (R10): project.execute_when_not_busy when idle, then right after a reload_mesh (plane onto itself) that makes Painter busy; when each callback runs relative to the BusyStatusChanged events and the reload callback, in both recordings, with the BaseColor export.",
+  "domain": "tier0/api-probes/phase1-save-modes",
+  "description": "API probe (R10): project.save_as_copy (Incremental), save_as (Full), then two edits and project.save with ProjectSaveMode.Incremental; the events of each save, file_path(), needs_saving() and the names of the files written in the work directory, in the first session and after save/reopen, with the BaseColor export.",
   "inputs": [
     {
       "input_id": "plane",
@@ -35,9 +35,9 @@
         "call": "substance_painter.event.Dispatcher.connect",
         "args": {
           "events": [
-            "BusyStatusChanged",
-            "ProjectEditionEntered",
-            "ProjectEditionLeft"
+            "ProjectAboutToSave",
+            "ProjectSaved",
+            "BusyStatusChanged"
           ]
         }
       },
@@ -82,37 +82,86 @@
       },
       {
         "step": 7,
-        "call": "substance_painter.project.is_busy"
+        "call": "substance_painter.project.file_path"
       },
       {
         "step": 8,
-        "call": "substance_painter.project.execute_when_not_busy",
-        "args": {
-          "probe": true
-        }
+        "call": "substance_painter.project.needs_saving"
       },
       {
         "step": 9,
-        "call": "substance_painter.project.reload_mesh",
+        "call": "substance_painter.project.save_as_copy",
         "args": {
-          "mesh": "plane",
-          "probe": true,
-          "wait": false
+          "work_file": "copy.spp",
+          "mode": "Incremental",
+          "probe": true
         }
       },
       {
         "step": 10,
-        "call": "substance_painter.project.execute_when_not_busy",
+        "call": "substance_painter.project.file_path"
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.project.needs_saving"
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.project.save_as",
         "args": {
+          "work_file": "main.spp",
+          "mode": "Full",
           "probe": true
         }
       },
       {
-        "step": 11,
-        "call": "substance_painter.project.is_busy"
+        "step": 13,
+        "call": "substance_painter.project.file_path"
       },
       {
-        "step": 12,
+        "step": 14,
+        "call": "substance_painter.project.needs_saving"
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 3,
+          "name": "uzp save probe x",
+          "probe": true
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 3,
+          "name": "uzp save probe y",
+          "probe": true
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.project.needs_saving"
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.project.save",
+        "args": {
+          "mode": "Incremental",
+          "probe": true
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.project.file_path"
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.project.needs_saving"
+      },
+      {
+        "step": 21,
         "call": "substance_painter.export.export_project_textures",
         "args": {
           "maps": [
@@ -168,5 +217,30 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "56ec47a22951c82a18762bc18ad93b2706b7d1d241bebef58da4036d5d6b09d3",
+      "size_bytes": 24921
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "3901718d3ecae40616f1aa3857ccc11dcd0bd382313bf4aac24ce12f1153110e",
+      "size_bytes": 1013
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "3901718d3ecae40616f1aa3857ccc11dcd0bd382313bf4aac24ce12f1153110e",
+      "size_bytes": 1013
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "6c93cbf6b1fa3bab4d30f7987be851c8371b662e452b63222b07858feba71eea",
+      "size_bytes": 402
+    }
+  ]
 }

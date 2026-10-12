@@ -1,7 +1,8 @@
 """R10 API probes (recording plan R10; `phase1.22` capability evidence): the request manifests.
 
-The manifests are staged, unrecorded, under the envelope's `requests/` root. Each must validate,
-load as an observed probe job and record end to end against the fake Painter
+The manifests are staged, unrecorded, under the envelope's `requests/` root; once a probe is
+admitted, its request is deleted and the store's manifest under `manifests/` replaces it. Each must
+validate, load as an observed probe job and record end to end against the fake Painter
 (`fake_probe_painter.py`), giving the `r1` and `r2` recordings.
 """
 
@@ -36,7 +37,26 @@ REQUEST_DIR = (
     / "tier0"
     / "api-probes"
 )
-REQUESTS = sorted(REQUEST_DIR.glob("*.json"))
+MANIFEST_DIR = REQUEST_DIR.parents[2] / "manifests" / "tier0" / "api-probes"
+STEMS = [
+    "phase1-create-settings",
+    "phase1-delete-node",
+    "phase1-engine-computations",
+    "phase1-execute-when-not-busy",
+    "phase1-reload-mesh",
+    "phase1-reload-resources",
+    "phase1-resource-update",
+    "phase1-save-modes",
+]
+
+
+def probe_path(stem: str) -> Path:
+    """The request while the probe is unrecorded, else its admitted manifest."""
+    request = REQUEST_DIR / f"{stem}.json"
+    return request if request.is_file() else MANIFEST_DIR / f"{stem}.json"
+
+
+PROBES = [probe_path(stem) for stem in STEMS]
 PROBE_FAKE = "uzp_recorder_fake_probe_painter"
 SOFTWARE = {
     "product": "Adobe Substance 3D Painter",
@@ -74,7 +94,7 @@ def record(
     probe_fake: types.ModuleType, fake: types.ModuleType, stem: str, tmp_path: Path
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     session = session_on(probe_fake, fake)
-    job = load_probe_job(REQUEST_DIR / f"{stem}.json")
+    job = load_probe_job(probe_path(stem))
     run = record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
     data = json.loads((run / "record.json").read_text(encoding="utf-8"))
     first, second = (
@@ -90,22 +110,15 @@ def event_names(output: dict[str, Any]) -> list[str]:
 # --- manifests -----------------------------------------------------------------------------
 
 
-def test_every_request_manifest_is_an_unrecorded_observed_probe_job() -> None:
-    assert [p.stem for p in REQUESTS] == [
-        "phase1-create-settings",
-        "phase1-delete-node",
-        "phase1-engine-computations",
-        "phase1-execute-when-not-busy",
-        "phase1-reload-mesh",
-        "phase1-reload-resources",
-        "phase1-resource-update",
-        "phase1-save-modes",
-    ]
-    for path in REQUESTS:
+def test_every_probe_manifest_is_an_observed_probe_job_requested_or_admitted() -> None:
+    requested = [p.stem for p in REQUEST_DIR.glob("*.json")]
+    admitted = [p.stem for p in MANIFEST_DIR.glob("phase1-*.json")]
+    assert sorted(requested + admitted) == STEMS
+    for path in PROBES:
         manifest = load_json(path)
         job = load_probe_job(path)  # validates against golden-public.json first
         assert job.golden_id == f"tier0/api-probes/{path.stem}"
-        assert manifest["private_records"] == []
+        assert (manifest["private_records"] == []) == (path.parent == REQUEST_DIR)
         assert manifest["software"]["painter"] == SOFTWARE
         assert manifest_symbol_problems(manifest) == []
         assert job.observed and not job.lifecycle
@@ -113,13 +126,13 @@ def test_every_request_manifest_is_an_unrecorded_observed_probe_job() -> None:
 
 
 def edited_steps(stem: str, index: int, **changes: Any) -> dict[str, Any]:
-    manifest: dict[str, Any] = load_json(REQUEST_DIR / f"{stem}.json")
+    manifest: dict[str, Any] = load_json(probe_path(stem))
     manifest["instruction_sequence"]["steps"][index]["args"].update(changes)
     return manifest
 
 
 def test_events_are_connected_by_step_two_only() -> None:
-    manifest = load_json(REQUEST_DIR / "phase1-delete-node.json")
+    manifest = load_json(probe_path("phase1-delete-node"))
     steps = manifest["instruction_sequence"]["steps"]
     steps[1], steps[2] = steps[2], steps[1]
     steps[1]["step"], steps[2]["step"] = 2, 3
@@ -143,7 +156,7 @@ def test_a_rewrite_names_two_inputs() -> None:
 # --- recording against the fake -----------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", REQUESTS, ids=lambda p: p.stem)
+@pytest.mark.parametrize("path", PROBES, ids=lambda p: p.stem)
 def test_every_request_records_r1_and_r2(
     probe_fake: types.ModuleType, fake: types.ModuleType, path: Path, tmp_path: Path
 ) -> None:
