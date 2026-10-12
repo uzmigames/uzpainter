@@ -87,8 +87,9 @@ def test_unavailable_backend_refuses_gpu_calls_before_mutating(
 def test_mutating_calls_need_key_and_current_precondition(
     painter: Path, tmp_path: Path, pipes: list[Pipe]
 ) -> None:
-    """2.5: a mutating call without `idempotency_key` / `expected_revision` is an invalid request;
-    a stale precondition is refused before the call runs; the reply carries
+    """2.5: a mutating call without `idempotency_key`, or with a precondition that is not an
+    integer, is an invalid request; an unknown key without a precondition is `outcome_unknown`
+    (phase2.2 item 2.5); a stale precondition is refused before the call runs; the reply carries
     `committed_revision`."""
     project = make_project(painter, tmp_path)
     pipe = Pipe(painter, tmp_path, "--gpu-backend", "vulkan", "--allow-python")
@@ -96,13 +97,15 @@ def test_mutating_calls_need_key_and_current_precondition(
     revision = pipe.call("project_open", {"path": str(project)})["result"]["revision"]
     for extra in (
         {},
-        {"idempotency_key": "k"},
         {"expected_revision": revision},
         {"idempotency_key": "", "expected_revision": revision},
         {"idempotency_key": "k", "expected_revision": "1"},
     ):
         reply = pipe.call("run_python", {"code": INSERT_FILL}, **extra)
         assert reply["error"]["code"] == "invalid_request", extra
+    unknown = pipe.call("run_python", {"code": INSERT_FILL}, idempotency_key="k")
+    assert unknown["error"]["code"] == "outcome_unknown"
+    assert unknown["error"]["details"] == {"key": "k", "committed_revision": revision}
     stale = pipe.call("run_python", {"code": INSERT_FILL}, expected_revision=revision - 1, **KEY)
     assert stale["error"] == {
         "code": "stale_revision",
@@ -117,9 +120,11 @@ def test_mutating_calls_need_key_and_current_precondition(
             "event": "revision",
             "revision": revision + 1,
             "project": project.as_posix(),
+            "project_uuid": pipe.events[0]["project_uuid"],
             "untitled": False,
         }
     ]
+    assert isinstance(pipe.events[0]["project_uuid"], str)
     assert done["result"]["status"] == "ok"
     assert done["committed_revision"] == revision + 1
     assert done["result"]["last_committed_revision"] == revision + 1

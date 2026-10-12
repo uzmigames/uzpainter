@@ -9,11 +9,14 @@
 // with one reply carrying the request's `id`:
 //
 // - request  `{"id", "method": "tools/list"}` or `{"id", "method": "tools/call", "name", "arguments",
-//   "idempotency_key", "expected_revision"}` (the last two required on a mutating tool);
-// - reply    `{"id", "result": {...}, "committed_revision"?}` or `{"id", "error": {"code", "message",
-//   "details"}}`;
+//   "idempotency_key", "expected_revision"}` (the key required on a mutating tool, the precondition
+//   decided with it); `{"id", "method": "worker/reopen" | "worker/operations", ...}` (supervisor
+//   recovery and reconciliation, not tools);
+// - reply    `{"id", "result": {...}, "committed_revision"?, "admission"?, "request_hash"?}` (the
+//   last two on a mutating call: `executed` or `stored_outcome`) or `{"id", "error": {"code",
+//   "message", "details"}}`;
 // - notifications (no `id`): `{"job_id", "status", "progress", "message"}` and
-//   `{"event": "revision", "revision"}`.
+//   `{"event": "revision", "revision", "project", "project_uuid", "untitled"}`.
 //
 // Large payloads never travel inline: the worker writes them under its output root and replies
 // with their path and SHA-256.

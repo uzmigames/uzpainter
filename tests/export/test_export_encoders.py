@@ -684,7 +684,8 @@ def test_srgb8_material_channels_equal_painter_files(export_tests: Path, tmp_pat
     report = encoders_tier0.srgb8_material_written(export_tests, tmp_path)
     assert report["problems"] == [], report["problems"][:10]
     # s4, s5 and s7 fill these channels from grey 16-bit bitmaps (height-ramps, grey-a) in the sRGB
-    # space, which the evaluator refuses before writing (phase1.14_compositor-core, sources.h).
+    # space, which the evaluator refuses before writing (phase1.15_compositor-colour-fits,
+    # sources.h).
     assert report["grey_bitmap_sets"] == {"s4", "s5", "s7"}, report
     assert report["files"] == 5 * 4 * 3, report
     assert report["identical"] == report["comparisons"] == 2 * report["files"], report

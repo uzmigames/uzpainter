@@ -229,17 +229,49 @@ std::string DurableStore(const python::OpenProject& open) {
     return python::Utf8(open.untitled_dir.empty() ? open.project_source : std::filesystem::absolute(open.store->path()));
 }
 
-/// `{"event": "revision", "revision", "project", "untitled"}`: the open project's revision and
-/// durable store (null, null and false when none is open).
+/// `{"event": "revision", "revision", "project", "project_uuid", "untitled"}`: the open project's
+/// revision, durable store and UUID (the scope of its idempotency keys); null, null, null and
+/// false when none is open.
 json::Object RevisionEvent() {
     python::Session& session = python::Session::Get();
-    json::Object event{{"event", "revision"}, {"revision", nullptr}, {"project", nullptr}, {"untitled", false}};
+    json::Object event{{"event", "revision"},
+                       {"revision", nullptr},
+                       {"project", nullptr},
+                       {"project_uuid", nullptr},
+                       {"untitled", false}};
     if (const std::shared_ptr<python::OpenProject> open = session.IsOpen() ? session.Current() : nullptr) {
         event["revision"] = open->document->revision();
         event["project"] = DurableStore(*open);
+        event["project_uuid"] = open->store->project_uuid();
         event["untitled"] = !open->untitled_dir.empty();
     }
     return event;
+}
+
+/// The refusal of a mutating call the stored operation rows decided not to run (`09-...` §4), or
+/// nothing for `execute` and `stored_outcome`.
+std::optional<CallError> AdmissionRefusal(const core::AdmissionDecision& decision, const std::string& key) {
+    switch (decision.admission) {
+        case core::Admission::idempotency_conflict:
+            return CallError{"idempotency_conflict", "the idempotency key was committed with other arguments",
+                             json::Object{{"key", key}, {"committed_revision", decision.record->committed_revision}}};
+        case core::Admission::outcome_unknown:
+            return CallError{"outcome_unknown",
+                             "the key is unknown and its precondition is missing, expired or unreadable: the call "
+                             "is not run",
+                             json::Object{{"key", key}, {"committed_revision", decision.current_revision}}};
+        case core::Admission::stale_revision: {
+            json::Object details{{"expected", decision.expected_revision ? json::Value(*decision.expected_revision)
+                                                                         : json::Value(nullptr)},
+                                 {"current", decision.current_revision}};
+            return CallError{"stale_revision", "the project is at another revision than the call expected",
+                             std::move(details)};
+        }
+        case core::Admission::stored_outcome:
+        case core::Admission::execute:
+            break;
+    }
+    return std::nullopt;
 }
 
 class Worker {
@@ -258,6 +290,7 @@ private:
     void DefineTools();
     json::Object Call(const json::Value& id, const json::Object& request);
     json::Object Reopen(const json::Value& id, const json::Object& request);
+    json::Object Operations(const json::Value& id, const json::Object& request);
     json::Object ListTools() const;
     std::optional<std::int64_t> CommittedRevision() const;
 
@@ -276,6 +309,7 @@ private:
     std::filesystem::path OutputDirectory(const json::Object& arguments) const;
 #if defined(UZP_WORKER_FAULT_HOOKS)
     json::Object TestFault(const json::Object& arguments);
+    json::Object TestMutation(const json::Object& arguments);
 #endif
 
     [[noreturn]] void FailRender(const render::Error& error);
@@ -286,6 +320,8 @@ private:
     std::map<std::string, Handler, std::less<>> m_handlers;
     std::unique_ptr<evaluator::Evaluator> m_evaluator;
     std::uint64_t m_payloads = 0;
+    /// The admitted request of the mutating call being handled (a typed tool submits it as is).
+    std::optional<core::MutationRequest> m_mutation;
 };
 
 void Worker::DefineTools() {
@@ -368,6 +404,15 @@ void Worker::DefineTools() {
                     {"fault"}),
              false, false},
             [this](const json::Object& a) { return TestFault(a); });
+        // A typed, single-transaction mutation (one fill layer on the active stack, or a call that
+        // fails after its edit with `fail`): the idempotency path of typed tools, tested before
+        // phase2.6 delivers them (decision 138).
+        add({"test_mutation", "Test-only typed mutation (Debug builds under --test-faults).",
+             Schema({{"name", StringProperty("The fill layer's name.")},
+                     {"fail", json::Object{{"type", "boolean"}, {"description", "Fail the call after its edit."}}}},
+                    {"name"}),
+             true, false},
+            [this](const json::Object& a) { return TestMutation(a); });
     }
 #endif
 }
@@ -399,6 +444,7 @@ json::Object Worker::Handle(const json::Object& request) {
     if (method == "tools/list") return ResultReply(*id, ListTools(), CommittedRevision());
     if (method == "tools/call") return Call(*id, request);
     if (method == "worker/reopen") return Reopen(*id, request);
+    if (method == "worker/operations") return Operations(*id, request);
     return ErrorReply(*id, "unknown_method", "unknown method " + method.value_or("(none)"),
                       json::Object{{"method", method ? json::Value(*method) : json::Value(nullptr)}});
 }
@@ -420,19 +466,42 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
     if (tool == m_tools.end()) {
         return ErrorReply(id, "unknown_tool", "unknown tool " + *name, json::Object{{"name", *name}});
     }
+    m_mutation.reset();
     if (tool->mutating) {
+        // The admission order of 02 §3: a known key and its request hash before the revision
+        // precondition. A key without a precondition is decided too: a known key returns its
+        // stored outcome, an unknown one `outcome_unknown`; it never runs.
         const std::optional<std::string> key = StringField(request, "idempotency_key");
         const json::Value* expected = Field(request, "expected_revision");
-        if (!key || key->empty() || !expected || !expected->IsInt()) {
+        const bool has_expected = expected && !expected->IsNull();
+        if (!key || key->empty() || (has_expected && !expected->IsInt())) {
             return ErrorReply(id, "invalid_request",
                               "a mutating call needs idempotency_key (string) and expected_revision (integer)");
         }
-        const std::optional<std::int64_t> current = CommittedRevision();
-        const std::int64_t want = std::get<std::int64_t>(expected->data);
-        if (current && *current != want) {
-            return ErrorReply(id, "stale_revision", "the project is at another revision than the call expected",
-                              json::Object{{"expected", want}, {"current", *current}});
+        core::MutationRequest mutation{*name, arguments, *key,
+                                       has_expected ? std::optional(std::get<std::int64_t>(expected->data))
+                                                    : std::nullopt};
+        python::Session& session = python::Session::Get();
+        if (session.IsOpen()) {
+            const std::shared_ptr<python::OpenProject> open = session.Current();
+            const core::AdmissionDecision decision = open->store->Decide(mutation, open->document->revision());
+            if (decision.admission == core::Admission::stored_outcome) {
+                const json::Value& stored = decision.record->outcome;
+                json::Object reply = ResultReply(
+                    id, stored.IsObject() ? std::get<json::Object>(stored.data) : json::Object{}, CommittedRevision());
+                reply["admission"] = "stored_outcome";
+                reply["request_hash"] = decision.record->request_hash;
+                return reply;
+            }
+            if (std::optional<CallError> refusal = AdmissionRefusal(decision, *key)) {
+                return ErrorReply(id, refusal->code, refusal->message, refusal->details);
+            }
+        } else if (!has_expected) {
+            return ErrorReply(id, "outcome_unknown",
+                              "the key is unknown and its precondition is missing: the call is not run",
+                              json::Object{{"key", *key}, {"committed_revision", nullptr}});
         }
+        m_mutation = std::move(mutation);
     }
     if (tool->gpu) {
         if (const std::optional<render::Error>& unavailable = m_engine.DeviceError()) {
@@ -443,7 +512,12 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
     }
     try {
         json::Object result = m_handlers.at(*name)(arguments);
-        return ResultReply(id, std::move(result), CommittedRevision());
+        json::Object reply = ResultReply(id, std::move(result), CommittedRevision());
+        if (m_mutation) {
+            reply["admission"] = "executed";
+            reply["request_hash"] = m_mutation->request_hash();
+        }
+        return reply;
     } catch (const CallError& error) {
         return ErrorReply(id, error.code, error.message, error.details);
     } catch (const python::ApiError& error) {
@@ -463,6 +537,39 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
         return ErrorReply(id, std::move(code), error.what(), std::move(details));
     } catch (const std::exception& error) {
         return ErrorReply(id, "call_failed", error.what(), json::Object{{"type", "RuntimeError"}});
+    }
+}
+
+/// `worker/operations {after}`: what the supervisor reconciles its ledger from after a restart
+/// (02 §3): the open project's UUID, current revision and horizon, its operation rows committed
+/// after `after` and the keys of rows that do not decode. Not a tool.
+json::Object Worker::Operations(const json::Value& id, const json::Object& request) {
+    const json::Value* after = Field(request, "after");
+    if (!after || !after->IsInt()) return ErrorReply(id, "invalid_request", "worker/operations needs after (integer)");
+    python::Session& session = python::Session::Get();
+    if (!session.IsOpen()) return ResultReply(id, {{"project_uuid", nullptr}}, std::nullopt);
+    const std::shared_ptr<python::OpenProject> open = session.Current();
+    try {
+        const store::ProjectStore::OperationLog log = open->store->OperationsAfter(std::get<std::int64_t>(after->data));
+        json::Array records;
+        for (const core::OperationRecord& record : log.records) {
+            records.push_back(json::Object{{"idempotency_key", record.idempotency_key},
+                                           {"request_hash", record.request_hash},
+                                           {"outcome", record.outcome},
+                                           {"committed_revision", record.committed_revision}});
+        }
+        json::Array unreadable;
+        for (const std::string& key : log.unreadable) unreadable.push_back(key);
+        return ResultReply(id,
+                           {{"project_uuid", open->store->project_uuid()},
+                            {"current_revision", log.current_revision},
+                            {"horizon_revision", log.horizon_revision},
+                            {"operations", std::move(records)},
+                            {"unreadable", std::move(unreadable)}},
+                           CommittedRevision());
+    } catch (const std::exception& error) {
+        return ErrorReply(id, "outcome_unknown", std::string("the operation records cannot be read: ") + error.what(),
+                          json::Object{{"committed_revision", open->document->revision()}});
     }
 }
 
@@ -816,6 +923,31 @@ json::Object Worker::TestFault(const json::Object& arguments) {
     if (!parsed) throw CallError{"invalid_arguments", "unknown fault", {}};
     fault::Trigger(*parsed);
     return {{"armed", *name}};
+}
+
+json::Object Worker::TestMutation(const json::Object& arguments) {
+    const std::optional<std::string> layer = StringField(arguments, "name");
+    const json::Value* fail = Field(arguments, "fail");
+    if (!layer || (fail && !fail->IsBool())) {
+        throw CallError{"invalid_arguments", "test_mutation needs a name and a boolean fail", {}};
+    }
+    const bool failing = fail && std::get<bool>(fail->data);
+    python::Session& session = python::Session::Get();
+    const std::shared_ptr<python::OpenProject> open = session.Current();
+    const core::RequestOutcome outcome = session.Submit(*m_mutation, [&](core::Edit& edit) {
+        edit.Insert(core::InsertPosition::FromStack(open->active_set, open->active_stack), core::NodeType::FillLayer,
+                    *layer);
+        if (failing) throw core::ValueError("test_mutation: the call failed as requested");
+    });
+    if (std::optional<CallError> refusal = AdmissionRefusal(outcome.decision, m_mutation->idempotency_key)) {
+        throw *refusal;
+    }
+    const core::TransactionResult& result = *outcome.result;
+    if (result.status == core::ResultStatus::failed) {
+        throw CallError{"call_failed", result.error,
+                        json::Object{{"type", result.error_type}, {"outcome", result.ToJson()}}};
+    }
+    return result.ToJson();
 }
 #endif
 

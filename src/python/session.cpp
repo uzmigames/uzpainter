@@ -473,6 +473,18 @@ CallResult Session::Mutate(const std::string& tool, core::json::Object arguments
     return result;
 }
 
+core::RequestOutcome Session::Submit(core::MutationRequest request, const std::function<void(core::Edit&)>& call) {
+    if (Thread().transaction) throw ApiError("RuntimeError", "a typed tool call inside an open Transaction");
+    const std::shared_ptr<OpenProject> project = Current();
+    core::RequestOutcome outcome =
+        project->store->Submit(*project->document, std::move(request), [&call](core::Edit& edit) {
+            call(edit);
+            evaluator::RequireSupported(edit.base(), edit.project());
+        });
+    if (outcome.result) Record(FromResult(*outcome.result));
+    return outcome;
+}
+
 void Session::OpenTransaction(const std::string& name) {
     ThreadState& thread = Thread();
     if (thread.transaction) throw ApiError("RuntimeError", "a Transaction is already open on this thread");
