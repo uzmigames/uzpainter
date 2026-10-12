@@ -1,5 +1,6 @@
 #include "export/virtual_maps.h"
 
+#include "evaluator/arith.h"
 #include "evaluator/error.h"
 #include "evaluator/evaluator.h"
 
@@ -26,6 +27,59 @@ constexpr std::string_view kView2dOwner =
     "a reproduction of Painter's 2D view render, which no task owns yet (decision 092)";
 
 }  // namespace
+
+std::optional<uint32_t> PassThroughComponents(core::MeshMapUsage usage) {
+    switch (usage) {
+        case core::MeshMapUsage::AO:
+        case core::MeshMapUsage::Curvature: return 1;
+        case core::MeshMapUsage::Position: return 3;
+        default: return std::nullopt;
+    }
+}
+
+render::Result<VirtualMapResult> PassThroughMeshMap(const core::Project& project, core::MeshMapUsage usage,
+                                                    const VirtualMapRequest& request) {
+    const std::string name(core::ToString(usage));
+    const std::optional<uint32_t> components = PassThroughComponents(usage);
+    if (!components) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        "exporting the " + name +
+                            " mesh map is not recorded (recording R-090 P7 shows AO, Curvature and Position; decision 103)");
+    }
+    const core::TextureSet* set = nullptr;
+    for (const core::TextureSet& candidate : project.texture_sets) {
+        if (candidate.id == request.textureSet) set = &candidate;
+    }
+    if (set == nullptr) return EvalFail(EvalErrorKind::Internal, "the texture set of the mesh map is not in the project");
+    const auto binding = set->mesh_maps.find(usage);
+    if (binding == set->mesh_maps.end()) {
+        return EvalFail(EvalErrorKind::MissingResource, "texture set " + set->name + " has no " + name + " mesh map");
+    }
+    const std::shared_ptr<const evaluator::DecodedImage> image =
+        request.resources ? request.resources->Fetch(binding->second.resource) : nullptr;
+    if (!image) {
+        return EvalFail(EvalErrorKind::MissingResource,
+                        "the " + name + " mesh map's image " + binding->second.resource + " is not available");
+    }
+    const bool unorm = image->encoding == render::TexelEncoding::Unorm16 ||
+                       image->encoding == render::TexelEncoding::Unorm8;
+    if (!unorm || image->channels != *components || image->width != static_cast<uint32_t>(set->resolution.width) ||
+        image->height != static_cast<uint32_t>(set->resolution.height)) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        "the " + name + " mesh map is recorded as an 8- or 16-bit " +
+                            (*components == 1 ? "grey" : "RGB") +
+                            " image at the set resolution only (a pass-through does not resample; decision 103)");
+    }
+    const uint32_t bits = image->encoding == render::TexelEncoding::Unorm16 ? 16u : 8u;
+    const uint32_t max = (1u << bits) - 1u;
+    VirtualMapResult result;
+    result.values.width = image->width;
+    result.values.height = image->height;
+    result.values.components = *components;
+    result.values.values.reserve(image->values.size());
+    for (const uint32_t code : image->values) result.values.values.push_back(evaluator::arith::UnormOperand(code & max, bits));
+    return result;
+}
 
 std::string_view VirtualMapName(VirtualMap map) { return kNames[static_cast<size_t>(map)]; }
 
@@ -91,11 +145,7 @@ render::Result<VirtualMapResult> EvaluateMeshMapOn(const core::Project& project,
                                                    core::MeshMapUsage usage, const VirtualMapRequest& request,
                                                    const evaluator::TemplateLibrary& templates,
                                                    evaluator::ITileStore& store, evaluator::TileCache& cache) {
-    if (usage != core::MeshMapUsage::Normal) {
-        return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "exporting the " + std::string(core::ToString(usage)) +
-                            " mesh map is not recorded (export-processing recording R-090 (decision 090))");
-    }
+    if (usage != core::MeshMapUsage::Normal) return PassThroughMeshMap(project, usage, request);
     evaluator::VirtualNormalRequest normal;
     normal.textureSet = request.textureSet;
     normal.stack = request.stack;

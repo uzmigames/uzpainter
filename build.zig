@@ -302,6 +302,7 @@ const export_sources = [_][]const u8{
     "export/plan.cpp",
     "export/png_writer.cpp",
     "export/preset_aliases.cpp",
+    "export/project_export.cpp",
     "export/publish.cpp",
     "export/receipt.cpp",
     "export/virtual_maps.cpp",
@@ -1130,6 +1131,8 @@ pub fn build(b: *std.Build) void {
         .flags = &evaluator_flags,
     });
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
+    // The end-to-end export re-derives the project's texturing mesh (`mesh::RederiveMesh`).
+    app_mod.linkLibrary(mesh_lib);
     app_mod.linkLibrary(uzp_core_lib);
     const install_templates = b.addInstallDirectory(.{
         .source_dir = b.path(templates_dir),
@@ -1237,6 +1240,8 @@ pub fn build(b: *std.Build) void {
     export_tests_mod.addIncludePath(b.path("thirdparty/zlib"));
     export_tests_mod.addIncludePath(b.path("thirdparty/tinyexr"));
     export_tests_mod.linkLibrary(mesh_lib);
+    // The end-to-end export opens `.uzp` projects (`src/export/project_export.h`).
+    export_tests_mod.linkLibrary(store_lib);
     export_tests_mod.linkLibrary(uzp_core_lib);
     for (system_libraries) |name| export_tests_mod.linkSystemLibrary(name, .{});
     export_tests_mod.linkSystemLibrary("version", .{});

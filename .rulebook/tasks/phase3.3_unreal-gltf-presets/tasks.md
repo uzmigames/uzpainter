@@ -11,6 +11,8 @@
 - [ ] 3.3 Consolidated consumer-gap report for both presets in `parity/reports/phase3/`
 - [ ] 3.4 Regenerate the capability manifest with both presets at their proven status
 
+- [ ] 3.5 (decision 103, from phase1.18_export-engine item 6.2, decision 096) Record R-095 (`parity/reports/phase1/export-presets.md` §3; `export-presets-legacy` crashed Painter in the 2026-10-12 session, the OCIO presets were not recorded); confirm or correct `pbr-metallic-roughness` and `blender-principled-bsdf` from it (provenance `parity.layout` "confirmed"); add an output-parity test per shipped preset in `tests/export/test_export_presets.py` against the R-095 goldens (every file's name and decoded pixels); set each record's `privateRecords` and `parity.status` "exact" once BaseColor (phase1.25_pilot-wand item 2.6) is fitted
+
 ## 4. Tests
 - [ ] 4.1 Consumer-matrix row 8 (`08-export.md` §5.1) passes on wand v1 for the PNG/TGA and the DDS variants
 - [ ] 4.2 The glTF consumer fixture passes on wand v1

@@ -306,9 +306,12 @@ def test_written_values_follow_the_write_rules(export_tests: Path, tmp_path: Pat
 @pytest.mark.parametrize(
     ("params", "rules", "expected"),
     [
-        ({"bitDepth": "8"}, None, "PNG at 8 bits"),
-        ({}, [{"parameters": {"fileFormat": "exr", "bitDepth": "16f"}}], "OpenEXR at 16f"),
-        ({"dithering": True}, None, "dithering"),
+        ({"bitDepth": "8", "dithering": True}, None, "dithering at PNG 8 bits"),
+        (
+            {},
+            [{"parameters": {"fileFormat": "exr", "bitDepth": "16f", "dithering": True}}],
+            "dithering in OpenEXR",
+        ),
         ({"sizeLog2": 7}, None, "resizing 256x256 to 128x128"),
         ({"sizeLog2": [8, 7]}, None, "resizing 256x256 to 256x128"),
         ({"paddingAlgorithm": "color", "dilationDistance": 4}, None, 'the padding "color"'),
@@ -327,8 +330,8 @@ def test_unrecorded_processing_is_refused_before_writing(
     rules: list[dict[str, Any]] | None,
     expected: str,
 ) -> None:
-    """2.2-2.5 (decision 090): processing no Tier 0 recording covers raises NotYetSupported naming
-    recording R-090, and nothing exists under exportPath afterwards."""
+    """6.1 (decisions 090 and 103): processing recording R-090 shows but no fit reproduces raises
+    NotYetSupported naming it, and nothing exists under exportPath afterwards."""
     out = tmp_path / "out"
     result = export(
         export_tests, spec(tmp_path / "spec"), config(out, rules, **params), tmp_path / "run"
@@ -338,40 +341,118 @@ def test_unrecorded_processing_is_refused_before_writing(
     assert files_under(out) == {}
 
 
-def test_alpha_layouts_are_refused_before_writing(export_tests: Path, tmp_path: Path) -> None:
-    """2.5 (decision 090): an RGB+A map (alpha from a defaultMap) is refused before writing; the
-    layout is recorded (R-085 P6, P7) but its alpha sources are not resolved by the plan yet."""
-    out = tmp_path / "out"
-    cfg = config(out)
-    cfg["exportPresets"][0]["maps"][0]["channels"].append(chan("A", "defaultMap", "white"))
-    result = export(export_tests, spec(tmp_path / "spec"), cfg, tmp_path / "run")
-    assert result.get("error") == "NotYetSupported", result
-    assert "RGB+A layout" in result["message"] and "decision 090" in result["message"]
-    assert files_under(out) == {}
+def write_unorm(values: np.ndarray, bits: int) -> np.ndarray:
+    """arith::WriteUnorm: clamp, truncate to bits + 4 fractional bits, nearest code, ties down."""
+    c = np.clip(np.nan_to_num(values.astype(np.float32), nan=0.0), 0, 1).astype(np.float32)
+    j = (c * np.float32(1 << (bits + 4))).astype(np.uint64)
+    top, bias = np.uint64((1 << bits) - 1), np.uint64((1 << (bits + 3)) - 1)
+    codes: np.ndarray = ((j * top + bias) >> np.uint64(bits + 4)).astype(np.int64)
+    return codes
 
 
-@pytest.mark.parametrize(
-    ("map_name", "file_format", "expected"),
-    [
-        ("basecolor", "png", "the export encoding of the sRGB8 channel BaseColor"),
-        ("user0", "exr", "the sRGB8 channel User0 in OpenEXR is not recorded"),
-    ],
-)
-def test_unfitted_srgb8_exports_are_refused(
-    export_tests: Path, tmp_path: Path, map_name: str, file_format: str, expected: str
+def test_recorded_depths_layouts_and_dithering_are_written(
+    export_tests: Path, tmp_path: Path
 ) -> None:
-    """2.5 (decision 090): an sRGB8 material channel (BaseColor: sRGB-encoded samples, recorded
-    but not fitted) and an sRGB8 channel in OpenEXR (not recorded) are refused before writing."""
+    """6.1 (decision 103): PNG 8 writes the 8-bit UNORM rule of each value; PNG 16 with
+    dithering writes the bytes PNG 16 without it writes; an RGB+A map whose alpha is 1 everywhere
+    is written RGB, byte for byte the RGB map; an L+A map with a varying alpha is a grey and alpha
+    PNG; an sRGB8 User channel is written to OpenEXR."""
+    from tools.parity.feasibility import png
+
+    spec_path = spec(tmp_path / "spec")
+    plain = tmp_path / "plain"
+    result = export(export_tests, spec_path, config(plain), tmp_path / "run-plain")
+    assert "error" not in result, result
+
+    out8 = tmp_path / "png8"
+    result = export(export_tests, spec_path, config(out8, bitDepth="8"), tmp_path / "run-8")
+    assert "error" not in result, result
+    rough = png.decode((out8 / "maps" / "s0_Roughness.png").read_bytes()).astype(np.int64)
+    operands = (ramp_codes() / 65535.0).astype(np.float32)
+    assert np.array_equal(rough.reshape(256, 256), write_unorm(operands, 8))
+
+    dithered = tmp_path / "dithered"
+    cfg = config(dithered, dithering=True)
+    cfg["exportParameters"][1]["parameters"]["dithering"] = False  # the OpenEXR Height map
+    result = export(export_tests, spec_path, cfg, tmp_path / "run-d")
+    assert "error" not in result, result
+    assert files_under(dithered) == files_under(plain)
+
+    alpha = tmp_path / "alpha"
+    cfg = config(alpha)
+    maps = cfg["exportPresets"][0]["maps"]
+    maps[0]["channels"].append(chan("A", "defaultMap", "white"))
+    maps.append(
+        {
+            "fileName": "$textureSet_la",
+            "channels": [
+                chan("L", "documentMap", "height"),
+                chan("A", "documentMap", "roughness") | {"srcChannel": "L"},
+            ],
+        }
+    )
+    result = export(export_tests, spec_path, cfg, tmp_path / "run-alpha")
+    assert "error" not in result, result
+    written = files_under(alpha)
+    assert written["s0_User0.png"] == files_under(plain)["s0_User0.png"]
+    assert written["s0_la.png"][25] == 4  # IHDR colour type: grey and alpha
+
+    exr = tmp_path / "exr"
+    cfg = config(exr)
+    cfg["exportParameters"][0]["parameters"] |= {"fileFormat": "exr", "bitDepth": "16f"}
+    result = export(export_tests, spec_path, cfg, tmp_path / "run-exr")
+    assert "error" not in result, result
+    assert sorted(files_under(exr)) == ["maps/s0_Roughness.exr", "s0_Height.exr", "s0_User0.exr"]
+
+
+def test_height_is_written_signed_to_png(export_tests: Path, tmp_path: Path) -> None:
+    """6.1 (decision 103): a Height channel is written to PNG as v * 0.5 + 0.5 (its OpenEXR 32f
+    value v), at 16 and at 8 bits; OpenEXR 16f holds v rounded toward zero to a half."""
+    from tools.parity.feasibility import png
+    from tools.parity.fit.decode import decode
+
+    pytest.importorskip("OpenEXR")
+    spec_path = spec(tmp_path / "spec")
+    out = tmp_path / "f32"
+    result = export(export_tests, spec_path, config(out), tmp_path / "run")
+    assert "error" not in result, result
+    height = decode((out / "s0_Height.exr").read_bytes()).values.astype(np.float32)[..., 0]
+    for depth in ("16", "8"):
+        target = tmp_path / f"png{depth}"
+        cfg = config(target, bitDepth=depth)
+        cfg["exportParameters"] = cfg["exportParameters"][:1]
+        result = export(export_tests, spec_path, cfg, tmp_path / f"run-{depth}")
+        assert "error" not in result, result
+        codes = png.decode((target / "s0_Height.png").read_bytes()).astype(np.int64)
+        expected = write_unorm(height * np.float32(0.5) + np.float32(0.5), int(depth))
+        assert np.array_equal(codes.reshape(256, 256), expected)
+    half = tmp_path / "f16"
+    cfg = config(half)
+    cfg["exportParameters"][1]["parameters"]["bitDepth"] = "16f"
+    result = export(export_tests, spec_path, cfg, tmp_path / "run-16f")
+    assert "error" not in result, result
+    stored = decode((half / "s0_Height.exr").read_bytes()).values.astype(np.float32)[..., 0]
+    nearest = height.astype(np.float16).astype(np.float32)
+    toward_zero = np.where(
+        np.abs(nearest) > np.abs(height),
+        np.nextafter(nearest.astype(np.float16), np.float16(0)).astype(np.float32),
+        nearest,
+    )
+    assert np.array_equal(stored, toward_zero)
+
+
+def test_unfitted_srgb8_exports_are_refused(export_tests: Path, tmp_path: Path) -> None:
+    """6.1 (decision 103): an sRGB8 material channel (BaseColor: sRGB-encoded samples, PNG 16 not
+    fitted, export-valued template constants) is refused before writing."""
     out = tmp_path / "out"
     cfg = config(out)
-    channels = cfg["exportPresets"][0]["maps"][0]["channels"]
-    for c in channels:
-        c["srcMapName"] = map_name
-    cfg["exportParameters"][0]["parameters"]["fileFormat"] = file_format
-    cfg["exportParameters"][0]["parameters"]["bitDepth"] = "16" if file_format == "png" else "32f"
+    for c in cfg["exportPresets"][0]["maps"][0]["channels"]:
+        c["srcMapName"] = "basecolor"
     result = export(export_tests, spec(tmp_path / "spec"), cfg, tmp_path / "run")
     assert result.get("error") == "NotYetSupported", result
-    assert expected in result["message"] and "decision 090" in result["message"], result["message"]
+    message = result["message"]
+    assert "the export encoding of the sRGB8 channel BaseColor" in message, message
+    assert "decision 103" in message, message
     assert files_under(out) == {}
 
 
@@ -424,7 +505,7 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
 @pytest.fixture(scope="module")
 def tier0_reports(
     export_tests: Path, tmp_path_factory: pytest.TempPathFactory
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     from tests.export import encoders_tier0
     from tests.export.tier0 import needs_store
 
@@ -432,46 +513,61 @@ def tier0_reports(
     work = tmp_path_factory.mktemp("encoders-tier0")
     reencoded = encoders_tier0.reencode_painter_files(export_tests, work / "reencode")
     exported = encoders_tier0.export_goldens(export_tests, work / "export", runs=2)
-    return reencoded, exported
+    processed = encoders_tier0.process_painter_files(export_tests, work / "process")
+    return reencoded, exported, processed
 
 
 def test_painter_files_reencode_byte_for_byte(
-    tier0_reports: tuple[dict[str, Any], dict[str, Any]],
+    tier0_reports: tuple[dict[str, Any], dict[str, Any], dict[str, Any]],
 ) -> None:
     """2.6, 3.4: every distinct PNG16 and OpenEXR 32f file Painter exported in the current envelope,
     decoded at native depth and encoded again by EncodePng / EncodeExr, is byte-identical."""
-    reencoded, _ = tier0_reports
+    reencoded, _, _ = tier0_reports
     assert reencoded["files"]["png"] > 0 and reencoded["files"]["exr"] > 0
     assert reencoded["differing"] == [], reencoded["differing"][:10]
     assert reencoded["identical"] == reencoded["files"]
 
 
 def test_written_goldens_equal_painter_files(
-    tier0_reports: tuple[dict[str, Any], dict[str, Any]],
+    tier0_reports: tuple[dict[str, Any], dict[str, Any], dict[str, Any]],
 ) -> None:
     """3.1, 3.3, 3.4, 3.5: every export step of the goldens of EXPORT_GOLDENS, written by
     WriteExport in two processes: the dry run's files, identical across the processes, and
     byte-identical to Painter's files (PNG16 and OpenEXR 32f, infinite padding without
     dithering on complete coverage)."""
-    _, exported = tier0_reports
+    _, exported, _ = tier0_reports
     assert exported["steps"] > 0 and exported["files"] > 0
     assert exported["problems"] == [], exported["problems"][:10]
     assert exported["identical_to_painter"] == exported["comparisons"]
 
 
+def test_processing_reproduces_painter_files(
+    tier0_reports: tuple[dict[str, Any], dict[str, Any], dict[str, Any]],
+) -> None:
+    """6.1 (decision 103): Painter's own file of each map, as the raster, encoded with the
+    processing of its other files gives those files byte for byte: PNG 8, PNG 16 and OpenEXR 16f of
+    every channel, mesh map and Height of export-bit-depth (sRGB8 material channels excepted), PNG
+    16 with dithering of export-dither, and the L+A and RGB+A PNG 16 files of export-alpha-layouts
+    (an all-opaque alpha dropped)."""
+    _, _, processed = tier0_reports
+    assert processed["cases"] and processed["differing"] == [], processed["differing"][:10]
+    assert processed["identical"] == processed["cases"]
+    assert processed["layouts"]["LA"] > 0 and processed["layouts"]["RGBA"] > 0
+
+
 def test_published_export_processing_reproduces(
-    tier0_reports: tuple[dict[str, Any], dict[str, Any]],
+    tier0_reports: tuple[dict[str, Any], dict[str, Any], dict[str, Any]],
 ) -> None:
     """2.7: `parity/semantics/export-processing.json` is valid, states `exact` only with zero
     residuals and equals what this machine's comparisons derive."""
     from tests.export import encoders_tier0
     from tools.parity.schemas import Schema, validation_errors
 
-    reencoded, exported = tier0_reports
+    reencoded, exported, processed = tier0_reports
     published = json.loads(encoders_tier0.PUBLISHED.read_text(encoding="utf-8"))
     assert validation_errors(published, Schema.SEMANTICS) == []
     for item in published["entries"]:
         zero = all(r["difference"]["differing"] == 0 for r in item["residuals"])
         if item["status"] != "gap":
             assert (item["status"] == "exact") == zero, item["entry_id"]
-    assert encoders_tier0.publish(reencoded, exported) == published
+    assert encoders_tier0.publish(reencoded, exported, processed) == published
