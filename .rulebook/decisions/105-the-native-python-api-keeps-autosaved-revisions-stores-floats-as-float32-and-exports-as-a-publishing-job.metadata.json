@@ -1,0 +1,16 @@
+{
+  "id": 105,
+  "slug": "the-native-python-api-keeps-autosaved-revisions-stores-floats-as-float32-and-exports-as-a-publishing-job",
+  "title": "The native Python API keeps autosaved revisions, stores floats as float32 and exports as a publishing job",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.19_pyapi-native-module",
+    "phase1.20_pyapi-facade",
+    "phase1.21_pyapi-dispatcher-lifecycle",
+    "phase1.22_pyapi-cli-capabilities",
+    "phase1.18_export-engine",
+    "phase4.1_nodes-paint-layers"
+  ],
+  "supersededBy": null
+}

@@ -51,6 +51,10 @@
 //!   (`tests/mesh/normal_bake.cpp`) and `uzp-mesh-reload-tests.exe`, the mesh reload
 //!   (`tests/mesh/reload_test.cpp`)
 //!
+//! - `zig build pyapi-tests` `uzp-pyapi-tests.exe`, the script runner of the native Python API
+//!   tests (`src/python/`, `tests/python/`) with the embedded CPython, `assets/templates/` and
+//!   `assets/export-presets/` beside it
+//!
 //! Every include and library path is inside this repository. Windows system headers and import
 //! libraries come from the MinGW-w64 files bundled with the pinned Zig release; nothing refers
 //! to a UzEngine checkout, `runtime.lib` or a submodule.
@@ -187,6 +191,25 @@ const app_sources = [_][]const u8{
     "selftest/cpython_stages.cpp",
     "python/interpreter.cpp",
     "python/uzpainter_module.cpp",
+};
+
+/// The native Python API (`src/python/`, phase1.19_pyapi-native-module; `uzpainter_module.cpp` and
+/// `interpreter.cpp` are in `app_sources`), relative to `src/`: compiled with `-Werror` into
+/// `UzPainter.exe` and into `uzp-pyapi-tests.exe`.
+const pyapi_sources = [_][]const u8{
+    "python/bind_color.cpp",
+    "python/bind_core.cpp",
+    "python/bind_export.cpp",
+    "python/bind_layerstack.cpp",
+    "python/bind_misc.cpp",
+    "python/bind_project.cpp",
+    "python/bind_resource.cpp",
+    "python/bind_textureset.cpp",
+    "python/errors.cpp",
+    "python/jobs.cpp",
+    "python/script.cpp",
+    "python/session.cpp",
+    "python/stack_sync.cpp",
 };
 
 /// UzPainter's render layer over the vendored RHI (`src/render/`, P1-CORE), relative to `src/`:
@@ -593,16 +616,8 @@ pub fn build(b: *std.Build) void {
         .files = &.{agility_export_source},
         .flags = &cxx_flags,
     });
-    app_mod.addCSourceFiles(.{
-        .root = b.path("thirdparty/zlib"),
-        .files = &zlib_sources,
-        .flags = &.{"-std=c11"},
-    });
-    app_mod.addCSourceFiles(.{
-        .root = b.path("thirdparty/spng/spng"),
-        .files = &.{"spng.c"},
-        .flags = &spng_flags,
-    });
+    // zlib and spng (the selftest's PNG encoder, the bitmap decoder) come from `uzp_mesh`, which
+    // compiles them with the same flags and is linked below with the mesh importers.
     app_mod.linkLibrary(core_lib);
     for (system_libraries) |name| app_mod.linkSystemLibrary(name, .{});
     // Module enumeration, file version resources and the registry (OS build) for the report.
@@ -1131,6 +1146,11 @@ pub fn build(b: *std.Build) void {
     });
     app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
     app_mod.linkLibrary(uzp_core_lib);
+    // The native Python API (phase1.19) creates projects from meshes and re-derives the texturing
+    // mesh of an export: the mesh importers join `UzPainter.exe`.
+    const pyapi_flags = evaluator_flags ++ app_defines;
+    app_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
+    app_mod.linkLibrary(mesh_lib);
     const install_templates = b.addInstallDirectory(.{
         .source_dir = b.path(templates_dir),
         .install_dir = .bin,
@@ -1249,6 +1269,68 @@ pub fn build(b: *std.Build) void {
     export_tests_step.dependOn(&install_templates.step);
     export_tests_step.dependOn(&install_export_presets.step);
     b.getInstallStep().dependOn(export_tests_step);
+
+    // ── The native Python API (phase1.19_pyapi-native-module) ─────────────────────────────────
+    // `uzp-pyapi-tests.exe <script.py>` runs one script in the embedded interpreter with the
+    // `uzpainter` module and prints its report (`tests/python/pyapi_runner.cpp`). It is installed
+    // with the embeddable CPython package, `assets/templates/` and `assets/export-presets/` beside
+    // it, as `UzPainter.exe` is; it evaluates on the CPU only.
+    const pyapi_tests_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    addCoreIncludePaths(b, pyapi_tests_mod);
+    pyapi_tests_mod.addIncludePath(b.path("src"));
+    for (app_thirdparty_include_dirs) |dir| pyapi_tests_mod.addIncludePath(b.path(dir));
+    pyapi_tests_mod.addCSourceFiles(.{
+        .root = b.path("tests/python"),
+        .files = &.{"pyapi_runner.cpp"},
+        .flags = &pyapi_flags,
+    });
+    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &pyapi_sources, .flags = &pyapi_flags });
+    pyapi_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &.{ "python/interpreter.cpp", "python/uzpainter_module.cpp" },
+        .flags = &(cxx_flags ++ [_][]const u8{"-DSPNG_STATIC"} ++ app_defines),
+    });
+    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &export_sources, .flags = &evaluator_flags });
+    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &.{tinyexr_unit}, .flags = &cxx_flags });
+    pyapi_tests_mod.addCSourceFiles(.{ .root = b.path("src"), .files = &evaluator_sources, .flags = &evaluator_flags });
+    pyapi_tests_mod.addCSourceFiles(.{
+        .root = b.path("src"),
+        .files = &render_sources,
+        .flags = &(cxx_flags ++ own_warning_flags),
+    });
+    pyapi_tests_mod.addCSourceFiles(.{
+        .root = b.path(core_root),
+        .files = &.{agility_export_source},
+        .flags = &cxx_flags,
+    });
+    pyapi_tests_mod.linkLibrary(core_lib);
+    pyapi_tests_mod.linkLibrary(store_lib);
+    pyapi_tests_mod.linkLibrary(mesh_lib);
+    pyapi_tests_mod.linkLibrary(uzp_core_lib);
+    for (system_libraries) |name| pyapi_tests_mod.linkSystemLibrary(name, .{});
+    pyapi_tests_mod.linkSystemLibrary("version", .{});
+    pyapi_tests_mod.addObjectFile(b.path(python_import_library));
+    const pyapi_tests_exe = b.addExecutable(.{
+        .name = "uzp-pyapi-tests",
+        .root_module = pyapi_tests_mod,
+    });
+    const pyapi_tests_step = b.step("pyapi-tests", "Build the native Python API script runner with its interpreter");
+    pyapi_tests_step.dependOn(&b.addInstallArtifact(pyapi_tests_exe, .{}).step);
+    pyapi_tests_step.dependOn(&b.addInstallDirectory(.{
+        .source_dir = b.path(cpython_package_dir),
+        .install_dir = .bin,
+        .install_subdir = "",
+        .exclude_extensions = &cpython_package_excluded,
+    }).step);
+    pyapi_tests_step.dependOn(&b.addInstallBinFile(b.path(cpython_pth_file), "python313._pth").step);
+    pyapi_tests_step.dependOn(&install_templates.step);
+    pyapi_tests_step.dependOn(&install_export_presets.step);
+    b.getInstallStep().dependOn(pyapi_tests_step);
 }
 
 /// The project store's sources (`store_sources`, compiled with `flags`) with SQLite and zstd.
