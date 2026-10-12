@@ -82,7 +82,7 @@ This is **conditional on the oracle ring.** The values copied into the gutter ar
   - ('x',(1,-1,0),(0,-1,1),<)
   - ('y',(1,-1,0),(0,-1,1),<)
   - ('x',(1,-1,0),(-1,1,0),<)
-- All twelve give identical results on every map below.
+- All twelve give identical residual counts on every map below. `reval` compares counts only, not the maps of source coordinates.
 
 **Residuals of the twelve orderings** (corrected run; texels missed per map, all channels):
 
@@ -175,7 +175,10 @@ This tests only decision 090's order (right, left, up, down, then the diagonals)
 
    **P-tie: discriminating propagation rules.**
    - Mesh: three separate axis-aligned 10 cm quads, each its own UV island. The UV squares have side 0.125, with lower-left corners at (0.1875, 0.1875), (0.6875, 0.1875) and (0.4375, 0.6875).
-   - The same channel, layer, ramp source and covered-texel control as P-ramp, at document resolution 512 and 2048, exported as OpenEXR 32f with `infinite`, twice, r1 and r2.
+   - Before any capture, an explicit P-tie OBJ and its SHA-256 must be fixed. Neither is fixed yet.
+   - The same channel and layer as P-ramp, at document resolution N = 512 and N = 2048, exported as OpenEXR 32f with `infinite`, twice, r1 and r2.
+   - For each tested N, the source is an N×N OpenEXR float32 bitmap: R(x, y) = (x + 0.5)/N, G(x, y) = (y + 0.5)/N, B = 0.5.
+   - The `passthrough` covered-texel control is compared bit for bit against that same N×N bitmap.
    - Prediction at 512 from the corrected code: the twelve candidate orderings agree with each other seed for seed, and differ from an exact Euclidean transform at 363 texels.
    - This probe tells "this jump flood" from "exact Euclidean". It does not tell the twelve orderings apart.
 
