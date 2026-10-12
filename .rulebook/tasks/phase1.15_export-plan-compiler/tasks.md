@@ -1,6 +1,6 @@
 ## 1. Prerequisites
 - [ ] 1.1 Prerequisites accepted: phase1.14_compositor-core
-  - Open: phase1.14 is merged on main, but its child phase1.12_compositor-height-normal is still closing on another branch (wt/phase1.12-close). The plan defers the combined normal's evaluator limits to the evaluator, so its lifts need no change here (decision 085).
+  - Open: phase1.12_compositor-height-normal is archived (2026-10-11); phase1.14 and its child phase1.13 are closing on `wt/close-compositor`. The plan defers the combined normal's evaluator limits to the evaluator, so its lifts need no change here (decision 085).
 
 ## 2. Implementation
 - [x] 2.1 Implement the verbatim parser of Painter's export configuration dictionary
