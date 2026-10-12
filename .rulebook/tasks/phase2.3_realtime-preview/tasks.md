@@ -20,3 +20,6 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Notes (child results)
+- phase2.1_preview-viewport-window (2026-10-12, owner machine, RTX 4090 driver 32.0.16.1714): `tests/preview` all green (display, environment, hand-over, unsupported configuration, regression goldens of sphere/plane/bevelled cube, stalled preview, window lifecycle, standalone `--preview`); details in that task's notes.
