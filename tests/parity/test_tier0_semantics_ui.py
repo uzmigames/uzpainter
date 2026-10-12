@@ -7,7 +7,8 @@ group `Passthrough` mode, set through Painter's UI and named in each manifest's 
 recorded with task `phase0.9_render-reference-capture`'s Painter session, `blend-component-hue`,
 `blend-normal-opacity` and `coverage-srgb8-ties` (decision 067); phase1.12's height-to-normal
 requests (decision 077, two with UI-set Sobel sets) and phase1.9's texture-unit validation
-recordings (decision 078); phase1.15's export recordings R-085 and R-086 (decision 087). Store
+recordings (decision 078); phase1.15's export recordings R-085 and R-086 (decision 087), and
+R-091 and R-092 (decision 093; the renamed texture set through the UI operator). Store
 and guard checks that need the owner's private store skip, saying so, without one (decision 028).
 """
 
@@ -36,7 +37,9 @@ from tools.parity.tier0_semantics.corpus import FIXTURE_DIR, MESH_SETS
 from tools.parity.tier0_semantics.current import (
     AMPLITUDES,
     ANISOTROPIC_CHANNELS,
+    AO_ISOLATION,
     CONVERTED_MAPS,
+    CONVERTED_TEMPLATES,
     FLAT_CASES,
     GROUP_MASKS,
     HEIGHT_METHODS,
@@ -52,8 +55,11 @@ from tools.parity.tier0_semantics.current import (
     TIE_CHANNELS,
     TIE_MULTI,
     UI_DIR,
+    VIEW_STATES,
     api_goldens,
     export_goldens,
+    r091_goldens,
+    r092_goldens,
     request_goldens,
     ui_goldens,
     validation_goldens,
@@ -124,6 +130,11 @@ def test_every_ui_set_value_is_named_in_the_settings_sheet(path: Path) -> None:
         assert {e.value for e in sheet} == {method}
         if path.stem.endswith("-plane-strength"):
             assert len(AMPLITUDES) == len(MESH_SETS["grid4x2"]) == 8
+    elif path.stem == "export-probes-r091-renamed":
+        # Decision 093: the texture set renamed in the Texture Set List, and nothing else.
+        assert [(e.panel, e.texture_set, e.value) for e in sheet] == [
+            ("Texture Set List", "s0", fixtures.RENAMED_SET)
+        ]
     else:
         groups = [s.step for s in job.state_steps if s.call.endswith("insert_group")]
         passthrough = groups[: len(GROUP_MASKS)]
@@ -453,3 +464,106 @@ def test_the_export_recordings_follow_decision_087() -> None:
             config = json.loads(data)
             assert "exportPath" not in config
             assert config == probes[group][item["input_id"].removeprefix(f"probe-{group}-")]
+
+
+def ui_manifest_of(name: str) -> dict[str, Any]:
+    data: dict[str, Any] = load_json(ENVELOPE_ROOT / UI_DIR / f"{name}.json")
+    return data
+
+
+def steps_without_exports(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        s
+        for s in manifest["instruction_sequence"]["steps"]
+        if not s["call"].endswith("export_project_textures")
+    ]
+
+
+def export_args(manifest: dict[str, Any]) -> list[tuple[str, Any]]:
+    return [
+        (s["args"]["file_format"], s["args"]["bit_depth"])
+        for s in manifest["instruction_sequence"]["steps"]
+        if s["call"].endswith("export_project_textures")
+    ]
+
+
+def unnumbered(steps: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    """Calls and arguments without step numbers (a display step shifts every later number)."""
+    return [
+        (s["call"], {k: v for k, v in s["args"].items() if not k.endswith("_step")}) for s in steps
+    ]
+
+
+def test_the_r091_probes_are_the_generators_configurations() -> None:
+    """Decision 093, R-091: every probe step names a hash-pinned recipe_json input holding the
+    generator's configuration; the dotted golden stages its mesh and saves its project under
+    names holding dots; the renamed golden renames s0 in the UI and has no layer."""
+    probes = fixtures.export_probes()
+    renamed = ui_manifest_of("export-probes-r091-renamed")
+    manifests = {g.name: manifest_of(g.name) for g in r091_goldens()}
+    manifests["export-probes-r091-renamed"] = renamed
+    for name, manifest in manifests.items():
+        group = name.removeprefix("export-probes-")
+        inputs = {i["input_id"]: i for i in manifest["inputs"]}
+        steps = [s for s in manifest["instruction_sequence"]["steps"] if s["call"] == LIST_TEXTURES]
+        assert [s["args"]["config"] for s in steps] == [f"probe-{group}-{p}" for p in probes[group]]
+        for step in steps:
+            item = inputs[step["args"]["config"]]
+            config = json.loads((REPO_ROOT / item["path"]).read_bytes())
+            assert item["kind"] == "recipe_json" and "exportPath" not in config
+            assert config == probes[group][item["input_id"].removeprefix(f"probe-{group}-")]
+    dotted = manifests["export-probes-r091-dotted"]
+    assert dotted["instruction_sequence"]["steps"][0]["args"]["mesh"] == "grid2x2.dotted"
+    assert {
+        "name": "project.file_name",
+        "value": "golden.dotted",
+        "applied_by": "recorder_api",
+    } in (dotted["applied_settings"])
+    assert [s["call"] for s in renamed["instruction_sequence"]["steps"][1:]] == [
+        LIST_TEXTURES
+    ] * len(probes["r091-renamed"])
+    assert fixtures.ALPHA_ROOTS == ("s0", "s1", "s2", "s3")
+
+
+def test_the_r092_twins_differ_only_in_their_exports() -> None:
+    """Decision 093, R-092: each golden exports its maps in step A and again in step B; the
+    OpenEXR 32f (and, for AO_Mixed, PNG 8) twins repeat the PNG 16 golden's state steps; the
+    View_2D goldens differ from the default view state only in their display steps."""
+    names = [g.name for g in r092_goldens()]
+    assert len(AO_ISOLATION) == len(MESH_SETS["grid6x4"]) == 24
+    groups = {
+        "ao-mixed-isolation": (["-float", "-8bit"], [("png", 16), ("exr", "32f"), ("png", 8)]),
+        "virtual-maps-coverage": (["-float"], [("png", 16), ("exr", "32f")]),
+        **{
+            f"virtual-maps-template-{key}": (["-float"], [("png", 16), ("exr", "32f")])
+            for key in CONVERTED_TEMPLATES
+        },
+    }
+    for base, (twins, formats) in groups.items():
+        manifests = [manifest_of(base), *(manifest_of(base + t) for t in twins)]
+        assert all(base + t in names for t in twins)
+        for manifest, expected in zip(manifests, formats, strict=True):
+            exports = export_args(manifest)
+            assert set(exports) == {expected} and len(exports) % 2 == 0
+            steps = [s for s in manifest["instruction_sequence"]["steps"] if "maps" in s["args"]]
+            half = len(steps) // 2
+            assert [s["args"]["maps"] for s in steps[:half]] == [
+                s["args"]["maps"] for s in steps[half:]
+            ]
+        assert all(
+            steps_without_exports(m) == steps_without_exports(manifests[0]) for m in manifests
+        )
+    default = steps_without_exports(manifest_of("view-2d-state-default"))
+    for state in VIEW_STATES:
+        manifest = manifest_of(f"view-2d-state-{state}")
+        steps = steps_without_exports(manifest)
+        display = [s for s in steps if s["call"].startswith("substance_painter.display.")]
+        assert len(display) == len(VIEW_STATES[state][1])
+        assert unnumbered([s for s in steps if s not in display]) == unnumbered(default)
+        assert {e[0] for e in export_args(manifest)} >= {"exr"}
+
+
+@pytest.mark.parametrize("code", fixtures.AO_CONSTANTS)
+def test_the_constant_greys_hold_one_lattice_code(code: int) -> None:
+    """Each AO isolation fixture holds the 16-bit code `code * 257` at every texel."""
+    assert {texel for row in bitmap(f"grey-{code:03d}") for texel in row} == {(code * 257,)}

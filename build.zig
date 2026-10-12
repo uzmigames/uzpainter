@@ -32,7 +32,8 @@
 //!   `tests/evaluator/evaluator_test.cpp`) with the DX run-time files and `assets/templates/`
 //!   beside it
 //! - `zig build export-tests` `uzp-export-tests.exe`, the native tests of the export plan
-//!   compiler (`src/export/`, `tests/export/export_test.cpp`) with `assets/templates/` beside it
+//!   compiler (`src/export/`, `tests/export/export_test.cpp`) with `assets/templates/` and
+//!   `assets/export-presets/` beside it
 //! - `zig build uzp-store`    the project store as a static library (`zig-out/lib/uzp_store.lib`,
 //!   `src/store/` with SQLite and zstd); `zig build uzp-store-tests` `uzp-store-tests.exe`, its
 //!   native tests with the test-only fault hooks (`tests/store/store_test.cpp`);
@@ -299,6 +300,7 @@ const export_sources = [_][]const u8{
     "export/padding.cpp",
     "export/plan.cpp",
     "export/png_writer.cpp",
+    "export/preset_aliases.cpp",
     "export/publish.cpp",
     "export/receipt.cpp",
     "export/virtual_maps.cpp",
@@ -316,6 +318,9 @@ const evaluator_flags = cxx_flags ++ own_warning_flags ++ [_][]const u8{ "-ffp-c
 /// The project templates the evaluator reads (`src/evaluator/templates.h`), installed beside the
 /// executables as `bin/assets/templates/`.
 const templates_dir = "assets/templates";
+/// The shipped export presets and their provenance records (`src/export/preset_aliases.h`),
+/// installed beside the executables as `bin/assets/export-presets/`.
+const export_presets_dir = "assets/export-presets";
 /// The mesh importers (`src/mesh/`, `docs/architecture/12-mesh-import.md`), relative to `src/`,
 /// compiled with `uzp_core_flags` into `uzp_mesh.lib`.
 const mesh_sources = [_][]const u8{
@@ -1131,6 +1136,12 @@ pub fn build(b: *std.Build) void {
         .install_subdir = "assets/templates",
     });
     painter_step.dependOn(&install_templates.step);
+    const install_export_presets = b.addInstallDirectory(.{
+        .source_dir = b.path(export_presets_dir),
+        .install_dir = .bin,
+        .install_subdir = "assets/export-presets",
+    });
+    painter_step.dependOn(&install_export_presets.step);
 
     const evaluator_tests_mod = b.createModule(.{
         .target = target,
@@ -1235,6 +1246,7 @@ pub fn build(b: *std.Build) void {
     const export_tests_step = b.step("export-tests", "Build the native tests of the export plan compiler");
     export_tests_step.dependOn(&b.addInstallArtifact(export_tests_exe, .{}).step);
     export_tests_step.dependOn(&install_templates.step);
+    export_tests_step.dependOn(&install_export_presets.step);
     b.getInstallStep().dependOn(export_tests_step);
 }
 

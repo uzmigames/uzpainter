@@ -18,11 +18,12 @@
 // configuration throws `core::ValueError` whose message starts with the JSON path and lists the
 // valid alternatives, nearest first (`Mixed_AO` names `AO_Mixed` first). A well-formed request
 // for something this build does not write (a later-package or excluded file format, shader
-// parameters, a shelf preset) throws `core::NotYetSupported` naming its owner task. Both happen
-// before any evaluation or write.
+// parameters, a shelf preset UzPainter does not ship) throws `core::NotYetSupported` naming its
+// owner task. Both happen before any evaluation or write.
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -142,8 +143,17 @@ struct ExportConfig {
 /// Parses the JSON text of a configuration (throws `core::ValueError` for a JSON syntax error
 /// too, with its byte offset).
 [[nodiscard]] ExportConfig ParseConfig(std::string_view jsonText);
-/// Parses a configuration already read as JSON.
+/// Parses a configuration already read as JSON. A preset reference that names no inline preset
+/// resolves to a shipped preset of `DefaultPresetDirectory()` (`preset_aliases.h`, decision 095).
 [[nodiscard]] ExportConfig ParseConfig(const core::json::Value& config);
+/// The same, with the shipped presets read from `presetDirectory`. A shipped preset a reference
+/// resolves to joins `exportPresets` under its id, and the reference is replaced by that id. A
+/// preset whose layout no recording confirms is refused (`NotYetSupported`, naming its pending
+/// recordings); so is a shipped preset an inline preset of the same id would shadow (`ValueError`).
+[[nodiscard]] ExportConfig ParseConfig(const core::json::Value& config, const std::filesystem::path& presetDirectory);
+
+/// Parses one `exportPresets[]` entry ({name, maps}) whose JSON path is `path`.
+[[nodiscard]] PresetSpec ParsePreset(const core::json::Value& preset, const std::string& path);
 
 /// The documented `srcMapName`s of a source type, in documentation order (documentMap: the
 /// documented list, then the other `ChannelType` members lower-cased; diagnosticMap: the kinds

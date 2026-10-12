@@ -109,29 +109,32 @@ render::Result<void> CheckSampling(const UvProjection& projection, uint32_t setW
 float BilinearFilter(const std::array<uint32_t, 4>& weights, const std::array<float, 4>& texels) {
     float largest = 0.0f;
     for (size_t k = 0; k < 4; ++k) {
-        if (weights[k] != 0) largest = std::fmax(largest, texels[k]);
+        if (weights[k] != 0) largest = std::fmax(largest, std::fabs(texels[k]));
     }
     if (largest == 0.0f) return 0.0f;
     int exponent = 0;
     (void)std::frexp(largest, &exponent);
-    // Each operand is below 2^28 + 1 and exact in double before the truncating conversion; the
-    // sum is below 2^37.
-    uint64_t sum = 0;
+    // Each operand's magnitude is below 2^28 + 1 and exact in double before the conversion, which
+    // truncates toward zero; the sum's magnitude is below 2^37.
+    int64_t sum = 0;
     for (size_t k = 0; k < 4; ++k) {
         const double scaled = std::ldexp(static_cast<double>(texels[k]), kFilterOperandBits - exponent);
-        sum += weights[k] * static_cast<uint64_t>(scaled);
+        sum += static_cast<int64_t>(weights[k]) * static_cast<int64_t>(scaled);
     }
-    // Round the sum to 24 significant bits, ties up, and scale it by 2^(E - 36).
+    // Round the magnitude to 24 significant bits, ties away from zero, and scale it by 2^(E - 36).
+    const bool negative = sum < 0;
+    const uint64_t magnitude = static_cast<uint64_t>(negative ? -sum : sum);
     int shift = 0;
-    while ((sum >> shift) >= (uint64_t{1} << 24)) ++shift;
-    uint64_t significand = sum >> shift;
-    if (shift > 0 && ((sum >> (shift - 1)) & 1) != 0) ++significand;
-    return static_cast<float>(
+    while ((magnitude >> shift) >= (uint64_t{1} << 24)) ++shift;
+    uint64_t significand = magnitude >> shift;
+    if (shift > 0 && ((magnitude >> (shift - 1)) & 1) != 0) ++significand;
+    const float result = static_cast<float>(
         std::ldexp(static_cast<double>(significand), shift + exponent - kFilterOperandBits - 8));
+    return negative ? -result : result;
 }
 
 ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, uint32_t i,
-                            uint32_t j, uint32_t setWidth, uint32_t setHeight) {
+                            uint32_t j, uint32_t setWidth, uint32_t setHeight, bool signedRange) {
     // Power-of-two resolutions: multiplying by the inverse is the exact division.
     const double invWidth = 1.0 / setWidth;
     const double invHeight = 1.0 / setHeight;
@@ -160,7 +163,9 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
     if (p.filter == core::FilteringMode::Nearest) {
         const int64_t xi = Address(static_cast<int64_t>(std::floor(x + 0.5)), image.width, repeatX);
         const int64_t yi = Address(static_cast<int64_t>(std::floor(y + 0.5)), image.height, repeatY);
-        for (uint32_t c = 0; c < 3; ++c) result.value[c] = arith::UnormOperand(Code(image, xi, yi, c), bits);
+        for (uint32_t c = 0; c < 3; ++c) {
+            result.value[c] = RangeValue(arith::UnormOperand(Code(image, xi, yi, c), bits), signedRange);
+        }
         return result;
     }
     const int64_t fixedX = static_cast<int64_t>(std::floor(x * kSubtexel + 0.5));
@@ -179,7 +184,7 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
     for (uint32_t c = 0; c < 3; ++c) {
         std::array<float, 4> texels{};
         for (size_t k = 0; k < 4; ++k) {
-            texels[k] = arith::UnormOperand(Code(image, taps[k][0], taps[k][1], c), bits);
+            texels[k] = RangeValue(arith::UnormOperand(Code(image, taps[k][0], taps[k][1], c), bits), signedRange);
         }
         result.value[c] = BilinearFilter(weights, texels);
     }

@@ -1096,6 +1096,454 @@ def export_goldens() -> list[Golden]:
     return corpus
 
 
+# ── Recording requests R-091 and R-092 of phase1.15 (decisions 091, 092, 093) ────────────
+
+R091 = "(export-plan-compiler.md section 4, R-091, decision 093)"
+
+
+def export_probes_r091(group: str, description: str) -> Golden:
+    """A probe group on 087's base project: s0 one fill of BaseColor field A and
+    SpecularRoughness grey A, s1-s3 the empty stack."""
+    s = start("grid2x2")
+    res = s.imports("field-a", "grey-a")
+    base_fill(s, res, None)
+    probe_steps(s, group)
+    return Golden(
+        f"export-probes-{group}",
+        EXPORT_DOMAIN,
+        description + " " + PROBE_DESCRIPTION,
+        "grid2x2",
+        ["grid2x2", "field-a", "grey-a", *probe_inputs(group)],
+        s,
+    )
+
+
+def coverage_fill(
+    s: Sequence,
+    res: dict[str, int],
+    sources: dict[str, Any],
+    opacity: float | dict[str, float] = 1.0,
+    **position: Any,
+) -> int:
+    """One fill with exactly `sources`' channels active (a tuple is a uniform in Working, a
+    string an imported bitmap), each in Normal at its opacity."""
+    node = s.fill(list(sources), **position)
+    for channel, source in sources.items():
+        set_source(s, node, channel, source, res)
+        s.blend(node, channel, "Normal", opacity[channel] if isinstance(opacity, dict) else opacity)
+    return node
+
+
+def mask_with(s: Sequence, node: int, background: str, source: int | None = None) -> None:
+    """A mask on `node` with `background`, and a mask fill effect of `source` when given."""
+    s.add(ps.ADD_MASK, node_step=node, background=background)
+    if source is not None:
+        effect = s.add(ps.INSERT_FILL, inside_step=node, stack="Mask")
+        s.bitmap(effect, None, source, effect=True)
+
+
+def export_probes_alpha() -> Golden:
+    """srcChannel A at partial coverage: the base fill on s0 (full), s1 (opacity 0.5) and s2
+    (masked by grey B on a black background), s3 empty; the export lists all four sets."""
+    group = "r091-alpha"
+    s = start("grid2x2")
+    res = s.imports("field-a", "grey-a", "grey-b")
+    sources = {"BaseColor": "field-a", "SpecularRoughness": "grey-a"}
+    for texture_set, opacity, masked in (("s0", 1.0, False), ("s1", 0.5, False), ("s2", 1.0, True)):
+        node = coverage_fill(s, res, sources, opacity, position="top", texture_set=texture_set)
+        if masked:
+            mask_with(s, node, "Black", res["grey-b"])
+    probe_steps(s, group)
+    return Golden(
+        f"export-probes-{group}",
+        EXPORT_DOMAIN,
+        f"srcChannel A at partial coverage {R091}: one fill of BaseColor field A and "
+        "SpecularRoughness grey A in Normal on s0 (opacity 1), s1 (opacity 0.5) and s2 (opacity "
+        "1, a black-background mask whose fill effect is grey B), s3 the empty stack; srcChannel "
+        "A of SpecularRoughness and of BaseColor under BaseColor RGB, and both channels exported "
+        "as the control, on root paths s0-s3. " + PROBE_DESCRIPTION,
+        "grid2x2",
+        ["grid2x2", "field-a", "grey-a", "grey-b", *probe_inputs(group)],
+        s,
+    )
+
+
+DOTTED_MESH = "grid2x2.dotted"
+DOTTED_PROJECT = "golden.dotted"
+
+
+def export_probes_dotted() -> Golden:
+    group = "r091-dotted"
+    s = start(DOTTED_MESH)
+    res = s.imports("field-a", "grey-a")
+    base_fill(s, res, None)
+    probe_steps(s, group)
+    return Golden(
+        f"export-probes-{group}",
+        EXPORT_DOMAIN,
+        f"$mesh and $project of names holding two dots {R091}: the grid2x2 geometry staged as "
+        f"{DOTTED_MESH}.obj, the project saved for r2 as {DOTTED_PROJECT}.spp (r1 is unsaved), "
+        "the base fill on s0; probes $mesh_$textureSet_a and $project_$textureSet_b with a "
+        "control. " + PROBE_DESCRIPTION,
+        DOTTED_MESH,
+        [DOTTED_MESH, "field-a", "grey-a", *probe_inputs(group)],
+        s,
+        settings=[
+            {"name": "project.file_name", "value": DOTTED_PROJECT, "applied_by": "recorder_api"}
+        ],
+    )
+
+
+def export_probes_renamed() -> Golden:
+    """s0 renamed in the Texture Set List by the UI operator; no layer, so nothing has to be
+    found again by its texture set's name."""
+    group = "r091-renamed"
+    s = start("grid2x2")
+    probe_steps(s, group)
+    return Golden(
+        f"export-probes-{group}",
+        EXPORT_DOMAIN,
+        f"$sceneMaterial of a renamed texture set {R091}: the documented API cannot rename a "
+        f"texture set, so the UI operator renames s0 to {fixtures.RENAMED_SET} in the Texture "
+        "Set List after the state steps (settings sheet; read back through TextureSet.name and "
+        "original_name, and again after the reopen); every stack empty. Probes "
+        "$textureSet_$sceneMaterial_c with the export root named by the new name and by the "
+        f"original name, and a control. {PROBE_DESCRIPTION}",
+        "grid2x2",
+        ["grid2x2", *probe_inputs(group)],
+        s,
+        settings=[operator_setting("Texture Set List/Name (s0)", fixtures.RENAMED_SET)],
+    )
+
+
+def r091_goldens() -> list[Golden]:
+    return [
+        export_probes_r091(
+            "r091-naming",
+            f"Export naming probes {R091}: filename groups holding an empty and a non-empty "
+            "wildcard, a stray ')', three maps of one name (BaseColor, SpecularRoughness, "
+            "Height), the case-only collision with the map order reversed, two exportList entries "
+            "of one root, and a wildcard-free file name on two roots in both orders.",
+        ),
+        export_probes_r091(
+            "r091-mixes",
+            f"Export source-mix probes {R091}: black and white default maps mixed (RGB, and RGB "
+            "with an A), white alone, black alone; an absent Opacity at R beside BaseColor, at "
+            "RGB beside a present A, and alone; a map that is written beside an unbound "
+            "curvature mesh map, and beside the legacy name sheencolor (no Fuzz channel), in "
+            "both orders.",
+        ),
+        export_probes_r091(
+            "r091-keys",
+            f"Export configuration key probes {R091}: one undocumented key in a channel, an "
+            "exportList entry, a filter, the parameters object, an exportParameters entry and "
+            "a preset, beside the valid configuration they change.",
+        ),
+        export_probes_alpha(),
+        export_probes_dotted(),
+    ]
+
+
+# R-092, AO_Mixed (decision 092 section 5): per texture set of grid6x4, the AO mesh map, the AO
+# fill's source (an imported bitmap, a uniform grey in Working, or None for no layer) and its
+# opacity. AO_Mixed's best model misses r1 at (mesh map code, channel code) = (127, 0), (240,
+# 33 + 34 k), (224, 254) at opacity 0.5 and (254, 0), (143, 173) at 0.75 (decision 093).
+AO_ISOLATION: tuple[tuple[str, str | float | None, float], ...] = (
+    # s0-s7: a constant mesh map, the channel grey B (varying).
+    ("grey-255", "grey-b", 0.5),
+    ("grey-240", "grey-b", 0.5),
+    ("grey-127", "grey-b", 0.5),
+    ("grey-224", "grey-b", 0.5),
+    ("grey-254", "grey-b", 0.75),
+    ("grey-143", "grey-b", 0.75),
+    ("grey-240", "grey-b", 0.75),
+    ("grey-255", "grey-b", 0.75),
+    # s8-s13: the mesh map grey A (varying), a constant channel.
+    ("grey-a", "grey-000", 0.5),
+    ("grey-a", "grey-033", 0.5),
+    ("grey-a", "grey-254", 0.5),
+    ("grey-a", "grey-000", 0.75),
+    ("grey-a", "grey-173", 0.75),
+    ("grey-a", "grey-255", 0.5),
+    # s14, s15: the roles swapped, so each missed pair sits at the transposed texel.
+    ("grey-b", "grey-a", 0.5),
+    ("grey-b", "grey-a", 0.75),
+    # s16, s17: the arrangement of ao-mixed-opacity s1 and s2 (the in-session control).
+    ("grey-a", "grey-b", 0.5),
+    ("grey-a", "grey-b", 0.75),
+    # s18, s19: uniform channels against the constant bitmaps of s8 and s10.
+    ("grey-a", 0.0, 0.5),
+    ("grey-a", 254.0 / 255.0, 0.5),
+    # s20, s21: no layer (the channel is 1).
+    ("grey-240", None, 1.0),
+    ("grey-a", None, 1.0),
+    # s22, s23: the channel at opacity 1.
+    ("grey-240", "grey-b", 1.0),
+    ("grey-127", "grey-b", 1.0),
+)
+AO_ISOLATION_MAPS = [*AO_MAPS, "meshMap/ambient_occlusion:L"]
+
+
+def ao_mixed_isolation(variant: str) -> Golden:
+    """`variant`: `png16`, `float` (OpenEXR 32f) or `8bit` (PNG 8, Painter's own 8-bit write)."""
+    s = start("grid6x4")
+    s.channels((("AO", "L16"),))
+    bitmaps = sorted(
+        {m for m, _, _ in AO_ISOLATION} | {c for _, c, _ in AO_ISOLATION if isinstance(c, str)}
+    )
+    res = s.imports(*bitmaps)
+    for texture_set, (mesh_map, source, opacity) in zip(
+        MESH_SETS["grid6x4"], AO_ISOLATION, strict=True
+    ):
+        s.add(ps.SET_MESH_MAP, usage="AO", resource_step=res[mesh_map], texture_set=texture_set)
+        if source is None:
+            continue
+        node = s.fill(["AO"], position="top", texture_set=texture_set)
+        set_source(s, node, "AO", (source,) * 3 if isinstance(source, float) else source, res)
+        s.blend(node, "AO", "Normal", opacity)
+    floating, depth = variant == "float", 8 if variant == "8bit" else 16
+    s.export(AO_ISOLATION_MAPS, floating, depth)
+    s.export(AO_ISOLATION_MAPS, floating, depth)
+    container = {"png16": "PNG 16", "float": "OpenEXR 32f", "8bit": "PNG 8"}[variant]
+    return Golden(
+        "ao-mixed-isolation" + ("" if variant == "png16" else f"-{variant}"),
+        "tier0/ao-mixed/operator",
+        "AO_Mixed operand isolation (export-plan-compiler.md section 4, R-092, decision 093) on "
+        "grid6x4, an AO channel (L16), the AO mesh map bound per texture set (authored constant "
+        "greys grey-<code> holding the 8-bit lattice code at every texel, or grey A or B), one "
+        "AO fill in Normal: s0-s7 constant mesh maps 255, 240, 127, 224 under grey B at 0.5 "
+        "and 254, 143, 240, 255 at 0.75; s8-s13 grey A under constant channels 0, 33, 254 at "
+        "0.5, 0 and 173 at 0.75, 255 at 0.5; s14, s15 grey B under grey A at 0.5 and 0.75 (the "
+        "roles swapped); s16, s17 grey A under grey B at 0.5 and 0.75 (ao-mixed-opacity s1, "
+        "s2); s18, s19 uniform 0 and 254/255 (Working) at 0.5; s20, s21 no layer over 240 and "
+        "grey A; s22, s23 grey B at 1 over 240 and 127 (tools/parity/tier0_semantics/current.py "
+        f"AO_ISOLATION). AO_Mixed, the AO channel and the AO mesh map ({container}) exported in "
+        "step A and again in step B of the same session.",
+        "grid6x4",
+        ["grid6x4", *bitmaps],
+        s,
+    )
+
+
+# R-092, the converted maps (decision 092 section 2(b)): BaseColor, SpecularRoughness and
+# BaseMetalness from bitmaps or uniforms, at fractional, masked, grouped and stacked coverage.
+B, R, M = "BaseColor", "SpecularRoughness", "BaseMetalness"
+COVERAGE_BITMAPS = {B: "field-a", R: "grey-a", M: "grey-b"}
+COVERAGE_UNIFORMS: dict[str, Any] = {B: (0.8, 0.3, 0.1), R: (0.4,) * 3, M: (0.6,) * 3}
+COVERAGE_UNIFORMS_TOP: dict[str, Any] = {B: (0.2, 0.6, 0.9), R: (0.7,) * 3, M: (0.1,) * 3}
+SOURCE_MAPS = ["documentMap/basecolor:RGB", "documentMap/specularroughness:L"]
+SOURCE_MAPS.append("documentMap/basemetalness:L")
+
+
+def coverage_set(s: Sequence, res: dict[str, int], index: int, texture_set: str) -> None:
+    """The stack of grid6x4's set `index` in `virtual-maps-coverage` (its description)."""
+    top = {"position": "top", "texture_set": texture_set}
+    bitmaps, uniforms = COVERAGE_BITMAPS, COVERAGE_UNIFORMS
+    if index in (0, 1, 20):
+        coverage_fill(s, res, bitmaps, 1.0 if index == 0 else 0.5, **top)
+    elif index in (2, 3, 4):
+        channel = (B, R, M)[index - 2]
+        coverage_fill(s, res, bitmaps, {**{c: 1.0 for c in bitmaps}, channel: 0.5}, **top)
+    elif index in (5, 21, 23):
+        node = coverage_fill(s, res, bitmaps, 0.25 if index == 23 else 1.0, **top)
+        mask_with(s, node, "Black", res["mask-codes"])
+    elif index in (6, 7):
+        group = s.add(ps.INSERT_GROUP, **top)
+        for channel in bitmaps:
+            s.blend(group, channel, "Normal", 0.5 if index == 6 else 1.0)
+        coverage_fill(
+            s, res, bitmaps, 1.0 if index == 6 else 0.5, inside_step=group, stack="Substack"
+        )
+    elif index in (8, 9, 18, 22):
+        layers = {
+            8: ((uniforms, 1.0), (bitmaps, 0.5)),
+            9: ((bitmaps, 1.0), (uniforms, 0.5)),
+            18: ((uniforms, 0.5), (bitmaps, 0.5)),
+            22: ((uniforms, 0.5), (bitmaps, 0.5), (COVERAGE_UNIFORMS_TOP, 0.5)),
+        }[index]
+        below: int | None = None
+        for sources, opacity in layers:
+            place = top if below is None else {"above_step": below}
+            below = coverage_fill(s, res, sources, opacity, **place)
+    elif index == 10:
+        coverage_fill(s, res, {B: bitmaps[B], R: bitmaps[R]}, 1.0, **top)
+    elif index == 11:
+        coverage_fill(s, res, {M: bitmaps[M]}, 1.0, **top)
+    elif index in (12, 13):
+        coverage_fill(s, res, bitmaps, 0.0 if index == 12 else {B: 0.0, R: 1.0, M: 1.0}, **top)
+    elif index == 14:
+        coverage_fill(s, res, {"Height": (0.7, 0.7, 0.7)}, 1.0, **top)
+    elif index in (15, 16):
+        node = coverage_fill(s, res, bitmaps, 1.0, **top)
+        mask_with(s, node, "Black" if index == 15 else "White")
+    elif index == 17:
+        coverage_fill(s, res, uniforms, 0.25, **top)
+
+
+def virtual_maps_coverage(floating: bool) -> Golden:
+    s = start("grid6x4")
+    res = s.imports("field-a", "grey-a", "grey-b", "mask-codes")
+    for index, texture_set in enumerate(MESH_SETS["grid6x4"]):
+        coverage_set(s, res, index, texture_set)
+    maps = [*CONVERTED_MAPS, *SOURCE_MAPS]
+    s.export(maps, floating)
+    s.export(maps, floating)
+    container = "OpenEXR 32f" if floating else "PNG 16"
+    return Golden(
+        "virtual-maps-coverage" + ("-float" if floating else ""),
+        "tier0/export/virtual-maps",
+        "The converted virtual maps at fractional coverage (export-plan-compiler.md section 4, "
+        "R-092, decision 093) on grid6x4 with no template: BaseColor field A, SpecularRoughness "
+        "grey A, BaseMetalness grey B (bitmaps) or uniforms (0.8, 0.3, 0.1), 0.4, 0.6 (Working), "
+        "fills in Normal: s0 full; s1 opacity 0.5; s2-s4 0.5 on BaseColor, roughness, "
+        "metalness only; s5 masked (mask fill effect mask-codes, black background); s6 a group "
+        "at 0.5 holding a full fill; s7 a group at 1 holding a fill at 0.5; s8 bitmaps at 0.5 "
+        "over uniforms at 1; s9 uniforms at 0.5 over bitmaps at 1; s10 metalness inactive; s11 "
+        "only metalness; s12 opacity 0; s13 opacity 0 on BaseColor; s14 a fill of Height only; "
+        "s15 a black-background mask without a fill; s16 a white-background mask; s17 uniforms "
+        "at 0.25; s18 bitmaps at 0.5 over uniforms at 0.5; s19 empty; s20 = s1; s21 = s5; s22 "
+        "uniforms (0.2, 0.6, 0.9), 0.7, 0.1 at 0.5 over s18; s23 s5 at opacity 0.25. The ten "
+        f"converted maps and the three source channels ({container}), the export step repeated "
+        "in the same session.",
+        "grid6x4",
+        ["grid6x4", "field-a", "grey-a", "grey-b", "mask-codes"],
+        s,
+    )
+
+
+# Other templates: the channels standing for BaseColor, roughness and metalness, and the native
+# maps exported beside the converted ones. The Specular Glossiness template has no BaseColor,
+# roughness or metalness channel: Diffuse, Glossiness and Specular take their places.
+CONVERTED_TEMPLATES: dict[str, tuple[str, tuple[str, str, str], list[str]]] = {
+    "pbr-metallic-roughness-alpha-blend": (
+        "templates/PBR - Metallic Roughness Alpha-blend.spt",
+        (B, R, M),
+        SOURCE_MAPS,
+    ),
+    "openpbr-coat": ("templates/OpenPBR - Coat.spt", (B, R, M), SOURCE_MAPS),
+    "pbr-specular-glossiness": (
+        "templates/PBR - Specular Glossiness.spt",
+        ("Diffuse", "Glossiness", "Specular"),
+        ["documentMap/diffuse:RGB", "documentMap/glossiness:L", "documentMap/specular:RGB"],
+    ),
+}
+
+
+def virtual_maps_template(key: str, floating: bool) -> Golden:
+    template, (colour, grey, third), native = CONVERTED_TEMPLATES[key]
+    s = start("grid4x2", template)
+    res = s.imports("field-a", "grey-a", "grey-b", "mask-codes")
+    bitmaps = {colour: "field-a", grey: "grey-a", third: "grey-b"}
+    uniforms: dict[str, Any] = {colour: (0.8, 0.3, 0.1), grey: (0.4,) * 3, third: (0.6,) * 3}
+    sets = MESH_SETS["grid4x2"]
+    for index, texture_set in enumerate(sets[:7]):
+        top = {"position": "top", "texture_set": texture_set}
+        if index == 5:
+            group = s.add(ps.INSERT_GROUP, **top)
+            for channel in bitmaps:
+                s.blend(group, channel, "Normal", 0.5)
+            coverage_fill(s, res, bitmaps, 1.0, inside_step=group, stack="Substack")
+            continue
+        sources = {
+            0: bitmaps,
+            1: bitmaps,
+            2: bitmaps,
+            3: {colour: bitmaps[colour], grey: bitmaps[grey]},
+            4: {colour: bitmaps[colour]},
+            6: uniforms,
+        }[index]
+        node = coverage_fill(s, res, sources, 0.5 if index == 1 else 1.0, **top)
+        if index == 2:
+            mask_with(s, node, "Black", res["mask-codes"])
+    maps = [*CONVERTED_MAPS, *native]
+    s.export(maps, floating)
+    s.export(maps, floating)
+    container = "OpenEXR 32f" if floating else "PNG 16"
+    return Golden(
+        f"virtual-maps-template-{key}" + ("-float" if floating else ""),
+        "tier0/export/virtual-maps",
+        "The converted virtual maps on another template (export-plan-compiler.md section 4, "
+        f"R-092, decision 093): {template} on grid4x2; {colour} field A, {grey} grey A, {third} "
+        "grey B (bitmaps) or uniforms (0.8, 0.3, 0.1), 0.4, 0.6 (Working), fills in Normal: s0 "
+        f"full; s1 opacity 0.5; s2 masked (mask-codes, black background); s3 {third} inactive; "
+        f"s4 {colour} only; s5 a group at 0.5 holding a full fill; s6 uniforms; s7 empty. The "
+        f"ten converted maps and the template's {colour}, {grey} and {third} ({container}), the "
+        "export step repeated in the same session.",
+        "grid4x2",
+        ["grid4x2", "field-a", "grey-a", "grey-b", "mask-codes"],
+        s,
+        template=template,
+    )
+
+
+# R-092, View_2D's view state (decision 092 section 3): the same stacks under one documented
+# display change each; identical inputs on s1 and s3, s4 and s5.
+VIEW_SETS: tuple[dict[str, Any], ...] = (
+    {B: (0.8, 0.3, 0.1), R: (0.0,) * 3, M: (0.0,) * 3},
+    {B: (0.8, 0.3, 0.1), R: (0.5,) * 3, M: (0.0,) * 3},
+    {B: (0.8, 0.3, 0.1), R: (1.0,) * 3, M: (0.0,) * 3},
+    {B: (0.8, 0.3, 0.1), R: (0.5,) * 3, M: (0.0,) * 3},
+    {B: "field-a", R: "grey-a", M: (0.0,) * 3},
+    {B: "field-a", R: "grey-a", M: (0.0,) * 3},
+    {B: (0.8, 0.3, 0.1), R: (0.3,) * 3, M: (1.0,) * 3},
+)
+VIEW_STATES: dict[str, tuple[str, list[tuple[str, dict[str, Any]]]]] = {
+    "default": ("no display step (Painter's default view state)", []),
+    "default-repeat": ("no display step, a second project of the same session", []),
+    "tone-linear": ("tone mapping Linear", [(ps.SET_TONE_MAPPING, {"function": "Linear"})]),
+    "tone-aces": ("tone mapping ACES", [(ps.SET_TONE_MAPPING, {"function": "ACES"})]),
+    "environment": (
+        "the authored environment sky-patch.exr",
+        [(ps.SET_ENVIRONMENT, {"environment": "sky-patch"})],
+    ),
+    "camera": (
+        "the 3D camera moved (position (0, 30, 60), rotation (-20, 0, 0), field of view 30)",
+        [
+            (ps.CAMERA + "position", {"value": [0.0, 30.0, 60.0]}),
+            (ps.CAMERA + "rotation", {"value": [-20.0, 0.0, 0.0]}),
+            (ps.CAMERA + "field_of_view", {"value": 30.0}),
+        ],
+    ),
+}
+VIEW_MAP = ["virtualMap/View_2D:RGBA"]
+
+
+def view_2d_state(state: str) -> Golden:
+    what, steps = VIEW_STATES[state]
+    s = start("grid4x2")
+    res = s.imports("field-a", "grey-a")
+    for call, args in steps:
+        s.add(call, **args)
+    for texture_set, sources in zip(MESH_SETS["grid4x2"], VIEW_SETS, strict=False):
+        coverage_fill(s, res, sources, 1.0, position="top", texture_set=texture_set)
+    s.export(VIEW_MAP, True)
+    s.export(VIEW_MAP, True)
+    baseline = state.startswith("default")
+    if baseline:
+        s.export(VIEW_MAP, False)
+    return Golden(
+        f"view-2d-state-{state}",
+        "tier0/export/virtual-maps",
+        f"View_2D's view state (export-plan-compiler.md section 4, R-092, decision 093): {what}; "
+        "grid4x2, one fill per set in Normal: BaseColor (0.8, 0.3, 0.1) with roughness 0, 0.5, "
+        "1 and 0.5 again (s0-s3, s3 = s1), BaseColor field A with roughness grey A (s4, s5 "
+        "identical), metalness 1 with roughness 0.3 (s6), metalness 0 elsewhere, s7 empty. "
+        "View_2D exported as OpenEXR 32f in step A and step B"
+        + (", then as PNG 16." if baseline else "."),
+        "grid4x2",
+        ["grid4x2", "field-a", "grey-a", *(["sky-patch"] if state == "environment" else [])],
+        s,
+    )
+
+
+def r092_goldens() -> list[Golden]:
+    corpus = [ao_mixed_isolation(v) for v in ("png16", "float", "8bit")]
+    corpus += [virtual_maps_coverage(f) for f in (False, True)]
+    corpus += [virtual_maps_template(k, f) for k in CONVERTED_TEMPLATES for f in (False, True)]
+    corpus += [view_2d_state(state) for state in VIEW_STATES]
+    return corpus
+
+
 def ui_goldens() -> list[Golden]:
     corpus = [
         height_normal_mesh(mesh, method)
@@ -1104,6 +1552,7 @@ def ui_goldens() -> list[Golden]:
     ]
     corpus += [height_normal_strength(method) for method in HEIGHT_METHODS]
     corpus.append(group_passthrough_masks())
+    corpus.append(export_probes_renamed())
     return corpus
 
 
@@ -1118,6 +1567,8 @@ def api_goldens() -> list[Golden]:
         *request_goldens(),
         *validation_goldens(),
         *export_goldens(),
+        *r091_goldens(),
+        *r092_goldens(),
     ]
 
 

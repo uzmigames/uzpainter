@@ -73,7 +73,7 @@ The model panel was consulted once under the owner's delegation (cx/gpt-6-astra,
 
 ## Consequences
 
-- `08-export.md` §5 and `src/export/EXPORT.md` §5 describe the publication. The PRD's INT-21 row still names `exportacao`, and this decision maps it to the v2 block.
+- `08-export.md` §5 and `src/export/EXPORT.md` §6 describe the publication. The PRD's INT-21 row still names `exportacao`, and this decision maps it to the v2 block.
 - `phase1.23_pyapi-pipeline-adapter` chooses each consumer's route (pinned directory or locked fixed names), rebases `manifest_files` paths under the Assets3D root, and supplies the app version and build.
 - Complete generations accumulate, because no retention policy is specified. Pruning old generations is not part of this task.
 - No Painter recording is needed: publication and receipts are UzPainter's own behaviour.

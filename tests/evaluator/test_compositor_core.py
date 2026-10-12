@@ -131,8 +131,8 @@ def test_excluded_features_raise_not_yet_supported_before_any_mutation(
     evaluation with a kind whose API class is NotYetSupported before any tile is allocated; a
     supported request commits; a project that already holds a gap stays editable elsewhere."""
     passed, _ = run_case(evaluator_tests, "not-yet-supported")
-    assert any(p.startswith("every excluded feature (30:") for p in passed)
-    assert any(p.startswith("the 22 features the evaluator refuses itself") for p in passed)
+    assert any(p.startswith("every excluded feature (29:") for p in passed)
+    assert any(p.startswith("the 23 features the evaluator refuses itself") for p in passed)
     assert {
         "unsupported_node, unsupported_blend_mode and unsupported_source are NotYetSupported; "
         "invalid_argument and not_found ValueError; missing_resource ResourceNotFoundError; "

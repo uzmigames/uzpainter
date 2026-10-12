@@ -1,0 +1,118 @@
+{
+  "name": "blender-principled-bsdf",
+  "maps": [
+    {
+      "fileName": "$textureSet_BaseColor(_$colorSpace)",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "basecolor"
+        }
+      ]
+    },
+    {
+      "fileName": "$textureSet_Normal(_$colorSpace)",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_OpenGL"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_OpenGL"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "virtualMap",
+          "srcMapName": "Normal_OpenGL"
+        }
+      ]
+    },
+    {
+      "fileName": "$textureSet_Metallic(_$colorSpace)",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "metallic"
+        }
+      ]
+    },
+    {
+      "fileName": "$textureSet_Roughness(_$colorSpace)",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "roughness"
+        }
+      ]
+    },
+    {
+      "fileName": "$textureSet_Emission(_$colorSpace)",
+      "channels": [
+        {
+          "destChannel": "R",
+          "srcChannel": "R",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        },
+        {
+          "destChannel": "G",
+          "srcChannel": "G",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        },
+        {
+          "destChannel": "B",
+          "srcChannel": "B",
+          "srcMapType": "documentMap",
+          "srcMapName": "emissive"
+        }
+      ]
+    },
+    {
+      "fileName": "$textureSet_Alpha(_$colorSpace)",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "opacity"
+        }
+      ]
+    },
+    {
+      "fileName": "$textureSet_Displacement(_$colorSpace)",
+      "channels": [
+        {
+          "destChannel": "L",
+          "srcChannel": "L",
+          "srcMapType": "documentMap",
+          "srcMapName": "height"
+        }
+      ]
+    }
+  ]
+}

@@ -14,6 +14,7 @@ Task `phase1.15_export-plan-compiler` (child of `phase1.18_export-engine`, P1-EX
 | `png_writer.{h,cpp}` | (phase1.16) `EncodePng`: UzPainter's own PNG encoder over the vendored zlib, byte-identical to Painter's files. |
 | `exr_writer.{h,cpp}`, `tinyexr_unit.cpp` | (phase1.16) `EncodeExr` / `DecodeExr` over the vendored tinyexr (one recorded local change), byte-identical to Painter's files; `tinyexr_unit.cpp` is the third-party translation unit of tinyexr's implementation. |
 | `write.{h,cpp}` | (phase1.16) `EncodeExport`: every planned file checked, then evaluated, padded and encoded in memory; `WriteExport`: those bytes written under exportPath in Painter's flat layout (the parity writer). |
+| `preset_aliases.{h,cpp}` | (phase1.17, decision 095) The shipped presets of `assets/export-presets/` and the compatibility alias table: `ShippedPresetId` (a shipped id, a Painter preset name, or its `resource://starter_assets/` URL), `LoadShippedPreset` (the preset and its provenance record), `DefaultPresetDirectory` (`assets/export-presets` beside the executable) (§5). |
 | `publish.{h,cpp}` | (phase1.17, decision 097) `PublishExport`: the encoded files, the plan and the receipt published as a new generation by an atomic pointer update; `PublicationLock`; `RecoverExport` (`export --recover`). |
 | `fixed_names.{h,cpp}` | (phase1.17) `OpenPinnedDelivery` (the generation-pinning adapter), `CopyFixedNames` (the journalled fixed-name copy), `LockedFixedNames` (the reader under the publication lock), `RecoverFixedNames`. |
 | `receipt.{h,cpp}`, `schema/receipt.schema.json` | (phase1.17) `BuildReceipt`, `ReadReceipt`, `ReadResourceHashes`: the receipt (ARC-11 header, per-file fields, normal tags, consumer gaps, the Assets3D v2 export block). |
@@ -28,7 +29,7 @@ Painter's documented semantics, with the Tier 0 recordings and the export probes
 
 - **Errors.** An ill-formed configuration, or one invalid for the project, throws `core::ValueError` (Painter's documented `ValueError`). The message starts with the JSON path or the file, and lists the valid alternatives nearest first: `Mixed_AO` lists `AO_Mixed` first. A well-formed request for something this build does not do throws `core::NotYetSupported` naming its owner task. A request for behaviour no recording shows also throws it, naming recording R-091 (decision 091) or R-092 (decision 092). Every failure happens before any evaluation or write.
 - **Keys.** Undocumented keys at the configuration's root and in a preset map are ignored, as Painter ignores them (probe P10). Elsewhere an undocumented key is not recorded and is refused. An integer `bitDepth` is a `ValueError` ("Expected a string value", probe P11). `srcPath` is accepted only empty (Painter's own `list_output_maps` emits `''`). `exportShaderParams: true` is a release gap (phase2.3).
-- **Presets.** `defaultExportPreset` and `exportList[].exportPreset` name inline presets. A `resource://` shelf preset is `phase1.17_export-presets`.
+- **Presets.** `defaultExportPreset` and `exportList[].exportPreset` name an inline preset, else a shipped preset (§5, decision 095). A shelf or predefined preset UzPainter does not ship is `NotYetSupported`.
 - **Roots.** `rootPath` is `<set>` for a set whose only stack is unnamed, `<set>/<stack>` otherwise. Any other value is a `ValueError` listing the valid roots.
 - **Filters.** An absent filter or member selects everything; a present empty list selects nothing. `dataPaths` entries match a root path or its texture set. `outputMaps` entries match the unexpanded `fileName` exactly. `uvTiles` selects a texture set of the Default workflow, the single tile [0, 0], when it lists [0, 0] (probe P4). Members combine with AND. A configuration may write no file (probe P8).
 - **Parameters.** Start from the preset map's `parameters`, then apply every matching `exportParameters` rule in list order. Each defined field overrides. `fileFormat`, `bitDepth`, `dithering` and `paddingAlgorithm` must then be defined, and `dilationDistance` when the padding is `transparent`, `color` or `diffusion`. Otherwise the configuration is invalid, naming the map and the parameter. An absent `sizeLog2` is the set's size. A scalar `sizeLog2` sets the larger side and keeps the aspect; `[w, h]` sets both. `bitDepth` must suit the format: png 8 or 16, exr 16f or 32f. Formats: png and exr are written in Phase 1. TGA, BMP, JPEG and DDS belong to `phase3.2_unreal-ue56-packed-preset`. TIFF, PSD, WebP, J2K/JP2, PGM, JNG and sbsar are not in v1.
@@ -74,8 +75,21 @@ Task `phase1.16_export-processing-encoders`. Local run report: `parity/reports/p
   - naming decision 090, recorded but not fitted: sRGB8 material channels such as BaseColor (sRGB-encoded on export) and the RGB+A layout.
 - **Order.** `WriteExport` checks every file's processing and padding, then evaluates, pads and encodes every file in memory, and only then writes. A refusal or an evaluation failure leaves nothing written. Two runs in two processes write identical bytes.
 
+## 5. Shipped presets (decision 095)
 
-## 5. Publication and receipts (decision 097)
+Task `phase1.17_export-presets`. Local run report: `parity/reports/phase1/export-presets.md`. Tests: `tests/export/test_export_presets.py`.
+
+- **Files.** `assets/export-presets/<id>.json` is one `exportPresets[]` entry (`{name, maps}`) whose `name` is its UzPainter id. Its provenance record `<id>.provenance.json` follows `src/export/preset-provenance.schema.json` (`uzpainter/export-preset-provenance/1`): sources (page, section, facts, SHA-256 of UzmiGames files), private records (SHA-256 only), one packing entry per map with its source and status, parity (layout, status, pending recordings with their owners, tests). Both are installed beside `UzPainter.exe` and `uzp-export-tests.exe` (`bin/assets/export-presets/`).
+- **Shipped.**
+  - `assets3d-inline-five-map`: the Assets3D pipeline's inline preset (`painter_export.py`), named `$textureSet_<map>`; layout `pipeline`. It plans, file for file, what the pipeline's inline configuration plans.
+  - `pbr-metallic-roughness` and `blender-principled-bsdf`: written from public sources and UzmiGames' own observations; layout `unconfirmed`.
+- **Resolution.** A reference that names an inline preset is that preset. Otherwise `ShippedPresetId` reads it as a shipped id, a Painter name of the alias table (`PBR Metallic Roughness`, `Blender (Principled BSDF)`), or `resource://starter_assets/<Painter name>` with no query or a recorded `?version=` (an unrecorded query: `NotYetSupported`, R-095). The shipped preset joins `exportPresets` under its id, and the reference becomes that id. Painter names are aliases only (CLR-06). An inline preset named like the shipped id a reference resolves to is a `ValueError`. Any other `resource://` or `export-preset-generator://` reference is `NotYetSupported` (the Unreal, glTF and UzEngine presets are Phase 3).
+- **Refusals.**
+  - A preset whose layout is `unconfirmed` is refused (`NotYetSupported`) before anything is planned, naming its pending recordings (R-095).
+  - The five-map preset writes BaseColor, an sRGB8 channel whose export encoding is not fitted. Its export is refused before writing, naming recording R-090 and `phase1.18_export-engine` item 6.1. Without BaseColor (an `outputMaps` filter) it writes.
+- **Parity.** The five-map preset's Normal map, written on the recorded plane goldens, is byte-identical to Painter's `Normal_OpenGL` PNG 16 files. Every preset's full output parity waits on recording R-095 (and R-090 for BaseColor): `phase1.18_export-engine` item 6.2.
+
+## 6. Publication and receipts (decision 097)
 
 Task `phase1.17_export-publication-receipts`. Tests: `tests/export/test_export_publication.py` (CPU, every lane).
 

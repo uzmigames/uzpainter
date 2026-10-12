@@ -1,0 +1,13 @@
+{
+  "id": 95,
+  "slug": "shipped-export-presets-resolve-inline-first-then-by-id-or-painter-alias-and-presets-whose-layout-no-recording-confirms-are-refused-until-r-095",
+  "title": "Shipped export presets resolve inline first, then by id or Painter alias, and presets whose layout no recording confirms are refused until R-095",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.17_export-presets",
+    "phase1.18_export-engine",
+    "phase1.15_export-plan-compiler"
+  ],
+  "supersededBy": null
+}

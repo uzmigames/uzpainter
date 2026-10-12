@@ -1,0 +1,9 @@
+{
+  "defaultExportPreset": "resource://starter_assets/PBR Metallic Roughness",
+  "exportList": [
+    {
+      "rootPath": "uzp_bevelled_cube"
+    }
+  ],
+  "exportShaderParams": false
+}

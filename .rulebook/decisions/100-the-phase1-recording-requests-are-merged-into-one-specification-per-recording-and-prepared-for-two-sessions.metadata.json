@@ -1,0 +1,17 @@
+{
+  "id": 100,
+  "slug": "the-phase1-recording-requests-are-merged-into-one-specification-per-recording-and-prepared-for-two-sessions",
+  "title": "The Phase 1 recording requests are merged into one specification per recording and prepared for two sessions",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.16_export-processing-encoders",
+    "phase1.17_export-presets",
+    "phase1.18_export-engine",
+    "phase1.20_pyapi-facade",
+    "phase1.21_pyapi-dispatcher-lifecycle",
+    "phase1.22_pyapi-cli-capabilities",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

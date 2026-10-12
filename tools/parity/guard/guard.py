@@ -47,6 +47,9 @@ MANIFEST_DIR = "parity/manifests/"
 # A promoted envelope's manifests (decision 037): goldens first recorded under a later Painter
 # build exist only there, and their authored inputs are declared there (decision 087).
 ENVELOPE_MANIFEST = re.compile(r"^parity/envelopes/[^/]+/manifests/")
+# Requested goldens of an envelope, prepared before the Painter session records them: public
+# manifests whose `private_records` is still empty, admitted later under `manifests/`.
+ENVELOPE_REQUEST = re.compile(r"^parity/envelopes/[^/]+/requests/")
 FIXTURE_DIR = "parity/fixtures/"
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -232,6 +235,14 @@ def _public_manifest(path: str, document: Any, data: bytes, ctx: _Context) -> li
     return validation_errors(document, Schema.GOLDEN_PUBLIC)
 
 
+def _requested_manifest(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    """A requested golden: a valid public manifest that names no private record yet."""
+    problems = validation_errors(document, Schema.GOLDEN_PUBLIC)
+    if not problems and document["private_records"]:
+        problems.append("a requested golden names no private record (admit it under manifests/)")
+    return problems
+
+
 def _synthetic_sample(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     """A synthetic private-shaped sample (CONTRACT.md §7): a valid private record that carries
     every synthetic mark: the note, a `samples/` golden id and the synthetic build id."""
@@ -270,8 +281,8 @@ def _register(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]
 
 def _fixture(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
     """A JSON fixture (fixture description, authored recipe) is public only as an authored
-    input that a valid manifest under `parity/manifests/` or an envelope's manifests names by
-    this path and SHA-256."""
+    input that a valid manifest under `parity/manifests/` or an envelope's manifests or requested
+    goldens names by this path and SHA-256."""
     if (path, hashlib.sha256(data).hexdigest()) in ctx.declared_inputs():
         return []
     return [
@@ -363,6 +374,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         _public_manifest,
     ),
     (
+        re.compile(r"^parity/envelopes/[^/]+/requests/.+$"),
+        "golden-public.json with no private record (an envelope's requested goldens)",
+        _requested_manifest,
+    ),
+    (
         re.compile(r"^parity/reports/[^/]+/oracle-envelope[^/]*\.json$"),
         "oracle-envelope.json (study, drift, prepared register entries)",
         _oracle_envelope_result,
@@ -380,7 +396,9 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
 def _declared_inputs(snapshot: Snapshot) -> frozenset[tuple[str, str]]:
     declared: set[tuple[str, str]] = set()
     for path in snapshot.paths:
-        if not path.startswith(MANIFEST_DIR) and not ENVELOPE_MANIFEST.match(path):
+        if not path.startswith(MANIFEST_DIR) and not (
+            ENVELOPE_MANIFEST.match(path) or ENVELOPE_REQUEST.match(path)
+        ):
             continue
         try:
             document = parse_json(path, snapshot.read(path))

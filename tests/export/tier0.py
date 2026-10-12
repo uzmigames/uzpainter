@@ -53,9 +53,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PUBLISHED = REPO_ROOT / "parity" / "semantics" / "virtual-maps.json"
 SET_MESH_MAP = "substance_painter.textureset.TextureSet.set_mesh_map_resource"
 # Refusals of a golden that are release gaps (never planned differently): native-precision mesh
-# maps other than normal_base (recording R-090, decision 090) and the virtual maps not reproduced
-# exactly (recording R-092, decision 092).
-GAP_OWNERS = ("R-090", "R-092")
+# maps other than normal_base (recording R-090, decision 090), the virtual maps not reproduced
+# exactly (recording R-092, decision 092) and View_2D, a render no task owns yet (decision 092;
+# its view-state goldens, decision 093).
+GAP_OWNERS = ("R-090", "R-092", "Painter's 2D view render")
 
 # plan_many(exe, cases, tmp[, project_path]) of tests/export/test_export_plan.py.
 PlanMany = Callable[..., list[dict[str, Any]]]

@@ -8,11 +8,15 @@ from tools.parity.fit import hwmath
 from tools.parity.fit.normal import (
     SHARP_Z,
     SOBEL_Z,
+    channel_normal,
+    fills,
     half_toward_zero,
     height_layers,
     height_readout,
     height_vector,
+    magnified,
     normal_maps,
+    stack_readout,
     unorm,
     uv_domain,
 )
@@ -110,3 +114,80 @@ def test_uv_domain_of_a_full_quad_is_the_image_minus_its_border() -> None:
     assert domain.shape == (256, 256)
     assert int(domain.sum()) == 254 * 254
     assert not domain[0].any() and domain[1, 1:255].all()
+
+
+def test_z_is_a_uv_space_gradient() -> None:
+    h = np.zeros((4, 4), np.float32)
+    assert height_vector(h, "Sharp", 512)[2][0, 0] == np.float32(SHARP_Z / 2)
+    assert height_vector(h, "SmoothSobel", 1024)[2][0, 0] == np.float32(SOBEL_Z / 4)
+
+
+def test_channel_normal_follows_the_coverage() -> None:
+    half_ = np.full((2, 2), 0.5, np.float32)
+    colour = (half_, half_, np.ones((2, 2), np.float32))
+    none = channel_normal(colour, np.zeros((2, 2), np.float32))
+    assert (none[0] == 0).all() and (none[1] == 0).all() and (none[2] == 1).all()
+    full = channel_normal(colour, np.ones((2, 2), np.float32))
+    assert (full[0] == 0).all() and (full[2] == 1).all()
+    # The flat colour divided by 1/2 decodes to (1, 1, 3) / |.|, turned halfway: +x = +y > 0.
+    half = channel_normal(colour, np.full((2, 2), 0.5, np.float32))
+    assert (half[0] == half[1]).all() and (half[0] > 0.15).all() and (half[0] < 0.17).all()
+
+
+def test_signed_texels_are_magnified_before_the_write() -> None:
+    signed = np.array([[-1.0, 1.0], [-1.0, 1.0]], np.float32)
+    assert np.array_equal(magnified(signed, 2), signed)
+    wide = magnified(signed, 4)
+    # Centres at x = -1/4, 1/4, 3/4, 5/4 of the 2 px row (repeat): weights 3/4 and 1/4.
+    assert wide[0].tolist() == [-0.5, -0.5, 0.5, 0.5]
+
+
+def test_signed_addition_on_height() -> None:
+    a = np.array([0.25, -0.5], np.float32)
+    b = np.array([0.75, 0.25], np.float32)
+    out = stack_readout([a, b], [("Normal", 1.0), ("SignedAddition", 1.0)])
+    assert out.tolist() == [0.75, -1.0]
+
+
+def test_fills_follow_active_channels_and_masks() -> None:
+    steps = [
+        {"step": 1, "call": "x.resource.import_project_resource", "args": {"input": "ramp"}},
+        {"step": 2, "call": "x.resource.import_project_resource", "args": {"input": "codes"}},
+        {"step": 3, "call": "x.layerstack.insert_fill", "args": {"texture_set": "s0"}},
+        {
+            "step": 4,
+            "call": "x.FillLayerNode.active_channels",
+            "args": {"node_step": 3, "channels": ["Height"]},
+        },
+        {"step": 5, "call": "x.layerstack.insert_fill", "args": {"above_step": 3}},
+        {
+            "step": 6,
+            "call": "x.FillLayerNode.active_channels",
+            "args": {"node_step": 5, "channels": ["Normal"]},
+        },
+        {
+            "step": 7,
+            "call": "x.FillLayerNode.set_source",
+            "args": {"node_step": 5, "channel": "Normal", "resource_step": 1},
+        },
+        {
+            "step": 8,
+            "call": "x.LayerNode.add_mask",
+            "args": {"node_step": 5, "background": "Black"},
+        },
+        {
+            "step": 9,
+            "call": "x.layerstack.insert_fill",
+            "args": {"inside_step": 5, "stack": "Mask"},
+        },
+        {
+            "step": 10,
+            "call": "x.FillEffectNode.set_source",
+            "args": {"node_step": 9, "channel": None, "resource_step": 2},
+        },
+    ]
+    manifest = {"instruction_sequence": {"steps": steps}}
+    assert height_layers(manifest, "s0") == [("Normal", 1.0)]
+    normal = fills(manifest, "s0", "Normal")
+    assert len(normal) == 1
+    assert normal[0].source == ("bitmap", "ramp") and normal[0].mask == "codes"

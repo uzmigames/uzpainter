@@ -1,0 +1,124 @@
+{
+  "schema": "uzpainter/export-preset-provenance/1",
+  "version": 1,
+  "author": "UzmiGames",
+  "licence": "Apache-2.0",
+  "date": "2026-10-12",
+  "reviewer": null,
+  "preset": "blender-principled-bsdf",
+  "answersTo": [
+    "Blender (Principled BSDF)"
+  ],
+  "sources": [
+    {
+      "kind": "public-documentation",
+      "page": "Adobe Substance 3D Painter user guide, Export > Output templates > Default Output templates",
+      "section": "List of default templates",
+      "facts": "The default template name this preset answers to; the page gives one-line descriptions only (no maps, channels, naming or parameters)."
+    },
+    {
+      "kind": "public-documentation",
+      "page": "Adobe Substance 3D Painter Python API documentation, export.html (substance_painter.export)",
+      "section": "Full json_config dict possibilities; Export path wildcards",
+      "facts": "The preset form {name, maps[].{fileName, channels[].{destChannel, srcChannel, srcMapType, srcMapName}, parameters}}; the documentMap and virtualMap names used here; the $textureSet and $colorSpace wildcards and ( ... ) optional groups."
+    },
+    {
+      "kind": "consumer-specification",
+      "page": "Blender Manual, Shader Nodes > Shader > Principled BSDF; Material Output node",
+      "section": "Inputs (Base Color, Metallic, Roughness, Alpha, Normal, Emission Color); Displacement",
+      "facts": "The consumer inputs each map feeds: colour maps (Base Color, Emission Color), scalar maps (Metallic, Roughness, Alpha), the tangent-space normal through a Normal Map node, displacement through the Material Output's Displacement."
+    },
+    {
+      "kind": "uzmigames-observation",
+      "page": "Assets3D Pipeline/render/Render-Comparison-Standard.json",
+      "section": "texture_contract",
+      "facts": "Blender consumes the exported normal as OpenGL (+Y) tangent space, Non-Color; BaseColor sRGB; Roughness and Metallic Raw."
+    },
+    {
+      "kind": "uzmigames-observation",
+      "page": "Assets3D Creatures/Undead/Skeletal Mage/Models3D/10-Chapeu/report.json",
+      "section": "painter_recipe.export",
+      "facts": "Files Painter wrote through this preset on an OCIO-managed UzmiGames project, in this order: <set>_BaseColor_sRGB, _Normal_Raw, _Metallic_Raw, _Roughness_Raw, _Emission_sRGB, _Alpha_Raw, _Displacement_Raw (the delivery kept the five present maps); the preset's resource URL and its version.",
+      "sha256": "4446cccc237ded36bf1e735435e0e394bd4480a017e24798c505f4766b369dd1"
+    },
+    {
+      "kind": "uzmigames-observation",
+      "page": "Assets3D Creatures/Undead/Skeletal Mage/Models3D/*/Textures (directory listing, docs/analysis/assets3d-pipeline/05-export-and-consumers.md §3)",
+      "section": "Naming and placement",
+      "facts": "Delivered files named <TextureSet>_<Map>_sRGB.png or _Raw.png (for example 18-Tunica DefaultMaterial_Normal_Raw.png, 13-Grimorio Grimorio_BaseColor_sRGB.png): the colour-space suffix appears on OCIO projects."
+    }
+  ],
+  "privateRecords": [],
+  "packing": [
+    {
+      "fileName": "$textureSet_BaseColor(_$colorSpace)",
+      "decision": "RGB from documentMap basecolor",
+      "source": "name: Assets3D deliveries; content: Principled BSDF Base Color",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Normal(_$colorSpace)",
+      "decision": "RGB from virtualMap Normal_OpenGL",
+      "source": "name: Assets3D deliveries; convention: Render-Comparison-Standard texture_contract (OpenGL)",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Metallic(_$colorSpace)",
+      "decision": "L from documentMap metallic",
+      "source": "name: Assets3D deliveries; content: Principled BSDF Metallic",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Roughness(_$colorSpace)",
+      "decision": "L from documentMap roughness",
+      "source": "name: Assets3D deliveries; content: Principled BSDF Roughness",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Emission(_$colorSpace)",
+      "decision": "RGB from documentMap emissive",
+      "source": "name: Assets3D hat report; content: Principled BSDF Emission Color",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Alpha(_$colorSpace)",
+      "decision": "L from documentMap opacity",
+      "source": "name: Assets3D hat report; content: Principled BSDF Alpha",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "$textureSet_Displacement(_$colorSpace)",
+      "decision": "L from documentMap height",
+      "source": "name: Assets3D deliveries; content: Material Output Displacement",
+      "status": "hypothesis"
+    },
+    {
+      "fileName": "(all)",
+      "decision": "No per-map parameters: file format, bit depth, padding and dithering come from exportParameters until the recording shows what the preset itself sets",
+      "source": "decision 095",
+      "status": "hypothesis"
+    }
+  ],
+  "parity": {
+    "layout": "unconfirmed",
+    "status": "pending",
+    "pending": [
+      {
+        "recording": "R-095",
+        "owner": "phase1.18_export-engine item 6.2",
+        "what": "Painter's files and dry run for resource://starter_assets/Blender (Principled BSDF) on a UzmiGames fixture with every channel the preset reads filled distinctly, with and without an exportParameters rule, under legacy and OCIO colour management: confirms or corrects every map, its channels, its name and the preset's own parameters."
+      },
+      {
+        "recording": "R-090",
+        "owner": "phase1.18_export-engine item 6.1",
+        "what": "BaseColor (sRGB8) is exported sRGB-encoded; the encoding is recorded but not fitted (decision 090), so every export writing it is refused before writing."
+      }
+    ],
+    "tests": [
+      "tests/export/test_export_presets.py::test_painter_names_resolve_to_shipped_presets",
+      "tests/export/test_export_presets.py::test_unconfirmed_presets_are_refused_naming_r095",
+      "tests/export/test_export_presets.py::test_provenance_records_are_complete",
+      "tests/export/test_export_presets.py::test_shipped_presets_pass_the_guard"
+    ]
+  }
+}

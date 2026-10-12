@@ -24,6 +24,14 @@
 //       (phase1.16) Encodes synthetic PNG16 and OpenEXR 32f images twice (ramps, runs, noise, signed
 //       zero, infinities, NaN payloads, odd sizes), decodes them back and writes the files; prints
 //       one JSON line per image {"name", "format", "decoded_equal", "repeat_equal", "sha256"}.
+//   uzp-export-tests presets <preset dir> <references.json>
+//       (phase1.17) {"references": [text...]}: each resolved to a shipped preset
+//       (`ShippedPresetId`) and loaded from <preset dir> (`LoadShippedPreset`); prints one JSON line
+//       per reference {"reference", "id": id or null, "name", "layout", "pending", "maps": [fileName]}
+//       or {"reference", "error": class, "message": text}, class `ValueError`, `NotYetSupported` or
+//       `ManifestError`.
+//   uzp-export-tests aliases
+//       (phase1.17) Prints {"shipped": [id...], "aliases": [[Painter name, id, [version...]]]}.
 //   uzp-export-tests [--fault <point>[:<n>]] publish <templates dir> <spec.json> <config.json>
 //       (phase1.17) As `export`, through `PublishExport`: the files and the receipt published as a
 //       new generation under exportPath; the spec's mesh is also the project's imported mesh (a
@@ -67,6 +75,7 @@
 #include "export/fixed_names.h"
 #include "export/plan.h"
 #include "export/png_writer.h"
+#include "export/preset_aliases.h"
 #include "export/publish.h"
 #include "export/virtual_maps.h"
 #include "export/write.h"
@@ -774,6 +783,67 @@ int RunHoldLock(const fs::path& exportPath, const std::string& milliseconds) {
 
 }  // namespace
 
+// ── Shipped presets (phase1.17) ─────────────────────────────────────────────
+
+std::string_view LayoutName(exporter::PresetLayout layout) {
+    switch (layout) {
+        case exporter::PresetLayout::pipeline: return "pipeline";
+        case exporter::PresetLayout::confirmed: return "confirmed";
+        case exporter::PresetLayout::unconfirmed: return "unconfirmed";
+    }
+    return "";
+}
+
+int RunPresets(const fs::path& directory, const fs::path& referencesPath) {
+    const json::Value document = json::Parse(ReadText(referencesPath));
+    for (const json::Value& r : Arr(Key(Obj(document, "document"), "references"), "references")) {
+        const std::string reference = Str(r, "reference");
+        json::Object result{{"reference", reference}};
+        try {
+            const std::optional<std::string> id = exporter::ShippedPresetId(reference);
+            if (!id) {
+                result["id"] = nullptr;
+            } else {
+                const exporter::ShippedPreset preset = exporter::LoadShippedPreset(directory, *id);
+                result["id"] = *id;
+                result["name"] = preset.spec.name;
+                result["layout"] = LayoutName(preset.layout);
+                json::Array pending;
+                for (const std::string& recording : preset.pendingRecordings) pending.emplace_back(recording);
+                result["pending"] = std::move(pending);
+                json::Array maps;
+                for (const exporter::MapSpec& map : preset.spec.maps) maps.emplace_back(map.fileName);
+                result["maps"] = std::move(maps);
+            }
+        } catch (const core::ValueError& e) {
+            result["error"] = "ValueError";
+            result["message"] = std::string(e.what());
+        } catch (const core::NotYetSupported& e) {
+            result["error"] = "NotYetSupported";
+            result["message"] = std::string(e.what());
+        } catch (const core::ManifestError& e) {
+            result["error"] = "ManifestError";
+            result["message"] = std::string(e.what());
+        }
+        std::cout << json::WriteCanonical(result) << "\n";
+    }
+    return 0;
+}
+
+int RunAliases() {
+    json::Array shipped;
+    for (std::string_view id : exporter::ShippedPresetIds()) shipped.emplace_back(id);
+    json::Array aliases;
+    for (const exporter::PresetAlias& alias : exporter::PresetAliases()) {
+        json::Array versions;
+        for (std::string_view v : alias.versions) versions.emplace_back(v);
+        aliases.push_back(json::Array{alias.painterName, alias.presetId, std::move(versions)});
+    }
+    std::cout << json::WriteCanonical(json::Object{{"shipped", std::move(shipped)}, {"aliases", std::move(aliases)}})
+              << "\n";
+    return 0;
+}
+
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
     try {
@@ -797,6 +867,8 @@ int main(int argc, char** argv) {
         if (args.size() == 4 && args[0] == "export") return RunExport(args[1], args[2], args[3]);
         if (args.size() == 2 && args[0] == "reencode") return RunReencode(args[1]);
         if (args.size() == 2 && args[0] == "roundtrip") return RunRoundtrip(args[1]);
+        if (args.size() == 3 && args[0] == "presets") return RunPresets(args[1], args[2]);
+        if (args.size() == 1 && args[0] == "aliases") return RunAliases();
     } catch (const std::exception& e) {
         std::cerr << "uzp-export-tests: " << e.what() << "\n";
         return 2;
@@ -805,6 +877,7 @@ int main(int argc, char** argv) {
                  "export <templates> <spec.json> <config.json> | reencode <list.txt> | roundtrip <out> | "
                  "[--fault <point>[:<n>]] publish <templates> <spec.json> <config.json> | "
                  "[--fault <point>[:<n>]] fixed-copy <exportPath> <dir> | consume-pinned <exportPath> | "
-                 "consume-locked <exportPath> <dir> | receipt <project.json> <config.json> | hold-lock <exportPath> <ms> | recover --recover <exportPath> [--fixed-names <dir>]...\n";
+                 "consume-locked <exportPath> <dir> | receipt <project.json> <config.json> | hold-lock <exportPath> <ms> | recover --recover <exportPath> [--fixed-names <dir>]... | "
+                 "presets <preset dir> <references.json> | aliases\n";
     return 2;
 }

@@ -159,9 +159,10 @@ struct ProjectBindings {
 // ── Virtual normal maps (height_to_normal.h, tile_store.h VirtualNormalOp) ────
 
 /// The HLSL of the virtual normal kernel (`evaluator_blend.hlsl` with `UZP_VNORMAL`): 32-bit float
-/// height and Normal-channel read-outs in, the encoded normal out (raw 32-bit float). Its
-/// parameter blocks share the arena and stride of the blend kernels.
-[[nodiscard]] render::KernelSource VirtualNormalKernelSource();
+/// height read-outs, the Normal channel's root list (`normalEncoding`, with coverage) and the
+/// mesh map's 32-bit float operands in, the encoded normal out (raw 32-bit float). Its parameter
+/// blocks share the arena and stride of the blend kernels.
+[[nodiscard]] render::KernelSource VirtualNormalKernelSource(render::TexelEncoding normalEncoding);
 
 struct VirtualNormalBindings {
     uint32_t width = 0;
@@ -170,8 +171,13 @@ struct VirtualNormalBindings {
     uint32_t table16Srv = 0;
     /// The SRVs of the nine height tiles (all 0 when the height is constant).
     std::array<uint32_t, 9> heightSrv{};
-    /// The SRV of the Normal channel's read-out tile (0 when it is a constant).
+    /// The SRV of the Normal channel's root-list tile (0 when it is a constant).
     uint32_t normalSrv = 0;
+    /// The SRV of the mesh map's operand tile (0 when none is bound).
+    uint32_t meshSrv = 0;
+    /// The SRV of the function tables (sine and cosine; 0 when the Normal channel is a constant
+    /// at full coverage).
+    uint32_t powSrv = 0;
 };
 
 /// The parameter block of `op` with the descriptor indices of `bindings`.
