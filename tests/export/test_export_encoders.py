@@ -504,7 +504,8 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
     is written: the documentMap on sRGB8 and on RGB16, and the diagnosticMap sources isolated,
     contribution, regionStats, materialView and materialLeaks of BaseColor (leaks compare the
     channel's full and solo read-outs). On the default template, whose base is observed, the same
-    diagnostic sources are written."""
+    diagnostic sources are written. Specular and Emissive added in a format other than sRGB8 fail
+    with `missing_base_value`: their channel default is recorded on sRGB8 only."""
 
     def variant(name: str, template: str | None, basecolor: str = "sRGB8") -> Path:
         document = json.loads(spec(tmp_path / "spec").read_text(encoding="utf-8"))
@@ -554,6 +555,22 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
         )
         assert "error" not in result, (source, result)
         assert files_under(out), source
+
+    # Specular and Emissive added in a format other than sRGB8: their channel default is recorded
+    # on sRGB8 only, so the evaluation fails (`missing_base_value`) before anything is written.
+    for channel, fmt in (("Specular", "RGB16"), ("Emissive", "RGB16"), ("Specular", "L8")):
+        document = json.loads((tmp_path / "spec" / "default.json").read_text(encoding="utf-8"))
+        document["channels"].append({"type": channel, "format": fmt})
+        path = tmp_path / "spec" / f"{channel}-{fmt}.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        out = tmp_path / f"added-{channel}-{fmt}"
+        layout = "L" if fmt.startswith("L") else "RGB"
+        cfg = single(out, "documentMap", channel.lower(), layout)
+        result = export(export_tests, path, cfg, tmp_path / f"a-{channel}-{fmt}")
+        assert result.get("error") == "Failure", (channel, fmt, result)
+        assert result["message"].startswith("evaluator:missing_base_value"), (channel, result)
+        assert "recorded as sRGB8 only" in result["message"], (channel, result)
+        assert files_under(out) == {}, (channel, fmt)
 
 
 def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
