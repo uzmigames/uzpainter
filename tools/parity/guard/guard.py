@@ -12,7 +12,8 @@ Checks the content of files, never only their names or signatures:
   validate against the public schema its path assigns (`PATH_RULES`); a JSON file under
   `parity/` that no rule covers is rejected. The envelope registry and every envelope's
   manifests (`parity/envelopes/`) and the oracle-envelope results
-  (`parity/reports/<phase>/oracle-envelope*.json`) have rules of their own. The store's size
+  (`parity/reports/<phase>/oracle-envelope*.json`) have rules of their own; so do a golden's
+  comparison reports (`parity/reports/<phase>/tier<tier>-*.json`). The store's size
   census (`parity/reports/<phase>/store-census.json`) is checked by a rule of its own: numbers, with
   text only in its identifier fields.
 """
@@ -382,6 +383,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         re.compile(r"^parity/reports/[^/]+/oracle-envelope[^/]*\.json$"),
         "oracle-envelope.json (study, drift, prepared register entries)",
         _oracle_envelope_result,
+    ),
+    (
+        re.compile(r"^parity/reports/[^/]+/tier(?:0|1|2a|2b|3)-[^/]+\.json$"),
+        "comparison-report.json (a golden's comparison report)",
+        _report_sample,
     ),
     (re.compile(r"^parity/semantics/[^/]+$"), "semantics.json", _semantics),
     (re.compile(r"^parity/fixtures/.+$"), "authored input of a manifest", _fixture),

@@ -258,7 +258,7 @@ void Session::Open(const std::filesystem::path& path) {
         // has none, and its mesh source stays unknown rather than resolved against this directory.
         if (!snapshot.project->mesh->source.empty()) project->mesh_path = snapshot.project->mesh->source;
     }
-    project->project_source = std::filesystem::absolute(path);
+    project->project_source = std::filesystem::absolute(project->store->path());  // a bundle: its `.uzp`
     SetActiveDefault(*project);
     std::lock_guard lock(mutex_);
     if (current_) ThrowProjectError("a project is already open");
@@ -367,7 +367,7 @@ core::Checkpoints Session::SaveAs(const std::filesystem::path& path, store::Save
     RequireNotBusy("save_as()");
     if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
     core::Checkpoints checkpoints = project->store->SaveAs(*project->document, path);
-    project->project_source = std::filesystem::absolute(path);
+    project->project_source = std::filesystem::absolute(project->store->path());
     if (mode == store::SaveMode::full) project->store->Compact(*project->document);
     if (!project->untitled_dir.empty()) {
         std::error_code ignored;

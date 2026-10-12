@@ -38,6 +38,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import numpy.typing as npt
+
 from tools.parity.envelope.registry import (
     corpus_manifests,
     current_envelope,
@@ -48,6 +51,9 @@ from tools.parity.recorder.environment import MATCH, envelope_match
 from tools.parity.schemas import REPO_ROOT, load_json
 
 ALL_TIERS = frozenset({"0", "1", "2a", "2b", "3"})
+
+# Compared values: a sequence of numbers or an array of them (any shape; flattened in order).
+Values = Sequence[float] | npt.NDArray[Any]
 
 
 class Outcome(StrEnum):
@@ -105,8 +111,8 @@ class Comparison:
 
     tier: str
     domain: str
-    oracle: Sequence[float] | None
-    candidate: Sequence[float]
+    oracle: Values | None
+    candidate: Values
     extra_metrics: Mapping[str, float] = field(default_factory=dict)
     region_metrics: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     oracle_stable: bool = True
@@ -117,30 +123,59 @@ class Comparison:
     candidate_environment: Mapping[str, Any] | None = None
 
 
-def _equal(a: float, b: float) -> bool:
-    return a == b or (math.isnan(a) and math.isnan(b))
+def _flat(values: Values) -> npt.NDArray[Any]:
+    array = np.asarray(values)
+    return (
+        array.reshape(-1)
+        if np.issubdtype(array.dtype, np.integer)
+        else array.astype(np.float64).reshape(-1)
+    )
 
 
-def _abs_diff(a: float, b: float) -> float:
-    if _equal(a, b):
-        return 0.0
-    difference = abs(a - b)
-    return math.inf if math.isnan(difference) else difference
+_INT64_SAFE = 1 << 62  # |a - b| of two integers strictly within +-2**62 is below 2**63
 
 
-def diagnose(oracle: Sequence[float], candidate: Sequence[float]) -> Diagnostics:
-    """Statistics of |candidate - oracle|; p99 is the nearest-rank 99th percentile."""
-    if len(oracle) != len(candidate):
-        raise ValueError(f"shape mismatch: {len(oracle)} oracle values, {len(candidate)} candidate")
-    if not oracle:
+def _int64_safe(values: npt.NDArray[Any]) -> bool:
+    return not values.size or (int(values.min()) > -_INT64_SAFE and int(values.max()) < _INT64_SAFE)
+
+
+def _abs_diffs(oracle: npt.NDArray[Any], candidate: npt.NDArray[Any]) -> npt.NDArray[np.float64]:
+    """|candidate - oracle| per value: equal values (equal infinities included) and two NaNs are
+    0, a NaN against anything else is inf. Integer values subtract exactly: in int64 when both
+    lie strictly within +-2**62, else as Python integers (uint64 against int64 included)."""
+    if np.issubdtype(oracle.dtype, np.integer) and np.issubdtype(candidate.dtype, np.integer):
+        if _int64_safe(oracle) and _int64_safe(candidate):
+            exact: npt.NDArray[np.float64] = np.abs(
+                oracle.astype(np.int64) - candidate.astype(np.int64)
+            ).astype(np.float64)
+            return exact
+        wide = np.abs(oracle.astype(object) - candidate.astype(object))  # Python integers
+        return np.array([float(value) for value in wide], dtype=np.float64)
+    a, b = oracle.astype(np.float64), candidate.astype(np.float64)
+    with np.errstate(invalid="ignore", over="ignore"):
+        diffs: npt.NDArray[np.float64] = np.abs(a - b)
+    diffs[(a == b) | (np.isnan(a) & np.isnan(b))] = 0.0
+    diffs[np.isnan(diffs)] = math.inf
+    return diffs
+
+
+def diagnose(oracle: Values, candidate: Values) -> Diagnostics:
+    """Statistics of |candidate - oracle|; p99 is the nearest-rank 99th percentile, the mean an
+    exactly rounded sum (`math.fsum`) over the count."""
+    if np.shape(oracle) != np.shape(candidate):
+        raise ValueError(
+            f"shape mismatch: oracle {np.shape(oracle)}, candidate {np.shape(candidate)}"
+        )
+    left, right = _flat(oracle), _flat(candidate)
+    if not left.size:
         raise ValueError("nothing to compare")
-    diffs = sorted(_abs_diff(a, b) for a, b in zip(oracle, candidate, strict=True))
-    total = len(diffs)
-    differing = sum(1 for d in diffs if d != 0.0)
+    diffs = np.sort(_abs_diffs(left, right))
+    total = int(diffs.size)
+    differing = int(np.count_nonzero(diffs))
     return Diagnostics(
-        max_abs_diff=diffs[-1],
-        mean_abs_diff=math.fsum(diffs) / total,
-        p99_abs_diff=diffs[math.ceil(0.99 * total) - 1],
+        max_abs_diff=float(diffs[-1]),
+        mean_abs_diff=math.fsum(diffs.tolist()) / total,
+        p99_abs_diff=float(diffs[math.ceil(0.99 * total) - 1]),
         differing_count=differing,
         differing_percent=100.0 * differing / total,
         total=total,
@@ -211,7 +246,8 @@ def _evaluate(
 ) -> Verdict:
     if comparison.oracle is None:
         return Verdict(Outcome.ORACLE_UNAVAILABLE, None, reason="oracle blob unavailable")
-    shaped = bool(comparison.oracle) and len(comparison.oracle) == len(comparison.candidate)
+    same_shape = np.shape(comparison.oracle) == np.shape(comparison.candidate)
+    shaped = same_shape and np.size(comparison.oracle) > 0
     if comparison.oracle_side:  # judged by the two environment records alone
         match = envelope_match(comparison.golden_environment, comparison.candidate_environment)
         if match != MATCH:
@@ -222,7 +258,7 @@ def _evaluate(
         diagnostics = diagnose(comparison.oracle, comparison.candidate) if shaped else None
         reason = f"golden of envelope {comparison.envelope_id}, not the current {current}"
         return Verdict(Outcome.STALE, diagnostics, reason=reason)
-    if len(comparison.oracle) != len(comparison.candidate):
+    if not same_shape:
         return Verdict(Outcome.FAIL, None, reason="structural difference: shape mismatch")
     diagnostics = diagnose(comparison.oracle, comparison.candidate)
     stable = comparison.oracle_stable

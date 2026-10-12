@@ -10,8 +10,11 @@ It is the `__main__` script of the run; the Assets3D code it executes is given a
    revision (decisions 105, 111). The session file names what the previous call left open (the
    project file, the facade's project index behind `resource://project<N>` contexts, its
    `needs_saving()` and the active stack): the project is reopened through the facade and those
-   values restored before the code runs. A carried project that no longer opens fails the call
-   before the code runs and empties the session.
+   values restored before the code runs. The project file is carried as the absolute path that
+   `open` or `save_as` resolved when it named the file (decision 118): the next call runs in the
+   client's working directory, not in one the script changed to. A carried project that no longer
+   opens, or a session naming a relative path, fails the call before the code runs and empties
+   the session.
 2. **Shim.** `_substance_painter.display.save_viewport(path, w, h, _)`, the pipeline's one
    private Painter call, is installed into `sys.modules` for this run only; it calls
    `uzpainter.render.capture(mode="painter_viewport")` and names that mode when it is missing.
@@ -218,6 +221,9 @@ def restore_session(session_file: Path) -> dict[str, Any] | None:
 
     path = carried["project"]
     try:
+        if not os.path.isabs(path):
+            # A path relative to a directory the earlier call may have changed to (decision 118).
+            raise ValueError("the session names a relative path")
         SESSION.projects = int(carried["project_index"]) - 1  # open() counts this project
         project.open(path)
     except Exception as error:
@@ -240,13 +246,15 @@ def session_left_open() -> dict[str, Any] | None:
     """The session this run leaves open (None when no project is open)."""
     import substance_painter.project as project
     import substance_painter.textureset as textureset
+    import uzpainter
     from uzpainter_facade.state import SESSION
 
     if not project.is_open():
         return None
     active = textureset.get_active_stack()
     return {
-        "project": project.file_path(),
+        # Absolute as resolved when the file was named, never under this run's final directory.
+        "project": uzpainter.project.absolute_file_path(),
         "project_index": SESSION.projects,
         "needs_saving": project.needs_saving(),
         "active_stack": [active.material().name(), active.name()],

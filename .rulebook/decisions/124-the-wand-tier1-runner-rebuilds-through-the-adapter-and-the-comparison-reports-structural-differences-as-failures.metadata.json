@@ -1,0 +1,14 @@
+{
+  "id": 124,
+  "slug": "the-wand-tier1-runner-rebuilds-through-the-adapter-and-the-comparison-reports-structural-differences-as-failures",
+  "title": "The Wand Tier 1 runner rebuilds through the adapter, and the comparison reports structural differences as failures",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.23_pyapi-pipeline-adapter",
+    "phase0.2_parity-contract",
+    "phase0.4_oracle-store-guard"
+  ],
+  "supersededBy": null
+}

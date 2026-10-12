@@ -92,7 +92,28 @@
             }
           }
         },
-        "maps": { "type": "array", "items": { "$ref": "#/$defs/map_diagnostics" } }
+        "maps": { "type": "array", "items": { "$ref": "#/$defs/map_diagnostics" } },
+        "structural": {
+          "description": "Structural differences, each a failure in every tier: UzPainter's export refused before writing (output_id `export`), a map exported on one side only, measured storage formats or map shapes that differ. Such a map has no diagnostics.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["output_id", "reason"],
+            "properties": {
+              "output_id": { "type": "string", "minLength": 1 },
+              "reason": {
+                "enum": [
+                  "candidate_export_refused",
+                  "missing_from_candidate",
+                  "missing_from_oracle",
+                  "storage_format_differs",
+                  "shape_differs"
+                ]
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -134,6 +155,15 @@
             }
           }
         }
+      }
+    },
+    {
+      "description": "A structural difference (missing content, a refused export, a differing storage format or shape) fails in every tier: no pass lists one, with or without exception entries.",
+      "if": {
+        "properties": { "equality_to_painter": { "properties": { "outcome": { "const": "pass" } } } }
+      },
+      "then": {
+        "properties": { "equality_to_painter": { "properties": { "structural": { "maxItems": 0 } } } }
       }
     },
     {
@@ -287,7 +317,10 @@
           "required": ["container", "sample_type", "bits_per_channel", "channels", "encoding"],
           "properties": {
             "container": { "enum": ["png", "exr", "tga", "tiff", "dds", "jpeg"] },
-            "encoding": { "enum": ["linear", "srgb", "display_referred"] },
+            "encoding": {
+              "description": "undetermined: the file states no encoding and no single source channel gives one (decision 087).",
+              "enum": ["linear", "srgb", "display_referred", "undetermined"]
+            },
             "sample_type": { "enum": ["uint", "half", "float"] },
             "bits_per_channel": { "enum": [8, 16, 32] },
             "channels": { "type": "integer", "minimum": 1, "maximum": 4 }
