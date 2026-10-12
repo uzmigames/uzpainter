@@ -47,7 +47,9 @@ from tools.parity.fit.decode import decode
 from tools.parity.fit.oracle import Golden, load
 from tools.parity.fit.stats import difference
 from tools.parity.recorder.job import Step, export_step
+from tools.parity.schemas import REGISTER_PATH, load_json
 from tools.parity.store.store import OracleStore, Status, locate
+from tools.parity.verdict import Comparison, evaluate
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PUBLISHED = REPO_ROOT / "parity" / "semantics" / "export-processing.json"
@@ -512,16 +514,19 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
 
 
 # export-ocio-encode-legacy: the authored 8-bit sRGB ramp at 1:1 on BaseColor in the sRGB space
-# (s3) and in Raw (s4), exported at PNG 16, PNG 8 and OpenEXR 32f (sources.h).
-SRGB8_BITMAP_SETS = ("s3", "s4")
+# (s3), in Raw (s4) and in the sRGB space inside a group masked by grey A (s5), exported at PNG 16,
+# PNG 8 and OpenEXR 32f (sources.h).
+SRGB8_BITMAP_SETS = ("s3", "s4", "s5")
 SRGB8_BITMAP_STEPS = (46, 47, 48)
 
 
 def srgb8_bitmap_written(exe: Path, tmp: Path) -> dict[str, Any]:
     """export-ocio-encode-legacy's BaseColor of `SRGB8_BITMAP_SETS` rebuilt per texture set on the
     grid mesh and written by `WriteExport` at each step of `SRGB8_BITMAP_STEPS`: compared byte for
-    byte with Painter's files of r1 and r2 (both stable on these sets, decision 101). Returns the
-    counts and the differing files or refusals."""
+    byte with Painter's files of r1, and of r2 wherever r2 equals r1. Painter is unstable on s5
+    (decision 032): r1 is its exact target, and a file whose r2 differs from r1 is judged against
+    r2 through the exception register (`tools/parity/verdict.py`), its outcome and the entries
+    relied on listed in `register`. Returns the counts and the differing files or refusals."""
     needs_store()
     root = manifest_root(current_envelope()) / "tier0" / "semantics"
     golden = load(locate(), root / "export-ocio-encode-legacy.json")
@@ -530,7 +535,14 @@ def srgb8_bitmap_written(exe: Path, tmp: Path) -> dict[str, Any]:
     # The colour-space listings are readbacks: the stack does not depend on them.
     built = [s for s in sequence["steps"] if not s["call"].endswith("list_available_color_spaces")]
     manifest = dict(golden.manifest, instruction_sequence=dict(sequence, steps=built))
-    report: dict[str, Any] = {"files": 0, "comparisons": 0, "identical": 0, "problems": []}
+    entries = load_json(REGISTER_PATH)["entries"]
+    report: dict[str, Any] = {
+        "files": 0,
+        "comparisons": 0,
+        "identical": 0,
+        "register": [],
+        "problems": [],
+    }
     for texture_set in SRGB8_BITMAP_SETS:
         spec_dir = tmp / texture_set / "spec"
         spec = export_spec(manifest, texture_set, spec_dir)
@@ -548,11 +560,38 @@ def srgb8_bitmap_written(exe: Path, tmp: Path) -> dict[str, Any]:
             if "error" in result:
                 report["problems"].append(f"{where}: {result['error']}: {result['message']}")
                 continue
+            theirs_r1 = _painter_files(golden, "r1", step, texture_set)
+            theirs_r2 = _painter_files(golden, "r2", step, texture_set)
             for written in result["written"]:
                 rel = written["relativePath"]
                 report["files"] += 1
-                for recording in ("r1", "r2"):
-                    theirs = _painter_files(golden, recording, step, texture_set)
+                for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
+                    if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
+                        ours = decode(Path(written["path"]).read_bytes()).values
+                        key = f"{texture_set}/basecolor/step{step}"
+                        verdicts = [
+                            evaluate(
+                                Comparison(
+                                    "0",
+                                    str(golden.manifest["domain"]),
+                                    golden.map(r, key).values.reshape(ours.shape),
+                                    ours,
+                                    oracle_stable=False,
+                                    exact_target=r == "r1",
+                                ),
+                                entries,
+                            )
+                            for r in ("r1", "r2")
+                        ]
+                        report["register"].append(
+                            (
+                                where,
+                                rel,
+                                [v.outcome.value for v in verdicts],
+                                sorted({e for v in verdicts for e in v.exceptions_relied_on}),
+                            )
+                        )
+                        continue
                     report["comparisons"] += 1
                     if written["sha256"] == theirs.get(rel):
                         report["identical"] += 1
