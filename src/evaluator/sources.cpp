@@ -10,6 +10,14 @@
 
 namespace uzp::evaluator {
 
+BitmapColourSpace BitmapColourSpaceOf(std::string_view tag) {
+    if (tag == "sRGB") return BitmapColourSpace::Srgb;
+    if (tag.empty() || tag == "Raw" || tag == "Data" || tag == "DataSigned" || tag == "NormalXYZLeft") {
+        return BitmapColourSpace::Linear;
+    }
+    return BitmapColourSpace::Unrecorded;
+}
+
 render::Result<void> CheckColourManagement(const core::Project& project, core::Id node) {
     const std::string& mode = project.settings.color_management.mode;
     if (mode.empty() || mode == "legacy") return {};

@@ -458,6 +458,33 @@ def fixture_resource(name: str, workdir: Path) -> dict[str, Any]:
     return {"sha256": hashlib.sha256(data).hexdigest(), "png": f"{name}.png"}
 
 
+# Channels whose bitmap sources Painter 12.1.5 reports in the Data colour space when the steps set
+# none (the recorded `get_source` readbacks of the current envelope).
+DATA_CHANNELS = frozenset(
+    {"AO", "BaseMetalness", "SpecularRoughness", *(f"User{i}" for i in range(10))}
+)
+
+
+def bitmap_color_space(args: dict[str, Any], channel: str | None, png: bytes) -> str:
+    """The colour space of the bitmap source a `set_source` step binds (`channel` None: a mask's
+    mono source): the step's `color_space` (documented `SourceBitmap.set_color_space`), else the
+    one Painter 12.1.5 gives it, as the recorded `get_source` readbacks report: sRGB for a colour
+    bitmap on BaseColor, DataSigned on Height, NormalXYZLeft on Normal, Data on the
+    `DATA_CHANNELS` and as a mask source. Any other case has no recorded default and fails."""
+    if "color_space" in args:
+        return str(args["color_space"])
+    colour = png[25] in (2, 6)  # the PNG IHDR colour type: RGB or RGBA
+    if channel == "BaseColor" and colour:
+        return "sRGB"
+    if channel == "Height":
+        return "DataSigned"
+    if channel == "Normal":
+        return "NormalXYZLeft"
+    if channel is None or channel in DATA_CHANNELS:
+        return "Data"
+    raise AssertionError(f"no recorded default colour space for this bitmap on {channel}")
+
+
 LAYER_CALLS = {
     "substance_painter.layerstack.insert_fill": "fill",
     "substance_painter.layerstack.insert_group": "group",
@@ -545,8 +572,10 @@ def spec_from_manifest(
             if owner_set(args["node_step"]) != texture_set:
                 continue
             if "resource_step" in args:
-                sha = resources[args["resource_step"]]["sha256"]
-                source = {"bitmap": sha, "color_space": "Raw"}
+                resource = resources[args["resource_step"]]
+                png = (workdir / resource["png"]).read_bytes()
+                space = bitmap_color_space(args, args["channel"], png)
+                source = {"bitmap": resource["sha256"], "color_space": space}
             else:
                 space = args.get("color_space", "Working")
                 source = {"uniform": list(args["color"]), "color_space": space}

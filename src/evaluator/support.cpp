@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "evaluator/sources.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/transaction/transaction.h"
 #include "uzp_core/types/errors.h"
@@ -28,9 +29,31 @@ bool LegacyColour(const core::Project& project) {
     return mode.empty() || mode == "legacy";
 }
 
-/// A source of a fill (layer or fill effect), for `channel` (nullopt: a mask's mono source).
-Gap SourceGap(const core::Project& project, const core::Source& source, std::optional<ChannelType> channel,
-              core::Id node) {
+/// The colour space of a bitmap source in `stack` for `channel` (sources.h): an sRGB bitmap is
+/// recorded on sRGB8 channels only (not as a mask's mono source); Working, Linear and other tags
+/// are not recorded. A channel the stack lacks is never evaluated.
+Gap BitmapColourSpaceGap(const core::Stack* stack, const core::BitmapSource& bitmap, std::optional<ChannelType> channel,
+                         core::Id node) {
+    switch (BitmapColourSpaceOf(bitmap.color_space)) {
+        case BitmapColourSpace::Linear: return std::nullopt;
+        case BitmapColourSpace::Srgb: {
+            if (!channel) return Make(node, "an sRGB bitmap as a mask source", "phase1.20_pyapi-facade");
+            if (stack == nullptr) return std::nullopt;
+            const auto it = stack->channels.find(*channel);
+            if (it == stack->channels.end() || it->second.format == core::ChannelFormat::sRGB8) return std::nullopt;
+            return Make(node, "an sRGB bitmap on a " + std::string(core::ToString(it->second.format)) + " channel",
+                        "phase1.20_pyapi-facade");
+        }
+        case BitmapColourSpace::Unrecorded:
+            return Make(node, "the bitmap colour space '" + bitmap.color_space + "'", "phase1.20_pyapi-facade");
+    }
+    return std::nullopt;
+}
+
+/// A source of a fill (layer or fill effect) in `stack`, for `channel` (nullopt: a mask's mono
+/// source).
+Gap SourceGap(const core::Project& project, const core::Stack* stack, const core::Source& source,
+              std::optional<ChannelType> channel, core::Id node) {
     switch (source.kind()) {
         case SourceKind::uniform_color:
             if (channel == ChannelType::Height) {
@@ -43,7 +66,7 @@ Gap SourceGap(const core::Project& project, const core::Source& source, std::opt
                 return Make(node, "a bitmap on the Normal channel of a DirectX project",
                             "phase1.12_compositor-height-normal");
             }
-            return std::nullopt;
+            return BitmapColourSpaceGap(stack, std::get<core::BitmapSource>(source.value), channel, node);
         case SourceKind::vector: return Make(node, "a vector source", "phase4.1_nodes-vector-font-sources");
         case SourceKind::font: return Make(node, "a font source", "phase4.1_nodes-vector-font-sources");
         case SourceKind::procedural: return Make(node, "a procedural source", "phase3.3_procedural-families");
@@ -53,7 +76,7 @@ Gap SourceGap(const core::Project& project, const core::Source& source, std::opt
     return std::nullopt;
 }
 
-Gap FillGap(const core::Project& project, const core::FillContent& fill, core::Id node) {
+Gap FillGap(const core::Project& project, const core::Stack* stack, const core::FillContent& fill, core::Id node) {
     if (fill.source_mode == core::SourceMode::Material) {
         return Make(node, "the Material source mode", "phase3.2_proc-material-families");
     }
@@ -92,13 +115,13 @@ Gap FillGap(const core::Project& project, const core::FillContent& fill, core::I
                     "phase1.20_pyapi-facade");
     }
     for (const auto& [channel, source] : fill.sources) {
-        if (Gap gap = SourceGap(project, source, channel, node)) return gap;
+        if (Gap gap = SourceGap(project, stack, source, channel, node)) return gap;
     }
-    if (fill.mono_source) return SourceGap(project, *fill.mono_source, std::nullopt, node);
+    if (fill.mono_source) return SourceGap(project, stack, *fill.mono_source, std::nullopt, node);
     return std::nullopt;
 }
 
-Gap LayerGap(const core::Project& project, const core::Layer& layer) {
+Gap LayerGap(const core::Project& project, const core::Stack* stack, const core::Layer& layer) {
     switch (layer.kind) {
         case LayerKind::paint: return Make(layer.uid, "a paint layer", "phase4.1_nodes-paint-layers");
         case LayerKind::instance:
@@ -117,11 +140,12 @@ Gap LayerGap(const core::Project& project, const core::Layer& layer) {
     if (height != layer.blending.end() && height->second.mode == core::BlendingMode::SignedAddition) {
         return Make(layer.uid, "SignedAddition on the Height channel", "phase1.12_compositor-height-normal");
     }
-    if (layer.kind == LayerKind::fill && layer.fill) return FillGap(project, *layer.fill, layer.uid);
+    if (layer.kind == LayerKind::fill && layer.fill) return FillGap(project, stack, *layer.fill, layer.uid);
     return std::nullopt;
 }
 
-Gap EffectGap(const core::Project& project, const core::Effect& effect, core::NodeStack stack) {
+Gap EffectGap(const core::Project& project, const core::Stack* layers, const core::Effect& effect,
+              core::NodeStack stack) {
     switch (effect.kind) {
         case EffectKind::generator: return Make(effect.uid, "a generator effect", "phase3.2_proc-generator-families");
         case EffectKind::filter: return Make(effect.uid, "a filter effect", "phase3.2_proc-filter-families");
@@ -140,7 +164,7 @@ Gap EffectGap(const core::Project& project, const core::Effect& effect, core::No
                 // Every recorded content-effect order holds the Blur filter (decision 069).
                 return Make(effect.uid, "a fill effect in a content stack", "phase3.2_proc-filter-families");
             }
-            return effect.fill ? FillGap(project, *effect.fill, effect.uid) : std::nullopt;
+            return effect.fill ? FillGap(project, layers, *effect.fill, effect.uid) : std::nullopt;
     }
     return std::nullopt;
 }
@@ -158,10 +182,11 @@ std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid) {
         if (seen) return;
         if (visit.layer != nullptr && visit.layer->uid == uid) {
             seen = true;
-            found = LayerGap(project, *visit.layer);
+            found = LayerGap(project, core::FindStack(project, visit.texture_set, visit.stack), *visit.layer);
         } else if (visit.effect != nullptr && visit.effect->uid == uid) {
             seen = true;
-            found = EffectGap(project, *visit.effect, visit.owner_stack);
+            found = EffectGap(project, core::FindStack(project, visit.texture_set, visit.stack), *visit.effect,
+                              visit.owner_stack);
         }
     });
     return found;

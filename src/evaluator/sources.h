@@ -15,16 +15,31 @@
 // - Bitmap: bound by the SHA-256 of its bytes (LAY-13: two nodes binding different bytes under
 //   one alias each read their own), decoded once per resource (`DecodeBitmap`, 8- or 16-bit PNG),
 //   sampled by the node's projection (projection_uv.h) and stored with the channel's write rule.
-//   Codes are taken as linear values c / M whatever the colour-space tag: observed for untagged
-//   16-bit bitmaps on RGB16, sRGB8, RGB8 and L16 channels (Tier 0 `blend-inputs`, every 16-bit
-//   code); 8-bit and sRGB-tagged bitmaps follow the same rule without a golden yet. A grey bitmap
-//   feeds every channel of a colour channel; a grey channel reads the first channel of a colour
-//   bitmap; alpha planes are not read.
+//   Under the colour spaces Raw, Data, DataSigned and NormalXYZLeft (and an untagged source) the
+//   codes are linear values c / M: observed for 16-bit bitmaps on RGB16, sRGB8, RGB8 and L16
+//   channels (Tier 0 `blend-inputs`, every 16-bit code; Painter reports them Data), on Height
+//   (DataSigned) and Normal (NormalXYZLeft), and for field A on BaseColor set to Raw
+//   (`export-probes-channels`); 8-bit bitmaps follow the same rule without a golden yet. A grey
+//   bitmap feeds every channel of a colour channel; a grey channel reads the first channel of a
+//   colour bitmap; alpha planes are not read.
+// - sRGB bitmap (Painter's default for a colour bitmap on BaseColor): each code is decoded with
+//   the sRGB transfer function, v = x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055)^2.4 with
+//   x = float32(c / 65535), and stored on the sRGB8 channel (arith::Srgb8Store). Exact on every
+//   texel of `virtual-maps-converted` (and its OpenEXR twin) s0-s1, `export-probes-config` and
+//   `export-probes-naming` (r1 and r2); c / M misses 195 325 of 196 608 values there. On an sRGB8
+//   channel the stored code does not depend on the decode's arithmetic: float32 orders of
+//   operations, the GPU's pow and the double-precision decode give the same code for each of the
+//   65 536 codes. Recorded only for a 16-bit colour bitmap sampled 1:1 (the bitmap the size of
+//   the set, the identity transform) onto an sRGB8 channel; any other use (another channel
+//   format or a mask, an 8-bit or grey bitmap, resampling) and the Working and Linear spaces
+//   fail with `evaluator:unsupported_source` (support.h refuses the first and last before any
+//   mutation).
 
 #include "evaluator/resources.h"
 #include "evaluator/tile_store.h"
 #include "render/backend.h"
 
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -37,6 +52,13 @@
 #include "uzp_core/types/project.h"
 
 namespace uzp::evaluator {
+
+/// How a bitmap source's colour-space tag (`core::BitmapSource::color_space`) turns its codes
+/// into channel values under legacy colour management (above): `Linear` (Raw, Data, DataSigned,
+/// NormalXYZLeft and the empty tag: c / M), `Srgb` (sRGB: decoded) or `Unrecorded` (any other
+/// tag, Working and Linear included: no golden).
+enum class BitmapColourSpace : uint8_t { Linear, Srgb, Unrecorded };
+[[nodiscard]] BitmapColourSpace BitmapColourSpaceOf(std::string_view tag);
 
 /// Fails with `evaluator:unsupported_source` unless `project` uses legacy colour management.
 [[nodiscard]] render::Result<void> CheckColourManagement(const core::Project& project,

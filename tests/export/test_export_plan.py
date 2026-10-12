@@ -1094,6 +1094,19 @@ def test_luma_probe_exact(export_tests: Path, tmp_path: Path) -> None:
     assert "base value" in refused["s1_lum.png"], refused
 
 
+def test_srgb_bitmap_exact(export_tests: Path, tmp_path: Path) -> None:
+    """A colour bitmap on BaseColor takes Painter's default colour space, sRGB (the recorded
+    readbacks), and the evaluator decodes it (sources.h): through the plan, BaseColor's RGB
+    sRGB-encoded equals every texel of r1 and r2 of `export-probes-config` and
+    `export-probes-naming` s0 (16-bit) and of Unity4Diff of `virtual-maps-converted` s0-s1 (16-bit,
+    and OpenEXR 32f in its twin), both exports of each."""
+    from tests.export.tier0 import srgb_bitmap_probe
+
+    report = srgb_bitmap_probe(export_tests, tmp_path)
+    assert len(report) == 2 * (1 + 1 + 4 + 4), report
+    assert not any(report.values()), report
+
+
 # ── 3.6 Virtual-map goldens through the plan (owner's machine) ───────────────
 
 
