@@ -18,13 +18,13 @@
 - [x] 3.3 Resolution-order test: `exportParameters` rules override preset parameters in list order; an unresolved parameter makes the config invalid
 - [x] 3.4 `Mixed_AO` is rejected with `AO_Mixed` among the alternatives; requesting TIFF or TGA raises before any file exists
 - [ ] 3.5 Dry run lists exactly the files a real export then writes
-  - Painter's side proven: dry run = Painter's written files on 165 Tier 0 export steps, 0 differing. Open: UzPainter's own written files need the phase1.16 writers and phase1.17 receipts (decision 085).
+  - Painter's side proven: dry run = Painter's written files on 165 Tier 0 export steps, and every R-085 probe compiles as Painter behaved (90 compilations, 6 refused as unrecorded, R-091; decision 091). Open: UzPainter's own written files need the phase1.16 writers and phase1.17 receipts (decision 085).
 - [ ] 3.6 Tier 0 virtual-map goldens (`AO_Mixed`, `Normal_OpenGL`, `Normal_DirectX` and every other virtual map marked `supported`) exact
-  - Normal_OpenGL/DirectX exact (40 maps, 72 comparisons). Open: AO_Mixed misses ao-mixed s1 (30 r1 values; Painter's r1/r2 disagree there); needs recording R-086a and its fit (decision 086).
+  - Normal_OpenGL/DirectX exact (40 maps, 72 comparisons). Open: AO_Mixed's best model misses r1 at 31 values of R-086a; needs recording R-092 (decision 092). Converted maps fitted but not marked supported (decision 092).
 
 ## 4. Acceptance
 - [ ] 4.1 Plan tests green on the hosted CPU lane; Tier 0 virtual-map goldens exact in a local run on the owner's machine (decision 028; the local run report is the evidence)
-  - Plan tests green; open until 3.6 (R-086a) closes.
+  - Plan tests green; open until 3.6 (AO_Mixed, R-092) closes.
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation

@@ -10,7 +10,7 @@ without it (hosted CI, decision 028); the local run on the owner's machine
   wrote for that configuration (item 3.5, Painter's side);
 - the virtual maps marked supported (`Normal_OpenGL`, `Normal_DirectX`), evaluated through the
   plan (`EvaluateFileOn`) and written with the 16-bit write rule, equal their goldens (item 3.6;
-  `AO_Mixed` is a release gap until recording R-086, decision 086), and the published
+  `AO_Mixed` and the converted maps are release gaps, decision 092), and the published
   `parity/semantics/virtual-maps.json` is what that comparison derives. Painter 12.1.5's r1 is
   the exact target where its two recordings differ (decision 032).
 """
@@ -898,10 +898,10 @@ def test_presence_and_sources(export_tests: Path, tmp_path: Path) -> None:
     files = ok(r[4])["files"]
     assert files[0]["layout"] == "RGBA"
     assert files[0]["channels"][3]["source"]["constant"] == 1.0
-    refused(r[5], "NotYetSupported", '"AO_Mixed"', "R-086")
-    refused(r[6], "NotYetSupported", '"AO_Mixed"', "R-086")
-    refused(r[7], "NotYetSupported", '"Diffuse"', "R-086")
-    refused(r[8], "NotYetSupported", '"Glossiness"', "R-086")
+    refused(r[5], "NotYetSupported", '"AO_Mixed"', "not identified", "R-092")
+    refused(r[6], "NotYetSupported", '"AO_Mixed"', "R-092")
+    refused(r[7], "NotYetSupported", '"Diffuse"', "coverage", "R-092")
+    refused(r[8], "NotYetSupported", '"Glossiness"', "coverage", "R-092")
     normal = ok(r[9])["files"][0]["channels"][0]["source"]
     assert normal["meshMap"] == "Normal" and normal["normal"] == "geometry_only"
     assert ok(r[10])["skipped"][0]["kind"] == "export_error"

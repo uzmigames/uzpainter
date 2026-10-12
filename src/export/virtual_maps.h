@@ -1,7 +1,7 @@
 #pragma once
 
 // The export's virtual maps (docs/architecture/08-export.md §2; task
-// phase1.15_export-plan-compiler, decision 086; parity/semantics/virtual-maps.json). The names
+// phase1.15_export-plan-compiler, decisions 086 and 092; parity/semantics/virtual-maps.json). The names
 // are the documented `virtualMap` `srcMapName`s (Painter's public Python API documentation,
 // export.html); their meaning is Adobe's public output-template documentation ("Output
 // templates": converted maps), their operators are fitted on Tier 0 goldens.
@@ -10,12 +10,15 @@
 //   channel and the height-derived normal, `evaluator/height_to_normal.h`), tagged `combined`.
 // - The geometry-only pass-through is the meshMap `normal_base` (the bound Normal mesh map,
 //   green inverted across conventions), tagged `geometry_only` (EXP-09).
-// - `AO_Mixed`: the published operator (parity/semantics/ao-mixed.json, calibrated: the AO mesh
-//   map times the AO channel at 8-bit precision) misses 30 values of the opacity-0.5 set of
-//   tier0/semantics/ao-mixed against r1, where Painter's own two recordings disagree on 27; it
-//   stays a release gap until recording R-086 and its fit (decision 086).
+// - `AO_Mixed`: the best model of the opacity sweep (the AO mesh map times the AO channel before
+//   its L16 write, written at 8 bits) misses r1 at 31 values, each a few ulps from a 2^-12
+//   boundary: Painter's operand conversions or arithmetic there are not identified (decision
+//   092, recording R-092).
 // - `Diffuse`, `Specular`, `Glossiness`, `Glossiness2`, `Unity4Diff`, `Unity4Gloss`,
-//   `reflection`, `1/ior`, `f0`, `View_2D`: no Tier 0 golden yet (R-086).
+//   `reflection`, `1/ior`, `f0`: fitted exactly on their goldens (virtual-maps.json), but they
+//   read each channel's per-texel coverage, which the evaluator does not give, and constants
+//   where a channel has no layer, seen on one template only (decision 092, recording R-092).
+// - `View_2D`: a shaded render of the 2D view, not an operator on the channels (decision 092).
 //
 // A release-gap map is refused before anything is written (`Support`, CompilePlan).
 //

@@ -172,7 +172,7 @@ Resolved ResolveVirtual(const ChannelSpec& spec, const Root& root, const std::st
     const VirtualMap map = *ParseVirtualMap(spec.name);
     const VirtualMapSupport support = Support(map);
     if (!support.supported) {
-        Gap(what, "the virtualMap \"" + spec.name + "\" has no exact Tier 0 golden yet", support.evidenceOrOwner);
+        Gap(what, "the virtualMap \"" + spec.name + "\" is not reproduced exactly", support.evidenceOrOwner);
     }
     if (map == VirtualMap::Normal_OpenGL || map == VirtualMap::Normal_DirectX) {
         CheckVirtualNormal(root, what);

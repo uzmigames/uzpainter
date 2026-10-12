@@ -53,8 +53,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PUBLISHED = REPO_ROOT / "parity" / "semantics" / "virtual-maps.json"
 SET_MESH_MAP = "substance_painter.textureset.TextureSet.set_mesh_map_resource"
 # Refusals of a golden that are release gaps (never planned differently): native-precision mesh
-# maps (phase1.16) and the virtual maps without an exact golden (recording R-086, decision 086).
-GAP_OWNERS = ("phase1.16_export-processing-encoders", "R-086")
+# maps (phase1.16) and the virtual maps not reproduced exactly (recording R-092, decision 092).
+GAP_OWNERS = ("phase1.16_export-processing-encoders", "R-092")
 
 # plan_many(exe, cases, tmp[, project_path]) of tests/export/test_export_plan.py.
 PlanMany = Callable[..., list[dict[str, Any]]]
@@ -585,16 +585,81 @@ FORMULAS = {
 
 
 GAP_FORMULA = (
-    "Release gap (decision 086): no exact Tier 0 golden yet (recording R-086); a configuration "
-    "naming it is refused with NotYetSupported before anything is written."
+    "Release gap (decisions 086 and 092): not reproduced exactly through the plan; a "
+    "configuration naming it is refused with NotYetSupported before anything is written."
 )
+GAP_CORPUS = (
+    "tier0/semantics/ao-mixed",
+    "tier0/semantics/ao-mixed-opacity",
+    "tier0/semantics/ao-mixed-opacity-float",
+    "tier0/semantics/virtual-maps-converted",
+    "tier0/semantics/virtual-maps-converted-float",
+)
+# The converted maps' fits (decision 092), made on virtual-maps-converted (PNG 16) and its
+# OpenEXR 32f twin. Inputs: L the BaseColor channel's linear sRGB8 operand
+# (`Srgb8OperandTable`), r and m the SpecularRoughness and BaseMetalness codes / 255, in float32;
+# enc(x) = x <= 0.0031308 ? 12.92 x : fma(1.055, exp2(0.41666 log2 x), -0.055) with the
+# recording GPU's exp2 and log2 (hwmath.h); toL(v) = fma(0.114, v, fma(0.299, v, 0.587 v)). The
+# EXR holds the float32 result and the PNG its 16-bit write; an RGBA file loses an all-opaque
+# alpha.
+CONVERTED_FIT = (
+    "Fitted exactly (decision 092): r1 = r2 on every texel of s0-s7 at PNG 16 and OpenEXR 32f, 0 "
+    "differing values in each of the 16 comparisons. Inputs: L the BaseColor channel's linear "
+    "sRGB8 operand, r and m the SpecularRoughness and BaseMetalness values, float32; enc is "
+    "Painter 12.1.5's sRGB encode x <= 0.0031308 ? 12.92 x : fma(1.055, exp2(0.41666 log2 x), "
+    "-0.055) with the recording GPU's exp2 and log2; toL(v) = fma(0.114, v, fma(0.299, v, "
+    "0.587 v)). Where a channel has no layer the map reads L = 1.3, r = 0.5980393 (0x3F19191A) and "
+    "m = 0, not the channel's base value. Still a release gap: the plan needs each channel's "
+    "per-texel coverage (the evaluator gives none), and the uncovered constants were seen on one "
+    "template only (recording R-092)."
+)
+CONVERTED_NOTES = {
+    "Diffuse": f"Operator: enc(L (1 - m)), RGB. {CONVERTED_FIT}",
+    "Specular": f"Operator: enc(fma(L - 0.04, m, 0.04)), RGB. {CONVERTED_FIT}",
+    "Glossiness": f"Operator: toL(1 - r), linear. {CONVERTED_FIT}",
+    "Glossiness2": f"Operator: g = 1 - r, toL(g g), linear. {CONVERTED_FIT}",
+    "Unity4Diff": (
+        "Operator: RGB enc(L); alpha the BaseColor channel's coverage (1 on a filled set, written "
+        f"RGB; 0 without a layer, written RGBA). {CONVERTED_FIT}"
+    ),
+    "Unity4Gloss": (
+        "Operator: RGB (m + (1 - r)) 0.5, linear; alpha the SpecularRoughness channel's coverage "
+        f"(whether BaseMetalness's coverage also counts is not recorded). {CONVERTED_FIT}"
+    ),
+    "reflection": f"Operator: fma(enc(L) - 1, enc(m), 1), RGB. {CONVERTED_FIT}",
+    "1/ior": (
+        "Operator: k = 0.66666663 (0x3F2AAAAA), toL(fma(-k, m, k)), linear; k (1 - m) and "
+        f"float32(2/3) miss. {CONVERTED_FIT}"
+    ),
+    "f0": f"Operator: fma(0.96, m, 0.04), grey RGB, linear. {CONVERTED_FIT}",
+    "View_2D": (
+        "Not fitted (decision 092): a shaded render, not an operator on the channels. It varies "
+        "texel to texel without period where roughness is above 0, and differs between sets with "
+        "identical inputs (s5 and s6 at 3 texels). It depends on the viewport's environment, "
+        "lighting and sampling; its PNG 16 is the 16-bit write of its EXR 32f (0 differing). "
+        "Release gap: it needs a reproduction of Painter's 2D view render."
+    ),
+}
 AO_MIXED_NOTES = (
-    "The calibrated operator of parity/semantics/ao-mixed.json (the AO mesh map times the AO "
-    "channel, written at 8-bit precision) is exact on ao-mixed s0, s2 and s3 but misses s1 (an AO "
-    "fill at opacity 0.5) by one 8-bit code at 30 values against r1 and 17 against r2, every one "
-    "within 0.03 of a 2^-12 step; Painter's own r1 and r2 differ at 27 AO_Mixed values there while "
-    "their AO channel exports are identical. Calibrated is not parity: the plan refuses AO_Mixed "
-    "until R-086 (an opacity sweep recorded twice per session) is fitted."
+    "Not exact (decision 092). Recording R-086a (ao-mixed-opacity and its OpenEXR 32f twin, "
+    "decision 087) shows AO_Mixed on the 8-bit lattice before encoding, step A = step B, and r1"
+    " != r2 by one 8-bit step at 9 to 41 values per set, deterministically. Best model: alpha ="
+    " the layer opacity's L16 code / 65535 and C = the fill's stored L16 code / 65535 "
+    "(float32); c = fma(C - 1, alpha, 1), the AO channel before its L16 write (1 without a "
+    "layer; WriteUnorm16(c) is the channel's export, 0 differing on r1); a = the AO mesh map "
+    "code / 255; v = a c (float32); AO_Mixed = WriteUnorm(v, 8) (12 fractional bits, nearest, "
+    "ties down). It misses r1 at 31 values over the three goldens (ao-mixed-opacity s0-s7 "
+    "0/9/2/0/0/9/2/0, its twin the same, ao-mixed s0-s3 0/9/0/0), each within 3 ulps of v from "
+    "a 2^-12 boundary; r2 misses more and is not explained. On the row where C = 0, c = 1 - "
+    "alpha is exact in any order of operations, yet v must rise by 2 to 3 ulps, so no correctly"
+    " rounded float32 evaluation of the tested inputs reproduces r1. Rejected: more than 40 "
+    "orders of operations with and without fma, multiply blends over the mesh map, fixed-point "
+    "(2^12 to 2^29) and half-float intermediates, a 16-bit intermediate, other conversions of "
+    "a, C and alpha, and the recording GPU's measured exp2, log2 and reciprocal. Unknown: "
+    "Painter's operand conversions or arithmetic on this path. Recording R-092 isolates them: a"
+    " constant AO mesh map with a varying channel, a constant channel with a varying mesh map, "
+    "values at the missed coordinates, and the same exports after reopen. Calibrated is not "
+    "parity: the plan refuses AO_Mixed."
 )
 
 
@@ -603,7 +668,7 @@ def publish(report: dict[str, Any]) -> dict[str, Any]:
     with their residuals through the plan, every other documented virtual map a gap refused
     before writing."""
     entries = []
-    corpus = sorted({f"tier0/{name}" for name in VIRTUAL_GOLDENS} | {"tier0/semantics/ao-mixed"})
+    corpus = sorted({f"tier0/{name}" for name in VIRTUAL_GOLDENS} | set(GAP_CORPUS))
     for name, (entry_id, components, meaning) in DOCUMENTED.items():
         residuals = [
             residual(g, key, recording, "16-bit code value", diff)
@@ -612,7 +677,7 @@ def publish(report: dict[str, Any]) -> dict[str, Any]:
         ]
         supported = name in FORMULAS
         formula = FORMULAS.get(name, GAP_FORMULA)
-        notes = AO_MIXED_NOTES if name == "AO_Mixed" else None
+        notes = AO_MIXED_NOTES if name == "AO_Mixed" else CONVERTED_NOTES.get(name)
         entries.append(
             entry(
                 entry_id,

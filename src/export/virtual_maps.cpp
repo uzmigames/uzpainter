@@ -15,9 +15,15 @@ constexpr std::array<std::string_view, kVirtualMapCount> kNames{
     "Unity4Gloss",   "reflection",     "1/ior",      "Glossiness2", "f0",   "View_2D",
 };
 
-/// The owner of the virtual maps without a Tier 0 golden: a recording and a fit (decision 086).
-constexpr std::string_view kVirtualGapOwner =
-    "phase1.18_export-engine: Tier 0 recording R-086 and its fit (decision 086)";
+/// The owners of the virtual maps not reproduced exactly (decision 092).
+constexpr std::string_view kAoMixedOwner =
+    "phase1.18_export-engine: Painter's AO_Mixed arithmetic is not identified (the best model misses r1 "
+    "at 31 values); Tier 0 recording R-092 and its fit (decision 092)";
+constexpr std::string_view kConvertedOwner =
+    "phase1.18_export-engine: fitted, but it needs each channel's per-texel coverage from the evaluator "
+    "and the uncovered constants of Tier 0 recording R-092 (decision 092)";
+constexpr std::string_view kView2dOwner =
+    "a reproduction of Painter's 2D view render, which no task owns yet (decision 092)";
 
 }  // namespace
 
@@ -39,20 +45,17 @@ VirtualMapSupport Support(VirtualMap map) {
             return {true, 3,
                     "tier0/semantics/height-normal-plane-amplitudes, height-normal-sphere, height-normal-bevelled-cube, "
                     "blend-normal-channel and the semantics-ui height-normal goldens (phase1.12, decisions 064, 065)"};
-        case VirtualMap::AO_Mixed:
-            // The calibrated operator of parity/semantics/ao-mixed.json misses the opacity-0.5 set
-            // of tier0/semantics/ao-mixed, where Painter's two recordings also disagree.
-            return {false, 1, std::string(kVirtualGapOwner)};
+        case VirtualMap::AO_Mixed: return {false, 1, std::string(kAoMixedOwner)};
         case VirtualMap::Diffuse:
         case VirtualMap::Specular:
         case VirtualMap::reflection:
         case VirtualMap::f0:
-        case VirtualMap::Unity4Diff:
-        case VirtualMap::View_2D: return {false, 3, std::string(kVirtualGapOwner)};
+        case VirtualMap::Unity4Diff: return {false, 3, std::string(kConvertedOwner)};
+        case VirtualMap::View_2D: return {false, 3, std::string(kView2dOwner)};
         case VirtualMap::Glossiness:
         case VirtualMap::Glossiness2:
         case VirtualMap::Unity4Gloss:
-        case VirtualMap::OneOverIor: return {false, 1, std::string(kVirtualGapOwner)};
+        case VirtualMap::OneOverIor: return {false, 1, std::string(kConvertedOwner)};
     }
     return {};
 }
