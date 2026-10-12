@@ -27,7 +27,7 @@ DAG gate: rebuild-from-dump equality on wand — the wand v1 project dumped, reb
   - `isolate` restores state;
   - the wand's export is refused on both sides (phase1.25 item 2.7);
   - `material_views` is refused (8-bit sRGB `T_base`, phase1.15_compositor-colour-fits item 2.2).
-- Every wand test waits on the R9 re-pin of the drifted Assets3D `painter_layer_stack.py` (decision 144).
+- After the R9 re-pin (decision 144), the same results hold from the repository: 2 passed, 2 skipped on their refusals.
 
 ## Impact
 - Affected specs: `recipe`

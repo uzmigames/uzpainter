@@ -38,4 +38,6 @@ No model panel was consulted: these are test-design choices with no scope conseq
    - 1.1 to 1.3 stay open: P1-WAND, and the children, which are open on it.
    - 3.1's byte equality waits for phase1.25 item 2.7, then phase1.15_compositor-colour-fits item 2.2.
    - 3.2's material views wait for phase1.15_compositor-colour-fits item 2.2.
-   - 4.1 waits on all of the above, and every wand test waits on the re-pin (decision 144).
+   - 4.1 waits on all of the above.
+
+**Addendum (2026-10-12).** After the re-pin (decision 144) was merged, `tests/parity/recipe/wand_v1` ran from the repository, with no staged bytes. 2 passed (digest equality, `isolate`) and 2 skipped, with the refusals above as reasons.

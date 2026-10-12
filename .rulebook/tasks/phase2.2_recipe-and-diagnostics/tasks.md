@@ -17,4 +17,4 @@
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation — `03-project-model.md` §7, `parity/CONTRACT.md` §7, `parity/GUARD.md`, decision 142
 - [x] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.3 Run tests and confirm they pass. On 2026-10-12, after the R9 re-pin (decision 144), `tests/parity/recipe/wand_v1` ran from the repository: 2 passed (digest equality, `isolate`) and 2 skipped on their stated refusals, which stay under 3.1 and 3.2. `test_recipe_rebuild_report.py`, `test_guard.py` and `test_schemas.py` gave 136 passed, and `tier1/test_tier1_compare.py` 20 passed
