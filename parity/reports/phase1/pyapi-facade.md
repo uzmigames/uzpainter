@@ -41,4 +41,4 @@ The recorder's own Painter-side code runs inside UzPainter's interpreter against
 ## Open
 
 - **Item 1.1.** `phase1.18_export-engine` has not been accepted.
-- **Recordings P20-A and P20-B** (decision 107): unrecorded fill-channel defaults and bitmap spaces, and the dense sRGB decode. Owner: phase1.14_compositor-core.
+- **Recordings P20-A and P20-B** (decision 107): unrecorded fill-channel defaults and bitmap spaces, and the dense sRGB decode. Owner: phase1.15_compositor-colour-fits item 2.1 (decision 130).

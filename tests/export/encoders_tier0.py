@@ -458,7 +458,8 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
     written by `WriteExport` at PNG 8, PNG 16, OpenEXR 16f and OpenEXR 32f: compared byte for
     byte with Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032). Returns the
     counts, the differing files, and the sets the evaluator refuses before writing because their
-    bitmap is a grey image in the sRGB space (`GREY_SRGB_BITMAP`, phase1.14_compositor-core)."""
+    bitmap is a grey image in the sRGB space (`GREY_SRGB_BITMAP`,
+    phase1.15_compositor-colour-fits)."""
     needs_store()
     root = manifest_root(current_envelope()) / "tier0" / "semantics"
     golden = load(locate(), root / "export-bit-depth.json")
