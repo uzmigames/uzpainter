@@ -59,6 +59,7 @@
 // naming its owner or the recording it needs).
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -225,6 +226,9 @@ struct SourceInputs {
     std::string templateId{evaluator::kDefaultTemplateId};
     std::shared_ptr<const evaluator::IResourceProvider> resources;
     std::shared_ptr<const evaluator::IGeometryMaskProvider> geometry;
+    /// Called before file `file` (of `files`) is evaluated (`EncodeExport` step 2); false stops the
+    /// export there with an `export:` failure and nothing written (a job's file checkpoint).
+    std::function<bool(size_t file, size_t files)> beforeFile;
 };
 
 /// A planned file's content before processing: its channels in destination order, float32

@@ -79,6 +79,9 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
     encoded.reserve(plan.files.size());
     for (size_t i = 0; i < plan.files.size(); ++i) {
         const PlannedFile& file = plan.files[i];
+        if (inputs.beforeFile && !inputs.beforeFile(i, plan.files.size())) {
+            return ExportFail("stopped before " + file.relativePath);
+        }
         render::Result<FileRaster> raster = EvaluateFileOn(project, revision, file, inputs, templates, store, cache);
         if (!raster) return render::Unexpected(raster.error());
         try {
