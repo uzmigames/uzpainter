@@ -199,6 +199,10 @@ The hooks are compiled only when `UZP_WORKER_FAULT_HOOKS` is defined. `build.zig
 | `remove_device` | The next GPU call first runs `ID3D12Device5::RemoveDevice` on the engine thread and fails with `device_removed`. |
 | `gpu_stall` | The next GPU call first makes the direct queue wait on a fence nothing signals, so the deadline wait returns `timeout`. |
 | `kill_before_reply` | The next call runs and commits, then the worker dies before its reply. |
+| `kill_during_save` | The next `project_save` terminates the worker (exit 77) at the first page write of its checkpoint commit, through the store's `kill_during_commit`: the rollback journal is hot, and the reopen rolls the checkpoint back. |
+| `kill_during_compaction` | The next `project_save {mode: full}` terminates the worker (exit 77) while `VACUUM INTO` writes the compacted copy, through the store's `kill_during_vacuum`: the checkpoint is committed, and the reopen removes the partial copy. |
+
+The two save faults act inside that save only (`SaveFaultScope`). They reach the store's own hooks (`src/store/fault.h`), which a Debug `UzPainter.exe` compiles in: the store sources are built with `UZP_STORE_FAULT_HOOKS` and the project's connections go through the store's forwarding VFS, inert unless armed. Release builds link the hook-free `uzp_store.lib` (decision 151).
 
 `UZP_TEST_HANDSHAKE`, a JSON object in the environment, replaces handshake fields for the mismatch tests. `UZP_TEST_KILL_ON_OPEN`, a file holding a count, makes `worker/reopen` terminate the worker while the count is above zero (decrementing it), so a worker can die while the supervisor reopens the project. The Vulkan device-loss hook waits for the Vulkan device, which phase3.1_vulkan-compute-parity items 2.2 and 3.4 deliver (decision 121).
 
@@ -233,3 +237,18 @@ All tests are in `tests/supervisor/`:
   - `uzpainter.jobs` receipts in the single-process path.
 - `test_admission.py` also covers the migration of a version 0 ledger and the sweep of orphaned jobs.
 - `test_supervisor_gpu.py` runs on DX12 and skips under `UZP_NO_GPU=1`. It checks that the device lives only in the worker, the evaluation payload by path and hash, and device removal and GPU stall with relaunch on the same backend.
+- `test_settling.py` holds the settling cases of 02 §7 that the children's tests do not cover, over stdio MCP (phase2.4_supervisor-worker, decisions 150 and 151):
+  - the worker killed inside a save's checkpoint commit and inside a full save's compaction;
+  - a client disconnect while a long mutating job runs, and a reconnect on the same ledger that commits the retried key once;
+  - a failed single call, an unwrapped script whose third call raises, and a raising native `Transaction`;
+  - `run_python` refused without `--allow-python`, and `gpu_backend_unavailable` while the export, a save and a mutation run;
+  - the per-call overhead of `run_python` through the supervisor against the same snippets in one `UzPainter.exe run` script.
+
+### Settling evidence (phase2.4)
+
+Each test that settles a §7 case carries `@pytest.mark.settling(<case>)`; the cases and the backends each must pass on are listed in `tools/parity/settling/report.py`. `UZP_SUPERVISOR_BACKEND` (default `vulkan`) is the backend the tagged MCP tests start their supervisors on; `test_supervisor_gpu.py` always runs DX12. With `UZP_SETTLING_REPORT=<path>` a run merges its results into that report: per case and backend, pass or fail, the run time, the recoveries the supervisor reported (cause, `recovery_ms`, attempts), the exe's SHA-256 and the date; and per backend and snippet, the overhead's median, p90 and maximum. A case that has not run on a backend is listed `not_run`, and a device case on Vulkan `pending` under decision 121. The published report is `parity/reports/phase2/supervisor-settling.json`, checked by the repository guard:
+
+```
+UZP_NO_GPU=1 UZP_SETTLING_REPORT=parity/reports/phase2/supervisor-settling.json python -m pytest tests/supervisor -m settling
+UZP_SUPERVISOR_BACKEND=dx12 UZP_SETTLING_REPORT=parity/reports/phase2/supervisor-settling.json python -m pytest tests/supervisor -m settling
+```

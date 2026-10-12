@@ -6,8 +6,9 @@
 // the process after the durable commit before the result is returned, and kill the process or
 // fail the I/O while `VACUUM INTO` writes its output and between `VACUUM INTO` and the rename
 // (`compact`, `save_as`, `save_as_copy`; `compact.h`). Everything here exists
-// only when `UZP_STORE_FAULT_HOOKS` is defined, which only the store's test executable does
-// (`build.zig`); `uzp_store.lib` and the application contain none of it.
+// only when `UZP_STORE_FAULT_HOOKS` is defined, which the store's test executables and a Debug
+// `UzPainter.exe` do (`build.zig`; the worker's `test_fault` arms them inside a save, decision
+// 151); `uzp_store.lib` and a release application contain none of it.
 //
 // The hooks work through a SQLite VFS (`VfsName()`) that wraps the platform VFS and forwards
 // every call; the store opens its connections through it in the test build.

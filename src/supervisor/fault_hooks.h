@@ -17,6 +17,11 @@
 //   signals, so its deadline wait returns `timeout`;
 // - `kill_before_reply`: the next call runs to its end, then the worker terminates before the
 //   reply is written (the call's commit is durable, its acknowledgement is lost).
+// - `kill_during_save`: the next `project_save` terminates the worker at the first page write of
+//   its checkpoint commit (the store's `kill_during_commit`: the rollback journal is hot);
+// - `kill_during_compaction`: the next `project_save {mode: full}` terminates the worker while
+//   `VACUUM INTO` writes the compacted copy (the store's `kill_during_vacuum`), after the
+//   checkpoint committed. Both act inside that save only (`SaveFaultScope`, decision 151).
 //
 // `UZP_TEST_HANDSHAKE`, a JSON object in the worker's environment, replaces fields of the
 // handshake frame (the supervisor's mismatch tests).
@@ -36,7 +41,7 @@
 
 namespace uzp::supervisor::fault {
 
-enum class Fault { kill, abort, seh, remove_device, gpu_stall, kill_before_reply };
+enum class Fault { kill, abort, seh, remove_device, gpu_stall, kill_before_reply, kill_during_save, kill_during_compaction };
 
 /// Exit code of a worker terminated by `kill` or `kill_before_reply`.
 inline constexpr unsigned kKillExitCode = 77;
@@ -52,6 +57,16 @@ void Trigger(Fault fault);
 /// On the engine thread, before a GPU request: performs the armed GPU fault (then disarmed) and
 /// returns the error the request fails with.
 [[nodiscard]] render::Result<void> InjectGpuFault(render::EngineContext& context);
+
+/// Around a save: arms the store fault of a pending `kill_during_save` or
+/// `kill_during_compaction` (then no longer pending) and disarms it when the save returns or
+/// throws, so it never acts on another commit.
+struct SaveFaultScope {
+    SaveFaultScope();
+    ~SaveFaultScope();
+    SaveFaultScope(const SaveFaultScope&) = delete;
+    SaveFaultScope& operator=(const SaveFaultScope&) = delete;
+};
 
 /// Whether `kill_before_reply` is armed (and disarms it).
 [[nodiscard]] bool TakeKillBeforeReply();

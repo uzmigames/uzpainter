@@ -7,6 +7,7 @@
 #include "dx12_device.h"
 #include "dx12_guids.h"
 #include "render/device.h"
+#include "store/fault.h"
 
 #include <windows.h>
 #include <wrl/client.h>
@@ -23,6 +24,7 @@ enum class GpuFault : int { none, remove_device, gpu_stall };
 
 std::atomic<GpuFault> g_gpu{GpuFault::none};
 std::atomic<bool> g_kill_before_reply{false};
+std::atomic<store::fault::Fault> g_save_fault{store::fault::Fault::none};
 
 render::Dx12Device* Dx12(render::EngineContext& context) { return dynamic_cast<render::Dx12Device*>(&context.Device()); }
 
@@ -35,6 +37,8 @@ std::optional<Fault> Parse(std::string_view name) {
     if (name == "remove_device") return Fault::remove_device;
     if (name == "gpu_stall") return Fault::gpu_stall;
     if (name == "kill_before_reply") return Fault::kill_before_reply;
+    if (name == "kill_during_save") return Fault::kill_during_save;
+    if (name == "kill_during_compaction") return Fault::kill_during_compaction;
     return std::nullopt;
 }
 
@@ -62,6 +66,12 @@ void Trigger(Fault fault) {
             break;
         case Fault::kill_before_reply:
             g_kill_before_reply = true;
+            break;
+        case Fault::kill_during_save:
+            g_save_fault = store::fault::Fault::kill_during_commit;
+            break;
+        case Fault::kill_during_compaction:
+            g_save_fault = store::fault::Fault::kill_during_vacuum;
             break;
     }
 }
@@ -98,6 +108,13 @@ render::Result<void> InjectGpuFault(render::EngineContext& context) {
 }
 
 bool TakeKillBeforeReply() { return g_kill_before_reply.exchange(false); }
+
+SaveFaultScope::SaveFaultScope() {
+    const store::fault::Fault fault = g_save_fault.exchange(store::fault::Fault::none);
+    if (fault != store::fault::Fault::none) store::fault::Arm(fault);
+}
+
+SaveFaultScope::~SaveFaultScope() { store::fault::Arm(store::fault::Fault::none); }
 
 void MaybeKillOnOpen() {
     const char* path = std::getenv("UZP_TEST_KILL_ON_OPEN");

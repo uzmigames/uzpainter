@@ -1,0 +1,292 @@
+{
+  "cases": [
+    {
+      "backend": "dx12",
+      "id": "worker_killed_during_long_job",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "worker_killed_during_long_job",
+      "recoveries": [
+        {
+          "attempts": 1,
+          "cause": "terminated",
+          "recovery_ms": 233.168
+        },
+        {
+          "attempts": 1,
+          "cause": "terminated",
+          "recovery_ms": 550.876
+        }
+      ],
+      "result": "pass",
+      "seconds": 5.588
+    },
+    {
+      "backend": "dx12",
+      "id": "worker_killed_during_save",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "worker_killed_during_save",
+      "recoveries": [
+        {
+          "attempts": 1,
+          "cause": "terminated",
+          "recovery_ms": 1075.95
+        }
+      ],
+      "result": "pass",
+      "seconds": 4.986
+    },
+    {
+      "backend": "dx12",
+      "id": "worker_killed_during_compaction",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "worker_killed_during_compaction",
+      "recoveries": [
+        {
+          "attempts": 1,
+          "cause": "terminated",
+          "recovery_ms": 86.594
+        }
+      ],
+      "result": "pass",
+      "seconds": 3.256
+    },
+    {
+      "backend": "dx12",
+      "id": "worker_killed_from_outside",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "worker_killed_from_outside",
+      "recoveries": [
+        {
+          "attempts": 1,
+          "cause": "terminated",
+          "recovery_ms": 69.25
+        }
+      ],
+      "result": "pass",
+      "seconds": 2.993
+    },
+    {
+      "backend": "dx12",
+      "id": "native_abort",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "native_abort",
+      "recoveries": [
+        {
+          "attempts": 1,
+          "cause": "abort",
+          "recovery_ms": 105.635
+        }
+      ],
+      "result": "pass",
+      "seconds": 3.424
+    },
+    {
+      "backend": "dx12",
+      "id": "native_access_violation",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "native_access_violation",
+      "recoveries": [
+        {
+          "attempts": 1,
+          "cause": "native_fault",
+          "recovery_ms": 143.047
+        }
+      ],
+      "result": "pass",
+      "seconds": 4.214
+    },
+    {
+      "backend": "dx12",
+      "id": "commit_then_die_retry",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "commit_then_die_retry",
+      "recoveries": [
+        {
+          "attempts": 1,
+          "cause": "terminated",
+          "recovery_ms": 174.301
+        }
+      ],
+      "result": "pass",
+      "seconds": 4.175
+    },
+    {
+      "backend": "dx12",
+      "id": "replay_inside_window",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "id": "replay_inside_window",
+      "recoveries": [],
+      "result": "pass",
+      "seconds": 11.349
+    },
+    {
+      "backend": "dx12",
+      "id": "replay_beyond_retention_lost_ledger",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "id": "replay_beyond_retention_lost_ledger",
+      "recoveries": [],
+      "result": "pass",
+      "seconds": 11.349
+    },
+    {
+      "backend": "dx12",
+      "id": "gpu_stall",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "decision": 121,
+      "id": "gpu_stall",
+      "result": "pending"
+    },
+    {
+      "backend": "dx12",
+      "id": "device_lost",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "decision": 121,
+      "id": "device_lost",
+      "result": "pending"
+    },
+    {
+      "backend": "dx12",
+      "id": "client_disconnect_reconnect",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "client_disconnect_reconnect",
+      "metrics": {
+        "reconnect_ms": 1217.698
+      },
+      "recoveries": [],
+      "result": "pass",
+      "seconds": 7.836
+    },
+    {
+      "backend": "dx12",
+      "id": "failure_comparison",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "failure_comparison",
+      "recoveries": [],
+      "result": "pass",
+      "seconds": 3.639
+    },
+    {
+      "backend": "dx12",
+      "id": "python_disabled",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "python_disabled",
+      "recoveries": [],
+      "result": "pass",
+      "seconds": 3.744
+    },
+    {
+      "backend": "vulkan",
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "gpu_status": "unavailable",
+      "id": "gpu_backend_unavailable",
+      "recoveries": [],
+      "result": "pass",
+      "seconds": 4.539
+    }
+  ],
+  "overhead": [
+    {
+      "backend": "vulkan",
+      "calls": 50,
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "mcp_median_ms": 51.982,
+      "overhead_max_ms": 48.433,
+      "overhead_median_ms": 17.892,
+      "overhead_p90_ms": 40.466,
+      "run_median_ms": 34.089,
+      "snippet": "mutation"
+    },
+    {
+      "backend": "vulkan",
+      "calls": 50,
+      "date": "2026-10-12",
+      "exe_sha256": "4fb4d965aa6019050e7d71bd6566094442450549c3ded628b746f7120a70e611",
+      "mcp_median_ms": 12.598,
+      "overhead_max_ms": 32.712,
+      "overhead_median_ms": 12.586,
+      "overhead_p90_ms": 16.407,
+      "run_median_ms": 0.012,
+      "snippet": "read"
+    }
+  ],
+  "schema": "uzpainter/supervisor-settling/1",
+  "task": "phase2.4_supervisor-worker"
+}

@@ -14,7 +14,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from tests.supervisor.conftest import (
+    BACKEND,
     PLANE,
     Mcp,
     kill_pid,
@@ -23,7 +26,7 @@ from tests.supervisor.conftest import (
     wait_until_gone,
 )
 
-BASE = ("--gpu-backend", "vulkan", "--allow-python", "--test-faults")
+BASE = ("--gpu-backend", BACKEND, "--allow-python", "--test-faults")
 TERMINAL = ("succeeded", "failed", "cancelled", "interrupted")
 # Painter's json_config of one 16-bit height PNG of the plane fixture (tests/python's export).
 EXPORT_CONFIG: dict[str, Any] = {
@@ -238,6 +241,7 @@ def test_cancel_before_and_after_commit(painter: Path, tmp_path: Path, sessions:
     assert session.close() == 0
 
 
+@pytest.mark.settling("worker_killed_during_long_job")
 def test_a_worker_killed_during_a_long_job_is_interrupted_and_resolved(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:
