@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisite accepted: phase1.14_compositor-core
+- [x] 1.1 Prerequisite accepted: phase1.14_compositor-core (archived 2026-10-12)
 
 ## 2. Implementation
 - [ ] 2.1 (decision 130, from phase1.14_compositor-core item 2.9; decisions 108 §4 and 117) Record P20-A (fill channel defaults) and P20-B (dense sRGB decode), the recordings of decision 107, then fit the facade's colour tables to them exactly: `DEFAULT_SOURCES` (`python/uzpainter_facade/nodes.py`), `default_bitmap_space`, `available_bitmap_spaces` and the float32 sRGB decode (`colour.py`)

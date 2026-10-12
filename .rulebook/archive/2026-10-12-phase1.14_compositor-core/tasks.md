@@ -26,7 +26,8 @@
   - Decision 082: `core::NotYetSupported` (transaction error type), `evaluator::RequireSupported` (`support.h`), `ErrorClassName` (`unsupported_*` → NotYetSupported; diagnostics' argument refusals → new `invalid_argument`); native case `not-yet-supported` (30 features).
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance (P1-COMPOSITOR gate): Tier 0 semantics exact for the implemented subset; report written to `parity/reports/phase1/` (numbers and hashes only) for the G1 gate record
+- [x] 4.1 Acceptance (P1-COMPOSITOR gate): Tier 0 semantics exact for the implemented subset; report written to `parity/reports/phase1/` (numbers and hashes only) for the G1 gate record
+  - `parity/reports/phase1/compositor-core.md` (final run, item 3.1): every compared map exact against r1 (1850 of 1850) and every comparison a pass (3639); the r2 differences are oracle instability (36 maps, r1 the target, decision 032), not UzPainter residuals. What lies outside the subset is refused before any mutation and has a named owner: Blur and the other filter effects (decision 069, phase3.2_proc-filter-families), rotated, non-square and Height minification (decision 084, `compositor:minification-rotated`) and the other release gaps of `tools/capabilities/compositor-capabilities.json` (decision 081), the unrecorded height and normal inputs (decision 079), and the colour fits (decision 130, phase1.15_compositor-colour-fits). The 46 recorded goldens outside the union are export recordings that the export tasks own.
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
