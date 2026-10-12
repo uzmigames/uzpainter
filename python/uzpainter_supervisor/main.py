@@ -5,8 +5,11 @@ are the worker's own (`tools/list` asks the worker) plus `supervisor_status` and
 mutating tool's schema takes its `idempotency_key` and `expected_revision` among the arguments
 (`public_schema`); both may be omitted, and the supervisor then generates the key and resolves
 the precondition. Every call goes through `admission.Admission`, which lifts them into the pipe
-request. The tool registry with its schemas, HTTP mode, roots, resources and prompts come with
-phase2.5-phase2.8.
+request. A long tool (the worker lists it as `long`) takes `wait` too and runs as a job
+(phase2.3): its progress reaches a client that waits as `notifications/progress` on the request's
+progress token, with `{job_id, status, progress, message}` under `_meta["uzpainter/job"]`; the
+supervisor's `job_status`, `job_result`, `job_cancel` and `job_list` follow it. The tool registry
+with its schemas, HTTP mode, roots, resources and prompts come with phase2.5-phase2.8.
 """
 
 from __future__ import annotations
@@ -33,6 +36,8 @@ EXIT_FATAL = 4
 
 STATUS_TOOL = "supervisor_status"
 WAIT_IDLE_TOOL = "wait_idle"
+JOB_META_KEY = "uzpainter/job"
+JOB_LIST_LIMIT = 50
 # The MCP arguments of a mutating tool carry its key and precondition (02 §2); the supervisor
 # lifts them into the pipe request, so the worker's own schema does not list them. Both may be
 # omitted together; a client that supplies its own key supplies its original precondition with
@@ -49,6 +54,46 @@ MUTATION_PROPERTIES: dict[str, Any] = {
         "description": "The revision the mutation is based on (its precondition), kept with "
         "the key on every retry; resolved by the supervisor when both are omitted.",
     },
+}
+WAIT_PROPERTY: dict[str, Any] = {
+    "type": "boolean",
+    "description": "Wait for the job's end (streaming its progress) instead of returning "
+    "{job_id, status} at once.",
+}
+JOB_ID_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"job_id": {"type": "string", "minLength": 1}},
+    "required": ["job_id"],
+    "additionalProperties": False,
+}
+JOB_LIST_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": f"The newest jobs to list ({JOB_LIST_LIMIT} when omitted).",
+        }
+    },
+    "additionalProperties": False,
+}
+# The supervisor's job tools: their descriptions and schemas.
+JOB_TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
+    "job_status": (
+        "A job's status: a running job's progress, message and commit point, or a finished "
+        "job's terminal state (succeeded, failed, cancelled or interrupted) and resolution.",
+        JOB_ID_SCHEMA,
+    ),
+    "job_result": (
+        "A finished job's reply with its receipt, as it was answered.",
+        JOB_ID_SCHEMA,
+    ),
+    "job_cancel": (
+        "Asks a running long job to stop at its next checkpoint (acknowledged at once); its "
+        "receipt then says whether it stopped before or after its commit point.",
+        JOB_ID_SCHEMA,
+    ),
+    "job_list": ("The ledger's newest jobs, newest first.", JOB_LIST_SCHEMA),
 }
 WAIT_IDLE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -69,6 +114,8 @@ def public_schema(tool: dict[str, Any]) -> dict[str, Any]:
     schema: dict[str, Any] = copy.deepcopy(tool["inputSchema"])
     if tool["mutating"]:
         schema.setdefault("properties", {}).update(copy.deepcopy(MUTATION_PROPERTIES))
+    if tool.get("long"):
+        schema.setdefault("properties", {})["wait"] = copy.deepcopy(WAIT_PROPERTY)
     return schema
 
 
@@ -151,6 +198,7 @@ async def _serve(config: worker_module.WorkerConfig, build: str, ledger: Ledger)
         log.critical("fatal supervisor error: %s", error)
         return EXIT_FATAL
     admission = Admission(supervisor, ledger)
+    supervisor.on_job_event = admission.on_job_event
     try:
         await _run_mcp(supervisor, admission, build)
     finally:
@@ -164,14 +212,14 @@ async def _run_mcp(supervisor: worker_module.Supervisor, admission: Admission, b
     from mcp.server.lowlevel import Server
     from mcp.server.stdio import stdio_server
 
-    mutating: dict[str, bool] = {}
+    known: dict[str, dict[str, Any]] = {}
 
     async def worker_tools() -> list[dict[str, Any]]:
         reply = await supervisor.request({"method": "tools/list"})
         if "error" in reply:  # the worker died while listing: ask the relaunched one
             reply = await supervisor.request({"method": "tools/list"})
         listed: list[dict[str, Any]] = reply.get("result", {}).get("tools", [])
-        mutating.update({tool["name"]: bool(tool["mutating"]) for tool in listed})
+        known.update({tool["name"]: tool for tool in listed})
         return listed
 
     async def list_tools(ctx: Any, params: Any) -> Any:
@@ -186,11 +234,20 @@ async def _run_mcp(supervisor: worker_module.Supervisor, admission: Admission, b
             ),
             types.Tool(
                 name=WAIT_IDLE_TOOL,
-                description="Waits until no mutating call runs; a timeout is an error.",
+                description="Waits until no mutating call or long job runs; a timeout is an error.",
                 input_schema=copy.deepcopy(WAIT_IDLE_SCHEMA),
                 annotations=types.ToolAnnotations(read_only_hint=True),
             ),
         ]
+        for name, (description, schema) in JOB_TOOLS.items():
+            tools.append(
+                types.Tool(
+                    name=name,
+                    description=description,
+                    input_schema=copy.deepcopy(schema),
+                    annotations=types.ToolAnnotations(read_only_hint=name != "job_cancel"),
+                )
+            )
         for tool in await worker_tools():
             tools.append(
                 types.Tool(
@@ -219,10 +276,61 @@ async def _run_mcp(supervisor: worker_module.Supervisor, admission: Admission, b
                     }
                 )
             return _tool_result(await admission.wait_idle(float(timeout)))
-        if params.name not in mutating:
+        if params.name in JOB_TOOLS:
+            return _tool_result(await job_tool(params.name, arguments))
+        if params.name not in known:
             await worker_tools()
-        reply = await admission.call(params.name, arguments, mutating.get(params.name, False))
+        tool = known.get(params.name, {})
+        reply = await admission.call(
+            params.name,
+            arguments,
+            bool(tool.get("mutating")),
+            long=bool(tool.get("long")),
+            commit_point=tool.get("commit_point"),
+            notify=progress_sender(ctx),
+        )
         return _tool_result(reply)
+
+    async def job_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if name == "job_list":
+            limit = arguments.get("limit", JOB_LIST_LIMIT)
+            if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+                return _invalid("job_list's limit must be a whole number of at least 1")
+            return admission.job_list(limit)
+        job_id = arguments.get("job_id")
+        if not isinstance(job_id, str) or not job_id:
+            return _invalid(f"{name} needs job_id")
+        if name == "job_status":
+            return admission.job_status(job_id)
+        if name == "job_result":
+            return admission.job_result(job_id)
+        return await admission.cancel(job_id)
+
+    def progress_sender(ctx: Any) -> Any:
+        """Sends a waited job's events as `notifications/progress` on the request's token."""
+        meta = (ctx.params or {}).get("_meta")
+        token = meta.get("progressToken") if isinstance(meta, dict) else None
+        if isinstance(token, bool) or not isinstance(token, str | int):
+            return None
+
+        async def notify(event: dict[str, Any]) -> None:
+            await ctx.session.send_notification(
+                types.ProgressNotification(
+                    params=types.ProgressNotificationParams(
+                        progress_token=token,
+                        progress=event["progress"],
+                        total=1.0,
+                        message=f"{event['status']}: {event['message']}",
+                        meta={JOB_META_KEY: event},
+                    )
+                ),
+                related_request_id=ctx.request_id,
+            )
+
+        return notify
+
+    def _invalid(message: str) -> dict[str, Any]:
+        return {"error": {"code": "invalid_arguments", "message": message, "details": {}}}
 
     def _tool_result(body: dict[str, Any]) -> Any:
         return types.CallToolResult(

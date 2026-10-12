@@ -200,11 +200,6 @@ struct Tool {
     json::Object input_schema;
     bool mutating = false;
     bool gpu = false;
-    /// A long operation: it runs as a job (`RunJob`), reports progress and can be cancelled.
-    bool long_job = false;
-    /// A long job's commit point: "revision" (a project revision with its operation row),
-    /// "publication" (an export generation), or none (it commits nothing).
-    std::optional<std::string> commit_point;
 };
 
 /// The long job the command thread runs, and the cancellations the pipe's reader thread received
@@ -383,7 +378,14 @@ private:
     const Emit m_emit;
     std::vector<Tool> m_tools;
     std::map<std::string, Handler, std::less<>> m_handlers;
-    std::map<std::string, JobHandler, std::less<>> m_job_handlers;
+    /// A long tool: it runs as a job (`RunJob`), reports progress and can be cancelled. Its commit
+    /// point is "revision" (a project revision with its operation row), "publication" (an export
+    /// generation), or none (it commits nothing).
+    struct LongTool {
+        JobHandler handler;
+        std::optional<std::string> commit_point;
+    };
+    std::map<std::string, LongTool, std::less<>> m_job_handlers;
     /// The receipt of the long job the call being handled ran (the reply's `job`).
     std::optional<json::Object> m_job_receipt;
     std::unique_ptr<evaluator::Evaluator> m_evaluator;
@@ -397,13 +399,13 @@ void Worker::DefineTools() {
         m_handlers.emplace(tool.name, std::move(handler));
         m_tools.push_back(std::move(tool));
     };
-    const auto add_job = [this](Tool tool, JobHandler handler) {
-        m_job_handlers.emplace(tool.name, std::move(handler));
+    const auto add_job = [this](Tool tool, std::optional<std::string> commit_point, JobHandler handler) {
+        m_job_handlers.emplace(tool.name, LongTool{std::move(handler), std::move(commit_point)});
         m_tools.push_back(std::move(tool));
     };
     add_job({"project_open", "Opens a project file in the worker (one project at a time; a long job).",
-             Schema({{"path", StringProperty("The .uzp file.")}}, {"path"}), false, false, true, std::nullopt},
-            [this](const json::Object& a) { return ProjectOpen(a); });
+             Schema({{"path", StringProperty("The .uzp file.")}}, {"path"}), false, false},
+            std::nullopt, [this](const json::Object& a) { return ProjectOpen(a); });
     add_job({"export",
              "Exports the current revision with Painter's json_config: a new generation under its exportPath with "
              "its receipt, then the fixed-name folders (a long job; phase2.6 adds presets and overrides).",
@@ -414,16 +416,16 @@ void Worker::DefineTools() {
                                    {"items", json::Object{{"type", "string"}}},
                                    {"description", "Folders that receive the generation's files under fixed names."}}}},
                     {"config"}),
-             false, false, true, "publication"},
-            [this](const json::Object& a) { return Export(a); });
-    add({"project_close", "Closes the open project.", Schema({}, {}), false, false, false, std::nullopt},
+             false, false},
+            "publication", [this](const json::Object& a) { return Export(a); });
+    add({"project_close", "Closes the open project.", Schema({}, {}), false, false},
         [this](const json::Object& a) { return ProjectClose(a); });
     add({"project_save", "Names a checkpoint of the current revision (save; `full` also compacts).",
          Schema({{"mode", json::Object{{"type", "string"}, {"enum", json::Array{"incremental", "full"}}}}}, {}), false,
-         false, false, std::nullopt},
+         false},
         [this](const json::Object& a) { return ProjectSave(a); });
     add({"project_inspect", "The open project: path, revision and texture sets with their stacks.", Schema({}, {}), false,
-         false, false, std::nullopt},
+         false},
         [this](const json::Object& a) { return ProjectInspect(a); });
     add({"evaluate_channel",
          "Evaluates one channel of one stack on the GPU and writes its tiles under the output root "
@@ -432,7 +434,7 @@ void Worker::DefineTools() {
                  {"stack", StringProperty("Stack name; the texture set's active or first stack when omitted.")},
                  {"channel", StringProperty("Channel type, e.g. BaseColor.")}},
                 {"channel"}),
-         false, true, false, std::nullopt},
+         false, true},
         [this](const json::Object& a) { return EvaluateChannel(a); });
     // The Diagnostics tools (11-mcp-server.md §2; decision 136): GPU-free reads of the committed
     // revision on the CPU evaluator, as the export; the exporting ones publish a generation.
@@ -510,7 +512,7 @@ void Worker::DefineTools() {
              Schema({{"code", StringProperty("The Python source.")},
                      {"args", json::Object{{"type", "array"}, {"items", json::Object{{"type", "string"}}}}}},
                     {"code"}),
-             true, false, false, std::nullopt},
+             true, false},
             [this](const json::Object& a) { return RunPython(a); });
     }
 #if defined(UZP_WORKER_FAULT_HOOKS)
@@ -520,7 +522,7 @@ void Worker::DefineTools() {
                                             {"enum", json::Array{"kill", "abort", "seh", "remove_device", "gpu_stall",
                                                                  "kill_before_reply"}}}}},
                     {"fault"}),
-             false, false, false, std::nullopt},
+             false, false},
             [this](const json::Object& a) { return TestFault(a); });
         // A typed, single-transaction mutation (one fill layer on the active stack, or a call that
         // fails after its edit with `fail`): the idempotency path of typed tools, tested before
@@ -529,7 +531,7 @@ void Worker::DefineTools() {
              Schema({{"name", StringProperty("The fill layer's name.")},
                      {"fail", json::Object{{"type", "boolean"}, {"description", "Fail the call after its edit."}}}},
                     {"name"}),
-             true, false, false, std::nullopt},
+             true, false},
             [this](const json::Object& a) { return TestMutation(a); });
         // A long typed mutation (`steps` cancellable steps of `step_ms`, one fill layer committed
         // with its operation row at step `commit_at`): the job path of the long typed tools, tested
@@ -543,8 +545,8 @@ void Worker::DefineTools() {
                          {"step_ms", integer("Milliseconds per step.")},
                          {"commit_at", integer("The step that commits the layer; none commits nothing.")}},
                         {"name", "steps"}),
-                 true, false, true, "revision"},
-                [this](const json::Object& a) { return TestJob(a); });
+                 true, false},
+                "revision", [this](const json::Object& a) { return TestJob(a); });
     }
 #endif
 }
@@ -552,14 +554,17 @@ void Worker::DefineTools() {
 json::Object Worker::ListTools() const {
     json::Array tools;
     for (const Tool& tool : m_tools) {
+        const auto long_tool = m_job_handlers.find(tool.name);
+        const bool long_job = long_tool != m_job_handlers.end();
         tools.push_back(json::Object{{"name", tool.name},
                                      {"description", tool.description},
                                      {"inputSchema", tool.input_schema},
                                      {"mutating", tool.mutating},
                                      {"gpu", tool.gpu},
-                                     {"long", tool.long_job},
-                                     {"commit_point", tool.commit_point ? json::Value(*tool.commit_point)
-                                                                        : json::Value(nullptr)}});
+                                     {"long", long_job},
+                                     {"commit_point", long_job && long_tool->second.commit_point
+                                                          ? json::Value(*long_tool->second.commit_point)
+                                                          : json::Value(nullptr)}});
     }
     return {{"tools", std::move(tools)}};
 }
@@ -654,8 +659,10 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
 json::Object Worker::Execute(const json::Value& id, const json::Object& request, const Tool& tool,
                              const json::Object& arguments) {
     try {
-        json::Object result = tool.long_job ? RunJob(request, tool, m_job_handlers.at(tool.name)(arguments))
-                                            : m_handlers.at(tool.name)(arguments);
+        const auto long_tool = m_job_handlers.find(tool.name);
+        json::Object result = long_tool != m_job_handlers.end()
+                                  ? RunJob(request, tool, long_tool->second.handler(arguments))
+                                  : m_handlers.at(tool.name)(arguments);
         json::Object reply = ResultReply(id, std::move(result), CommittedRevision());
         if (m_mutation) {
             reply["admission"] = "executed";
@@ -688,7 +695,8 @@ json::Object Worker::Execute(const json::Value& id, const json::Object& request,
 /// its progress and its commit point go to the supervisor as `job_progress` events, and a
 /// `worker/cancel` asks it to stop at its next checkpoint. The job's id is the request's `job_id`
 /// (the supervisor's), or the native one. The reply carries the job's receipt (`job`); a job that
-/// was cancelled is the error `cancelled {stopped, committed}`, one that failed is its error.
+/// was cancelled is the error `cancelled {job_id, stopped, committed, committed_revision}` (the
+/// project's revision afterwards), one that failed is its error.
 json::Object Worker::RunJob(const json::Object& request, const Tool& tool, python::JobBody body) {
     const std::string requested = StringField(request, "job_id").value_or("");
     const std::shared_ptr<python::Job> job = python::JobEngine::Get().Start(
@@ -714,7 +722,9 @@ json::Object Worker::RunJob(const json::Object& request, const Tool& tool, pytho
                                   : "the job was cancelled before its commit point: it committed nothing",
                         json::Object{{"job_id", job_id},
                                      {"stopped", receipt.at("stopped")},
-                                     {"committed", receipt.at("committed")}}};
+                                     {"committed", receipt.at("committed")},
+                                     {"committed_revision", CommittedRevision() ? json::Value(*CommittedRevision())
+                                                                                : json::Value(nullptr)}}};
     }
     return job->Result();  // rethrows the error that failed it
 }
@@ -1251,8 +1261,9 @@ python::JobBody Worker::TestJob(const json::Object& arguments) {
             context.SetProgress(static_cast<double>(step + 1) / static_cast<double>(steps),
                                 "step " + std::to_string(step + 1) + " of " + std::to_string(steps));
         }
-        if (!commit_at) context.NoOp();
-        return json::Object{{"steps", steps}, {"outcome", std::move(outcome)}};
+        if (outcome.IsObject()) return std::get<json::Object>(outcome.data);  // the operation row's outcome
+        context.NoOp();
+        return json::Object{{"status", "no_op"}, {"revision", session.Revision()}};
     };
 }
 #endif

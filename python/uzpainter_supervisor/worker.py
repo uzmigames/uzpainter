@@ -124,7 +124,6 @@ class _Generation:
             log.error("worker %d replied to an unknown request: %s", self.number, frame)
         elif "event" in frame:
             self.on_event(frame)
-        # Job notifications are delivered by phase2.3; nothing subscribes to them yet.
 
     def on_pipe_lost(self) -> None:
         self.pipe_lost.set()
@@ -178,6 +177,8 @@ class Supervisor:
         self._monitor: asyncio.Task[None] | None = None
         self._closing = False
         self.fatal: str | None = None
+        # Receives the worker's `job_progress` events (admission.Admission.on_job_event).
+        self.on_job_event: Callable[[dict[str, Any]], None] | None = None
 
     # ── Lifecycle ────────────────────────────────────────────────────────────────────────────
 
@@ -399,7 +400,10 @@ class Supervisor:
     def _on_event(self, frame: dict[str, Any]) -> None:
         """A worker's `revision` event: the absolute store it holds (the saved file, or an
         untitled project's temporary store; None when none is open), its UUID, whether it is
-        untitled, and its revision, sent after every commit and switch."""
+        untitled, and its revision, sent after every commit and switch. A `job_progress` event
+        goes to `on_job_event`."""
+        if frame.get("event") == "job_progress" and self.on_job_event is not None:
+            self.on_job_event(frame)
         if frame.get("event") == "revision":
             project = frame.get("project")
             project_uuid = frame.get("project_uuid")
