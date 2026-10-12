@@ -63,8 +63,30 @@ def test_tools_are_forwarded_and_stdout_carries_protocol_frames_only(
         "project_save",
         "project_inspect",
         "evaluate_channel",
+        "snapshot_layer_tree",
+        "diff_snapshots",
+        "isolate_layer",
+        "material_views",
+        "region_stats",
+        "display_get",
+        "display_set",
+        "shader_get",
+        "shader_set",
+        "camera_get",
+        "camera_set",
     }
     assert tools["project_open"]["inputSchema"]["required"] == ["path"]
+    assert tools["isolate_layer"]["inputSchema"]["required"] == ["uid", "channels", "path"]
+    # The Diagnostics tools are reads (decision 136): admitted without a lease, key or precondition.
+    for name in (
+        "snapshot_layer_tree",
+        "diff_snapshots",
+        "isolate_layer",
+        "material_views",
+        "region_stats",
+    ):
+        assert tools[name]["annotations"]["readOnlyHint"] is True, name
+        assert "idempotency_key" not in tools[name]["inputSchema"]["properties"], name
     inspected = session.call("project_inspect")
     assert inspected["result"] == {"open": False}
     assert inspected["receipt"]["project"] is None and inspected["receipt"]["job_id"] is None
@@ -386,6 +408,84 @@ def run_revision(session: Mcp, path: Path) -> int:
     revision = reply["result"]["result"]
     assert isinstance(revision, int)
     return revision
+
+
+CAMERA = {
+    "position": [0.0, 1.0, 40.0],
+    "rotation": [0.0, 0.0, 0.0],
+    "projection_type": "Perspective",
+    "field_of_view": 40.0,
+    "focal_length": 50.0,
+    "focus_distance": 40.0,
+    "aperture": 0.0,
+    "orthographic_height": 2.5,
+}
+
+
+def test_display_shader_and_camera_tools_hold_the_fixed_pipeline(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """phase2.1_preview-display-presets item 2.6: the worker's `display_*`, `shader_*` and
+    `camera_*` tools read the state, accept the fixed pipeline's values and refuse every other
+    value before any change, naming decision 038."""
+    session, revision = opened_session(painter, tmp_path, sessions)
+    state = session.call("display_get")["result"]
+    assert state["name"] == "common" and state["parity"] is False
+    assert state["display"]["view"] == "Default - sRGB" and state["shader"]["shader"] == "open-pbr"
+
+    def mutate(name: str, arguments: dict[str, Any], key: str) -> dict[str, Any]:
+        return session.call(
+            name, {**arguments, "idempotency_key": key, "expected_revision": revision}
+        )
+
+    refused = [
+        mutate("display_set", {"exposure": 1.0}, "k-exposure"),
+        mutate("display_set", {"rotation": 0.0, "shadows": True}, "k-shadows"),
+        mutate("display_set", {"color_lut": "a" * 64}, "k-lut"),
+        mutate("shader_set", {"parameters": {"double_sided": True}}, "k-shader"),
+        mutate("camera_set", {"camera": {**CAMERA, "aperture": 1.0}}, "k-camera-bad"),
+    ]
+    for reply in refused:
+        assert reply["error"]["code"] == "call_failed", reply
+        assert reply["error"]["details"]["type"] == "UnsupportedInUzPainter", reply
+    assert session.call("project_inspect")["result"]["revision"] == revision
+    assert "decision 038" in refused[0]["error"]["message"]
+    assert "shadows (preset 'common')" in refused[1]["error"]["message"]
+    assert "the colour LUT" in refused[2]["error"]["message"]
+    assert "'double_sided'" in refused[3]["error"]["message"]
+    assert session.call("shader_get")["result"]["parameters"]["double_sided"] is False
+    assert session.call("camera_get")["result"] == {"camera": None, "blender": None}
+
+    blender = {
+        "location": [0.0, -40.0, 1.0],
+        "rotation_euler_degrees": [90.0, 0.0, 0.0],
+        "type": "PERSP",
+        "angle_degrees": 40.0,
+        "lens_mm": 50.0,
+        "ortho_scale": 2.5,
+        "focus_distance": 40.0,
+        "aperture_radius": 0.0,
+    }
+    reply = mutate("camera_set", {"blender": blender}, "k-camera")
+    assert reply["committed_revision"] == revision + 1, reply
+    assert reply["result"]["status"] == "committed", reply
+    assert session.call("camera_get")["result"] == {"camera": CAMERA, "blender": blender}
+    # The setters run the admitted request: a retry of the key returns its stored outcome.
+    retry = mutate("camera_set", {"blender": blender}, "k-camera")
+    assert retry["result"] == reply["result"] and retry["receipt"]["admission"] == "stored_outcome"
+    assert retry["committed_revision"] == revision + 1, retry
+    accepted = session.call(
+        "display_set",
+        {
+            "exposure": 0.0,
+            "background": [89, 89, 89],
+            "idempotency_key": "k-same",
+            "expected_revision": revision + 1,
+        },
+    )
+    assert accepted["committed_revision"] == revision + 1, accepted
+    assert accepted["result"]["status"] == "no_op", accepted
+    assert session.call("display_get")["result"]["name"] == "common"
 
 
 def test_mutating_tools_publish_their_key_and_precondition(

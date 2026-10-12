@@ -81,7 +81,7 @@ Each quirk comes from a Tier 0 api-probe and is compared exactly by `test_pyapi_
 ## 6. `js.evaluate` (10 §3; decision 107 §6)
 
 - `evaluate` accepts one whitelisted `alg.*` expression with JSON-literal arguments and runs it as a typed native call. The table is in `uzpainter_facade/js.py`.
-- `alg.shaders.*` raises `NotYetSupported` until phase2.3. So does `alg.mapexport.save*`, because no golden records a JavaScript export.
+- `alg.shaders.*` raises `NotYetSupported`: Painter's shader instance ids and parameter keys are unrecorded (recording R-132-D). The shader is read through `uzpainter.render.shader` (decision 132). So does `alg.mapexport.save*`, because no golden records a JavaScript export.
 - Anything else raises `UnsupportedInUzPainter` before any native call. Wrong arguments to a whitelisted call raise `RuntimeError`.
 
 ## 7. Desktop-only symbols (10 §3)
@@ -121,3 +121,11 @@ Each row comes from a Tier 0 recording and is compared exactly by `test_pyapi_li
 - **Shelves.** `Shelves.add(name, path)` adds a folder of user files for the session. `Shelf.refresh()` and `Shelves.refresh_all()` crawl it on a worker thread between `ShelfCrawlingStarted` and `ShelfCrawlingEnded`, and `is_crawling()` is true meanwhile. `application_shelf`, `user_shelf` (recording P21-D), `resources`, `import_resource` and `can_import_resources` (phase3.3_procedural-families) raise `NotYetSupported`.
 - **Connectable, emitted later.** `BakingProcessAboutToStart/Progress/Ended` (phase3.5_embree-bakers), `CameraPropertiesChanged` and `TextureStateEvent` (phase2.3_realtime-preview). `TextureStateEvent`'s throttling period reads back what was set; its default is unrecorded (recording P21-C).
 - **`async_utils.StopSource`**: `request_stop()` and `stop_requested()` over a state its operation shares.
+
+## 10. Display (decisions 038, 042 and 132)
+
+`substance_painter.display` keeps Painter's documented symbols over the native `uzpainter.display` (`src/python/PYAPI.md`, Display). It accepts only the fixed render pipeline.
+- `get/set_environment_resource` take and return Painter-shaped `resource.ResourceID`s. The environment is a project resource imported with `Usage.ENVIRONMENT`: an OpenEXR equirectangular map, versioned `<sha1>.image` like a texture. Anything other than a `ResourceID` raises `TypeError`, as documented.
+- `set_color_lut_resource(None)` is accepted, and `get_color_lut_resource()` is None. Any LUT raises `UnsupportedInUzPainter` naming decision 038.
+- `get/set_tone_mapping` raise `UnsupportedInUzPainter` on the Legacy projects the facade opens. On a colour-managed project the native call raises `RuntimeError`, as Painter documents.
+- `Camera`, `CameraProjectionType` and `ToneMappingFunction` are the native ones. A project has no camera until one is set, and `field_of_view` and `focal_length` cannot be set one at a time (decision 132; recordings R-132-A and R-132-B).

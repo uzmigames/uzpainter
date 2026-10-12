@@ -186,6 +186,9 @@ struct PlanContext {
     std::string projectPath;
 };
 
+/// The rootPath of a stack (see above).
+[[nodiscard]] std::string RootPathOf(const core::TextureSet& set, const core::Stack& stack);
+
 /// Compiles `config` against `project` (see above).
 [[nodiscard]] ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config,
                                      const PlanContext& context = {});
@@ -253,6 +256,17 @@ struct FileRaster {
 /// BaseColor, Specular and Emissive (recording R-090 P10, decision 126). An sRGB8 User channel is
 /// exported linear.
 [[nodiscard]] bool SrgbEncodedOnExport(core::ChannelType type);
+
+/// Refuses (`evaluator:unsupported_source`) a source of stack `stack` of texture set `textureSet`
+/// whose values depend on a stack channel whose template base value is `inferred` (templates.h): a
+/// documentMap of the channel, and a diagnosticMap that isolates, compares, summarises, views or
+/// checks for leaks in it (decision 126). Neither a mesh map, a virtual normal map, a material
+/// mask nor an ID view reads a channel's base. `EvaluateFileOn` runs it on every source before
+/// evaluating it, and `uzpainter.diagnostics` on every diagnostic it returns (decision 136).
+[[nodiscard]] render::Result<void> RequireIdentifiedBase(const core::Project& project, core::Id textureSet,
+                                                         core::Id stack, const PlannedSource& source,
+                                                         std::string_view templateId,
+                                                         const evaluator::TemplateLibrary& templates);
 
 /// Evaluates every source of `file` (compiled from revision `revision` of `project`) on `store`
 /// with `cache` and assembles its channels: documentMap the channel read-out, meshMap and

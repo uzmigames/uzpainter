@@ -1,0 +1,14 @@
+{
+  "id": 136,
+  "slug": "the-diagnostic-views-read-the-committed-revision-through-the-export-s-entry-points-refuse-inferred-bases-per-source-and-the-mcp-tools-publish-export-generations",
+  "title": "The diagnostic views read the committed revision through the export's entry points, refuse inferred bases per source, and the MCP tools publish export generations",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.1_recipe-diagnostic-views",
+    "phase2.2_recipe-and-diagnostics",
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.5_mcp-transport-registry"
+  ],
+  "supersededBy": null
+}

@@ -13,8 +13,9 @@ before any native call, so nothing changes. A whitelisted call given the wrong a
 - `alg.project.isOpen()`, `alg.project.name()`: `uzpainter.project.is_open()`, `.name()`.
 - `alg.project.saveAndClose([mode])`: the facade's `project.save(mode)`, then `close()`.
 - `alg.shaders.instances()`, `parameters(id[, group])`, `setParameters(id, params[, options])`,
-  `updateShaderInstance(id, url)`: `uzpainter.render.shader`, NotYetSupported until
-  phase2.3_realtime-preview.
+  `updateShaderInstance(id, url)`: NotYetSupported. Painter's shader instance ids and parameter
+  keys are unrecorded (recording R-132-D); the shader is the default `open-pbr` instance under
+  UzPainter's identifiers, `uzpainter.render.shader` (decisions 042, 132).
 - `alg.mapexport.channelIdentifiers()`, `convertedMapIdentifiers()`, `meshMapIdentifiers()`:
   the identifier lists of the JavaScript API documentation.
 - `alg.mapexport.save`, `saveChannelMap`, `saveMeshMap`, `saveConvertedMap`: NotYetSupported, as
@@ -73,6 +74,17 @@ def _export_gap(name: str) -> Callable[..., Any]:
     return call
 
 
+def _shader_gap(name: str) -> Callable[..., Any]:
+    def call(*args: Any) -> Any:
+        raise uzpainter.NotYetSupported(
+            f"alg.shaders.{name}: Painter's shader instance ids and parameter keys are unrecorded "
+            "(recording R-132-D); the shader is the default open-pbr instance, read and checked "
+            "through uzpainter.render.shader (decisions 042, 132)"
+        )
+
+    return call
+
+
 def _identifiers(values: list[str]) -> Callable[..., Any]:
     def call(*context: Any) -> Any:
         if context:
@@ -92,13 +104,10 @@ WHITELIST: dict[str, tuple[tuple[int, int] | None, Callable[..., Any]]] = {
     "alg.project.isOpen": ((0, 0), lambda: uzpainter.project.is_open()),
     "alg.project.name": ((0, 0), lambda: uzpainter.project.name()),
     "alg.project.saveAndClose": ((0, 1), _save_and_close),
-    "alg.shaders.instances": ((0, 0), lambda: uzpainter.render.shader.parameters()),
-    "alg.shaders.parameters": ((1, 2), lambda *a: uzpainter.render.shader.parameters(*a)),
-    "alg.shaders.setParameters": ((2, 3), lambda *a: uzpainter.render.shader.set_parameters(*a)),
-    "alg.shaders.updateShaderInstance": (
-        (2, 2),
-        lambda *a: uzpainter.render.shader.set_parameters(*a),
-    ),
+    "alg.shaders.instances": ((0, 0), _shader_gap("instances")),
+    "alg.shaders.parameters": ((1, 2), _shader_gap("parameters")),
+    "alg.shaders.setParameters": ((2, 3), _shader_gap("setParameters")),
+    "alg.shaders.updateShaderInstance": ((2, 2), _shader_gap("updateShaderInstance")),
     "alg.mapexport.save": ((2, 3), _export_gap("save")),
     "alg.mapexport.saveChannelMap": ((3, 4), _export_gap("saveChannelMap")),
     "alg.mapexport.saveMeshMap": ((3, 4), _export_gap("saveMeshMap")),

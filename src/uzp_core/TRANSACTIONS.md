@@ -12,6 +12,7 @@ idempotency/precondition decision of ARC-02 (`02-runtime-topology.md` §3,
 |---|---|
 | `document/document.h` | `Document`: current revision, `Snapshot`, `Checkpoints`, operation records, commit sink |
 | `document/nodes.h` | Tree walking (`ForEachNode`) and lookups (`FindStack`, `FindLayer`, `FindEffect`) |
+| `document/layer_tree.h` | Layer-tree snapshots and their structural diff (`SnapshotLayerTree`, `DiffSnapshots`; decision 136) |
 | `transaction/transaction.h` | `Transaction`, `Execute`, `Edit`, `TransactionResult`, `ChangeSet`, `Diff` |
 | `operation/operation.h` | `OperationRecord`, `RequestHash`, `MutationRequest`, `DecideAdmission` |
 | `naming/naming.h` | `NameScope`, `FindAllByName`, `FindByName`, `ResolveName`, `InsertNamed`, `AmbiguousNameError` |
