@@ -662,11 +662,12 @@ def test_a_project_saved_under_a_relative_path_is_reopened_where_it_was_saved(
     reply, status = client.execute_python(code)
     assert status == client.OK, reply["error"]
     saved = paint / "relative.spp"
-    assert reply["session"]["project"] == str(saved)
+    assert Path(reply["session"]["project"]) == saved  # native paths use `/` (generic form)
     monkeypatch.chdir(second)
     carried, status = client.execute_python(CARRIED)
     assert status == client.OK, carried["error"]
-    assert carried["data"] == {"uuid": reply["data"], "path": str(saved)}
+    assert carried["data"]["uuid"] == reply["data"]
+    assert Path(carried["data"]["path"]) == saved
 
 
 RELATIVE_REOPEN = (
