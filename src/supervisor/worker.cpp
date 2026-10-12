@@ -36,6 +36,7 @@
 #include "evaluator/templates.h"
 #include "mesh/reload.h"
 #include "preview/preview.h"
+#include "python/capture.h"
 #include "python/diagnostics.h"
 #include "python/display.h"
 #include "python/errors.h"
@@ -205,6 +206,9 @@ struct Tool {
     json::Object input_schema;
     bool mutating = false;
     bool gpu = false;
+    /// The call is refused before it runs when the device is unavailable (`gpu`); a tool whose
+    /// mode decides whether it uses the GPU (`capture`) checks the device itself.
+    bool gpu_gate = true;
 };
 
 /// The long job the command thread runs, and the cancellations the pipe's reader thread received
@@ -265,6 +269,27 @@ std::optional<std::string> StringField(const json::Object& object, std::string_v
     const json::Value* value = Field(object, key);
     if (!value || !value->IsString()) return std::nullopt;
     return std::get<std::string>(value->data);
+}
+
+/// The texture set and stack a call names by `texture_set` and `stack`: the active texture set,
+/// and its active or first stack, when omitted. `invalid_arguments` for a name that is not there.
+std::pair<const core::TextureSet*, const core::Stack*> NamedStack(const core::Project& project,
+                                                                  const python::OpenProject& open,
+                                                                  const json::Object& arguments) {
+    const core::TextureSet* set = nullptr;
+    const std::optional<std::string> set_name = StringField(arguments, "texture_set");
+    for (const core::TextureSet& candidate : project.texture_sets) {
+        if (set_name ? candidate.name == *set_name : candidate.id == open.active_set) set = &candidate;
+    }
+    if (!set) throw CallError{"invalid_arguments", "no texture set " + set_name.value_or("(active)"), {}};
+    const core::Stack* stack = nullptr;
+    const std::optional<std::string> stack_name = StringField(arguments, "stack");
+    for (const core::Stack& candidate : set->stacks) {
+        if (stack_name ? candidate.name == *stack_name : candidate.id == open.active_stack) stack = &candidate;
+    }
+    if (!stack && !stack_name && !set->stacks.empty()) stack = &set->stacks.front();
+    if (!stack) throw CallError{"invalid_arguments", "no stack " + stack_name.value_or("(active)"), {}};
+    return {set, stack};
 }
 
 /// The absolute path of the store that durably holds `open`: the file a saved project was
@@ -374,8 +399,11 @@ private:
     json::Object SubmitAdmitted(const std::function<void(core::Edit&)>& call);
     json::Object RunPython(const json::Object& arguments);
     json::Object PreviewStatus(const json::Object& arguments);
+    json::Object CaptureTool(const json::Object& arguments);
     /// The folder a Diagnostics tool exports into: `path`, inside the output root.
     std::filesystem::path OutputDirectory(const json::Object& arguments) const;
+    /// `path` (relative paths under the output root), which must lie inside the output root.
+    std::filesystem::path InsideOutputRoot(const std::string& path) const;
 #if defined(UZP_WORKER_FAULT_HOOKS)
     json::Object TestFault(const json::Object& arguments);
     json::Object TestMutation(const json::Object& arguments);
@@ -522,6 +550,30 @@ void Worker::DefineTools() {
          Schema({{"camera", json::Object{{"type", "object"}}}, {"blender", json::Object{{"type", "object"}}}}, {}), true,
          false},
         [this](const json::Object& a) { return CameraSet(a); });
+    // The Render family's capture (11-mcp-server.md §2; decision 148): non-mutating; only
+    // painter_viewport uses the GPU, so the handler checks the device for that mode itself.
+    add({"capture",
+         "Captures the committed revision (07-preview-and-render-parity.md §5): painter_viewport renders the preview "
+         "pass offscreen on the GPU; base_color, channel:<name> and mask:<uid> are texture-space captures equal to the "
+         "export; painter_iray is unavailable until the path tracer (PathTracerUnavailable). Writes the PNG, an "
+         "OpenEXR and the receipt beside it, inside the output root; returns the receipt.",
+         Schema({{"mode", StringProperty("painter_viewport, base_color, channel:<name>, mask:<uid> or painter_iray.")},
+                 {"path", StringProperty("The .png to write, relative to the output root.")},
+                 {"camera", json::Object{{"type", "object"}, {"description", "painter_viewport: a camera record (Painter's convention)."}}},
+                 {"size", json::Object{{"type", "array"},
+                                       {"items", json::Object{{"type", "integer"}, {"minimum", 1}}},
+                                       {"minItems", 2},
+                                       {"maxItems", 2},
+                                       {"description", "[width, height]; painter_viewport needs it."}}},
+                 {"samples", json::Object{{"type", "integer"}, {"description", "painter_viewport: 1."}}},
+                 {"seed", json::Object{{"type", "integer"}, {"minimum", 0}}},
+                 {"preset", json::Object{{"type", json::Array{"string", "object"}},
+                                         {"description", "painter_viewport: a standard preset's name or a whole preset."}}},
+                 {"texture_set", StringProperty("base_color, channel:<name>: the texture set; the active one when omitted.")},
+                 {"stack", StringProperty("base_color, channel:<name>: the stack; the active or first one when omitted.")}},
+                {"mode", "path"}),
+         false, true, false},
+        [this](const json::Object& a) { return CaptureTool(a); });
     if (m_options.allow_python) {
         add({"run_python", "Runs Python source in the worker's interpreter (only with --allow-python).",
              Schema({{"code", StringProperty("The Python source.")},
@@ -667,7 +719,7 @@ json::Object Worker::Call(const json::Value& id, const json::Object& request) {
         }
         m_mutation = std::move(mutation);
     }
-    if (tool->gpu) {
+    if (tool->gpu && tool->gpu_gate) {
         if (const std::optional<render::Error>& unavailable = m_engine.DeviceError()) {
             return ErrorReply(id, std::string(render::ErrorCodeName(unavailable->code)), unavailable->Describe(),
                               json::Object{{"backend", std::string(render::BackendName(m_options.backend))},
@@ -951,20 +1003,7 @@ json::Object Worker::EvaluateChannel(const json::Object& arguments) {
     const std::shared_ptr<python::OpenProject> open = python::Session::Get().Current();
     const core::Snapshot snapshot = open->document->snapshot();
     const core::Project& project = *snapshot.project;
-
-    const core::TextureSet* set = nullptr;
-    const std::optional<std::string> set_name = StringField(arguments, "texture_set");
-    for (const core::TextureSet& candidate : project.texture_sets) {
-        if (set_name ? candidate.name == *set_name : candidate.id == open->active_set) set = &candidate;
-    }
-    if (!set) throw CallError{"invalid_arguments", "no texture set " + set_name.value_or("(active)"), {}};
-    const core::Stack* stack = nullptr;
-    const std::optional<std::string> stack_name = StringField(arguments, "stack");
-    for (const core::Stack& candidate : set->stacks) {
-        if (stack_name ? candidate.name == *stack_name : candidate.id == open->active_stack) stack = &candidate;
-    }
-    if (!stack && !stack_name && !set->stacks.empty()) stack = &set->stacks.front();
-    if (!stack) throw CallError{"invalid_arguments", "no stack " + stack_name.value_or("(active)"), {}};
+    const auto [set, stack] = NamedStack(project, *open, arguments);
 
     store::ProjectStore* store = open->store.get();
     evaluator::EvaluateRequest request;
@@ -1063,6 +1102,51 @@ json::Object Worker::EvaluateChannel(const json::Object& arguments) {
                                      {"size", static_cast<std::int64_t>(texels.size())}}}};
 }
 
+json::Object Worker::CaptureTool(const json::Object& arguments) {
+    const std::optional<std::string> mode = StringField(arguments, "mode");
+    if (!mode) throw CallError{"invalid_arguments", "mode must be a string", {}};
+    python::RefuseUnavailableMode(*mode);  // before the path and every other check (decision 148)
+    python::CaptureArguments capture;
+    capture.mode = *mode;
+    const std::optional<std::string> path = StringField(arguments, "path");
+    if (!path || path->empty()) throw CallError{"invalid_arguments", "path must name a .png file", {}};
+    capture.path = InsideOutputRoot(*path);
+    const auto integer = [&](const char* key) -> std::optional<std::int64_t> {
+        const json::Value* value = Field(arguments, key);
+        if (!value || value->IsNull()) return std::nullopt;
+        if (!value->IsInt()) throw CallError{"invalid_arguments", std::string(key) + " must be an integer", {}};
+        return std::get<std::int64_t>(value->data);
+    };
+    if (const json::Value* camera = Field(arguments, "camera"); camera && !camera->IsNull()) capture.camera = *camera;
+    if (const json::Value* size = Field(arguments, "size"); size && !size->IsNull()) {
+        const json::Array* pair = size->IsArray() ? &std::get<json::Array>(size->data) : nullptr;
+        if (!pair || pair->size() != 2 || !(*pair)[0].IsInt() || !(*pair)[1].IsInt()) {
+            throw CallError{"invalid_arguments", "size must be [width, height]", {}};
+        }
+        capture.size = std::pair{std::get<std::int64_t>((*pair)[0].data), std::get<std::int64_t>((*pair)[1].data)};
+    }
+    capture.samples = integer("samples");
+    capture.seed = integer("seed");
+    if (const json::Value* preset = Field(arguments, "preset"); preset && !preset->IsNull()) capture.preset = *preset;
+    if (Field(arguments, "texture_set") || Field(arguments, "stack")) {
+        if (*mode != "base_color" && !mode->starts_with("channel:")) {
+            throw CallError{"invalid_arguments", "texture_set and stack apply to base_color and channel:<name> only", {}};
+        }
+        const std::shared_ptr<python::OpenProject> open = python::Session::Get().Current();
+        const core::Snapshot snapshot = open->document->snapshot();
+        const auto [set, stack] = NamedStack(*snapshot.project, *open, arguments);
+        capture.stack = std::pair{set->id, stack->id};
+    }
+    if (python::UsesGpu(*mode)) {
+        if (const std::optional<render::Error>& unavailable = m_engine.DeviceError()) {
+            throw CallError{std::string(render::ErrorCodeName(unavailable->code)), unavailable->Describe(),
+                            json::Object{{"backend", std::string(render::BackendName(m_options.backend))},
+                                         {"reason", unavailable->reason}}};
+        }
+    }
+    return python::Capture(capture);
+}
+
 json::Object Worker::PreviewStatus(const json::Object&) {
     const preview::PreviewStatus status = m_previewHost->Status();
     return {{"window_open", status.windowOpen},
@@ -1117,9 +1201,14 @@ json::Array Triple(const std::array<float, 3>& v) {
 std::filesystem::path Worker::OutputDirectory(const json::Object& arguments) const {
     const std::optional<std::string> path = StringField(arguments, "path");
     if (!path || path->empty()) throw CallError{"invalid_arguments", "path must name a folder", {}};
-    // Exports stay inside the output root until MCP roots exist (phase2.5_mcp-transport-registry).
+    return InsideOutputRoot(*path);
+}
+
+std::filesystem::path Worker::InsideOutputRoot(const std::string& path) const {
+    // Exports and captures stay inside the output root until MCP roots exist
+    // (phase2.5_mcp-transport-registry).
     const std::filesystem::path root = std::filesystem::weakly_canonical(std::filesystem::absolute(m_options.output_root));
-    std::filesystem::path folder = python::PathFromUtf8(*path);
+    std::filesystem::path folder = python::PathFromUtf8(path);
     if (folder.is_relative()) folder = root / folder;
     folder = std::filesystem::weakly_canonical(folder);
     const auto [inside, rest] = std::mismatch(root.begin(), root.end(), folder.begin(), folder.end());
@@ -1478,6 +1567,8 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
         preview_options.title = "UzPainter preview - worker " + std::to_string(GetCurrentProcessId());
         preview_host = std::make_unique<preview::PreviewHost>(preview_options, preview_feed);
     }
+    // `painter_viewport` captures (also those of `run_python`) render on the worker's engine.
+    python::SetCaptureGpu(options.backend, &engine);
     Worker worker(
         options, engine, jobs,
         [reader_pipe](const json::Object& frame) {

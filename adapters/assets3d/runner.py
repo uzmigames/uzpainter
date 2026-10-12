@@ -17,7 +17,8 @@ It is the `__main__` script of the run; the Assets3D code it executes is given a
    the session.
 2. **Shim.** `_substance_painter.display.save_viewport(path, w, h, _)`, the pipeline's one
    private Painter call, is installed into `sys.modules` for this run only; it calls
-   `uzpainter.render.capture(mode="painter_viewport")` and names that mode when it is missing.
+   `uzpainter.render.capture(path, "painter_viewport", size=(w, h))`, which captures the committed
+   revision (decision 148) and raises its own errors unchanged.
 3. **Code.** Executed as the community bridge executes it: in a fresh namespace `{"params": {}}`,
    `result` read back and normalised with `json.dumps(..., default=str)`. A namespace `open` maps
    the fixed-path redirects of `UZP_ASSETS3D_OPEN_REDIRECTS` (the wand fixture's repointed
@@ -50,7 +51,6 @@ CODE_FILE_NAME = "<uzpainter-assets3d-adapter>"
 JOURNAL = "fixed-names.journal.json"
 REDIRECTS_ENV = "UZP_ASSETS3D_OPEN_REDIRECTS"
 ROOT_ENV = "UZP_ASSETS3D_ROOT"
-VIEWPORT_OWNER = "phase2.2_preview-capture"
 
 
 class AdapterSessionError(RuntimeError):
@@ -189,14 +189,7 @@ def install_shim(uzpainter: Any) -> None:
 
     def save_viewport(path: str, width: int, height: int, *_: Any) -> None:
         """The painting view as an image (Painter's private call): UzPainter's current state."""
-        try:
-            uzpainter.render.capture(mode="painter_viewport", path=path, width=width, height=height)
-        except uzpainter.NotYetSupported as error:
-            raise uzpainter.NotYetSupported(
-                "_substance_painter.display.save_viewport needs the capture mode "
-                f"painter_viewport of uzpainter.render.capture, which {VIEWPORT_OWNER} "
-                f"delivers ({error})"
-            ) from error
+        uzpainter.render.capture(path, "painter_viewport", size=(width, height))
 
     package = types.ModuleType("_substance_painter", "UzmiGames shim of the Assets3D adapter.")
     display = types.ModuleType("_substance_painter.display", "UzmiGames shim: save_viewport.")

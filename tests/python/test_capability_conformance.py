@@ -198,6 +198,11 @@ def recipes() -> dict[Any, tuple[str, str]]:
         "",
         "nfill.set_material_source(None)",
     )
+    # The capture mode `painter_iray` (decision 148): refused first, with any arguments.
+    r[("uzpainter.render.capture", "mode:painter_iray")] = (
+        "",
+        "uzpainter.render.capture(WORK + '/iray.png', 'painter_iray')",
+    )
     r["uzpainter.layerstack.FillEffectNode.set_material_source"] = (
         "neffect = nls.get_node_by_uid(ls.insert_fill("
         "ls.InsertPosition.inside_node(masked, ls.NodeStack.Mask)).uid())",

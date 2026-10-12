@@ -8,6 +8,7 @@ owner's machine (decision 028): it needs the UzmiGames asset repository at `E:\\
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -271,19 +272,68 @@ def test_the_shim_is_visible_to_adapter_run_scripts_only(
     assert not [e for e in manifest["entries"] if e["symbol"].startswith("_substance_painter")]
 
 
-# ── 3.4 Missing capabilities in Phase 1 ─────────────────────────────────────────────────────────
+# ── 3.4 Missing capabilities in Phase 1; the capture shim (phase2.2 item 3.6) ───────────────────
 
 
-def test_capture_fails_naming_painter_viewport(created: Wand) -> None:
-    """3.4: `capture` reaches the shim, which names the missing capture mode; nothing changes."""
+def test_capture_on_the_legacy_wand_is_the_unsupported_configuration(created: Wand) -> None:
+    """phase2.2 3.6 (decision 148): `capture` reaches the shim, which calls
+    `uzpainter.render.capture(mode="painter_viewport")`; the wand project is Legacy
+    colour-managed, as every project UzPainter creates today, so the capture refuses the display
+    configuration (decisions 038, 134) before any evaluation or device; nothing is written and the
+    revision is unchanged."""
     before = revision(created)
     out = created.work / "capture.png"
     call = created.call("capture", "--out", str(out), "--size", "640", "480")
     assert call.status == 1
-    assert "NotYetSupported" in call.stderr and "painter_viewport" in call.stderr, call.stderr
-    assert "phase2.2_preview-capture" in call.stderr
+    assert "UnsupportedInUzPainter" in call.stderr, call.stderr
+    assert "unsupported_configuration: Legacy" in call.stderr and "decision 038" in call.stderr
     assert "CAPTURE_DONE" not in call.stdout and not out.exists()
+    assert not out.with_suffix(".exr").exists()
     assert revision(created) == before
+
+
+# The pipeline's `capture` subcommand code (CAPTURE_CODE of painter_layer_stack.py), after a
+# native open of the OCIO fixture in the same call: the facade, and so the adapter's session
+# restore, refuses an OCIO project until phase1.15 (decision 148), so the pipeline's own
+# subcommand cannot be run on one; this runs the call it makes through the shim.
+SHIM_CAPTURE = """
+import os
+import uzpainter
+uzpainter.project.open(__BUNDLE__)
+import _substance_painter.display as display
+path = __PATH__
+if os.path.exists(path): os.remove(path)
+display.save_viewport(path, 64, 48, False)
+result = {"saved": os.path.exists(path), "path": path, "revision": uzpainter.project.revision()}
+"""
+
+
+def test_the_shim_writes_the_viewport_under_uzpainter_run(
+    painter: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """phase2.2 3.6 (decision 148): through the runner under `UzPainter.exe run`, on an OCIO
+    project, `_substance_painter.display.save_viewport(path, w, h, _)` writes the committed
+    revision's `painter_viewport` capture at the size asked, with its receipt."""
+    from tests.preview.conftest import ocio_bundle
+
+    bundle = ocio_bundle(painter, tmp_path / "fixture")
+    (tmp_path / "assets").mkdir()
+    monkeypatch.setenv("UZPAINTER_EXE", str(painter))
+    monkeypatch.setenv("UZP_ASSETS3D_SESSION", str(tmp_path / "session.json"))
+    monkeypatch.setenv("UZP_ASSETS3D_ROOT", str(tmp_path / "assets"))
+    monkeypatch.delenv("UZP_ASSETS3D_OPEN_REDIRECTS", raising=False)
+    out = tmp_path / "shots" / "capture.png"
+    out.parent.mkdir()
+    code = SHIM_CAPTURE.replace("__BUNDLE__", repr(str(bundle))).replace("__PATH__", repr(str(out)))
+    reply, status = client.execute_python(code)
+    assert status == client.OK, reply
+    assert reply["data"]["saved"] is True and reply["data"]["path"] == str(out)
+    receipt = json.loads(out.with_suffix(".receipt.json").read_text(encoding="utf-8"))
+    assert receipt["mode"] == "painter_viewport" and receipt["size"] == [64, 48]
+    assert receipt["revision"] == reply["data"]["revision"] and receipt["backend"] == "dx12"
+    data = out.read_bytes()
+    assert hashlib.sha256(data).hexdigest() == receipt["hashes"]["png"]
+    assert data[16:24] == (64).to_bytes(4, "big") + (48).to_bytes(4, "big")  # IHDR size
 
 
 def test_smart_is_refused_naming_smart_presets(created: Wand) -> None:

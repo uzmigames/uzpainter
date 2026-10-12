@@ -1,6 +1,6 @@
 # Preview viewport and window (`src/preview/`)
 
-This folder holds `painter_viewport`, the realtime preview of `docs/architecture/07-preview-and-render-parity.md` §1, §5 and §6 (task `phase2.1_preview-viewport-window`; decisions 018, 042 and 134). It is a preview and a fast check. It is never the parity target and never acceptance evidence: Iray is the target, through `painter_iray` in Phase 3.
+This folder holds `painter_viewport`, the realtime preview of `docs/architecture/07-preview-and-render-parity.md` §1, §5 and §6 (task `phase2.1_preview-viewport-window`; decisions 018, 042 and 134), and the scene its captures render (task `phase2.2_preview-capture`, decision 148). It is a preview and a fast check. It is never the parity target and never acceptance evidence: Iray is the target, through `painter_iray` in Phase 3.
 
 | File | What it does |
 |---|---|
@@ -10,6 +10,7 @@ This folder holds `painter_viewport`, the realtime preview of `docs/architecture
 | `latest.h` | The wait-free hand-over between evaluation and the preview thread (item 2.4) |
 | `preview.{h,cpp}` | The publisher side, the preview thread and its window (items 2.4 and 2.5) |
 | `cli.{h,cpp}` | `UzPainter.exe --preview <file.uzp>` (item 2.5) |
+| `scene.cpp` | The viewport scene of a frame (`SceneOf`, `MaterialsOf`, `ChannelFor`), shared by the window and the captures |
 
 ## Display transform (decision 134)
 
@@ -60,6 +61,28 @@ Two ways to run it:
 
 - **Standalone.** `UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan]` opens the project as `run` does, holding its lock. It evaluates the preview's channels of every texture set once and shows the window. On close it prints `UZP_JSON:{"status": "closed", "frames_rendered", "revision_shown", "last_error"}`.
 - **Attached.** `UzPainter.exe --worker … --preview`, or `--mcp … --preview`, which passes the flag to its workers. The worker publishes after every `evaluate_channel`, and lists the GPU-free `preview_status` tool.
+
+## Captures (phase2.2_preview-capture, decision 148)
+
+`uzpainter.render.capture(path, mode, camera, size, samples, seed, preset, stack)` and the worker's `capture` tool live in `src/python/capture.{h,cpp}`. Every capture reads the committed revision once and evaluates it synchronously; inside an open Transaction it refuses. Its receipt names the revision it shows. The modes:
+
+- **`painter_iray`** raises `PathTracerUnavailable`, a `NotYetSupported`, before anything else: no argument is checked, no project read, no device created and no file written (P3-PATHTRACER).
+- **`painter_viewport`**:
+  - **Inputs.** The base colour, metalness, roughness and combined Normal_OpenGL of every texture set's first stack, evaluated on a CPU evaluator with the export's inputs.
+  - **Scene.** `SceneOf`, the window's own builder, with the project's display state, or with `preset` (a standard preset's name or a whole preset) applied to an in-memory copy that is never committed.
+  - **Checks.** The display configuration, the mesh and the environment are checked before any evaluation or device. An unsupported configuration raises `UnsupportedInUzPainter` with decision 134's `unsupported_configuration` text.
+  - **Device.** The pass runs on the worker's engine, or on a device of `run`'s `--gpu-backend` created for the call (`gpu_backend_unavailable` without one). It uploads its buffers and dispatches in one submission, waits for it, and reads both targets back through `TextureReadback`.
+  - **Files.** `path`, a 16-bit RGB PNG of the display codes, and `<stem>.exr`, RGB binary16 of the linear colour. Alpha is always 1 and is not written.
+  - **Camera.** A Painter camera record, with right, up and forward `R·x`, `R·y`, `-R·z` for `R = Rx @ Ry @ Rz`. `field_of_view` is taken as the vertical angle; this is UzPainter's convention, not a measured Painter fact. Without one, the display state's default camera, else `FitCamera`. An orthographic camera raises `NotYetSupported` (phase2.3_realtime-preview).
+  - **Arguments.** `size` is required, `samples` is 1, and `seed` is only recorded.
+  - **Today.** It renders only OCIO projects without fill sources (phase1.15, phase1.18).
+- **`base_color`, `channel:<name>`, `mask:<uid>`** are texture-space captures of one stack, at its set's resolution.
+  - The stack is `stack` (Python) or `texture_set`/`stack` (worker), else the active stack; `mask:<uid>` takes its node's.
+  - The export engine compiles and encodes a one-file plan of `documentMap baseColor`, `documentMap <name>` or `diagnosticMap materialMask/<uid>` with padding `passthrough`. It writes a 16-bit PNG at `path` and an OpenEXR 32f at `<stem>.exr`, so each equals the export of its source with the same parameters.
+  - A given `camera`, `preset`, `samples` or `seed`, or another size, raises `ValueError`.
+- **Receipt.** Every capture writes `<stem>.receipt.json` (`src/python/capture-receipt.schema.json`): `{schema, revision, project_uuid, evaluator_profile, render_state_digest, mode, source, encoding, backend, adapter, driver, samples, seed, camera, size, display_configuration, hashes}`.
+  - `render_state_digest` is the SHA-256 of the canonical JSON of the resolved render state. For `painter_viewport` that is the environment, background, camera and pose, size, samples, seed, shader and display configuration; for the other modes, the source, size and encoding.
+  - `adapter` and `driver` (the DXGI user-mode version) are null on the CPU.
 
 ## Regression goldens (item 2.6)
 

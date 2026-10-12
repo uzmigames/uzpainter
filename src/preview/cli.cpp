@@ -21,27 +21,6 @@ namespace {
 
 constexpr const char* kUsage = "usage: UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan]\n";
 
-/// The channel of `set`'s stack that feeds `slot`: the OpenPBR name, else the legacy one.
-std::optional<core::ChannelType> ChannelFor(const core::Stack& stack, MaterialSlot slot) {
-    using core::ChannelType;
-    const auto has = [&](ChannelType type) { return stack.channels.contains(type); };
-    switch (slot) {
-        case MaterialSlot::BaseColor:
-            if (has(ChannelType::BaseColor)) return ChannelType::BaseColor;
-            return std::nullopt;
-        case MaterialSlot::Metalness:
-            if (has(ChannelType::BaseMetalness)) return ChannelType::BaseMetalness;
-            if (has(ChannelType::Metallic)) return ChannelType::Metallic;
-            return std::nullopt;
-        case MaterialSlot::Roughness:
-            if (has(ChannelType::SpecularRoughness)) return ChannelType::SpecularRoughness;
-            if (has(ChannelType::Roughness)) return ChannelType::Roughness;
-            return std::nullopt;
-        case MaterialSlot::Normal: return std::nullopt;  // the combined virtual map, below
-    }
-    return std::nullopt;
-}
-
 }  // namespace
 
 bool IsPreviewCommand(std::string_view first) { return first == "--preview"; }
