@@ -1,0 +1,12 @@
+{
+  "id": 156,
+  "slug": "the-srgb-bitmap-variants-request-runs-on-a-3x3-grid-and-the-recorder-records-an-attempted-set-color-space-and-legacy-bitmap-spaces",
+  "title": "The sRGB bitmap variants request runs on a 3x3 grid, and the recorder records an attempted set_color_space and the Legacy bitmap spaces",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

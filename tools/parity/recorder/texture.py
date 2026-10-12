@@ -201,6 +201,9 @@ def replay(session: PainterSession, job: Job, staged: dict[str, Path]) -> dict[s
         elif step.call in (ps.INSERT_GROUP, ps.INSERT_LEVELS, ps.INSERT_FILTER):
             inserted = {k: v for k, v in result.items() if k != "done_at"}
             defaults.setdefault("inserted_nodes", {})[str(step.step)] = inserted
+        elif step.call == ps.SET_COLOR_SPACE:
+            attempt = {k: v for k, v in result.items() if k != "done_at"}
+            defaults.setdefault("set_color_space", {})[str(step.step)] = attempt
         elif "resource_url" in result:
             defaults.setdefault("resources", {})[str(step.step)] = result["resource_url"]
     session.wait_ready()

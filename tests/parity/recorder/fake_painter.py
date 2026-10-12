@@ -121,6 +121,12 @@ class LegacyColorSpace(enum.Enum):
     sRGB = 2
 
 
+SPACE_CLASSES: dict[str, Any] = {
+    "GenericColorSpace": GenericColorSpace,
+    "LegacyColorSpace": LegacyColorSpace,
+}
+
+
 class DataColorSpace(enum.Enum):
     Data = 1
 
@@ -258,10 +264,10 @@ class SourceBitmap:
     def __init__(self, layer: Layer, channel: ChannelType, resource_id: Any) -> None:
         self.layer, self.channel, self.resource_id = layer, channel, resource_id
 
-    def get_color_space(self) -> GenericColorSpace:
+    def get_color_space(self) -> GenericColorSpace | LegacyColorSpace:
         return self.layer.bitmaps[self.channel]
 
-    def set_color_space(self, space: GenericColorSpace) -> None:
+    def set_color_space(self, space: GenericColorSpace | LegacyColorSpace) -> None:
         self.layer.bitmaps[self.channel] = space
 
     def list_available_color_spaces(self) -> list[Any]:
@@ -406,7 +412,7 @@ class Layer:
     sources: dict[ChannelType, Color] = field(default_factory=dict)
     substances: dict[ChannelType, str] = field(default_factory=dict)
     # Bitmap sources (an image resource) by channel: their colour space.
-    bitmaps: dict[ChannelType, GenericColorSpace] = field(default_factory=dict)
+    bitmaps: dict[ChannelType, GenericColorSpace | LegacyColorSpace] = field(default_factory=dict)
     blending: dict[ChannelType, BlendingMode] = field(default_factory=dict)
     opacity: dict[ChannelType, float] = field(default_factory=dict)
 
@@ -512,7 +518,10 @@ class FakeWorld:
                     "channels": sorted(c.name for c in layer.channels),
                     "sources": {c.name: list(v.working) for c, v in layer.sources.items()},
                     "substances": {c.name: url for c, url in layer.substances.items()},
-                    "bitmaps": {c.name: space.name for c, space in layer.bitmaps.items()},
+                    "bitmaps": {
+                        c.name: [type(space).__name__, space.name]
+                        for c, space in layer.bitmaps.items()
+                    },
                     "blending": {c.name: m.name for c, m in layer.blending.items()},
                     "opacity": {c.name: o for c, o in layer.opacity.items()},
                 }
@@ -533,7 +542,10 @@ class FakeWorld:
                     for c, v in item["sources"].items()
                 },
                 substances={ChannelType[c]: url for c, url in item["substances"].items()},
-                bitmaps={ChannelType[c]: GenericColorSpace[v] for c, v in item["bitmaps"].items()},
+                bitmaps={
+                    ChannelType[c]: SPACE_CLASSES[kind][name]
+                    for c, (kind, name) in item["bitmaps"].items()
+                },
                 blending={ChannelType[c]: BlendingMode[m] for c, m in item["blending"].items()},
                 opacity={ChannelType[c]: o for c, o in item["opacity"].items()},
             )

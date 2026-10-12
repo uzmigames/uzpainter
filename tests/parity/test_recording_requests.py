@@ -3,8 +3,11 @@ session under the current envelope's `requests/` root, and their authored fixtur
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import struct
+import zlib
 from pathlib import Path
 
 import pytest
@@ -148,3 +151,94 @@ def test_the_requests_and_their_fixtures_pass_the_guard() -> None:
     store = locate()
     index = None if store is None else load_index(store.root / "index.json")
     assert [str(f) for f in run_guard(REPO_ROOT, snapshot, index)] == []
+
+
+def test_srgb8_grey_ramp_holds_every_code() -> None:
+    """Decision 145 s0: 8-bit grey, column x holds code x."""
+    width, height, depth, texels = bitmap("srgb8-grey-ramp")
+    assert (width, height, depth) == (256, 256, 8)
+    assert [t[0] for t in texels[:256]] == list(range(256))
+    assert all(texels[y * 256 + x][0] == x for y in (0, 255) for x in range(256))
+
+
+# Decision 129 fixes the P-ramp meshes by SHA-256 (phase 0, +0.25/1024, +0.75/1024).
+P_RAMP_SHA256 = {
+    "r1": (
+        "be463fa73ab3ddba7e6d536d1b9e366b9b987dd42494a53a7535af830b33c95e",
+        "a9300f4531619c51d931054b0634da0a6d38ba3d1577767b988cad5c4d504074",
+        "e68e4c014bf51b2016ba5f5c0daf12afa509a866fac5073ba218d18f3256832f",
+    ),
+    "r2": (
+        "50376d51b0dbcdecbb9aa4e77051dcf9d3763669d7553209e002afa6f2a0b100",
+        "d2dee8be1567e62c2ff8c674a7d636f985779c3827b5f6c61e3ce8734bf53c9d",
+        "b8b4a1ab1574c874d33db00128c0d33d9405afc222c067e22b080a540ea69d87",
+    ),
+    "r15": (
+        "ca9b86387b8bd14ba15766c37c4c4037f20c85f5c689125496e728569137bc62",
+        "ebf2bc7a92ece0d4e17f263c4579d7f1145a0364cb28f55224fe27e13acf8c59",
+        "821c625e8e3cb90401b22116e719742a11aee234222db426d3b6ed24504b7553",
+    ),
+}
+
+
+def test_p_ramp_meshes_are_the_ones_decision_129_fixes() -> None:
+    for mesh, hashes in P_RAMP_SHA256.items():
+        for phase, want in zip(rf.RAMP_PHASES, hashes, strict=True):
+            path = REPO_ROOT / FIXTURE_DIR / "meshes" / f"seam-ramp-{mesh}-{phase}.obj"
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == want, (mesh, phase)
+
+
+def test_tie_mesh_has_three_axis_aligned_islands() -> None:
+    _, uvs, faces = obj_uvs("tie")
+    assert len(uvs) == 12 and len(faces) == 6
+    for corner, quad in zip(rf.TIE_CORNERS, (uvs[i : i + 4] for i in (0, 4, 8)), strict=True):
+        assert (min(u for u, _ in quad), min(v for _, v in quad)) == corner
+        assert max(u for u, _ in quad) - corner[0] == rf.TIE_SIDE
+
+
+def exr_rgb(path: Path) -> tuple[int, int, list[tuple[float, float, float]]]:
+    """Decode the authored ZIP float EXR (channels B, G, R) without OpenEXR."""
+    data = path.read_bytes()
+    header_end = data.index(b"screenWindowWidth") + len(b"screenWindowWidth\0float\0") + 8 + 1
+    box = data.index(b"dataWindow\0box2i\0") + len(b"dataWindow\0box2i\0") + 4
+    x0, y0, x1, y1 = struct.unpack("<iiii", data[box : box + 16])
+    width, height = x1 - x0 + 1, y1 - y0 + 1
+    blocks = (height + 15) // 16
+    offsets = struct.unpack(f"<{blocks}Q", data[header_end : header_end + 8 * blocks])
+    pixels: list[tuple[float, float, float]] = []
+    for offset in offsets:
+        y, size = struct.unpack("<ii", data[offset : offset + 8])
+        lines = min(16, height - y)
+        packed = data[offset + 8 : offset + 8 + size]
+        raw_size = lines * width * 3 * 4
+        if size < raw_size:
+            split = bytearray(zlib.decompress(packed))
+            for i in range(1, len(split)):
+                split[i] = (split[i - 1] + split[i] - 128) & 0xFF
+            half = (len(split) + 1) // 2
+            raw = bytearray(len(split))
+            raw[0::2], raw[1::2] = split[:half], split[half:]
+        else:
+            raw = bytearray(packed)
+        for line in range(lines):
+            row = struct.unpack(f"<{3 * width}f", raw[line * width * 12 : (line + 1) * width * 12])
+            b, g, r = row[:width], row[width : 2 * width], row[2 * width :]
+            pixels += list(zip(r, g, b, strict=True))
+    return width, height, pixels
+
+
+def test_uv_ramps_are_float32_texel_centres() -> None:
+    """Decision 129: R = (x + 0.5)/N, G = (y + 0.5)/N (y from the top row), B = 0.5."""
+    width, height, pixels = exr_rgb(REPO_ROOT / FIXTURE_DIR / "bitmaps" / "uv-ramp-512.exr")
+    assert (width, height) == (512, 512)
+    for y in (0, 17, 511):
+        for x in (0, 300, 511):
+            r, g, b = pixels[y * 512 + x]
+            assert (r, g, b) == (
+                struct.unpack("<f", struct.pack("<f", (x + 0.5) / 512))[0],
+                struct.unpack("<f", struct.pack("<f", (y + 0.5) / 512))[0],
+                0.5,
+            )
+    for size in (1024, 2048):
+        data = (REPO_ROOT / FIXTURE_DIR / "bitmaps" / f"uv-ramp-{size}.exr").read_bytes()
+        assert data == rf.uv_ramp(size)

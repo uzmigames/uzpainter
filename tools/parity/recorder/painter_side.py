@@ -79,6 +79,11 @@ PREDEFINED_OUTPUT_MAPS = "substance_painter.export.PredefinedExportPreset.list_o
 RESOURCE_OUTPUT_MAPS = "substance_painter.export.ResourceExportPreset.list_output_maps"
 LIST_COLOR_SPACES = "substance_painter.source.SourceBitmap.list_available_color_spaces"
 
+# An attempted `SourceBitmap.set_color_space` (decision 156): a state step whose refusal is the
+# observation. What Painter raises is recorded in the effective defaults instead of failing the
+# golden (e.g. a mask fill effect's grey source set to sRGB, decision 145 s5).
+SET_COLOR_SPACE = "substance_painter.source.SourceBitmap.set_color_space"
+
 # Procedural vocabulary (phase0.6_procedural-feasibility): imported resources, mesh maps, masks,
 # generator effects, smart materials and substance parameters.
 IMPORT_RESOURCE = "substance_painter.resource.import_project_resource"
@@ -346,6 +351,14 @@ COLOR_SPACES = {
     "sRGB": lambda: substance_painter.colormanagement.GenericColorSpace.sRGB,
     "Working": lambda: substance_painter.colormanagement.GenericColorSpace.Working,
     "Raw": lambda: substance_painter.colormanagement.GenericColorSpace.Raw,
+}
+
+# Colour spaces a bitmap source may be set to: the generic ones, and the `LegacyColorSpace`
+# members by qualified name (a bare `sRGB` stays the generic member; decision 156).
+BITMAP_COLOR_SPACES = {
+    **COLOR_SPACES,
+    "LegacyColorSpace.Linear": lambda: substance_painter.colormanagement.LegacyColorSpace.Linear,
+    "LegacyColorSpace.sRGB": lambda: substance_painter.colormanagement.LegacyColorSpace.sRGB,
 }
 
 # display.CameraProjectionType members.
@@ -937,8 +950,16 @@ def apply_step(args: dict[str, Any]) -> dict[str, Any]:
         node.set_source(channel_type(params["channel"]), source)
         if "color" not in params and "color_space" in params:
             # A bitmap source's colour space (documented `SourceBitmap.set_color_space`).
-            space = member(COLOR_SPACES, "GenericColorSpace", params["color_space"])
+            space = member(BITMAP_COLOR_SPACES, "bitmap colour space", params["color_space"])
             node.get_source(channel_type(params["channel"])).set_color_space(space)
+    elif call == SET_COLOR_SPACE:
+        node = NODES[int(params["node_step"])]
+        space = member(BITMAP_COLOR_SPACES, "bitmap colour space", params["color_space"])
+        try:
+            node.get_source(channel_type(params["channel"])).set_color_space(space)
+            result = {"applied": True}
+        except Exception as error:  # Painter's refusal is the observation (decision 156)
+            result = {"applied": False, "raised": raised_by(error)}
     elif call in (SET_ACTIVE_CHANNELS, SET_EFFECT_CHANNELS, SET_FILTER_CHANNELS):
         node = NODES[int(params["node_step"])]
         node.active_channels = {channel_type(c) for c in params["channels"]}

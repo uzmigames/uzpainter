@@ -50,6 +50,7 @@ STATE_CALLS = frozenset(
         ps.CREATE,
         ps.INSERT_FILL,
         ps.SET_SOURCE,
+        ps.SET_COLOR_SPACE,
         ps.SET_ACTIVE_CHANNELS,
         ps.SET_BLENDING_MODE,
         ps.SET_OPACITY,
@@ -107,9 +108,15 @@ API_CAPTURES: dict[str, tuple[str, tuple[str, ...]]] = {
     PREDEFINED_OUTPUT_MAPS: ("presets", ("preset", "texture_set")),
     RESOURCE_OUTPUT_MAPS: ("presets", ("preset",)),
     LIST_COLOR_SPACES: ("color-spaces", ("node_step", "channel")),
+    # A fill's UV projection as Painter holds it, read without setting it first (decision 156:
+    # the default filtering of decision 129's padding probes).
+    ps.GET_PROJECTION: ("projection", ("node_step",)),
 }
 # Without `preset`, the output maps of every predefined preset Painter lists are recorded.
 OPTIONAL_CAPTURE_ARGS = {PREDEFINED_OUTPUT_MAPS: ("preset",)}
+
+# Arguments of an attempted `SourceBitmap.set_color_space` step (decision 156).
+COLOR_SPACE_ARGS = ("node_step", "channel", "color_space")
 
 # Arguments of a `set_resolutions` step: the size, and optionally the one texture set it sets.
 RESOLUTION_ARGS = ("width", "height", "texture_set")
@@ -346,6 +353,26 @@ def check_resolution_step(step: Step) -> None:
         )
 
 
+def check_colour_space_step(step: Step, state: list[Step]) -> None:
+    """Refuse a malformed attempted `set_color_space` before Painter is touched: exactly its
+    arguments, `node_step` naming an earlier `insert_fill` step (`channel` null in a mask) and
+    the colour space by name."""
+    args = step.args
+    fills = {s.step for s in state if s.call == ps.INSERT_FILL}
+    node_step = args.get("node_step")
+    if (
+        set(args) != set(COLOR_SPACE_ARGS)
+        or isinstance(node_step, bool)
+        or node_step not in fills
+        or (args["channel"] is not None and not is_name(args["channel"]))
+        or not is_name(args["color_space"])
+    ):
+        raise RecorderError(
+            f"step {step.step}: set_color_space takes `node_step` (an insert_fill step), "
+            "`channel` (a name, or null in a mask) and `color_space` (a name)"
+        )
+
+
 def check_api_capture(step: Step, state: list[Step]) -> None:
     """Refuse a malformed texture-job capture before Painter is touched: exactly its arguments,
     preset and texture-set names as strings, a resource preset as a `resource://` URL, and the
@@ -362,13 +389,14 @@ def check_api_capture(step: Step, state: list[Step]) -> None:
             raise RecorderError(f"{where}: `{name}` must be a name")
     if step.call == RESOURCE_OUTPUT_MAPS and not str(args["preset"]).startswith("resource://"):
         raise RecorderError(f"{where}: `preset` must be a resource:// URL")
-    if step.call == LIST_COLOR_SPACES:
+    if step.call in (LIST_COLOR_SPACES, ps.GET_PROJECTION):
         fills = {s.step for s in state if s.call == ps.INSERT_FILL}
         node_step = args["node_step"]
         if isinstance(node_step, bool) or node_step not in fills:
             raise RecorderError(f"{where}: `node_step` must name an insert_fill step")
-        if args["channel"] is not None and not is_name(args["channel"]):
-            raise RecorderError(f"{where}: `channel` must be a channel name or null")
+    channel = args.get("channel")
+    if step.call == LIST_COLOR_SPACES and channel is not None and not is_name(channel):
+        raise RecorderError(f"{where}: `channel` must be a channel name or null")
 
 
 @dataclass(frozen=True)
@@ -495,6 +523,8 @@ def job_from_manifest(manifest: dict[str, Any], repo_root: Path = REPO_ROOT) -> 
             check_baking_step(step)
         if step.call == ps.SET_RESOLUTIONS:
             check_resolution_step(step)
+        if step.call == ps.SET_COLOR_SPACE:
+            check_colour_space_step(step, state)
         state.append(step)
     if not state or state[0].call != ps.CREATE:
         raise RecorderError("the instruction sequence must start with project.create")

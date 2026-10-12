@@ -29,7 +29,8 @@ A job is the golden's public manifest (`golden-public.json`) with `private_recor
 | `substance_painter.layerstack.FillLayerNode.set_projection_parameters` | `node_step`, `filtering_mode` (`BilinearHQ`, `BilinearSharp`, `Nearest`), `uv_wrapping_mode`, `scale_mode` (`Factors`), `scale`, `rotation`, `offset` (`UVProjectionParams`) |
 | `substance_painter.textureset.Stack.add_channel`, `.edit_channel` | `channel`, `format` (a `ChannelFormat` member); optional `texture_set`, else every texture set |
 | `substance_painter.layerstack.FillLayerNode.active_channels` | `node_step`, `channels` |
-| `substance_painter.layerstack.FillLayerNode.set_source` | `node_step`, `channel`, and either `color` [r, g, b] with optional `color_space` (`sRGB`, `Working`, `Raw`) or `resource` (a `resource://` URL, `resource.ResourceID.from_url`) or `resource_step`, an imported bitmap, with optional `color_space` (`sRGB`, `Working`, `Raw`; set by the documented `SourceBitmap.set_color_space`, decision 087); the readback records a uniform colour, a bitmap's colour space, or every `properties.Property` of a substance source (`value`, `widget_type`, `label`) |
+| `substance_painter.layerstack.FillLayerNode.set_source` | `node_step`, `channel`, and either `color` [r, g, b] with optional `color_space` (`sRGB`, `Working`, `Raw`) or `resource` (a `resource://` URL, `resource.ResourceID.from_url`) or `resource_step`, an imported bitmap, with optional `color_space` (`sRGB`, `Working`, `Raw`, `LegacyColorSpace.Linear`, `LegacyColorSpace.sRGB`; set by the documented `SourceBitmap.set_color_space`, decisions 087 and 156); the readback records a uniform colour, a bitmap's colour space, or every `properties.Property` of a substance source (`value`, `widget_type`, `label`) |
+| `substance_painter.source.SourceBitmap.set_color_space` (attempted, decision 156) | `node_step` (an `insert_fill` step), `channel` (`null` for a fill effect in a mask stack), `color_space` (as for `set_source`); a state step whose refusal is the observation: the record's effective defaults hold `set_color_space.<step>` as `applied: true`, or `applied: false` with what Painter raised, and the golden is still recorded |
 | `substance_painter.layerstack.Node.set_blending_mode` | `node_step`, `blending_mode`, `channel` |
 | `substance_painter.layerstack.Node.set_opacity` | `node_step`, `opacity`, `channel` |
 | `substance_painter.textureset.set_resolutions` | `width`, `height` (may differ, e.g. 256 × 128); optional `texture_set`: only that set (`TextureSet.from_name`), else every texture set. Each set's resolution is in the template capture of both recordings |
@@ -51,6 +52,7 @@ A job is the golden's public manifest (`golden-public.json`) with `private_recor
 | `substance_painter.export.PredefinedExportPreset.list_output_maps` (capture) | `texture_set` (its stack is passed); optional `preset` (a name): that preset only, else every preset Painter lists; recorded by preset name with its `url` and `output_maps` (or what that preset's call raised) |
 | `substance_painter.export.ResourceExportPreset.list_output_maps` (capture) | `preset` (a `resource://` URL; `ResourceExportPreset(ResourceID.from_url(preset))`, no stack) |
 | `substance_painter.source.SourceBitmap.list_available_color_spaces` (capture) | `node_step` (an `insert_fill` step), `channel` (`null` for a fill effect in a mask stack); records the available colour spaces and `get_color_space()`, each as `{class, name}` (`GenericColorSpace`, `LegacyColorSpace`, `DataColorSpace`, `NormalColorSpace` or `str`) |
+| `substance_painter.layerstack.FillLayerNode.get_projection_parameters` (capture, decision 156) | `node_step` (an `insert_fill` step); records the fill's UV projection as Painter holds it, e.g. its default filtering when no step set it |
 | `substance_painter.baking.BakingParameters.common` (capture, §8) | none |
 | `substance_painter.baking.BakingParameters.baker` (capture, §8) | `usage` (a `textureset.MeshMapUsage` member name) |
 | `substance_painter.baking.BakingParameters.get_curvature_method`, `.get_enabled_bakers`, `.is_textureset_enabled` (captures, §8) | none |
@@ -324,6 +326,23 @@ $exe = "C:\Program Files\Adobe\Adobe Substance 3D Painter\Adobe Substance 3D Pai
 
    It records `r1` (create, sync, export), `r1-repeat` (export again in the same session) and `r2` (reopen the saved work project, export again). Admit it to `$man/phase1/tier1/wand-v1.json`.
 4. Admit as in 11.1 step 5.
+
+### 11.4 Later Legacy requests (decisions 145, 126, 129; requests by decisions 156, 157)
+
+Recorded in a Legacy session as in 11.1 steps 1, 2 and 5, after anything left of 11.1:
+
+```powershell
+$later = @("srgb-bitmap-variants",
+  "export-template-base-unreal-engine", "export-template-base-openpbr-anisotropy",
+  "export-template-base-pbr-specular-glossiness")
+$later += foreach ($m in "r1", "r2", "r15") { foreach ($p in "p0", "p25", "p75") { "export-padding-ramp-$m-$p" } }
+$later += "export-padding-tie-512", "export-padding-tie-2048"
+foreach ($g in $later) {
+  python -m tools.parity.recorder record "$req/tier0/semantics/$g.json"
+}
+```
+
+`srgb-bitmap-variants` s5 attempts `set_color_space(sRGB)` on a mask source: a refusal there is recorded (`set_color_space.<step>` in the effective defaults), not a refused golden. A P-ramp or P-tie record whose `passthrough` User0 differs from the ramp on a covered texel, or whose template capture shows User0 other than RGB32F, is void (decision 129); report it.
 
 ### 11.3 After the sessions
 
