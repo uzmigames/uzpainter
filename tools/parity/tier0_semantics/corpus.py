@@ -108,6 +108,23 @@ FIXTURES: dict[str, tuple[str, str, Callable[[], bytes] | None]] = {
         f"{FIXTURE_DIR}/bitmaps/normal-a-8bit.png",
         lambda: fixtures.normal_field("a", bits=8),
     ),
+    # Recording requests R-091 and R-092 (decision 093): the grid whose file name holds two dots
+    # (`$mesh` is the staged input's stem), the constant greys of AO_Mixed's isolation, and the
+    # authored environment of the Iray procedure for the View_2D view-state probes.
+    "grid2x2.dotted": (
+        "mesh",
+        f"{FIXTURE_DIR}/meshes/grid2x2.dotted.obj",
+        lambda: fixtures.grid(2, 2),
+    ),
+    **{
+        f"grey-{code:03d}": (
+            "image",
+            f"{FIXTURE_DIR}/bitmaps/grey-{code:03d}.png",
+            (lambda c: lambda: fixtures.constant_grey(c))(code),
+        )
+        for code in fixtures.AO_CONSTANTS
+    },
+    "sky-patch": ("environment", "parity/fixtures/render-procedure/sky-patch.exr", None),
 }
 
 
@@ -288,16 +305,17 @@ class Sequence:
         self.add(ps.SET_BLENDING_MODE, node_step=node, blending_mode=mode, channel=channel)
         self.add(ps.SET_OPACITY, node_step=node, opacity=opacity, channel=channel)
 
-    def export(self, maps: list[str], floating: bool) -> None:
+    def export(self, maps: list[str], floating: bool, png_depth: int = 16) -> None:
         for first in range(0, len(maps), MAPS_PER_EXPORT):
-            self.export_step(maps[first : first + MAPS_PER_EXPORT], floating)
+            self.export_step(maps[first : first + MAPS_PER_EXPORT], floating, png_depth)
 
-    def export_step(self, maps: list[str], floating: bool) -> None:
+    def export_step(self, maps: list[str], floating: bool, png_depth: int = 16) -> None:
+        """OpenEXR 32f, or PNG at `png_depth` bits (16, or 8 for Painter's own 8-bit write)."""
         self.add(
             EXPORT,
             maps=maps,
             file_format="exr" if floating else "png",
-            bit_depth="32f" if floating else 16,
+            bit_depth="32f" if floating else png_depth,
             padding="infinite",
             dithering=False,
         )
@@ -956,11 +974,12 @@ def applied_settings(golden: Golden) -> list[dict[str, Any]]:
         settings.append(
             {"name": "project.template", "value": golden.template, "applied_by": "recorder_api"}
         )
-    formats = sorted(
-        {str(s["args"]["file_format"]) for s in golden.sequence.steps if s["call"] == EXPORT}
-    )
-    for file_format in formats:
-        depth = "32f" if file_format == "exr" else 16
+    depths = {
+        (str(s["args"]["file_format"]), s["args"]["bit_depth"])
+        for s in golden.sequence.steps
+        if s["call"] == EXPORT
+    }
+    for file_format, depth in sorted(depths, key=lambda d: (d[0], str(d[1]))):
         settings.append(
             {
                 "name": f"export.{file_format}.bit_depth",
