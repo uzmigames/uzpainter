@@ -1,13 +1,15 @@
 # `phase1.15_export-plan-compiler`: local run on the owner's machine and recording requests R-085, R-086
 
-Child of `phase1.18_export-engine` (P1-EXPORT; `docs/architecture/08-export.md` §1, §2, §6; EXP-01, EXP-03, EXP-04, EXP-09, INT-13, QG-03). Under decision 028 the Tier 0 comparisons run locally against the private oracle store, and this report is their evidence. Run on 2026-10-11 on the branch `wt/phase1.15-export-plan` (base main `444406a`, current envelope `painter-12.1.5_js-api.1.1.20`). Decisions 076, 085 and 086. Implementation: `src/export/` (`src/export/EXPORT.md`).
+Child of `phase1.18_export-engine` (P1-EXPORT; `docs/architecture/08-export.md` §1, §2, §6; EXP-01, EXP-03, EXP-04, EXP-09, INT-13, QG-03). Under decision 028 the Tier 0 comparisons run locally against the private oracle store, and this report is their evidence. Run on 2026-10-11 on the branch `wt/phase1.15-export-plan` (base main `444406a`, current envelope `painter-12.1.5_js-api.1.1.20`). Decisions 076, 085, 086, 091 and 092; continued on `wt/phase1.15-close`. Implementation: `src/export/` (`src/export/EXPORT.md`).
 
 **Result.**
 
-- The plan compiler is implemented and its CPU tests pass: 15 of 15 in `tests/export`.
+- The plan compiler is implemented and its tests pass: 18 of 18 in `tests/export`.
 - The dry run lists exactly the files Painter wrote on every compared Tier 0 export step: 165 steps, 0 differing.
+- Every export probe of recording R-085 compiles as Painter behaved: 90 compilations, of which 6 are refused as not recorded (R-091). The refusals the probes settle are lifted (decision 091).
 - Normal_OpenGL and Normal_DirectX, compiled as plan files and evaluated through `EvaluateFileOn`, equal their goldens: 40 maps, 72 comparisons, 0 differing values.
-- `AO_Mixed` is not exact on one set of its golden, where Painter's two recordings also disagree. It is a release gap until recording R-086 (decision 086). The ten converted maps have no golden.
+- `AO_Mixed` is not exact: its best model misses r1 at 31 values of recording R-086a (decision 092).
+- Nine converted maps are fitted exactly on recording R-086b. They stay release gaps until the evaluator gives channel coverage and recording R-092 covers other templates. View_2D is a render, not an operator (decision 092).
 
 Items 3.5, 3.6 and 4.1 stay open (§5).
 
@@ -73,6 +75,24 @@ Items 3.5, 3.6 and 4.1 stay open (§5).
 
 Before decision 086 made `AO_Mixed` a gap, the `ao-mixed` step also planned exactly Painter's files, giving 166 equal steps. The equality covers the 26 template channel sets of the `base-values-*` goldens. Each of them requests every documented `documentMap`, so the presence and alias rules of decision 085 are measured on every template.
 
+### The export probes (recording R-085, decisions 087 and 091)
+
+`test_dry_run_equals_painter_probes` compiles every probe of the six `export-probes-*` goldens. It uses the recording's texture sets, the mesh file name, and the project path: none for r1, and r2's `golden.spp`. Each result is compared with what Painter did:
+
+- a configuration Painter's `list_project_textures` refused must be a `ValueError`;
+- an export Painter refused must make the dry run raise `ValueError` (`CheckExportable`);
+- otherwise the planned files must be exactly the files on disk after Painter's export, meaning its result less the inventory's missing names, with Painter's bit depth and channel count;
+- each legacy name must read the channel whose direct export Painter wrote with the same bytes.
+
+| Outcome | Compilations (45 probes × r1, r2) |
+|---|---|
+| As Painter (files, depths, channels, refusals) | 84 |
+| Legacy-name pairings checked against Painter's bytes | 24 |
+| Refused as not recorded (R-091) | 6: the case-only collision P9 and srcChannel A (P6, two probes) |
+| Differing, or refused unexpectedly | 0 |
+
+`test_luma_probe_exact` evaluates P5 through the plan: srcChannel L of BaseColor, field A in Raw, as the Rec. 601 luma of the linear channel. Written with Painter 12.1.5's 16-bit sRGB encode (`srgb16`), it equals r1 and r2 on every texel of s0, and so does the channel's RGB export. On s1 the BaseColor holds its base value, and the luma of a base value is refused (decision 091 §5).
+
 ## 3. Virtual maps through the plan (item 3.6)
 
 `test_virtual_map_goldens_exact` uses `uzp-export-tests files`. Each golden's texture set is built from its instruction sequence (`spec_from_steps`, with the bound mesh maps), and the recorder's configuration for the map is compiled. Every planned file is evaluated through `EvaluateFileOn` on the CPU store and written with the 16-bit UNORM write rule.
@@ -100,9 +120,38 @@ Operand models tried and rejected on s1:
 | 8-bit channel | 8166 / 8139 |
 | decoding by multiplying with float32(1/65535), either operand | 30 / 17 |
 
-The published `virtual-maps.json` lists AO_Mixed as `gap` with these numbers.
+### R-086: AO_Mixed and the converted maps (decision 092)
+
+Recording R-086 (decision 087) was fitted in the scratchpad against the private store; only counts are published.
+
+**AO_Mixed** (`ao-mixed-opacity`, its OpenEXR 32f twin, and `ao-mixed`):
+
+- The values lie on the 8-bit lattice before encoding, and step A equals step B. r1 and r2 differ by one 8-bit step at 9 to 41 values per set.
+- **Best model:**
+  - the AO channel before its L16 write, `c = fma(C - 1, alpha, 1)`, with the layer's opacity and colour taken at their L16 codes;
+  - times the mesh map, `a = k/255`, in float32;
+  - written at 8 bits (12 fractional bits, nearest, ties down).
+
+| Model | r1 misses: `ao-mixed-opacity` s0-s7 (its twin the same) | `ao-mixed` s0-s3 |
+|---|---|---|
+| product with the exported L16 channel (decision 086) | 28/30/37/33/0/30/37/0 | 0/30/0/0 |
+| best model | 0/9/2/0/0/9/2/0 | 0/9/0/0 |
+
+Every remaining miss lies within 3 ulps of the product from a 2^-12 boundary, and no correctly rounded float32 evaluation of the tested inputs reproduces it. The rejected candidates are listed in `virtual-maps.json`. AO_Mixed stays a gap, and recording R-092 isolates the unknown.
+
+**The converted maps** (`virtual-maps-converted` and its OpenEXR 32f twin; r1 = r2 on all 160 maps):
+
+- 9 of 10 maps equal r1 with 0 differing values on every texel of s0-s7, at PNG 16 and EXR 32f: Diffuse, Specular, Glossiness, Glossiness2, Unity4Diff, Unity4Gloss, reflection, 1/ior and f0. Their operators are in `virtual-maps.json`.
+- They read each channel's coverage: Unity4Diff and Unity4Gloss through their alpha, and all nine through fixed inputs where a channel has no layer. Those inputs (BaseColor 1.3, roughness 0.5980393, metalness 0) were seen on one template only.
+- View_2D varies texel to texel like a render and is not fitted.
+- All ten stay gaps (decision 092 §2 lists what lifts them).
 
 ## 4. Recording requests (for the agent that owns Painter)
+
+R-085 and R-086 below were recorded and admitted (decision 087). The follow-ups are specified in their decisions:
+
+- **R-091** (decision 091 §7): the export cases the probes left open.
+- **R-092** (decision 092 §5): AO_Mixed's operands, the converted maps on other templates and at fractional coverage, and the View_2D view state.
 
 Both requests use the documented API through the recorder, Legacy colour management and the current envelope's build. Each golden is recorded as r1 (same session) and r2 (after save and reopen), and goldens are added to `tools/parity/tier0_semantics/current.py` (`api_goldens`) as decision 077 did.
 
@@ -159,4 +208,4 @@ One project per probe group, on `grid2x2` (texture sets s0-s3), OpenGL, 256 px. 
 
 - **1.1** Prerequisite `phase1.14_compositor-core` is merged, but `phase1.12_compositor-height-normal` (one of its children) is still closing on another branch. The virtual normal maps' set-size and Normal-mesh-map limits change when it lands. The plan defers those limits to the evaluator, so nothing in `src/export/` needs to change for them (decision 085).
 - **3.5** Painter's side is proven (§2). Equality between UzPainter's own dry run and its own written files needs the phase1.16 writers, and phase1.17's receipts must check it against the files actually written (decision 085).
-- **3.6, 4.1** The maps marked supported are exact (§3). AO_Mixed, which item 3.6 names, needs R-086a and its fit.
+- **3.6, 4.1** The maps marked supported are exact (§3). AO_Mixed, which item 3.6 names, is not exact on R-086a and needs recording R-092 (decision 092). The converted maps are not marked supported, so they do not block 3.6.

@@ -109,14 +109,17 @@ int AsInt(const json::Value& value, const std::string& path) {
     Invalid(path, "expected an integer, got " + std::string(TypeName(value)));
 }
 
-/// Refuses every key of `object` outside the documented `allowed` ones: what Painter does with an
-/// undocumented key is not recorded (decision 085), so it is a release gap, not an ignored key.
+/// Refuses every key of `object` outside the documented `allowed` ones where what Painter does with
+/// an undocumented key is not recorded (decision 085). Painter ignores undocumented keys at the
+/// configuration's root and in a preset map (probe P10, decision 091); those two objects are not
+/// checked.
 void CheckKeys(const json::Object& object, const std::string& path, std::vector<std::string> allowed) {
     for (const auto& [key, _] : object) {
         if (std::find(allowed.begin(), allowed.end(), key) == allowed.end()) {
             throw core::NotYetSupported("export: " + path + ": the key \"" + key +
                                         "\" is not documented and its effect in Painter is not recorded; "
-                                        "documented keys: " + JoinNames(Nearest(key, std::move(allowed))));
+                                        "documented keys: " + JoinNames(Nearest(key, std::move(allowed))) +
+                                        " (export-semantics recording R-091, decision 091)");
         }
     }
 }
@@ -172,10 +175,8 @@ FileFormat ParseFormat(const json::Value& value, const std::string& path) {
 }
 
 BitDepth ParseDepth(const json::Value& value, const std::string& path) {
-    if (value.IsInt()) {
-        throw core::NotYetSupported("export: " + path + ": an integer bitDepth is not recorded; Painter documents "
-                                    "the strings \"8\", \"16\", \"16f\" and \"32f\"");
-    }
+    // Painter raises "Expected a string value" for an integer (probe P11, decision 091).
+    if (value.IsInt()) Invalid(path, "Expected a string value; valid: \"8\", \"16\", \"16f\", \"32f\"");
     const std::string& name = AsString(value, path);
     const std::optional<size_t> index = IndexOf(kDepths, name);
     if (!index) Unknown(path, "bit depth", name, Strings(kDepths));
@@ -318,7 +319,6 @@ void CheckDestinations(const std::vector<ChannelSpec>& channels, const std::stri
 
 MapSpec ParseMap(const json::Value& value, const std::string& path) {
     const json::Object& object = AsObject(value, path);
-    CheckKeys(object, path, {"fileName", "channels", "parameters"});
     MapSpec map;
     map.fileName = AsString(Required(object, "fileName", path), path + ".fileName");
     if (map.fileName.empty()) Invalid(path + ".fileName", "must not be empty");
@@ -489,21 +489,27 @@ std::optional<core::ChannelType> RecordedAliasTarget(core::ChannelType member) {
         case Emissive: return EmissionColor;
         case Anisotropylevel: return SpecularRoughnessAnisotropy;
         case Scattering: return SubsurfaceRadiusScale;
+        case CoatOpacity: return CoatWeight;
+        case SheenColor: return FuzzColor;
+        case SheenRoughness: return FuzzRoughness;
+        case SheenOpacity: return FuzzWeight;
+        case Translucency: return SubsurfaceWeight;
+        case ScatteringColor: return SubsurfaceColor;
         default: return std::nullopt;
     }
 }
 
-bool IsUnrecordedAlias(core::ChannelType member) {
+bool RaisesWhenAbsent(core::ChannelType member) {
     using enum core::ChannelType;
     switch (member) {
-        case SpecularEdgeColor:
-        case ScatteringColor:
-        case Translucency:
-        case AbsorptionColor:
-        case SheenOpacity:
-        case SheenRoughness:
+        case CoatOpacity:
         case SheenColor:
-        case CoatOpacity: return true;
+        case SheenRoughness:
+        case SheenOpacity:
+        case Translucency:
+        case ScatteringColor:
+        case AbsorptionColor:
+        case SpecularEdgeColor: return true;
         default: return false;
     }
 }
@@ -535,9 +541,6 @@ ExportConfig ParseConfig(std::string_view jsonText) {
 ExportConfig ParseConfig(const json::Value& value) {
     const std::string root = "config";
     const json::Object& object = AsObject(value, root);
-    CheckKeys(object, root,
-              {"exportPath", "exportShaderParams", "defaultExportPreset", "exportPresets", "exportList",
-               "exportParameters"});
     ExportConfig config;
     config.exportPath = AsString(Required(object, "exportPath", root), "exportPath");
     if (config.exportPath.empty()) Invalid("exportPath", "must not be empty");

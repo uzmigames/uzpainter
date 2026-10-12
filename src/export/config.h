@@ -156,15 +156,18 @@ struct ExportConfig {
 [[nodiscard]] std::optional<core::ChannelType> DocumentMapMember(std::string_view name);
 
 /// The OpenPBR member a legacy alias member reads when the stack lacks the alias itself, for the
-/// pairings Painter 12.1.5 was observed to export (decision 085: Tier 0 recordings): Roughness →
-/// SpecularRoughness, Metallic → BaseMetalness, Emissive → EmissionColor, Anisotropylevel →
-/// SpecularRoughnessAnisotropy, Scattering → SubsurfaceRadiusScale. nullopt for a member that is
-/// no alias or whose pairing is not recorded (`IsUnrecordedAlias`).
+/// pairings Painter 12.1.5 was observed to export: Roughness → SpecularRoughness, Metallic →
+/// BaseMetalness, Emissive → EmissionColor, Anisotropylevel → SpecularRoughnessAnisotropy,
+/// Scattering → SubsurfaceRadiusScale (decision 085, the Tier 0 goldens); CoatOpacity →
+/// CoatWeight, SheenColor → FuzzColor, SheenRoughness → FuzzRoughness, SheenOpacity → FuzzWeight,
+/// Translucency → SubsurfaceWeight, ScatteringColor → SubsurfaceColor (probe P13, decision 091:
+/// byte-equal to the paired channel's own export). nullopt for any other member.
 [[nodiscard]] std::optional<core::ChannelType> RecordedAliasTarget(core::ChannelType member);
-/// The legacy alias members whose pairing was never observed (SpecularEdgeColor,
-/// ScatteringColor, Translucency, AbsorptionColor, SheenOpacity, SheenRoughness, SheenColor,
-/// CoatOpacity).
-[[nodiscard]] bool IsUnrecordedAlias(core::ChannelType member);
+/// The legacy names whose export raises ValueError when the stack has neither the name's channel
+/// nor its pairing (probe P13, decision 091), unlike every other documentMap, whose map is then
+/// absent: the six P13 pairings above, and AbsorptionColor and SpecularEdgeColor, which have no
+/// pairing on any recorded template.
+[[nodiscard]] bool RaisesWhenAbsent(core::ChannelType member);
 
 /// The mesh map a meshMap name names (`ambient_occlusion` AO, `id` ID, `curvature` Curvature,
 /// `normal_base` Normal, `world_space_normals` WorldSpaceNormal, `position` Position,

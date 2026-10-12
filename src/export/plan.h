@@ -1,19 +1,22 @@
 #pragma once
 
 // The typed export plan (docs/architecture/08-export.md §1, §2, §6; task
-// phase1.15_export-plan-compiler, decisions 085 and 086). `CompilePlan` turns a parsed
+// phase1.15_export-plan-compiler, decisions 085, 086 and 091). `CompilePlan` turns a parsed
 // configuration (config.h) and a project into every output file with its resolved sources,
 // parameters, size, name and target format, before any evaluation or write. The plan is also the
-// dry run: `ListProjectTextures` returns Painter's `list_project_textures` shape from it.
+// dry run: `ListProjectTextures` returns, in Painter's `list_project_textures` shape, exactly the
+// files the export writes (decision 091). Painter's own `list_project_textures` also names maps
+// its export then does not write or refuses; the plan keeps those in `skipped` with their kind.
 //
-// Semantics (Painter's public export documentation and the Tier 0 recordings, decision 085):
+// Semantics (Painter's public export documentation, the Tier 0 recordings, decision 085, and the
+// export probes of recording R-085, decision 091):
 //
 // - rootPath is "<texture set>" for a set whose only stack is unnamed, "<texture set>/<stack>"
 //   otherwise. The preset is the entry's `exportPreset`, else `defaultExportPreset`.
 // - Filters: an absent member selects everything, a present empty list nothing. `dataPaths`
 //   entries match a rootPath or its texture set; `outputMaps` entries match the map's
-//   unexpanded `fileName` exactly; members combine with AND. `uvTiles` in the Default workflow is
-//   not recorded and is refused.
+//   unexpanded `fileName` exactly; `uvTiles` selects a texture set of the Default workflow (the
+//   single tile [0, 0], UDIM 1001) when it lists [0, 0]; members combine with AND.
 // - Parameters per file: the preset map's `parameters`, then every matching `exportParameters`
 //   rule in list order, each overriding the parameters it defines. fileFormat, bitDepth,
 //   dithering and paddingAlgorithm must then be defined, and dilationDistance when the padding
@@ -21,22 +24,32 @@
 //   (png: 8, 16; exr: 16f, 32f).
 // - Presence: a documentMap whose channel the stack lacks (directly or through a recorded alias
 //   pairing) makes its map absent, and a map whose channels are all `defaultMap white` is absent:
-//   absent maps are skipped and listed in `skipped` (Painter writes neither). A map with a present
-//   source and an absent documentMap, a map of `defaultMap black` only, an unbound mesh map and a
-//   virtual map whose inputs the stack lacks are not recorded and are refused. A diagnosticMap
-//   whose node is not in a stack is absent there; one whose node is in no exported stack is an
-//   invalid configuration. A plan without any file is an invalid configuration.
-// - Names: `$textureSet` is the set's name; under legacy colour management `$colorSpace` is
-//   empty, and in the Default workflow `$udim` and `$uvTileName` are empty; a `( … )` group is
-//   dropped when one of its wildcards is empty and written without its parentheses otherwise. An
-//   empty wildcard outside a group, a group without wildcards, nested groups, `$mesh`,
-//   `$project` and `$sceneMaterial` are not recorded and are refused. `/` separates
-//   sub-folders. Two files whose paths are equal ignoring case are not recorded (Painter's
-//   behaviour on a collision is unknown) and are refused naming both.
+//   absent maps are skipped (`SkipKind::absent`, Painter writes neither). A map whose channels
+//   are all `defaultMap black` is listed by Painter but not written (`not_written`). An unbound
+//   mesh map, and a legacy name whose channel and pairing the stack lacks (`RaisesWhenAbsent`),
+//   are listed by Painter but their export raises ValueError (`export_error`; the dry run raises
+//   too, `CheckExportable`). An absent documentMap as the alpha of an R+G+B+A map whose R, G and B
+//   are present drops the alpha: the file is R+G+B. Any other mix of present and absent sources,
+//   a mix of black and white default maps and a virtual map whose inputs the stack lacks are not
+//   recorded and are refused. A diagnosticMap whose node is not in a stack is absent there; one
+//   whose node is in no exported stack is an invalid configuration. A plan may write no file.
+// - Names: `$textureSet` is the set's name, `$sceneMaterial` its mesh material (`original_name`),
+//   `$mesh` the imported mesh file's name without its extension, `$project` the project file's
+//   name without its extension, `Untitled` while it was never saved (`PlanContext`); under legacy
+//   colour management `$colorSpace` is empty, and in the Default workflow `$udim` and
+//   `$uvTileName` are empty, also outside a group. A `( … )` holding no parenthesis and at least
+//   one wildcard is a group: dropped when one of its wildcards is empty, written without its
+//   parentheses otherwise; every other parenthesis is a literal character. A mesh or project file
+//   name with more than one dot is not recorded and is refused. `/` separates sub-folders. Within
+//   one exportList entry, a later map whose path equals an earlier one's gets `_1` before its
+//   extension; a third equal path, equal paths of two entries and paths equal only ignoring case
+//   are not recorded and are refused naming both.
 // - Channels: destChannels L, L+A, R+G+B or R+G+B+A. srcChannel L, R, G or B of a one-component
-//   source reads its value; R, G or B of a three-component source reads that component; any
-//   letter of a defaultMap reads its constant. L of a three-component source (an undocumented
-//   mix) and A of any other source are refused.
+//   source reads its value; R, G or B of a three-component source reads that component; L of a
+//   three-component source reads the Rec. 601 luma of its linear components, fma(0.114, b,
+//   fma(0.299, r, 0.587 g)) in float32 (probe P5, decision 091); any letter of a defaultMap reads
+//   its constant. A of any other source is not recorded beyond full and no coverage and is
+//   refused.
 // - A `diagnosticMap` `regionStats/...` source is a statistics file: the map's only channel
 //   (destChannel L), written as canonical JSON (`<name>.json`, decision 076); anywhere else it
 //   is an invalid configuration.
@@ -89,6 +102,9 @@ struct PlannedChannel {
     ChannelLetter src = ChannelLetter::L;
     /// The component of the source's values this channel reads.
     uint32_t component = 0;
+    /// srcChannel L of a three-component source: the Rec. 601 luma of its components (probe P5,
+    /// decision 091) instead of `component`.
+    bool luma = false;
     PlannedSource source;
 };
 
@@ -130,7 +146,18 @@ struct PlannedFile {
     uint32_t height = 0;
 };
 
-/// A preset map Painter would not write for a stack (its sources are absent there).
+/// Why the export writes no file for a preset map of a stack (decision 091).
+enum class SkipKind : uint8_t {
+    /// Its sources are absent in the stack: Painter writes no file.
+    absent,
+    /// Painter's `list_project_textures` lists it, its export writes nothing (black only).
+    not_written,
+    /// Painter's `list_project_textures` lists it, its export raises ValueError.
+    export_error,
+};
+[[nodiscard]] std::string_view SkipKindName(SkipKind kind);
+
+/// A preset map the export does not write for a stack.
 struct SkippedMap {
     std::string textureSet;
     std::string stack;
@@ -139,6 +166,7 @@ struct SkippedMap {
     size_t mapIndex = 0;
     std::string fileName;
     std::string reason;
+    SkipKind kind = SkipKind::absent;
 };
 
 struct ExportPlan {
@@ -150,10 +178,25 @@ struct ExportPlan {
     std::string hash;
 };
 
+/// What a plan reads besides the project and its configuration.
+struct PlanContext {
+    /// The project file's path; empty while the project was never saved (`$project` is then
+    /// `Untitled`, probe P1).
+    std::string projectPath;
+};
+
 /// Compiles `config` against `project` (see above).
-[[nodiscard]] ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config);
+[[nodiscard]] ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config,
+                                     const PlanContext& context = {});
 /// Parses and compiles the JSON text of a configuration.
-[[nodiscard]] ExportPlan CompilePlan(const core::Project& project, std::string_view configJson);
+[[nodiscard]] ExportPlan CompilePlan(const core::Project& project, std::string_view configJson,
+                                     const PlanContext& context = {});
+
+/// Throws `core::ValueError` naming the first `export_error` map of `plan` when the plan writes no
+/// file: Painter's export of that configuration raises ValueError, and so do the dry run and the
+/// export, before anything is written (probes P12, P13, decision 091). With files to write it
+/// throws `core::NotYetSupported`: whether Painter writes them before it raises is not recorded.
+void CheckExportable(const ExportPlan& plan);
 
 /// The plan as JSON (`kPlanSchema`): exportPath, files (every field of PlannedFile), skipped and
 /// hash. Its canonical form (core::json::WriteCanonical) is byte-stable.
@@ -172,8 +215,10 @@ struct StackFiles {
 /// `list_project_textures` result.
 [[nodiscard]] std::vector<StackFiles> FilesByStack(const ExportPlan& plan);
 
-/// The dry run: `list_project_textures(json_config)` on `project`.
-[[nodiscard]] std::vector<StackFiles> ListProjectTextures(const core::Project& project, std::string_view configJson);
+/// The dry run: the files `export_project_textures(json_config)` writes on `project`, grouped as
+/// `list_project_textures` groups them (CompilePlan, CheckExportable, FilesByStack).
+[[nodiscard]] std::vector<StackFiles> ListProjectTextures(const core::Project& project, std::string_view configJson,
+                                                          const PlanContext& context = {});
 
 /// The inputs every source of a planned file reads.
 struct SourceInputs {

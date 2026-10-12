@@ -23,6 +23,7 @@ import json
 import subprocess
 import sys
 import types
+import zlib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -52,11 +53,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PUBLISHED = REPO_ROOT / "parity" / "semantics" / "virtual-maps.json"
 SET_MESH_MAP = "substance_painter.textureset.TextureSet.set_mesh_map_resource"
 # Refusals of a golden that are release gaps (never planned differently): native-precision mesh
-# maps other than normal_base (recording R-090, decision 090) and the virtual maps without an exact
-# golden (recording R-086, decision 086).
-GAP_OWNERS = ("R-090", "R-086")
+# maps other than normal_base (recording R-090, decision 090) and the virtual maps not reproduced
+# exactly (recording R-092, decision 092).
+GAP_OWNERS = ("R-090", "R-092")
 
-PlanMany = Callable[[Path, list[tuple[dict[str, Any], Any]], Path], list[dict[str, Any]]]
+# plan_many(exe, cases, tmp[, project_path]) of tests/export/test_export_plan.py.
+PlanMany = Callable[..., list[dict[str, Any]]]
 SkeletonOf = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
 
 
@@ -146,6 +148,232 @@ def compare_dry_runs(
     return report
 
 
+# ── Export probes (recording R-085, decisions 087 and 091) ───────────────────
+
+PROBE_GOLDENS = (
+    "semantics/export-probes-naming",
+    "semantics/export-probes-channels",
+    "semantics/export-probes-config",
+    "semantics/export-probes-aliases-coat",
+    "semantics/export-probes-aliases-fuzz",
+    "semantics/export-probes-aliases-subsurface",
+)
+# Probes the plan still refuses as unrecorded (NotYetSupported naming R-091, decision 091): the
+# surviving file of a case-only collision, and srcChannel A (only full and no coverage recorded).
+REFUSED_PROBES = (
+    "probe-naming-p9-case-only",
+    "probe-channels-p6-alpha-of-roughness",
+    "probe-channels-p6-alpha-of-basecolor",
+)
+# The recorder saves r2's project as `golden.spp` before reopening it (texture.py).
+SAVED_PROJECT = "C:/recording/project/golden.spp"
+
+
+def compare_probes(
+    exe: Path, tmp: Path, skeleton_of: SkeletonOf, plan_many: PlanMany
+) -> dict[str, Any]:
+    """Compiles every export probe of `PROBE_GOLDENS` on its recording's texture sets (r1 never
+    saved, r2 saved as golden.spp) and compares with Painter: a probe Painter's
+    `list_project_textures` refused is a ValueError; one whose export raised makes the dry run
+    raise ValueError; otherwise the dry run lists exactly the files on disk after the export
+    (Painter's result less the inventory's missing names), with Painter's bit depth and channel
+    count. A legacy name's planned channel is the one whose direct control Painter wrote with the
+    same bytes."""
+    needs_store()
+    report: dict[str, Any] = {
+        "compared": 0,
+        "differing": [],
+        "unexpected_refusals": [],
+        "refused": [],
+        "pairings": 0,
+    }
+    for name in PROBE_GOLDENS:
+        golden = envelope_golden(name)
+        manifest = golden.manifest
+        inputs = {i["input_id"]: REPO_ROOT / i["path"] for i in manifest["inputs"]}
+        steps = manifest["instruction_sequence"]["steps"]
+        mesh = next(s["args"]["mesh"] for s in steps if s["call"].endswith("project.create"))
+        probes = [s for s in steps if s["call"].endswith("list_project_textures")]
+        for recording in sorted(golden.recordings):
+            template = golden.output(recording, "template/texture-sets")["values"]
+            skeleton = skeleton_of(manifest, template) | {"mesh": inputs[mesh].name}
+            cases = []
+            for step in probes:
+                cfg = json.loads(inputs[step["args"]["config"]].read_text(encoding="utf-8"))
+                cases.append((skeleton, cfg | {"exportPath": "C:/export"}))
+            results = plan_many(exe, cases, tmp, None if recording == "r1" else SAVED_PROJECT)
+            by_blob: dict[str, str] = {}
+            aliases: list[tuple[str, str]] = []
+            for step, result in zip(probes, results, strict=True):
+                probe = str(step["args"]["config"])
+                where = f"{golden.golden_id} {recording} {probe}"
+                outputs = golden.recordings[recording].outputs
+                listed = outputs[f"probe/s{step['step']}/list"]
+                exported = outputs.get(f"probe/s{step['step']}/export")
+                report["compared"] += 1
+                if "error" in result:
+                    expected = probe in REFUSED_PROBES and "R-091" in result["message"]
+                    if result["error"] == "NotYetSupported" and expected:
+                        report["refused"].append(f"{where}: {result['message']}")
+                    elif not ("raised" in listed and result["error"] == "ValueError"):
+                        report["unexpected_refusals"].append(f"{where}: {result['message']}")
+                    continue
+                if "raised" in listed or probe in REFUSED_PROBES:
+                    report["differing"].append(f"{where}: Painter refused, the plan compiled")
+                    continue
+                assert exported is not None
+                if "raised" in exported:
+                    if "list_error" not in result:
+                        report["differing"].append(
+                            f"{where}: Painter's export raised, the dry run did not"
+                        )
+                    continue
+                missing = set(exported["value"]["directory"]["missing"])
+                theirs = {
+                    (root, f)
+                    for root, files in exported["value"]["textures"].items()
+                    for f in files
+                    if f not in missing
+                }
+                planned = {(f["rootPath"], f["relativePath"]): f for f in result["plan"]["files"]}
+                if "list_error" in result or set(planned) != theirs:
+                    report["differing"].append(
+                        f"{where}: planned {sorted(planned)}, Painter {sorted(theirs)}"
+                    )
+                    continue
+                for o in outputs.values():
+                    if o["kind"] != "exported_map" or o["export_settings"]["step"] != step["step"]:
+                        continue
+                    f = planned[(o["texture_set"], o["map"])]
+                    fmt = o["storage_format"]
+                    if (str(fmt["bits_per_channel"]), fmt["channels"]) != (
+                        f["parameters"]["bitDepth"],
+                        len(f["channels"]),
+                    ):
+                        report["differing"].append(f"{where}: {o['map']} depth or channels")
+                    channel = f["channels"][0]["source"].get("channel")
+                    if "direct" in probe:
+                        by_blob[o["blob"]["sha256"]] = channel
+                    elif "p13" in probe:
+                        aliases.append((o["blob"]["sha256"], channel))
+            for blob, channel in aliases:
+                report["pairings"] += 1
+                if by_blob.get(blob) != channel:
+                    report["differing"].append(
+                        f"{golden.golden_id} {recording}: alias read {channel}, "
+                        f"Painter's bytes are {by_blob.get(blob)}'s"
+                    )
+    return report
+
+
+# The recording GPU's log2 and exp2 (src/evaluator/hwmath.h, `src/evaluator/tables/hw-*.zlib`).
+def _hw_table(name: str) -> np.ndarray:
+    raw = zlib.decompress(
+        (REPO_ROOT / "src" / "evaluator" / "tables" / f"hw-{name}.zlib").read_bytes()
+    )
+    deltas = np.frombuffer(raw, np.uint32)
+    with np.errstate(over="ignore"):
+        table: np.ndarray = np.cumsum(np.cumsum(deltas, dtype=np.uint32), dtype=np.uint32).view(
+            np.float32
+        )
+    return table
+
+
+def _hw_log2(x: np.ndarray) -> np.ndarray:
+    hi, lo = _hw_table("lg2-hi"), _hw_table("lg2-lo")
+    bits = np.asarray(x, np.float32).view(np.uint32)
+    e = ((bits >> 23) & 0xFF).astype(np.int64) - 127
+    m = bits & 0x7FFFFF
+    h, low = hi[m].astype(np.float64), lo[m].astype(np.float64)
+    r = np.where(e >= 1, e + h, np.where(e == 0, h, np.where(e == -1, low, (e + 1) + low)))
+    f = r.astype(np.float32)  # then toward zero
+    f = np.where(np.abs(f.astype(np.float64)) > np.abs(r), np.nextafter(f, np.float32(0)), f)
+    result: np.ndarray = np.where(((bits >> 23) & 0xFF) == 0, np.float32(-np.inf), f).astype(
+        np.float32
+    )
+    return result
+
+
+def _hw_exp2(y: np.ndarray) -> np.ndarray:
+    pos, neg = _hw_table("ex2-pos"), _hw_table("ex2-neg")
+    v = np.asarray(y, np.float32).astype(np.float64)
+    a = np.abs(v)
+    k = np.floor(a)
+    j = np.floor((a - k) * 2.0**23).astype(np.int64)
+    result: np.ndarray = np.where(
+        v >= 0, pos[j].astype(np.float64) * 2.0**k, neg[j].astype(np.float64) * 2.0**-k
+    ).astype(np.float32)
+    return result
+
+
+def srgb16(values: np.ndarray) -> np.ndarray:
+    """Painter 12.1.5's 16-bit export of a linear colour value (probe P5, decision 091): the sRGB
+    encode with exponent 0.41666 through the GPU's exp2 and log2, its last step fused, then the
+    16-bit write rule."""
+    f32 = np.float32
+    x = np.asarray(values, f32)
+    wide = np.asarray(x, np.float64)
+    power = float(f32(0.41666)) * np.asarray(_hw_log2(np.maximum(x, f32(1e-30))), np.float64)
+    t = np.asarray(_hw_exp2(power.astype(f32)), np.float64)
+    encoded = np.where(
+        x <= f32(0.0031308),
+        (float(f32(12.92)) * wide).astype(f32),
+        (float(f32(1.055)) * t + float(f32(-0.055))).astype(f32),
+    )
+    return write16(encoded)
+
+
+def luma_probe(exe: Path, tmp: Path) -> tuple[dict[str, int], dict[str, str]]:
+    """Probe P5 through the plan: `srcChannel L` of BaseColor (field A in Raw) evaluated by
+    `EvaluateFileOn` (the luma of the linear channel) and the channel's RGB, both written with
+    `srgb16`, against r1 and r2 of every texel of s0: differing values; and the evaluation
+    failures of s1, whose BaseColor holds its base value (the luma of a base value is refused)."""
+    needs_store()
+    name = "semantics/export-probes-channels"
+    manifest, golden = envelope_manifest(name), envelope_golden(name)
+    cfg = json.loads(
+        (
+            REPO_ROOT / "parity/fixtures/tier0-semantics/export-probes/channels/p5-luminance.json"
+        ).read_text(encoding="utf-8")
+    )
+    cfg["exportPresets"][0]["maps"].append(
+        {
+            "fileName": "$textureSet_rgb",
+            "channels": [
+                {
+                    "destChannel": c,
+                    "srcChannel": c,
+                    "srcMapType": "documentMap",
+                    "srcMapName": "basecolor",
+                }
+                for c in "RGB"
+            ],
+        }
+    )
+    report: dict[str, int] = {}
+    refused: dict[str, str] = {}
+    for texture_set in ("s0", "s1"):
+        workdir = tmp / "p5" / texture_set
+        spec = export_spec(manifest, texture_set, workdir)
+        rasters, errors = evaluate_files_or_errors(
+            exe,
+            spec,
+            cfg | {"exportPath": "C:/export", "exportList": [{"rootPath": texture_set}]},
+            workdir,
+        )
+        if texture_set == "s1":
+            refused |= errors
+            continue
+        lum = srgb16(rasters[f"{texture_set}_lum.png"][..., 0])
+        rgb = srgb16(rasters[f"{texture_set}_rgb.png"])
+        for recording in ("r1", "r2"):
+            theirs_l = golden.map(recording, f"probe/s12/{texture_set}_lum.png").values[..., 0]
+            theirs_rgb = golden.map(recording, f"probe/s15/{texture_set}_rgba_opacity.png").values
+            report[f"{texture_set}/lum/{recording}"] = int((lum != theirs_l).sum())
+            report[f"{texture_set}/rgb/{recording}"] = int((rgb != theirs_rgb).sum())
+    return report, refused
+
+
 # ── 3.6 Virtual maps through the plan ────────────────────────────────────────
 
 # golden (current envelope, tier0/...) -> (texture sets, supported virtual maps)
@@ -224,6 +452,16 @@ def evaluate_files(
 ) -> dict[str, np.ndarray]:
     """`uzp-export-tests files`: relativePath -> values (height, width, channels) of every planned
     file."""
+    rasters, errors = evaluate_files_or_errors(exe, spec, config, workdir)
+    assert not errors, errors
+    return rasters
+
+
+def evaluate_files_or_errors(
+    exe: Path, spec: dict[str, Any], config: dict[str, Any], workdir: Path
+) -> tuple[dict[str, np.ndarray], dict[str, str]]:
+    """`uzp-export-tests files`: the planned files evaluated (relativePath -> values) and those
+    whose evaluation failed (relativePath -> reason)."""
     workdir.mkdir(parents=True, exist_ok=True)
     (workdir / "spec.json").write_text(json.dumps(spec), encoding="utf-8")
     (workdir / "config.json").write_text(json.dumps(config), encoding="utf-8")
@@ -246,11 +484,14 @@ def evaluate_files(
     assert proc.returncode == 0, proc.stdout + proc.stderr
     index = json.loads((out / "index.json").read_text(encoding="utf-8"))
     rasters = {}
+    errors = {}
     for f in index["files"]:
-        assert "error" not in f, f
+        if "error" in f:
+            errors[f["relativePath"]] = str(f["error"])
+            continue
         values = np.fromfile(out / f["raw"], dtype=np.float32)
         rasters[f["relativePath"]] = values.reshape(f["height"], f["width"], f["channels"])
-    return rasters
+    return rasters, errors
 
 
 def virtual_map_goldens(exe: Path, tmp: Path, repo_root: Path) -> dict[str, Any]:
@@ -345,16 +586,81 @@ FORMULAS = {
 
 
 GAP_FORMULA = (
-    "Release gap (decision 086): no exact Tier 0 golden yet (recording R-086); a configuration "
-    "naming it is refused with NotYetSupported before anything is written."
+    "Release gap (decisions 086 and 092): not reproduced exactly through the plan; a "
+    "configuration naming it is refused with NotYetSupported before anything is written."
 )
+GAP_CORPUS = (
+    "tier0/semantics/ao-mixed",
+    "tier0/semantics/ao-mixed-opacity",
+    "tier0/semantics/ao-mixed-opacity-float",
+    "tier0/semantics/virtual-maps-converted",
+    "tier0/semantics/virtual-maps-converted-float",
+)
+# The converted maps' fits (decision 092), made on virtual-maps-converted (PNG 16) and its
+# OpenEXR 32f twin. Inputs: L the BaseColor channel's linear sRGB8 operand
+# (`Srgb8OperandTable`), r and m the SpecularRoughness and BaseMetalness codes / 255, in float32;
+# enc(x) = x <= 0.0031308 ? 12.92 x : fma(1.055, exp2(0.41666 log2 x), -0.055) with the
+# recording GPU's exp2 and log2 (hwmath.h); toL(v) = fma(0.114, v, fma(0.299, v, 0.587 v)). The
+# EXR holds the float32 result and the PNG its 16-bit write; an RGBA file loses an all-opaque
+# alpha.
+CONVERTED_FIT = (
+    "Fitted exactly (decision 092): r1 = r2 on every texel of s0-s7 at PNG 16 and OpenEXR 32f, 0 "
+    "differing values in each of the 16 comparisons. Inputs: L the BaseColor channel's linear "
+    "sRGB8 operand, r and m the SpecularRoughness and BaseMetalness values, float32; enc is "
+    "Painter 12.1.5's sRGB encode x <= 0.0031308 ? 12.92 x : fma(1.055, exp2(0.41666 log2 x), "
+    "-0.055) with the recording GPU's exp2 and log2; toL(v) = fma(0.114, v, fma(0.299, v, "
+    "0.587 v)). Where a channel has no layer the map reads L = 1.3, r = 0.5980393 (0x3F19191A) and "
+    "m = 0, not the channel's base value. Still a release gap: the plan needs each channel's "
+    "per-texel coverage (the evaluator gives none), and the uncovered constants were seen on one "
+    "template only (recording R-092)."
+)
+CONVERTED_NOTES = {
+    "Diffuse": f"Operator: enc(L (1 - m)), RGB. {CONVERTED_FIT}",
+    "Specular": f"Operator: enc(fma(L - 0.04, m, 0.04)), RGB. {CONVERTED_FIT}",
+    "Glossiness": f"Operator: toL(1 - r), linear. {CONVERTED_FIT}",
+    "Glossiness2": f"Operator: g = 1 - r, toL(g g), linear. {CONVERTED_FIT}",
+    "Unity4Diff": (
+        "Operator: RGB enc(L); alpha the BaseColor channel's coverage (1 on a filled set, written "
+        f"RGB; 0 without a layer, written RGBA). {CONVERTED_FIT}"
+    ),
+    "Unity4Gloss": (
+        "Operator: RGB (m + (1 - r)) 0.5, linear; alpha the SpecularRoughness channel's coverage "
+        f"(whether BaseMetalness's coverage also counts is not recorded). {CONVERTED_FIT}"
+    ),
+    "reflection": f"Operator: fma(enc(L) - 1, enc(m), 1), RGB. {CONVERTED_FIT}",
+    "1/ior": (
+        "Operator: k = 0.66666663 (0x3F2AAAAA), toL(fma(-k, m, k)), linear; k (1 - m) and "
+        f"float32(2/3) miss. {CONVERTED_FIT}"
+    ),
+    "f0": f"Operator: fma(0.96, m, 0.04), grey RGB, linear. {CONVERTED_FIT}",
+    "View_2D": (
+        "Not fitted (decision 092): a shaded render, not an operator on the channels. It varies "
+        "texel to texel without period where roughness is above 0, and differs between sets with "
+        "identical inputs (s5 and s6 at 3 texels). It depends on the viewport's environment, "
+        "lighting and sampling; its PNG 16 is the 16-bit write of its EXR 32f (0 differing). "
+        "Release gap: it needs a reproduction of Painter's 2D view render."
+    ),
+}
 AO_MIXED_NOTES = (
-    "The calibrated operator of parity/semantics/ao-mixed.json (the AO mesh map times the AO "
-    "channel, written at 8-bit precision) is exact on ao-mixed s0, s2 and s3 but misses s1 (an AO "
-    "fill at opacity 0.5) by one 8-bit code at 30 values against r1 and 17 against r2, every one "
-    "within 0.03 of a 2^-12 step; Painter's own r1 and r2 differ at 27 AO_Mixed values there while "
-    "their AO channel exports are identical. Calibrated is not parity: the plan refuses AO_Mixed "
-    "until R-086 (an opacity sweep recorded twice per session) is fitted."
+    "Not exact (decision 092). Recording R-086a (ao-mixed-opacity and its OpenEXR 32f twin, "
+    "decision 087) shows AO_Mixed on the 8-bit lattice before encoding, step A = step B, and r1"
+    " != r2 by one 8-bit step at 9 to 41 values per set, deterministically. Best model: alpha ="
+    " the layer opacity's L16 code / 65535 and C = the fill's stored L16 code / 65535 "
+    "(float32); c = fma(C - 1, alpha, 1), the AO channel before its L16 write (1 without a "
+    "layer; WriteUnorm16(c) is the channel's export, 0 differing on r1); a = the AO mesh map "
+    "code / 255; v = a c (float32); AO_Mixed = WriteUnorm(v, 8) (12 fractional bits, nearest, "
+    "ties down). It misses r1 at 31 values over the three goldens (ao-mixed-opacity s0-s7 "
+    "0/9/2/0/0/9/2/0, its twin the same, ao-mixed s0-s3 0/9/0/0), each within 3 ulps of v from "
+    "a 2^-12 boundary; r2 misses more and is not explained. On the row where C = 0, c = 1 - "
+    "alpha is exact in any order of operations, yet v must rise by 2 to 3 ulps, so no correctly"
+    " rounded float32 evaluation of the tested inputs reproduces r1. Rejected: more than 40 "
+    "orders of operations with and without fma, multiply blends over the mesh map, fixed-point "
+    "(2^12 to 2^29) and half-float intermediates, a 16-bit intermediate, other conversions of "
+    "a, C and alpha, and the recording GPU's measured exp2, log2 and reciprocal. Unknown: "
+    "Painter's operand conversions or arithmetic on this path. Recording R-092 isolates them: a"
+    " constant AO mesh map with a varying channel, a constant channel with a varying mesh map, "
+    "values at the missed coordinates, and the same exports after reopen. Calibrated is not "
+    "parity: the plan refuses AO_Mixed."
 )
 
 
@@ -363,7 +669,7 @@ def publish(report: dict[str, Any]) -> dict[str, Any]:
     with their residuals through the plan, every other documented virtual map a gap refused
     before writing."""
     entries = []
-    corpus = sorted({f"tier0/{name}" for name in VIRTUAL_GOLDENS} | {"tier0/semantics/ao-mixed"})
+    corpus = sorted({f"tier0/{name}" for name in VIRTUAL_GOLDENS} | set(GAP_CORPUS))
     for name, (entry_id, components, meaning) in DOCUMENTED.items():
         residuals = [
             residual(g, key, recording, "16-bit code value", diff)
@@ -372,7 +678,7 @@ def publish(report: dict[str, Any]) -> dict[str, Any]:
         ]
         supported = name in FORMULAS
         formula = FORMULAS.get(name, GAP_FORMULA)
-        notes = AO_MIXED_NOTES if name == "AO_Mixed" else None
+        notes = AO_MIXED_NOTES if name == "AO_Mixed" else CONVERTED_NOTES.get(name)
         entries.append(
             entry(
                 entry_id,

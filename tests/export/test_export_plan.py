@@ -10,7 +10,7 @@ without it (hosted CI, decision 028); the local run on the owner's machine
   wrote for that configuration (item 3.5, Painter's side);
 - the virtual maps marked supported (`Normal_OpenGL`, `Normal_DirectX`), evaluated through the
   plan (`EvaluateFileOn`) and written with the 16-bit write rule, equal their goldens (item 3.6;
-  `AO_Mixed` is a release gap until recording R-086, decision 086), and the published
+  `AO_Mixed` and the converted maps are release gaps, decision 092), and the published
   `parity/semantics/virtual-maps.json` is what that comparison derives. Painter 12.1.5's r1 is
   the exact target where its two recordings differ (decision 032).
 """
@@ -111,10 +111,18 @@ TWO_SETS = project(
 
 
 def plan_many(
-    exe: Path, cases: list[tuple[dict[str, Any], Any]], tmp: Path
+    exe: Path,
+    cases: list[tuple[dict[str, Any], Any]],
+    tmp: Path,
+    project_path: str | None = None,
 ) -> list[dict[str, Any]]:
+    """`uzp-export-tests plan` on every (project skeleton, configuration) case; `project_path` is
+    the saved project file's path of every case (absent: never saved)."""
     path = tmp / "cases.json"
-    path.write_text(json.dumps([{"project": p, "config": c} for p, c in cases]), encoding="utf-8")
+    extra = {} if project_path is None else {"project_path": project_path}
+    path.write_text(
+        json.dumps([{"project": p, "config": c} | extra for p, c in cases]), encoding="utf-8"
+    )
     proc = subprocess.run(
         [str(exe), "plan", str(path)],
         capture_output=True,
@@ -244,8 +252,10 @@ def test_recorder_and_shipped_patterns_expand(export_tests: Path, tmp_path: Path
 
 
 def test_collisions_and_invalid_names_are_refused(export_tests: Path, tmp_path: Path) -> None:
-    """3.1: two outputs resolving to one path (also when they differ only in case) are refused
-    naming both; malformed and unrecorded names are refused before anything is written."""
+    """3.1: two outputs of one exportList entry resolving to one path are written `name` and
+    `name_1` (probe P9); two entries resolving to one path, a third equal path and paths equal
+    only ignoring case are refused naming both; malformed and unrecorded names are refused before
+    anything is written (decision 091)."""
     base = rgb("documentMap", "basecolor")
     h = grey("documentMap", "height")
     cases = [
@@ -254,11 +264,17 @@ def test_collisions_and_invalid_names_are_refused(export_tests: Path, tmp_path: 
         (TWO_SETS, config([mapping("../$textureSet", base)], ["s0"])),
         (TWO_SETS, config([mapping("$textureSet:x", base)], ["s0"])),
         (TWO_SETS, config([mapping("$textureset_x", base)], ["s0"])),
-        (TWO_SETS, config([mapping("$mesh_$textureSet_x", base)], ["s0"])),
-        (TWO_SETS, config([mapping("$textureSet((_$udim))", base)], ["s0"])),
-        (TWO_SETS, config([mapping("$textureSet(_$udim", base)], ["s0"])),
-        (TWO_SETS, config([mapping("$textureSet_$udim", base)], ["s0"])),
-        (TWO_SETS, config([mapping("$textureSet(_v2)", base)], ["s0"])),
+        (TWO_SETS, config([mapping("$textureSet_c", base), mapping("$textureSet_c", h)], ["s0"])),
+        (
+            TWO_SETS,
+            config([mapping("$textureSet_c", base), mapping("$textureSet_c", h)] * 2, ["s0"]),
+        ),
+        (TWO_SETS, config([mapping("$textureSet_c", base), mapping("$textureSet_c_1", h)], ["s0"])),
+        (
+            TWO_SETS,
+            config([mapping("$textureSet_c", base)], ["s0"])
+            | {"exportList": [{"rootPath": "s0"}, {"rootPath": "s0"}]},
+        ),
         (TWO_SETS, config([mapping("con", base)], ["s0"])),
     ]
     r = plan_many(export_tests, cases, tmp_path)
@@ -267,12 +283,63 @@ def test_collisions_and_invalid_names_are_refused(export_tests: Path, tmp_path: 
     refused(r[2], "ValueError", "inside exportPath")
     refused(r[3], "ValueError", "Windows forbids")
     refused(r[4], "ValueError", 'unknown wildcard "$textureset"', "valid: $textureSet")
-    refused(r[5], "NotYetSupported", "$mesh", "R-085")
-    refused(r[6], "NotYetSupported", "nested")
-    refused(r[7], "ValueError", "group open")
-    refused(r[8], "NotYetSupported", "$udim", "outside")
-    refused(r[9], "NotYetSupported", "without a wildcard")
-    refused(r[10], "ValueError", "reserved")
+    assert paths(r[5]) == ["s0_c.png", "s0_c_1.png"]
+    assert [f["map"] for f in ok(r[5])["files"]] == [0, 1]
+    refused(r[6], "NotYetSupported", "third map", "R-091")
+    assert paths(r[7]) == ["s0_c.png", "s0_c_1.png"]
+    refused(r[8], "NotYetSupported", "s0_c.png", "collision")
+    refused(r[9], "ValueError", "reserved")
+
+
+def test_wildcards_and_groups(export_tests: Path, tmp_path: Path) -> None:
+    """3.1: the wildcards and groups probes P1-P3 recorded (decision 091): `$mesh` is the mesh
+    file's name without its extension, `$project` the project file's (`Untitled` while never
+    saved), `$sceneMaterial` the set's material; an empty wildcard outside a group expands to
+    nothing; parentheses without a wildcard, around a group or unclosed are literal. A file name
+    with two dots, a renamed set's `$sceneMaterial`, a `)` after no literal `(` and a group with
+    both empty and non-empty wildcards are not recorded."""
+    base = rgb("documentMap", "basecolor")
+    meshed = TWO_SETS | {"mesh": "grid2x2.obj"}
+    renamed = project(texture_set("s0") | {"original_name": "mat0"}) | {"mesh": "grid2x2.obj"}
+
+    def case(pattern: str, prj: dict[str, Any] = meshed) -> tuple[dict[str, Any], Any]:
+        return prj, config([mapping(pattern, base)], ["s0"])
+
+    cases = [
+        case("$mesh_$textureSet_a"),
+        case("$project_$textureSet_b"),
+        case("$textureSet_$sceneMaterial_c"),
+        case("$textureSet_$udim_d"),
+        case("$textureSet_$colorSpace_e"),
+        case("$textureSet(_v2)"),
+        case("$textureSet((_$udim))"),
+        case("$textureSet(_$udim"),
+        case("($textureSet)x(_$textureSet)"),
+        case("$mesh", meshed | {"mesh": "grid.v2.obj"}),
+        case("$sceneMaterial", renamed),
+        case("$mesh", TWO_SETS),
+        case("$textureSet)x"),
+        case("$textureSet(_$textureSet$udim)"),
+    ]
+    r = plan_many(export_tests, cases, tmp_path)
+    assert [paths(x)[0] for x in r[:9]] == [
+        "grid2x2_s0_a.png",
+        "Untitled_s0_b.png",
+        "s0_s0_c.png",
+        "s0__d.png",
+        "s0__e.png",
+        "s0(_v2).png",
+        "s0().png",
+        "s0(_.png",
+        "s0x_s0.png",
+    ]
+    refused(r[9], "NotYetSupported", "grid.v2.obj", "more than one dot")
+    refused(r[10], "NotYetSupported", "$sceneMaterial", "mat0")
+    refused(r[11], "ValueError", "$mesh", "has none")
+    refused(r[12], "NotYetSupported", '")" after no literal "("')
+    refused(r[13], "NotYetSupported", "both an empty and a non-empty wildcard")
+    saved = plan_many(export_tests, [case("$project_x")], tmp_path, "D:/work/golden.spp")
+    assert paths(saved[0]) == ["golden_x.png"]
 
 
 # ── 3.2 Filters ──────────────────────────────────────────────────────────────
@@ -281,8 +348,9 @@ def test_collisions_and_invalid_names_are_refused(export_tests: Path, tmp_path: 
 def test_filters(export_tests: Path, tmp_path: Path) -> None:
     """3.2: `{}` and an absent filter select all, `{"dataPaths": []}` selects nothing,
     `outputMaps` compares the unexpanded fileName, members combine with AND, `dataPaths`
-    matches a texture set (all its stacks) or `set/stack`, and `uvTiles` (not recorded on a
-    project without UV tiles) is refused."""
+    matches a texture set (all its stacks) or `set/stack`, and `uvTiles` selects a set of the
+    Default workflow when it lists [0, 0] (probe P4, decision 091). A selection without any file
+    is an export writing nothing (probe P8)."""
     maps = [
         mapping("$textureSet_BaseColor", rgb("documentMap", "basecolor")),
         mapping("$textureSet_Height", grey("documentMap", "height")),
@@ -383,6 +451,16 @@ def test_filters(export_tests: Path, tmp_path: Path) -> None:
         ),
         (layered, config(maps, ["body"])),
         (layered, config(maps, ["body/skin", "body/cloth"])),
+        (
+            TWO_SETS,
+            config(maps, ["s0", "s1"])
+            | {
+                "exportList": [
+                    {"rootPath": "s0", "filter": {"uvTiles": [[1, 0]]}},
+                    {"rootPath": "s1"},
+                ]
+            },
+        ),
     ]
     r = plan_many(export_tests, cases, tmp_path)
     assert len(paths(r[0])) == 4
@@ -395,7 +473,7 @@ def test_filters(export_tests: Path, tmp_path: Path) -> None:
         "s1_Height.png": "8",
     }
     assert paths(r[3]) == ["s0_Height.png"]
-    refused(r[4], "ValueError", "writes no file")
+    assert paths(r[4]) == [] and r[4]["list"] == []
     by_stack = {
         (f["stack"], f["relativePath"]): f["parameters"]["bitDepth"] for f in ok(r[5])["files"]
     }
@@ -403,13 +481,15 @@ def test_filters(export_tests: Path, tmp_path: Path) -> None:
     assert by_stack[("cloth", "body_cloth_BaseColor.png")] == "8"
     assert by_stack[("cloth", "body_cloth_Height.png")] == "8"
     assert {f["parameters"]["bitDepth"] for f in ok(r[6])["files"]} == {"8"}
-    refused(r[7], "NotYetSupported", "uvTiles")
-    refused(r[8], "NotYetSupported", "uvTiles")
+    assert paths(r[7]) == ["s0_BaseColor.png", "s0_Height.png"]
+    assert {f["parameters"]["bitDepth"] for f in ok(r[8])["files"]} == {"8"}
     assert {f["parameters"]["bitDepth"] for f in ok(r[9])["files"]} == {"16"}
     refused(r[10], "ValueError", 'no texture set or stack "body"', "body/skin")
     # $textureSet is the texture set's name in every stack (export.html): one preset over two
     # stacks of a set collides.
     refused(r[11], "NotYetSupported", "body/cloth", "body/skin", "body_BaseColor.png", "collision")
+    assert paths(r[12]) == ["s1_BaseColor.png", "s1_Height.png"]
+    assert [entry[0] for entry in r[12]["list"]] == ["s1"]
 
 
 # ── 3.3 Resolution order ─────────────────────────────────────────────────────
@@ -532,7 +612,7 @@ def test_resolution_order(export_tests: Path, tmp_path: Path) -> None:
     assert ok(r[4])["files"][0]["parameters"]["dilationDistance"] == 16
     refused(r[5], "ValueError", "16f is not supported by the format png", "valid: 8, 16")
     assert paths(r[6]) == ["s0_a.exr"]
-    refused(r[7], "NotYetSupported", "integer bitDepth")
+    refused(r[7], "ValueError", "bitDepth", "Expected a string value")
     refused(r[8], "NotYetSupported", "sizeLog2 14")
 
 
@@ -577,9 +657,11 @@ def test_refused_formats_raise_before_any_file(export_tests: Path, tmp_path: Pat
 
 
 def test_identifiers_are_checked(export_tests: Path, tmp_path: Path) -> None:
-    """3.4 (decision 085): srcMapType, channel letters, destination sets, presets and keys are
-    checked with their alternatives; documentMap spellings follow the documented and recorded
-    ones; shader parameters and shelf presets are release gaps."""
+    """3.4 (decisions 085, 091): srcMapType, channel letters, destination sets, presets and keys
+    are checked with their alternatives; documentMap spellings follow the documented and recorded
+    ones; shader parameters and shelf presets are release gaps. Undocumented keys at the root and
+    in a preset map are ignored as Painter ignores them (probe P10); elsewhere they are not
+    recorded. A legacy name whose pairing the stack lacks makes the dry run raise (probe P13)."""
     base = rgb("documentMap", "basecolor")
 
     def with_map(channels: list[dict[str, str]]) -> dict[str, Any]:
@@ -616,6 +698,14 @@ def test_identifiers_are_checked(export_tests: Path, tmp_path: Path) -> None:
         (TWO_SETS, with_map(base) | {"exportPathh": "C:/x"}),
         (
             TWO_SETS,
+            config([mapping("$textureSet_x", base) | {"comment": "x"}], ["s0"]),
+        ),
+        (
+            TWO_SETS,
+            with_map([chan(c, c, "documentMap", "basecolor") | {"note": ""} for c in "RGB"]),
+        ),
+        (
+            TWO_SETS,
             with_map([chan(c, c, "documentMap", "basecolor") | {"srcPath": ""} for c in "RGB"]),
         ),
         (
@@ -635,7 +725,8 @@ def test_identifiers_are_checked(export_tests: Path, tmp_path: Path) -> None:
     refused(r[6], "NotYetSupported", '"BaseColor" is not recorded', "basecolor, baseColor")
     refused(r[7], "ValueError", 'unknown documentMap "ao"', "ambientOcclusion")
     assert ok(r[8])["files"][0]["channels"][0]["source"]["channel"] == "AO"
-    refused(r[9], "NotYetSupported", "legacy alias")
+    assert ok(r[9])["skipped"][0]["kind"] == "export_error"
+    assert "SheenColor" in r[9]["list_error"] and "FuzzColor" in r[9]["list_error"]
     refused(r[10], "ValueError", 'unknown meshMap "Normal_Base"', "valid: normal_base")
     refused(r[11], "ValueError", 'unknown defaultMap "grey"', "black, white")
     refused(r[12], "ValueError", 'unknown export preset "q"', "valid: p")
@@ -643,11 +734,13 @@ def test_identifiers_are_checked(export_tests: Path, tmp_path: Path) -> None:
     refused(r[14], "ValueError", "no exportPreset and no defaultExportPreset")
     refused(r[15], "NotYetSupported", "phase1.17_export-presets")
     refused(r[16], "NotYetSupported", "exportShaderParams")
-    refused(r[17], "NotYetSupported", '"exportPathh" is not documented', "exportPath")
+    assert paths(r[17]) == ["s0_x.png"]
     assert paths(r[18]) == ["s0_x.png"]
-    refused(r[19], "ValueError", "srcPath")
-    refused(r[20], "ValueError", "not JSON")
-    refused(r[21], "ValueError", 'no texture set or stack "s9"', "valid: s0")
+    refused(r[19], "NotYetSupported", '"note" is not documented', "R-091")
+    assert paths(r[20]) == ["s0_x.png"]
+    refused(r[21], "ValueError", "srcPath")
+    refused(r[22], "ValueError", "not JSON")
+    refused(r[23], "ValueError", 'no texture set or stack "s9"', "valid: s0")
 
 
 # ── Presence, sources and channels (decision 085) ────────────────────────────
@@ -655,9 +748,11 @@ def test_identifiers_are_checked(export_tests: Path, tmp_path: Path) -> None:
 
 def test_presence_and_sources(export_tests: Path, tmp_path: Path) -> None:
     """Maps whose documentMap is absent, and white-only maps, are skipped and listed (Painter
-    writes neither); unrecorded presence cases, release-gap virtual maps and mesh maps, and
-    undocumented channel mixes are refused; supported virtual and mesh maps resolve with their
-    EXP-09 role."""
+    writes neither); black-only maps are skipped as listed by Painter but not written (probe P8);
+    an absent alpha drops to an RGB file (P7); an unbound mesh map is an export error the dry run
+    raises (P12); srcChannel L of a colour is its luma (P5); unrecorded presence cases, release-gap
+    virtual maps and mesh maps are refused; supported virtual and mesh maps resolve with their
+    EXP-09 role (decisions 085, 091)."""
     base = rgb("documentMap", "basecolor")
     cases = [
         (
@@ -754,6 +849,31 @@ def test_presence_and_sources(export_tests: Path, tmp_path: Path) -> None:
             config([mapping("$textureSet_b", base)], ["s0"]),
         ),
         (TWO_SETS, config([mapping("$textureSet_r", grey("documentMap", "roughness"))], ["s1"])),
+        (
+            project(texture_set("s0", mesh_maps=("Normal",))),
+            config(
+                [
+                    mapping("$textureSet_b", base),
+                    mapping("$textureSet_c", grey("meshMap", "curvature")),
+                ],
+                ["s0"],
+            ),
+        ),
+        (
+            TWO_SETS,
+            config(
+                [
+                    mapping(
+                        "$textureSet_m",
+                        [
+                            chan("L", "L", "defaultMap", "black"),
+                            chan("A", "L", "defaultMap", "white"),
+                        ],
+                    )
+                ],
+                ["s0"],
+            ),
+        ),
     ]
     r = plan_many(export_tests, cases, tmp_path)
     assert paths(r[0]) == ["s0_r.png", "s0_b.png", "s1_b.png"]
@@ -763,27 +883,31 @@ def test_presence_and_sources(export_tests: Path, tmp_path: Path) -> None:
             "map": 0,
             "preset": "p",
             "reason": "the stack has no Roughness channel",
+            "kind": "absent",
             "rootPath": "s1",
             "stack": "",
             "textureSet": "s1",
         }
     ]
     assert paths(r[1]) == ["s0_b.png"]
-    assert ok(r[1])["skipped"][0]["reason"] == "every channel reads a defaultMap"
-    refused(r[2], "NotYetSupported", "black")
-    refused(r[3], "NotYetSupported", "a present source and an absent one")
+    assert ok(r[1])["skipped"][0]["reason"] == "every channel reads defaultMap white"
+    assert paths(r[2]) == [] and r[2]["list"] == []
+    assert ok(r[2])["skipped"][0]["kind"] == "not_written"
+    rgb_only = ok(r[3])["files"][0]
+    assert rgb_only["layout"] == "RGB" and len(rgb_only["channels"]) == 3
     files = ok(r[4])["files"]
     assert files[0]["layout"] == "RGBA"
     assert files[0]["channels"][3]["source"]["constant"] == 1.0
-    refused(r[5], "NotYetSupported", '"AO_Mixed"', "R-086")
-    refused(r[6], "NotYetSupported", '"AO_Mixed"', "R-086")
-    refused(r[7], "NotYetSupported", '"Diffuse"', "R-086")
-    refused(r[8], "NotYetSupported", '"Glossiness"', "R-086")
+    refused(r[5], "NotYetSupported", '"AO_Mixed"', "not identified", "R-092")
+    refused(r[6], "NotYetSupported", '"AO_Mixed"', "R-092")
+    refused(r[7], "NotYetSupported", '"Diffuse"', "coverage", "R-092")
+    refused(r[8], "NotYetSupported", '"Glossiness"', "coverage", "R-092")
     normal = ok(r[9])["files"][0]["channels"][0]["source"]
     assert normal["meshMap"] == "Normal" and normal["normal"] == "geometry_only"
-    refused(r[10], "NotYetSupported", "not bound")
+    assert ok(r[10])["skipped"][0]["kind"] == "export_error"
+    assert "not bound" in r[10]["list_error"] and "P12" in r[10]["list_error"]
     refused(r[11], "NotYetSupported", "R-090")
-    refused(r[12], "NotYetSupported", "srcChannel L of a three-component map")
+    assert ok(r[12])["files"][0]["channels"][0]["luma"] is True
     assert ok(r[13])["files"][0]["channels"][0]["component"] == 0
     refused(r[14], "NotYetSupported", "srcChannel A")
     assert ok(r[15])["files"][0]["layout"] == "RGB"
@@ -794,7 +918,9 @@ def test_presence_and_sources(export_tests: Path, tmp_path: Path) -> None:
     assert ok(r[18])["files"][0]["channels"][0]["source"]["normal"] == "combined"
     refused(r[19], "NotYetSupported", '"ocio"')
     refused(r[20], "NotYetSupported", "UVTile workflow")
-    refused(r[21], "ValueError", "writes no file")
+    assert paths(r[21]) == [] and ok(r[21])["skipped"][0]["kind"] == "absent"
+    refused(r[22], "NotYetSupported", "also writes other files")
+    refused(r[23], "NotYetSupported", "black and white")
 
 
 def test_diagnostic_sources(export_tests: Path, tmp_path: Path) -> None:
@@ -935,6 +1061,37 @@ def test_dry_run_equals_painter_export(export_tests: Path, tmp_path: Path) -> No
     assert report["compared"] > 0, report
     assert report["differing"] == [], report["differing"]
     assert report["unexpected_refusals"] == [], report["unexpected_refusals"]
+
+
+def test_dry_run_equals_painter_probes(export_tests: Path, tmp_path: Path) -> None:
+    """3.5 (decision 091): every export probe of recording R-085 (P0-P13, decision 087), compiled
+    on its recording's texture sets, behaves as Painter did: the dry run lists exactly the files
+    the export left on disk, with their bit depth and channel count; Painter's refusals are
+    ValueErrors; an export Painter refused makes the dry run raise; each legacy name reads the
+    channel whose direct export Painter wrote with the same bytes. Only the case-only collision
+    and srcChannel A stay refused as unrecorded."""
+    from tests.export.tier0 import compare_probes
+
+    report = compare_probes(export_tests, tmp_path, skeleton_of, plan_many)
+    assert report["compared"] == 2 * (14 + 7 + 4 + 3 * 14), report["compared"]
+    assert report["differing"] == [], report["differing"]
+    assert report["unexpected_refusals"] == [], report["unexpected_refusals"]
+    assert len(report["refused"]) == 2 * 3, report["refused"]
+    assert report["pairings"] == 2 * 2 * (1 + 3 + 2), report["pairings"]
+
+
+def test_luma_probe_exact(export_tests: Path, tmp_path: Path) -> None:
+    """Probe P5 (decision 091): `srcChannel L` of BaseColor through the plan is the Rec. 601 luma
+    of the linear channel; written with Painter 12.1.5's 16-bit sRGB encode it equals r1 and r2
+    on every texel of s0 (field A), and so does the RGB export of the channel. On s1 (no layer)
+    the luma of BaseColor's base value is refused: the evaluator holds the base's export value,
+    not its linear one."""
+    from tests.export.tier0 import luma_probe
+
+    report, refused = luma_probe(export_tests, tmp_path)
+    assert len(report) == 4 and not any(report.values()), report
+    assert list(refused) == ["s1_lum.png"], refused
+    assert "base value" in refused["s1_lum.png"], refused
 
 
 # ── 3.6 Virtual-map goldens through the plan (owner's machine) ───────────────
