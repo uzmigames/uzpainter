@@ -1,0 +1,13 @@
+{
+  "id": 129,
+  "slug": "infinite-padding-on-uv-islands-stays-refused-the-ring-is-not-identified-and-a-jump-flood-from-the-recorded-ring-is-an-exploratory-candidate",
+  "title": "infinite padding on UV islands stays refused: the seam ring is not identified, and a jump flood seeded by the recorded ring is only an exploratory propagation candidate",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
