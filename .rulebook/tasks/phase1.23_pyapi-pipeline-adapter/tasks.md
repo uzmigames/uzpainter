@@ -17,9 +17,9 @@
 - [x] 3.6 LAY-07 through `sync`: only the addressed group is rebuilt, other root groups hidden (not deleted) unless `--keep-visible` matches, unrelated roots and resources survive
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green in a local run on the owner's machine (decision 028); the local run report with script hashes, as evidence, attached to `phase1.24_python-api-facade`
+- [x] 4.1 Every §3 test green in a local run on the owner's machine (decision 028); the local run report with script hashes, as evidence, attached to `phase1.24_python-api-facade` (`parity/reports/phase1/pyapi-pipeline-adapter.md`; 3.1 and 3.5 as the recorded scope splits of decision 113 §7)
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.1 Update or create documentation covering the implementation (`adapters/assets3d/MIGRATIONS.md`, `docs/architecture/10-python-api.md` §2, the local run report)
+- [x] 5.2 Write tests covering the new behavior (`tests/adapters/assets3d/`: 10 over `UzPainter.exe` on the wand v1 inputs, 24 host-side on every lane)
+- [x] 5.3 Run tests and confirm they pass (`tests/adapters`: 34 of 34 after merging main; ruff, mypy strict on the whole repository and the guard pass)
