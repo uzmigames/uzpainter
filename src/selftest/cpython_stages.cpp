@@ -113,6 +113,8 @@ def inside(path, folder):
 root = norm(exe_dir)
 stdlib_zip = os.path.join(root, 'python313.zip')
 site_packages = os.path.join(root, os.path.normcase('Lib'), 'site-packages')
+# UzPainter's own pure-Python packages (the substance_painter facade), installed with the app.
+facade = os.path.join(root, 'python')
 )PY";
 
 std::string WithPrelude(const char* body) { return std::string(kPrelude) + body; }
@@ -134,9 +136,9 @@ if site.ENABLE_USER_SITE:
 if norm(sys.prefix) != root:
     problems.append(f'sys.prefix is {sys.prefix}, not the install folder')
 for entry in sys.path:
-    if norm(entry) not in (stdlib_zip, root) and not inside(entry, site_packages):
-        problems.append(f'sys.path entry outside the vendored interpreter: {entry}')
-for required in (stdlib_zip, root, site_packages):
+    if norm(entry) not in (stdlib_zip, root, facade) and not inside(entry, site_packages):
+        problems.append(f'sys.path entry outside the installed interpreter: {entry}')
+for required in (stdlib_zip, root, site_packages, facade):
     if required not in [norm(entry) for entry in sys.path]:
         problems.append(f'{required} is not on sys.path')
 for name, module in sorted(sys.modules.items()):
