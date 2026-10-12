@@ -78,6 +78,10 @@ BAKE_TIMEOUT_S = 1800.0
 # path separator and the drive colon); any other character makes the URL ambiguous.
 URL_SAFE_PATH = re.compile(r"[A-Za-z0-9._~/:-]+")
 
+# A manifest setting naming the stem of r2's project file (`project_file_name`).
+PROJECT_FILE_NAME = "project.file_name"
+PROJECT_STEM = re.compile(r"[a-z0-9][a-z0-9_-]*(\.[a-z0-9_-]+)*")
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -462,6 +466,26 @@ def probe_outputs(
     return outputs, present
 
 
+def project_file_name(job: Job) -> str:
+    """The file name r2's project is saved under: `golden.spp`, or the stem a manifest names in
+    its `project.file_name` setting (applied by the recorder; decision 093, a project name
+    holding dots for the `$project` export wildcard)."""
+    names = [
+        s["value"]
+        for s in job.manifest["applied_settings"]
+        if s["name"] == PROJECT_FILE_NAME and s["applied_by"] == "recorder_api"
+    ]
+    if not names:
+        return "golden.spp"
+    stem = names[0]
+    if len(names) > 1 or not isinstance(stem, str) or not PROJECT_STEM.fullmatch(stem):
+        raise RecorderError(
+            f"{job.golden_id}: `{PROJECT_FILE_NAME}` must be one file stem "
+            f"({PROJECT_STEM.pattern}), not {names!r}"
+        )
+    return f"{stem}.spp"
+
+
 def require_colour_management(job: Job, identity: PainterIdentity) -> None:
     """A manifest that names `OCIO` (applied by environment variable) is recorded only in a
     session started with that configuration: a Legacy session would record another project."""
@@ -574,6 +598,7 @@ def record_texture_golden(
             f"{job.golden_id}: its settings sheet names values only Painter's UI can set; "
             "record it with an operator (--operator ui or console)"
         )
+    project_name = project_file_name(job)
     identity = session.connect()
     require_colour_management(job, identity)
     directory = ensure_outside_repository(work) / job.golden_id.replace("/", "__")
@@ -590,7 +615,7 @@ def record_texture_golden(
         first, first_blobs = record_once(
             session, job, identity, directory / "r1", "r1", "same_session", now, extra, applied
         )
-        save_and_reopen(session, directory / "project" / "golden.spp")
+        save_and_reopen(session, directory / "project" / project_name)
         reread = (
             operate(session, operator, sheet, directory / "r2-operator", apply=False)
             if sheet and operator is not None

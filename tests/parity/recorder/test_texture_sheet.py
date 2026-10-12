@@ -198,3 +198,73 @@ def test_refresh_and_study_record_a_sheet_golden_with_the_ui_operator(
         make_session(fake.FakeWorld()), job.manifest, work, inbox, lambda: datetime.now(UTC)
     )
     assert made == [work] and (run / "READY").is_file()
+
+
+RENAME = "Texture Set List/Name (uzp_plane)"
+
+
+class RenamingOperator(ScriptedOperator):
+    """The UI operator renaming a texture set in the Texture Set List: the fake's set takes the
+    typed name and keeps the name it was imported under (`TextureSet.original_name`)."""
+
+    def __init__(self, images: Path, world: Any, typed: str, shown: str) -> None:
+        super().__init__(images, {"Name of texture set": shown})
+        self.world, self.typed = world, typed
+
+    def ask(self, question: str) -> str:
+        if "(sheet: " in question:
+            self.world.texture_set = self.typed
+        return super().ask(question)
+
+
+def test_a_texture_set_renamed_in_the_ui_is_read_back_through_the_api(
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    sample_job: Job,
+    work: Path,
+    inbox: Path,
+    tmp_path: Path,
+) -> None:
+    """Decision 093: the sheet names the set by the name it was imported under; the operator
+    renames it before r1, and `TextureSet.name` must read the sheet's value before r1 and
+    after the reopen."""
+    world = fake.FakeWorld()
+    job = sheet_job(sample_job, [(RENAME, "renamed0")])
+    (entry,) = texture_sheet(job)
+    assert (entry.panel, entry.texture_set, entry.value) == (
+        "Texture Set List",
+        "uzp_plane",
+        "renamed0",
+    )
+    operator = RenamingOperator(tmp_path / "images", world, "renamed0", "renamed0")
+    run = record_texture_golden(make_session(world), job, work, inbox, operator=operator)
+    applied = [q for q in operator.questions if "(sheet: " in q]
+    reread = [q for q in operator.questions if q.endswith("value shown now:")]
+    assert applied == ["[Texture Set List] Name of texture set 'uzp_plane' (sheet: renamed0):"]
+    assert reread == ["[Texture Set List] Name of texture set 'renamed0': value shown now:"]
+    record = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    for recording in record["recordings"]:
+        maps = [o["output_id"] for o in recording["outputs"] if o["kind"] == "exported_map"]
+        assert maps and all(m.startswith("renamed0/") for m in maps)
+
+
+def test_a_rename_the_api_does_not_read_refuses_the_golden(
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    sample_job: Job,
+    work: Path,
+    inbox: Path,
+    tmp_path: Path,
+) -> None:
+    world = fake.FakeWorld()
+    job = sheet_job(sample_job, [(RENAME, "renamed0")])
+    operator = RenamingOperator(tmp_path / "images", world, "other", "renamed0")
+    with pytest.raises(RecorderError, match=r"TextureSet.name reads 'other'"):
+        record_texture_golden(make_session(world), job, work, inbox, operator=operator)
+    assert not inbox.exists()
+
+
+@pytest.mark.parametrize("value", ["renamed 0", "a/b", "$textureSet", ""])
+def test_a_texture_set_name_with_other_characters_is_refused(sample_job: Job, value: str) -> None:
+    with pytest.raises(RecorderError, match="not a texture set name"):
+        texture_sheet(sheet_job(sample_job, [(RENAME, value)]))

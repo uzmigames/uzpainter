@@ -226,6 +226,10 @@ CHANNEL_TYPES = {
     "User9": lambda: substance_painter.textureset.ChannelType.User9,
     "Scattering": lambda: substance_painter.textureset.ChannelType.Scattering,
     "Anisotropylevel": lambda: substance_painter.textureset.ChannelType.Anisotropylevel,
+    # The Specular Glossiness workflow's channels (decision 093).
+    "Diffuse": lambda: substance_painter.textureset.ChannelType.Diffuse,
+    "Specular": lambda: substance_painter.textureset.ChannelType.Specular,
+    "Glossiness": lambda: substance_painter.textureset.ChannelType.Glossiness,
 }
 
 # textureset.ChannelFormat members.
@@ -1362,6 +1366,22 @@ def show_texture_set(args: dict[str, Any]) -> str:
     return str(substance_painter.textureset.get_active_stack().material().name())
 
 
+def texture_set_names(args: dict[str, Any]) -> list[dict[str, str]]:
+    """Each texture set's name and the name it had when the mesh was imported (the operator's
+    rename in the Texture Set List, `texture_sheet.py`, decision 093). Painter 12.1.5 exposes
+    the documented `TextureSet.original_name` as a string, not a method."""
+    names = []
+    for texture_set in substance_painter.textureset.all_texture_sets():
+        original = texture_set.original_name
+        names.append(
+            {
+                "name": str(texture_set.name()),
+                "original_name": str(original() if callable(original) else original),
+            }
+        )
+    return names
+
+
 def show_node(args: dict[str, Any]) -> dict[str, Any]:
     """Make the stack of a recorded node the active one; returns the node's name as the Layers
     panel lists it, and its texture set."""
@@ -1388,6 +1408,7 @@ OPERATIONS = {
     "channel_names": channel_names,
     "show_texture_set": show_texture_set,
     "show_node": show_node,
+    "texture_set_names": texture_set_names,
     "shipped_templates": shipped_templates,
     "baking_capture": baking_capture,
     "baking_state": baking_state,

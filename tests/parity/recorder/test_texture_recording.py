@@ -528,3 +528,42 @@ def test_a_converted_virtual_map_exported_twice_is_one_file_per_step(
     published = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
     record_ids = {r["record_id"] for r in published["private_records"]}
     assert "r2-uzp_plane-1_over_ior-step11" in record_ids
+
+
+def with_project_name(sample_job: Job, *names: Any) -> Job:
+    manifest = copy.deepcopy(sample_job.manifest)
+    manifest["applied_settings"] += [
+        {"name": "project.file_name", "value": name, "applied_by": "recorder_api"} for name in names
+    ]
+    return job_from_manifest(manifest)
+
+
+def test_a_golden_may_name_the_file_its_project_is_saved_under(
+    fake: types.ModuleType, make_session: MakeSession, sample_job: Job, work: Path, inbox: Path
+) -> None:
+    """Decision 093: r2's project is `golden.spp` unless the manifest names a file stem in
+    `project.file_name` (a project name holding dots, for the `$project` wildcard)."""
+    record_texture_golden(make_session(fake.FakeWorld()), sample_job, work / "a", inbox)
+    job = with_project_name(sample_job, "golden.dotted")
+    record_texture_golden(make_session(fake.FakeWorld()), job, work / "b", inbox)
+    assert sorted(p.name for p in work.rglob("*.spp")) == ["golden.dotted.spp", "golden.spp"]
+
+
+@pytest.mark.parametrize(
+    "names",
+    [("../golden",), ("a/b",), ("golden.",), ("Golden",), (3,), ("one", "two")],
+)
+def test_a_project_file_name_that_is_not_one_stem_is_refused_before_painter_is_touched(
+    fake: types.ModuleType,
+    make_session: MakeSession,
+    sample_job: Job,
+    work: Path,
+    inbox: Path,
+    names: tuple[Any, ...],
+) -> None:
+    world = fake.FakeWorld()
+    with pytest.raises(RecorderError, match="must be one file stem"):
+        record_texture_golden(
+            make_session(world), with_project_name(sample_job, *names), work, inbox
+        )
+    assert not world.project_open and not inbox.exists() and not work.exists()
