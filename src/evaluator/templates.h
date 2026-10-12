@@ -50,6 +50,9 @@ struct ProjectTemplate {
     std::string name;
     /// The shipped `.spt` path the template reproduces; absent for "default" and the defaults.
     std::optional<std::string> painterTemplate;
+    /// The texture set resolution a project created from the template gets when its settings name
+    /// none (Painter's template capture); absent = the project default, 1024.
+    std::optional<int> defaultResolution;
     bool channelDefaults = false;
     std::vector<TemplateChannel> channels;
     core::json::Object provenance;

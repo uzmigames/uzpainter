@@ -4,9 +4,15 @@
   "id": "maxwell-metallic-roughness",
   "name": "Maxwell - Metallic Roughness",
   "painter_template": "templates/Maxwell - Metallic Roughness.spt",
+  "default_resolution": 2048,
   "provenance": {
     "author": "UzmiGames",
     "licence": "Apache-2.0",
+    "default_resolution": {
+      "golden_id": "tier0/defaults-templates/project-templates",
+      "record_sha256": "d546c51c1697bc16a9874989696625588978902cb1902306205a93e17f42b0fd",
+      "note": "texture set resolution of a project created with no setting, read through the documented textureset API (template capture)"
+    },
     "channel_set": {
       "golden_id": "tier0/defaults-templates/project-templates",
       "record_sha256": "d546c51c1697bc16a9874989696625588978902cb1902306205a93e17f42b0fd",

@@ -415,6 +415,97 @@ def test_sync_rebuilds_only_its_group_and_keeps_unrelated_content(created: Wand)
     assert shown["metal"] is True and shown["extra"] is False
 
 
+# ── The native composite builds the script's document (decision 115) ─────────────────────────
+
+
+NATIVE_SYNC = """
+import uzpainter
+nls, nts, nsrc = uzpainter.layerstack, uzpainter.textureset, uzpainter.source
+stack = nts.get_active_stack()
+channels = sorted(stack.all_channels(), key=lambda c: c.name)
+
+
+def source(node, channel):
+    s = node.get_source(channel)
+    if s is None:
+        return None
+    if isinstance(s, nsrc.SourceBitmap):
+        return ["bitmap", s.resource_id().url().rsplit("version=", 1)[1], s.get_color_space()]
+    c = s.get_color()
+    return ["uniform", list(c.value_raw), c.color_space]
+
+
+def projection(node):
+    p = node.get_projection_parameters()
+    t = p.uv_transformation
+    return [node.get_projection_mode().name, p.filtering_mode.name, p.uv_wrapping_mode.name,
+            t.scale_mode.name, list(t.scale), t.rotation, list(t.offset)]
+
+
+def document(node):
+    mask = node.is_in_mask_stack()
+    out = {"name": node.get_name(), "type": type(node).__name__, "visible": node.is_visible()}
+    if node.has_blending():
+        out["blending"] = (
+            [node.get_blending_mode().name, node.get_opacity()] if mask else
+            {c.name: [node.get_blending_mode(c).name, node.get_opacity(c)] for c in channels})
+    if isinstance(node, (nls.FillLayerNode, nls.FillEffectNode)):
+        out["projection"] = projection(node)
+        if mask:
+            out["source"] = source(node, None)
+        else:
+            out["active"] = sorted(c.name for c in node.active_channels)
+            out["sources"] = {c.name: source(node, c) for c in channels}
+    if isinstance(node, nls.LayerNode):
+        out["content"] = [document(e) for e in node.content_effects()]
+        out["mask"] = ([node.get_mask_background().name, node.is_mask_enabled(),
+                        [document(e) for e in node.mask_effects()]] if node.has_mask() else None)
+    if isinstance(node, nls.GroupLayerNode):
+        out["children"] = [document(x) for x in node.sub_layers()]
+    return out
+
+
+def titled():
+    return [n for n in nls.get_root_layer_nodes(stack) if n.get_name() == __TITLE__]
+
+
+(script_root,) = titled()
+script = document(script_root)
+r = nls.sync_stack(__STACK__, __MASKS__)
+(native_root,) = titled()
+result = {"script": script, "native": document(native_root),
+          "rebuilt": native_root.uid() != script_root.uid(), "status": r.status}
+"""
+
+
+def test_native_sync_stack_builds_the_document_the_script_builds(created: Wand) -> None:
+    """Decision 115: `uzpainter.layerstack.sync_stack` on the wand's stack JSON builds the same
+    group as `painter_layer_stack.py sync` through the facade: the tree, every node's blending on
+    every channel (Height LinearDodge from Painter's insert defaults), opacity, active channels,
+    every source (uniform colours as given with their space, bitmaps by content and colour
+    space), projections and masks. Only the uids differ (a rebuild) and the names the two give
+    the imported images (bitmaps are compared by content)."""
+    first = created.sync()
+    assert first.status == 0, first.stdout + first.stderr
+    stack_json = created.staged["wand-stack"]
+    title = json.loads(stack_json.read_text(encoding="utf-8"))["title"]
+    masks = created.staged[created.job.sync.args["masks"][0]].parent
+    body = (
+        NATIVE_SYNC.replace("__TITLE__", repr(title))
+        .replace("__STACK__", repr(str(stack_json)))
+        .replace("__MASKS__", repr(str(masks)))
+    )
+    result = created.probe("native-sync", body)
+    assert result["status"] == "committed" and result["rebuilt"] is True
+    assert result["native"] == result["script"]
+    heights = {
+        layer["name"]: layer["blending"]["Height"][0]
+        for group in result["script"]["children"]
+        for layer in group["children"]
+    }
+    assert set(heights.values()) == {"LinearDodge"}
+
+
 # ── The consumers' route and the manifest (decisions 097, 113) ──────────────────────────────────
 
 
@@ -463,3 +554,160 @@ def test_exports_are_verified_and_their_manifest_rebased(
         export["manifest"] is None and "outside the Assets3D root" in export["manifest_unavailable"]
     )
     assert os.path.isfile(out / "probe_Roughness.png")
+
+
+AFTER_EXPORT = {
+    "different": "import substance_painter.project as p\np.save_as(__OTHER__)\n",
+    "closed": "import substance_painter.project as p\np.close()\n",
+}
+
+
+@pytest.mark.parametrize("then", sorted(AFTER_EXPORT))
+def test_an_export_keeps_its_sources_when_the_run_ends_on_another_project(
+    created: Wand, adapter_env: None, then: str
+) -> None:
+    """The manifest of an export names the project and mesh it was exported from, also when the
+    script then saves the project under another name or closes it (the export job records its
+    sources when it is queued)."""
+    out = created.root / "_tmp" / "claude" / "varinha11-v1" / "probe-export"
+    other = created.root / "_tmp" / "claude" / "varinha11-v1" / "other.spp"
+    code = EXPORT.replace("__OUT__", repr(str(out))) + AFTER_EXPORT[then].replace(
+        "__OTHER__", repr(str(other))
+    )
+    reply, status = client.execute_python(code)
+    assert status == client.OK, reply["error"]
+    (export,) = reply["exports"]
+    assert export["manifest"] is not None, export["manifest_unavailable"]
+    files = export["manifest"]["manifest_files"]
+    dst = created.argument("create", "dst")
+    assert files["project"]["path"] == dst.relative_to(created.root).as_posix()
+    assert files["mesh"]["path"] == "_tmp/claude/varinha11-v1/paint/11-Varinha-Madeira-v1_low.obj"
+
+
+RELATIVE_SOURCES = (
+    """
+import os
+import substance_painter.project as p
+p.close()
+os.chdir(__PAINT__)
+p.create("11-Varinha-Madeira-v1_low.obj")
+p.save_as("relative.spp")
+"""
+    + EXPORT
+    + """
+os.chdir(__ELSEWHERE__)
+p.close()
+"""
+)
+
+
+def test_an_export_names_relative_sources_against_the_directory_they_were_named_in(
+    created: Wand, adapter_env: None, tmp_path: Path
+) -> None:
+    """A project created from a relative mesh path and saved under a relative path, exported,
+    then left from another working directory: the manifest names both sources where they were
+    when the calls named them (the export job records absolute paths), not under the final
+    directory."""
+    paint = created.root / "_tmp" / "claude" / "varinha11-v1" / "paint"
+    out = created.root / "_tmp" / "claude" / "varinha11-v1" / "probe-export"
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    code = (
+        RELATIVE_SOURCES.replace("__PAINT__", repr(str(paint)))
+        .replace("__ELSEWHERE__", repr(str(elsewhere)))
+        .replace("__OUT__", repr(str(out)))
+    )
+    reply, status = client.execute_python(code)
+    assert status == client.OK, reply["error"]
+    (export,) = reply["exports"]
+    assert export["manifest"] is not None, export["manifest_unavailable"]
+    files = export["manifest"]["manifest_files"]
+    assert files["project"]["path"] == "_tmp/claude/varinha11-v1/paint/relative.spp"
+    assert files["mesh"]["path"] == "_tmp/claude/varinha11-v1/paint/11-Varinha-Madeira-v1_low.obj"
+
+
+RELATIVE_REOPEN = (
+    """
+import os
+import substance_painter.project as p
+p.close()
+os.chdir(__PAINT__)
+p.create("11-Varinha-Madeira-v1_low.obj")
+p.save_as("relative.spp")
+p.close()
+os.chdir(__ELSEWHERE__)
+p.open(os.path.join(__PAINT__, "relative.spp"))
+"""
+    + EXPORT
+)
+
+RELOADED_ELSEWHERE = (
+    """
+import uzpainter
+before = uzpainter.project.revision()
+uzpainter.project.reload_mesh(__COPY__)
+if __REVERT__:
+    uzpainter.project.revert(before)
+"""
+    + EXPORT
+)
+
+
+def test_a_reopened_project_names_the_mesh_it_was_created_from(
+    created: Wand, adapter_env: None, tmp_path: Path
+) -> None:
+    """A project created from a relative mesh path, saved, closed and reopened from another
+    working directory names its mesh where it was imported from: the project records the
+    mesh's absolute source, so nothing is resolved against the directory it is reopened in."""
+    paint = created.root / "_tmp" / "claude" / "varinha11-v1" / "paint"
+    out = created.root / "_tmp" / "claude" / "varinha11-v1" / "probe-export"
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    code = (
+        RELATIVE_REOPEN.replace("__PAINT__", repr(str(paint)))
+        .replace("__ELSEWHERE__", repr(str(elsewhere)))
+        .replace("__OUT__", repr(str(out)))
+    )
+    reply, status = client.execute_python(code)
+    assert status == client.OK, reply["error"]
+    (export,) = reply["exports"]
+    assert export["manifest"] is not None, export["manifest_unavailable"]
+    files = export["manifest"]["manifest_files"]
+    assert files["project"]["path"] == "_tmp/claude/varinha11-v1/paint/relative.spp"
+    assert files["mesh"]["path"] == "_tmp/claude/varinha11-v1/paint/11-Varinha-Madeira-v1_low.obj"
+
+
+@pytest.mark.parametrize("revert", [False, True])
+def test_a_mesh_reloaded_from_another_folder_is_named_where_it_was_reloaded_from(
+    created: Wand, adapter_env: None, revert: bool
+) -> None:
+    """Reloading identical mesh bytes from another folder keeps one catalog entry for them, but
+    the project's current mesh source is the new path, and the export's manifest names it. A
+    revert to the revision before the reload brings back the first path: the export reads the
+    source of the revision it exports."""
+    paint = created.root / "_tmp" / "claude" / "varinha11-v1" / "paint"
+    copy = (
+        created.root
+        / "_tmp"
+        / "claude"
+        / "varinha11-v1"
+        / "copy"
+        / paint.joinpath("11-Varinha-Madeira-v1_low.obj").name
+    )
+    copy.parent.mkdir(parents=True)
+    copy.write_bytes((paint / copy.name).read_bytes())
+    out = created.root / "_tmp" / "claude" / "varinha11-v1" / "probe-export"
+    code = (
+        RELOADED_ELSEWHERE.replace("__COPY__", repr(str(copy)))
+        .replace("__REVERT__", repr(revert))
+        .replace("__OUT__", repr(str(out)))
+    )
+    reply, status = client.execute_python(code)
+    assert status == client.OK, reply["error"]
+    (export,) = reply["exports"]
+    assert export["manifest"] is not None, export["manifest_unavailable"]
+    files = export["manifest"]["manifest_files"]
+    folder = "paint" if revert else "copy"
+    assert (
+        files["mesh"]["path"] == f"_tmp/claude/varinha11-v1/{folder}/11-Varinha-Madeira-v1_low.obj"
+    )

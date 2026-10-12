@@ -26,7 +26,8 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 
 - **`project`.**
   - Lifecycle: `create(mesh_file_path, Settings(...))`, `open`, `close`, `is_open`.
-  - `reload_mesh(path, import_cameras=None, material_mapping={})`: one transaction over `mesh/reload.h`. Texture sets are matched by material, added sets get the default template's channels, and the new mesh's bytes are stored with the commit. Renamed, split or merged materials raise `MaterialMappingError` (a `ProjectError` whose `details` hold the proposal and the renames to pass back).
+  - Templates (decision 116): `Settings(template=<id>)` creates the stacks from an installed template (`templates()` lists `{id, name, painter_template}`; an unknown id raises `ValueError` before anything is created). The project records it (`template()`; the manifest's `settings.template`), and every evaluation and export reads its base values. The settings' resolution overrides the template's `default_resolution`.
+  - `reload_mesh(path, import_cameras=None, material_mapping={})`: one transaction over `mesh/reload.h`. Texture sets are matched by material, added sets get the channels of the project's template, and the new mesh's bytes are stored with the commit. Renamed, split or merged materials raise `MaterialMappingError` (a `ProjectError` whose `details` hold the proposal and the renames to pass back).
   - Saving: `save(ProjectSaveMode)`, `save_as`, `save_as_copy`, `revert(revision | checkpoint)`.
   - State: `revision()`, `checkpoints()`, `needs_saving()`, `file_path()`, `name()`, `get_uuid()`, `last_imported_mesh_path()`, `Metadata(context)`.
   - `dump_recipe()` raises `NotYetSupported` (phase2.2).
@@ -48,7 +49,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
   - `import_project_resource` imports PNG files of usage TEXTURE; other usages and formats raise `NotYetSupported` naming their owner.
   - `list_project_resources`, `replace_node_resource(node, resource, channel=None)` (LAY-08), `update_layer_stack_resource`.
   - `list_used_resources()`: the entries the layer stacks and mesh maps bind. `resource_origin(id)`: the file an entry was imported from.
-- **`export`.** `plan(config)` is the typed dry run. `list_project_textures(config)`, `start(config, fixed_names=[])` returns a `jobs.Job`, and `export_project_textures(config, fixed_names=[])` starts and waits (decision 105 §5).
+- **`export`.** `plan(config)` is the typed dry run. `list_project_textures(config)`, `start(config, fixed_names=[])` returns a `jobs.Job`, and `export_project_textures(config, fixed_names=[])` starts and waits (decision 105 §5). The job's result names the publication (`directory`, `files`, `fixed_names`, `generation`, `receipt`, `receipt_sha256`, `plan_hash`, `revision`) and the sources the export was queued from: `project_path`, absolute as `open` or `save_as` resolved it, and `mesh_path`, the exported revision's mesh source (the absolute path the last create or `reload_mesh` imported from, persisted as the manifest's `mesh.source`). Either is None when unknown. The Assets3D adapter rebases each receipt on its own sources, even when the run ends on another project, on none, or in another directory.
 - **`jobs`.** `Job.id`, `.kind`, `.status`, `.progress`, `.wait(timeout=None)`, `.cancel()`, `list()`, and `busy()` (the id of a queued or running job, or None).
 - **`colormanagement`.** `Color(r, g, b, color_space=None)` keeps `value_raw` and the space as given. `GenericColorSpace`. `get_color_management()`.
 - **`exception`.** Painter's `ProjectError`, `ServiceNotFoundError`, `ResourceNotFoundError` and `EditionContextException`, plus `UnsupportedInUzPainter(symbol, reason, alternative)`, `NotYetSupported`, `UnsupportedProcedural`, `BusyError(job_id)`, `StaleRevisionError(expected, current)`, `AmbiguousNameError(message, candidates)` (a `ValueError`) and the mesh-import classes (`MeshParseError`, `UnsupportedFormat`, `DuplicateMaterialNames`, `UVOutsideTile`, `ReleaseGap`). Each is also exported by `uzpainter`.
@@ -71,7 +72,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 - **Native `Transaction`.** Inside `with uzpainter.Transaction():` the calls of the thread are applied to one working copy and reads see it. A clean exit commits one revision (`.result`); an exception commits nothing.
 - **No reset on toggle (LAY-01).** Assigning `active_channels` replaces the set and keeps every source.
 - **Channel contexts.** A content-stack node needs a channel: None raises `EditionContextException`. A mask-stack node takes None: a channel raises `ValueError`.
-- **Stored values.** Floats are stored as float32, as Painter stores them, and colours keep their raw value and colour-space string (decision 105 §2). Inserts use Painter's default names ("Fill", "Folder").
+- **Stored values.** Floats are stored as float32, as Painter stores them, and colours keep their raw value and colour-space string (decision 105 §2). Inserts give Painter's effective defaults (decision 115): the names "Fill", "Folder", "Levels - Base color" (a content-stack levels effect, which affects BaseColor) and "Compare mask"; Height `LinearDodge` and Normal `NormalMapDetail` blending on a new content-stack fill, fill effect or group; BaseColor 0.8 and Height 0 working-space sources on a new content fill, its active channels empty. A mask-stack node keeps the plain defaults.
 - **Threads (02 §4).** The bindings release the GIL around every call that can wait: the document lock, the store, a job. A call holds the document lock only while it edits the working copy, or for the length of a native `Transaction`. Another Python thread runs meanwhile.
 - **Saving (decision 105 §1).** Commits are durable, and `close()` keeps them. A project created from a mesh is "Untitled" in a private temporary folder until `save_as`. `ProjectSaveMode.Full` compacts the file. Saving or closing while a job is queued or running raises `BusyError`.
 
@@ -84,6 +85,8 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 3. deletes the earlier root groups of that title;
 4. attaches the new group at the top of the stack in one step;
 5. hides every other visible root layer, unless its name starts with a keep-visible prefix. It never deletes them.
+
+Every node it builds starts with the insert defaults of §3, as the script's inserted nodes do, so it builds the document `painter_layer_stack.py sync` builds through the facade (decision 115; compared node for node in `tests/adapters/assets3d`).
 
 The result's `returned["sync"]` lists the groups, layers, imported and skipped images, deleted and hidden nodes. The JSON fields and their channels are documented in `stack_sync.h`.
 

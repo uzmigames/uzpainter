@@ -265,8 +265,6 @@ def exports_of_run(uzpainter: Any) -> list[dict[str, Any]]:
         for copy in publication["fixed_names"]:
             latest[os.path.normcase(os.path.abspath(copy["directory"]))] = index
     root = os.environ.get(ROOT_ENV)
-    project_path = uzpainter.project.file_path() if uzpainter.project.is_open() else None
-    mesh_path = uzpainter.project.last_imported_mesh_path() if project_path else None
     out = []
     problems = []
     for index, publication in enumerate(publications):
@@ -282,11 +280,13 @@ def exports_of_run(uzpainter: Any) -> list[dict[str, Any]]:
             )
             problems += found
             copies.append({**copy, "verified": current and not found, "superseded": not current})
+        # Each export names the project and mesh it was started from: the project open at the
+        # end of the run may be another one, or none.
         manifest, reason = rebase_manifest(
             receipt,
             publication["directory"],
-            project_path and str(project_path),
-            mesh_path and str(mesh_path),
+            publication["project_path"],
+            publication["mesh_path"],
             root,
         )
         out.append(

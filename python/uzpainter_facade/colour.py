@@ -9,7 +9,10 @@ project's declared mode, working space, input rules or display transform.
 
 Uniform colours. A colour without a space is sRGB on a colour-managed channel (an sRGB8 channel:
 BaseColor in the templates) and Raw elsewhere, as Painter documents and the
-`export-ocio-encode-legacy` readbacks record. The facade stores every uniform colour as its
+`export-ocio-encode-legacy` readbacks record. A user channel is not colour managed for a uniform
+colour, sRGB8 or not: Painter reads back and exports the value set whatever its space
+(`colour-ramps-srgb`, `-working`, `-raw`; decision 115), and so does any channel the facade does not
+colour-manage. The facade stores every uniform colour as its
 working-space value (`Color(working, "Working")`): the native evaluator takes a stored value as
 linear, so it receives the value Painter composites, and Painter's readback (`.working`) is that
 value. The sRGB transfer runs in float32 as Painter's readbacks show it: x = f32(v),
@@ -247,14 +250,19 @@ Color.__module__ = MODULE
 
 def working_value(color: Any, colour_managed: bool) -> tuple[float, float, float]:
     """The float32 working-space value of `color` set on a channel: a colour without a space is
-    sRGB on a colour-managed channel and Raw elsewhere."""
+    sRGB on a colour-managed channel and Raw elsewhere; a channel that is not colour managed takes
+    the value as given, whatever its space."""
     if not isinstance(color, Color):
         raise TypeError("the colour must be a colormanagement.Color")
     if color.color_space is None:
         space = "sRGB" if colour_managed else "Raw"
     else:
         space = color_space_name(color.color_space)
-    return to_working(color.value_raw, space)
+    working = to_working(color.value_raw, space)  # a space outside Legacy mode raises here
+    if not colour_managed:
+        r, g, b = (f32(c) for c in color.value_raw)  # taken as given (decision 115)
+        return (r, g, b)
+    return working
 
 
 def stored_color(color: Any, colour_managed: bool) -> Any:

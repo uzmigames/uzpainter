@@ -811,12 +811,14 @@ json::Value ProjectToJson(const Project& project) {
     settings["color_management"] = std::move(color);
     settings["import_cameras"] = s.import_cameras;
     settings["auto_unwrap"] = s.auto_unwrap;
+    if (s.template_id != "default") settings["template"] = s.template_id;
     o["settings"] = std::move(settings);
 
     if (project.mesh) {
         json::Object mesh = project.mesh->extra;
         mesh["resource"] = project.mesh->resource;
         mesh["import_report"] = project.mesh->import_report;
+        if (!project.mesh->source.empty()) mesh["source"] = project.mesh->source;
         o["mesh"] = std::move(mesh);
     } else {
         o["mesh"] = nullptr;
@@ -915,6 +917,7 @@ Project ProjectFromJson(const json::Value& manifest) {
     settings.color_management.extra = c.Rest();
     settings.import_cameras = s.Bool("import_cameras");
     settings.auto_unwrap = s.Bool("auto_unwrap");
+    if (const json::Value* id = s.GetOptional("template")) settings.template_id = AsString(*id, s.Path("template"));
     settings.extra = s.Rest();
 
     if (const json::Value* mesh = r.GetOptional("mesh")) {
@@ -922,6 +925,7 @@ Project ProjectFromJson(const json::Value& manifest) {
         MeshReference out;
         out.resource = m.String("resource");
         out.import_report = m.Object("import_report");
+        if (const json::Value* source = m.GetOptional("source")) out.source = AsString(*source, m.Path("source"));
         out.extra = m.Rest();
         project.mesh = std::move(out);
     }

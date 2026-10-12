@@ -11,7 +11,10 @@ import struct
 from pathlib import Path
 from typing import Any
 
-from tests.python.conftest import PROBE_IMAGES, Run
+import numpy as np
+
+from tests.python.conftest import PROBE_IMAGES, REPO_ROOT, Run
+from tools.parity.fit.decode import decode
 
 
 def with_values(script: str) -> str:
@@ -195,7 +198,7 @@ def test_every_setter_reads_back_through_fresh_handles_and_after_reopen(run: Run
     assert result["needs_saving_reopened"] is False
     assert result["file_path"].endswith("/sub/readback.uzp")
     assert result["name"] == "readback"
-    assert before["names"] == ["uzp fill A", "Fill", "Levels", "uzp group", "Fill"]
+    assert before["names"] == ["uzp fill A", "Fill", "Levels - Base color", "uzp group", "Fill"]
     assert before["classes"] == [
         "FillLayerNode",
         "FillEffectNode",
@@ -279,6 +282,126 @@ def test_lay01_active_channels_keep_every_source(run: Run) -> None:
         "ChannelType.Height",
         "ChannelType.SpecularRoughness",
     ]
+
+
+def test_inserts_give_painters_effective_defaults(run: Run) -> None:
+    """Decision 115: a new fill or group in a content stack blends Height LinearDodge and Normal
+    NormalMapDetail (a content fill effect too, once the support check admits it); a new fill
+    holds BaseColor 0.8 and Height 0 (working space) with no active channel; the levels effect
+    of a content stack affects BaseColor and is named "Levels - Base color" (a compare mask is
+    named "Compare mask" once the support check admits it). A mask-stack node keeps the plain
+    defaults, a named insert keeps its name, and LAY-01 still holds."""
+    result = ok(
+        run("""
+        stack = create()
+        fill = ls.insert_fill(top(stack))
+        group = ls.insert_group(top(stack))
+        levels = ls.insert_levels_effect(ls.InsertPosition.inside_node(fill, ls.NodeStack.Content))
+        named = ls.insert_levels_effect(ls.InsertPosition.above_node(levels), name="mine")
+        fill.add_mask(ls.MaskBackground.Black)
+        in_mask = ls.insert_fill(ls.InsertPosition.inside_node(fill, ls.NodeStack.Mask))
+
+
+        def blending(node):
+            return {c.name: [node.get_blending_mode(c).name, node.get_opacity(c)]
+                    for c in (CT.BaseColor, CT.Height, CT.Normal, CT.SpecularRoughness)}
+
+
+        def sources(node):
+            out = {}
+            for c in (CT.BaseColor, CT.Height, CT.SpecularRoughness):
+                s = node.get_source(c)
+                out[c.name] = None if s is None else [list(s.get_color().value_raw),
+                                                      s.get_color().color_space]
+            return out
+
+
+        before = sources(fill)
+        fill.active_channels = {CT.BaseColor}
+        result = {
+            "names": [n.get_name() for n in (fill, group, levels, named, in_mask)],
+            "fill": blending(fill), "group": blending(group), "fill_sources": before,
+            "levels": [str(levels.affected_channel), type(levels.get_parameters()).__name__,
+                       str(named.affected_channel)],
+            "mask": [in_mask.get_blending_mode().name, in_mask.get_source(None)],
+            "kept": sources(fill),
+        }
+        """)
+    )
+    assert result["names"] == [
+        "Fill",
+        "Folder",
+        "Levels - Base color",
+        "mine",
+        "Fill",
+    ]
+    painter = {
+        "BaseColor": ["Normal", 1.0],
+        "Height": ["LinearDodge", 1.0],
+        "Normal": ["NormalMapDetail", 1.0],
+        "SpecularRoughness": ["Normal", 1.0],
+    }
+    assert result["fill"] == result["group"] == painter
+    defaults = {
+        "BaseColor": [[0.800000011920929] * 3, "Working"],
+        "Height": [[0.0] * 3, "Working"],
+        "SpecularRoughness": None,  # unrecorded (recording P20-A): no source
+    }
+    assert result["fill_sources"] == defaults
+    assert result["levels"] == [
+        "ChannelType.BaseColor",
+        "LevelsParamsRGB",
+        "ChannelType.BaseColor",
+    ]
+    assert result["mask"] == ["Normal", None]
+    assert result["kept"] == defaults  # LAY-01: assigning active channels changes no source
+
+
+def test_a_project_records_its_template(run: Run) -> None:
+    """Decision 116: `Settings(template=...)` creates the stacks from an installed template, the
+    project records it through save and reopen, and an export reads its base values: the empty
+    Glossiness channel of Dota 2 (a channel the default template and the channel defaults lack)
+    exports the template's base 178/255. An unknown id fails before anything is created."""
+    result = ok(
+        run(
+            with_values("""
+        listed = {t["id"]: t["painter_template"] for t in project.templates()}
+        bad = raises(project.create, PLANE, project.Settings(template="nope"))
+        open_after_bad = project.is_open()
+        project.create(PLANE, project.Settings(default_texture_resolution=256, template="dota-2"))
+        channels = sorted(c.name for c in ts.get_active_stack().all_channels())
+        project.save_as(WORK + "/dota.uzp")
+        project.close()
+        project.open(WORK + "/dota.uzp")
+        reopened = project.template()
+        config = __CONFIG__
+        config["exportPresets"][0]["maps"][0]["channels"][0]["srcMapName"] = "glossiness"
+        out = export.export_project_textures(config)
+        files = [[f["relative_path"], f["path"]] for f in out["files"]]
+        project.close()
+        create()
+        default_template = project.template()
+        project.close()
+        result = {"listed": listed, "bad": bad, "open_after_bad": open_after_bad,
+                  "channels": channels, "reopened": reopened, "files": files,
+                  "default": default_template}
+        """)
+        )
+    )
+    assert result["listed"]["default"] is None
+    assert result["listed"]["dota-2"] == "templates/Dota 2.spt"
+    assert len(result["listed"]) == 27
+    assert result["bad"].startswith("ValueError: no project template 'nope'")
+    assert result["open_after_bad"] is False
+    assert result["reopened"] == "dota-2"
+    assert result["default"] == "default"
+    template = json.loads((REPO_ROOT / "assets/templates/dota-2.json").read_text(encoding="utf-8"))
+    assert result["channels"] == sorted(c["type"] for c in template["channels"])
+    [(relative, path)] = result["files"]
+    assert relative == "uzp_plane_height.png"
+    exported = decode(Path(path).read_bytes())
+    assert exported.values.shape[:2] == (256, 256)
+    assert set(np.unique(exported.values).tolist()) == {178 * 257}
 
 
 # ── 3.3 handles and later-phase calls ───────────────────────────────────────────────────────────
@@ -703,6 +826,16 @@ def test_sync_stack_rebuilds_only_the_named_group_and_hides_others(
                 str(tex.get_projection_parameters().uv_wrapping_mode),
             ],
             "lining_height": str(lining.get_blending_mode(CT.Height)),
+            "height_blending": {
+                n.get_name(): str(n.get_blending_mode(CT.Height))
+                for n in (root, ls.get_node_by_name("Outer", parent=root), top_fill, tex)
+            },
+            "base_sources": [
+                list(n.get_source(CT.Height).get_color().value_raw) for n in (
+                    ls.get_node_by_name("base", parent=ls.get_node_by_name("Outer", parent=root)),
+                    tex,
+                )
+            ],
             "resources": sorted(x.name for x in resource.list_project_resources()),
         }
         again = ls.sync_stack(
@@ -734,9 +867,23 @@ def test_sync_stack_rebuilds_only_the_named_group_and_hides_others(
     assert base["opacity"] == 0.5
     assert outer["children"][0]["mask"] == ["MaskBackground.Black", ["M_left"]]
     assert tree["children"][0]["mask"] == ["MaskBackground.Black", ["M_left"]]
-    assert result["top_base"] == [[f32(0.1), f32(0.2), f32(0.3)], "sRGB"]
+    # `base` is stored as the facade stores the script's sRGB colour: its float32 working value
+    # on the sRGB8 BaseColor (decision 115).
+    assert result["top_base"] == [
+        [0.010022825561463833, 0.03310476243495941, 0.07323896884918213],
+        "Working",
+    ]
     assert result["tex"] == ["sRGB", "ProjectionMode.UV", "UVWrapMode.RepeatNone"]
     assert result["lining_height"] == "BlendingMode.Normal"
+    # Painter's insert defaults, as the script's inserted nodes get them (decision 115): Height
+    # adds unless the group replaces it, and a fill without a height keeps the default source 0.
+    assert result["height_blending"] == {
+        "B": "BlendingMode.LinearDodge",
+        "Outer": "BlendingMode.LinearDodge",
+        "top": "BlendingMode.LinearDodge",
+        "tex": "BlendingMode.LinearDodge",
+    }
+    assert result["base_sources"] == [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
     assert result["sync"]["imported"] == ["M_left", "T_checker"]
     assert result["resources"] == ["M_c_only", "M_left", "T_checker", "plane.obj"]
     assert result["again"] == ["committed", [], ["M_left", "T_checker"], True]

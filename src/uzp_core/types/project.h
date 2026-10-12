@@ -49,6 +49,10 @@ struct ProjectSettings {
     ColorManagement color_management;
     bool import_cameras = false;
     bool auto_unwrap = false;  // recorded; rejected at import (release gap)
+    /// The project template the stacks were created from (`assets/templates/<id>.json`); its base
+    /// values are the backdrops every evaluation of the project reads (decision 116). "default" is
+    /// the project created with no template; the manifest omits it.
+    std::string template_id{"default"};
     json::Object extra;
 
     bool operator==(const ProjectSettings&) const = default;
@@ -60,6 +64,10 @@ struct MeshReference {
     std::string resource;  // SHA-256 of the original file
     json::Object import_report;
     json::Object extra;
+    /// The absolute path the current mesh was imported from, by the last create or reload; empty
+    /// when unknown (a project written before it was recorded). The resource catalog keeps one
+    /// entry per (hash, file name), so its origin can name an earlier import of the same bytes.
+    std::string source{};
 
     bool operator==(const MeshReference&) const = default;
 };

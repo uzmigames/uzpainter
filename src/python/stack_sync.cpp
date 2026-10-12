@@ -3,6 +3,7 @@
 #include "python/stack_sync.h"
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <set>
 
@@ -67,11 +68,22 @@ core::Source Uniform(std::array<double, 3> rgb, const std::string& colour_space)
     return core::Source{core::UniformColorSource{{F32(rgb[0]), F32(rgb[1]), F32(rgb[2])}, colour_space, {}}};
 }
 
+/// The facade's float32 sRGB decode of one component (`python/uzpainter_facade/colour.py`
+/// `srgb_to_linear`): x = f32(v), ((x + 0.055f) / 1.055f) ^ 2.4f, the power of the float32
+/// operands rounded once to float32.
+double SrgbToLinear(double value) {
+    const float x = static_cast<float>(value);
+    if (x <= 0.04045f) return x / 12.92f;
+    const float base = (x + 0.055f) / 1.055f;
+    return static_cast<float>(std::pow(static_cast<double>(base), static_cast<double>(2.4f)));
+}
+
 core::Source Bitmap(const std::string& sha256, const std::string& colour_space) {
     return core::Source{core::BitmapSource{core::ResourceBinding{sha256, std::nullopt, {}}, colour_space, {}}};
 }
 
-/// A black mask holding one fill effect whose source is the image `sha256` in UV projection.
+/// A black mask holding one fill effect whose source is the image `sha256` in UV projection, in
+/// the Data colour space Painter gives a bitmap bound in a mask.
 core::Mask ImageMask(core::Edit& edit, const std::string& name, const std::string& sha256) {
     core::Effect effect;
     effect.uid = edit.AllocateId();
@@ -79,7 +91,7 @@ core::Mask ImageMask(core::Edit& edit, const std::string& name, const std::strin
     effect.name = name;
     effect.mono_blending = core::Blending{};
     core::FillContent fill;
-    fill.mono_source = Bitmap(sha256, "");
+    fill.mono_source = Bitmap(sha256, "Data");
     fill.projection.mode = core::ProjectionMode::UV;
     effect.fill = std::move(fill);
     core::Mask mask;
@@ -111,6 +123,23 @@ bool Erase(std::vector<core::Layer>& layers, core::Id uid) {
 }
 
 }  // namespace
+
+void ApplyDefaultBlending(core::ChannelBlending& blending, const std::map<core::ChannelType, core::Channel>& channels) {
+    if (channels.contains(core::ChannelType::Height)) {
+        blending[core::ChannelType::Height] = core::Blending{core::BlendingMode::LinearDodge, 1.0, {}};
+    }
+    if (channels.contains(core::ChannelType::Normal)) {
+        blending[core::ChannelType::Normal] = core::Blending{core::BlendingMode::NormalMapDetail, 1.0, {}};
+    }
+}
+
+void ApplyDefaultSources(core::FillContent& fill, const std::map<core::ChannelType, core::Channel>& channels) {
+    const auto set = [&](core::ChannelType channel, double value) {
+        if (channels.contains(channel)) fill.sources[channel] = Uniform({value, value, value}, "Working");
+    };
+    set(core::ChannelType::BaseColor, 0.8);
+    set(core::ChannelType::Height, 0.0);
+}
 
 void RemoveNode(core::Project& project, core::Id uid) {
     for (core::TextureSet& set : project.texture_sets) {
@@ -237,6 +266,9 @@ Object SyncStack(core::Edit& edit, store::ProjectStore& store, const Object& sta
     root.uid = edit.AllocateId();
     root.kind = core::LayerKind::group;
     root.name = title;
+    // The script inserts every node, so each one starts with Painter's insert defaults.
+    const std::map<core::ChannelType, core::Channel> channels = target->channels;
+    ApplyDefaultBlending(root.blending, channels);
     Array group_report, layer_report;
     for (const Group& g : groups) {
         core::Layer group;
@@ -244,6 +276,7 @@ Object SyncStack(core::Edit& edit, store::ProjectStore& store, const Object& sta
         group.kind = core::LayerKind::group;
         group.name = g.name;
         if (g.mask) group.mask = ImageMask(edit, *g.mask, sha_of.at(*g.mask));
+        ApplyDefaultBlending(group.blending, channels);
         if (g.replace_height) group.blending[core::ChannelType::Height] = core::Blending{};
         for (const LayerSpec& l : layers) {
             if (l.group != g.key) continue;
@@ -251,7 +284,9 @@ Object SyncStack(core::Edit& edit, store::ProjectStore& store, const Object& sta
             fill.uid = edit.AllocateId();
             fill.kind = core::LayerKind::fill;
             fill.name = l.name;
+            ApplyDefaultBlending(fill.blending, channels);
             core::FillContent content;
+            ApplyDefaultSources(content, channels);
             if (l.base_tex) {
                 content.sources[core::ChannelType::BaseColor] = Bitmap(sha_of.at(*l.base_tex), "sRGB");
                 content.projection.mode = core::ProjectionMode::UV;
@@ -259,16 +294,28 @@ Object SyncStack(core::Edit& edit, store::ProjectStore& store, const Object& sta
                 content.projection.uv.uv_wrapping_mode = core::UVWrapMode::RepeatNone;
                 content.projection.uv.uv_transformation = core::UVTransformation{};
             } else {
-                content.sources[core::ChannelType::BaseColor] = Uniform(*l.base, "sRGB");
+                // The script sets `base` as an sRGB colour; the facade stores the working value
+                // it decodes to on a colour-managed (sRGB8) BaseColor, the value as given on any
+                // other format (decision 115).
+                std::array<double, 3> working = *l.base;
+                const auto base_channel = channels.find(core::ChannelType::BaseColor);
+                if (base_channel != channels.end() && base_channel->second.format == core::ChannelFormat::sRGB8) {
+                    for (double& c : working) c = SrgbToLinear(c);
+                }
+                content.sources[core::ChannelType::BaseColor] = Uniform(working, "Working");
             }
+            // The active channels are exactly the ones the layer names; the default sources of
+            // the others stay, inactive, as the script's inserted fill keeps them.
+            content.active_channels.insert(core::ChannelType::BaseColor);
             const auto raw = [&content](core::ChannelType channel, const std::optional<double>& value) {
-                if (value) content.sources[channel] = Uniform({*value, *value, *value}, "Raw");
+                if (!value) return;
+                content.sources[channel] = Uniform({*value, *value, *value}, "Working");
+                content.active_channels.insert(channel);
             };
             raw(core::ChannelType::SpecularRoughness, l.rough);
             raw(core::ChannelType::BaseMetalness, l.metal);
             raw(core::ChannelType::SpecularWeight, l.spec);
             raw(core::ChannelType::Height, l.height);
-            for (const auto& [channel, source] : content.sources) content.active_channels.insert(channel);
             fill.fill = std::move(content);
             if (l.mask) fill.mask = ImageMask(edit, *l.mask, sha_of.at(*l.mask));
             fill.blending[core::ChannelType::BaseColor] = core::Blending{core::BlendingMode::Normal, F32(l.op), {}};

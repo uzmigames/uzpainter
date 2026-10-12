@@ -172,8 +172,15 @@ void Session::Create(const std::filesystem::path& mesh_path, const CreateSetting
 
     const evaluator::TemplateLibrary templates =
         evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
-    const evaluator::ProjectTemplate* fresh = templates.Find(evaluator::kDefaultTemplateId);
-    if (fresh == nullptr) throw ApiError("RuntimeError", "the default project template is not installed");
+    const std::string template_id = settings.template_id.value_or(std::string(evaluator::kDefaultTemplateId));
+    const evaluator::ProjectTemplate* fresh = templates.Find(template_id);
+    if (fresh == nullptr || fresh->channelDefaults) {
+        std::string known;
+        for (const std::string& id : templates.Ids()) {
+            if (id != evaluator::kChannelDefaultsId) known += (known.empty() ? "" : ", ") + id;
+        }
+        throw ApiError("ValueError", "no project template '" + template_id + "' is installed (" + known + ")");
+    }
 
     core::DocumentState state;
     state.project_uuid = NewUuid();
@@ -182,18 +189,23 @@ void Session::Create(const std::filesystem::path& mesh_path, const CreateSetting
     p.versions.evaluator_profile = std::string(evaluator::kCurrentProfile);
     if (settings.normal_map_format) p.settings.normal_map_format = *settings.normal_map_format;
     if (settings.tangent_space) p.settings.tangent_space = *settings.tangent_space;
-    if (settings.default_texture_resolution) {
-        p.settings.default_resolution.width = *settings.default_texture_resolution;
-        p.settings.default_resolution.height = *settings.default_texture_resolution;
+    // The settings' resolution overrides the template's, as Painter's settings override the
+    // template parameters.
+    if (const std::optional<int> size =
+            settings.default_texture_resolution ? settings.default_texture_resolution : fresh->defaultResolution) {
+        p.settings.default_resolution.width = *size;
+        p.settings.default_resolution.height = *size;
     }
     if (settings.mesh_unit_scale) p.settings.mesh_unit_scale = *settings.mesh_unit_scale;
     if (settings.import_cameras) p.settings.import_cameras = *settings.import_cameras;
+    p.settings.template_id = template_id;
     core::Validate(p);
 
     auto project = std::make_shared<OpenProject>();
     project->untitled_dir = std::filesystem::temp_directory_path() / "UzPainter" / ("untitled-" + RandomHex(8));
     std::filesystem::create_directories(project->untitled_dir);
     project->mesh_path = Utf8(mesh_path);
+    const std::string mesh_source = Utf8(std::filesystem::absolute(mesh_path));
     project->store = store::ProjectStore::Create(project->untitled_dir / "Untitled.uzp", state);
     project->document = std::make_unique<core::Document>(std::move(state));
     project->store->Attach(*project->document);
@@ -207,7 +219,7 @@ void Session::Create(const std::filesystem::path& mesh_path, const CreateSetting
     const core::RequestOutcome outcome = store.Submit(*project->document, request, [&](core::Edit& edit) {
         try {
             store.StageResource(bytes, std::string(mesh::MimeOf(imported.format)));
-            mesh::CreateTextureSets(edit, imported, mesh::MeshSource{Utf8(mesh_path), NowUtc()}, channels);
+            mesh::CreateTextureSets(edit, imported, mesh::MeshSource{mesh_source, NowUtc()}, channels);
         } catch (...) {
             error = std::current_exception();
             throw;
@@ -234,7 +246,11 @@ void Session::Open(const std::filesystem::path& path) {
     if (snapshot.project->mesh) {
         const auto it = snapshot.project->resources.find(snapshot.project->mesh->resource);
         if (it != snapshot.project->resources.end() && !it->second.empty()) project->mesh_path = it->second.front().origin;
+        // The current mesh's recorded source (absolute); a project written before it was recorded
+        // has none, and its mesh source stays unknown rather than resolved against this directory.
+        if (!snapshot.project->mesh->source.empty()) project->mesh_path = snapshot.project->mesh->source;
     }
+    project->project_source = std::filesystem::absolute(path);
     SetActiveDefault(*project);
     std::lock_guard lock(mutex_);
     if (current_) ThrowProjectError("a project is already open");
@@ -262,6 +278,7 @@ core::Checkpoints Session::SaveAs(const std::filesystem::path& path, store::Save
     RequireNotBusy("save_as()");
     if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
     core::Checkpoints checkpoints = project->store->SaveAs(*project->document, path);
+    project->project_source = std::filesystem::absolute(path);
     if (mode == store::SaveMode::full) project->store->Compact(*project->document);
     if (!project->untitled_dir.empty()) {
         std::error_code ignored;

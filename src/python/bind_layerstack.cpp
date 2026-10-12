@@ -182,7 +182,7 @@ std::string DefaultName(core::NodeType type) {
         case core::NodeType::GeneratorEffect: return "Generator";
         case core::NodeType::FilterEffect: return "Filter";
         case core::NodeType::LevelsEffect: return "Levels";
-        case core::NodeType::CompareMaskEffect: return "Compare Mask";
+        case core::NodeType::CompareMaskEffect: return "Compare mask";
         case core::NodeType::ColorSelectionEffect: return "Color Selection";
         case core::NodeType::AnchorPointEffect: return "Anchor Point";
     }
@@ -316,6 +316,47 @@ bool RgbChannel(const core::Project& project, const NodeInfo& info, const core::
     const core::ChannelFormat f = it->second.format;
     return f == core::ChannelFormat::sRGB8 || f == core::ChannelFormat::RGB8 || f == core::ChannelFormat::RGB16 ||
            f == core::ChannelFormat::RGB16F || f == core::ChannelFormat::RGB32F;
+}
+
+// ── Insert defaults ─────────────────────────────────────────────────────────────────────────────
+
+/// Painter's effective defaults of a node `Insert` just created in a content stack (the inserted
+/// nodes of the Tier 0 api-probes; decision 115): a fill, fill effect or group gets Painter's
+/// per-channel blending, a fill its recorded default sources (active channels stay empty), and a
+/// levels effect, where the stack has BaseColor, affects BaseColor and is named
+/// "Levels - Base color" unless the call named it. A node in a mask stack keeps the plain defaults.
+void InsertDefaults(core::Edit& edit, Id uid, bool named) {
+    const NodeInfo info = Resolve(edit.project(), uid);
+    if (info.in_mask()) return;
+    const std::map<core::ChannelType, core::Channel> channels =
+        ResolveStack(edit.project(), {info.texture_set, info.stack}).channels;
+    switch (info.type()) {
+        case core::NodeType::FillLayer:
+        case core::NodeType::GroupLayer: {
+            core::Layer& layer = EditLayer(edit, uid);
+            ApplyDefaultBlending(layer.blending, channels);
+            if (layer.fill) ApplyDefaultSources(*layer.fill, channels);
+            break;
+        }
+        case core::NodeType::FillEffect: {
+            core::Effect& effect = EditEffect(edit, uid);
+            ApplyDefaultBlending(effect.blending, channels);
+            if (effect.fill) ApplyDefaultSources(*effect.fill, channels);
+            break;
+        }
+        case core::NodeType::LevelsEffect: {
+            if (!channels.contains(core::ChannelType::BaseColor)) break;
+            core::Effect& effect = EditEffect(edit, uid);
+            if (!named) effect.name = "Levels - Base color";
+            effect.levels = core::LevelsParams{};
+            effect.levels->affected_channel = core::ChannelType::BaseColor;
+            const std::size_t arity = RgbChannel(edit.project(), info, &*effect.levels) ? 3 : 1;
+            effect.levels->components.assign(arity, core::LevelsComponent{});
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 // ── Bindings ────────────────────────────────────────────────────────────────────────────────────
@@ -951,7 +992,9 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                          Resolve(*project, position.node).effect != nullptr);
                     if (effect_position) type = *effect_type;
                 }
-                return Insert(std::string("layerstack.") + name, position, type, node_name);
+                const bool named = node_name.has_value();
+                return Insert(std::string("layerstack.") + name, position, type, node_name, core::kNoId,
+                              [named](core::Edit& edit, Id uid) { InsertDefaults(edit, uid, named); });
             },
             py::arg("position"), py::arg("name") = py::none());
     };
