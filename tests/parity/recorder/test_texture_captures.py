@@ -24,7 +24,7 @@ from tools.parity.recorder.job import (
 )
 from tools.parity.recorder.session import PainterSession, RecorderError
 from tools.parity.recorder.texture import record_texture_golden
-from tools.parity.recorder.vocabulary import SET_RESOLUTIONS
+from tools.parity.recorder.vocabulary import GET_PROJECTION, SET_COLOR_SPACE, SET_RESOLUTIONS
 
 MakeSession = Callable[[Any], PainterSession]
 
@@ -304,6 +304,11 @@ def test_captures_alone_make_a_texture_golden(
         ),
         ({"call": LIST_COLOR_SPACES, "args": {"node_step": 2}}, "takes exactly"),
         (
+            {"call": GET_PROJECTION, "args": {"node_step": 3}},
+            "must name an insert_fill step",
+        ),
+        ({"call": GET_PROJECTION, "args": {}}, "takes exactly"),
+        (
             {"call": SET_RESOLUTIONS, "args": {"width": 256, "height": "128"}},
             "positive integers",
         ),
@@ -334,6 +339,59 @@ def test_a_null_channel_names_a_mask_fill_and_state_steps_precede_captures(
     fill = copy.deepcopy(sample_job.manifest["instruction_sequence"]["steps"][1])
     with pytest.raises(RecorderError, match="must precede the captures"):
         job_from_manifest(with_steps(sample_job, [capture, fill]))
+
+
+def test_an_attempted_colour_space_is_recorded_applied_or_refused(
+    fake: types.ModuleType, make_session: MakeSession, sample_job: Job, work: Path, inbox: Path
+) -> None:
+    """Decision 156: a `set_color_space` step Painter refuses is the observation, recorded in
+    the effective defaults; a Legacy space is named by its qualified member name."""
+    attempts = [
+        {
+            "call": SET_COLOR_SPACE,
+            "args": {
+                "node_step": 2,
+                "channel": "BaseColor",
+                "color_space": "LegacyColorSpace.sRGB",
+            },
+        },
+        {
+            "call": SET_COLOR_SPACE,
+            "args": {"node_step": 5, "channel": "BaseColor", "color_space": "sRGB"},
+        },
+        {"call": LIST_COLOR_SPACES, "args": {"node_step": 2, "channel": "BaseColor"}},
+        {"call": GET_PROJECTION, "args": {"node_step": 2}},
+    ]
+    job = job_from_manifest(with_steps(sample_job, BITMAP_STEPS + attempts))
+    assert [s.step for s in job.api_captures] == [14, 15]
+    assert [s.step for s in job.state_steps][-2:] == [12, 13]
+    record = record_of(record_texture_golden(make_session(fake.FakeWorld()), job, work, inbox))
+    tried = record["key"]["effective_defaults"]["set_color_space"]
+    assert tried["12"] == {"applied": True}
+    assert tried["13"]["applied"] is False
+    assert tried["13"]["raised"]["type"] == "AttributeError"
+    for index in (0, 1):
+        space = by_id(record, index)["color-spaces/s14"]["value"]["color_space"]
+        assert space == {"class": "LegacyColorSpace", "name": "sRGB"}
+        # The fake has no UV projection: what a capture raises is recorded, never a refusal.
+        assert by_id(record, index)["projection/s15"]["call"] == GET_PROJECTION
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {"node_step": 3, "channel": "BaseColor", "color_space": "sRGB"},
+        {"node_step": True, "channel": "BaseColor", "color_space": "sRGB"},
+        {"node_step": 2, "channel": 5, "color_space": "sRGB"},
+        {"node_step": 2, "channel": "BaseColor", "color_space": ""},
+        {"node_step": 2, "channel": "BaseColor"},
+        {"node_step": 2, "channel": None, "color_space": "sRGB", "resource_step": 1},
+    ],
+)
+def test_a_malformed_colour_space_attempt_is_refused(sample_job: Job, args: dict[str, Any]) -> None:
+    step = {"call": SET_COLOR_SPACE, "args": args}
+    with pytest.raises(RecorderError, match="set_color_space takes"):
+        job_from_manifest(with_steps(sample_job, [step]))
 
 
 def ocio_manifest(sample_job: Job) -> Job:

@@ -12,7 +12,12 @@ from __future__ import annotations
 
 import json
 import math
+import struct
+import zlib
 from typing import Any
+
+import numpy as np
+import numpy.typing as npt
 
 from tools.parity.tier0_semantics.fixtures import (
     PROBE_PARAMETERS,
@@ -206,6 +211,125 @@ def srgb8_ramp() -> bytes:
     """8-bit RGB like the wand's base bitmap (R5): R the codes 0..255 along x, G along y, B
     falling along x."""
     return png16(256, 256, 3, lambda x, y: (x, y, 255 - x), bits=8)
+
+
+def srgb8_grey_ramp() -> bytes:
+    """8-bit grey (decision 145 s0): column x holds code x, so every code 0..255 appears."""
+    return png16(256, 256, 1, lambda x, y: (x,), bits=8)
+
+
+# --- Padding probes of decision 129 (P-ramp, P-tie) -----------------------------------------
+
+# P-ramp meshes: seam.obj's vertices, normal and faces, two UV islands sharing the 3D edge
+# x = 10 cm; A's right edge u1 is the seam, B (turned 90 degrees) meets it on its bottom edge v0.
+# UV boxes (u0, u1, v0, v1) of A and B per scale ratio (decision 129 section 4).
+UVBox = tuple[float, float, float, float]
+RAMP_RESOLUTION = 1024
+RAMP_MESHES: dict[str, tuple[UVBox, UVBox]] = {
+    "r1": ((0.125, 0.375, 0.125, 0.375), (0.5625, 0.8125, 0.625, 0.875)),
+    "r2": ((0.125, 0.375, 0.125, 0.375), (0.5625, 0.6875, 0.625, 0.75)),
+    "r15": ((0.0625, 0.4375, 0.1, 0.475), (0.55, 0.8, 0.6, 0.85)),
+}
+# Fractional-phase controls: every UV shifted by `shift` / 1024 in u and v.
+RAMP_PHASES = {"p0": 0.0, "p25": 0.25, "p75": 0.75}
+
+
+def ramp_seam(mesh: str, phase: str) -> bytes:
+    """One P-ramp mesh, the text decision 129 fixes by SHA-256 (`vt` as %.9f, LF)."""
+    shift = RAMP_PHASES[phase] / RAMP_RESOLUTION
+    a, b = RAMP_MESHES[mesh]
+    au0, au1, av0, av1 = (c + shift for c in a)
+    bu0, bu1, bv0, bv1 = (c + shift for c in b)
+    uvs = [(au0, av1), (au1, av1), (au1, av0), (au0, av0)]
+    uvs += [(bu1, bv0), (bu1, bv1), (bu0, bv1), (bu0, bv0)]
+    lines = ["# UzPainter R-090 P-ramp probe mesh (specification), Apache-2.0", "o uzp_seam"]
+    lines += [f"v {fmt(x, 0.0, z)}" for z in (0.0, 10.0) for x in (0.0, 10.0, 20.0)]
+    lines += ["vn 0.0 1.0 0.0", *(f"vt {u:.9f} {v:.9f}" for u, v in uvs), "usemtl uzp_seam"]
+    lines += ["f 4/1/1 5/2/1 2/3/1", "f 4/1/1 2/3/1 1/4/1", "f 5/5/1 6/6/1 3/7/1"]
+    lines += ["f 5/5/1 3/7/1 2/8/1"]
+    return ("\n".join(lines) + "\n").encode("ascii")
+
+
+# P-tie mesh: three separate 10 cm quads, each its own axis-aligned UV island of side 0.125,
+# lower-left corners as below, one texture set `uzp_tie`.
+TIE_SIDE = 0.125
+TIE_CORNERS = ((0.1875, 0.1875), (0.6875, 0.1875), (0.4375, 0.6875))
+TIE_RESOLUTIONS = (512, 2048)
+
+
+def tie() -> bytes:
+    """The P-tie mesh (decision 129): its text and SHA-256 are fixed by this generator."""
+    data: list[str] = ["vn 0.0 1.0 0.0\n"]
+    faces: list[str] = []
+    for index, (u0, v0) in enumerate(TIE_CORNERS):
+        cx = index * 12.0
+        quad = [(cx - 5.0, 0.0, 5.0), (cx + 5.0, 0.0, 5.0), (cx + 5.0, 0.0, -5.0)]
+        quad.append((cx - 5.0, 0.0, -5.0))
+        u1, v1 = u0 + TIE_SIDE, v0 + TIE_SIDE
+        corners = [(u0, v0), (u1, v0), (u1, v1), (u0, v1)]
+        lines, quad_faces = quad_obj_lines(quad, corners, index * 4)
+        data += lines
+        faces += quad_faces
+    return obj(
+        "uzp_tie",
+        "Three axis-aligned UV islands of side 0.125 at (0.1875, 0.1875), (0.6875, 0.1875) and "
+        "(0.4375, 0.6875) (decision 129 P-tie).",
+        [("uzp_tie", faces)],
+        "".join(data),
+    )
+
+
+def exr_float_rgb(rgb: npt.NDArray[np.float32]) -> bytes:
+    """Scanline OpenEXR, channels B, G, R as FLOAT, ZIP compression (16 lines a block),
+    increasing Y; `rgb` is (height, width, 3), row 0 the top row."""
+    height, width, _ = rgb.shape
+
+    def attribute(name: str, kind: str, value: bytes) -> bytes:
+        return name.encode() + b"\0" + kind.encode() + b"\0" + struct.pack("<i", len(value)) + value
+
+    channels = b"".join(c + b"\0" + struct.pack("<iB3xii", 2, 0, 1, 1) for c in (b"B", b"G", b"R"))
+    box = struct.pack("<iiii", 0, 0, width - 1, height - 1)
+    header = (
+        struct.pack("<ii", 20000630, 2)
+        + attribute("channels", "chlist", channels + b"\0")
+        + attribute("compression", "compression", b"\3")
+        + attribute("dataWindow", "box2i", box)
+        + attribute("displayWindow", "box2i", box)
+        + attribute("lineOrder", "lineOrder", b"\0")
+        + attribute("pixelAspectRatio", "float", struct.pack("<f", 1.0))
+        + attribute("screenWindowCenter", "v2f", struct.pack("<ff", 0.0, 0.0))
+        + attribute("screenWindowWidth", "float", struct.pack("<f", 1.0))
+        + b"\0"
+    )
+    planes = rgb.astype("<f4")
+    blocks: list[bytes] = []
+    for y in range(0, height, 16):
+        # Each line holds its B, G and R samples in turn; ZIP splits even and odd bytes, then
+        # stores each byte as its difference from the previous one plus 128 before deflating.
+        raw = planes[y : y + 16, :, ::-1].transpose(0, 2, 1).tobytes()
+        codes = np.frombuffer(raw, dtype=np.uint8)
+        split = np.concatenate([codes[0::2], codes[1::2]]).astype(np.int16)
+        split[1:] = (split[1:] - split[:-1] + 128) & 0xFF
+        packed = zlib.compress(split.astype(np.uint8).tobytes(), 9)
+        data = packed if len(packed) < len(raw) else raw
+        blocks.append(struct.pack("<ii", y, len(data)) + data)
+    offsets = []
+    position = len(header) + 8 * len(blocks)
+    for block in blocks:
+        offsets.append(struct.pack("<Q", position))
+        position += len(block)
+    return header + b"".join(offsets) + b"".join(blocks)
+
+
+def uv_ramp(size: int) -> bytes:
+    """`size` x `size` float32: R(x, y) = (x + 0.5) / size, G(x, y) = (y + 0.5) / size, B = 0.5
+    (x the column, y the row from the top; decision 129)."""
+    centres = (np.arange(size, dtype=np.float64) + 0.5) / size
+    rgb = np.empty((size, size, 3), dtype=np.float32)
+    rgb[:, :, 0] = centres[None, :]
+    rgb[:, :, 1] = centres[:, None]
+    rgb[:, :, 2] = 0.5
+    return exr_float_rgb(rgb)
 
 
 # --- Literal export configurations (recipe_json) ----------------------------------------------
