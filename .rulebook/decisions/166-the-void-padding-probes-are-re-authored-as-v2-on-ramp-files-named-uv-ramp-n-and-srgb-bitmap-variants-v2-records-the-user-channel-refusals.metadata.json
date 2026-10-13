@@ -1,0 +1,12 @@
+{
+  "id": 166,
+  "slug": "the-void-padding-probes-are-re-authored-as-v2-on-ramp-files-named-uv-ramp-n-and-srgb-bitmap-variants-v2-records-the-user-channel-refusals",
+  "title": "The void padding probes are re-authored as -v2 on ramp files named uv-ramp-n<N>, and srgb-bitmap-variants-v2 records the user-channel refusals",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

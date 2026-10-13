@@ -1,10 +1,10 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/semantics/srgb-bitmap-variants",
+  "golden_id": "tier0/semantics/srgb-bitmap-variants-v2",
   "tier": "0",
   "domain": "tier0/colour/srgb-bitmaps",
-  "description": "The sRGB bitmap uses decision 145 leaves refused (phase1.15_compositor-colour-fits item 2.2, decisions 145 and 156), under Legacy on the authored 3x3 plane grid (nine sets) at 256 px, Emissive added as sRGB8 and User1 RGB8, User2 L8, User3 RGB16, User4 L16, User5 RGB16F, User7 RGB32F. s0: the authored 8-bit grey ramp (column x holds code x) on BaseColor set to sRGB, default projection (1:1). s1-s3: field A (16-bit) on BaseColor and the 8-bit srgb8-ramp on Emissive, both set to sRGB, UV projection with wrap Repeat: BilinearHQ at scale (2, 2), rotation 30, offset (0.1, 0.2) (s1); BilinearHQ at scale (0.5, 0.5) (s2); Nearest at scale (2, 2) (s3). s4: User1, User3, User5 and User7 field A and the L channels User2 and User4 grey A (decision 048), each set to sRGB. s5: BaseColor uniform (0.2, 0.5, 0.8) sRGB under a black mask whose fill effect's source is grey A, with set_color_space(sRGB) attempted on that source (decision 156: Painter's refusal, if it refuses, is recorded). s6-s8: field A on BaseColor set to Working, Legacy Linear and Legacy sRGB. Captures: get_color_space and list_available_color_spaces of every bitmap. BaseColor, Emissive and the six user channels at PNG 16, PNG 8 and OpenEXR 32f, infinite padding, no dithering, every export step done twice in the session.",
+  "description": "The sRGB bitmap uses decision 145 leaves refused (phase1.15_compositor-colour-fits item 2.2, decisions 145, 156 and 166), under Legacy on the authored 3x3 plane grid (nine sets) at 256 px, Emissive added as sRGB8 and User1 RGB8, User2 L8, User3 RGB16, User4 L16, User5 RGB16F, User7 RGB32F. s0: the authored 8-bit grey ramp (column x holds code x) on BaseColor set to sRGB, default projection (1:1). s1-s3: field A (16-bit) on BaseColor and the 8-bit srgb8-ramp on Emissive, both set to sRGB, UV projection with wrap Repeat: BilinearHQ at scale (2, 2), rotation 30, offset (0.1, 0.2) (s1); BilinearHQ at scale (0.5, 0.5) (s2); Nearest at scale (2, 2) (s3). s4: User1, User3, User5 and User7 field A and the L channels User2 and User4 grey A (decision 048), each with set_color_space(sRGB) attempted (decision 166: Painter refused it on User1, decision 160; each channel's refusal is recorded). s5: BaseColor uniform (0.2, 0.5, 0.8) sRGB under a black mask whose fill effect's source is grey A, with set_color_space(sRGB) attempted on that source (decision 156: Painter's refusal, if it refuses, is recorded). s6-s8: field A on BaseColor set to Working, Legacy Linear and Legacy sRGB. Captures: get_color_space and list_available_color_spaces of every bitmap. BaseColor, Emissive and the six user channels at PNG 16, PNG 8 and OpenEXR 32f, infinite padding, no dithering, every export step done twice in the session.",
   "inputs": [
     {
       "input_id": "grid3x3",
@@ -394,17 +394,15 @@
         "args": {
           "node_step": 31,
           "channel": "User1",
-          "resource_step": 10,
-          "color_space": "sRGB"
+          "resource_step": 10
         }
       },
       {
         "step": 34,
-        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "call": "substance_painter.source.SourceBitmap.set_color_space",
         "args": {
           "node_step": 31,
-          "channel": "User2",
-          "resource_step": 12,
+          "channel": "User1",
           "color_space": "sRGB"
         }
       },
@@ -413,18 +411,16 @@
         "call": "substance_painter.layerstack.FillLayerNode.set_source",
         "args": {
           "node_step": 31,
-          "channel": "User3",
-          "resource_step": 10,
-          "color_space": "sRGB"
+          "channel": "User2",
+          "resource_step": 12
         }
       },
       {
         "step": 36,
-        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "call": "substance_painter.source.SourceBitmap.set_color_space",
         "args": {
           "node_step": 31,
-          "channel": "User4",
-          "resource_step": 12,
+          "channel": "User2",
           "color_space": "sRGB"
         }
       },
@@ -433,23 +429,75 @@
         "call": "substance_painter.layerstack.FillLayerNode.set_source",
         "args": {
           "node_step": 31,
-          "channel": "User5",
-          "resource_step": 10,
-          "color_space": "sRGB"
+          "channel": "User3",
+          "resource_step": 10
         }
       },
       {
         "step": 38,
-        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "call": "substance_painter.source.SourceBitmap.set_color_space",
         "args": {
           "node_step": 31,
-          "channel": "User7",
-          "resource_step": 10,
+          "channel": "User3",
           "color_space": "sRGB"
         }
       },
       {
         "step": 39,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 31,
+          "channel": "User4",
+          "resource_step": 12
+        }
+      },
+      {
+        "step": 40,
+        "call": "substance_painter.source.SourceBitmap.set_color_space",
+        "args": {
+          "node_step": 31,
+          "channel": "User4",
+          "color_space": "sRGB"
+        }
+      },
+      {
+        "step": 41,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 31,
+          "channel": "User5",
+          "resource_step": 10
+        }
+      },
+      {
+        "step": 42,
+        "call": "substance_painter.source.SourceBitmap.set_color_space",
+        "args": {
+          "node_step": 31,
+          "channel": "User5",
+          "color_space": "sRGB"
+        }
+      },
+      {
+        "step": 43,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 31,
+          "channel": "User7",
+          "resource_step": 10
+        }
+      },
+      {
+        "step": 44,
+        "call": "substance_painter.source.SourceBitmap.set_color_space",
+        "args": {
+          "node_step": 31,
+          "channel": "User7",
+          "color_space": "sRGB"
+        }
+      },
+      {
+        "step": 45,
         "call": "substance_painter.layerstack.insert_fill",
         "args": {
           "position": "top",
@@ -457,20 +505,20 @@
         }
       },
       {
-        "step": 40,
+        "step": 46,
         "call": "substance_painter.layerstack.FillLayerNode.active_channels",
         "args": {
-          "node_step": 39,
+          "node_step": 45,
           "channels": [
             "BaseColor"
           ]
         }
       },
       {
-        "step": 41,
+        "step": 47,
         "call": "substance_painter.layerstack.FillLayerNode.set_source",
         "args": {
-          "node_step": 39,
+          "node_step": 45,
           "channel": "BaseColor",
           "color": [
             0.2,
@@ -481,93 +529,37 @@
         }
       },
       {
-        "step": 42,
+        "step": 48,
         "call": "substance_painter.layerstack.LayerNode.add_mask",
         "args": {
-          "node_step": 39,
+          "node_step": 45,
           "background": "Black"
-        }
-      },
-      {
-        "step": 43,
-        "call": "substance_painter.layerstack.insert_fill",
-        "args": {
-          "inside_step": 39,
-          "stack": "Mask"
-        }
-      },
-      {
-        "step": 44,
-        "call": "substance_painter.layerstack.FillEffectNode.set_source",
-        "args": {
-          "node_step": 43,
-          "channel": null,
-          "resource_step": 12
-        }
-      },
-      {
-        "step": 45,
-        "call": "substance_painter.source.SourceBitmap.set_color_space",
-        "args": {
-          "node_step": 43,
-          "channel": null,
-          "color_space": "sRGB"
-        }
-      },
-      {
-        "step": 46,
-        "call": "substance_painter.layerstack.insert_fill",
-        "args": {
-          "position": "top",
-          "texture_set": "s6"
-        }
-      },
-      {
-        "step": 47,
-        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
-        "args": {
-          "node_step": 46,
-          "channels": [
-            "BaseColor"
-          ]
-        }
-      },
-      {
-        "step": 48,
-        "call": "substance_painter.layerstack.FillLayerNode.set_source",
-        "args": {
-          "node_step": 46,
-          "channel": "BaseColor",
-          "resource_step": 10,
-          "color_space": "Working"
         }
       },
       {
         "step": 49,
         "call": "substance_painter.layerstack.insert_fill",
         "args": {
-          "position": "top",
-          "texture_set": "s7"
+          "inside_step": 45,
+          "stack": "Mask"
         }
       },
       {
         "step": 50,
-        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "call": "substance_painter.layerstack.FillEffectNode.set_source",
         "args": {
           "node_step": 49,
-          "channels": [
-            "BaseColor"
-          ]
+          "channel": null,
+          "resource_step": 12
         }
       },
       {
         "step": 51,
-        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "call": "substance_painter.source.SourceBitmap.set_color_space",
         "args": {
           "node_step": 49,
-          "channel": "BaseColor",
-          "resource_step": 10,
-          "color_space": "LegacyColorSpace.Linear"
+          "channel": null,
+          "color_space": "sRGB"
         }
       },
       {
@@ -575,7 +567,7 @@
         "call": "substance_painter.layerstack.insert_fill",
         "args": {
           "position": "top",
-          "texture_set": "s8"
+          "texture_set": "s6"
         }
       },
       {
@@ -595,11 +587,67 @@
           "node_step": 52,
           "channel": "BaseColor",
           "resource_step": 10,
-          "color_space": "LegacyColorSpace.sRGB"
+          "color_space": "Working"
         }
       },
       {
         "step": 55,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top",
+          "texture_set": "s7"
+        }
+      },
+      {
+        "step": 56,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 55,
+          "channels": [
+            "BaseColor"
+          ]
+        }
+      },
+      {
+        "step": 57,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 55,
+          "channel": "BaseColor",
+          "resource_step": 10,
+          "color_space": "LegacyColorSpace.Linear"
+        }
+      },
+      {
+        "step": 58,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top",
+          "texture_set": "s8"
+        }
+      },
+      {
+        "step": 59,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 58,
+          "channels": [
+            "BaseColor"
+          ]
+        }
+      },
+      {
+        "step": 60,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 58,
+          "channel": "BaseColor",
+          "resource_step": 10,
+          "color_space": "LegacyColorSpace.sRGB"
+        }
+      },
+      {
+        "step": 61,
         "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
         "args": {
           "node_step": 13,
@@ -607,55 +655,55 @@
         }
       },
       {
-        "step": 56,
-        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
-        "args": {
-          "node_step": 16,
-          "channel": "BaseColor"
-        }
-      },
-      {
-        "step": 57,
-        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
-        "args": {
-          "node_step": 16,
-          "channel": "Emissive"
-        }
-      },
-      {
-        "step": 58,
-        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
-        "args": {
-          "node_step": 21,
-          "channel": "BaseColor"
-        }
-      },
-      {
-        "step": 59,
-        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
-        "args": {
-          "node_step": 21,
-          "channel": "Emissive"
-        }
-      },
-      {
-        "step": 60,
-        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
-        "args": {
-          "node_step": 26,
-          "channel": "BaseColor"
-        }
-      },
-      {
-        "step": 61,
-        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
-        "args": {
-          "node_step": 26,
-          "channel": "Emissive"
-        }
-      },
-      {
         "step": 62,
+        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
+        "args": {
+          "node_step": 16,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 63,
+        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
+        "args": {
+          "node_step": 16,
+          "channel": "Emissive"
+        }
+      },
+      {
+        "step": 64,
+        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
+        "args": {
+          "node_step": 21,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 65,
+        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
+        "args": {
+          "node_step": 21,
+          "channel": "Emissive"
+        }
+      },
+      {
+        "step": 66,
+        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
+        "args": {
+          "node_step": 26,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 67,
+        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
+        "args": {
+          "node_step": 26,
+          "channel": "Emissive"
+        }
+      },
+      {
+        "step": 68,
         "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
         "args": {
           "node_step": 31,
@@ -663,7 +711,7 @@
         }
       },
       {
-        "step": 63,
+        "step": 69,
         "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
         "args": {
           "node_step": 31,
@@ -671,7 +719,7 @@
         }
       },
       {
-        "step": 64,
+        "step": 70,
         "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
         "args": {
           "node_step": 31,
@@ -679,7 +727,7 @@
         }
       },
       {
-        "step": 65,
+        "step": 71,
         "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
         "args": {
           "node_step": 31,
@@ -687,7 +735,7 @@
         }
       },
       {
-        "step": 66,
+        "step": 72,
         "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
         "args": {
           "node_step": 31,
@@ -695,7 +743,7 @@
         }
       },
       {
-        "step": 67,
+        "step": 73,
         "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
         "args": {
           "node_step": 31,
@@ -703,31 +751,15 @@
         }
       },
       {
-        "step": 68,
+        "step": 74,
         "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
         "args": {
-          "node_step": 43,
+          "node_step": 49,
           "channel": null
         }
       },
       {
-        "step": 69,
-        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
-        "args": {
-          "node_step": 46,
-          "channel": "BaseColor"
-        }
-      },
-      {
-        "step": 70,
-        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
-        "args": {
-          "node_step": 49,
-          "channel": "BaseColor"
-        }
-      },
-      {
-        "step": 71,
+        "step": 75,
         "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
         "args": {
           "node_step": 52,
@@ -735,87 +767,103 @@
         }
       },
       {
-        "step": 72,
-        "call": "substance_painter.export.export_project_textures",
-        "args": {
-          "maps": [
-            "documentMap/basecolor:RGB",
-            "documentMap/emissive:RGB",
-            "documentMap/user1:RGB",
-            "documentMap/user2:L",
-            "documentMap/user3:RGB",
-            "documentMap/user4:L",
-            "documentMap/user5:RGB",
-            "documentMap/user7:RGB"
-          ],
-          "file_format": "png",
-          "bit_depth": 16,
-          "padding": "infinite",
-          "dithering": false
-        }
-      },
-      {
-        "step": 73,
-        "call": "substance_painter.export.export_project_textures",
-        "args": {
-          "maps": [
-            "documentMap/basecolor:RGB",
-            "documentMap/emissive:RGB",
-            "documentMap/user1:RGB",
-            "documentMap/user2:L",
-            "documentMap/user3:RGB",
-            "documentMap/user4:L",
-            "documentMap/user5:RGB",
-            "documentMap/user7:RGB"
-          ],
-          "file_format": "png",
-          "bit_depth": 16,
-          "padding": "infinite",
-          "dithering": false
-        }
-      },
-      {
-        "step": 74,
-        "call": "substance_painter.export.export_project_textures",
-        "args": {
-          "maps": [
-            "documentMap/basecolor:RGB",
-            "documentMap/emissive:RGB",
-            "documentMap/user1:RGB",
-            "documentMap/user2:L",
-            "documentMap/user3:RGB",
-            "documentMap/user4:L",
-            "documentMap/user5:RGB",
-            "documentMap/user7:RGB"
-          ],
-          "file_format": "png",
-          "bit_depth": 8,
-          "padding": "infinite",
-          "dithering": false
-        }
-      },
-      {
-        "step": 75,
-        "call": "substance_painter.export.export_project_textures",
-        "args": {
-          "maps": [
-            "documentMap/basecolor:RGB",
-            "documentMap/emissive:RGB",
-            "documentMap/user1:RGB",
-            "documentMap/user2:L",
-            "documentMap/user3:RGB",
-            "documentMap/user4:L",
-            "documentMap/user5:RGB",
-            "documentMap/user7:RGB"
-          ],
-          "file_format": "png",
-          "bit_depth": 8,
-          "padding": "infinite",
-          "dithering": false
-        }
-      },
-      {
         "step": 76,
+        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
+        "args": {
+          "node_step": 55,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 77,
+        "call": "substance_painter.source.SourceBitmap.list_available_color_spaces",
+        "args": {
+          "node_step": 58,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 78,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/emissive:RGB",
+            "documentMap/user1:RGB",
+            "documentMap/user2:L",
+            "documentMap/user3:RGB",
+            "documentMap/user4:L",
+            "documentMap/user5:RGB",
+            "documentMap/user7:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 79,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/emissive:RGB",
+            "documentMap/user1:RGB",
+            "documentMap/user2:L",
+            "documentMap/user3:RGB",
+            "documentMap/user4:L",
+            "documentMap/user5:RGB",
+            "documentMap/user7:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 80,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/emissive:RGB",
+            "documentMap/user1:RGB",
+            "documentMap/user2:L",
+            "documentMap/user3:RGB",
+            "documentMap/user4:L",
+            "documentMap/user5:RGB",
+            "documentMap/user7:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 8,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 81,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/emissive:RGB",
+            "documentMap/user1:RGB",
+            "documentMap/user2:L",
+            "documentMap/user3:RGB",
+            "documentMap/user4:L",
+            "documentMap/user5:RGB",
+            "documentMap/user7:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 8,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 82,
         "call": "substance_painter.export.export_project_textures",
         "args": {
           "maps": [
@@ -835,7 +883,7 @@
         }
       },
       {
-        "step": 77,
+        "step": 83,
         "call": "substance_painter.export.export_project_textures",
         "args": {
           "maps": [

@@ -332,11 +332,9 @@ $exe = "C:\Program Files\Adobe\Adobe Substance 3D Painter\Adobe Substance 3D Pai
 Recorded in a Legacy session as in 11.1 steps 1, 2 and 5, after anything left of 11.1:
 
 ```powershell
-$later = @("srgb-bitmap-variants",
-  "export-template-base-unreal-engine", "export-template-base-openpbr-anisotropy",
-  "export-template-base-pbr-specular-glossiness")
-$later += foreach ($m in "r1", "r2", "r15") { foreach ($p in "p0", "p25", "p75") { "export-padding-ramp-$m-$p" } }
-$later += "export-padding-tie-512", "export-padding-tie-2048"
+$later = @("srgb-bitmap-variants-v2")
+$later += foreach ($m in "r1", "r2", "r15") { foreach ($p in "p0", "p25", "p75") { "export-padding-ramp-$m-$p-v2" } }
+$later += "export-padding-tie-2048-v2"
 foreach ($g in $later) {
   python -m tools.parity.recorder record "$req/tier0/semantics/$g.json"
 }
@@ -351,7 +349,7 @@ foreach ($g in "phase1-srgb-uniform-decode", "phase1-mesh-map-update", "phase1-r
 }
 ```
 
-`srgb-bitmap-variants` s5 attempts `set_color_space(sRGB)` on a mask source: a refusal there is recorded (`set_color_space.<step>` in the effective defaults), not a refused golden. A P-ramp or P-tie record whose `passthrough` User0 differs from the ramp on a covered texel, or whose template capture shows User0 other than RGB32F, is void (decision 129); report it.
+Decision 160 admitted the template bases, `export-padding-tie-512` and the void first P-ramp and P-tie 2048 records; the `-v2` names re-author the void ones with the ramp files `uv-ramp-n1024.exr` and `uv-ramp-n2048.exr` (decision 166). `srgb-bitmap-variants-v2` s4 and s5 attempt `set_color_space(sRGB)` (decisions 156 and 167): a refusal there is recorded (`set_color_space.<step>` in the effective defaults), not a refused golden. A P-ramp or P-tie record whose `passthrough` User0 differs from the ramp on a covered texel, or whose template capture shows User0 other than RGB32F, is void (decision 129); report it.
 
 ### 11.3 After the sessions
 
