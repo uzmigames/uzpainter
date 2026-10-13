@@ -1,0 +1,13 @@
+{
+  "id": 211,
+  "slug": "211-infinite-padding-on-uv-islands-stays-refused-the-seam-ring-is-a-four-tap-inverse-distance-mean-across-the-unfolded-seam-but-its-tap-choice-and-weights-are-not-exact",
+  "title": "infinite padding on UV islands stays refused: the seam ring is a four-tap inverse-distance mean across the unfolded seam, but its tap choice and weights are not exact",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
