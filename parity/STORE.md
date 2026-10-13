@@ -1,6 +1,6 @@
 # UzPainter private oracle store
 
-Work package P0-STORE (`docs/dag.md`), task `phase0.3_oracle-store-cli`. Implements `parity/CONTRACT.md` §3 (`oracle_unavailable`) and §6.4, and `docs/architecture/14-parity-testing.md` §6–§7, under decisions 002 (clean room), 022 (platform) and 028 (hosted CPU-only CI; oracle checks run locally on the owner's machine). Code: `tools/parity/store/`; tests: `tests/parity/test_store.py`; hosted CI: `.github/workflows/parity.yml`.
+Work package P0-STORE (`docs/dag.md`), task `phase0.3_oracle-store-cli`. Implements `parity/CONTRACT.md` §3 (`oracle_unavailable`) and §6.4, and `docs/architecture/14-parity-testing.md` §6–§7, under decisions 002 (clean room), 022 (platform), 028 (no GPU CI; oracle checks run locally on the owner's machine) and 200 (the hosted parity CI was removed; the local full gate replaces it, §5). Code: `tools/parity/store/`; tests: `tests/parity/test_store.py`.
 
 ## 1. Rules
 
@@ -53,18 +53,18 @@ The Painter recorder (`phase0.3_painter-oracle-recorder`) writes each recording 
 
 ## 5. Local full gate and the local oracle run
 
-Decision 028: there is no GPU CI on GitHub and no self-hosted runner. Decision 200: there is no hosted CI either; the owner removed it. Every check runs locally (`14-parity-testing.md` §7):
+Decision 028: there is no GPU CI on GitHub and no self-hosted runner. Decision 200: the owner removed the hosted parity CI as well; only codespell still runs on GitHub. Every check runs locally (`14-parity-testing.md` §7):
 
 | Where | Runs on | Does |
 |---|---|---|
-| Local full gate | The coordinator's run before the owner pushes | Type-check, lint, full test suite (GPU and oracle tests skip with an explicit reason where the GPU or store is missing); `python -m tools.parity.store verify parity/schema/samples/public` on a machine without the store exits 1 and reports `oracle_unavailable` |
+| Local full gate | The coordinator's run before the owner pushes | Type-check, lint, full test suite (GPU and oracle tests skip with an explicit reason where the GPU or store is missing), the guard (`python -m tools.parity.guard`), the vendoring check (`python -m tools.vendoring.vendor_check`) and the selftest (`zig build painter` with `UzPainter.exe selftest`); `python -m tools.parity.store verify parity/schema/samples/public` on a machine without the store exits 1 and reports `oracle_unavailable` |
 | Local oracle run | The owner's machine only, started by hand (§5.1) | Whole-store integrity, then `verify parity/manifests`. Later comparisons against recorded Painter values run the same way, locally, and nowhere else |
 
 The local run report is the gate evidence for every check that needs the store or Painter.
 
 ### 5.1 Local oracle run procedure (owner's machine)
 
-1. Prerequisites on the machine: the GPU with DXR Tier 1.1 and Vulkan ray query, licensed Adobe Substance 3D Painter 12.1.0, Python 3.13 with `jsonschema` on `PATH`, and the store: `python -m tools.parity.store --store <root> init` with `<root>` outside the repository (once). Set `UZP_PARITY_STORE=<root>`, or leave it unset when the store is at the default `%LOCALAPPDATA%\UzPainter\parity-store`.
+1. Prerequisites on the machine: the GPU with DXR Tier 1.1 and Vulkan ray query, licensed Adobe Substance 3D Painter at the current envelope's build (`parity/CONTRACT.md` §6.5, decision 037), Python 3.13 with `jsonschema` on `PATH`, and the store: `python -m tools.parity.store --store <root> init` with `<root>` outside the repository (once). Set `UZP_PARITY_STORE=<root>`, or leave it unset when the store is at the default `%LOCALAPPDATA%\UzPainter\parity-store`.
 2. From the repository root, on a clean checkout of the commit under test: `python -m tools.parity.store verify` (whole-store integrity), then `python -m tools.parity.store verify parity/manifests` when that folder exists. Both must exit 0.
 3. Write the run report: the commands, machine name, GPU and driver version, build hash (the commit), Painter build, and each command's exit status and output. It holds statuses and hashes only, never a recorded output, and is recorded as the evidence of the task that needs it.
 

@@ -372,7 +372,7 @@ $exe = "C:\Program Files\Adobe\Adobe Substance 3D Painter\Adobe Substance 3D Pai
    It records `r1` (create, sync, export), `r1-repeat` (export again in the same session) and `r2` (reopen the saved work project, export again). Admit it to `$man/phase1/tier1/wand-v1.json`.
 4. Admit as in 11.1 step 5.
 
-### 11.4 Later requests (decisions 095, 107, 109, 110, 132, 169, 174; requests by decisions 156, 157, 168, 180)
+### 11.4 Later requests (decisions 095, 107, 109, 110, 132, 169, 174; requests by decisions 156, 157, 168, 180, 188)
 
 Legacy session as in 11.1 steps 1, 2 and 5. The throttling probe (P21-C) goes first, in the fresh session, before any script can set the period:
 

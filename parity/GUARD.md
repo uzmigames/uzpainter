@@ -1,6 +1,6 @@
 # UzPainter repository guard
 
-Work package P0-STORE (`docs/dag.md`), task `phase0.4_oracle-store-guard`. Implements the guard of `docs/architecture/14-parity-testing.md` §6 for `parity/CONTRACT.md` §6.4 and §7, under decisions 002 (clean room) and 028 (hosted CPU-only CI; the store never leaves the owner's machine). Code: `tools/parity/guard/`; hook: `.githooks/pre-commit`; tests: `tests/parity/test_guard.py`; hosted CI: `.github/workflows/parity.yml`.
+Work package P0-STORE (`docs/dag.md`), task `phase0.4_oracle-store-guard`. Implements the guard of `docs/architecture/14-parity-testing.md` §6 for `parity/CONTRACT.md` §6.4 and §7, under decisions 002 (clean room), 028 (no GPU CI; the store never leaves the owner's machine) and 200 (the hosted parity CI was removed; the local full gate runs the guard, §5). Code: `tools/parity/guard/`; hook: `.githooks/pre-commit`; tests: `tests/parity/test_guard.py`.
 
 ## 1. What it blocks
 
@@ -8,7 +8,7 @@ No recorded Painter output may enter the repository in any form. The guard judge
 
 | Rule | Blocks | Needs |
 |---|---|---|
-| `store-hash` | A file whose SHA-256 is in the private store index (`parity/STORE.md` §2). Text is also hashed after CRLF→LF and LF→CRLF conversion, so a copy whose line endings git or an editor changed still matches | The index of the owner's store (`UZP_PARITY_STORE`, else `%LOCALAPPDATA%\UzPainter\parity-store`) or `--index FILE`. Hosted CI has neither and skips this rule, saying so |
+| `store-hash` | A file whose SHA-256 is in the private store index (`parity/STORE.md` §2). Text is also hashed after CRLF→LF and LF→CRLF conversion, so a copy whose line endings git or an editor changed still matches | The index of the owner's store (`UZP_PARITY_STORE`, else `%LOCALAPPDATA%\UzPainter\parity-store`) or `--index FILE`. A machine with neither skips this rule, saying so |
 | `private-record` | A JSON file anywhere in the repository that holds a private oracle record at any depth (`record_class` `private_oracle_record`, or a `uzpainter/parity/golden-private/` schema id) | Nothing |
 | `public-schema` | A JSON data file under `parity/` that fails the public schema its path assigns (§2), or that no rule covers. A file counts as JSON by its `.json` name (it must then parse as UTF-8 JSON) or by its content (starts with `{` or `[` and parses), so a readback renamed to `.txt` is still judged | Nothing |
 
@@ -36,6 +36,10 @@ First match wins; any other JSON under `parity/` is blocked until a rule for its
 | `parity/fixtures/**` | An authored input (fixture description, authored recipe) that a valid manifest under `parity/manifests/`, under an envelope's `parity/envelopes/<envelope id>/manifests/` or among its requested goldens (`requests/`) declares by this path and SHA-256 (decision 087) |
 | `parity/reports/<phase>/recipe-rebuild-*.json` | Valid `recipe-rebuild-report.json`: a rebuild-from-dump report (`phase2.2_recipe-and-diagnostics`): recipe digests, file names, SHA-256 and sizes, the outcome; no oracle data |
 | `parity/reports/<phase>/store-census.json` | The project store's size census (`src/store/census.h`, `phase1.7_store-inspect-census`): `schema` `uzpainter/store-census/1`, a non-empty `projects` list of objects with an `id`, numbers everywhere else; text only in `schema`, `task`, `date`, `id`, `format`, `raster_plane_format` and the `not_measured` lists, each an identifier (no paths) |
+| `parity/reports/<phase>/supervisor-settling.json` | The supervisor's settling report (`tools/parity/settling/report.py`, `phase2.4_supervisor-worker`, decision 150): numbers, booleans, identifiers, dates and SHA-256 digests only |
+| `parity/reports/<phase>/preview-settling.json` | The preview's settling report (`tools/parity/settling/preview.py`, `phase2.3_realtime-preview`, decision 162): numbers, enums, identifiers, dates and SHA-256 digests only; no oracle data |
+| `parity/reports/<phase>/mcp-contract.json` | The MCP contract report (`tools/parity/settling/mcp_contract.py`, `phase2.8_mcp-server`, decision 186): numbers, enums, identifiers, dates and SHA-256 digests only; no oracle data |
+| `parity/reports/<phase>/<pilot>-mcp-round.json` | A pilot's MCP-only round report (`tools/parity/tier1/mcp_round.py`, `phase2.9_pilot-belt`, decision 192): the call log, the outcome and each exported map's SHA-256 beside the Tier 1 run's; both sides are UzPainter's, no oracle data |
 
 ## 3. Running it
 
@@ -59,8 +63,8 @@ git config core.hooksPath .githooks
 
 ## 5. Local full gate
 
-There is no hosted CI (decision 200). `python -m tools.parity.guard` runs locally on the commit under test, in the coordinator's full gate before the owner pushes, besides the pre-commit hook. On a machine without the store it applies the `private-record` and `public-schema` rules and says the hash rule was skipped; a blocked file exits 1. The `store-hash` rule runs on the owner's machine (hook and local runs).
+The hosted parity CI was removed (decision 200). `python -m tools.parity.guard` runs locally on the commit under test, in the coordinator's full gate before the owner pushes, besides the pre-commit hook. On a machine without the store it applies the `private-record` and `public-schema` rules and says the hash rule was skipped; a blocked file exits 1. The `store-hash` rule runs on the owner's machine (hook and local runs).
 
 ## 6. Tests
 
-`tests/parity/test_guard.py`: stand-ins for a recorded PNG and a recorded JSON readback are written outside the repository and recorded into a temporary store; each case runs in a throwaway git repository. Covered: the PNG blocked by hash when staged (API, CLI with the local store, and `git commit` through the committed hook); the readback blocked by hash, after line-ending conversion, and re-serialised under `parity/` (manifest, fixture, uncovered and schema paths, `.txt` name), outside `parity/`, and relabelled as a synthetic sample; the authored fixture image and expectation JSON (`tests/parity/guard_data/`) pass staged and in the working tree; declared and undeclared JSON fixtures; the repository's own `parity/schema` and register pass, synthetic private samples included; the guard command, run without a store, fails on a commit carrying a blocked file.
+`tests/parity/test_guard.py`: stand-ins for a recorded PNG and a recorded JSON readback are written outside the repository and recorded into a temporary store; each case runs in a throwaway git repository. Covered: the PNG blocked by hash when staged (API, CLI with the local store, and `git commit` through the committed hook); the readback blocked by hash, after line-ending conversion, and re-serialised under `parity/` (manifest, fixture, uncovered and schema paths, `.txt` name), outside `parity/`, and relabelled as a synthetic sample; the authored fixture image and expectation JSON (`tests/parity/guard_data/`) pass staged and in the working tree; declared and undeclared JSON fixtures; the repository's own `parity/schema` and register pass, synthetic private samples included; the report rules of §2 and the envelope registry, manifests and requests; the guard command, run without a store, fails on a commit carrying a blocked file.
