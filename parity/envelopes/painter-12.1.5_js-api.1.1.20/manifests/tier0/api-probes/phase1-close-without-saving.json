@@ -145,5 +145,18 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "c40252913d9606281f5450fadf513e4855ad914870e41f77509aca02bbc0155c",
+      "size_bytes": 17959
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "5b3a03531a5044fc65b10e6b62a59c26b6b2f518af05b2e508725f2df2979b88",
+      "size_bytes": 402
+    }
+  ]
 }

@@ -1,10 +1,10 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/api-probes/phase1-export-preset-search",
+  "golden_id": "tier0/api-probes/phase1-default-camera-plane",
   "tier": "0",
-  "domain": "tier0/api-probes/phase1-export-preset-search",
-  "description": "Recording R-095 P7 (decision 095, parity/reports/phase1/export-presets.md \u00a73): resource.search of the export presets, on the starter-assets shelf and on every shelf, each result's identifier (context, name and the ?version= its URL carries), GUI name and usages, on the plane in the first session and after save/reopen.",
+  "domain": "tier0/api-probes/phase1-default-camera-plane",
+  "description": "Recording R-132-A (decision 132): Painter's default camera after project.create on the plane fixture mesh, all eight documented properties read through Camera.get_default_camera(), with the scene bounding box, in the first session and after save/reopen.",
   "inputs": [
     {
       "input_id": "plane",
@@ -41,17 +41,13 @@
       },
       {
         "step": 3,
-        "call": "substance_painter.resource.search",
-        "args": {
-          "query": "s:starterassets u:export"
-        }
+        "call": "substance_painter.display.Camera.get_default_camera",
+        "args": {}
       },
       {
         "step": 4,
-        "call": "substance_painter.resource.search",
-        "args": {
-          "query": "u:export"
-        }
+        "call": "substance_painter.project.get_scene_bounding_box",
+        "args": {}
       }
     ]
   },
@@ -77,5 +73,18 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "abc545251e7cfaaa64a03e989fec8a3479fcac092521252fc1df752195a4f4ea",
+      "size_bytes": 6933
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "5b3a03531a5044fc65b10e6b62a59c26b6b2f518af05b2e508725f2df2979b88",
+      "size_bytes": 402
+    }
+  ]
 }
