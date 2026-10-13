@@ -275,10 +275,11 @@ const preview_sources = [_][]const u8{
 const preview_scene_sources = [_][]const u8{
     "preview/scene.cpp",
 };
-/// The preview window, its thread and `UzPainter.exe --preview` (`src/preview/`), relative to
-/// `src/`: `UzPainter.exe` only (they read the evaluator and the session).
+/// The preview window, its thread, its evaluation and `UzPainter.exe --preview` (`src/preview/`),
+/// relative to `src/`: `UzPainter.exe` only (they read the evaluator and the session).
 const preview_host_sources = [_][]const u8{
     "preview/preview.cpp",
+    "preview/evaluation.cpp",
     "preview/cli.cpp",
 };
 /// Warnings are errors in UzPainter's render layer and its tests (never in vendored code).

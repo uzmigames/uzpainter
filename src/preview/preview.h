@@ -3,12 +3,12 @@
 // The preview window and its thread (docs/architecture/07-preview-and-render-parity.md §5, §6;
 // task phase2.1_preview-viewport-window items 2.4 and 2.5; decisions 018, 042, 134).
 //
-// - `PreviewFeed` is the publisher side, called by the thread that evaluates (the worker's request
-//   thread, or the `--preview` host after its evaluations). It accumulates the last evaluation of
-//   every (texture set, material slot) with the revision, project, mesh and environment it was
-//   evaluated from, and publishes a snapshot through a wait-free triple buffer (latest.h).
-//   Publishing copies shared pointers only: it never waits for, locks against or calls into the
-//   preview thread.
+// - `PreviewFeed` is the publisher side, called by the one thread that evaluates the preview's
+//   frames (the attached preview's evaluation thread, evaluation.h, or the `--preview` host after
+//   its evaluations). It collects one revision's frame: its maps of every (texture set, material
+//   slot) with the revision, project, mesh and environment they were evaluated from, or why they
+//   are missing, and publishes it through a wait-free triple buffer (latest.h). Publishing copies
+//   shared pointers only: it never waits for, locks against or calls into the preview thread.
 // - `PreviewHost` owns the preview thread: its own GPU device (a separate engine, so preview
 //   rendering never queues behind or in front of evaluation), the read-only window (vendored
 //   `platform_window` and `input`) with an orbit camera only (left drag orbits, the wheel zooms),
@@ -16,8 +16,10 @@
 //   minimised). The window is double buffered (decision 227): each frame is composed off screen
 //   and presented whole, only when it changed or Windows asks, and never erased. The
 //   `painter_iray` panel states that the mode is unavailable: no capture can exist before the path
-//   tracer (P3-PATHTRACER). Errors (an unsupported display configuration, a
-//   missing environment, no mesh) are shown in place of the image, and nothing is drawn.
+//   tracer (P3-PATHTRACER). The panel also names the project's display configuration and the
+//   revision shown. Errors (an unsupported display configuration, a failed evaluation, a missing
+//   environment, no mesh) are shown in place of the image, and nothing is drawn; a frame without
+//   a project (it was closed) shows that no project is open.
 // - The stall hook (`Stall`) blocks the preview thread while it holds its frame, for the tests of
 //   item 3.2; nothing else ever waits for that thread.
 
@@ -43,6 +45,7 @@
 #include <unordered_map>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "uzp_core/types/ids.h"
 #include "uzp_core/types/project.h"
@@ -63,7 +66,8 @@ enum class MaterialSlot : uint8_t { BaseColor, Metalness, Roughness, Normal };
 using EvaluatedMap =
     std::variant<std::shared_ptr<const evaluator::ChannelResult>, std::shared_ptr<const evaluator::VirtualNormalResult>>;
 
-/// What the preview shows: the last evaluation, as published.
+/// What the preview shows: the last evaluated revision, as published. Without a project, no project
+/// is open.
 struct PreviewFrame {
     std::int64_t revision = 0;
     std::shared_ptr<const core::Project> project;
@@ -75,8 +79,11 @@ struct PreviewFrame {
     std::shared_ptr<const std::string> environmentBytes;
     std::string environmentError;
     bool environmentDefault = false;
-    /// The last evaluated map of each (texture set id, slot).
+    /// The evaluated map of each (texture set id, slot).
     std::map<std::pair<core::Id, MaterialSlot>, EvaluatedMap> maps;
+    /// The evaluations of the revision that failed, one per line; the window shows them in place of
+    /// the image, never a material with those maps missing.
+    std::string evaluationError;
 };
 
 /// The installation's default environment (decision 212): the shipped CC0 `studio-small-09.exr`
@@ -97,13 +104,16 @@ using ResourceReader = std::function<std::optional<std::string>(const std::strin
 
 class PreviewFeed {
 public:
-    /// Records the state an evaluation of `revision` read. The environment's bytes are read with
-    /// `read` only when its hash differs from the last one.
+    /// Starts the frame of `revision`: the state its evaluation reads (no project: none is open).
+    /// The maps and failures of the previous frame are dropped. The environment's bytes are read
+    /// with `read` only when its hash differs from the last one.
     void Update(std::int64_t revision, std::shared_ptr<const core::Project> project,
                 std::shared_ptr<const mesh::TexturingMesh> mesh, const ResourceReader& read);
-    /// Records the last evaluation of `slot` of texture set `set`.
+    /// Records the evaluation of `slot` of texture set `set`.
     void Record(core::Id set, MaterialSlot slot, EvaluatedMap map);
-    /// Makes the accumulated state the newest frame. Wait-free with respect to the preview thread.
+    /// Records an evaluation of the frame that failed.
+    void RecordFailure(const std::string& failure);
+    /// Makes the collected frame the newest one. Wait-free with respect to the preview thread.
     void Publish();
 
     /// The reader side, for the preview thread.
@@ -125,7 +135,13 @@ struct PreviewStatus {
     std::uint64_t presents = 0;
     /// Times the orbit camera was fitted: on the first frame and on another mesh.
     std::uint64_t cameraFits = 0;
+    /// The revision of the image shown; -1 while the window shows a message instead.
     std::int64_t revisionShown = -1;
+    /// The maps of the image shown, as `<texture set>/<slot>` (slots BaseColor, Metalness,
+    /// Roughness, Normal).
+    std::vector<std::string> mapsShown;
+    /// The panel's display line: the taken frame's display configuration (`DisplayLabel`).
+    std::string display;
     std::string lastError;
 };
 
@@ -158,6 +174,8 @@ public:
     /// Test hook: while set, the preview thread blocks, holding the frame it took.
     void Stall(bool stalled);
     [[nodiscard]] PreviewStatus Status() const;
+    /// The window was closed, or could not be created: it never shows a frame again.
+    [[nodiscard]] bool Closed() const { return m_closed; }
     /// Blocks until the window was closed (or never opened); the thread then ends.
     void WaitClosed();
 
@@ -170,13 +188,17 @@ private:
     std::atomic<bool> m_stall{false};
     std::atomic<bool> m_stalled{false};
     std::atomic<bool> m_windowOpen{false};
+    std::atomic<bool> m_closed{false};
     std::atomic<std::uint64_t> m_taken{0};
     std::atomic<std::uint64_t> m_rendered{0};
     std::atomic<std::uint64_t> m_presents{0};
     std::atomic<std::uint64_t> m_cameraFits{0};
     std::atomic<std::int64_t> m_revisionShown{-1};
-    mutable std::mutex m_errorMutex;  // guards m_lastError only; the publisher never takes it
+    // Guards m_lastError, m_mapsShown and m_display only; the publisher never takes it.
+    mutable std::mutex m_errorMutex;
     std::string m_lastError;
+    std::vector<std::string> m_mapsShown;
+    std::string m_display;
     std::thread m_thread;
 };
 
@@ -187,12 +209,17 @@ private:
 /// The decoded environments' lighting by SHA-256, kept by a caller across frames.
 using LightingCache = std::unordered_map<std::string, std::shared_ptr<const EnvironmentLighting>>;
 
-/// The viewport scene of `frame` (scene.cpp): the display state of the display presets (its view,
-/// its config pin and the active preset's clear colour; `python::display::PresetOf`), the mesh,
-/// the environment's lighting (from `cache`, decoded and precomputed on first use), the material
-/// maps and the environment's rotation and exposure. Otherwise the message that replaces the
-/// image: the `unsupported_configuration` error (decision 134), no mesh, a missing environment or
-/// a frame without one (RES-03), an environment that does not decode.
+/// The display configuration the viewport renders `project` with (scene.cpp): the project's colour
+/// management, with the view and config pin of the display presets' state
+/// (`python::display::PresetOf`).
+[[nodiscard]] DisplayConfiguration DisplayOf(const core::Project& project);
+
+/// The viewport scene of `frame` (scene.cpp): the display configuration (`DisplayOf`), the active
+/// preset's clear colour, the mesh, the environment's lighting (from `cache`, decoded and
+/// precomputed on first use), the material maps and the environment's rotation and exposure.
+/// Otherwise the message that replaces the image: the `unsupported_configuration` error (decision
+/// 134), the frame's failed evaluations, no mesh, a missing environment or a frame without one
+/// (RES-03), an environment that does not decode.
 [[nodiscard]] std::expected<ViewportScene, std::string> SceneOf(const PreviewFrame& frame, LightingCache& cache);
 
 }  // namespace uzp::preview

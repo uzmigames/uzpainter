@@ -1,0 +1,12 @@
+{
+  "id": 248,
+  "slug": "the-attached-preview-evaluates-every-committed-revision-on-its-own-thread-and-device-and-clears-when-the-project-closes",
+  "title": "The attached preview evaluates every committed revision on its own thread and device, and clears when the project closes",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.1_preview-viewport-window",
+    "phase2.3_realtime-preview"
+  ],
+  "supersededBy": null
+}

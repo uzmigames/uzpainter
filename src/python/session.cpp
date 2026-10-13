@@ -407,9 +407,12 @@ void Session::Rebuild(const core::json::Value& dump, const std::filesystem::path
     });
     Record(FromResult(Settle(outcome, error)));
     SetActiveDefault(*project);
-    std::lock_guard lock(mutex_);
-    if (current_) ThrowProjectError("a project is already open");
-    current_ = std::move(project);
+    {
+        std::lock_guard lock(mutex_);
+        if (current_) ThrowProjectError("a project is already open");
+        current_ = std::move(project);
+    }
+    NotifyDurableChange();  // the rebuilt project is now the open one, as after Create
 }
 
 void Session::Close() {

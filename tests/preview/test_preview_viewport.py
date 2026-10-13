@@ -21,10 +21,16 @@ from tests.preview.conftest import GOLDENS, run_case
 def test_display_configuration_and_table(preview_tests: Path) -> None:
     """2.3, 3.4: only OCIO with Painter's substance config and `Default - sRGB` is supported;
     Legacy Linear and ACES, ACE mode, other configs and other views are refused naming decision
-    038; the display table is round(65535 encode(binary16(clamp(L, 0, 1))))."""
+    038, and the preview panel labels them so (B13 of the practical end-to-end report, which saw a
+    Legacy project labelled as the pinned configuration); the display table is
+    round(65535 encode(binary16(clamp(L, 0, 1))))."""
     passed, _ = run_case(preview_tests, "display")
     assert {
         "the pinned configuration (OCIO, substance config, Default - sRGB) is supported",
+        "the preview panel labels the pinned configuration",
+        "the preview panel labels Legacy Linear as not displayed (decision 038)",
+        "the preview panel labels Legacy ACES as not displayed (decision 038)",
+        "the preview panel labels ACE mode as not displayed (decision 038)",
         "Legacy Linear is unsupported, naming what differs and decision 038",
         "Legacy ACES is unsupported, naming what differs and decision 038",
         "ACE mode is unsupported, naming what differs and decision 038",

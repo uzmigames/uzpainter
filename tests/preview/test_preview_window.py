@@ -30,7 +30,7 @@ import numpy.typing as npt
 import pytest
 
 from tests.desktop import PrivateDesktop, WindowRecorder, visible_windows
-from tests.preview.conftest import NO_GPU, ocio_bundle
+from tests.preview.conftest import ENVIRONMENT, NO_GPU, SPHERE, ocio_bundle
 from tests.supervisor.conftest import JSON_PREFIX, Pipe, make_project
 
 pytestmark = pytest.mark.skipif(
@@ -52,6 +52,9 @@ RDW_INVALIDATE = 0x0001
 RDW_ERASE = 0x0004
 RDW_UPDATENOW = 0x0100
 PANEL_WIDTH = 300  # src/preview/preview.cpp kPanelWidth
+PANEL_BGR = (28, 24, 24)  # src/preview/preview.cpp: the panel's RGB(24, 24, 28), as BGR
+UOI_NAME = 2
+DESKTOP_READOBJECTS = 0x0001
 
 EXPORT = """
 import hashlib, os
@@ -189,9 +192,10 @@ def test_stalled_preview_never_delays_evaluation_or_export(
     second = run.evaluate("BaseColor")
     exported = run.export()
     elapsed = time.monotonic() - started
+    # The preview's own thread evaluates the committed edit and publishes it (decision 248).
+    wait_for(lambda: status(pipe)["frames_published"] > held["frames_published"])
     during = status(pipe)
     assert during["stalled"] and during["frames_taken"] == held["frames_taken"]
-    assert during["frames_published"] > held["frames_published"]
 
     resume = pipe.call("test_fault", {"fault": "preview_resume"})
     assert resume["result"] == {"armed": "preview_resume"}
@@ -242,6 +246,67 @@ def test_window_lifecycle_during_evaluation_changes_nothing(
     assert "decision 038" in status(pipe)["last_error"]
 
 
+def test_the_previews_evaluation_never_delays_or_changes_the_workers_results(
+    painter: Path, tmp_path: Path, pipes: list[Pipe], desktop: PrivateDesktop
+) -> None:
+    """Decision 248 on the OCIO fixture, the projects the attached preview evaluates on its own
+    thread and device (a Legacy project, as in the tests above, is published without being
+    evaluated). The worker's evaluations, commits and export give the bytes and revisions of a
+    worker without a preview while the preview evaluates the opened revision, and while the test
+    hook holds the preview's evaluation thread inside its evaluation of the next one: nothing the
+    worker does waits for it. The held revision, superseded by a commit made meanwhile, is never
+    published; the newest one is, with its four maps."""
+    bundle = ocio_bundle(painter, tmp_path / "fixture")
+    copies = [tmp_path / name / bundle.name for name in ("baseline", "preview")]
+    for copy in copies:
+        shutil.copytree(bundle, copy)
+
+    pipe = Pipe(painter, tmp_path, *WORKER)
+    pipes.append(pipe)
+    if pipe.handshake["gpu_status"] != "ready":
+        pytest.skip("no DX12 device on this machine")
+    run = Run(pipe, copies[0], tmp_path / "export-baseline")
+    first = run.evaluate("BaseColor")
+    run.python(INSERT_FILL)
+    run.python(INSERT_FILL)
+    expected = (first, run.evaluate("BaseColor"), run.export(), run.revisions)
+
+    pipe = Pipe(painter, tmp_path, *WORKER, "--preview", desktop=desktop)
+    pipes.append(pipe)
+    wait_for(lambda: status(pipe)["window_open"])
+    # A call that waited for the held evaluation would never reply: the watchdog then ends the
+    # worker, and the call fails on the closed pipe.
+    watchdog = threading.Timer(300, pipe.process.kill)
+    watchdog.start()
+    try:
+        run = Run(pipe, copies[1], tmp_path / "export-preview")
+        # The preview's thread evaluates the opened revision meanwhile, on its own device.
+        first = run.evaluate("BaseColor")
+        opened = wait_for(lambda: (s := status(pipe))["revision_shown"] == run.revision and s)
+        assert len(opened["maps_shown"]) == 4 and opened["last_error"] == "", opened
+
+        armed = pipe.call("test_fault", {"fault": "preview_evaluation_stall"})
+        assert armed["result"] == {"armed": "preview_evaluation_stall"}
+        run.python(INSERT_FILL)
+        wait_for(lambda: status(pipe)["evaluation_stalled"])
+        held = status(pipe)
+        run.python(INSERT_FILL)  # supersedes the held revision
+        second = run.evaluate("BaseColor")
+        exported = run.export()
+        during = status(pipe)
+    finally:
+        watchdog.cancel()
+    assert during["evaluation_stalled"] and during["frames_published"] == held["frames_published"]
+    assert during["revision_shown"] == run.revisions[0]
+
+    resume = pipe.call("test_fault", {"fault": "preview_evaluation_resume"})
+    assert resume["result"] == {"armed": "preview_evaluation_resume"}
+    shown = wait_for(lambda: (s := status(pipe))["revision_shown"] == run.revision and s)
+    assert shown["frames_published"] == held["frames_published"] + 1, (held, shown)
+    assert len(shown["maps_shown"]) == 4 and shown["last_error"] == "", shown
+    assert (first, second, exported, run.revisions) == expected
+
+
 class BitmapInfoHeader(ctypes.Structure):
     _fields_: ClassVar[list[tuple[str, type[Any]]]] = [
         ("size", ctypes.wintypes.DWORD),
@@ -259,12 +324,56 @@ class BitmapInfoHeader(ctypes.Structure):
     ]
 
 
+def desktop_unavailable() -> str | None:
+    """Why the screen cannot be captured: the input desktop is not the user's `Default` one (the
+    workstation is locked, or a secure desktop is up), or there is none; None when it can be."""
+    user = ctypes.WinDLL("user32", use_last_error=True)
+    user.OpenInputDesktop.restype = ctypes.c_void_p
+    user.OpenInputDesktop.argtypes = [
+        ctypes.wintypes.DWORD,
+        ctypes.wintypes.BOOL,
+        ctypes.wintypes.DWORD,
+    ]
+    user.CloseDesktop.argtypes = [ctypes.c_void_p]
+    user.GetUserObjectInformationW.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.wintypes.DWORD,
+        ctypes.POINTER(ctypes.wintypes.DWORD),
+    ]
+    desktop = user.OpenInputDesktop(0, False, DESKTOP_READOBJECTS)
+    if not desktop:
+        return (
+            f"no input desktop (error {ctypes.get_last_error()}): the workstation is locked or the "
+            "session is not interactive, so the screen cannot be captured"
+        )
+    try:
+        name = ctypes.create_unicode_buffer(64)
+        needed = ctypes.wintypes.DWORD()
+        if not user.GetUserObjectInformationW(desktop, UOI_NAME, name, 128, ctypes.byref(needed)):
+            return f"the input desktop's name cannot be read (error {ctypes.get_last_error()})"
+        if name.value != "Default":
+            return (
+                f"the input desktop is {name.value!r}, not 'Default': the workstation is locked, "
+                "so the screen cannot be captured"
+            )
+        return None
+    finally:
+        user.CloseDesktop(desktop)
+
+
+class CaptureUnavailable(Exception):
+    """The screen could not be captured: the reason the test is skipped."""
+
+
 class Sampler(threading.Thread):
     """The window's client area as the desktop compositor (DWM) shows it, sampled once per
-    composition (`DwmFlush`, then a BitBlt from the screen), and the samples that show an
-    unbuffered window: a view that is uniformly (0, 0, 0), the class brush's erase, or a panel
-    status box without one pixel of its text (every channel at least 150), cleared before its
-    text was drawn. A sample whose client rectangle changed while it was taken is discarded."""
+    composition (`DwmFlush`, then a BitBlt from the screen), and the samples that do not show one
+    whole composed frame (`check`). A sample whose client rectangle changed while it was taken is
+    discarded. When the screen cannot be captured (`DwmFlush` or the BitBlt fails because the
+    workstation is locked), `unavailable` says why and sampling stops; any other failure of those
+    calls is an error."""
 
     def __init__(self, hwnd: int) -> None:
         super().__init__(daemon=True)
@@ -274,11 +383,13 @@ class Sampler(threading.Thread):
         self.samples = 0
         self.failures: list[str] = []
         self.error: BaseException | None = None
+        self.unavailable: str | None = None
         # Own function pointers: GDI handles are pointer-sized, so these need their types.
         handle = ctypes.c_void_p
         self.user32 = ctypes.WinDLL("user32", use_last_error=True)
         self.gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
         self.dwmapi = ctypes.WinDLL("dwmapi")
+        self.dwmapi.DwmFlush.restype = ctypes.c_long  # an HRESULT
         self.user32.GetDC.restype = handle
         self.user32.GetDC.argtypes = [handle]
         self.user32.ReleaseDC.argtypes = [handle, handle]
@@ -293,6 +404,7 @@ class Sampler(threading.Thread):
         self.gdi32.DeleteDC.argtypes = [handle]
         integer, unsigned = ctypes.c_int, ctypes.c_uint
         self.gdi32.BitBlt.argtypes = [handle, *[integer] * 4, handle, integer, integer, unsigned]
+        self.gdi32.BitBlt.restype = ctypes.wintypes.BOOL
         self.gdi32.GetDIBits.argtypes = [*[handle] * 2, unsigned, unsigned, *[handle] * 2, unsigned]
 
     def client(self) -> tuple[int, int, int, int] | None:
@@ -315,8 +427,14 @@ class Sampler(threading.Thread):
         bitmap = self.gdi32.CreateCompatibleBitmap(screen, width, height)
         try:
             previous = self.gdi32.SelectObject(memory, bitmap)
-            self.gdi32.BitBlt(memory, 0, 0, width, height, screen, left, top, 0x00CC0020)
+            copied = self.gdi32.BitBlt(memory, 0, 0, width, height, screen, left, top, 0x00CC0020)
+            error = ctypes.get_last_error()
             self.gdi32.SelectObject(memory, previous)  # GetDIBits needs it deselected
+            if not copied:
+                reason = desktop_unavailable()
+                if reason:
+                    raise CaptureUnavailable(reason)
+                raise AssertionError(f"BitBlt from the screen failed (error {error})")
             header = BitmapInfoHeader(40, width, -height)  # 40: BITMAPINFOHEADER's size
             header.planes, header.bit_count = 1, 32
             pixels = np.zeros((height, width, 4), np.uint8)
@@ -330,14 +448,28 @@ class Sampler(threading.Thread):
             self.gdi32.DeleteDC(memory)
 
     def check(self, pixels: npt.NDArray[np.uint8]) -> str | None:
+        """Why `pixels` (BGRA) is not one whole composed frame: a row of the view that is all
+        (0, 0, 0) (an erase, even of a band only: the image and the message never hold a black
+        row), a panel whose background is not its colour (erased), or a panel without the text
+        of either of its boxes (cleared before its text was drawn)."""
         height, width = pixels.shape[:2]
         view_width = width - PANEL_WIDTH
         # Inside the window's rounded corners, which show the desktop behind it.
-        if not pixels[16:-16, 16 : view_width - 16, :3].any():
-            return "the view is uniformly (0, 0, 0): the window was erased"
+        view = pixels[16:-16, 16 : view_width - 16, :3]
+        erased = int((~view.any(axis=(1, 2))).sum())
+        if erased:
+            return f"{erased} rows of the view are (0, 0, 0): the window was erased"
+        panel = pixels[16:-16, view_width + 4 : width - 16, :3].astype(np.int16)
+        background = float((np.abs(panel - np.array(PANEL_BGR)) <= 4).all(axis=-1).mean())
+        if background < 0.5:
+            return f"{background:.0%} of the panel shows its background colour: it was erased"
         box = pixels[12 : height // 2, view_width + 12 : width - 12, :3]
         if not (box >= 150).all(axis=-1).any():
-            return "the panel shows no text: it was cleared before its text was drawn"
+            return "the panel's status box shows no text: it was cleared before its text was drawn"
+        # The painter_iray line, RGB(220, 190, 90).
+        iray = pixels[height // 2 : height - 12, view_width + 12 : width - 12, :3]
+        if not ((iray[..., 2] >= 180) & (iray[..., 1] >= 150) & (iray[..., 0] <= 130)).any():
+            return "the panel's painter_iray box shows no text: it was cleared before its text"
         return None
 
     def run(self) -> None:
@@ -347,7 +479,13 @@ class Sampler(threading.Thread):
             screen = self.user32.GetDC(None)
             try:
                 while not self.stop.is_set():
-                    self.dwmapi.DwmFlush()
+                    flushed = self.dwmapi.DwmFlush()
+                    if flushed < 0:
+                        reason = desktop_unavailable()
+                        if reason:
+                            raise CaptureUnavailable(reason)
+                        hresult = flushed & 0xFFFFFFFF
+                        raise AssertionError(f"DwmFlush failed (HRESULT {hresult:#010x})")
                     area = None if self.paused.is_set() else self.client()
                     if area is None:
                         continue
@@ -357,9 +495,14 @@ class Sampler(threading.Thread):
                     self.samples += 1
                     problem = self.check(pixels)
                     if problem:
+                        # A desktop locked while sampling may hand back a black screen.
+                        if reason := desktop_unavailable():
+                            raise CaptureUnavailable(reason)
                         self.failures.append(f"sample {self.samples} {area[2:]}: {problem}")
             finally:
                 self.user32.ReleaseDC(None, screen)
+        except CaptureUnavailable as reason:
+            self.unavailable = str(reason)
         except BaseException as error:  # reported by the test's thread
             self.error = error
 
@@ -377,6 +520,8 @@ def test_window_presents_only_complete_frames(
     window (no class background brush, WM_ERASEBKGND answered without erasing), and an unchanged
     window is not redrawn. Through resizes, a minimise and restore, forced repaints and a new
     evaluation, the screen never shows an erased view or a panel cleared of its text."""
+    if reason := desktop_unavailable():
+        pytest.skip(reason)
     bundle = ocio_bundle(painter, tmp_path / "fixture")
     pipe = Pipe(painter, tmp_path, *WORKER, "--preview")
     pipes.append(pipe)
@@ -428,6 +573,8 @@ def test_window_presents_only_complete_frames(
     finally:
         sampler.stop.set()
         sampler.join(30)
+    if sampler.unavailable:
+        pytest.skip(sampler.unavailable)
     assert sampler.error is None, sampler.error
     assert sampler.samples >= 20, f"only {sampler.samples} samples"
     assert not sampler.failures, (
@@ -439,8 +586,8 @@ def test_window_presents_only_complete_frames(
 def test_a_new_evaluation_of_the_same_mesh_keeps_the_camera(
     painter: Path, tmp_path: Path, pipes: list[Pipe], desktop: PrivateDesktop
 ) -> None:
-    """The worker derives a new mesh object for every evaluation. The preview fits its camera on
-    the first frame and again only for another mesh, so an edit does not undo the user's orbit."""
+    """The preview evaluates every committed revision. It fits its camera on the first frame and
+    again only for another mesh, so an edit does not undo the user's orbit."""
     bundle = ocio_bundle(painter, tmp_path / "fixture")
     pipe = Pipe(painter, tmp_path, *WORKER, "--preview", desktop=desktop)
     pipes.append(pipe)
@@ -448,22 +595,84 @@ def test_a_new_evaluation_of_the_same_mesh_keeps_the_camera(
         pytest.skip("no DX12 device on this machine")
     wait_for(lambda: status(pipe)["window_open"])
     run = Run(pipe, bundle, tmp_path / "export")
-    run.evaluate("BaseColor")
     wait_for(lambda: status(pipe)["revision_shown"] == run.revision)
     assert status(pipe)["camera_fits"] == 1
     run.python(INSERT_FILL)
-    run.evaluate("BaseColor")
     wait_for(lambda: status(pipe)["revision_shown"] == run.revision)
     assert len(run.revisions) == 2 and status(pipe)["camera_fits"] == 1
+
+
+REBUILD = """
+import hashlib, os, shutil
+from uzpainter import project
+dump = project.dump_recipe()
+os.makedirs(__RES__, exist_ok=True)
+for path in __SOURCES__:
+    sha = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    if sha in dump["rebuild"]["/resource_catalog"]:
+        shutil.copyfile(path, os.path.join(__RES__, sha + os.path.splitext(path)[1]))
+project.close()
+project.rebuild_from_recipe(dump, __RES__)
+result = project.revision()
+"""
+
+
+def test_the_attached_preview_shows_the_committed_revision(
+    painter: Path, tmp_path: Path, pipes: list[Pipe], desktop: PrivateDesktop
+) -> None:
+    """B7 of the practical end-to-end report (decision 248): the attached preview evaluates every
+    committed revision itself, on its own thread and device. Without any `evaluate_channel` it
+    shows the project after `project_open`, after a committed edit and after a rebuild from a
+    recipe, each time with every map it displays (base colour, metalness, roughness and the
+    combined normal), and it shows that no project is open once the project is closed."""
+    bundle = ocio_bundle(painter, tmp_path / "fixture")
+    pipe = Pipe(painter, tmp_path, *WORKER, "--preview", desktop=desktop)
+    pipes.append(pipe)
+    if pipe.handshake["gpu_status"] != "ready":
+        pytest.skip("no DX12 device on this machine")
+    wait_for(lambda: status(pipe)["window_open"])
+
+    def shown(revision: int) -> None:
+        found = wait_for(lambda: (s := status(pipe))["revision_shown"] == revision and s)
+        (texture_set,) = pipe.call("project_inspect")["result"]["texture_sets"]
+        slots = ("BaseColor", "Metalness", "Roughness", "Normal")
+        assert sorted(found["maps_shown"]) == sorted(f"{texture_set['name']}/{s}" for s in slots)
+        assert found["display"] == "OCIO, Painter's substance config, Default - sRGB (decision 042)"
+        assert found["last_error"] == ""
+
+    run = Run(pipe, bundle, tmp_path / "export")
+    shown(run.revision)
+    run.python(INSERT_FILL)
+    assert len(run.revisions) == 2
+    shown(run.revision)
+
+    # Rebuilt from its recipe into a new untitled project, which the session then holds.
+    code = REBUILD.replace("__RES__", repr(str(tmp_path / "res"))).replace(
+        "__SOURCES__", repr([str(SPHERE), str(ENVIRONMENT)])
+    )
+    rebuilt = pipe.call(
+        "run_python", {"code": code}, expected_revision=run.revision, idempotency_key="rebuild"
+    )
+    assert "error" not in rebuilt and rebuilt["result"]["status"] == "ok", rebuilt
+    revision = rebuilt["result"]["result"]
+    shown(revision)
+    event = [e for e in pipe.events if e.get("event") == "revision"][-1]
+    assert event["revision"] == revision and event["untitled"] and event["project"], event
+
+    assert "error" not in pipe.call("project_close", {"discard": True})
+    closed = wait_for(lambda: (s := status(pipe))["revision_shown"] == -1 and s)
+    assert closed["maps_shown"] == [] and closed["display"] == "-" and closed["last_error"] == ""
 
 
 def test_standalone_preview_opens_and_closes(
     painter: Path, tmp_path: Path, desktop: PrivateDesktop
 ) -> None:
     """2.5: `UzPainter.exe --preview <file.uzp>` evaluates the project, shows the read-only window
-    with the unsupported-configuration message for a Legacy project, and reports on close.
-    Decision 252: headless is only the default, and a preview asked for explicitly still opens
-    its window; the recorder that proves no window in tests/supervisor/test_headless.py sees it."""
+    with the unsupported-configuration message for a Legacy project, and reports on close; its
+    panel labels the Legacy display as not displayed (B13 of the practical end-to-end report: it
+    read "OCIO, Painter's substance config"). Decision 252: headless is only the default, and a
+    preview asked for explicitly still opens its window; the recorder that proves no window in
+    tests/supervisor/test_headless.py sees it."""
     project = make_project(painter, tmp_path)
     recorder = WindowRecorder(desktop.handle).start()
     env = {k: v for k, v in os.environ.items() if k != "UZP_HEADLESS"}
@@ -485,3 +694,6 @@ def test_standalone_preview_opens_and_closes(
     report = json.loads(lines[-1][len(JSON_PREFIX) :])
     assert report["status"] == "closed" and report["frames_rendered"] == 0
     assert "decision 038" in report["last_error"] and "Legacy" in report["last_error"]
+    assert report["display"].startswith(
+        "Legacy colour management with tone mapping Linear: not displayed"
+    )

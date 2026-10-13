@@ -104,14 +104,9 @@ std::vector<MaterialInputs> MaterialsOf(const PreviewFrame& frame) {
     return materials;
 }
 
-std::expected<ViewportScene, std::string> SceneOf(const PreviewFrame& frame, LightingCache& cache) {
-    // Named through `std::expected`: Zig's libc++ also declares the function `Problem()`.
-    using Problem = std::expected<ViewportScene, std::string>::unexpected_type;
-    if (!frame.project) return Problem(std::string("no project"));
-    const core::Project& project = *frame.project;
-    ViewportScene next;
-    // The display state of the display presets (src/python/display.h, decision 132): its view,
-    // its config pin and the active preset's clear colour.
+DisplayConfiguration DisplayOf(const core::Project& project) {
+    // The display state of the display presets (src/python/display.h, decision 132): its view and
+    // its config pin.
     const core::json::Object preset = python::display::PresetOf(project);
     std::string view(kDefaultSrgbView);
     std::string displayHash;
@@ -125,8 +120,20 @@ std::expected<ViewportScene, std::string> SceneOf(const PreviewFrame& frame, Lig
             displayHash = std::get<std::string>(it->second.data);
         }
     }
-    next.display = ConfigurationOf(project, view);
-    if (next.display.mode == kOcioMode && next.display.configHash.empty()) next.display.configHash = displayHash;
+    DisplayConfiguration configuration = ConfigurationOf(project, view);
+    if (configuration.mode == kOcioMode && configuration.configHash.empty()) configuration.configHash = displayHash;
+    return configuration;
+}
+
+std::expected<ViewportScene, std::string> SceneOf(const PreviewFrame& frame, LightingCache& cache) {
+    // Named through `std::expected`: Zig's libc++ also declares the function `Problem()`.
+    using Problem = std::expected<ViewportScene, std::string>::unexpected_type;
+    if (!frame.project) return Problem(std::string("no project"));
+    const core::Project& project = *frame.project;
+    ViewportScene next;
+    next.display = DisplayOf(project);
+    // The active preset's clear colour.
+    const core::json::Object preset = python::display::PresetOf(project);
     if (const auto background = preset.find("background");
         background != preset.end() && background->second.IsObject()) {
         const core::json::Object& b = std::get<core::json::Object>(background->second.data);
@@ -144,6 +151,7 @@ std::expected<ViewportScene, std::string> SceneOf(const PreviewFrame& frame, Lig
     if (std::optional<std::string> unsupported = UnsupportedConfiguration(next.display)) {
         return Problem(*unsupported);
     }
+    if (!frame.evaluationError.empty()) return Problem("evaluation failed: " + frame.evaluationError);
     if (!frame.mesh) return Problem(std::string("the evaluation carries no mesh (the project has none)"));
     if (!frame.environmentError.empty()) return Problem(frame.environmentError);
     if (frame.environmentHash.empty()) {

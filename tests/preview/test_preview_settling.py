@@ -7,14 +7,14 @@ project. A worker without a preview gives the baseline; workers with the preview
 (`--preview`, Debug build with the stall hook, decision 120) must give the same bytes:
 
 - 2.1: evaluation of every wand channel on the worker's GPU, the wand's export, and captures in
-  every Phase 2 mode. The wand is Legacy colour-managed, as every project UzPainter creates today,
-  so `painter_viewport` refuses it (decision 038) and the window shows that refusal; the same
-  worker then renders the OCIO fixture, in the window and in a capture (scope split owned by
-  phase1.15_compositor-colour-fits). The export is the pipeline's `painter_export.py`
-  configuration. While `infinite` padding on UV islands is a gap (`export-processing.json`
-  `padding-islands`, phase1.25_pilot-wand item 2.7) it runs with `passthrough` padding and without
-  its Normal map: a virtualMap outside the UV islands under `passthrough` is unrecorded (R-090,
-  decision 090), so the export refuses it.
+  every Phase 2 mode. The wand is an OCIO project with Painter's substance config
+  (`painter_create.py` sets `OCIO`, decision 207), so the window draws it and `painter_viewport`
+  renders it; the same worker then closes it and renders the OCIO fixture, in the window and in a
+  capture. The export is the pipeline's `painter_export.py` configuration. While `infinite`
+  padding on UV islands is a gap (`export-processing.json` `padding-islands`, phase1.25_pilot-wand
+  item 2.7) it runs with `passthrough` padding and without its Normal map: a virtualMap outside
+  the UV islands under `passthrough` is unrecorded (R-090, decision 090), so the export refuses
+  it.
 - 3.2: the export with the window minimised and the preview thread stalled by the test hook.
   Nothing waits on the preview thread: the stalled run completes while the preview holds its
   frame. The export times are recorded in the settling report, with no threshold (decision 162).
@@ -46,7 +46,14 @@ from tests.adapters.assets3d.wand import ASSETS3D, Wand
 from tests.desktop import PrivateDesktop
 from tests.preview.conftest import JSON_PREFIX, NO_GPU, OCIO_CONFIG, ocio_bundle
 from tests.preview.conftest import PreviewSettling as Settling
-from tests.preview.test_preview_window import SW_MINIMIZE, status, user32, wait_for, windows_of
+from tests.preview.test_preview_window import (
+    INSERT_FILL,
+    SW_MINIMIZE,
+    status,
+    user32,
+    wait_for,
+    windows_of,
+)
 from tests.supervisor.conftest import Pipe
 from tools.parity.fit.decode import decode
 
@@ -67,10 +74,12 @@ WORKER = ("--gpu-backend", "dx12", "--allow-python", "--test-faults")
 # One export of the wand on the Debug worker's CPU evaluator takes about 7.5 minutes, 6.6 of them
 # its BaseColor (measured 2026-10-12), so the full scenarios run longer than an agent's 10-minute
 # test budget: they belong to the coordinator's batch. `UZP_PREVIEW_WAND_QUICK=1` leaves BaseColor
-# out of the export and the captures, to check the scenarios in a few minutes; a quick run is never
-# settling evidence (decision 162).
+# out of the export and the captures, and the wand's `painter_viewport` capture (it evaluates every
+# wand map on that CPU evaluator, about 11 minutes, measured 2026-10-13), to check the scenarios in
+# a few minutes; a quick run is never settling evidence (decision 162).
 QUICK = os.environ.get("UZP_PREVIEW_WAND_QUICK") == "1"
 TEXTURE_SET = "11-Varinha-Madeira"
+OCIO_DISPLAY = "OCIO, Painter's substance config, Default - sRGB (decision 042)"
 CHANNELS = ("BaseColor", "BaseMetalness", "SpecularRoughness", "Height", "Normal")
 GEM = "Gema"  # a group of the wand's stack with a bitmap mask
 
@@ -124,6 +133,17 @@ def sha256(path: str | Path) -> str:
 
 def hashes(files: dict[str, str]) -> dict[str, str]:
     return {name: sha256(path) for name, path in files.items()}
+
+
+def viewport(pipe: Pipe, path: str, revision: int) -> None:
+    """A `painter_viewport` capture of the open project's `revision` on the worker's DX12 device,
+    under Painter's substance config."""
+    reply = pipe.call("capture", {"mode": "painter_viewport", "path": path, "size": [96, 64]})
+    assert "error" not in reply, reply
+    receipt = reply["result"]
+    assert receipt["revision"] == revision and receipt["backend"] == "dx12"
+    assert receipt["display_configuration"]["config_sha256"] == OCIO_CONFIG
+    assert sha256(receipt["files"]["png"]) == receipt["hashes"]["png"]
 
 
 @pytest.fixture(scope="module")
@@ -256,9 +276,10 @@ def test_wand_v1_with_the_preview_attached(
     """2.1: a worker with the preview window open evaluates every wand channel and exports the
     wand's maps with the bytes of a worker without a preview; its `base_color` and
     `channel:roughness` captures hold the decoded values of the exported maps, and the gem's
-    `mask:<uid>` is written. It refuses `painter_viewport` on the Legacy wand (the window shows the
-    same refusal) and `painter_iray` before any work, then renders the OCIO fixture in the window
-    and in a `painter_viewport` capture."""
+    `mask:<uid>` is written. It refuses `painter_iray` before any work. The window draws the OCIO
+    wand with the four maps the preview's own evaluation published (decision 248), and
+    `painter_viewport` renders it. Closing the wand clears the window; the OCIO fixture opened next
+    is drawn and rendered."""
     session = Session(painter, tmp_path / "preview", wand_project, "--preview", desktop=desktop)
     try:
         pipe = session.pipe
@@ -281,33 +302,22 @@ def test_wand_v1_with_the_preview_attached(
             expected = np.asarray(decode(Path(files[exported]).read_bytes()).values)
             assert np.array_equal(captured, expected), name
         session.capture(f"mask:{session.gem()}", "caps/gem.png")
-
-        kind, message = session.refusal("painter_viewport", "caps/vp.png", size=[64, 64])
-        assert kind == "UnsupportedInUzPainter", message
-        assert "unsupported_configuration: Legacy" in message and "decision 038" in message, (
-            "the wand is no longer Legacy: render it here (phase1.15_compositor-colour-fits)"
-        )
-        assert not (session.root / "out" / "caps" / "vp.png").exists()
         kind, message = session.refusal("painter_iray", "../../outside.png", "capability_gap")
         assert kind == "PathTracerUnavailable" and "P3-PATHTRACER" in message, message
-        wait_for(lambda: status(pipe)["frames_taken"] >= 1)
-        shown = status(pipe)
-        assert shown["frames_rendered"] == 0 and "decision 038" in shown["last_error"]
 
-        # The OCIO fixture (no layers) is what painter_viewport renders today.
+        shown = wait_for(lambda: (s := status(pipe))["revision_shown"] == session.revision and s)
+        slots = ("BaseColor", "Metalness", "Roughness", "Normal")
+        assert sorted(shown["maps_shown"]) == sorted(f"{TEXTURE_SET}/{s}" for s in slots), shown
+        assert shown["display"] == OCIO_DISPLAY and shown["last_error"] == "", shown
+        if not QUICK:
+            viewport(pipe, "caps/vp.png", session.revision)
+
         assert "error" not in pipe.call("project_close")
+        wait_for(lambda: status(pipe)["revision_shown"] == -1)
         bundle = ocio_bundle(painter, tmp_path / "fixture")
         revision = pipe.call("project_open", {"path": str(bundle)})["result"]["revision"]
-        assert "error" not in pipe.call("evaluate_channel", {"channel": "BaseColor"})
-        wait_for(lambda: status(pipe)["frames_rendered"] >= 1)
-        assert status(pipe)["revision_shown"] == revision
-        reply = pipe.call(
-            "capture", {"mode": "painter_viewport", "path": "ocio/vp.png", "size": [96, 64]}
-        )
-        receipt = reply["result"]
-        assert receipt["revision"] == revision and receipt["backend"] == "dx12"
-        assert receipt["display_configuration"]["config_sha256"] == OCIO_CONFIG
-        assert sha256(receipt["files"]["png"]) == receipt["hashes"]["png"]
+        wait_for(lambda: status(pipe)["revision_shown"] == revision)
+        viewport(pipe, "ocio/vp.png", revision)
         preview_settling.metric("baseline_export_s", baseline["export_s"])
         preview_settling.metric("open_export_s", seconds)
     finally:
@@ -325,9 +335,10 @@ def test_wand_v1_export_with_the_preview_minimised_and_stalled(
 ) -> None:
     """3.2: with the window minimised and then the preview thread stalled by the test hook while
     it holds its frame, the wand's evaluation and export run to the end with the baseline's bytes
-    while no frame is taken (nothing waits on the preview thread); frames are taken again after the
-    resume. An export with the window open is the integration test's; the export times go to the
-    settling report."""
+    while no frame is taken (nothing waits on the preview thread); a commit made then is still
+    evaluated and published by the preview's own thread (decision 248), and frames are taken again
+    after the resume. An export with the window open is the integration test's; the export times
+    go to the settling report."""
     session = Session(painter, tmp_path / "preview", wand_project, "--preview", desktop=desktop)
     try:
         pipe = session.pipe
@@ -343,9 +354,17 @@ def test_wand_v1_export_with_the_preview_minimised_and_stalled(
         held = status(pipe)
         stalled_evaluation = session.evaluate()
         files, seconds = session.export()
+        revision = pipe.call("project_inspect")["result"]["revision"]
+        fill = pipe.call(
+            "run_python",
+            {"code": INSERT_FILL},
+            expected_revision=session.revision,
+            idempotency_key="fill",
+        )
+        assert "error" not in fill and "committed_revision" in fill, fill
+        wait_for(lambda: status(pipe)["frames_published"] > held["frames_published"])
         during = status(pipe)
         assert during["stalled"] and during["frames_taken"] == held["frames_taken"]
-        assert during["frames_published"] > held["frames_published"]
         assert pipe.call("test_fault", {"fault": "preview_resume"})["result"] == {
             "armed": "preview_resume"
         }
@@ -353,7 +372,7 @@ def test_wand_v1_export_with_the_preview_minimised_and_stalled(
 
         assert stalled_evaluation == baseline["evaluated"]
         assert hashes(files) == baseline["exported"]
-        assert pipe.call("project_inspect")["result"]["revision"] == baseline["revision"]
+        assert revision == baseline["revision"]
         preview_settling.metric("baseline_export_s", baseline["export_s"])
         preview_settling.metric("stalled_export_s", seconds)
     finally:

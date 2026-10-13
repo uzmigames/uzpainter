@@ -19,6 +19,20 @@ std::string Unsupported(const std::string& what) {
            Supported();
 }
 
+/// What differs from the pinned configuration; empty for the pinned one.
+std::optional<std::string> Differs(const DisplayConfiguration& config) {
+    if (config.mode.empty() || config.mode == "legacy") {
+        return "Legacy colour management with tone mapping " +
+               (config.toneMapping.empty() ? std::string("Linear") : config.toneMapping);
+    }
+    if (config.mode == "ace") return "ACE colour management";
+    if (config.mode != kOcioMode) return "the colour-management mode '" + config.mode + "'";
+    if (config.configHash.empty()) return "an OCIO project without a config hash";
+    if (config.configHash != kSubstanceConfigSha256) return "the OCIO config sha256 " + config.configHash;
+    if (config.view != kDefaultSrgbView) return "the OCIO view '" + config.view + "'";
+    return std::nullopt;
+}
+
 }  // namespace
 
 DisplayConfiguration PinnedConfiguration() {
@@ -38,18 +52,16 @@ DisplayConfiguration ConfigurationOf(const core::Project& project, std::string_v
 }
 
 std::optional<std::string> UnsupportedConfiguration(const DisplayConfiguration& config) {
-    if (config.mode.empty() || config.mode == "legacy") {
-        return Unsupported("Legacy colour management with tone mapping " +
-                           (config.toneMapping.empty() ? std::string("Linear") : config.toneMapping));
-    }
-    if (config.mode == "ace") return Unsupported("ACE colour management");
-    if (config.mode != kOcioMode) return Unsupported("the colour-management mode '" + config.mode + "'");
-    if (config.configHash.empty()) return Unsupported("an OCIO project without a config hash");
-    if (config.configHash != kSubstanceConfigSha256) {
-        return Unsupported("the OCIO config sha256 " + config.configHash);
-    }
-    if (config.view != kDefaultSrgbView) return Unsupported("the OCIO view '" + config.view + "'");
+    if (std::optional<std::string> what = Differs(config)) return Unsupported(*what);
     return std::nullopt;
+}
+
+std::string DisplayLabel(const DisplayConfiguration& config) {
+    if (std::optional<std::string> what = Differs(config)) {
+        return *what + ": not displayed, the viewport needs OCIO with Painter's substance config and the view '" +
+               std::string(kDefaultSrgbView) + "' (decision 038)";
+    }
+    return "OCIO, Painter's substance config, " + std::string(kDefaultSrgbView) + " (decision 042)";
 }
 
 double SrgbEncode(double linear) {

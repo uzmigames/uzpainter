@@ -22,7 +22,7 @@ Implemented features have different evidence and support limits. Use the
 | Projects | Self-contained `.uzp` files, revisions, save/reopen, recipe inspection and rebuild | No `.spp` reader; migration uses Painter's documented APIs |
 | Texturing | Fill layers, groups, masks, levels, blend modes, uniform and bitmap sources, supported UV projection cases | Colour conversion and texture filtering have bounded support and remaining parity gaps across combinations; consult capabilities and subsystem evidence |
 | Export | PNG and OpenEXR, supported PBR configurations, publication and receipts | Wand export is still under qualification, including UV-island padding |
-| Preview and capture | Read-only viewport, offscreen viewport captures and channel/mask captures | Preview is not render-parity evidence; `painter_iray` is unavailable |
+| Preview and capture | Read-only viewport, offscreen viewport captures and channel/mask captures | Preview is not render-parity evidence; the viewport and its captures need an OCIO project (Legacy is refused, decision 038); `painter_iray` is unavailable |
 | Baking and procedurals | Imported mesh maps; feasibility prototypes and private reference data | Native bakers, editable procedural families and the clean-room path tracer remain future work |
 
 Brush strokes are outside the agreed scope. Arbitrary `.sbsar` execution is unsupported. Unreal

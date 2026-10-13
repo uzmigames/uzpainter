@@ -124,7 +124,13 @@ int RunDisplay() {
         Check(error && error->starts_with("unsupported_configuration: ") && error->find("decision 038") != std::string::npos &&
                   error->find(c.names) != std::string::npos,
               std::string(c.name) + " is unsupported, naming what differs and decision 038", error.value_or("accepted"));
+        const std::string label = DisplayLabel(c.config);
+        Check(label.starts_with(c.names) && label.find(": not displayed") != std::string::npos &&
+                  label.find("decision 038") != std::string::npos,
+              std::string("the preview panel labels ") + c.name + " as not displayed (decision 038)", label);
     }
+    Check(DisplayLabel(pinned) == "OCIO, Painter's substance config, Default - sRGB (decision 042)",
+          "the preview panel labels the pinned configuration", DisplayLabel(pinned));
 
     // Binary16 conversions: every pattern round-trips; ties go to even.
     bool roundTrip = true;

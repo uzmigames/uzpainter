@@ -39,6 +39,7 @@ struct PresetSpec {
     const char* block;     // where the standard defines it
     std::int64_t version;  // of that block
     const char* environment;
+    const char* environment_file;  // what the environment's file is and where it lives (never shipped)
     bool shadows;
     std::array<int, 3> background;
     std::vector<double> rotations;  // accepted environment rotations
@@ -51,8 +52,13 @@ const std::vector<PresetSpec>& Specs() {
     // back and side views: 180, and +-90 whose sign is unverified, so both are accepted as given;
     // decision 132).
     static const std::vector<PresetSpec> specs{
-        {"common", "painter (v2 common block)", 2, kCommonEnvironment, false, {89, 89, 89}, {0.0}},
-        {"ref_match", "presets.ref_match", 3, kRefMatchEnvironment, true, {141, 142, 148}, {0.0, 90.0, -90.0, 180.0, 270.0}},
+        {"common", "painter (v2 common block)", 2, kCommonEnvironment,
+         "Painter's starter environment \"Studio White Soft\", an Adobe asset installed with Painter", false,
+         {89, 89, 89}, {0.0}},
+        {"ref_match", "presets.ref_match", 3, kRefMatchEnvironment,
+         "the render standard's HDRI/TOS-RefMatch-Skeletal-Mage.exr, beside Render-Comparison-Standard.json in "
+         "Pipeline/render of the Assets3D repository (decision 046)",
+         true, {141, 142, 148}, {0.0, 90.0, -90.0, 180.0, 270.0}},
     };
     return specs;
 }
@@ -218,11 +224,18 @@ bool StoresEnvironment(const core::Project& project, const std::string& sha256) 
 }
 
 void RequireEnvironment(const core::Project& project, const std::string& sha256, const std::string& symbol) {
-    if (!StoresEnvironment(project, sha256)) {
-        ThrowResourceNotFound(symbol + ": the project stores no environment " + sha256 +
-                              " (import its file with resource.import_project_resource(path, Usage.ENVIRONMENT)); "
-                              "no substitute is used");
+    if (StoresEnvironment(project, sha256)) return;
+    // A standard preset's environment is named, with where its file lives: UzPainter ships neither.
+    std::string file = ". Import its file";
+    for (const PresetSpec& spec : Specs()) {
+        if (sha256 == spec.environment) {
+            file = std::string("; preset '") + spec.name + "' is lit by " + spec.environment_file +
+                   ", which UzPainter does not ship. Import that file";
+        }
     }
+    ThrowResourceNotFound(symbol + ": the project stores no environment " + sha256 + file +
+                          " first (MCP: resource_import {path, usage: ENVIRONMENT}; Python: "
+                          "resource.import_project_resource(path, Usage.ENVIRONMENT)); no substitute is used");
 }
 
 void CheckValue(const std::string& symbol, const std::string& setting, double value, const std::vector<double>& accepted) {

@@ -9,6 +9,7 @@ This folder holds `painter_viewport`, the realtime preview of `docs/architecture
 | `viewport.{h,cpp}`, `shaders/viewport.hlsl` | The forward pass on the render layer (item 2.2) |
 | `latest.h` | The wait-free hand-over between evaluation and the preview thread (item 2.4) |
 | `preview.{h,cpp}` | The publisher side, the preview thread and its window (items 2.4 and 2.5) |
+| `evaluation.{h,cpp}` | The evaluation of a revision's frame (`EvaluateFrame`) and the attached preview's evaluation thread (`AttachedEvaluation`, decision 248) |
 | `cli.{h,cpp}` | `UzPainter.exe --preview <file.uzp>` (item 2.5) |
 | `scene.cpp` | The viewport scene of a frame (`SceneOf`, `MaterialsOf`, `ChannelFor`), shared by the window and the captures |
 
@@ -50,11 +51,17 @@ The same scene, build, adapter and driver give the same bytes. Kernels are IEEE-
 
 ## Preview thread and window (items 2.4 and 2.5)
 
-- **Publishing.** `PreviewFeed` is called by the thread that evaluates. It keeps the last evaluated map of each texture set and slot, together with the revision, project, mesh and environment bytes. `Publish()` hands a snapshot to the triple buffer of `latest.h`. Only shared pointers are copied. The publisher never waits for, locks against or calls into the preview thread. A stalled or closed reader only means frames are replaced before they are taken.
+- **Evaluating a frame.** `EvaluateFrame` evaluates what the window shows of one revision on a GPU evaluator: the base colour, metalness and roughness of every texture set's first stack, and its combined Normal_OpenGL map.
+  - A project whose display configuration the viewport refuses (Legacy, decision 038) is published without evaluating anything, so the window shows the refusal.
+  - A failed evaluation is recorded in the frame. The window shows it in place of the image, never a material with that map missing.
+  - The texturing mesh is derived again only when the project's mesh reference changes.
+- **Publishing.** `PreviewFeed` is called by the one thread that evaluates the frames. `Update` starts a revision's frame and drops the previous one's maps. The frame holds the evaluated map of each texture set and slot, with the revision, project, mesh and environment bytes, or the failed evaluations. `Publish()` hands the frame to the triple buffer of `latest.h`.
+  - Only shared pointers are copied. The publisher never waits for, locks against or calls into the preview thread.
+  - A stalled or closed reader only means frames are replaced before they are taken.
 - **The preview thread.** `PreviewHost` owns the preview thread. That thread has:
   - its own `render::Engine`, so preview rendering never queues in front of or behind evaluation on the worker's device;
   - the window, through the vendored `platform_window` and `input`. It is read-only, with an orbit camera only: left drag orbits, the wheel zooms.
-  - The camera is fitted to the mesh on the first frame and again only when the project's mesh reference changes. The worker derives a new mesh object for every evaluation; one of the same mesh keeps the user's orbit. `preview_status` counts the fits (`camera_fits`).
+  - The camera is fitted to the mesh on the first frame and again only when the project's mesh reference changes, so an edit keeps the user's orbit. `preview_status` counts the fits (`camera_fits`).
 - **Rendering.** At most one render every 200 ms, and none while the window is minimised.
 - **Presenting (decision 227).** The window is double buffered with GDI. Nothing is ever drawn straight onto the window.
   - **Composing.** Each frame is composed whole in a memory bitmap the size of the client area: the image stretched to the view (HALFTONE), or the message, then the panel and its text. A frame is composed only when something it shows has changed: a new image or message, a newly taken frame's revision, or another client size.
@@ -64,15 +71,26 @@ The same scene, build, adapter and driver give the same bytes. Kernels are IEEE-
   - **Rendering a new frame.** While a new frame renders, and during a live resize (the loop then waits inside Windows' modal size loop), the window keeps showing the last complete frame, stretched to the new size.
   - **No swap chain.** The image is read back for the CPU anyway, so the capture path and its goldens are unchanged.
   - **Counter.** `preview_status` counts the presents (`presents`).
-- **Panel.** The right-hand panel states that `painter_iray` is unavailable: no capture can exist before P3-PATHTRACER. It also gives the display configuration and the revision shown.
+- **Panel.** The right-hand panel states that `painter_iray` is unavailable: no capture can exist before P3-PATHTRACER.
+  - It gives the project's display configuration (`DisplayLabel`). That is "OCIO, Painter's substance config, Default - sRGB (decision 042)" for the pinned one. Otherwise it names what differs and says the viewport does not display it, e.g. "Legacy colour management with tone mapping Linear: not displayed, … (decision 038)".
+  - It also gives the revision shown, or that no project is open.
+  - `preview_status` and the standalone report return the display line as `display`.
 - **Environment.** A project that names no environment is lit by the installation's default, `bin/assets/environments/studio-small-09.exr` checked against its SHA-256 (`DefaultEnvironment`, decision 212); the capture receipt's `environment.default` is then true. A named environment whose bytes are missing fails with no substitute (RES-03).
-- **Errors.** An unsupported configuration, a missing environment or a project without a mesh is shown as text in place of the image.
+- **Errors.** An unsupported configuration, a failed evaluation, a missing environment or a project without a mesh is shown as text in place of the image. A frame without a project shows that no project is open. While a message is shown, `revision_shown` is -1 and `maps_shown` is empty; with an image they name its revision and its maps (`<texture set>/<slot>`).
 - **Stall hook.** `Stall(true)` blocks the thread while it holds its frame. It is the test hook of item 3.2. In a Debug worker it is reached with `test_fault preview_stall` / `preview_resume` (decision 120).
 
 Two ways to run it:
 
-- **Standalone.** `UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan]` opens the project as `run` does, holding its lock. It evaluates the preview's channels of every texture set once and shows the window. On close it prints `UZP_JSON:{"status": "closed", "frames_rendered", "revision_shown", "last_error"}`.
-- **Attached.** `UzPainter.exe --worker … --preview`, or `--mcp … --preview`, which passes the flag to its workers. The worker publishes after every `evaluate_channel`, and lists the GPU-free `preview_status` tool.
+- **Standalone.** `UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan]` opens the project as `run` does, holding its lock. It evaluates the preview's channels of every texture set once (`EvaluateFrame`) and shows the window. On close it prints `UZP_JSON:{"status": "closed", "frames_rendered", "revision_shown", "display", "last_error"}`. A Legacy project exits 0 with `frames_rendered` 0 and the decision-038 refusal in `last_error`.
+- **Attached** (decision 248). `UzPainter.exe --worker … --preview`, or `--mcp … --preview`, which passes the flag to its workers. The worker lists the GPU-free `preview_status` tool.
+  - The window shows the open project's committed revision after `project_open`, `project_create`, a rebuild from a recipe and every committed call. It shows that no project is open once the project closes.
+  - **Hand-over.** The worker hands every change of what its session holds (`python::Session::on_durable_change`) to `AttachedEvaluation`. That class has its own thread and its own device and evaluator. It evaluates the newest committed revision with `EvaluateFrame`, and it is the feed's only publisher. `evaluate_channel` publishes nothing.
+  - **Newest wins.** A revision superseded before its evaluation ends is abandoned and never published; the window keeps the last complete frame.
+  - **Nothing waits.** The worker's request thread and device never wait for the preview. The window's thread never queues a render behind an evaluation.
+  - **Stall hook.** `AttachedEvaluation::Stall(true)` blocks the evaluation thread inside its evaluation, between its steps (after it started a revision's frame, before each map and before publishing). In a Debug worker it is reached with `test_fault preview_evaluation_stall` / `preview_evaluation_resume`, and `preview_status` reports it as `evaluation_stalled`. `test_the_previews_evaluation_never_delays_or_changes_the_workers_results` holds it on the OCIO fixture while the worker evaluates, commits and exports.
+  - **After the window closes.** Nothing more is evaluated.
+  - **Store access.** The evaluation thread reads the project's resources through a `StoreAccess`, one locked read at a time. When the project closes or another one opens, the worker's thread revokes the access within that change. It waits at most for one read in flight. So the store, its lock and an untitled project's folder are released before the call that closed the project returns.
+  - **Cost.** The preview's evaluation still shares the GPU and the CPU with the worker. Export times with and without the preview are settling metrics with no threshold (decision 162).
 
 **Headless (decision 252).** The window is the only one UzPainter can open, and only an explicit `--preview` opens it. `UZP_HEADLESS=1` refuses it. A leading `--headless` (`UzPainter.exe --headless <command> …`), or `--headless` among the options of `--preview` or `--mcp`, sets that variable for the process and its children. While headless, all three entry points refuse the preview as a usage error (exit 2), and the message names the switch:
 

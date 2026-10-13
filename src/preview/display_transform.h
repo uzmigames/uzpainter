@@ -72,6 +72,12 @@ struct DisplayConfiguration {
 /// 'Default - sRGB'".
 [[nodiscard]] std::optional<std::string> UnsupportedConfiguration(const DisplayConfiguration& config);
 
+/// The preview panel's display line for `config`: "OCIO, Painter's substance config, Default -
+/// sRGB (decision 042)" for the pinned configuration; otherwise what differs and that the viewport
+/// does not display it, e.g. "Legacy colour management with tone mapping Linear: not displayed, the
+/// viewport needs OCIO with Painter's substance config and the view 'Default - sRGB' (decision 038)".
+[[nodiscard]] std::string DisplayLabel(const DisplayConfiguration& config);
+
 /// IEC 61966-2-1 sRGB encoding of a linear value in [0, 1], in double.
 [[nodiscard]] double SrgbEncode(double linear);
 

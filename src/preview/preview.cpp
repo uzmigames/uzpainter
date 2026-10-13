@@ -9,7 +9,9 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <string_view>
 #include <vector>
 
 namespace uzp::preview {
@@ -23,6 +25,10 @@ constexpr uint32_t kMaxRenderSide = 1024;
 /// The window property that holds its `BackBuffer` (the vendored window procedure keeps
 /// `GWLP_USERDATA` for itself).
 constexpr wchar_t kBackBufferProperty[] = L"UzPainterPreviewBackBuffer";
+/// What a frame without a project shows: the project was closed.
+constexpr const char* kNoProject = "no project is open";
+/// The names of `MaterialSlot`, in its order.
+constexpr std::array<std::string_view, 4> kSlotNames{"BaseColor", "Metalness", "Roughness", "Normal"};
 
 void FillText(HDC dc, RECT rect, const std::string& text, COLORREF colour) {
     SetTextColor(dc, colour);
@@ -161,7 +167,9 @@ void PreviewFeed::Update(std::int64_t revision, std::shared_ptr<const core::Proj
     const std::string named = project ? project->display.environment.resource.value_or("") : "";
     const bool isDefault = project && named.empty();
     const std::string hash = isDefault ? std::string(kDefaultEnvironmentSha256) : named;
-    if (hash != m_state.environmentHash || isDefault != m_state.environmentDefault) {
+    // Bytes are kept while the hash stays; an environment that could not be read is read again.
+    if (hash != m_state.environmentHash || isDefault != m_state.environmentDefault ||
+        !m_state.environmentError.empty()) {
         m_state.environmentHash = hash;
         m_state.environmentDefault = isDefault;
         m_state.environmentBytes.reset();
@@ -174,21 +182,32 @@ void PreviewFeed::Update(std::int64_t revision, std::shared_ptr<const core::Proj
                 m_state.environmentError = shipped.error();
             }
         } else if (!hash.empty()) {
-            std::optional<std::string> bytes = read(hash);
+            std::optional<std::string> bytes;
+            try {
+                bytes = read(hash);
+            } catch (const std::exception& error) {
+                m_state.environmentError = "the environment sha256 " + hash + " cannot be read: " + error.what();
+            }
             if (bytes) {
                 m_state.environmentBytes = std::make_shared<const std::string>(std::move(*bytes));
-            } else {
+            } else if (m_state.environmentError.empty()) {
                 m_state.environmentError = "missing environment: the project holds no bytes for sha256 " + hash +
                                            " (RES-03: no substitute)";
             }
         }
     }
     m_state.project = std::move(project);
-    if (mesh) m_state.mesh = std::move(mesh);
+    m_state.mesh = std::move(mesh);
+    m_state.maps.clear();
+    m_state.evaluationError.clear();
 }
 
 void PreviewFeed::Record(core::Id set, MaterialSlot slot, EvaluatedMap map) {
     m_state.maps[{set, slot}] = std::move(map);
+}
+
+void PreviewFeed::RecordFailure(const std::string& failure) {
+    m_state.evaluationError += (m_state.evaluationError.empty() ? "" : "\n") + failure;
 }
 
 void PreviewFeed::Publish() { m_frames.Publish(std::make_shared<const PreviewFrame>(m_state)); }
@@ -215,9 +234,11 @@ PreviewStatus PreviewHost::Status() const {
     status.framesRendered = m_rendered;
     status.presents = m_presents;
     status.cameraFits = m_cameraFits;
-    status.revisionShown = m_revisionShown;
     std::lock_guard lock(m_errorMutex);
+    status.revisionShown = m_revisionShown;
     status.lastError = m_lastError;
+    status.mapsShown = m_mapsShown;
+    status.display = m_display;
     return status;
 }
 
@@ -229,6 +250,12 @@ void PreviewHost::Run() {
     const auto setError = [this](std::string error) {
         std::lock_guard lock(m_errorMutex);
         m_lastError = std::move(error);
+    };
+    // What the window shows: the image of a revision with its maps, or a message (-1, none).
+    const auto setShown = [this](std::int64_t revision, std::vector<std::string> maps) {
+        std::lock_guard lock(m_errorMutex);
+        m_mapsShown = std::move(maps);
+        m_revisionShown = revision;
     };
 
     render::EngineOptions engineOptions;
@@ -247,6 +274,7 @@ void PreviewHost::Run() {
     if (!window.Create(desc)) {
         setError(kWindowNotCreated);
         engine.Stop();
+        m_closed = true;
         return;
     }
     HWND hwnd = static_cast<HWND>(window.GetNativeHandle());
@@ -261,6 +289,7 @@ void PreviewHost::Run() {
     bool cameraFitted = false;
     OrbitCamera camera;
     std::string message = "waiting for the first evaluation";
+    std::string display = "-";  // the panel's display line, of the taken frame's project
     std::vector<uint8_t> pixels;  // BGRA, rows top first
     uint32_t imageWidth = 0;
     uint32_t imageHeight = 0;
@@ -268,7 +297,8 @@ void PreviewHost::Run() {
     auto lastRender = std::chrono::steady_clock::now() - m_options.period;
 
     const auto prepare = [&]() -> std::optional<std::string> {
-        if (!current || !current->project) return std::string("waiting for the first evaluation");
+        if (!current) return std::string("waiting for the first evaluation");
+        if (!current->project) return std::string(kNoProject);
         if (sceneOf == current) return std::nullopt;
         std::expected<ViewportScene, std::string> next = SceneOf(*current, lightingCache);
         if (!next) return next.error();
@@ -292,7 +322,9 @@ void PreviewHost::Run() {
             message = *problem;
             pixels.clear();
             imageWidth = imageHeight = 0;
-            if (current) setError(message);
+            // No project open is a state, not an error.
+            if (current) setError(current->project ? message : std::string());
+            setShown(-1, {});
             return;
         }
         const double scale = std::min(1.0, static_cast<double>(kMaxRenderSide) / std::max(viewWidth, viewHeight));
@@ -310,6 +342,7 @@ void PreviewHost::Run() {
             pixels.clear();
             imageWidth = imageHeight = 0;
             setError(message);
+            setShown(-1, {});
             return;
         }
         imageWidth = image->width;
@@ -324,7 +357,14 @@ void PreviewHost::Run() {
         message.clear();
         setError("");
         ++m_rendered;
-        m_revisionShown = current->revision;
+        std::vector<std::string> maps;
+        for (const auto& [key, map] : current->maps) {
+            const auto set = std::find_if(current->project->texture_sets.begin(), current->project->texture_sets.end(),
+                                          [&](const core::TextureSet& s) { return s.id == key.first; });
+            maps.push_back((set == current->project->texture_sets.end() ? std::to_string(key.first) : set->name) + "/" +
+                           std::string(kSlotNames[static_cast<size_t>(key.second)]));
+        }
+        setShown(current->revision, std::move(maps));
     };
 
     // One whole frame of the window, drawn into the back buffer.
@@ -358,8 +398,9 @@ void PreviewHost::Run() {
         SetBkMode(dc, TRANSPARENT);
         const std::string status =
             std::string("painter_viewport - read-only preview, not parity evidence (decision 018)\n\n") +
-            "display: OCIO, Painter's substance config, Default - sRGB (decision 042)\n\n" +
-            (current ? "revision " + std::to_string(current->revision) : std::string("no evaluation yet")) +
+            "display: " + display + "\n\n" +
+            (!current ? std::string("no evaluation yet")
+                      : current->project ? "revision " + std::to_string(current->revision) : std::string(kNoProject)) +
             "\n\nleft drag: orbit    wheel: zoom\n\n";
         FillText(dc, RECT{viewWidth + 12, 12, width - 12, height / 2}, status, RGB(200, 200, 200));
         FillText(dc, RECT{viewWidth + 12, height / 2, width - 12, height - 12}, kIrayUnavailable, RGB(220, 190, 90));
@@ -378,7 +419,10 @@ void PreviewHost::Run() {
             current = std::move(*taken);
             ++m_taken;
             dirty = true;
-            composed = false;  // the panel names the frame's revision
+            composed = false;  // the panel names the frame's revision and display configuration
+            display = current->project ? DisplayLabel(DisplayOf(*current->project)) : std::string("-");
+            std::lock_guard lock(m_errorMutex);
+            m_display = display;
         }
         // Test hook (item 3.2): the thread blocks here, holding `current`.
         while (m_stall && !m_stop) {
@@ -420,6 +464,7 @@ void PreviewHost::Run() {
         MsgWaitForMultipleObjectsEx(0, nullptr, 15, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
     }
     m_windowOpen = false;
+    m_closed = true;
     backBuffer.reset();
     window.Destroy();
     input.Shutdown();

@@ -193,24 +193,39 @@ texture = resource.import_project_resource(CHECKER, resource.Usage.TEXTURE, "tex
 before = (project.revision(), rd.preset())
 preset = rd.presets()[1]
 missing = raises(rd.apply_preset, preset)
+missing_common = raises(rd.apply_preset, rd.presets()[0])
 preset["environment"]["sha256"] = texture.identifier().version
 not_environment = raises(rd.apply_preset, preset)
 as_environment = raises(d.set_environment_resource, texture.identifier())
 not_exr = raises(resource.import_project_resource, CHECKER, resource.Usage.ENVIRONMENT, "e")
 after = (project.revision(), rd.preset())
-result = {"missing": missing, "not_environment": not_environment, "as_environment": as_environment,
-          "not_exr": not_exr, "unchanged": before == after,
+result = {"missing": missing, "missing_common": missing_common, "not_environment": not_environment,
+          "as_environment": as_environment, "not_exr": not_exr, "unchanged": before == after,
           "environment": d.get_environment_resource()}
 """
 
 
 def test_missing_environment_fails_without_substitute(run: Run) -> None:
     """3.2: a preset naming an environment the project does not store raises
-    `ResourceNotFoundError`; nothing changes and no other environment is used."""
+    `ResourceNotFoundError`; nothing changes and no other environment is used. The error names the
+    standard preset's environment file and where it lives, which UzPainter does not ship, and how
+    to import it (B12 of the practical end-to-end report: an MCP client could not tell which file
+    `ref_match` needs)."""
     result = ok(run(MISSING))
     assert result["missing"].startswith("ResourceNotFoundError: ")
     assert "77eeed8de580113581d50258e0ab3dd055aa29fa7d5ab614f2599ce036e0841d" in result["missing"]
     assert "no substitute" in result["missing"]
+    for named in (
+        "preset 'ref_match' is lit by the render standard's HDRI/TOS-RefMatch-Skeletal-Mage.exr",
+        "Pipeline/render of the Assets3D repository",
+        "which UzPainter does not ship",
+        "resource_import {path, usage: ENVIRONMENT}",
+        "resource.import_project_resource(path, Usage.ENVIRONMENT)",
+    ):
+        assert named in result["missing"], named
+    assert result["missing_common"].startswith("ResourceNotFoundError: ")
+    assert "preset 'common' is lit by Painter's starter environment" in result["missing_common"]
+    assert '"Studio White Soft"' in result["missing_common"]
     assert result["not_environment"].startswith("ResourceNotFoundError: ")
     assert result["as_environment"].startswith("ResourceNotFoundError: ")
     assert (

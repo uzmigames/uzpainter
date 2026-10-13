@@ -40,6 +40,7 @@
 #include "mesh/import_error.h"
 #include "mesh/reload.h"
 #include "preview/cli.h"
+#include "preview/evaluation.h"
 #include "preview/preview.h"
 #include "python/capture.h"
 #include "python/diagnostics.h"
@@ -295,14 +296,14 @@ class Worker {
 public:
     using Emit = std::function<void(const json::Object& frame)>;
 
-    Worker(const Options& options, render::Engine& engine, JobControl& jobs, Emit emit, preview::PreviewFeed* feed,
-           preview::PreviewHost* host)
+    Worker(const Options& options, render::Engine& engine, JobControl& jobs, Emit emit, preview::PreviewHost* host,
+           preview::AttachedEvaluation* evaluation)
         : m_options(options),
           m_engine(engine),
           m_jobs(jobs),
           m_emit(std::move(emit)),
-          m_previewFeed(feed),
-          m_previewHost(host) {
+          m_previewHost(host),
+          m_previewEvaluation(evaluation) {
         DefineTools();
     }
 
@@ -378,9 +379,11 @@ private:
     std::optional<json::Object> m_job_receipt;
     std::unique_ptr<evaluator::Evaluator> m_evaluator;
     std::uint64_t m_payloads = 0;
-    /// The attached preview (`--preview`): every evaluation is published to it, never waited for.
-    preview::PreviewFeed* m_previewFeed = nullptr;
+    /// The attached preview (`--preview`): its window, for `preview_status` and the stall hook. It is
+    /// fed by its own evaluation thread (preview/evaluation.h), never by a call.
     preview::PreviewHost* m_previewHost = nullptr;
+    /// The attached preview's evaluation thread, for `preview_status` and its stall hook.
+    preview::AttachedEvaluation* m_previewEvaluation = nullptr;
     /// The admitted request of the mutating call being handled (a typed tool submits it as is).
     std::optional<core::MutationRequest> m_mutation;
 };
@@ -559,8 +562,13 @@ void Worker::DefineTools() {
                                        {"description", "[width, height]; painter_viewport needs it."}}},
                  {"samples", json::Object{{"type", "integer"}, {"description", "painter_viewport: 1."}}},
                  {"seed", json::Object{{"type", "integer"}, {"minimum", 0}}},
-                 {"preset", json::Object{{"type", json::Array{"string", "object"}},
-                                         {"description", "painter_viewport: a standard preset's name or a whole preset."}}},
+                 {"preset",
+                  json::Object{{"type", json::Array{"string", "object"}},
+                               {"description",
+                                "painter_viewport: a standard preset's name or a whole preset. The project must store "
+                                "the preset's environment (resource_import, usage ENVIRONMENT), which UzPainter does "
+                                "not ship: for 'ref_match' the render standard's HDRI/TOS-RefMatch-Skeletal-Mage.exr "
+                                "(Assets3D Pipeline/render), for 'common' Painter's \"Studio White Soft\"."}}},
                  {"texture_set",
                   json::Object{{"type", "string"},
                                {"description", "base_color, channel:<name>: the texture set; the active one when omitted."},
@@ -607,7 +615,9 @@ void Worker::DefineTools() {
             [this](const json::Object& a) { return RunPython(a); });
     }
     if (m_previewHost) {
-        add({"preview_status", "The attached preview: window, frames published, taken, rendered and presented, last error.",
+        add({"preview_status",
+             "The attached preview: window, frames published, taken, rendered and presented, the revision and maps "
+             "shown, the display line, last error.",
              Schema({}, {}), false, false},
             [this](const json::Object& a) { return PreviewStatus(a); });
     }
@@ -618,6 +628,8 @@ void Worker::DefineTools() {
         if (m_previewHost) {
             faults.push_back("preview_stall");
             faults.push_back("preview_resume");
+            faults.push_back("preview_evaluation_stall");
+            faults.push_back("preview_evaluation_resume");
         }
         add({"test_fault", "Test-only fault hook (Debug builds under --test-faults).",
              Schema({{"fault", json::Object{{"type", "string"}, {"enum", std::move(faults)}}}},
@@ -1252,23 +1264,6 @@ json::Object Worker::EvaluateChannel(const json::Object& arguments) {
     render::Result<evaluator::ChannelResult> result = m_evaluator->Evaluate(snapshot, std::move(request)).get();
     if (!result) FailRender(result.error());
     const auto evaluated = std::make_shared<const evaluator::ChannelResult>(std::move(*result));
-    if (m_previewFeed) {
-        // The preview takes the newest published state when it wants a frame; publishing never
-        // waits for it (preview/latest.h).
-        m_previewFeed->Update(snapshot.revision, snapshot.project, texturing,
-                              [store](const std::string& sha256) -> std::optional<std::string> {
-                                  try {
-                                      return store->ReadResource(sha256);
-                                  } catch (const store::StoreError& error) {
-                                      if (error.code() == store::StoreError::Code::missing_resource) return std::nullopt;
-                                      throw;
-                                  }
-                              });
-        if (const std::optional<preview::MaterialSlot> slot = preview::SlotOf(*channel)) {
-            m_previewFeed->Record(set->id, *slot, evaluated);
-        }
-        m_previewFeed->Publish();
-    }
 
     // The texels of every tile in order (constant tiles contribute none), under the output root.
     std::string texels;
@@ -1356,14 +1351,19 @@ json::Object Worker::CaptureTool(const json::Object& arguments) {
 
 json::Object Worker::PreviewStatus(const json::Object&) {
     const preview::PreviewStatus status = m_previewHost->Status();
+    json::Array maps;
+    for (const std::string& map : status.mapsShown) maps.push_back(map);
     return {{"window_open", status.windowOpen},
             {"stalled", status.stalled},
+            {"evaluation_stalled", m_previewEvaluation != nullptr && m_previewEvaluation->Stalled()},
             {"frames_published", static_cast<std::int64_t>(status.framesPublished)},
             {"frames_taken", static_cast<std::int64_t>(status.framesTaken)},
             {"frames_rendered", static_cast<std::int64_t>(status.framesRendered)},
             {"presents", static_cast<std::int64_t>(status.presents)},
             {"camera_fits", static_cast<std::int64_t>(status.cameraFits)},
             {"revision_shown", status.revisionShown},
+            {"maps_shown", maps},
+            {"display", status.display},
             {"last_error", status.lastError}};
 }
 
@@ -1550,6 +1550,10 @@ json::Object Worker::TestFault(const json::Object& arguments) {
     const std::optional<std::string> name = StringField(arguments, "fault");
     if (m_previewHost && (name == "preview_stall" || name == "preview_resume")) {
         m_previewHost->Stall(name == "preview_stall");
+        return {{"armed", *name}};
+    }
+    if (m_previewEvaluation && (name == "preview_evaluation_stall" || name == "preview_evaluation_resume")) {
+        m_previewEvaluation->Stall(name == "preview_evaluation_stall");
         return {{"armed", *name}};
     }
     const std::optional<fault::Fault> parsed = name ? fault::Parse(*name) : std::nullopt;
@@ -1766,24 +1770,33 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
         }
     }).detach();
 
-    // What the worker durably holds goes to the supervisor after every commit and project switch,
-    // before the call that caused it can reply: a reply lost to a crash loses neither.
-    python::Session::Get().on_durable_change = [reader_pipe] {
-        if (!reader_pipe->Write(EncodeFrame(RevisionEvent()))) Exit(kWorkerExitSupervisorGone);
-    };
-
-    // The attached preview runs on its own thread with its own device; the process ends without
-    // joining it (every end of the worker terminates the process).
-    std::shared_ptr<preview::PreviewFeed> preview_feed;
+    // The attached preview runs on its own threads with its own devices: the window, and the
+    // evaluation of every committed revision it shows (decision 248). The process ends without
+    // joining them (every end of the worker terminates the process).
     std::unique_ptr<preview::PreviewHost> preview_host;
+    std::unique_ptr<preview::AttachedEvaluation> preview_evaluation;
     if (options.preview) {
-        preview_feed = std::make_shared<preview::PreviewFeed>();
+        auto preview_feed = std::make_shared<preview::PreviewFeed>();
         preview::PreviewOptions preview_options;
         preview_options.backend = options.backend;
         preview_options.deadline = options.gpu_deadline;
         preview_options.title = "UzPainter preview - worker " + std::to_string(GetCurrentProcessId());
         preview_host = std::make_unique<preview::PreviewHost>(preview_options, preview_feed);
+        preview_evaluation = std::make_unique<preview::AttachedEvaluation>(
+            options.backend, options.gpu_deadline, preview_feed,
+            [host = preview_host.get()] { return host->Closed(); });
     }
+
+    // What the worker durably holds goes to the supervisor after every commit and project switch,
+    // before the call that caused it can reply: a reply lost to a crash loses neither. The attached
+    // preview is handed the same change first, so a closed project's store is released before then.
+    python::Session::Get().on_durable_change = [reader_pipe, evaluation = preview_evaluation.get()] {
+        if (evaluation) {
+            python::Session& session = python::Session::Get();
+            evaluation->Committed(session.IsOpen() ? session.Current() : nullptr);
+        }
+        if (!reader_pipe->Write(EncodeFrame(RevisionEvent()))) Exit(kWorkerExitSupervisorGone);
+    };
     // `painter_viewport` captures (also those of `run_python`) render on the worker's engine.
     python::SetCaptureGpu(options.backend, &engine);
     Worker worker(
@@ -1791,7 +1804,7 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
         [reader_pipe](const json::Object& frame) {
             if (!reader_pipe->Write(EncodeFrame(frame))) Exit(kWorkerExitSupervisorGone);
         },
-        preview_feed.get(), preview_host.get());
+        preview_host.get(), preview_evaluation.get());
     // The interpreter's thread holds the GIL only while Python runs (`run_python`).
     pybind11::gil_scoped_release release;
     for (;;) {

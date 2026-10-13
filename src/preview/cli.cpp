@@ -1,10 +1,9 @@
 #include "preview/cli.h"
 
 #include "evaluator/evaluator.h"
-#include "evaluator/geometry_mask.h"
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
-#include "mesh/reload.h"
+#include "preview/evaluation.h"
 #include "python/session.h"
 #include "render/backend.h"
 #include "render/engine_thread.h"
@@ -35,9 +34,6 @@ bool IsPreviewCommand(std::string_view first) { return first == "--preview"; }
 
 std::vector<std::string> EvaluateForPreview(const python::OpenProject& open, evaluator::Evaluator& evaluator,
                                             PreviewFeed& feed) {
-    std::vector<std::string> failures;
-    const core::Snapshot snapshot = open.document->snapshot();
-    const core::Project& project = *snapshot.project;
     store::ProjectStore* store = open.store.get();
     const ResourceReader read = [store](const std::string& sha256) -> std::optional<std::string> {
         try {
@@ -49,55 +45,8 @@ std::vector<std::string> EvaluateForPreview(const python::OpenProject& open, eva
     };
     auto resources = std::make_shared<evaluator::DecodingResourceProvider>(
         [read](std::string_view sha256) { return read(std::string(sha256)); });
-    std::shared_ptr<const mesh::TexturingMesh> mesh;
-    std::shared_ptr<evaluator::MeshGeometryMasks> geometry;
-    if (project.mesh) {
-        mesh::ImportResult imported =
-            mesh::RederiveMesh(project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
-        mesh = std::make_shared<const mesh::TexturingMesh>(std::move(imported.mesh));
-        geometry = std::make_shared<evaluator::MeshGeometryMasks>(mesh);
-    }
-    feed.Update(snapshot.revision, snapshot.project, mesh, read);
-
-    for (const core::TextureSet& set : project.texture_sets) {
-        if (set.stacks.empty()) continue;
-        const core::Stack& stack = set.stacks.front();
-        for (MaterialSlot slot : {MaterialSlot::BaseColor, MaterialSlot::Metalness, MaterialSlot::Roughness}) {
-            const std::optional<core::ChannelType> channel = ChannelFor(stack, slot);
-            if (!channel) continue;
-            evaluator::EvaluateRequest request;
-            request.textureSet = set.id;
-            request.stack = stack.id;
-            request.channel = *channel;
-            request.templateId = project.settings.template_id;
-            request.resources = resources;
-            request.geometry = geometry;
-            render::Result<evaluator::ChannelResult> result = evaluator.Evaluate(snapshot, std::move(request)).get();
-            if (!result) {
-                failures.push_back(set.name + " " + std::string(core::ToString(*channel)) + ": " +
-                                   result.error().Describe());
-                continue;
-            }
-            feed.Record(set.id, slot, std::make_shared<const evaluator::ChannelResult>(std::move(*result)));
-        }
-        evaluator::VirtualNormalRequest normal;
-        normal.textureSet = set.id;
-        normal.stack = stack.id;
-        normal.kind = evaluator::NormalSourceKind::Combined;
-        normal.convention = core::NormalMapFormat::OpenGL;
-        normal.templateId = project.settings.template_id;
-        normal.resources = resources;
-        normal.geometry = geometry;
-        render::Result<evaluator::VirtualNormalResult> combined = evaluator.EvaluateNormal(snapshot, std::move(normal)).get();
-        if (!combined) {
-            failures.push_back(set.name + " Normal_OpenGL: " + combined.error().Describe());
-        } else {
-            feed.Record(set.id, MaterialSlot::Normal,
-                        std::make_shared<const evaluator::VirtualNormalResult>(std::move(*combined)));
-        }
-    }
-    feed.Publish();
-    return failures;
+    MeshCache meshes;
+    return *EvaluateFrame(open.document->snapshot(), read, resources, evaluator, meshes, feed);
 }
 
 int RunPreviewCommand(const std::vector<std::string>& args, std::FILE* out, std::FILE* err) {
@@ -171,6 +120,7 @@ int RunPreviewCommand(const std::vector<std::string>& args, std::FILE* out, std:
     const core::json::Object report{{"status", "closed"},
                                     {"frames_rendered", static_cast<std::int64_t>(status.framesRendered)},
                                     {"revision_shown", status.revisionShown},
+                                    {"display", status.display},
                                     {"last_error", status.lastError}};
     std::fprintf(out, "UZP_JSON:%s\n", core::json::WriteCanonical(core::json::Value(report)).c_str());
     std::fflush(out);
