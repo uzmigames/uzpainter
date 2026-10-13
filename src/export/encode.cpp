@@ -192,7 +192,7 @@ std::optional<uint16_t> OcioSrgbPng16Code(float v) {
     return kOcioSrgbPng16[it - operands.begin()];
 }
 
-EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster) {
+EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster, const Coverage* coverage) {
     if (file.layout == FileLayout::Statistics) {
         if (!raster.statistics) throw std::invalid_argument("export: a statistics file without statistics");
         return {*raster.statistics, FileLayout::Statistics};
@@ -223,6 +223,9 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster) {
                 image.values.push_back(half ? evaluator::arith::HalfToFloat(evaluator::arith::HalfTowardZero(v)) : v);
             }
         }
+        if (coverage != nullptr && ApplyPadding(file, *coverage, written, image.values) && half) {
+            for (float& v : image.values) v = evaluator::arith::HalfToFloat(evaluator::arith::HalfTowardZero(v));
+        }
         return {EncodeExr(image), layout};
     }
     // PNG 8 and 16: the UNORM write rule at the file's depth (R-090 P1), of the sRGB encode of an
@@ -246,6 +249,20 @@ EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster) {
             }
             if (encoded) v = SrgbExportEncode(v);
             image.samples.push_back(static_cast<uint16_t>(evaluator::arith::WriteUnorm(v, bits)));
+        }
+    }
+    if (coverage != nullptr) {
+        // The codes as UNORM operands, padded; the filled texels written back by the write rule.
+        std::vector<float> stored(image.samples.size());
+        for (size_t i = 0; i < stored.size(); ++i) stored[i] = evaluator::arith::UnormOperand(image.samples[i], bits);
+        if (ApplyPadding(file, *coverage, written, stored)) {
+            for (size_t t = 0; t < texels; ++t) {
+                if (coverage->covered[t] != 0) continue;
+                for (uint32_t c = 0; c < written; ++c) {
+                    image.samples[t * written + c] =
+                        static_cast<uint16_t>(evaluator::arith::WriteUnorm(stored[t * written + c], bits));
+                }
+            }
         }
     }
     return {EncodePng(image), layout};

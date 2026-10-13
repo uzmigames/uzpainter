@@ -218,6 +218,48 @@
       "approved_by": "owner",
       "approved_on": "2026-10-11",
       "notes": "The evaluator equals r1 exactly on s5's BaseColor at PNG 16, PNG 8 and OpenEXR 32f (phase1.15_compositor-colour-fits item 2.4, decision 152). The OCIO twin export-ocio-encode shares the domain but is unrecorded (Session O); its comparisons need their own evidence and a new version of this entry if it is unstable. Entered under decision 032's standing approval; flagged for the owner's review."
+    },
+    {
+      "exception_id": "EXC-007",
+      "version": 1,
+      "tier": "1",
+      "domain": {
+        "kind": "asset_map",
+        "selector": "tier1/pilot/wand-v1"
+      },
+      "bounds": [
+        {
+          "metric": "max_abs_diff",
+          "scope": "covered",
+          "max": 0
+        }
+      ],
+      "evidence": {
+        "basis": "owner_scope_split",
+        "summary": "Painter's `infinite` padding outside the UV islands is stable (the Wand's r1, r1-repeat and r2 are byte-identical on all 3 685 999 padding texels of its five maps) but not identified: the exact ring across UV seams, at seam corners, at poles and on turned or narrow borders is unknown after eight fitting passes (decisions 176 to 220). The best-known rule misses Painter by up to 59 150 PNG 16 codes on the Wand, and already on the one-texel ring (N = 1), so no band of exact padding is reachable (decision 223, measurements). The owner delegated the choice to the model panel (2026-10-13, verbatim: \"n sei oq quer dizer isso, fale com outros modelos disponiveis no 9 router\"); the panel chose by majority to except the texels outside the texture set's texel-centre UV coverage (tools/parity/coverage.py, equal to Painter's on the position-encoded padding probes) and to hold the covered texels exactly equal. This entry bounds only the covered texels (max |delta| 0); the uncovered texels may differ and every report publishes them per map (padding block: covered, uncovered, and within 1, 2, 4 and 8 texels of coverage). It covers the Wand v1 Tier 1 golden only; another asset needs a new version with its own measurements. The entry is narrowed by a new version as parts of the rule become exact (phase1.25_pilot-wand item 2.7).",
+        "private_evidence": [
+          {
+            "sha256": "9ff068c77c2c953773695c50f1d067a2d5f46367d8fe064981e8f87b26377d83",
+            "description": "private golden record of tier1/pilot/wand-v1 (recording R9): r1, r1-repeat and r2, the five exported maps of each and their blob hashes"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_owner_scope_split_catches_injected_defects",
+        "injected_defects": [
+          "one_covered_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_covered_region",
+          "no_coverage_mask",
+          "coverage_mask_of_another_size"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "223",
+      "approved_by": "owner",
+      "approved_on": "2026-10-13",
+      "notes": "Approved on the owner's delegation to the model panel (decision 223: OPTION-2G, 2 of 3; GPT voted a bounded Wand-only variant, whose Wand-only scope is taken). The padding written is decision 223's coverage-only rule (src/export/padding.h). Flagged for the owner's review: he may withdraw or replace these terms by a new version."
     }
   ]
 }

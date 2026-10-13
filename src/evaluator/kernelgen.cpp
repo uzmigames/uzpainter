@@ -291,7 +291,7 @@ std::array<uint32_t, kBlendParamsStride> EncodeProjectParams(const ProjectOp& op
     params[28] = op.signedRange ? 1u : 0u;
     params[29] = bindings.chainSrv;
     params[30] = bindings.tablesSrv;
-    params[31] = bindings.chainSrv != 0 && op.image && op.image->srgb8 ? 1u : 0u;
+    params[31] = op.image && op.image->srgb8 ? 1u : 0u;
     if (bindings.chainSrv != 0) {
         // Minification reads Painter's float32 matrix in place of the double transform.
         const std::array<float, 6> m = PainterMatrix(op.projection);

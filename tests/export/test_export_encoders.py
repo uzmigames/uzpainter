@@ -689,37 +689,118 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
         assert files_under(out) == {}, (channel, fmt)
 
 
+def reference_padding(values: np.ndarray, covered: np.ndarray) -> np.ndarray:
+    """Decision 223's `infinite` padding (src/export/padding.h), written again independently:
+    the ring from the covered 8-neighbours (x wraps), then the jump flood over covered and ring."""
+    height, width, _ = values.shape
+    out = values.astype(np.float32).copy()
+    f = 0.4142245
+    diagonal = f / (1.0 - f)
+    shift = 24.875 * 2.0**-15
+    weaken = (diagonal - shift * (1.0 + diagonal)) / (diagonal * (1.0 + shift))
+    seed = covered.copy()
+    for y, x in zip(*np.nonzero(~covered), strict=True):
+        near = [
+            (dy, dx, y + dy, (x + dx) % width)
+            for dy, dx in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+            if 0 <= y + dy < height and covered[y + dy, (x + dx) % width]
+        ]
+        if not near:
+            continue
+        seed[y, x] = True
+        taps = [values[yy, xx] for _, _, yy, xx in near]
+        if all(np.array_equal(taps[0], tap) for tap in taps):
+            out[y, x] = taps[0]
+            continue
+        rows, cols = {n[0] for n in near}, {n[1] for n in near}
+        flat = len(near) == 3 and len(rows) == 1 and 0 not in rows and cols == {-1, 0, 1}
+        upright = len(near) == 3 and len(cols) == 1 and 0 not in cols and rows == {-1, 0, 1}
+        total, weights = np.zeros(values.shape[2]), 0.0
+        for dy, dx, yy, xx in near:
+            w = 1.0 if dy == 0 or dx == 0 else diagonal
+            w *= weaken if (flat and dx == -1) or (upright and dy == 1) else 1.0
+            total = total + w * values[yy, xx].astype(np.float64)
+            weights += w
+        mean = (total / weights).astype(np.float32)
+        out[y, x] = np.float32(1.0) - (np.float32(1.0) - mean)
+    ys, xs = np.mgrid[0:height, 0:width]
+    sy, sx = np.where(seed, ys, -1), np.where(seed, xs, -1)
+    big = np.iinfo(np.int64).max
+    k = max(width, height) // 2
+    while k >= 1:
+        by, bx = sy.copy(), sx.copy()
+        best = np.where(by >= 0, (by - ys) ** 2 + (bx - xs) ** 2, big)
+        for dy, dx in ((0, 1), (0, -1), (-1, 0), (1, 0), (-1, 1), (1, -1), (-1, -1), (1, 1)):
+            cy, cx = np.full_like(sy, -1), np.full_like(sx, -1)
+            y0, y1 = max(0, -dy * k), min(height, height - dy * k)
+            x0, x1 = max(0, -dx * k), min(width, width - dx * k)
+            cy[y0:y1, x0:x1] = sy[y0 + dy * k : y1 + dy * k, x0 + dx * k : x1 + dx * k]
+            cx[y0:y1, x0:x1] = sx[y0 + dy * k : y1 + dy * k, x0 + dx * k : x1 + dx * k]
+            d = np.where(cy >= 0, (cy - ys) ** 2 + (cx - xs) ** 2, big)
+            better = d < best
+            by, bx = np.where(better, cy, by), np.where(better, cx, bx)
+            best = np.where(better, d, best)
+        sy, sx = by, bx
+        k //= 2
+    gutter = ~seed & (sy >= 0)
+    out[gutter] = out[sy[gutter], sx[gutter]]
+    return out
+
+
 def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
-    """2.2 (decision 090): on the sphere, whose UV islands leave texels uncovered:
-    - `infinite` padding is refused naming R-090, nothing written;
+    """2.2 (decision 090) and decision 223: on the sphere, whose UV islands leave texels uncovered:
+    - `infinite` padding is written (exception EXC-007): the covered texels hold their evaluated
+      values, and the OpenEXR 32f Height equals the padding of padding.h written independently
+      (`reference_padding`) over the coverage of `tools.parity.coverage`, value for value;
+    - a virtualMap source with `infinite` is written; with `passthrough` it is refused (not
+      recorded outside the islands);
     - `passthrough` writes every texel's evaluated value (the L16 roughness holds the ramp's codes
       inside and outside the islands);
-    - a virtualMap source with `passthrough` is refused (not recorded outside the islands);
     - without a texturing mesh the export fails before writing."""
+    from tools.parity.coverage import coverage, obj_triangles
     from tools.parity.feasibility import png
+    from tools.parity.fit.decode import decode
 
+    covered = coverage(obj_triangles(SPHERE, "uzp_sphere"), 256, 256)
+    assert 0 < covered.sum() < covered.size
     sphere = spec(tmp_path / "sphere", SPHERE, "uzp_sphere")
-    out = tmp_path / "infinite"
-    result = export(export_tests, sphere, config(out, root="uzp_sphere"), tmp_path / "run-infinite")
-    assert result.get("error") == "NotYetSupported", result
-    assert "do not cover the whole tile" in result["message"] and "R-090" in result["message"]
-    assert files_under(out) == {}
-
     out = tmp_path / "passthrough"
     cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
     result = export(export_tests, sphere, cfg, tmp_path / "run-passthrough")
     assert "error" not in result, result
     rough = png.decode((out / "maps" / "uzp_sphere_Roughness.png").read_bytes()).astype(np.int64)
     assert np.array_equal(rough.reshape(256, 256), ramp_codes())
+    evaluated = decode((out / "uzp_sphere_Height.exr").read_bytes()).values
 
-    out = tmp_path / "virtual"
-    cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
-    cfg["exportPresets"][0]["maps"] = [
+    out = tmp_path / "infinite"
+    result = export(export_tests, sphere, config(out, root="uzp_sphere"), tmp_path / "run-infinite")
+    assert "error" not in result, result
+    padded = png.decode((out / "maps" / "uzp_sphere_Roughness.png").read_bytes()).astype(np.int64)
+    padded = padded.reshape(256, 256)
+    assert np.array_equal(padded[covered], ramp_codes()[covered])
+    assert not np.array_equal(padded[~covered], ramp_codes()[~covered])
+    height = decode((out / "uzp_sphere_Height.exr").read_bytes()).values
+    height, evaluated = height.reshape(256, 256, -1), evaluated.reshape(256, 256, -1)
+    expected = reference_padding(evaluated.astype(np.float32), covered)
+    assert np.array_equal(height.astype(np.float32).view(np.uint32), expected.view(np.uint32))
+
+    normal = [
         {
             "fileName": "$textureSet_n",
             "channels": [chan(c, "virtualMap", "Normal_OpenGL") for c in "RGB"],
         }
     ]
+    out = tmp_path / "virtual-infinite"
+    cfg = config(out, root="uzp_sphere")
+    cfg["exportPresets"][0]["maps"] = normal
+    cfg["exportParameters"] = cfg["exportParameters"][:1]
+    result = export(export_tests, sphere, cfg, tmp_path / "run-virtual-infinite")
+    assert "error" not in result, result
+    assert list(files_under(out)) == ["uzp_sphere_n.png"]
+
+    out = tmp_path / "virtual"
+    cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
+    cfg["exportPresets"][0]["maps"] = normal
     cfg["exportParameters"] = cfg["exportParameters"][:1]
     result = export(export_tests, sphere, cfg, tmp_path / "run-virtual")
     assert result.get("error") == "NotYetSupported", result
@@ -787,6 +868,25 @@ def test_processing_reproduces_painter_files(
     assert processed["identical"] == processed["cases"]
     assert processed["layouts"]["LA"] > 0 and processed["layouts"]["RGBA"] > 0
     assert sum(processed["srgb8_cases"].values()) == 2 * 8 * 3 * 3
+
+
+def test_infinite_padding_on_islands_keeps_covered_texels_exact(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 223 (EXC-007): every r1 `infinite` file of the recorded padding goldens, padded by
+    ApplyPadding from Painter's OpenEXR 32f file of the map over the golden's mesh, equals
+    Painter's file exactly on every covered texel (PNG 8, PNG 16, OpenEXR); the export's coverage
+    equals `tools.parity.coverage`'s, and on the position-encoded probes that coverage is exactly
+    the texels holding their own centre (Painter's). The padding texels differ (the exact rule is
+    open, item 2.7); their max |delta| is printed, never asserted."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.padding_goldens(export_tests, tmp_path / "padding")
+    files = report["files"]
+    assert len({f["golden"] for f in files}) == len(encoders_tier0.PADDING_GOLDENS)
+    assert [f for f in files if not f["coverage_equal"] or not f["covered_equal"]] == []
+    assert report["position_probe_mismatches"] == dict.fromkeys(encoders_tier0.POSITION_PROBES, 0)
+    print(json.dumps(files, indent=1))
 
 
 def test_srgb8_material_channels_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:

@@ -140,17 +140,6 @@ EXCLUDED: dict[str, dict[str, str]] = {
         f"phase1-srgb-uniform-decode-ocio-part{part}": excluded(OCIO_NATIVE, "uzp_plane/basecolor")
         for part in range(1, 5)
     },
-    # The L8 and L16F maps and the colour mask (decision 218) and the Normal map (decision 226) are
-    # exact.
-    "phase1-fill-channel-defaults": {
-        **excluded(
-            "BaseColor magnifies the 8-bit sRGB checker 16 times: Painter's sRGB8 texture "
-            "filter (decision 209's single-probe rule) differs from the evaluator's float32 "
-            "filter by one sRGB8 code on 8 264 texels (phase1.15_compositor-colour-fits item "
-            "2.7, decision 218)",
-            "uzp_plane/basecolor",
-        ),
-    },
     "phase1-delete-node": excluded(UID_VALUE, "s17/uid"),
     "phase1-resource-update": excluded(UID_VALUE, "s14/uid", "s15/uid"),
     "insert-positions": {
@@ -588,11 +577,11 @@ def test_facade_legacy_uniform_decode_equals_painter(
 
 
 def test_facade_fill_channel_defaults_equal_painter(facade: Run, tmp_path: Path) -> None:
-    """phase1.15 items 2.1 and 2.9 (decisions 214, 218 and 226): a fill's default sources after the
-    active-channel reset, the bitmaps' default and available colour spaces, and the BaseMetalness,
-    Height and SpecularRoughness maps (the colour checker on L8 and L16F and as a mask source) and
-    the Normal map (the checker and the grey bitmap on RGB16F), both recordings (BaseColor is
-    `EXCLUDED`)."""
+    """phase1.15 items 2.1, 2.7 and 2.9 (decisions 214, 218, 224 and 226): a fill's default sources
+    after the active-channel reset, the bitmaps' default and available colour spaces, and all five
+    maps, both recordings: BaseColor (the 8-bit sRGB checker magnified 16 times through the sRGB8
+    texture filter), BaseMetalness, Height and SpecularRoughness (the colour checker on L8 and L16F
+    and as a mask source) and Normal (the checker and the grey bitmap on RGB16F)."""
     differences = compare(DEFAULTS_PROBE, facade, tmp_path)
     assert differences == [], "\n".join(differences)
 

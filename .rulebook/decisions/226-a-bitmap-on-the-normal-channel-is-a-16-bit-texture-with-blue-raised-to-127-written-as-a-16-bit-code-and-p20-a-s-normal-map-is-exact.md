@@ -52,7 +52,7 @@ No model panel was consulted. The rule is read from the recordings, and the scop
 
 ## Consequences
 
-- P20-A's Normal map is exact. Of P20-A's maps, only BaseColor stays open (item 2.7, decision 218).
+- P20-A's Normal map is exact. With BaseColor (decision 224), all five P20-A maps are exact, nothing is excluded from `test_facade_fill_channel_defaults_equal_painter`, and item 2.9 is done.
 - These cases are modelled by the same texture rule but are not recorded:
   - a magnified or minified 16-bit normal map: its result is now written as a 16-bit code, and its blue is not clamped;
   - an 8-bit normal map at 1:1 with a blue code below 127: it now stores 127.

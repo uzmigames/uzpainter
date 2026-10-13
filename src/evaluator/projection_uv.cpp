@@ -155,19 +155,14 @@ bool Minifies(const UvProjection& projection, uint32_t setWidth, uint32_t setHei
 
 tu::Chain BitmapChain(const DecodedImage& image) {
     if (image.srgb8) {
-        // The codes behind the decodes: the decode table rises strictly.
-        const std::array<float, 256>& decode = arith::Srgb8OperandTable();
+        // The codes behind the decodes.
         std::vector<uint8_t> codes(size_t{image.width} * image.height * 3);
         for (uint32_t row = 0; row < image.height; ++row) {
             const uint32_t y = image.height - 1 - row;  // the GPU's rows go bottom up
             for (uint32_t x = 0; x < image.width; ++x) {
                 for (uint32_t c = 0; c < 3; ++c) {
-                    const float value = TexelValue(image, x, y, c);
-                    const auto at = std::lower_bound(decode.begin(), decode.end(), value);
-                    if (at == decode.end() || *at != value) {
-                        throw std::logic_error("evaluator: an sRGB8 bitmap's value is not a decode");
-                    }
-                    codes[(size_t{row} * image.width + x) * 3 + c] = static_cast<uint8_t>(at - decode.begin());
+                    codes[(size_t{row} * image.width + x) * 3 + c] =
+                        static_cast<uint8_t>(Srgb8Code(TexelValue(image, x, y, c)));
                 }
             }
         }
@@ -249,6 +244,15 @@ float BilinearFilter(const std::array<uint32_t, 4>& weights, const std::array<fl
     const float result = static_cast<float>(
         std::ldexp(static_cast<double>(significand), shift + exponent - kFilterOperandBits - 8));
     return negative ? -result : result;
+}
+
+uint32_t Srgb8Code(float decode) {
+    const std::array<float, 256>& table = arith::Srgb8OperandTable();
+    const auto at = std::lower_bound(table.begin(), table.end(), decode);
+    if (at == table.end() || *at != decode) {
+        throw std::logic_error("evaluator: a texel of an sRGB8 image is not an sRGB8 decode");
+    }
+    return static_cast<uint32_t>(at - table.begin());
 }
 
 namespace {
@@ -380,6 +384,14 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
         std::array<float, 4> texels{};
         for (size_t k = 0; k < 4; ++k) {
             texels[k] = RangeValue(TexelValue(image, taps[k][0], taps[k][1], c), signedRange);
+        }
+        if (image.srgb8) {
+            // An sRGB8 texture: one probe of the texture unit's sRGB8 sums on its codes, with these
+            // weights (decisions 209, 219, 224).
+            std::array<uint32_t, 4> codes{};
+            for (size_t k = 0; k < 4; ++k) codes[k] = Srgb8Code(texels[k]);
+            result.value[c] = tu::Srgb8Probe(weights, codes);
+            continue;
         }
         result.value[c] = BilinearFilter(weights, texels);
         // An R16F texture's filter returns a binary16, to nearest, ties away from zero (decision 218).

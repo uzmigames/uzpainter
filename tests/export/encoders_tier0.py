@@ -264,6 +264,119 @@ def process_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
     return report
 
 
+# ── `infinite` padding on UV islands (decision 223) ──────────────────────────
+
+# The recorded `infinite` padding goldens whose UV islands leave texels uncovered.
+PADDING_GOLDENS = (
+    *(f"export-padding-ramp-{r}-{p}-v2" for r in ("r1", "r2", "r15") for p in ("p0", "p25", "p75")),
+    "export-padding-tie-512",
+    "export-padding-tie-2048-v2",
+    "export-padding-tie-512-box16",
+    "export-padding-ramp-r1-p0-box17",
+    "export-padding-seam-ramp-1024",
+    "export-padding",
+    "export-padding-bevelled-cube",
+    "export-padding-sphere",
+    "export-padding-seam-256",
+    "export-padding-seam-1024",
+    "export-padding-seam-field-256",
+    "export-padding-seam-field-1024",
+)
+# The P-ramp and P-tie probes hold each covered texel's own centre (u, v) in their first channels.
+POSITION_PROBES = tuple(g for g in PADDING_GOLDENS if "-ramp-" in g or "-tie-" in g)
+
+
+def padding_goldens(exe: Path, tmp: Path) -> dict[str, Any]:
+    """Every r1 `infinite` file of `PADDING_GOLDENS`, padded by `uzp-export-tests process` from the
+    map's OpenEXR 32f file over the golden's mesh: per file, whether the covered texels equal
+    Painter's file exactly, whether the export's coverage equals `tools.parity.coverage`, and the
+    padding texels' max |delta| (native units). Per position probe, the texels holding their own
+    centre against that coverage."""
+    from tools.parity.coverage import coverage, obj_triangles
+
+    needs_store()
+    store = locate()
+    assert store is not None
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    cases: list[dict[str, Any]] = []
+    meta: list[tuple[str, str, Path]] = []
+    probes: dict[str, int] = {}
+    tmp.mkdir(parents=True, exist_ok=True)
+    for name in PADDING_GOLDENS:
+        golden = load(store, root / f"{name}.json")
+        mesh = _mesh_of(golden.manifest)
+        steps = {s["step"]: s["args"] for s in golden.manifest["instruction_sequence"]["steps"]}
+        outputs = golden.recordings["r1"].outputs
+        infinite = {
+            oid: o
+            for oid, o in outputs.items()
+            if o["kind"] == "exported_map"
+            and steps[o["export_settings"]["step"]].get("padding") == "infinite"
+        }
+        sources = {
+            (o["texture_set"], o["map"]): oid
+            for oid, o in infinite.items()
+            if o["storage_format"]["container"] == "exr"
+            and o["storage_format"]["bits_per_channel"] == 32
+        }
+        for _, o in sorted(infinite.items()):
+            source = sources[o["texture_set"], o["map"]]
+            fmt = o["storage_format"]
+            depth = "32f" if fmt["container"] == "exr" else str(fmt["bits_per_channel"])
+            if fmt["container"] == "exr" and fmt["bits_per_channel"] == 16:
+                depth = "16f"
+            index = len(cases)
+            cases.append(
+                {
+                    "source": str(_blob_path(store, golden, outputs[source]["blob"])),
+                    "target": str(_blob_path(store, golden, o["blob"])),
+                    "format": fmt["container"],
+                    "bit_depth": depth,
+                    "height": o["map"] == "height",
+                    "srgb8_material": o["map"] in SRGB8_MATERIAL,
+                    "mesh": str(mesh),
+                    "material": str(o["texture_set"]).split("/")[0],
+                    "out": str(tmp / f"{index}.{fmt['container']}"),
+                    "coverage_out": str(tmp / f"{index}.coverage"),
+                }
+            )
+            meta.append((name, f"{o['map']} {fmt['container']} {depth}", mesh))
+        if name in POSITION_PROBES:
+            values = golden.map("r1", next(iter(sources.values()))).values
+            size = values.shape[0]
+            y, x = np.mgrid[0:size, 0:size]
+            own = (values[..., 0] == np.float32((x + 0.5) / size)) & (
+                values[..., 1] == np.float32((y + 0.5) / size)
+            )
+            material = str(next(iter(sources))[0]).split("/")[0]
+            covered = coverage(obj_triangles(mesh, material), size, size)
+            probes[name] = int((own != covered).sum())
+    listing = tmp / "padding.json"
+    listing.write_text(json.dumps(cases), encoding="utf-8")
+    lines = _run([str(exe), "process", str(listing)]).splitlines()
+    assert len(lines) == len(cases)
+    files: list[dict[str, Any]] = []
+    for case, (name, label, mesh), line in zip(cases, meta, lines, strict=True):
+        result = json.loads(line)
+        ours = decode(Path(case["out"]).read_bytes()).values
+        theirs = decode(Path(case["target"]).read_bytes()).values
+        size = theirs.shape[:2]
+        native = np.frombuffer(Path(case["coverage_out"]).read_bytes(), np.uint8).reshape(size) != 0
+        covered = coverage(obj_triangles(mesh, case["material"]), size[1], size[0])
+        delta = np.abs(ours.astype(np.float64) - theirs.astype(np.float64))
+        files.append(
+            {
+                "golden": name,
+                "file": label,
+                "covered_texels": int(result["covered_texels"]),
+                "coverage_equal": bool(np.array_equal(native, covered)),
+                "covered_equal": bool(np.array_equal(ours[covered], theirs[covered])),
+                "padding_max_abs_diff": float(delta[~covered].max()) if (~covered).any() else 0.0,
+            }
+        )
+    return {"files": files, "position_probe_mismatches": probes}
+
+
 # ── Goldens written by WriteExport ───────────────────────────────────────────
 
 
@@ -1201,6 +1314,13 @@ GAP_FORMULA = (
     "refused with NotYetSupported before anything is written, naming recording R-090."
 )
 
+PADDING_ISLANDS_FORMULA = (
+    "Written under exception EXC-007 (decision 223), not fitted: covered texels keep their "
+    "evaluated values; the ring takes the straight-edge 8-neighbour mean of decisions 176 and "
+    "206 (x wraps) and the gutter the jump flood of decision 197 (src/export/padding.h). "
+    "Painter's ring across UV seams, at seam corners and at poles is not identified."
+)
+
 
 def _byte_residual(
     golden_id: str, fmt: str, recording: str, files: int, identical: int
@@ -1397,7 +1517,10 @@ def publish(
             "UV seam with unidentified weights (2344 ring texels on the cube, 2152 on the sphere). "
             "Passthrough on such sets is written as no operation: Painter's r1 and r2 agree "
             "inside the islands and differ outside them at up to every uncovered texel. Owner "
-            "phase1.25_pilot-wand (decision 103).",
+            "phase1.25_pilot-wand (decision 103). Decision 220 measured the best-known rule at up "
+            "to 59150 PNG 16 codes from Painter on padding texels, already on the ring; decision "
+            "223 writes the coverage-only rule under EXC-007 (Wand v1 only: covered texels exact, "
+            "padding texels excepted and published).",
         ),
         "padding-dilation": (
             "Padding color, transparent and diffusion with dilationDistance",
@@ -1419,10 +1542,10 @@ def publish(
             "phase3.2_unreal-ue56-packed-preset.",
         ),
     }
+    formulas = {"padding-islands": PADDING_ISLANDS_FORMULA}
     for entry_id, (subject, notes) in gaps.items():
-        entries.append(
-            entry(entry_id, subject, GAP_FORMULA, [PYDOC, HELP], [], [], notes, gap=True)
-        )
+        formula = formulas.get(entry_id, GAP_FORMULA)
+        entries.append(entry(entry_id, subject, formula, [PYDOC, HELP], [], [], notes, gap=True))
     corpus = sorted(
         {g for g, _, _ in reencoded["per_golden"]}
         | {f"tier0/{n}" for n in EXPORT_GOLDENS}

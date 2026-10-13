@@ -54,7 +54,8 @@
 // - A float32 image (a decoded sRGB bitmap, sources.h) gives its stored values in place of
 //   float32(c / M), through the same addressing, filters and mip chain (`BitmapChain`; decision
 //   203). Decoded from an 8-bit bitmap, the texture unit filters its codes as an sRGB8 texture
-//   on level 0 only (`ReadsMipLevels`, decision 219).
+//   on level 0 only (`ReadsMipLevels`, decision 219); magnified or at 1:1, the four taps and
+//   weights above are one probe of its sRGB8 sums (`tu::Srgb8Probe`, decision 224).
 //
 // The channel stores the sampled value with its own write rule (cpu_store.h `StoreValue`): at
 // 1:1 a bitmap is copied exactly. Wrap modes: `Repeat` takes tap
@@ -145,6 +146,10 @@ inline constexpr int kFilterOperandBits = 28;
 /// exact on its magnified sets).
 [[nodiscard]] float BilinearFilter(const std::array<uint32_t, 4>& weights,
                                    const std::array<float, 4>& texels);
+
+/// The sRGB8 code whose decode `Srgb8Operand` is `decode` (the decode rises strictly); a value that
+/// is no decode is a logic error and throws.
+[[nodiscard]] uint32_t Srgb8Code(float decode);
 
 /// The bitmap's float32 RGB mip chain for the texture unit: level 0 holds float32(c / M), or the
 /// stored value of a float32 image (a decoded 16-bit sRGB bitmap, decision 203), rows bottom up

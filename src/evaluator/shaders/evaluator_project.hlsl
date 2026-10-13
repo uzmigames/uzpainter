@@ -16,7 +16,9 @@
 // minifying bilinear projection (P_CHAIN non-zero) samples the bitmap's float32 mip chain through
 // the texture unit (texture_unit.h, mirrored below) with Painter's float32 arithmetic around it
 // (projection_uv.cpp `Minified`); with P_TU_SRGB8 non-zero the chain holds an 8-bit sRGB bitmap's
-// level-0 codes, one per uint, summed with the sRGB8 texture's arithmetic (decision 219).
+// level-0 codes, one per uint, summed with the sRGB8 texture's arithmetic (decision 219). With
+// P_TU_SRGB8 non-zero a magnifying or 1:1 bilinear projection of the decoded bitmap sums its four
+// taps as one probe of the same arithmetic, on the codes behind the decodes (decision 224).
 
 #include "image_common.hlsli"
 #include "evaluator_tables.hlsli"
@@ -353,7 +355,11 @@ float TuTiesUp(uint64_t n, int e) {
 
 // The sRGB8 code of channel c of chain texel `index`, its decode and its segment exponent (the
 // binary exponent of the decode of c | 7; texture_unit.h, step 5').
+// A magnifying probe (Srgb8Probe) reads its four codes from g_probeCodes instead.
+static bool g_probeLocal = false;
+static uint g_probeCodes[4];
 uint TuSrgb8Code(uint index, uint c) {
+    if (g_probeLocal) return g_probeCodes[index];
     StructuredBuffer<uint> chain = ResourceDescriptorHeap[g_tuChain];
     return chain[index * 3u + c];
 }
@@ -446,6 +452,47 @@ float TuSrgb8Channel(TuProbe probes[8], uint group[8], uint count, uint c) {
     }
     if (gAll > -1000) acc = TuTruncate26(acc, TuCoarse(gAll) - 16);
     return TuHalfNearestAway(acc);
+}
+
+// The sRGB8 code whose decode is d, a texel of a decoded 8-bit sRGB bitmap (projection_uv.cpp
+// `Srgb8Code`): the largest code whose decode is at or below d (the decode rises strictly).
+uint Srgb8Code(float d) {
+    uint lo = 0u;
+    uint hi = 255u;
+    [loop] while (lo < hi) {
+        const uint mid = (lo + hi + 1u) >> 1;
+        if (asfloat(kSrgb8Operand[mid]) <= d) lo = mid;
+        else hi = mid - 1u;
+    }
+    return lo;
+}
+
+// One bilinear probe of an sRGB8 texture with the magnifying path's weights (1/256): its taps of
+// non-zero weight summed by TuSrgb8Channel (texture_unit.cpp `Srgb8Probe`, decision 224).
+float Srgb8Probe(uint4 w, uint4 codes) {
+    TuProbe probes[8];
+    uint group[8];
+    [unroll] for (uint k = 0u; k < 8u; ++k) {
+        probes[k].offset = 0;
+        probes[k].count = 0u;
+        probes[k].half = 0u;
+        group[k] = 0u;
+        [unroll] for (uint q = 0u; q < 8u; ++q) {
+            probes[k].texel[q] = 0u;
+            probes[k].weight[q] = 0u;
+        }
+    }
+    [unroll] for (uint t = 0u; t < 4u; ++t) {
+        if (w[t] == 0u) continue;
+        g_probeCodes[probes[0].count] = codes[t];
+        probes[0].texel[probes[0].count] = probes[0].count;
+        probes[0].weight[probes[0].count] = w[t] * 4u;  // 1/256 to the unit's 1/1024
+        probes[0].count += 1u;
+    }
+    g_probeLocal = true;
+    const float value = TuSrgb8Channel(probes, group, 1u, 0u);
+    g_probeLocal = false;
+    return value;
 }
 
 float3 TuSampleAt(TuFootprint fp, uint size, uint levels, float u, float v, bool repeatU, bool repeatV) {
@@ -888,11 +935,18 @@ void main(uint3 id : SV_DispatchThreadID) {
             const int64_t xb = Address(x0 + 1, imageWidth, repeatX);
             const int64_t ya = Address(y0, imageHeight, repeatY);
             const int64_t yb = Address(y0 + 1, imageHeight, repeatY);
+            const bool srgb8 = Param(P_TU_SRGB8) != 0u;
             [unroll] for (uint c = 0; c < 3u; ++c) {
                 const float t00 = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xa, ya, c, range), signedRange);
                 const float t10 = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xb, ya, c, range), signedRange);
                 const float t01 = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xa, yb, c, range), signedRange);
                 const float t11 = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xb, yb, c, range), signedRange);
+                if (srgb8) {
+                    // An sRGB8 texture: one probe of the unit's sRGB8 sums (decisions 209, 219, 224).
+                    value[c] = Srgb8Probe(uint4(w00, w10, w01, w11),
+                                          uint4(Srgb8Code(t00), Srgb8Code(t10), Srgb8Code(t01), Srgb8Code(t11)));
+                    continue;
+                }
                 value[c] = BilinearFilter(uint4(w00, w10, w01, w11), float4(t00, t10, t01, t11));
                 if (sixteen == IMAGE_FLOAT16) value[c] = HalfNearestAway(value[c]);
             }

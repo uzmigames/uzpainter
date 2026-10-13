@@ -40,13 +40,15 @@ pytestmark = [
 
 @pytest.fixture(scope="module")
 def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """`UzPainter.exe` of a fresh `zig build painter` install."""
+    """`UzPainter.exe` of a fresh `zig build painter -Doptimize=ReleaseFast` install: in a Debug
+    build the five-map export takes longer than the adapter's 600 s per call (decision 223: 465 s
+    to its first 2048 map)."""
     zig = shutil.which("zig")
     if zig is None:
         pytest.skip("zig is not on PATH; UzPainter.exe cannot be built")
     prefix = tmp_path_factory.mktemp("painter")
     build = subprocess.run(
-        [zig, "build", "painter", "--prefix", str(prefix)],
+        [zig, "build", "painter", "-Doptimize=ReleaseFast", "--prefix", str(prefix)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

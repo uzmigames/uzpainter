@@ -137,6 +137,12 @@ struct Footprint {
                                           std::array<float, 2> ddx, std::array<float, 2> ddy,
                                           int bias, bool repeatU, bool repeatV);
 
+/// One bilinear probe of an sRGB8 texture, summed as steps 5' and 6' sum a single probe: four
+/// codes with weights in 1/256 that sum to 256 (projection_uv.cpp's magnification and 1:1 weights,
+/// decision 224). It equals decision 209's single-probe rule on every two-tap probe (all code
+/// pairs and weights) and on 8 000 000 random four-tap probes (decision 224).
+[[nodiscard]] float Srgb8Probe(const std::array<uint32_t, 4>& weights, const std::array<uint32_t, 4>& codes);
+
 /// SampleLevel(u, v, 0): one bilinear probe of weight 256 on level 0 (step 3's magnification).
 [[nodiscard]] std::array<float, 3> SampleLevel0(const Chain& chain, float u, float v, bool repeatU,
                                                 bool repeatV);

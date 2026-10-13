@@ -44,8 +44,8 @@
       "properties": {
         "metric": { "$ref": "#/$defs/metric" },
         "scope": {
-          "description": "whole: the statistic over the compared data; each_region: the statistic of every material region.",
-          "enum": ["whole", "each_region"]
+          "description": "whole: the statistic over the compared data; each_region: the statistic of every material region; covered: the statistic over the texels the comparison's UV coverage mask marks covered (decision 223), and the entry covers no comparison without such a mask.",
+          "enum": ["whole", "each_region", "covered"]
         },
         "max": {
           "description": "Inclusive upper bound: the metric passes when its value is <= max.",
@@ -105,7 +105,10 @@
           "additionalProperties": false,
           "required": ["basis", "summary", "private_evidence", "uncontrolled_settings"],
           "properties": {
-            "basis": { "enum": ["oracle_instability", "irreducible_difference", "noise_floor"] },
+            "basis": {
+              "description": "owner_scope_split (decision 223): Painter is stable and the difference is UzPainter's unfitted rule, excepted by an owner scope decision outside the covered texels only.",
+              "enum": ["oracle_instability", "irreducible_difference", "noise_floor", "owner_scope_split"]
+            },
             "summary": { "type": "string", "minLength": 1 },
             "private_evidence": {
               "description": "SHA-256 of the private evidence records (stability reports, references, difference maps).",
@@ -210,7 +213,9 @@
                 }
               },
               "evidence": {
-                "properties": { "basis": { "enum": ["oracle_instability", "irreducible_difference"] } }
+                "properties": {
+                  "basis": { "enum": ["oracle_instability", "irreducible_difference", "owner_scope_split"] }
+                }
               },
               "bounds": {
                 "items": {
@@ -222,6 +227,27 @@
                   }
                 }
               }
+            }
+          }
+        },
+        {
+          "description": "An owner scope split (decision 223) bounds only the covered texels, and holds them exactly equal: the texels outside the coverage are the ones it excepts.",
+          "if": {
+            "properties": { "evidence": { "properties": { "basis": { "const": "owner_scope_split" } } } }
+          },
+          "then": {
+            "properties": {
+              "bounds": {
+                "items": { "properties": { "scope": { "const": "covered" } } },
+                "contains": {
+                  "properties": { "metric": { "const": "max_abs_diff" }, "max": { "const": 0 } }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "bounds": { "items": { "properties": { "scope": { "enum": ["whole", "each_region"] } } } }
             }
           }
         },

@@ -2781,6 +2781,48 @@ int RunSources(const fs::path& assets) {
         }
         Check(moved == 0, "the sRGB8 decode of each 8-bit code stores the code itself", std::to_string(moved) + " differ");
 
+        // Magnified or at 1:1, an 8-bit sRGB bitmap is one probe of the sRGB8 texture's sums (tu::Srgb8Probe,
+        // decision 224), which is decision 209's single-probe rule: each live code's decode cut to floor(d 2^(8 - E)),
+        // E the largest segment exponent (frexp of the decode of c | 7) of the live codes, the weighted sum times
+        // 2^(E - 16) rounded once to binary16, ties away; a code weighed 256 gives its decode.
+        auto rule209 = [](const std::array<uint32_t, 4>& w, const std::array<uint32_t, 4>& c) {
+            int e = -1000;
+            uint32_t live = 0;
+            for (size_t k = 0; k < 4; ++k) {
+                if (w[k] == 0) continue;
+                ++live;
+                int ek = 0;
+                (void)std::frexp(arith::Srgb8Operand(c[k] | 7u), &ek);
+                e = std::max(e, ek);
+            }
+            if (live == 1) {
+                for (size_t k = 0; k < 4; ++k) {
+                    if (w[k] != 0) return arith::Srgb8Operand(c[k]);
+                }
+            }
+            int64_t sum = 0;
+            for (size_t k = 0; k < 4; ++k) {
+                sum += int64_t{w[k]} * static_cast<int64_t>(std::floor(std::ldexp(static_cast<double>(arith::Srgb8Operand(c[k])), 8 - e)));
+            }
+            return arith::HalfToFloat(arith::HalfNearestAway(static_cast<float>(std::ldexp(static_cast<double>(sum), e - 16))));
+        };
+        size_t probeDiffers = 0;
+        for (uint32_t a = 0; a < 256; ++a) {
+            for (uint32_t b = 0; b < 256; ++b) {
+                for (uint32_t f = 0; f <= 256; f += 16) {
+                    const std::array<uint32_t, 4> w{256 - std::min(f, 255u), std::min(f, 255u), 0, 0};
+                    const std::array<uint32_t, 4> c{a, b, (a * 7) & 255, (b * 13) & 255};
+                    if (tu::Srgb8Probe(w, c) != rule209(w, c)) ++probeDiffers;
+                    const std::array<uint32_t, 4> w4{64 - f / 8, 64 + f / 16, 64, 64 + f / 8 - f / 16};
+                    if (tu::Srgb8Probe(w4, c) != rule209(w4, c)) ++probeDiffers;
+                }
+            }
+        }
+        Check(probeDiffers == 0,
+              "one sRGB8 probe of the texture unit's sums (magnification and 1:1) equals decision 209's single-probe rule "
+              "on two- and four-tap probes over every code pair",
+              std::to_string(probeDiffers) + " differ");
+
         auto srgb = [&](ChannelFormat format, const std::string& sha, core::FilteringMode filter, double scale,
                         const std::string& space) {
             Builder builder(kSize, kSize, {{ChannelType::User0, format}});
