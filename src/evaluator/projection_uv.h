@@ -15,8 +15,10 @@
 // `resample-uv-impulse` users 6-7 combine an offset with a scale). Bitmap texel coordinates
 // (row 0 on top, centres at integers): x = u' w - 1/2, y = (1 - v') h - 1/2 for a w x h bitmap.
 //
-// - Nearest: the texel (floor(x + 1/2), floor(y + 1/2)); its code is the sample (exact at every
-//   scale, resampling.json `resample-nearest`).
+// - Nearest: the texel (floor(x + 1/2), ceil(y + 1/2) - 1), the GPU's point sample of the bitmap
+//   stored bottom-up: a tie between two rows takes the upper one (`srgb-bitmap-variants-v2` s3,
+//   every texel of a scale-2 Nearest projection lies on a tie; decision 174); its code is the
+//   sample (exact at every scale, resampling.json `resample-nearest`).
 // - BilinearHQ and BilinearSharp: X = floor(256 x + 1/2), x0 = X >> 8, fx = X & 255 (same for y);
 //   integer weights w11 = (fx fy + 127) >> 8, w10 = fx - w11, w01 = fy - w11,
 //   w00 = 256 - fx - fy + w11 over the taps (x0, y0), (x0 + 1, y0), (x0, y0 + 1), (x0 + 1, y0 + 1).
@@ -49,6 +51,8 @@
 //   The magnifying path keeps the double UV above: both give the same fixed-point coordinates on
 //   every magnifying golden (decision 060).
 // - Nearest samples float32(c / M) of the texel.
+// - A float32 image (a decoded sRGB bitmap, sources.h) gives its stored values in place of
+//   float32(c / M), through the same addressing and filters; it is never minified (`CheckSampling`).
 //
 // The channel stores the sampled value with its own write rule (cpu_store.h `StoreValue`): at
 // 1:1 a bitmap is copied exactly. Wrap modes: `Repeat` takes tap
@@ -114,7 +118,8 @@ struct UvProjection {
 /// filter minifies outside the texture unit's measured domain: a rotation that is not a multiple
 /// of 90 degrees, a bitmap that is not square with a power-of-two side, a non-square set, or
 /// `signedRange` (the Height channel: Painter filters the signed heights, `ProjectTexel`, and its
-/// minification of them is not measured).
+/// minification of them is not measured), and for a float32 image (a decoded sRGB bitmap) that
+/// a bilinear filter would minify.
 [[nodiscard]] render::Result<void> CheckSampling(const UvProjection& projection,
                                                  uint32_t setWidth, uint32_t setHeight,
                                                  const DecodedImage& image, bool signedRange,

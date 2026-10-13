@@ -16,7 +16,7 @@
       "entry_id": "uv-nearest",
       "subject": "UV projection with the Nearest filter (Repeat), any scale",
       "status": "exact",
-      "formula": "Output texel (i, j) of the W x H set at u = (i + 0.5)/W, v = 1 - (j + 0.5)/H; (a, b) = ((u - 0.5 - o_u) s_u, (v - 0.5 - o_v) s_v) (the offset precedes the scale and the rotation, decision 056); u' = (cos r a + sin r b) + 0.5, v' = (-sin r a + cos r b) + 0.5, in double; bitmap texel coordinates x = u' w - 0.5, y = (1 - v') h - 0.5 (row 0 on top, centres at integers). The texel (floor(x + 0.5) mod w, floor(y + 0.5) mod h); its value float32(c / M) stored with the channel's write rule (the code itself at equal depth).",
+      "formula": "Output texel (i, j) of the W x H set at u = (i + 0.5)/W, v = 1 - (j + 0.5)/H; (a, b) = ((u - 0.5 - o_u) s_u, (v - 0.5 - o_v) s_v) (the offset precedes the scale and the rotation, decision 056); u' = (cos r a + sin r b) + 0.5, v' = (-sin r a + cos r b) + 0.5, in double; bitmap texel coordinates x = u' w - 0.5, y = (1 - v') h - 0.5 (row 0 on top, centres at integers). The texel (floor(x + 0.5) mod w, (ceil(y + 0.5) - 1) mod h): a tie between two rows takes the upper one, the GPU's point sample of the bitmap stored bottom-up (srgb-bitmap-variants-v2 s3, decision 174); its value float32(c / M) stored with the channel's write rule (the code itself at equal depth).",
       "public_sources": [
         {
           "source_id": "A-PYDOC",

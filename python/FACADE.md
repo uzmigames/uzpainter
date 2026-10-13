@@ -70,7 +70,9 @@ Each quirk comes from a Tier 0 api-probe and is compared exactly by `test_pyapi_
   - DataSigned on Height;
   - NormalXYZLeft on Normal.
 
-  The recorded lists of available spaces are those on sRGB8 channels and in masks. Any other case raises `NotYetSupported`, naming the defaults probe.
+  The recorded lists of available spaces are those on sRGB8 channels, on user channels of the other formats and in masks. Any other case raises `NotYetSupported`, naming the defaults probe.
+  - On a user channel that is not sRGB8 and in a mask, Painter offers Raw, Data and DataSigned and refuses sRGB with `ValueError: Invalid colorspace 'standard sRGB'`; the facade raises the same before any change, and the bitmap keeps Data (decision 174).
+  - A `LegacyColorSpace` member is stored under its qualified name, so `get_color_space` returns the Legacy member that was set.
 
 ## 5. Resource ids (decision 107 §4)
 

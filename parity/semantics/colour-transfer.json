@@ -561,7 +561,7 @@
       "entry_id": "uniform-colour-height-and-8-bit-bitmaps",
       "subject": "Uniform colours on Height, 8-bit bitmaps, unrecorded sRGB bitmaps, OCIO colour management",
       "status": "gap",
-      "formula": "Not observed. Uniform colours on Height are stored like any channel value (no remap); 8-bit bitmaps follow bitmap-import-linear; an sRGB bitmap other than a 16-bit colour or grey or an 8-bit colour bitmap sampled 1:1 onto an sRGB8 channel, the Working and Linear bitmap colour spaces and an OCIO project fail with evaluator:unsupported_source.",
+      "formula": "Not observed. Uniform colours on Height are stored like any channel value (no remap); 8-bit bitmaps follow bitmap-import-linear; bilinear minification of an sRGB bitmap, a bitmap colour space other than Raw, Data, DataSigned, NormalXYZLeft, Working, sRGB and the Legacy Linear and sRGB spaces, and an OCIO project fail with evaluator:unsupported_source.",
       "public_sources": [
         {
           "source_id": "A-PYDOC",

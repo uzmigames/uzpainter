@@ -707,6 +707,27 @@ def test_srgb8_bitmap_equals_painter_files(export_tests: Path, tmp_path: Path) -
     ], report["register"]
 
 
+def test_srgb_variants_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:
+    """phase1.15_compositor-colour-fits item 2.2 (decision 174): srgb-bitmap-variants-v2 rebuilt
+    per texture set and written by WriteExport at PNG 16, PNG 8 and OpenEXR 32f, every map, is
+    byte-identical to Painter's files: the 8-bit grey sRGB ramp at 1:1 (s0); field A and the 8-bit
+    sRGB ramp magnified by BilinearHQ (s2) and under Nearest at scale 2 (s3); the user channels
+    whose sRGB Painter refused, read as Data (s4); BaseColor under a mask whose grey source stays
+    Data (s5, r1: Painter is unstable there, decision 032); Working, Legacy Linear and Legacy sRGB
+    (s6-s8). s1 (BilinearHQ minification at 30 degrees) is refused for every bitmap."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.srgb_variants_written(export_tests, tmp_path)
+    assert report["problems"] == [], report["problems"][:10]
+    assert set(report["refused"]) == {"s1"}, report["refused"]
+    assert report["files"] == 8 * 8 * 3, report
+    assert report["unstable"] == [
+        f"s5 step {step}: s5_basecolor.{ext}"
+        for step, ext in ((78, "png"), (80, "png"), (82, "exr"))
+    ], report["unstable"]
+    assert report["identical"] == report["comparisons"] == 2 * report["files"] - 3, report
+
+
 def test_published_export_processing_reproduces(
     tier0_reports: tuple[dict[str, Any], dict[str, Any], dict[str, Any]],
 ) -> None:

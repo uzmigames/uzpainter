@@ -196,7 +196,8 @@ struct VirtualNormalBindings {
     const VirtualNormalOp& op, const VirtualNormalBindings& bindings);
 
 /// The codes of `image` in sample order, packed for the projection kernel: two 16-bit codes or
-/// four 8-bit codes per uint, low bits first.
+/// four 8-bit codes per uint, low bits first; a float32 image (a decoded sRGB bitmap) one value's
+/// bits per uint.
 [[nodiscard]] std::vector<uint32_t> PackBitmapCodes(const DecodedImage& image);
 
 }  // namespace uzp::evaluator

@@ -39,6 +39,17 @@ uint32_t Code(const DecodedImage& image, int64_t x, int64_t y, uint32_t c) {
     return image.At(static_cast<uint32_t>(x), static_cast<uint32_t>(y), channel);
 }
 
+/// The channel `c` value of bitmap texel (x, y): float32(c / M) of a code, or the stored value
+/// of a float32 image (a decoded sRGB bitmap, sources.h).
+float TexelValue(const DecodedImage& image, int64_t x, int64_t y, uint32_t c) {
+    const uint32_t code = Code(image, x, y, c);
+    switch (image.encoding) {
+        case render::TexelEncoding::Float32: return std::bit_cast<float>(code);
+        case render::TexelEncoding::Unorm16: return arith::UnormOperand(code, 16);
+        default: return arith::UnormOperand(code, 8);
+    }
+}
+
 }  // namespace
 
 render::Result<UvProjection> UvProjectionOf(const core::Projection& projection, core::Id node) {
@@ -98,10 +109,10 @@ render::Result<void> CheckSampling(const UvProjection& projection, uint32_t setW
     if (image.width == 0 || image.height == 0 || image.channels == 0) {
         return EvalFail(EvalErrorKind::UnsupportedSource, "an empty bitmap", node);
     }
-    if (image.encoding != render::TexelEncoding::Unorm8 &&
-        image.encoding != render::TexelEncoding::Unorm16) {
+    if (image.encoding == render::TexelEncoding::Float16 ||
+        (image.encoding == render::TexelEncoding::Float32 && Minifies(projection, setWidth, setHeight, image))) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "bitmap sources are 8- or 16-bit images", node);
+                        "bitmap sources are 8- or 16-bit images (a decoded sRGB bitmap is not minified)", node);
     }
     if (Minifies(projection, setWidth, setHeight, image)) {
         const std::string what = std::string(core::ToString(projection.filter)) + " minification (" +
@@ -292,13 +303,14 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
     ProjectedTexel result;
     result.covered = (repeatX || (u2 >= 0.0 && u2 < 1.0)) && (repeatY || (v2 >= 0.0 && v2 < 1.0));
     if (!result.covered) return result;
-    const uint32_t bits = image.encoding == render::TexelEncoding::Unorm8 ? 8u : 16u;
 
     if (p.filter == core::FilteringMode::Nearest) {
+        // The GPU's point sample of the bottom-up bitmap: texel floor(x + 1/2) across and, down
+        // the rows, ceil(y + 1/2) - 1 (a tie takes the upper row: `srgb-bitmap-variants-v2` s3).
         const int64_t xi = Address(static_cast<int64_t>(std::floor(x + 0.5)), image.width, repeatX);
-        const int64_t yi = Address(static_cast<int64_t>(std::floor(y + 0.5)), image.height, repeatY);
+        const int64_t yi = Address(static_cast<int64_t>(std::ceil(y + 0.5)) - 1, image.height, repeatY);
         for (uint32_t c = 0; c < 3; ++c) {
-            result.value[c] = RangeValue(arith::UnormOperand(Code(image, xi, yi, c), bits), signedRange);
+            result.value[c] = RangeValue(TexelValue(image, xi, yi, c), signedRange);
         }
         return result;
     }
@@ -318,7 +330,7 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
     for (uint32_t c = 0; c < 3; ++c) {
         std::array<float, 4> texels{};
         for (size_t k = 0; k < 4; ++k) {
-            texels[k] = RangeValue(arith::UnormOperand(Code(image, taps[k][0], taps[k][1], c), bits), signedRange);
+            texels[k] = RangeValue(TexelValue(image, taps[k][0], taps[k][1], c), signedRange);
         }
         result.value[c] = BilinearFilter(weights, texels);
     }

@@ -29,20 +29,23 @@ bool LegacyColour(const core::Project& project) {
     return mode.empty() || mode == "legacy";
 }
 
-/// The colour space of a bitmap source in `stack` for `channel` (sources.h): an sRGB bitmap is
-/// recorded on sRGB8 channels only (not as a mask's mono source); Working, Linear and other tags
-/// are not recorded. A channel the stack lacks is never evaluated.
+/// The colour space of a bitmap source in `stack` for `channel` (sources.h): an sRGB bitmap
+/// exists on sRGB8 channels only (Painter refuses the space on every other channel format and on
+/// a mask's mono source: decision 174); tags outside sources.h are not recorded. A channel the
+/// stack lacks is never evaluated.
 Gap BitmapColourSpaceGap(const core::Stack* stack, const core::BitmapSource& bitmap, std::optional<ChannelType> channel,
                          core::Id node) {
     switch (BitmapColourSpaceOf(bitmap.color_space)) {
         case BitmapColourSpace::Linear: return std::nullopt;
         case BitmapColourSpace::Srgb: {
-            if (!channel) return Make(node, "an sRGB bitmap as a mask source", "phase1.15_compositor-colour-fits");
+            if (!channel) return Make(node, "an sRGB bitmap as a mask source (Painter refuses it)", "decision 174");
             if (stack == nullptr) return std::nullopt;
             const auto it = stack->channels.find(*channel);
             if (it == stack->channels.end() || it->second.format == core::ChannelFormat::sRGB8) return std::nullopt;
-            return Make(node, "an sRGB bitmap on a " + std::string(core::ToString(it->second.format)) + " channel",
-                        "phase1.15_compositor-colour-fits");
+            return Make(node,
+                        "an sRGB bitmap on a " + std::string(core::ToString(it->second.format)) +
+                            " channel (Painter refuses it)",
+                        "decision 174");
         }
         case BitmapColourSpace::Unrecorded:
             return Make(node, "the bitmap colour space '" + bitmap.color_space + "'",

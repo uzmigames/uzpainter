@@ -318,9 +318,34 @@ def default_bitmap_space(channel: str | None, colour_image: bool) -> Any:
     )
 
 
+# Painter's refusal of the sRGB space where it does not offer it: on a user channel of every format
+# but sRGB8 and on a mask's mono source (`srgb-bitmap-variants-v2` s4 and s5, both recordings;
+# decision 174). The bitmap keeps its space.
+SRGB_REFUSAL = "Invalid colorspace 'standard sRGB'"
+
+
+def bitmap_space_tag(space: Any) -> str:
+    """The native tag of a bitmap colour space: a `LegacyColorSpace` member by qualified name (its
+    `sRGB` is not the generic one; the evaluator reads both tags, `src/evaluator/sources.h`), any
+    other member by name, a string as given."""
+    if isinstance(space, LegacyColorSpace):
+        return f"LegacyColorSpace.{space.name}"
+    return space_name(space)
+
+
+def bitmap_space_member(tag: str) -> Any:
+    """The documented member of a native bitmap colour-space tag (`bitmap_space_tag`)."""
+    kind, _, name = tag.partition(".")
+    if kind == "LegacyColorSpace" and name in LegacyColorSpace.__members__:
+        return LegacyColorSpace[name]
+    return space_member(tag)
+
+
 def available_bitmap_spaces(channel: str | None, colour_managed: bool) -> list[Any]:
-    """`SourceBitmap.list_available_color_spaces` in Legacy mode."""
-    if channel is None:
+    """`SourceBitmap.list_available_color_spaces` in Legacy mode: a mask's mono source and a user
+    channel other than sRGB8 (RGB8, L8, RGB16, L16, RGB16F and RGB32F recorded) offer the data
+    spaces, an sRGB8 channel the colour spaces."""
+    if channel is None or (channel.startswith("User") and not colour_managed):
         return [GenericColorSpace.Raw, DataColorSpace.Data, DataColorSpace.DataSigned]
     if colour_managed:
         return [

@@ -11,8 +11,9 @@
 namespace uzp::evaluator {
 
 BitmapColourSpace BitmapColourSpaceOf(std::string_view tag) {
-    if (tag == "sRGB") return BitmapColourSpace::Srgb;
-    if (tag.empty() || tag == "Raw" || tag == "Data" || tag == "DataSigned" || tag == "NormalXYZLeft") {
+    if (tag == "sRGB" || tag == "LegacyColorSpace.sRGB") return BitmapColourSpace::Srgb;
+    if (tag.empty() || tag == "Raw" || tag == "Data" || tag == "DataSigned" || tag == "NormalXYZLeft" ||
+        tag == "Working" || tag == "LegacyColorSpace.Linear") {
         return BitmapColourSpace::Linear;
     }
     return BitmapColourSpace::Unrecorded;

@@ -1,10 +1,13 @@
 #include "evaluator/evaluate.h"
 
+#include <bit>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <string>
 
 #include "evaluator/arith.h"
+#include "evaluator/hwmath.h"
 #include "evaluator/cpu_store.h"
 #include "evaluator/error.h"
 #include "evaluator/projection_uv.h"
@@ -29,34 +32,29 @@ render::Result<std::shared_ptr<const DecodedImage>> GreenInverted(const DecodedI
     return std::shared_ptr<const DecodedImage>(std::move(inverted));
 }
 
-/// An sRGB bitmap as an sRGB8 channel stores it (sources.h), an 8-bit colour image the size of
-/// the bitmap: every 16-bit code c becomes the sRGB8 code of the sRGB decode of float32(c / 65535),
-/// every 8-bit code is its own sRGB8 code, and a grey bitmap feeds the three channels. A 16-bit
-/// colour or grey and an 8-bit colour bitmap are recorded; an 8-bit grey one is not.
+/// An sRGB bitmap as the texture Painter samples (sources.h): a float32 image of its linear
+/// values, the bitmap's size and channel count. An 8-bit code c is the recording GPU's sRGB8
+/// decode `Srgb8Operand(c)`; a 16-bit code is the GPU's float32 decode of x = float32(c / 65535):
+/// x float32(1 / 12.92) up to 0.04045, above it pow(fma(x, r, float32(0.055) r), 2.4) with
+/// r = float32(1 / 1.055) (the shader's contracted (x + 0.055) r) and the GPU's pow (hw::Pow).
 render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedImage& image, core::Id node) {
     const bool sixteen = image.encoding == render::TexelEncoding::Unorm16;
-    const bool recorded = image.channels == 3 ? sixteen || image.encoding == render::TexelEncoding::Unorm8
-                                              : image.channels == 1 && sixteen;
-    if (!recorded) {
-        return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "an sRGB bitmap is recorded as a 16-bit colour or grey or an 8-bit colour image only "
-                        "(phase1.15_compositor-colour-fits)",
-                        node);
+    if (!sixteen && image.encoding != render::TexelEncoding::Unorm8) {
+        return EvalFail(EvalErrorKind::UnsupportedSource, "an sRGB bitmap is an 8- or 16-bit image", node);
     }
-    auto decoded = std::make_shared<DecodedImage>();
-    decoded->width = image.width;
-    decoded->height = image.height;
-    decoded->channels = 3;
-    decoded->encoding = render::TexelEncoding::Unorm8;
-    const size_t texels = size_t{image.width} * image.height;
-    decoded->values.resize(texels * 3);
-    for (size_t t = 0; t < texels; ++t) {
-        for (uint32_t c = 0; c < 3; ++c) {
-            const uint32_t code = image.values[t * image.channels + (image.channels == 1 ? 0 : c)];
-            decoded->values[t * 3 + c] =
-                sixteen ? arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(arith::UnormOperand(code, 16))))
-                        : code;
+    auto decoded = std::make_shared<DecodedImage>(image);
+    decoded->encoding = render::TexelEncoding::Float32;
+    const float invLow = static_cast<float>(1.0 / 12.92);
+    const float invHigh = static_cast<float>(1.0 / 1.055);
+    for (uint32_t& value : decoded->values) {
+        float linear = arith::Srgb8Operand(value);
+        if (sixteen) {
+            const float x = arith::UnormOperand(value, 16);
+            const float base = std::fma(x, invHigh, 0.055f * invHigh);
+            const float high = hw::Pow(base, 2.4f);
+            linear = x <= 0.04045f ? x * invLow : high;
         }
+        value = std::bit_cast<uint32_t>(linear);
     }
     return std::shared_ptr<const DecodedImage>(std::move(decoded));
 }
@@ -250,39 +248,25 @@ private:
         render::Result<void> sampling = CheckSampling(source.projection, m_dag.grid.width,
                                                       m_dag.grid.height, *image, source.signedRange, node);
         if (!sampling) return render::Unexpected(sampling.error());
+        if (source.srgbDecode) {
+            if (Minifies(source.projection, m_dag.grid.width, m_dag.grid.height, *image)) {
+                return EvalFail(EvalErrorKind::UnsupportedSource,
+                                "bilinear minification of an sRGB bitmap is not recorded "
+                                "(phase1.15_compositor-colour-fits item 2.5)", node);
+            }
+            imageKey += "/srgb";
+            std::shared_ptr<const DecodedImage>& decoded = m_env.srgbDecoded[source.sha256];
+            if (!decoded) {
+                render::Result<std::shared_ptr<const DecodedImage>> made = SrgbDecoded(*image, node);
+                if (!made) return render::Unexpected(made.error());
+                decoded = *made;
+            }
+            image = decoded;
+        }
         // A wrap mode that can leave texels uncovered gives the content a coverage plane: the
         // fill keeps the value below there (resampling.json, RepeatNone).
         format.alpha = source.projection.MayUncover();
-        if (source.srgbDecode) return SrgbUploaded(key, format, *image, source, node);
         return Projected(key, format, image, imageKey, source.projection, source.signedRange);
-    }
-
-    /// An sRGB bitmap sampled 1:1 (the bitmap the size of the set, the identity transform: every
-    /// texel covered, each filter returning the texel's own code): its decoded sRGB8 codes copied
-    /// into the tile. Any other sampling is not recorded (sources.h).
-    render::Result<Operand> SrgbUploaded(const CacheKey& key, const TileFormat& format, const DecodedImage& image,
-                                         const DagSource& source, core::Id node) {
-        const UvProjection& p = source.projection;
-        const bool identity = p.cosR == 1.0 && p.sinR == 0.0 && p.scale == std::array<double, 2>{1.0, 1.0} &&
-                              p.offset == std::array<double, 2>{0.0, 0.0};
-        if (!identity || image.width != m_dag.grid.width || image.height != m_dag.grid.height) {
-            return EvalFail(EvalErrorKind::UnsupportedSource,
-                            "an sRGB bitmap is recorded sampled 1:1 only (the bitmap the size of the set, the "
-                            "identity transform; phase1.15_compositor-colour-fits)",
-                            node);
-        }
-        std::shared_ptr<const DecodedImage>& decoded = m_env.srgbDecoded[source.sha256];
-        if (!decoded) {
-            render::Result<std::shared_ptr<const DecodedImage>> made = SrgbDecoded(image, node);
-            if (!made) return render::Unexpected(made.error());
-            decoded = *made;
-        }
-        render::Result<TileHandle> tile = Allocate(key, format);
-        if (!tile) return render::Unexpected(tile.error());
-        render::Result<void> uploaded = m_env.store.Upload(*tile, *decoded, m_tx * kTileSize, m_ty * kTileSize);
-        if (!uploaded) return render::Unexpected(uploaded.error());
-        ++m_stats.uploads;
-        return Operand::Of(*tile);
     }
 
     render::Result<Operand> Projected(const CacheKey& key, const TileFormat& format,

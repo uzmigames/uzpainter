@@ -22,23 +22,33 @@
 //   (`export-probes-channels`); 8-bit bitmaps follow the same rule without a golden yet. A grey
 //   bitmap feeds every channel of a colour channel; a grey channel reads the first channel of a
 //   colour bitmap; alpha planes are not read.
-// - sRGB bitmap (Painter's default for a colour bitmap on BaseColor): each code is decoded with
-//   the sRGB transfer function, v = x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055)^2.4 with
-//   x = float32(c / 65535), and stored on the sRGB8 channel (arith::Srgb8Store). Exact on every
-//   texel of `virtual-maps-converted` (and its OpenEXR twin) s0-s1, `export-probes-config` and
-//   `export-probes-naming` (r1 and r2); c / M misses 195 325 of 196 608 values there. On an sRGB8
-//   channel the stored code does not depend on the decode's arithmetic: float32 orders of
-//   operations, the GPU's pow and the double-precision decode give the same code for each of the
-//   65 536 codes. An 8-bit code is its own sRGB8 code: the decode of float32(c / 255) (the
-//   16-bit code 257 c) stores c for each of the 256 codes, and the 8-bit sRGB ramp at 1:1 on
-//   BaseColor equals every texel of `export-ocio-encode-legacy` s3 (PNG 16, PNG 8 and OpenEXR
-//   32f, r1 and r2), where c / 255 misses 195 072 of 196 608 values. A grey bitmap feeds the
-//   three channels: 16-bit grey A at 1:1 on BaseColor equals every texel of `export-bit-depth`
-//   s7 (eight exports, r1 and r2; c / M misses 195 072). Recorded only for a 16-bit colour or
-//   grey or an 8-bit colour bitmap sampled 1:1 (the bitmap the size of the set, the identity
-//   transform) onto an sRGB8 channel; any other use (another channel format or a mask, an 8-bit
-//   grey bitmap, resampling) and the Working and Linear spaces fail with
-//   `evaluator:unsupported_source` (support.h refuses the first and last before any mutation).
+// - sRGB bitmap (Painter's default for a colour bitmap on BaseColor; the tags `sRGB` and
+//   `LegacyColorSpace.sRGB`, which give the same codes: `srgb-bitmap-variants-v2` s8): each texel
+//   is decoded to a float32 linear value before the projection samples it, then stored on the
+//   sRGB8 channel (arith::Srgb8Store). An 8-bit code c decodes as the recording GPU's sRGB8 texel
+//   (arith::Srgb8Operand: Painter samples an sRGB8 texture); a 16-bit code as the GPU's float32
+//   shader decode of x = float32(c / 65535), x float32(1 / 12.92) up to 0.04045 and above it
+//   pow(fma(x, r, float32(0.055) r), 2.4), r = float32(1 / 1.055), with the GPU's pow (hw::Pow).
+//   Only filtered texels tell the decodes apart: at 1:1 every decode stores the same code (the
+//   double-precision decode, float32 orders of operations and the GPU's pow agree on each of the
+//   65 536 16-bit codes, and an 8-bit code is its own sRGB8 code). The 16-bit decode is the one
+//   form exact on both field A at 1:1 (s8) and BilinearHQ-magnified (s2), where one texel's
+//   filtered value lies on an sRGB8 threshold: the uncontracted product, a division, the
+//   double-precision decode and a correctly rounded pow each miss at least one; decoding after
+//   the filter misses 67 values of s2 and the 8-bit decode in a shader 1 536 of s2's 8-bit ramp.
+//   A grey bitmap feeds the three channels. Exact, every texel, PNG 16, PNG 8 and OpenEXR 32f, r1
+//   and r2: 16-bit colour at 1:1 (`virtual-maps-converted` and its OpenEXR twin s0-s1,
+//   `export-probes-config`, `export-probes-naming`, c / M misses 195 325 of 196 608 values there),
+//   8-bit colour at 1:1 (`export-ocio-encode-legacy` s3), 16-bit grey at 1:1 (`export-bit-depth`
+//   s4, s5, s7), 8-bit grey at 1:1 (`srgb-bitmap-variants-v2` s0), 16- and 8-bit colour magnified
+//   by BilinearHQ (s2, scale 0.5) and under Nearest at scale 2 (s3). Bilinear minification of an
+//   sRGB bitmap is not recorded and fails with `evaluator:unsupported_source` (its mip chain is
+//   unmeasured; s1 minifies at 30 degrees, refused for every bitmap).
+// - Working and `LegacyColorSpace.Linear` read the codes as Raw does (s6, s7). Painter offers
+//   sRGB on sRGB8 channels only: on every other channel format (RGB8, L8, RGB16, L16, RGB16F and
+//   RGB32F recorded) and on a mask's mono source it refuses the space and the bitmap stays Data
+//   (s4, s5; decision 174), so an sRGB tag there fails with `evaluator:unsupported_source`
+//   (support.h before any mutation). Any other tag is not recorded and fails the same way.
 
 #include "evaluator/resources.h"
 #include "evaluator/tile_store.h"
@@ -60,8 +70,8 @@ namespace uzp::evaluator {
 
 /// How a bitmap source's colour-space tag (`core::BitmapSource::color_space`) turns its codes
 /// into channel values under legacy colour management (above): `Linear` (Raw, Data, DataSigned,
-/// NormalXYZLeft and the empty tag: c / M), `Srgb` (sRGB: decoded) or `Unrecorded` (any other
-/// tag, Working and Linear included: no golden).
+/// NormalXYZLeft, Working, LegacyColorSpace.Linear and the empty tag: c / M), `Srgb` (sRGB and
+/// LegacyColorSpace.sRGB: decoded) or `Unrecorded` (any other tag: no golden).
 enum class BitmapColourSpace : uint8_t { Linear, Srgb, Unrecorded };
 [[nodiscard]] BitmapColourSpace BitmapColourSpaceOf(std::string_view tag);
 

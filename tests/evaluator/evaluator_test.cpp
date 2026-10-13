@@ -2685,7 +2685,8 @@ int RunSources(const fs::path& assets) {
     provider->Add(sha16, image16);
     provider->Add(sha8, image8);
     provider->Add(shaGrey, grey);
-    provider->Add(shaGrey8, PatternImage(kSize, kSize, 1, render::TexelEncoding::Unorm8, 15));
+    std::shared_ptr<DecodedImage> grey8 = PatternImage(kSize, kSize, 1, render::TexelEncoding::Unorm8, 15);
+    provider->Add(shaGrey8, grey8);
     provider->Add(shaOblong, PatternImage(kSize, kSize / 2, 3, render::TexelEncoding::Unorm16, 14));
     const std::vector<ChannelType> user0{ChannelType::User0};
     auto evaluate = [&](Builder& builder, ChannelType channel, CpuEvaluator& cpu) {
@@ -2746,95 +2747,135 @@ int RunSources(const fs::path& assets) {
         Check(result && Samples(*result) == image16->values, "the Fill projection matches the bitmap to the UV tile (a 1:1 copy)", Describe(result));
     }
 
-    // sRGB bitmaps (sources.h): decoded onto an sRGB8 channel at 1:1 (16-bit colour or grey, 8-bit colour); every
-    // other use is refused.
+    // sRGB bitmaps (sources.h): decoded to float32 linear texels (8-bit: the GPU's sRGB8 decode; 16-bit: its float32
+    // shader decode), sampled like any bitmap except under bilinear minification, and stored on an sRGB8 channel.
     {
-        // The stored code does not depend on the decode's arithmetic: the double-precision decode and the GPU's
-        // float32 one (x / 12.92 as a product, ((x + 0.055) / 1.055)^2.4 through the measured pow) agree on every code.
+        const float invLow = static_cast<float>(1.0 / 12.92);
+        const float invHigh = static_cast<float>(1.0 / 1.055);
+        auto decode16 = [&](uint32_t code) {
+            const float x = arith::UnormOperand(code, 16);
+            return x <= 0.04045f ? x * invLow : hw::Pow(std::fma(x, invHigh, 0.055f * invHigh), 2.4f);
+        };
+        // At 1:1 the stored code does not depend on the decode's arithmetic: the double-precision decode and the GPU's
+        // float32 one agree on every 16-bit code, and the sRGB8 decode of an 8-bit code stores the code itself.
         size_t differing = 0;
         for (uint32_t code = 0; code <= 0xFFFFu; ++code) {
             const float x = arith::UnormOperand(code, 16);
-            const float gpu = x <= 0.04045f ? x * static_cast<float>(1.0 / 12.92)
-                                            : hw::Pow((x + 0.055f) * static_cast<float>(1.0 / 1.055), 2.4f);
-            if (arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x))) != arith::Srgb8Store(gpu)) ++differing;
+            if (arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x))) != arith::Srgb8Store(decode16(code))) ++differing;
         }
         Check(differing == 0, "on an sRGB8 channel the double-precision and the GPU's float32 sRGB decode store the same code "
                               "for each of the 65 536 16-bit codes",
               std::to_string(differing) + " differ");
-        auto srgb = [&](ChannelFormat format, const std::string& sha, double scale) {
+        size_t moved = 0;
+        for (uint32_t code = 0; code < 256; ++code) {
+            if (arith::Srgb8Store(arith::Srgb8Operand(code)) != code) ++moved;
+        }
+        Check(moved == 0, "the sRGB8 decode of each 8-bit code stores the code itself", std::to_string(moved) + " differ");
+
+        auto srgb = [&](ChannelFormat format, const std::string& sha, core::FilteringMode filter, double scale,
+                        const std::string& space) {
             Builder builder(kSize, kSize, {{ChannelType::User0, format}});
-            core::Layer layer = builder.Fill("bitmap", SameSource(user0, Bitmap(sha, "sRGB")), Same(user0, BlendingMode::Normal, 1.0));
-            if (scale == 1.0) {
+            core::Layer layer = builder.Fill("bitmap", SameSource(user0, Bitmap(sha, space)), Same(user0, BlendingMode::Normal, 1.0));
+            if (scale == 1.0 && filter == core::FilteringMode::BilinearHQ) {
                 layer.fill->projection.mode = core::ProjectionMode::Fill;
             } else {
-                SetUv(layer, core::FilteringMode::Nearest, core::UVWrapMode::Repeat, {scale, scale}, 0.0, {0.0, 0.0});
+                SetUv(layer, filter, core::UVWrapMode::Repeat, {scale, scale}, 0.0, {0.0, 0.0});
             }
             single(format, layer, builder);
             CpuEvaluator cpu(templates, kWideLimits);
             return evaluate(builder, ChannelType::User0, cpu);
         };
-        render::Result<ChannelResult> decoded = srgb(ChannelFormat::sRGB8, sha16, 1.0);
-        bool ok = decoded.has_value();
-        if (ok) {
-            const std::vector<uint32_t> samples = Samples(*decoded);
-            for (size_t k = 0; k < samples.size() && ok; ++k) {
-                const float x = arith::UnormOperand(image16->values[k], 16);
-                ok = samples[k] == arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x)));
+        // The expected codes: each texel projected (ProjectTexel) from the decoded float32 image, stored as sRGB8.
+        auto expected = [&](const DecodedImage& img, core::FilteringMode filter, double scale) {
+            DecodedImage linear = img;
+            linear.encoding = render::TexelEncoding::Float32;
+            for (uint32_t& v : linear.values) {
+                v = std::bit_cast<uint32_t>(img.encoding == render::TexelEncoding::Unorm16 ? decode16(v) : arith::Srgb8Operand(v));
+            }
+            UvProjection projection;
+            projection.filter = filter;
+            projection.scale = {scale, scale};
+            std::vector<uint32_t> out;
+            for (uint32_t j = 0; j < kSize; ++j) {
+                for (uint32_t i = 0; i < kSize; ++i) {
+                    const ProjectedTexel texel = ProjectTexel(projection, linear, i, j, kSize, kSize);
+                    for (uint32_t c = 0; c < 3; ++c) out.push_back(arith::Srgb8Store(texel.value[c]));
+                }
+            }
+            return out;
+        };
+        const std::vector<std::tuple<std::string, std::string, std::shared_ptr<DecodedImage>>> images{
+            {"16-bit colour", sha16, image16}, {"8-bit colour", sha8, image8}, {"16-bit grey", shaGrey, grey}, {"8-bit grey", shaGrey8, grey8}};
+        const std::vector<std::pair<core::FilteringMode, double>> samplings{
+            {core::FilteringMode::BilinearHQ, 1.0}, {core::FilteringMode::BilinearHQ, 0.5}, {core::FilteringMode::Nearest, 0.5},
+            {core::FilteringMode::Nearest, 2.0}};
+        for (const auto& [name, sha, img] : images) {
+            for (const auto& [filter, scale] : samplings) {
+                render::Result<ChannelResult> result = srgb(ChannelFormat::sRGB8, sha, filter, scale, "sRGB");
+                Check(result && Samples(*result) == expected(*img, filter, scale),
+                      "a " + name + " sRGB bitmap under " + std::string(core::ToString(filter)) + " at scale " +
+                          std::to_string(scale) + " stores the sRGB8 code of its projected decoded texels",
+                      Describe(result));
+                if (scale != 1.0 || !result) continue;
+                // 1:1: every code is decoded and stored (an 8-bit code is its own sRGB8 code).
+                bool same = true;
+                const std::vector<uint32_t> samples = Samples(*result);
+                for (size_t k = 0; k < samples.size() && same; ++k) {
+                    const uint32_t code = img->values[(k / 3) * img->channels + (img->channels == 1 ? 0 : k % 3)];
+                    same = samples[k] == (img->encoding == render::TexelEncoding::Unorm8
+                                              ? code
+                                              : arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(arith::UnormOperand(code, 16)))));
+                }
+                Check(same, "a " + name + " sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code", "");
             }
         }
-        Check(ok, "a 16-bit colour sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code", Describe(decoded));
-        // An 8-bit code c is the 16-bit code 257 c: its decode stores c through either arithmetic.
-        size_t moved = 0;
-        for (uint32_t code = 0; code < 256; ++code) {
-            const float x = arith::UnormOperand(code, 8);
-            const float gpu = x <= 0.04045f ? x * static_cast<float>(1.0 / 12.92)
-                                            : hw::Pow((x + 0.055f) * static_cast<float>(1.0 / 1.055), 2.4f);
-            if (x != arith::UnormOperand(code * 257u, 16) || arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x))) != code ||
-                arith::Srgb8Store(gpu) != code) {
-                ++moved;
-            }
+        // Working and Legacy Linear read the codes as linear values (Raw); Legacy sRGB decodes them as sRGB.
+        render::Result<ChannelResult> raw = srgb(ChannelFormat::sRGB8, sha16, core::FilteringMode::BilinearHQ, 1.0, "Raw");
+        render::Result<ChannelResult> decoded = srgb(ChannelFormat::sRGB8, sha16, core::FilteringMode::BilinearHQ, 1.0, "sRGB");
+        bool spaces = raw && decoded && Samples(*raw) != Samples(*decoded);
+        for (const auto& [space, like] : {std::pair{"Working", &raw}, std::pair{"LegacyColorSpace.Linear", &raw},
+                                          std::pair{"LegacyColorSpace.sRGB", &decoded}}) {
+            render::Result<ChannelResult> result = srgb(ChannelFormat::sRGB8, sha16, core::FilteringMode::BilinearHQ, 1.0, space);
+            spaces = spaces && result && Samples(*result) == Samples(**like);
         }
-        Check(moved == 0, "the sRGB decode of each 8-bit code stores the code itself (double precision and the GPU's float32)",
-              std::to_string(moved) + " differ");
-        render::Result<ChannelResult> decoded8 = srgb(ChannelFormat::sRGB8, sha8, 1.0);
-        Check(decoded8 && Samples(*decoded8) == image8->values, "an 8-bit colour sRGB bitmap at 1:1 stores each code as its sRGB8 code",
-              Describe(decoded8));
-        render::Result<ChannelResult> decodedGrey = srgb(ChannelFormat::sRGB8, shaGrey, 1.0);
-        bool greyOk = decodedGrey.has_value();
-        if (greyOk) {
-            const std::vector<uint32_t> samples = Samples(*decodedGrey);
-            greyOk = samples.size() == grey->values.size() * 3;
-            for (size_t k = 0; k < samples.size() && greyOk; ++k) {
-                const float x = arith::UnormOperand(grey->values[k / 3], 16);
-                greyOk = samples[k] == arith::Srgb8Store(static_cast<float>(arith::SrgbDecode(x)));
-            }
-        }
-        Check(greyOk, "a 16-bit grey sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code on the three channels",
-              Describe(decodedGrey));
+        Check(spaces, "a bitmap in Working or Legacy Linear is read as in Raw, in Legacy sRGB as in sRGB", "");
         bool refused = true;
         std::string detail;
         for (const auto& [name, result] :
-             {std::pair{"RGB16 channel", srgb(ChannelFormat::RGB16, sha16, 1.0)},
-              std::pair{"8-bit grey bitmap", srgb(ChannelFormat::sRGB8, shaGrey8, 1.0)},
-              std::pair{"Nearest at scale 0.5", srgb(ChannelFormat::sRGB8, sha16, 0.5)},
-              std::pair{"8-bit Nearest at scale 0.5", srgb(ChannelFormat::sRGB8, sha8, 0.5)}}) {
+             {std::pair{"RGB16 channel", srgb(ChannelFormat::RGB16, sha16, core::FilteringMode::BilinearHQ, 1.0, "sRGB")},
+              std::pair{"BilinearHQ at scale 2", srgb(ChannelFormat::sRGB8, sha16, core::FilteringMode::BilinearHQ, 2.0, "sRGB")},
+              std::pair{"8-bit BilinearSharp at scale 2", srgb(ChannelFormat::sRGB8, sha8, core::FilteringMode::BilinearSharp, 2.0, "sRGB")},
+              std::pair{"ACEScg", srgb(ChannelFormat::sRGB8, sha16, core::FilteringMode::BilinearHQ, 1.0, "ACEScg")}}) {
             if (result || KindName(result.error()) != "unsupported_source") {
                 refused = false;
                 detail += std::string(name) + ": " + Describe(result) + " ";
             }
         }
-        Builder working(kSize, kSize, {{ChannelType::User0, ChannelFormat::sRGB8}});
-        working.SetRoot({working.Fill("bitmap", SameSource(user0, Bitmap(sha16, "Working")), Same(user0, BlendingMode::Normal, 1.0))});
-        working.AddResource(sha16, 100);
-        CpuEvaluator cpu(templates, kWideLimits);
-        render::Result<ChannelResult> unrecorded = evaluate(working, ChannelType::User0, cpu);
-        if (unrecorded || KindName(unrecorded.error()) != "unsupported_source") {
-            refused = false;
-            detail += "Working: " + Describe(unrecorded);
-        }
-        Check(refused, "an sRGB bitmap on a channel that is not sRGB8, 8-bit grey, or resampled, and a bitmap in the Working "
+        Check(refused, "an sRGB bitmap on a channel that is not sRGB8 or minified by a bilinear filter, and an unknown bitmap "
                        "colour space fail with unsupported_source",
               detail);
+    }
+    {
+        // Nearest at scale 2 puts every texel on a tie: across, the right texel (2 i + 1 - W / 2); down the rows, the
+        // upper one (2 j - W / 2), the GPU's point sample of the bottom-up bitmap (srgb-bitmap-variants-v2 s3).
+        Builder builder(kSize, kSize, {{ChannelType::User0, ChannelFormat::RGB16}});
+        core::Layer layer = builder.Fill("bitmap", SameSource(user0, Bitmap(sha16)), Same(user0, BlendingMode::Normal, 1.0));
+        SetUv(layer, core::FilteringMode::Nearest, core::UVWrapMode::Repeat, {2.0, 2.0}, 0.0, {0.0, 0.0});
+        single(ChannelFormat::RGB16, layer, builder);
+        CpuEvaluator cpu(templates, kWideLimits);
+        render::Result<ChannelResult> ties = evaluate(builder, ChannelType::User0, cpu);
+        bool ok = ties.has_value();
+        if (ok) {
+            const std::vector<uint32_t> s = Samples(*ties);
+            for (uint32_t y = 0; y < kSize && ok; ++y) {
+                for (uint32_t x = 0; x < kSize && ok; ++x) {
+                    const uint32_t bx = (2 * x + 1 + kSize / 2) % kSize;
+                    const uint32_t by = (2 * y + kSize / 2) % kSize;
+                    ok = s[(size_t{y} * kSize + x) * 3] == image16->At(bx, by, 0);
+                }
+            }
+        }
+        Check(ok, "Nearest at a tie takes the right texel across and the upper texel down the rows", Describe(ties));
     }
 
     // Transforms on RGB16 against direct texel arithmetic.
@@ -3260,6 +3301,71 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
     Check(allEqual, "every random projection stack (filters, wrap modes, transforms, 8/16-bit grey and colour bitmaps) evaluates "
                     "to the same bytes on the GPU and on the CPU (" + std::to_string(compared) + " samples, " +
                     std::to_string(stacks) + " stacks over 9 formats)");
+
+    // sRGB bitmaps (sources.h, decision 174): 8- and 16-bit, grey and colour, decoded to float32 texels, on an sRGB8
+    // channel under magnifying bilinear filters and Nearest at any scale, with a Nearest stack at scale 2 whose every
+    // texel lies on a tie.
+    size_t decoded = 0;
+    for (int variant = 0; variant < 6; ++variant) {
+        Builder builder(256, 256, {{ChannelType::User0, ChannelFormat::sRGB8}});
+        auto provider = std::make_shared<MapResourceProvider>();
+        const std::vector<ChannelType> channels{ChannelType::User0};
+        std::vector<core::Layer> layers;
+        for (int i = 0; i < 3; ++i) {
+            const bool sixteen = (rng() & 1) != 0;
+            const uint32_t imageChannels = (rng() & 3) == 0 ? 1 : 3;
+            const uint32_t side = (rng() & 1) != 0 ? 64 : 256;
+            char buffer[65];
+            std::snprintf(buffer, sizeof(buffer), "%064d", ++serial);
+            const std::string sha(buffer);
+            provider->Add(sha, PatternImage(side, side, imageChannels,
+                                            sixteen ? render::TexelEncoding::Unorm16 : render::TexelEncoding::Unorm8, rng()));
+            builder.AddResource(sha, 100);
+            core::Layer layer = builder.Fill("srgb" + std::to_string(i), SameSource(channels, Bitmap(sha, "sRGB")),
+                                             Same(channels, i == 0 ? BlendingMode::Normal : modes[rng() % modes.size()], 0.3 + 0.7 * unit()));
+            if (variant == 0) {
+                SetUv(layer, core::FilteringMode::Nearest, core::UVWrapMode::Repeat, {2.0, 2.0}, 0.0, {0.0, 0.0});
+            } else {
+                const core::FilteringMode filter = filters[rng() % filters.size()];
+                const double fit = 256.0 / side;
+                const double scale = filter == core::FilteringMode::Nearest ? 0.2 + 4.0 * unit() : fit * (0.3 + 0.7 * unit());
+                SetUv(layer, filter, wraps[rng() % wraps.size()], {scale, scale * (0.8 + 0.2 * unit())}, 360.0 * unit() - 180.0,
+                      {unit() - 0.5, unit() - 0.5});
+            }
+            layers.push_back(std::move(layer));
+        }
+        builder.SetRoot(layers);
+        if (!builder.Validate("sRGB projection stack")) return Finish();
+        EvaluateRequest request;
+        request.textureSet = builder.SetId();
+        request.stack = builder.StackId();
+        request.channel = ChannelType::User0;
+        request.resources = provider;
+        CpuEvaluator cpu(templates, kWideLimits);
+        render::Result<ChannelResult> cpuResult = cpu.Evaluate(builder.project, request);
+        auto project = std::make_shared<const core::Project>(builder.project);
+        std::future<render::Result<ChannelResult>> future = gpu.Evaluate(core::Snapshot{1, project}, request);
+        render::Result<ChannelResult> gpuResult = Get(future);
+        const std::string label = "sRGB projection stack " + std::to_string(variant);
+        if (!cpuResult || !gpuResult) {
+            allEqual = false;
+            Check(false, label + " evaluates on both stores", Describe(cpuResult) + " / " + Describe(gpuResult));
+            continue;
+        }
+        std::string first;
+        const std::vector<uint32_t> expected = Samples(*cpuResult);
+        const size_t mismatches = Mismatches(expected, Samples(*gpuResult), first, cpuResult->tileFormat.encoding);
+        decoded += expected.size();
+        if (mismatches != 0) {
+            allEqual = false;
+            Check(false, label + ": GPU equals CPU", std::to_string(mismatches) + " mismatches; " + first);
+        }
+    }
+    Check(decoded > 0 && allEqual,
+          "every random sRGB projection stack (8/16-bit grey and colour bitmaps decoded to float32, magnifying bilinear "
+          "filters and Nearest, a stack of Nearest ties) evaluates to the same bytes on the GPU and on the CPU (" +
+              std::to_string(decoded) + " samples)",
+          "");
 
     // The grid size reaches the GPU cache keys too.
     {
@@ -6859,13 +6965,14 @@ std::vector<ExcludedFeature> ExcludedFeatures() {
                             geometry.inclusion_list = false;
                             geometry.items = {"other"};
                         }});
-    features.push_back({"an sRGB bitmap on an RGB16 channel", "phase1.15_compositor-colour-fits", ChannelType::User0,
+    // Painter refuses the sRGB space on a channel that is not sRGB8 (decision 174).
+    features.push_back({"an sRGB bitmap on an RGB16 channel", "decision 174", ChannelType::User0,
                         [](core::Project& p, core::Id fill) {
                             FillOf(p, fill).sources[ChannelType::User0] = Bitmap(std::string(64, 'd'), "sRGB");
                         }});
-    features.push_back({"a bitmap in the Working colour space", "phase1.15_compositor-colour-fits", ChannelType::User0,
+    features.push_back({"a bitmap in an unrecorded colour space", "phase1.15_compositor-colour-fits", ChannelType::User0,
                         [](core::Project& p, core::Id fill) {
-                            FillOf(p, fill).sources[ChannelType::User0] = Bitmap(std::string(64, 'e'), "Working");
+                            FillOf(p, fill).sources[ChannelType::User0] = Bitmap(std::string(64, 'e'), "ACEScg");
                         }});
     // SignedAddition and uniform colours on Height are recorded (height-signed-addition, decision
     // 079); a DirectX project's Normal channel only as one bitmap fill at opacity 1.

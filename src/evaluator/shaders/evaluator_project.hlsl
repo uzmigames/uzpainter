@@ -4,16 +4,18 @@
 // plane). Mirrors ProjectTexel, SampleValue and the store of cpu_store.cpp operation for
 // operation: the UV transform in double precision (each operation one IEEE double operation,
 // compiled IEEE-strict and `precise`), the fixed-point coordinates and weights in integers, the
-// texels as float32(c / M) correctly rounded (2 t - 1 on the Height channel, before the filter),
-// the bilinear filter in integers (BilinearFilter: operands aligned to the largest weighed texel
-// magnitude, rounded once to float32, ties away from zero), and the channel's write rule.
+// texels as float32(c / M) correctly rounded or a float32 image's values (2 t - 1 on the Height
+// channel, before the filter), the bilinear filter in integers (BilinearFilter: operands aligned
+// to the largest weighed texel magnitude, rounded once to float32, ties away from zero), and the
+// channel's write rule.
 //
 // Parameters: a block of 32 uints in the arena behind root constant 0, block index in root
 // constant 1 (kernelgen.h, ProjectParam). The bitmap is a structured buffer of uints holding its
 // codes packed in sample order (rows top first, channels interleaved): two 16-bit codes or four
-// 8-bit codes per uint, low bits first. A minifying bilinear projection (P_CHAIN non-zero) samples
-// the bitmap's float32 mip chain through the texture unit (texture_unit.h, mirrored below) with
-// Painter's float32 arithmetic around it (projection_uv.cpp `Minified`).
+// 8-bit codes per uint, low bits first, or one float32 value per uint (a decoded sRGB bitmap). A
+// minifying bilinear projection (P_CHAIN non-zero) samples the bitmap's float32 mip chain through
+// the texture unit (texture_unit.h, mirrored below) with Painter's float32 arithmetic around it
+// (projection_uv.cpp `Minified`).
 
 #include "image_common.hlsli"
 #include "evaluator_tables.hlsli"
@@ -74,10 +76,16 @@ int64_t Address(int64_t index, uint extent, bool repeat) {
     return index < 0 ? 0 : (index >= n ? n - 1 : index);
 }
 
+// P_IMAGE_SIXTEEN: the bitmap's encoding.
+#define IMAGE_UNORM8 0u
+#define IMAGE_UNORM16 1u
+#define IMAGE_FLOAT32 2u
+
 uint Code(uint srv, uint sixteen, uint width, uint channels, int64_t x, int64_t y, uint c) {
     StructuredBuffer<uint> image = ResourceDescriptorHeap[srv];
     const uint channel = channels == 1u ? 0u : c;
     const uint k = ((uint)y * width + (uint)x) * channels + channel;
+    if (sixteen == IMAGE_FLOAT32) return image[k];
     if (sixteen != 0u) {
         const uint word = image[k >> 1];
         return (k & 1u) != 0u ? word >> 16 : word & 0xFFFFu;
@@ -106,6 +114,13 @@ float DivNearest(uint s, uint d) {
         else break;
     }
     return q;
+}
+
+// The texel's value (projection_uv.cpp `TexelValue`): float32(c / M) of a code, or the stored
+// value of a float32 image (a decoded sRGB bitmap).
+float TexelValue(uint srv, uint sixteen, uint width, uint channels, int64_t x, int64_t y, uint c, uint range) {
+    const uint code = Code(srv, sixteen, width, channels, x, y, c);
+    return sixteen == IMAGE_FLOAT32 ? asfloat(code) : DivNearest(code, range);
 }
 
 // projection_uv.h BilinearFilter on float32 texels: E the frexp exponent of the largest texel
@@ -693,10 +708,11 @@ void main(uint3 id : SV_DispatchThreadID) {
         if (filter == FILTER_NEAREST) {
             precise const double xr = x + 0.5;
             precise const double yr = y + 0.5;
+            // A tie between two rows takes the upper one: ceil(y + 1/2) - 1 (projection_uv.h).
             const int64_t xi = Address(FloorToInt(xr), imageWidth, repeatX);
-            const int64_t yi = Address(FloorToInt(yr), imageHeight, repeatY);
+            const int64_t yi = Address(-FloorToInt(-yr) - 1, imageHeight, repeatY);
             [unroll] for (uint c = 0; c < 3u; ++c) {
-                value[c] = SignedValue(DivNearest(Code(srv, sixteen, imageWidth, channels, xi, yi, c), range), signedRange);
+                value[c] = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xi, yi, c, range), signedRange);
             }
         } else {
             precise const double xs = x * 256.0 + 0.5;
@@ -716,10 +732,10 @@ void main(uint3 id : SV_DispatchThreadID) {
             const int64_t ya = Address(y0, imageHeight, repeatY);
             const int64_t yb = Address(y0 + 1, imageHeight, repeatY);
             [unroll] for (uint c = 0; c < 3u; ++c) {
-                const float t00 = SignedValue(DivNearest(Code(srv, sixteen, imageWidth, channels, xa, ya, c), range), signedRange);
-                const float t10 = SignedValue(DivNearest(Code(srv, sixteen, imageWidth, channels, xb, ya, c), range), signedRange);
-                const float t01 = SignedValue(DivNearest(Code(srv, sixteen, imageWidth, channels, xa, yb, c), range), signedRange);
-                const float t11 = SignedValue(DivNearest(Code(srv, sixteen, imageWidth, channels, xb, yb, c), range), signedRange);
+                const float t00 = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xa, ya, c, range), signedRange);
+                const float t10 = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xb, ya, c, range), signedRange);
+                const float t01 = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xa, yb, c, range), signedRange);
+                const float t11 = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xb, yb, c, range), signedRange);
                 value[c] = BilinearFilter(uint4(w00, w10, w01, w11), float4(t00, t10, t01, t11));
             }
         }

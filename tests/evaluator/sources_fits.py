@@ -384,9 +384,9 @@ def colour_transfer(ev: Evaluations, decode: np.ndarray) -> dict[str, Any]:
             "Uniform colours on Height, 8-bit bitmaps, unrecorded sRGB bitmaps, OCIO colour "
             "management",
             "Not observed. Uniform colours on Height are stored like any channel value (no "
-            "remap); 8-bit bitmaps follow bitmap-import-linear; an sRGB bitmap other than a 16-bit "
-            "colour or grey or an 8-bit colour bitmap sampled 1:1 onto an sRGB8 channel, the "
-            "Working and Linear bitmap colour spaces and an OCIO project fail with "
+            "remap); 8-bit bitmaps follow bitmap-import-linear; bilinear minification of an sRGB "
+            "bitmap, a bitmap colour space other than Raw, Data, DataSigned, NormalXYZLeft, "
+            "Working, sRGB and the Legacy Linear and sRGB spaces, and an OCIO project fail with "
             "evaluator:unsupported_source.",
             [PYDOC_COLOUR, source("S-OCIO", "Colour transforms")],
             [],
@@ -499,8 +499,10 @@ def uv_sampling(ev: Evaluations, exe: Path) -> dict[str, Any]:
         entry(
             "uv-nearest",
             "UV projection with the Nearest filter (Repeat), any scale",
-            TRANSFORM + "The texel (floor(x + 0.5) mod w, floor(y + 0.5) mod h); its value "
-            "float32(c / M) stored with the channel's write rule (the code itself at equal depth).",
+            TRANSFORM + "The texel (floor(x + 0.5) mod w, (ceil(y + 0.5) - 1) mod h): a tie "
+            "between two rows takes the upper one, the GPU's point sample of the bitmap stored "
+            "bottom-up (srgb-bitmap-variants-v2 s3, decision 174); its value float32(c / M) "
+            "stored with the channel's write rule (the code itself at equal depth).",
             [PYDOC_UV, PYDOC_WRAP, PBRT],
             [parameter("uv_pivot", [0.5, 0.5], "fitted")],
             set_residuals("s2", "s2/user0-user7"),
