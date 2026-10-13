@@ -167,7 +167,10 @@ COVERAGE: dict[str, tuple[str, ...]] = {
     "content-effect order": ("tier0/effects/order",),
     "levels clamp behaviour": ("tier0/levels/clamp",),
     "the `BilinearHQ` kernel": ("tier0/resample/uv",),
-    "height→normal methods and strength scaling": ("tier0/height-normal/default-method",),
+    (
+        "height→normal methods and their scaling with the height amplitude (Painter has no "
+        "strength setting, decision 047)"
+    ): ("tier0/height-normal/default-method",),
     "the `AO_Mixed` operator": ("tier0/ao-mixed/operator",),
 }
 

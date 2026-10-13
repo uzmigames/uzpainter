@@ -23,7 +23,10 @@ ITEM_GROUP = "group `Normal`/`PassThrough` semantics with masks"
 ITEM_EFFECT = "content-effect order"
 ITEM_LEVELS = "levels clamp behaviour"
 ITEM_RESAMPLE = "the `BilinearHQ` kernel"
-ITEM_HEIGHT = "height→normal methods and strength scaling"
+ITEM_HEIGHT = (
+    "height→normal methods and their scaling with the height amplitude (Painter has no strength "
+    "setting, decision 047)"
+)
 ITEM_AO = "the `AO_Mixed` operator"
 ITEM_API = "API readback rules (set→get, mask `None`, insertion errors)"
 UI_CASES = "phase0.7_tier0-semantics-ui-cases"

@@ -997,6 +997,11 @@ def tier0_export_goldens() -> list[Path]:
     root = manifest_root(current_envelope())
     out = []
     for path in sorted(root.rglob("*.json")):
+        if "tier1" in path.relative_to(root).parts:
+            # A Tier 1 golden exports through its own recorded configuration (`config`, e.g. the
+            # Tunic v10 migration golden, decision 215), not the recorder job's `maps`; the Tier 1
+            # comparison covers it.
+            continue
         steps = (
             json.loads(path.read_text(encoding="utf-8"))
             .get("instruction_sequence", {})

@@ -1259,7 +1259,6 @@
    "uzpainter.source.SourceBitmap",
    "uzpainter.source.SourceBitmap.get_color_space",
    "uzpainter.source.SourceBitmap.resource_id",
-   "uzpainter.source.SourceBitmap.set_color_space",
    "uzpainter.source.SourceMode",
    "uzpainter.source.SourceMode.Split",
    "uzpainter.source.SourceUniformColor",

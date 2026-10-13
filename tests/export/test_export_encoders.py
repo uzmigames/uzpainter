@@ -152,12 +152,13 @@ def ramp_codes() -> np.ndarray:
 
 
 def ramp_png(path: Path) -> str:
-    """A 256x256 RGB16 bitmap holding `ramp_codes` in its three components (the fill source of
-    `spec`); returns its SHA-256."""
+    """A 256x256 grey 16-bit bitmap holding `ramp_codes` (the fill source of `spec`); returns its
+    SHA-256. A grey bitmap feeds every channel of a colour channel, and the one-channel channels
+    read it without the colour-on-mono texture, which is recorded only for 8-bit images
+    (decision 218)."""
     from tools.parity.feasibility import png
 
-    samples = np.repeat(ramp_codes()[:, :, None], 3, axis=-1)
-    data = png.encode(samples.astype(np.int64), 16)
+    data = png.encode(ramp_codes().astype(np.int64), 16)
     path.write_bytes(data)
     return hashlib.sha256(data).hexdigest()
 
