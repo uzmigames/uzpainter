@@ -81,8 +81,9 @@ const core_root = "thirdparty/uzengine-render-core";
 
 /// Language level and defines of the vendored core. The profiling defines (`TRACY_ENABLE`,
 /// `UZ_PROFILING_ENABLED`) stay undefined, so the profiling macros and Tracy's GPU headers
-/// compile to stubs and no Tracy client is linked (`13-…` §2.2).
-const cxx_flags = [_][]const u8{ "-std=c++23", "-DSPDLOG_COMPILED_LIB" };
+/// compile to stubs and no Tracy client is linked (`13-…` §2.2). spdlog takes UTF-16 file names
+/// (`SPDLOG_WCHAR_FILENAMES`), so the render core's log file can be at any path (UZP-MOD-010).
+const cxx_flags = [_][]const u8{ "-std=c++23", "-DSPDLOG_COMPILED_LIB", "-DSPDLOG_WCHAR_FILENAMES" };
 
 /// `dx12_d3d12ma.cpp` includes `D3D12MemAlloc.cpp`; like UzEngine's build it is compiled
 /// without the undefined-behaviour sanitizer that Zig enables in Debug builds.

@@ -120,7 +120,7 @@ All UzPainter captures are window-independent (VIS-02, NFR-01); there is no hidd
 Implementation (decision 148; `src/python/capture.{h,cpp}`, `src/preview/PREVIEW.md`). `uzpainter.render.capture(path, mode, camera, size, samples, seed, preset, stack)` and the worker's `capture` tool read the committed revision once and evaluate it synchronously, so the receipt names the revision shown.
 - `painter_iray` raises `PathTracerUnavailable`, a `NotYetSupported`, before anything else.
 - `painter_viewport` evaluates the material channels on the CPU evaluator. It then renders the §6 pass offscreen on the process's GPU, with the project's display state or `preset` applied to an in-memory copy. It writes a 16-bit RGB PNG of the display codes and an RGB binary16 OpenEXR of the linear colour.
-- `base_color`, `channel:<name>` and `mask:<uid>` are texture-space captures of one stack. The export engine itself encodes them (padding `passthrough`, PNG 16 and OpenEXR 32f), so they equal the channel export.
+- `base_color`, `channel:<name>` and `mask:<uid>` are texture-space captures of one stack. The export engine itself encodes them (padding `passthrough`, PNG 16 and OpenEXR 32f), so they equal the channel export. `<name>` is a channel type as `evaluate_channel` and `source_set` take it (`SpecularRoughness`) or the export's documentMap name of one (`specularroughness`); the source is the documentMap the export records for that channel (decision 242).
 - The receipt `uzpainter/capture-receipt/1` (`src/python/capture-receipt.schema.json`) is written beside the PNG.
 
 ## 6. Realtime viewport (`painter_viewport`): preview and fast check

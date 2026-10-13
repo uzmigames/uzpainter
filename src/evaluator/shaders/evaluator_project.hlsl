@@ -86,6 +86,9 @@ int64_t Address(int64_t index, uint extent, bool repeat) {
 #define IMAGE_FLOAT32 2u
 // An R16F texture (decision 218): float32 bits of binary16 values; its filter returns a binary16.
 #define IMAGE_FLOAT16 3u
+// A Normal-channel bitmap (decision 226): 16-bit codes like IMAGE_UNORM16, the projected value
+// written as a 16-bit code before the tile stores it (DecodedImage::unorm16Target).
+#define IMAGE_UNORM16_TARGET 4u
 
 uint Code(uint srv, uint sixteen, uint width, uint channels, int64_t x, int64_t y, uint c) {
     StructuredBuffer<uint> image = ResourceDescriptorHeap[srv];
@@ -120,6 +123,12 @@ float DivNearest(uint s, uint d) {
         else break;
     }
     return q;
+}
+
+// The projected value as the tile receives it (projection_uv.cpp `Written`): through a 16-bit code
+// for IMAGE_UNORM16_TARGET.
+float Written(float v, uint sixteen) {
+    return sixteen == IMAGE_UNORM16_TARGET ? DivNearest(WriteValue(v, ENC_UNORM16), 65535u) : v;
 }
 
 // The texel's value (projection_uv.cpp `TexelValue`): float32(c / M) of a code, or the stored
@@ -867,10 +876,10 @@ void main(uint3 id : SV_DispatchThreadID) {
             minValue = Minified(m, i, j, invWidth, invHeight, ddx, ddy, filter == FILTER_SHARP, imageWidth, repeat);
         }
         float4 minResult = float4(0.0f, 0.0f, 0.0f, 1.0f);
-        minResult.x = StoreChannel(minValue.x);
+        minResult.x = StoreChannel(Written(minValue.x, sixteen));
 #if UZP_CHANNELS == 3
-        minResult.y = StoreChannel(minValue.y);
-        minResult.z = StoreChannel(minValue.z);
+        minResult.y = StoreChannel(Written(minValue.y, sixteen));
+        minResult.z = StoreChannel(Written(minValue.z, sixteen));
 #endif
 #if UZP_ALPHA
         minResult.w = StoreCoverage(minCovered ? 1.0f : 0.0f);
@@ -944,10 +953,10 @@ void main(uint3 id : SV_DispatchThreadID) {
         }
     }
     float4 result = float4(0.0f, 0.0f, 0.0f, 1.0f);
-    result.x = StoreChannel(value.x);
+    result.x = StoreChannel(Written(value.x, sixteen));
 #if UZP_CHANNELS == 3
-    result.y = StoreChannel(value.y);
-    result.z = StoreChannel(value.z);
+    result.y = StoreChannel(Written(value.y, sixteen));
+    result.z = StoreChannel(Written(value.z, sixteen));
 #endif
 #if UZP_ALPHA
     result.w = StoreCoverage(covered ? 1.0f : 0.0f);

@@ -501,6 +501,7 @@ class _Fill(Node):
     def set_source(self, channeltype: Any, source: Any) -> Any:
         native = self._context(channeltype)
         uid = self.uid()
+        context: str | None = None
         with one_transaction("layerstack.FillLayerNode.set_source"):
             if channeltype is not None and channeltype not in native.active_channels:
                 # Implicit activation, without the reset of an assignment (set-source-none-
@@ -522,14 +523,17 @@ class _Fill(Node):
                 # Bound in its default space in one native call: under OCIO a bitmap without a
                 # space on BaseColor is unrecorded, and the support check runs per call.
                 native.set_source(channeltype, target, colour.space_name(space))
-                key = ("source", uid, None if channeltype is None else channeltype.name)
-                SESSION.bound_context[key] = identifier.context
+                context = identifier.context
             elif isinstance(source, AnchorPointEffectNode):
                 raise uzpainter.NotYetSupported(
                     "anchor reference sources are release gaps (phase4.1_nodes-instances-anchors)"
                 )
             else:
                 raise ValueError(f"{source!r} is not a valid source (a Color or a ResourceID)")
+        if context is not None:
+            # Once committed: the transaction's commit checks the bitmap's image (decision 240).
+            key = ("source", uid, None if channeltype is None else channeltype.name)
+            SESSION.bound_context[key] = context
         return wrap_source(uid, channeltype, native.get_source(channeltype))
 
     @edits

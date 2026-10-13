@@ -35,6 +35,7 @@ Both transports serve the same `registry.Registry` (decision 159).
   - While it serves, the SDK points file descriptor 1 at stderr and writes frames to a private duplicate. So stdout carries protocol frames only, whatever else in the process writes.
   - The worker's own stdout goes to stderr.
   - Logs at INFO and above go to stderr and to the ledger's `log` table (`ledger.LogHandler`, newest 10 000 rows). Each call is logged as `call <tool>: ok|error <code> (job <id>)`.
+  - Ctrl+C or Ctrl+Break stops it as it stops HTTP (exit 0): `_serve` ends the worker, then `main` closes the ledger, which checkpoints its WAL. The SDK's stdin reader thread cannot be cancelled, so the loop is left with that task pending and the process ends (`main._run`, not `asyncio.run`).
 - **Streamable HTTP**: `--mcp-http <host>:<port>` serves `http://<host>:<port>/mcp` on uvicorn, in the supervisor's event loop. The address is logged once the server listens.
   - A host that is not loopback is a usage error without `--allow-remote`. `--token` and `--allow-remote` need `--mcp-http`.
   - `transport_http.Guard` checks every request before the SDK sees it:
@@ -46,6 +47,7 @@ Both transports serve the same `registry.Registry` (decision 159).
   - Ctrl+C or Ctrl+Break stops the server cleanly (exit 0). The worker runs in its own process group, so the signal never reaches it.
 - **Lease.** The stdio session holds the lease implicitly (`stdio:<pid>`). In HTTP mode a session names its owner:
   - `lease_acquire {owner}` binds the owner to the session (by `Mcp-Session-Id`) and takes the open project's lease. If another owner holds it, the call fails `lease_held {holder, since, active_job}`.
+  - An owner bound with no project open still holds the project its session then creates or opens: the lease is taken when the worker switches to it (admission step 3). A second client is then refused `lease_held` (decision 243).
   - A mutating call from a session without an owner fails `lease_required`.
   - The lease belongs to the owner, not to the connection. A client that reconnects names the same owner, gets its lease back, and reads its jobs by id from the ledger.
   - `lease_release` ends the session owner's leases. While that owner's job runs, it fails `busy` instead.
@@ -60,7 +62,7 @@ Both transports serve the same `registry.Registry` (decision 159).
 - The supervisor's tools are `status`, `capabilities`, `batch`, `supervisor_status`, `wait_idle`, `job_status`, `job_result`, `job_cancel` and `job_list`. In HTTP mode they also include `lease_acquire`, `lease_release` and `lease_status`.
   - `status`: the worker's and the supervisor's builds, the IPC protocol, the manifest's compat profile, the GPU backend and its status, the Python policy, the open project (path, UUID, untitled), its committed revision, the running jobs and the lease.
   - `capabilities`: the manifest's entry counts by status, and each worker tool's status with its gap operations and gap argument values.
-  - `batch {calls: [{tool, arguments}], stop_on_error = true, idempotency_key?}` (decision 165): each call goes through every check below and its own admission, job and transaction, in order; a long call runs with `wait`. With `stop_on_error`, the calls after the first failure are `not_executed`. A nested batch fails that call. The result is `{status: completed | completed_with_errors | stopped, executed, failed, results: [{index, tool, status, summary, body}]}`. A batch is not atomic. With a batch key, a mutating call without its own key gets `<key>/<index>` and the revision current at its admission, so a retried batch returns each committed call's stored outcome.
+  - `batch {calls: [{tool, arguments}], stop_on_error = true, idempotency_key?}` (decision 165): each call goes through every check below and its own admission, job and transaction, in order; a long call runs with `wait`. With `stop_on_error`, the calls after the first failure are `not_executed`. A nested batch fails that call. The result is `{status: completed | completed_with_errors | stopped, executed, failed, results: [{index, tool, status, summary, body}]}`. The reply carries the result contract (see Results; decision 242): `revision` is the revision its first call was admitted on, `job_id` is null, the change lists gather its calls on the project it ends on, `warnings` every call's, and the receipt is `{tool: batch, job_id: null, revision, project, project_uuid, texture_set: null, committed_revision}`. A batch is not atomic. With a batch key, a mutating call without its own key gets `<key>/<index>` and the revision current at its admission, so a retried batch returns each committed call's stored outcome.
 - A mutating tool's schema also takes `idempotency_key` and `expected_revision`. A long tool's schema also takes `wait`.
 - A tool that declares capability-manifest operations carries `_meta["uzpainter/capability"] = {status: available | release-gap, operations, values}`. `values` lists the status of each argument value an `x-uzpainter-capability` map names (see step 2).
 
@@ -69,7 +71,7 @@ Every `tools/call` is checked in the order below (decision 158). Each refusal co
 1. **Capability.**
    - The worker lists each tool's `capability: [{symbol, context}]`.
    - The supervisor reads `capabilities.json` beside `UzPainter.exe` at start. A missing or malformed manifest is a fatal start error.
-   - While one of a tool's operations is a `release-gap`, or is missing from the manifest, the call fails `capability_gap {tool, operations}`.
+   - While one of a tool's operations is a `release-gap`, or is missing from the manifest, the call fails `capability_gap {tool, type, reason, operations}`: `type` is `NotYetSupported`, the API's release-gap class, and `reason` names each gap operation with its manifest notes (its owner task). Every release-gap refusal has these fields, the worker's too (decision 242).
    - The tool becomes callable when its manifest entry changes, with no MCP change.
 2. **Schema.** The arguments are validated against the public schema (JSON Schema 2020-12). A failure is `invalid_arguments {errors: [{argument, rule, message}]}`, and a message never repeats the value given.
 3. **Key and precondition.**
@@ -173,14 +175,17 @@ The supervisor learns which project to reopen from the worker's `revision` event
    | a key only | forwards it without a precondition: the worker returns its stored outcome or `outcome_unknown`, and never runs it |
 
 3. **Lease.** There is one mutation lease per project UUID, held in the ledger.
-   - The stdio session takes it implicitly (`stdio:<supervisor pid>`) at its first mutating call, and releases it on exit.
+   - The stdio session takes it implicitly (`stdio:<supervisor pid>`) at its first mutating call, or when it opens or creates the project, and releases it on exit.
    - A lease whose holder process has ended is taken over.
    - A mutating call from another owner returns `lease_held {holder, since, active_job}`. Reads need no lease.
    - HTTP clients name their own owners with `lease_acquire` (see Transports).
+   - **Project switch** (decision 243). When the worker switches to another project during a call (`project_create`, `project_open`, a script), that call's owner takes the new project's lease. Another live owner's lease stays. The lease is taken in the same step that records the new project from the worker's `revision` event, before the call replies, so no other call sees the project unleased.
+     - The call is the oldest request pending on the pipe, `worker/cancel` aside. The worker's command thread runs requests in order, and each reply reaches the pipe before the next request's events.
+     - A call from an HTTP session that has named no owner is admitted `anonymous`, so the project it opens stays unleased.
 4. **Busy.** A mutating call or long job while another mutating call or long job of the same project runs returns `busy {job_id}`; it is not queued. `wait_idle {timeout}` (seconds) waits until none runs, and a timeout is the error `timeout`.
 5. **Job.** Each admitted mutating call and each long call is a ledger job: `running`, then `succeeded`, `failed`, `cancelled` or `interrupted` (see Jobs).
 6. **Receipt.** Every reply carries `receipt`:
-   - always: `tool`, `project` and `project_uuid` (what the worker holds afterwards), `texture_set` (named in the arguments or returned), `job_id`, `revision` (the revision the call was admitted on) and `committed_revision`;
+   - always: `tool`, `project` and `project_uuid` (what the worker holds afterwards), `texture_set` (named in the arguments or returned), `job_id`, `revision` (the revision the call was admitted on; with no project open, 0 for a mutating call, the precondition it is given, and null for a read, decision 242) and `committed_revision`;
    - for a mutating call, also: `idempotency_key`, `key_source` (`client` or `supervisor`), `expected_revision`, `request_hash` and `admission` (`executed` or `stored_outcome`).
 
 **Ledger.** The ledger is a SQLite file in WAL mode: `%LOCALAPPDATA%\UzPainter\supervisor\ledger.sqlite3`, or `--ledger <file>`. It has four tables: `lease`, `job`, `acknowledgement` and `outcome`.
@@ -208,7 +213,7 @@ Long operations are jobs (02 §3, 11 §3; task phase2.3, decisions 140 and 141).
   | long, no commit point | `{committed: false, source: no_commit_point}` |
   | long, commit point not reported | `{committed: null, source: no_commit_event, commit_point}`: an export may have published just before the death (`uzpainter export --recover` completes or discards its generation) |
 
-- **Queries.** `job_status {job_id}` returns a running job's progress, message and commit point, or a finished one's terminal state, `job` and `resolution`. `job_result {job_id}` returns the reply as it was answered, with its receipt (`job_running` while it runs). `job_list {limit?}` lists the ledger's newest jobs (50 by default). An unknown id is `unknown_job`; `job_cancel` of a finished job returns `{status, cancel: already_ended, job}`.
+- **Queries.** `job_status {job_id}` returns a running job's progress, message and commit point, or a finished one's terminal state, `job` and `resolution`. A finished job's row holds its terminal receipt's progress and message (1.0 when it succeeded; the worker reports no event at the end), and an interrupted one the last it reported (decision 242). `job_result {job_id}` returns the reply as it was answered, with its receipt (`job_running` while it runs). `job_list {limit?}` lists the ledger's newest jobs (50 by default). An unknown id is `unknown_job`; `job_cancel` of a finished job returns `{status, cancel: already_ended, job}`.
 - **Restart.** The ledger keeps every job's terminal reply, so a later supervisor answers the queries. Each job row names its supervisor by process id and creation time. When a supervisor starts, running jobs of supervisors that have ended become `interrupted` with `{committed: null, source: supervisor_ended}`; the next reconciliation of their project that finds their key's row resolves them as committed.
 
 ## Worker
@@ -231,12 +236,12 @@ It then answers one request at a time on the interpreter's thread; a long tool's
 | Tool | Kind | Result |
 |---|---|---|
 | `project_open {path}` | GPU-free, long (no commit point) | `{path, revision}` |
-| `export {config \| preset, output_dir?, texture_sets?, size_log2?, file_format?, bit_depth?, padding?, dry_run?, fixed_names?}` | GPU-free (CPU evaluator), long (commit point: the publication) | the export job's result (`uzpainter.export`): `{directory, files, fixed_names, generation, plan_hash, project_path, mesh_path, receipt, receipt_sha256, revision}`. `preset` exports a shipped preset for the texture sets into `output_dir`; the overrides are one last unfiltered `exportParameters` rule; `dry_run` returns `{dry_run, revision, plan, textures}` and writes nothing |
+| `export {config \| preset, output_dir?, texture_sets?, size_log2?, file_format?, bit_depth?, padding?, dry_run?, fixed_names?}` | GPU-free (CPU evaluator), long (commit point: the publication) | the export job's result (`uzpainter.export`): `{directory, files, fixed_names, generation, plan_hash, project_path, mesh_path, receipt, receipt_sha256, revision}`. `preset` exports a shipped preset for the texture sets into `output_dir`; the overrides are one last unfiltered `exportParameters` rule; `dry_run` returns `{dry_run, revision, plan, textures}` and writes nothing. Before the job starts, the configuration's plan is compiled and checked: an invalid configuration (a parameter undefined after the preset map and every matching rule, such as `dilationDistance` for `diffusion`, `color` or `transparent` padding) is `invalid_arguments {type: ValueError}` and no job runs (decision 242) |
 | `export_presets_list` | GPU-free | the shipped presets: `{id, aliases, maps, layout, pending_recordings}` |
-| `project_close {discard?}` | GPU-free | `{}`; an untitled project needs `discard: true`, because closing deletes it |
+| `project_close {discard?}` | GPU-free | `{}`. Without `discard` every commit is kept. `discard: true` drops what was not saved, as Painter's close does (decision 244): a saved project returns to its last save (`Session::DiscardUnsaved`: one revert to the last named checkpoint, saved); an untitled project, which needs it, is deleted |
 | `project_save {mode?: incremental\|full}` | GPU-free, names a checkpoint | `{current, named, previous}` |
 | `project_inspect {path?}` | GPU-free | `{open, path, revision, texture_sets: [{name, stacks}]}`; with `path`, `{open: false, path, report}`: the store's inspection report of that file, read without opening it |
-| `evaluate_channel {channel, texture_set?, stack?}` | GPU (the GPU evaluator on the engine thread) | `{revision, texture_set, stack, channel, format, width, height, tiles, payload: {path, sha256, size}}`; the texels go to a file under `--output-root` |
+| `evaluate_channel {channel, texture_set?, stack?}` | GPU (the GPU evaluator on the engine thread) | `{revision, texture_set, stack, channel, format, width, height, tiles, payload: {path, sha256, size}}`; the texels go to a file under `--output-root`. An evaluator failure carries its API class, as the export's does: a release gap is `capability_gap`, any other `call_failed {type}` (decision 242) |
 | `snapshot_layer_tree` | GPU-free | the layer-tree snapshot of the committed revision (`uzp_core/document/layer_tree.h`) |
 | `diff_snapshots {before, after}` | GPU-free | the nodes and stacks added, removed and modified between two snapshots |
 | `isolate_layer {uid, channels, path}` | GPU-free (CPU evaluator, as the export) | `{revision, uid, was_visible, export}`: the sources `isolated/<channel>/<uid>` published as an export generation (OpenEXR 32f, padding `passthrough`) under `path` |
@@ -246,9 +251,9 @@ It then answers one request at a time on the interpreter's thread; a long tool's
 | `display_set {preset?, environment?, exposure?, rotation?, opacity?, blur?, shadows?, background?, color_lut?}` | mutating: the lease, key and precondition; one transaction (the preset first) | the transaction result, stored for the key (`display_get` reads the state); a value outside the fixed pipeline fails `call_failed` (`UnsupportedInUzPainter`, decision 038) with nothing committed |
 | `shader_get` / `shader_set {parameters}` | read / mutating (lease, key, precondition) | `shader_get`: `{shader, parameters}`, the setters return the transaction result; the default `open-pbr` instance; other values are refused (decision 042) |
 | `camera_get` / `camera_set {camera \| blender}` | read / mutating (lease, key, precondition) | `camera_get`: `{camera, blender}`, the default camera in Painter's and Blender's conventions, null when none is set |
-| `capture {mode, path, camera?, size?, samples?, seed?, preset?, texture_set?, stack?}` | non-mutating; listed `gpu: true`, but only `painter_viewport` needs the device (`gpu_backend_unavailable` otherwise), so the CPU modes run without one | the capture receipt with `files` (`src/python/capture.h`, decision 148). `path` is the PNG and lies inside `--output-root` (relative paths are taken under it; with `--roots`, the supervisor confines it to the export root first); the OpenEXR and the receipt go beside it. Over MCP a downscaled copy of the PNG (long edge at most 512 px) also comes back as an image content block when that copy is at most 4 MiB (see Registry). `painter_iray` is `call_failed` with `details.type` `PathTracerUnavailable`, decided before the path is looked at. `texture_set` and `stack` apply to `base_color` and `channel:<name>` only |
+| `capture {mode, path, camera?, size?, samples?, seed?, preset?, texture_set?, stack?}` | non-mutating; listed `gpu: true`, but only `painter_viewport` needs the device (`gpu_backend_unavailable` otherwise), so the CPU modes run without one | the capture receipt with `files` (`src/python/capture.h`, decision 148). `path` is the PNG and lies inside `--output-root` (relative paths are taken under it; with `--roots`, the supervisor confines it to the export root first); the OpenEXR and the receipt go beside it. Over MCP a downscaled copy of the PNG (long edge at most 512 px) also comes back as an image content block when that copy is at most 4 MiB (see Registry). `painter_iray` is `capability_gap` with `details.type` `PathTracerUnavailable`, decided before the path is looked at (decision 242). `<name>` is a channel type as `evaluate_channel` and `source_set` take it (`SpecularRoughness`) or the export's documentMap name of one (`specularroughness`); the source is the documentMap the export records for that channel (decision 242). `texture_set` and `stack` apply to `base_color` and `channel:<name>` only |
 | `run_python {code \| path, args?}` | mutating; listed and run only with `--allow-python`; its MCP schema also takes `idempotency_key` and `expected_revision`; `path` is a script file, which the roots never confine | the report `{result, stdout, stderr, last_committed_revision, committed}`; a raising script is `script_failed`, with that report (the calls it committed) in `details` |
-| `preview_status` | GPU-free; listed only with `--preview` | `{window_open, stalled, frames_published, frames_taken, frames_rendered, revision_shown, last_error}` of the attached preview (`src/preview/PREVIEW.md`) |
+| `preview_status` | GPU-free; listed only with `--preview` | `{window_open, stalled, frames_published, frames_taken, frames_rendered, presents, camera_fits, revision_shown, last_error}` of the attached preview (`src/preview/PREVIEW.md`) |
 | `test_fault {fault}` | Debug builds under `--test-faults` only; `preview_stall` and `preview_resume` only with `--preview` (the stall hook of the preview thread) | `{armed}` |
 | `test_mutation {name, fail?}` | mutating and typed (one transaction); Debug builds under `--test-faults` only (decision 138) | the committed `TransactionResult` (`{status, revision, committed_revision, created, ...}`). It inserts the fill layer `name` on the active stack. With `fail`, the call fails after its edit (`call_failed`) and commits nothing. |
 | `test_job {name, steps, step_ms?, commit_at?}` | mutating, typed and long (commit point: the revision); Debug builds under `--test-faults` only (decision 140) | `steps` cancellable steps of `step_ms`; at step `commit_at` it commits the fill layer `name` with its operation row and returns that `TransactionResult`; without `commit_at` it is a no-op (`{status: no_op, revision}`) |
@@ -261,7 +266,9 @@ The typed families of 11 §2 (`typed_tools.{h,cpp}`; task phase2.6, decision 164
 - They run the edits the `uzpainter` API runs (`src/python/edits.{h,cpp}`), so the API and MCP behave the same.
 - Setters address nodes by `uid`. Stack-level calls take `texture_set` and `stack` names, the active stack when omitted.
 - Inserts take at most one of `above`, `below` and `inside`, or the top of the stack. With a `name`, the node of that name and kind in the target list is used instead (`returned.created: false`, `no_op`). Several such nodes fail `ambiguous_name {candidates}` before mutation (LAY-06). `params` sets the matching setter's fields in the same transaction, on a found node too.
-- A release gap the native code meets (`NotYetSupported` and its kin) is `capability_gap`. So is one a worker tool's long job meets, such as an `export` setting UzPainter refuses before writing: `capability_gap {tool, type: "NotYetSupported", reason}` (decision 192).
+- `source_set` stores a uniform colour as the API's `set_source` does, its working value in the Working space, through the one rule every path uses (`python::WorkingColour`, decision 240). sRGB is decoded on a channel Painter colour-manages (sRGB8, not a user channel), and an omitted or empty `color_space` is sRGB there and Raw elsewhere. Under OCIO a component Painter's measured decode does not record is `capability_gap`. So is a bitmap the evaluator would refuse (an 8-bit colour bitmap not at 1:1, an 8-bit grey mask source), refused from its PNG header before mutation, and so is a `set_resolution` or `set_channels` that would make a bound bitmap such a use. Every MCP call commits (a `batch` is not atomic), so such a change binds another source first and the new image after; a `run_python` script can do both in one `uzpainter.Transaction`, whose final state alone is checked.
+- A release gap the native code meets is `capability_gap {tool, type, reason, operations}`, in every worker tool and its long job (`Worker::Execute`, decisions 192 and 242): the native `NotYetSupported` and the API classes `NotYetSupported`, `UnsupportedProcedural`, `ReleaseGap` and `PathTracerUnavailable` (an export setting UzPainter refuses before writing, an evaluator source it does not sample yet, `painter_iray`, a `.dae`, `.ply` or USD mesh). `type` is the class, `reason` the message, and `operations` the gap family's operations, `[]` otherwise.
+- A mesh refusal of `project_create` or `mesh_reload` (`mesh::ImportError`, `mesh::MaterialMappingError`) has the class the `uzpainter` API raises (`python::FromImportError`, `FromMaterialMappingError`): `ReleaseGap` is `capability_gap`; `MeshParseError`, `UnsupportedFormat`, `DuplicateMaterialNames`, `UVOutsideTile` and `MaterialMappingError`, which are `ProjectError`s, are `project_error {type, details}` like `ProjectError` itself, `details` holding the refusal's facts (a reload's `{proposal, mapping}`, to pass back as `settings.material_mapping`). Nothing is created or committed (decision 242).
 
 | Family | Tools |
 |---|---|
@@ -365,7 +372,8 @@ All tests are in `tests/supervisor/`:
   - busy and `wait_idle`;
   - reconciliation per epoch and unreadable rows;
   - the omission rule and receipts;
-  - the durable ledger.
+  - the durable ledger;
+  - revision 0 for a mutation with no project open, and a finished long job's terminal progress (decision 242).
 - `test_worker_admission.py` runs the worker through its pipe. It covers:
   - the known-key order, `idempotency_conflict` and `outcome_unknown`;
   - the request hash;
@@ -390,17 +398,21 @@ All tests are in `tests/supervisor/`:
   - the argument-value gate, failing closed;
   - the result contract and its summary;
   - the image blocks of `capture`, built and refused;
-  - `status`, `capabilities` and `batch` (stop on error, keys);
+  - the fields of every capability gap (decision 242);
+  - `status`, `capabilities` and `batch` (stop on error, keys, its result contract);
   - the resources and prompts;
   - the HTTP lease across a reconnect;
+  - the lease of a project an owner creates or opens, an anonymous session's open, and the stdio session's (decision 243);
   - roots and scrubbing.
 - `test_typed_tools.py` drives the typed families through `UzPainter.exe --mcp` with Python disabled (phase2.6). It covers:
   - every family listed with its capability status;
   - the spec's stack edit with its receipts;
   - Project and Texture sets; Resources and Stack; Export, Mesh and Render with the image block;
+  - `project_close` keeping every commit and `discard: true` returning to the last save (B10, decision 244), and a damaged project file refused by `project_open` with its bytes unchanged (B9 of `parity/reports/phase2/practical-e2e.md`);
   - LAY-06 through MCP, and LAY-07 through `sync_stack`;
   - `batch`, long tools with and without `wait`, `busy` and `wait_idle`;
   - the gap families, refused before admission and listed in `uzpainter://capabilities`;
+  - one `capability_gap` from every layer, an invalid export configuration as `invalid_arguments`, and the result contract of jobs, batches and a create with no project open (decision 242);
   - the resources and prompts.
 - `test_roots.py` covers the canonicalisation on real folders, with a junction out of the root. `test_transport_http.py` covers the guard and the bind rules.
 - `test_supervisor_transports.py` drives `UzPainter.exe --mcp` (phase2.5). It covers:
@@ -409,7 +421,8 @@ All tests are in `tests/supervisor/`:
   - roots, with a junction and the `file:///` and `\\?\` forms;
   - `run_python` with and without `--allow-python`;
   - HTTP mode: the guard, the bind usage errors, a reconnect that keeps the lease and the job, and a clean Ctrl+Break.
-- `test_supervisor_gpu.py` runs on DX12 and skips under `UZP_NO_GPU=1`. It checks that the device lives only in the worker, the evaluation payload by path and hash, and device removal and GPU stall with relaunch on the same backend.
+  - stdio mode: Ctrl+Break with a saved project open ends like HTTP, with no lock sidecar and no ledger `-wal`/`-shm` left (B14 of `parity/reports/phase2/practical-e2e.md`).
+- `test_supervisor_gpu.py` runs on DX12 and skips under `UZP_NO_GPU=1`. It checks that the device lives only in the worker, the evaluation payload by path and hash, an evaluator release gap as `capability_gap`, and device removal and GPU stall with relaunch on the same backend.
 - `test_settling.py` holds the settling cases of 02 §7 that the children's tests do not cover, over stdio MCP (phase2.4_supervisor-worker, decisions 150 and 151):
   - the worker killed inside a save's checkpoint commit and inside a full save's compaction;
   - a client disconnect while a long mutating job runs, and a reconnect on the same ledger that commits the retried key once;

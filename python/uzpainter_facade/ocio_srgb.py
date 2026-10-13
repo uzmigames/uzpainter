@@ -12,7 +12,8 @@ The decode is per component: the components 51/255, 204/255, 75/255, 70/255 and 
 the `export-ocio-encode` colours, another project and session, equal `CODES` bit for bit.
 
 This file is the one source of the table: `tools/parity/ocio_srgb_table.py` generates the native
-copy (`src/evaluator/ocio_srgb_table.inc`, decision 212) from it.
+copy (`src/evaluator/ocio_srgb_table.inc`, decision 212) from it, which every path that stores a
+uniform colour reads, the facade's included (`python::WorkingColour`, decision 240).
 """
 
 CODES: tuple[float, ...] = (

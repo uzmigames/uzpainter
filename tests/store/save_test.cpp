@@ -810,7 +810,7 @@ void InterruptedRewrite() {
         const std::string bytes = ReadBytes(path);
         CHECK(RunChild({"child", action, Utf8(path), Utf8(target)}) == kKilled);
         CHECK(ReadBytes(path) == bytes && !fs::exists(target));
-        CHECK(fs::exists(LockPath(path)));  // the killed worker's, stale
+        CHECK(!fs::exists(LockPath(path)));  // the OS deleted the killed worker's sidecar
         if (Contains(action, "compact")) CHECK(fs::exists(With(path, ".compact")) || fs::exists(With(path, ".vacuum")));
         Session reopened = OpenSession(path, VerifyLevel::full);
         CHECK(reopened.report.ok() && NoTemporaries(path));
@@ -881,18 +881,28 @@ void LockSidecar() {
     WriteBytes(release, "go");
     CHECK(Wait(holder) == 0 && !fs::exists(LockPath(path)));
 
-    // A worker killed while holding the lock leaves a stale lock: detected and replaced.
+    // A worker killed while holding the lock leaves no sidecar: the OS deletes it with the handle
+    // (B14 of parity/reports/phase2/practical-e2e.md: a console Ctrl+Break ends the process so).
     CHECK(RunChild({"child", "kill-holding-lock", Utf8(path), ""}) == kKilled);
-    const std::optional<LockOwner> dead = ReadLockOwner(LockPath(path));
-    CHECK(dead && dead->pid != GetCurrentProcessId() && !OwnerAlive(*dead));
+    CHECK(!fs::exists(LockPath(path)));
     {
         Session s = OpenSession(path);
         CHECK(ReadLockOwner(LockPath(path)) == CurrentOwner());
         s.Close();
         CHECK(!fs::exists(LockPath(path)) && AtRest(path));
     }
-    // A sidecar no process holds is stale whatever it records: a reused pid (another start time),
-    // a live pid (this process) and an unreadable lock.
+    // A sidecar no process holds (left by a machine that stopped) is stale whatever it records: a
+    // dead owner, a reused pid (another start time), a live pid (this process) and an unreadable
+    // lock.
+    {
+        WriteBytes(LockPath(path), "pid=4294967295\nstarted=1\n");
+        const std::optional<LockOwner> dead = ReadLockOwner(LockPath(path));
+        CHECK(dead && !OwnerAlive(*dead));
+        Session s = OpenSession(path);
+        CHECK(ReadLockOwner(LockPath(path)) == CurrentOwner());
+        s.Close();
+        CHECK(!fs::exists(LockPath(path)) && AtRest(path));
+    }
     const std::string self = "pid=" + std::to_string(CurrentOwner().pid) + "\nstarted=" + std::to_string(CurrentOwner().started) + "\n";
     for (const std::string& content : {"pid=" + std::to_string(GetCurrentProcessId()) + "\nstarted=1\n", self, std::string("garbage")}) {
         WriteBytes(LockPath(path), content);

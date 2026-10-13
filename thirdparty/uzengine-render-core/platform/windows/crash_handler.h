@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-010. Original: UzEngine runtime/platform/windows/crash_handler.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// UzEngine Crash Handler — Windows SEH-based crash diagnostics.
@@ -179,9 +181,11 @@ void CrashHandler_SetGpuDeviceRemoved(bool removed);
 /// own directory (e.g., the `native/` folder next to `uzengine.node`).
 ///
 /// # Arguments
-/// * `dir` - Absolute path to the crash output directory. A `crashes/`
-///           subdirectory will be created inside it. Pass nullptr to reset
-///           to the default (exe dir).
+/// * `dir` - Absolute path to the crash output directory, UTF-8 (UZP-MOD-010:
+///           the reports are written through its UTF-16 form, so any path works).
+///           A `crashes/` subdirectory will be created inside it. Pass nullptr to
+///           reset to the default (exe dir); a path that is not UTF-8 or does not
+///           fit in MAX_PATH UTF-16 units also resets to the default.
 ///
 /// # Safety
 /// Must be called before any crash occurs. NOT thread-safe.

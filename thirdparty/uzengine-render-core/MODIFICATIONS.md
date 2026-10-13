@@ -116,6 +116,19 @@ below against the selected commit, and runs the covering tests.
 | Author | UzmiGames (rulebook task `phase1.2_core-readback`) |
 | Covering test | `tests/render/test_core_readback.py::test_exact_native_formats` |
 
+## UZP-MOD-010 — Crash reports and the log file at any path
+
+| Field | Value |
+|---|---|
+| Id | UZP-MOD-010 |
+| Files | `platform/windows/crash_handler.cpp`, `platform/windows/crash_handler.h`, `engine/logging/log.cpp`, `engine/logging/log.h` |
+| Reason | defect |
+| Description | The path arguments of `CrashHandler_SetCrashDir` and `LogInit` are UTF-8, and both open their files through the UTF-16 form, so a folder outside the ANSI code page works. The crash handler keeps the directory as UTF-16 (`MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS)`; a directory that is not UTF-8 or does not fit in `MAX_PATH` UTF-16 units is refused with an error log and the executable folder stays the default, instead of being truncated) and builds and creates the report folder and the `crash.dmp`, `crash.txt` and `crash.json` files with `swprintf`, `GetModuleFileNameW`, `CreateDirectoryW` and `CreateFileW`, still on stack buffers only. `LogInit` hands the rotating file sink the native (UTF-16) form of the UTF-8 path; spdlog takes UTF-16 file names only with `SPDLOG_WCHAR_FILENAMES`, which UzPainter's `build.zig` defines for every C++ unit, and `log.cpp` refuses to compile on Windows without it. The default log path is read with `_wgetenv` and returned as UTF-8, and `LogGetFilePath` returns UTF-8. Before, UzPainter had to narrow its paths with `std::filesystem::path::string()`, which throws `filesystem_error` for a character outside the ANSI code page, so a worker whose `--crash-dir`, or a `selftest` whose `--out-dir` or `%LOCALAPPDATA%`, lay outside it ended in an uncaught exception (`parity/reports/phase2/practical-e2e.md` B2 review). |
+| Upstream behaviour | `platform/windows/crash_handler.cpp:59` keeps the directory in a `char` buffer; `platform/windows/crash_handler.cpp:579-587` copies the ANSI path into it, truncated at `MAX_PATH`; `platform/windows/crash_handler.cpp:416-452` builds the report folder in `char` buffers and creates it with `CreateDirectoryA` (the default with `GetModuleFileNameA`); `platform/windows/crash_handler.cpp:110-113`, `platform/windows/crash_handler.cpp:143-146` and `platform/windows/crash_handler.cpp:263-266` create the three files with `CreateFileA`; `engine/logging/log.cpp:133-134` opens the file sink with the narrow path (spdlog `_fsopen`, ANSI); `engine/logging/log.cpp:63` reads the default folder with `std::getenv`; `engine/logging/log.cpp:99` narrows the default path with `path::string()` |
+| Date | 2026-10-13 |
+| Author | UzmiGames (practical end-to-end fixes, group cli-unicode, branch `wt/e2e-cli`) |
+| Covering test | `tests/supervisor/test_worker_pipe.py::test_crash_reports_go_to_a_crash_dir_outside_the_code_page`, `tests/toolchain/test_selftest.py::test_out_dir_outside_the_code_page` |
+
 ## Behaviours kept on purpose
 
 - `DX12CommandList::FatalErrorLoop` still aborts the process after repeated RHI errors
