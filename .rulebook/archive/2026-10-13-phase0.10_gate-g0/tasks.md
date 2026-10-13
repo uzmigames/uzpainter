@@ -22,4 +22,4 @@
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
 - [x] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.3 Run tests and confirm they pass — 2026-10-13 on `6a311f4` plus this archive change (affected checks only, CLAUDE.md test time budget): `python -m pytest tests/parity/test_gate_g0.py` exit 0, 3 passed; `python -m tools.parity.guard` exit 0, 0 blocked; `python -m tools.parity.store verify` exit 0 on `parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests` (248 manifests, 19767 blobs available), on `parity/manifests` (82 manifests, 2686 blobs available) and on the whole store (ok). Logs: session scratchpad `g0/` (`pytest-gate-g0*.log`, `guard*.log`, `verify-*.log`). Counts in `parity/reports/phase0/gate-g0.md` §4

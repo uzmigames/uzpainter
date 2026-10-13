@@ -4,6 +4,8 @@ Task `phase0.10_gate-g0` (`docs/dag.md` G0, D14; `docs/roadmap.md` Phase 0 gate,
 
 **Result: G0 held open.** All six joined items are accepted and archived; every G0 clause of `docs/roadmap.md` is evidenced below; the guard blocks nothing and every manifest hash of the current and the superseded envelope resolves in the private store. The owner holds the gate open in strict sequence order (2026-10-11) until the Phase 0 tasks of §5 close, and the full test suite is not green (§4).
 
+**Closed 2026-10-13 on the owner's order.** Every Phase 0 task except this gate is archived (§5), the gate checks of §4 are green again on `6a311f4`, and `phase0.10_gate-g0` is archived as `.rulebook/archive/2026-10-13-phase0.10_gate-g0/`.
+
 ## 1. Oracle envelope used by this gate (decision 037)
 
 `parity/envelopes/registry.json` (SHA-256 `361bd5262722c43fd4aaa274726e1ec4cfeb6f05ed88afc296f287e01f342762`): current envelope `painter-12.1.5+js-api.1.1.20` (envelope SHA-256 `1497f6497fd984cadeb5a136ce73fc41c7c601b7a6652c76fa6670be7bc4e406`, promoted 2026-10-11), superseded `painter-12.1.0+js-api.1.1.20` (`0f0c8d5fec0381271fa5df51b448311b6a2e322cc96372fb97b999cb15fd119c`, kept as history). No candidate, no quarantine.
@@ -129,6 +131,8 @@ All archived 2026-10-10 under `.rulebook/archive/`:
 | `python -m mypy` | exit 0; 202 source files |
 | `python -m pytest` | not green: 1396 passed of 1410 (`tests/parity` alone: 699 passed, `test_gate_g0.py` 3 passed); 3 failed and 11 not run, all in `tests/store/test_store_inspect.py` (`phase1.7_store-inspect-census`): its native cases each ran into the 900 s per-case timeout, and a direct `uzp-store-inspect-tests.exe run inspect_fields` gave no output within 120 s, while two other full-suite runs were on the machine; cause not diagnosed |
 
+Re-run 2026-10-13 on `6a311f4` with the archive of this gate, affected checks only (CLAUDE.md test time budget; the full suite is the coordinator's batch): `python -m pytest tests/parity/test_gate_g0.py` exit 0, 3 passed; `python -m tools.parity.guard` exit 0, store-hash rule against the store (3615 hashes), 3480 files checked, 0 blocked; `python -m tools.parity.store verify parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests` exit 0, 248 manifests, 19767 blobs `available`; `python -m tools.parity.store verify parity/manifests` exit 0, 82 manifests, 2686 blobs `available`; `python -m tools.parity.store verify` exit 0, store ok. `phase1.7_store-inspect-census`, whose timeouts kept the 2026-10-11 suite red, is archived (2026-10-13).
+
 ## 5. Phase 0 tasks not archived (roadmap rule 3 exemptions)
 
 24 Phase 0 tasks are archived under `.rulebook/archive/`. Open, by recorded decision:
@@ -140,6 +144,8 @@ All archived 2026-10-10 under `.rulebook/archive/`:
 | `phase0.7_render-reference-captures` | pending | decision 033 (child of P0-FEAS-RENDER) |
 | `phase0.8_render-reference-fits` | pending | decision 033 (child of P0-FEAS-RENDER) |
 | `phase0.7_tier0-semantics-ui-cases` | pending | owner answer to q1 of `phase0.6_tier0-semantics-goldens`, 2026-10-10 (`.rulebook/archive/2026-10-10-phase0.6_tier0-semantics-goldens/.metadata.json`): "That child task must not block G0." |
+
+Since closed (2026-10-13): `phase0.7_tier0-semantics-ui-cases` was archived 2026-10-11 (`d086d44`); the three Iray-leg children were archived 2026-10-11 and `phase0.9_render-reference-capture` on 2026-10-13 (`6a311f4`, the owner signed the P3-PATHTRACER entry gate record). No Phase 0 task other than this gate remains open.
 
 ## 6. Capability manifest
 
