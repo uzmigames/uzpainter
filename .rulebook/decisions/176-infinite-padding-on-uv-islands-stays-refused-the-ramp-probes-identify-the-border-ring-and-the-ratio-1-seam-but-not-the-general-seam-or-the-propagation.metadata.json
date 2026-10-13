@@ -1,0 +1,13 @@
+{
+  "id": 176,
+  "slug": "infinite-padding-on-uv-islands-stays-refused-the-ramp-probes-identify-the-border-ring-and-the-ratio-1-seam-but-not-the-general-seam-or-the-propagation",
+  "title": "infinite padding on UV islands stays refused: the ramp probes identify the border ring and the ratio-1 seam, but not the general seam ring, its micro-offset or the propagation",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
