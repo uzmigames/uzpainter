@@ -26,6 +26,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from tests.supervisor.conftest import Mcp, make_project
 
 BASE = ("--gpu-backend", "vulkan", "--test-faults")
@@ -142,6 +144,7 @@ def test_schema_references_and_the_omission_rule_through_mcp(
     assert session.close() == 0
 
 
+@pytest.mark.mcp_contract("path_outside_roots", transport="stdio")
 def test_roots_confine_paths_and_never_echo_them(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:
@@ -366,6 +369,7 @@ def free_port() -> int:
     return port
 
 
+@pytest.mark.mcp_contract("http_reconnect", transport="http")
 def test_http_transport_guards_and_reconnect(painter: Path, tmp_path: Path) -> None:
     """3.2, 2.3, 2.6: a bad Origin, a bad Host and a missing or wrong bearer are refused before
     the MCP layer; a non-loopback bind needs --allow-remote; a mutating call needs the session's

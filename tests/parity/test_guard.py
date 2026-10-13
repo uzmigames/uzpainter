@@ -30,6 +30,8 @@ from tools.parity.guard.guard import (
     worktree_snapshot,
 )
 from tools.parity.schemas import REPO_ROOT, SCHEMA_DIR, Schema, load_json, validation_errors
+from tools.parity.settling.mcp_contract import merge as mcp_contract_merge
+from tools.parity.settling.mcp_contract import report_problems as mcp_contract_problems
 from tools.parity.settling.preview import merge as preview_settling_merge
 from tools.parity.settling.preview import report_problems as preview_settling_problems
 from tools.parity.settling.report import merge as settling_merge
@@ -611,6 +613,76 @@ def test_repository_preview_settling_report_passes() -> None:
     assert (REPO_ROOT / PREVIEW_SETTLING_PATH).is_file()
     snapshot = worktree_snapshot(REPO_ROOT, [PREVIEW_SETTLING_PATH])
     assert snapshot.checked == (PREVIEW_SETTLING_PATH,)
+    assert run_guard(REPO_ROOT, snapshot, None) == []
+
+
+MCP_CONTRACT_PATH = "parity/reports/phase2/mcp-contract.json"
+
+
+def _mcp_contract() -> dict[str, Any]:
+    entry = {  # the first fixture listed, so that `fixtures[0]` is this passing entry
+        "id": "two_writers",
+        "transport": "http",
+        "result": "pass",
+        "tests": 1,
+        "seconds": 6.5,
+        "date": "2026-10-12",
+        "exe_sha256": SHA,
+    }
+    return mcp_contract_merge(None, [entry])
+
+
+@pytest.mark.parametrize(
+    ("change", "allowed"),
+    [
+        (lambda c: c, True),
+        (lambda c: {**c, "schema": "uzpainter/mcp-contract/2"}, False),
+        (lambda c: {**c, "project": "E:/Assets3D/18-Tunica-v10.spp"}, False),
+        (lambda c: {**c, "fixtures": [{**c["fixtures"][0], "note": "free text"}]}, False),
+        (lambda c: {**c, "fixtures": [{**c["fixtures"][0], "id": "made_up_fixture"}]}, False),
+        (lambda c: {**c, "fixtures": [{**c["fixtures"][0], "transport": "stdio"}]}, False),
+        (lambda c: {**c, "fixtures": [{**c["fixtures"][0], "exe_sha256": "C:/x.exe"}]}, False),
+        (lambda c: {**c, "fixtures": [c["fixtures"][0], c["fixtures"][0]]}, False),
+        (
+            lambda c: {
+                **c,
+                "fixtures": [{k: v for k, v in c["fixtures"][0].items() if k != "tests"}],
+            },
+            False,
+        ),
+    ],
+)
+def test_mcp_contract_report_holds_numbers_identifiers_and_hashes_only(
+    repo: Path, change: Any, allowed: bool
+) -> None:
+    """phase2.8_mcp-server item 2.3 (decision 186)."""
+    put(repo, MCP_CONTRACT_PATH, json.dumps(change(_mcp_contract())).encode())
+    expected = {} if allowed else {MCP_CONTRACT_PATH: {"public-schema"}}
+    assert blocked(repo, None) == expected
+
+
+def test_mcp_contract_merge_keeps_other_transports_and_lists_what_has_not_run() -> None:
+    """A run replaces only its own fixtures and transports; anything missing is `not_run`, never
+    a pass, and a fixture is listed only on the transports it runs on."""
+    first = _mcp_contract()
+    stdio = {**first["fixtures"][0], "id": "stale_revision", "transport": "stdio"}
+    merged = mcp_contract_merge(first, [stdio])
+    by_key = {(entry["id"], entry["transport"]): entry for entry in merged["fixtures"]}
+    assert by_key[("two_writers", "http")]["result"] == "pass"
+    assert by_key[("stale_revision", "stdio")]["result"] == "pass"
+    assert by_key[("stale_revision", "http")] == {
+        "id": "stale_revision",
+        "transport": "http",
+        "result": "not_run",
+    }
+    assert ("two_writers", "stdio") not in by_key and ("http_reconnect", "stdio") not in by_key
+    assert mcp_contract_problems(merged) == []
+
+
+def test_repository_mcp_contract_report_passes() -> None:
+    assert (REPO_ROOT / MCP_CONTRACT_PATH).is_file()
+    snapshot = worktree_snapshot(REPO_ROOT, [MCP_CONTRACT_PATH])
+    assert snapshot.checked == (MCP_CONTRACT_PATH,)
     assert run_guard(REPO_ROOT, snapshot, None) == []
 
 
