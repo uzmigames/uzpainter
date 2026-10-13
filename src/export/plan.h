@@ -247,8 +247,8 @@ struct FileRaster {
     std::optional<evaluator::NormalTag> normalTag;
     /// Statistics files: RegionStatsJson.
     std::optional<std::string> statistics;
-    /// Per channel, 1 where a PNG writes the sRGB encode of the linear value (`SrgbEncodedOnExport`
-    /// of a documentMap source stored as sRGB8; encode.h). Empty: no channel is encoded.
+    /// Per channel, 1 where a PNG writes the sRGB encode of the linear value (`SrgbEncodedRead` of a
+    /// documentMap source; encode.h). Empty: no channel is encoded.
     std::vector<uint8_t> srgbEncoded;
     /// OCIO with Painter's substance config (decision 190): a PNG 16 writes an sRGB-encoded
     /// channel through `OcioSrgbPng16Code` (encode.h).
@@ -259,6 +259,12 @@ struct FileRaster {
 /// BaseColor, Specular and Emissive (recording R-090 P10, decision 126). An sRGB8 User channel is
 /// exported linear.
 [[nodiscard]] bool SrgbEncodedOnExport(core::ChannelType type);
+
+/// True when a PNG writes the sRGB encode of the linear value of channel `type`, stored as
+/// `format`, read through srcChannel `src`: a `SrgbEncodedOnExport` channel stored as sRGB8
+/// (decision 126), or stored as L8 and read through R, B or L; through G an L8 one holds its linear
+/// value (export-l8-material: an RGB file holds (sRGB, linear, sRGB), decision 204).
+[[nodiscard]] bool SrgbEncodedRead(core::ChannelType type, core::ChannelFormat format, ChannelLetter src);
 
 /// Refuses (`evaluator:unsupported_source`) a source of stack `stack` of texture set `textureSet`
 /// whose values depend on a stack channel whose template base value is `inferred` (templates.h): a

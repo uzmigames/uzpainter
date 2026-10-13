@@ -20,7 +20,10 @@
 //   Specular or Emissive (`FileRaster::srgbEncoded`) is written as the sRGB encode of its linear
 //   value: x <= 0.0031308 ? 12.92 x : fma(1.055, exp2(0.41666 log2 x), -0.055), with the
 //   recording GPU's log2 and exp2 (evaluator/hwmath.h; decisions 091 and 126). Its OpenEXR files
-//   hold the linear value. Encoded by png_writer.h.
+//   hold the linear value. An L8 BaseColor, Specular or Emissive is written the same way through
+//   srcChannel R, B and L, and as its linear value through G (export-l8-material, decision 204:
+//   an RGB file holds (sRGB, linear, sRGB), an L file the sRGB encode, at 8 and 16 bits). Encoded
+//   by png_writer.h.
 // - OpenEXR 32f: each value unchanged (float32, no clamp; a signed channel keeps its sign).
 //   OpenEXR 16f: each value rounded toward zero to a half. Encoded by exr_writer.h.
 // - Alpha: an L+A or RGB+A file whose alpha is 1 everywhere is written without it (L or RGB).
@@ -34,9 +37,9 @@
 // other than the texture set's (resize), and the `color`, `transparent` and `diffusion` paddings.
 // An sRGB8 channel other than a User channel, BaseColor, Specular and Emissive (EmissionColor,
 // Diffuse, CoatColor, ...) is refused as not recorded: no recording shows whether Painter writes it
-// linear or sRGB-encoded. A PNG of an L8 BaseColor, Specular or Emissive is refused as recorded but
-// not fitted: Dota 2's empty L8 Specular, float32(10/255) in OpenEXR, writes (14330, 2570, 14330)
-// at PNG 16 (decision 169). Its OpenEXR files hold the linear value.
+// linear or sRGB-encoded. A PNG of an L8 BaseColor, Specular or Emissive is refused as not recorded
+// under OCIO, and in any file other than an RGB file whose R, G and B (or an L file whose L) read
+// those letters of the one L8 channel (decision 204).
 
 #include <cstdint>
 #include <optional>

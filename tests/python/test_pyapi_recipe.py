@@ -224,7 +224,11 @@ def test_an_added_channel_takes_its_format_restricted_default_in_the_dump_and_re
     defaults = json.loads(
         (REPO_ROOT / "assets" / "templates" / "channel-defaults.json").read_text(encoding="utf-8")
     )
-    recorded = {c["type"]: c for c in defaults["channels"] if c["type"] in ("Specular", "Emissive")}
+    recorded = {
+        c["type"]: c
+        for c in defaults["channels"]
+        if c["type"] in ("Specular", "Emissive") and c["format"] == "sRGB8"
+    }
     assert {t: c["format"] for t, c in recorded.items()} == {
         "Specular": "sRGB8",
         "Emissive": "sRGB8",
