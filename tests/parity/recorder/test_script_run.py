@@ -486,11 +486,14 @@ def test_records_r1_repeat_and_r2_without_writing_under_the_assets_root(
     route_decoy.locate = no_subprocess  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "route_check", route_decoy)
     path = list(sys.path)
+    # Modules imported before the run (pytest imports every collected test module, such as
+    # tests.supervisor.test_supervisor_mcp) are not the sync command's imports.
+    loaded = set(sys.modules)
     run = record(painter, manifest, assets, tmp_path)
 
     assert tree_state(assets) == before
     assert sys.modules["route_check"] is route_decoy and sys.path == path  # restored
-    assert not [name for name in sys.modules if "mcp" in name.lower()]
+    assert not [name for name in set(sys.modules) - loaded if "mcp" in name.lower()]
     data = json.loads((run / "record.json").read_text(encoding="utf-8"))
     assert record_problems(data) == []
     recordings = {r["recording_id"]: r for r in data["recordings"]}

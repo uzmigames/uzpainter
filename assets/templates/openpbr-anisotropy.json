@@ -27,16 +27,16 @@
         0.800000011920929
       ],
       "base_provenance": {
-        "kind": "inferred",
-        "golden_id": "tier0/semantics/base-values-openpbr-anisotropy",
-        "record_sha256": "56521f6a89f0ada98d141e78070528d38a0f120a8cfdbf859f62ef95b2f55e10",
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-template-base-openpbr-anisotropy",
+        "record_sha256": "ef8fc950fdcf90e3af533a54440169ef079b021312f1dc68b5db4291e55cc874",
         "map": "uzp_plane/basecolor",
         "export16": [
           59397,
           59397,
           59397
         ],
-        "note": "linear (decision 126): the 16-bit PNG export of the empty channel is the PNG write of the sRGB export encode of float32(0.8) (src/export/encode.h); this template's OpenEXR export of the empty channel is not recorded: float32(0.8) is the linear value the default template's empty BaseColor exports to OpenEXR 32f with the same 16-bit code (tier0/semantics/export-bit-depth s3)"
+        "note": "linear (decision 126): its OpenEXR 32f export of the empty channel holds float32(0.8) in every texel, r1 and r2 (decision 168); its 16-bit PNG export, code 59397 in tier0/semantics/base-values-openpbr-anisotropy, is the PNG write of the sRGB export encode of that value (src/export/encode.h)"
       }
     },
     {

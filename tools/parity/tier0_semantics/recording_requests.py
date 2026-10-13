@@ -12,7 +12,7 @@ because its inputs are the request fixtures).
 
 Later decisions add requests the same way (`later_goldens`): decision 145's sRGB bitmap variants
 (decision 156), decision 126's inferred template bases and decision 129's padding probes P-ramp
-and P-tie (decision 157).
+and P-tie (decision 157), and the other 21 inferred template bases (decision 168).
 
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
 two that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`), which
@@ -949,6 +949,31 @@ INFERRED_BASE_TEMPLATES = (
     "templates/OpenPBR - Anisotropy.spt",
     "templates/PBR - Specular Glossiness.spt",
 )
+# Decision 168: the shipped templates whose sRGB8 base no OpenEXR export shows yet (the empty
+# BaseColor, or Specular for the sRGB8-Specular templates), one golden each.
+REMAINING_BASE_TEMPLATES = (
+    "templates/ASM - PBR Metallic Roughness.spt",
+    "templates/ASM - PBR Metallic Roughness Anisotropy Angle.spt",
+    "templates/ASM - PBR Metallic Roughness Coated.spt",
+    "templates/ASM - PBR Metallic Roughness SSS.spt",
+    "templates/ASM - PBR Metallic Roughness Sheen.spt",
+    "templates/Blender.spt",
+    "templates/Dota 2.spt",
+    "templates/KeyShot.spt",
+    "templates/Lens Studio.spt",
+    "templates/Maxwell - Metallic Roughness.spt",
+    "templates/Maxwell - Specular Glossiness.spt",
+    "templates/Non-PBR - Specular Glossiness.spt",
+    "templates/OpenPBR - Fuzz.spt",
+    "templates/OpenPBR - Subsurface Scattering.spt",
+    "templates/PBR - Metallic Roughness Alpha-test.spt",
+    "templates/Roblox (MaterialVariant).spt",
+    "templates/Roblox (SurfaceAppearance).spt",
+    "templates/Spark AR Studio.spt",
+    "templates/Unity HD Render Pipeline (Metallic Standard).spt",
+    "templates/VrayMtl - Metallic Roughness.spt",
+    "templates/VrayMtl - Specular Glossiness.spt",
+)
 TEMPLATE_BASE_MAPS = ["documentMap/basecolor:RGB", "documentMap/specular:RGB"]
 
 
@@ -1047,11 +1072,12 @@ def padding_tie(resolution: int, renamed: bool = False) -> Golden:
 
 
 def later_goldens() -> list[Golden]:
-    """Requested goldens of later decisions (145, 126, 129), in the order of the runbook, then
-    the padding probes decision 160 voids under their new names (decision 166)."""
+    """Requested goldens of later decisions (145, 126, 129, 168), in the order of the runbook,
+    then the padding probes decision 160 voids under their new names (decision 166)."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
+        *(template_base(t) for t in REMAINING_BASE_TEMPLATES),
         *(padding_ramp(m, p) for m in rf.RAMP_MESHES for p in rf.RAMP_PHASES),
         *(padding_tie(r) for r in rf.TIE_RESOLUTIONS),
         *(padding_ramp(m, p, renamed=True) for m in rf.RAMP_MESHES for p in rf.RAMP_PHASES),
