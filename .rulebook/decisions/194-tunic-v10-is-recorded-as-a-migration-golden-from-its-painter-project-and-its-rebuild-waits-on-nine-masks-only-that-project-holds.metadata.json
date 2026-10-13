@@ -1,0 +1,13 @@
+{
+  "id": 194,
+  "slug": "tunic-v10-is-recorded-as-a-migration-golden-from-its-painter-project-and-its-rebuild-waits-on-nine-masks-only-that-project-holds",
+  "title": "Tunic v10 is recorded as a migration golden from its Painter project, and its rebuild waits on nine masks only that project holds",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.10_pilot-tunic-recovery",
+    "phase2.9_pilot-belt",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

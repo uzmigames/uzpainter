@@ -10,6 +10,7 @@ r"""Command line of the Painter oracle recorder (operator guide: `parity/RECORDE
     python -m tools.parity.recorder record-defaults <manifest.json>
     python -m tools.parity.recorder list-templates
     python -m tools.parity.recorder record-script <manifest.json> --assets-root <dir> [--launch]
+    python -m tools.parity.recorder record-migration <manifest.json> --assets-root <dir> [--launch]
     python -m tools.parity.recorder record-templates <manifest.json>
     python -m tools.parity.recorder check [--python-doc <objects.inv>]
     python -m tools.parity.recorder iray-probe --ref-match-hdri <exr> [--operator ui]
@@ -38,7 +39,9 @@ decision 062 needs (`iray.SAME_SESSION`).
 
 `record-script` records a Tier 1 golden whose steps run UzmiGames pipeline scripts pinned by
 SHA-256 (`script_run.py`, decision 099); its inputs are hash-checked under `--assets-root` before
-Painter is touched, and `--launch` starts (and finally stops) Painter itself.
+Painter is touched, and `--launch` starts (and finally stops) Painter itself. `record-migration`
+records a Tier 1 migration golden the same way: a UzmiGames project saved by Painter, opened from a
+hash-checked private copy and exported (`migration.py`, decision 194).
 
 Painter must already run with `--enable-remote-scripting` and no project open (or `--launch`).
 Records go to `UZP_ORACLE_INBOX` (default `%LOCALAPPDATA%\UzPainter\oracle-inbox`), working files to
@@ -72,6 +75,7 @@ from tools.parity.recorder.iray import (
 from tools.parity.recorder.iray_probe import reanalyse, run_probe
 from tools.parity.recorder.job import load_job
 from tools.parity.recorder.launcher import PainterLauncher, default_painter_exe
+from tools.parity.recorder.migration import load_migration_job, record_migration_golden
 from tools.parity.recorder.output import inbox_root, work_root
 from tools.parity.recorder.provenance import check_files, inventory_problems, recorder_sources
 from tools.parity.recorder.script_run import ScriptSession, load_script_job, record_script_golden
@@ -133,9 +137,11 @@ def parse(argv: Sequence[str]) -> argparse.Namespace:
     canary = commands.add_parser("canary", help="re-record and diff the canary (034 (d))")
     add_painter_options(canary)
     script = commands.add_parser("record-script", help="record a pipeline-script golden (099)")
-    script.add_argument("manifest", type=Path)
-    script.add_argument("--assets-root", type=Path, required=True, help="the Assets3D root")
-    add_painter_options(script)
+    migration = commands.add_parser("record-migration", help="record a migration golden (194)")
+    for parser_ in (script, migration):
+        parser_.add_argument("manifest", type=Path)
+        parser_.add_argument("--assets-root", type=Path, required=True, help="the Assets3D root")
+        add_painter_options(parser_)
     return parser.parse_args(argv)
 
 
@@ -255,9 +261,13 @@ def run_iray(args: argparse.Namespace, launcher: Launcher | None = None) -> int:
 
 
 def run_record_script(args: argparse.Namespace, launcher: Launcher | None = None) -> int:
-    """Record one pipeline-script golden; the job (every input's hash) is checked first."""
+    """Record one pipeline-script or migration golden; the job (every input's hash) is checked
+    first."""
     try:
-        job = load_script_job(args.manifest, args.assets_root)
+        if args.command == "record-migration":
+            migration = load_migration_job(args.manifest, args.assets_root)
+        else:
+            job = load_script_job(args.manifest, args.assets_root)
         if args.launch and launcher is None:
             launcher = PainterLauncher(
                 args.painter_exe or default_painter_exe(), host=args.host, port=args.port
@@ -266,7 +276,10 @@ def run_record_script(args: argparse.Namespace, launcher: Launcher | None = None
         if launcher is not None:
             launcher.start()
         try:
-            run = record_script_golden(session, job, work_root(), inbox_root())
+            if args.command == "record-migration":
+                run = record_migration_golden(session, migration, work_root(), inbox_root())
+            else:
+                run = record_script_golden(session, job, work_root(), inbox_root())
         finally:
             if launcher is not None:
                 launcher.stop(session)
@@ -305,7 +318,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
     if args.command == "iray":
         return run_iray(args)
-    if args.command == "record-script":
+    if args.command in ("record-script", "record-migration"):
         return run_record_script(args)
     run: Path | None
     try:

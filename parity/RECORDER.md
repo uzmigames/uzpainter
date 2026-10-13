@@ -241,6 +241,38 @@ Belt v5 (phase2.9, decision 192) uses the same runner and comparison: `python -m
 
 The report (`comparison-report.json`) keeps three results apart: oracle stability, UzPainter repeatability and equality to Painter. Structural differences fail and are listed: a refused export, a map on one side only, a differing storage format or shape. A golden that is not admitted, or one whose record or blobs are missing, is `oracle_unavailable`.
 
+## 9b. Migration goldens (Tier 1, decision 194)
+
+Code: `tools/parity/recorder/migration.py` (host) and `migration_readback` in `painter_side.py`; tests: `tests/parity/recorder/test_migration.py`.
+
+`python -m tools.parity.recorder record-migration <manifest.json> --assets-root <Assets3D> [--launch]` records a golden whose instruction sequence uses the `painter_project_migration` interface. It is for an approved asset whose state exists only as its Painter project, such as Tunic v10, which was painted interactively and has no pipeline round.
+
+- **What the steps are.**
+  1. `substance_painter.project.open` with `project`: a `painter_project` input, named by `assets3d_path` and SHA-256. UzPainter never reads the file; only Painter opens it.
+  2. `substance_painter.export.export_project_textures` with `config`: an authored `recipe_json` repository file holding the `json_config` without `exportPath`.
+- **The project.** It resolves in Assets3D, or else from the private store by its hash (decision 144). The recorder opens a hash-checked copy in its private work directory, so the original is never opened or saved.
+- **Recordings.**
+  - `r1` (same session): open, read back, export.
+  - `r1-repeat` (same session): export again.
+  - `r2`: save the copy under a new name, close, reopen, read back, export again.
+- **Readback** (private, `migration/state`). It holds:
+  - the mesh the project was last imported from;
+  - per texture set: its resolution, its mesh-map resources (each URL's `version` is the SHA-1 of the imported bytes) and its channel formats;
+  - every node: its sources with their resource versions, per-channel blending and opacity, visibility, uid and mask, and everything below it.
+
+  The double-sided display state has no Python API and is not read back.
+
+**Tunic v10 (phase2.10).**
+- **The request.** `python -m tools.parity.recorder.script_run manifest --pilot tunic --assets-root <Assets3D> --out <request> --store` writes `requests/phase2/tier1/tunic-v10.json`.
+  - It pins `18-Tunica-v10.spp`. A project that differs from the hash the piece manifest `manifests/v10.json` verifies is refused.
+  - It exports with `parity/fixtures/tier1/tunic-v10/export-config.json`: Painter's shipped Blender preset, 16-bit PNG, 4096 px, `infinite` padding, no dithering.
+  - Record it under OCIO with Painter's substance configuration.
+- **The rebuild fixture.** `--pilot tunic-rebuild` pins what UzPainter rebuilds from:
+  - the stack working copy with the F03 override, every mask binding by SHA-256 and resource version, the Normal mesh map, the mesh and the double-sided value;
+  - eight masks and the Normal map recovered from the `.blend` into the private store.
+
+  Until the nine masks that only the Painter project holds are back at `_tmp/claude/<name>.png`, the command refuses and lists them.
+
 ## 10. Oracle envelope: rolling refresh, stability study, canary
 
 Task `phase0.9_oracle-envelope`, decisions 034 (envelope, study, canary) and 037 (rolling oracle). Code: `tools/parity/envelope/` and `tools/parity/recorder/{environment,launcher}.py`; tests: `tests/parity/test_oracle_envelope.py` (fake Painter only); report: `parity/reports/phase0/oracle-envelope.md` (generated, numbers and hashes only).

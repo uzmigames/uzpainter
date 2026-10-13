@@ -2,7 +2,7 @@ r"""Tier 1 goldens from UzmiGames pipeline scripts run byte-unchanged in Painter
 
     python -m tools.parity.recorder record-script <manifest.json> --assets-root <Assets3D>
     python -m tools.parity.recorder.script_run manifest --assets-root <Assets3D> --out <path> \
-        [--pilot wand|belt] [--store]
+        [--pilot wand|belt|tunic|tunic-rebuild] [--store]
 
 The manifest's `instruction_sequence.interface` is `uzmigames_pipeline_scripts`: every step is one
 script run (`uzmigames.pipeline.run_script`), and its inputs live in the UzmiGames asset
@@ -55,7 +55,7 @@ import json
 import shutil
 import sys
 import types
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
@@ -918,7 +918,9 @@ class MissingInputs(RecorderError):
 
     def __init__(self, golden_id: str, missing: Sequence[str]) -> None:
         self.missing = sorted(set(missing))
-        super().__init__(f"{golden_id}: {len(self.missing)} input(s) missing: {self.missing}")
+        # The message as the exception's `args` (what `str` shows), with no dunder access: the
+        # recorder's provenance rule refuses any underscore-prefixed attribute.
+        self.args = (f"{golden_id}: {len(self.missing)} input(s) missing: {self.missing}",)
 
 
 def assets3d_relative(value: str, assets_root: Path) -> str | None:
@@ -1015,9 +1017,11 @@ PILOTS = {"wand": wand_manifest, "belt": belt_manifest}
 
 
 def store_inputs(manifest: dict[str, Any], assets_root: Path, store: OracleStore) -> int:
-    """Every pinned input into the private store (decision 144), each re-resolved by its hash
-    afterwards; the number stored. Refused when a file no longer holds its pinned bytes."""
-    for item in manifest["inputs"]:
+    """Every pinned Assets3D input into the private store (decision 144), each re-resolved by its
+    hash afterwards; the number stored. Refused when a file no longer holds its pinned bytes. A
+    repository file or a bitmap already resolved from the store (decision 194) is not Assets3D's."""
+    pinned = [item for item in manifest["inputs"] if "assets3d_path" in item]
+    for item in pinned:
         file = assets_root / item["assets3d_path"]
         if sha256_file(file) != item["sha256"]:
             raise RecorderError(f"input {item['input_id']}: {file} changed since it was hashed")
@@ -1025,23 +1029,26 @@ def store_inputs(manifest: dict[str, Any], assets_root: Path, store: OracleStore
         stored = store.resolve(item["input_id"], item["sha256"])
         if stored.status is not Status.AVAILABLE:
             raise RecorderError(f"input {item['input_id']}: not stored ({stored.reason})")
-    return len(manifest["inputs"])
+    return len(pinned)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    from tools.parity.recorder.tunic import PILOTS as TUNIC_PILOTS  # imports this module
+
+    pilots: dict[str, Callable[[Path], dict[str, Any]]] = {**PILOTS, **TUNIC_PILOTS}
     parser = argparse.ArgumentParser(prog="python -m tools.parity.recorder.script_run")
     commands = parser.add_subparsers(dest="command", required=True)
     write = commands.add_parser("manifest", help="write a pilot's manifest (hashes Assets3D)")
     write.add_argument("--assets-root", type=Path, required=True)
     write.add_argument("--out", type=Path, required=True)
-    write.add_argument("--pilot", choices=sorted(PILOTS), default="wand")
+    write.add_argument("--pilot", choices=sorted(pilots), default="wand")
     write.add_argument(
         "--store", action="store_true", help="also store every pinned input in the private store"
     )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     root = args.assets_root.resolve()
     try:
-        manifest = PILOTS[args.pilot](root)
+        manifest = pilots[args.pilot](root)
         if args.store:
             store = locate()
             if store is None:
