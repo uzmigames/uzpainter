@@ -55,16 +55,9 @@ RELOAD_RESIDUAL = (
     "new version equal); UzPainter reloads a resource only when the file's bytes match none of "
     "its versions (decision 110)"
 )
-GREY_BITMAP = (
-    "s6 binds the grey mask_left_half bitmap to BaseColor, which the facade refuses until the "
-    "default colour space of a grey bitmap there is recorded (decision 107): the used-by-project "
-    "reload of s9 finds no binding and the project reload of s12 makes the reload instead. The "
-    "same reload of a bound colour bitmap is tested in test_pyapi_dispatcher.py"
-)
 # Outputs that cannot equal Painter's: probe -> condition -> output id -> reason.
 EXCLUDED: dict[str, dict[str, dict[str, str]]] = {
     "phase1-reload-resources": {
-        "same_session": {"s9/events": GREY_BITMAP, "s12/events": GREY_BITMAP},
         "after_save_reopen": {"s9/events": RELOAD_RESIDUAL, "s12/events": RELOAD_RESIDUAL},
     },
 }

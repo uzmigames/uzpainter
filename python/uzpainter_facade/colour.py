@@ -22,15 +22,18 @@ colour, sRGB8 or not: Painter reads back and exports the value set whatever its 
 colour-manage. The facade stores every uniform colour as its
 working-space value (`Color(working, "Working")`): the native evaluator takes a stored value as
 linear, so it receives the value Painter composites, and Painter's readback (`.working`) is that
-value. The sRGB transfer runs in float32 as Painter's readbacks show it: x = f32(v),
-((x + 0.055f) / 1.055f) ^ 2.4f with the power of the float32 operands rounded once to float32
-(`fill-layer-readback` s5 and s30, `export-ocio-encode-legacy` readbacks: 6 of 7 recorded
-components; the seventh is decision 107's named residual).
+value. The sRGB decode runs in float32 as Painter's readbacks show it (decision 214): x = f32(v),
+x * (1 / 12.92f) up to 0.04045f, else ((x + 0.055f) * (1 / 1.055f)) ^ 2.4f, each reciprocal the
+float32 quotient of 1 by the float32 constant and the power of the float32 operands rounded once
+to float32 (P20-B, `phase1-srgb-uniform-decode-part1..4`: all 448 recorded components, both
+recordings).
 
 Bitmap sources. A bitmap takes Painter's default space for its channel when bound
-(`DEFAULT_BITMAP_SPACES`, from the recorded `get_source` readbacks) and lists Painter's available
-spaces (`fill-layer-readback` s43, `export-ocio-encode-legacy` colour-space captures); a channel
-without a recorded default or list raises `NotYetSupported` naming the recording that settles it.
+(`default_bitmap_space`, from the recorded `get_source` readbacks) and lists Painter's available
+spaces (`available_bitmap_spaces`: `fill-layer-readback` s43, `export-ocio-encode-legacy`
+colour-space captures and P20-A, `phase1-fill-channel-defaults`, on the default template's five
+channels and a mask, colour and grey bitmaps alike); a channel without a recorded default or list
+raises `NotYetSupported` naming the recording that settles it.
 
 Under OCIO (decision 202) only what Session O records is admitted; everything else raises
 `NotYetSupported` before any change:
@@ -189,14 +192,17 @@ _F_1_055 = f32(1.055)
 _F_2_4 = f32(2.4)
 _F_0_0031308 = f32(0.0031308)
 _F_INV_2_4 = f32(1.0 / 2.4)
+# The float32 quotients 1.0f / 12.92f and 1.0f / 1.055f: Painter's decode multiplies by them.
+_F_INV_12_92 = f32(1.0 / _F_12_92)
+_F_INV_1_055 = f32(1.0 / _F_1_055)
 
 
 def srgb_to_linear(value: float) -> float:
-    """Painter's float32 sRGB decode of one component."""
+    """Painter's Legacy float32 sRGB decode of one component (P20-B, decision 214)."""
     x = f32(value)
     if x <= _F_0_04045:
-        return f32(x / _F_12_92)
-    base = f32(f32(x + _F_0_055) / _F_1_055)
+        return f32(x * _F_INV_12_92)
+    base = f32(f32(x + _F_0_055) * _F_INV_1_055)
     return f32(base**_F_2_4)
 
 
@@ -412,18 +418,23 @@ DATA_CHANNELS = frozenset(
     {"AO", "BaseMetalness", "SpecularRoughness", *(f"User{i}" for i in range(10))}
 )
 CHANNEL_DEFAULTS_PROBE = (
-    "a Tier 0 probe reading get_source, get_color_space and list_available_color_spaces of a "
-    "bitmap and a fresh fill on every template channel (decision 107)"
+    "a Tier 0 probe like P20-A (phase1-fill-channel-defaults, decision 107) reading get_source, "
+    "get_color_space and list_available_color_spaces of a bitmap and a fresh fill on a template "
+    "with the channel"
 )
 
 
 def default_bitmap_space(channel: str | None, colour_image: bool) -> Any:
-    """Painter's colour space of a bitmap bound on `channel` (None: a mask's mono source)."""
-    if active_profile() == OCIO_PROFILE and channel is not None and channel != "BaseColor":
-        raise _ocio_unrecorded(f"Painter's default colour space of a bitmap on {channel}")
+    """Painter's colour space of a bitmap bound on `channel` (None: a mask's mono source). In
+    Legacy mode a grey bitmap takes the same space as a colour one (P20-A)."""
+    if active_profile() == OCIO_PROFILE and channel is not None:
+        if channel != "BaseColor":
+            raise _ocio_unrecorded(f"Painter's default colour space of a bitmap on {channel}")
+        if not colour_image:
+            raise _ocio_unrecorded("Painter's default colour space of a grey bitmap on BaseColor")
     if channel is None or channel in DATA_CHANNELS:
         return DataColorSpace.Data
-    if channel == "BaseColor" and colour_image:
+    if channel == "BaseColor":
         return GenericColorSpace.sRGB
     if channel == "Height":
         return DataColorSpace.DataSigned
@@ -472,18 +483,31 @@ OCIO_COLOUR_SPACES = (
 )
 
 
+# The channels whose bitmaps Painter lists the data spaces for, outside sRGB8 (P20-A: BaseMetalness
+# and SpecularRoughness in L8, Height in L16F).
+DATA_LISTED_CHANNELS = frozenset({"BaseMetalness", "SpecularRoughness", "Height"})
+
+
 def available_bitmap_spaces(channel: str | None, colour_managed: bool) -> list[Any]:
-    """`SourceBitmap.list_available_color_spaces`. Legacy mode: a mask's mono source and a user
-    channel other than sRGB8 (RGB8, L8, RGB16, L16, RGB16F and RGB32F recorded) offer the data
-    spaces, an sRGB8 channel the colour spaces. OCIO: a mask's mono source offers the data spaces
-    and BaseColor the generic spaces and Painter's OCIO spaces."""
+    """`SourceBitmap.list_available_color_spaces`. Legacy mode: a mask's mono source, a user
+    channel other than sRGB8 (RGB8, L8, RGB16, L16, RGB16F and RGB32F recorded), BaseMetalness,
+    SpecularRoughness and Height offer the data spaces, Normal the normal spaces, an sRGB8 channel
+    the colour spaces, for a colour and a grey bitmap alike (P20-A). OCIO: a mask's mono source
+    offers the data spaces and BaseColor the generic spaces and Painter's OCIO spaces."""
     if active_profile() == OCIO_PROFILE and channel is not None:
         if channel != "BaseColor":
             raise _ocio_unrecorded(f"the colour spaces Painter lists for a bitmap on {channel}")
         generic = [GenericColorSpace.Raw, GenericColorSpace.Working, GenericColorSpace.sRGB]
         return [*generic, *OCIO_COLOUR_SPACES]
-    if channel is None or (channel.startswith("User") and not colour_managed):
+    data = channel is not None and (channel.startswith("User") or channel in DATA_LISTED_CHANNELS)
+    if channel is None or (data and not colour_managed):
         return [GenericColorSpace.Raw, DataColorSpace.Data, DataColorSpace.DataSigned]
+    if channel == "Normal" and not colour_managed:
+        return [
+            GenericColorSpace.Raw,
+            NormalColorSpace.NormalXYZRight,
+            NormalColorSpace.NormalXYZLeft,
+        ]
     if colour_managed:
         return [
             GenericColorSpace.Raw,

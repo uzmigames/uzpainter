@@ -38,12 +38,12 @@ Under decision 028, this report is the local-run evidence for the G1 gate record
 | A uid's value (`phase1-delete-node` s17, `phase1-resource-update` s14-s15) | Normalisation: Painter's own allocation. The identity outputs compare what a uid resolves to. | — |
 | Resource contexts `project<N>` | Normalisation up to the session offset (decision 107 §4) | — |
 | `phase1-execute-when-not-busy` s9-s10 | Painter's two recordings differ from each other | the recording (decision 109) |
-| `phase1-reload-resources` recording 1 s9, s12 | Refused: the facade refuses s6's grey bitmap on BaseColor (P20-A) | phase1.15_compositor-colour-fits item 2.1 (decisions 108 §4, 117, 130): record P20-A, fit exactly, and make these two steps exact |
 | **Known divergences that return a value.** Each test requires them to still differ. | | |
-| `readback/get_source/29/BaseColor` of `export-ocio-encode-legacy`: the sRGB decode of 70/255 reads 2 float32 ulp off | Divergence (decision 107 §3) | phase1.15_compositor-colour-fits item 2.1 (decisions 108 §4, 117, 130): record P20-B, then fit the decode exactly |
 | Painter's empty default paint layer "Layer 1" | Divergence: UzPainter creates no such layer. The structure readbacks are compared without it after asserting it is exactly that empty layer. | phase4.1_nodes-paint-layers item 2.8 |
 | `phase1-reload-resources` recording 2 s9, s12: Painter reports reloads of bytes the project already holds | Divergence (decision 110 §6) | phase5.2_parity-report-tiers item 2.10 (decision 117): after recording 1 is exact, explained by a recording that settles it, or entered in `parity/exceptions.json` as a decision-032 r2 divergence. Named first by decision 110 §6 and phase1.21 item 2.8 (archived). |
 | The channel labels of Dota 2's User0-User3 (`project-templates`) | Divergence: they read "", Painter's text is not shipped (decision 116 §4) | **Owner question q1** in the task's `.metadata.json` (decision 117): (a) ship generic labels, or (b) ship Painter's label text after the owner's licence review. Item 3.1 stays open until it is answered. |
+
+Closed by phase1.15_compositor-colour-fits item 2.1 (decision 214, 2026-10-13): `phase1-reload-resources` recording 1 s9 and s12 (a grey bitmap on BaseColor now binds in sRGB, P20-A) and the 70/255 decode of `export-ocio-encode-legacy` (the Legacy decode fitted from P20-B) are compared exactly; their rows are removed.
 
 ## 4. Local run on the owner's machine
 
