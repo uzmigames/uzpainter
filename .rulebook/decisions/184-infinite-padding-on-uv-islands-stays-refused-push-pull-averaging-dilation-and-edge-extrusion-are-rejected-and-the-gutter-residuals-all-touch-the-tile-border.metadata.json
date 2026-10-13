@@ -1,0 +1,13 @@
+{
+  "id": 184,
+  "slug": "infinite-padding-on-uv-islands-stays-refused-push-pull-averaging-dilation-and-edge-extrusion-are-rejected-and-the-gutter-residuals-all-touch-the-tile-border",
+  "title": "infinite padding on UV islands stays refused: push-pull, averaging dilation and edge extrusion are rejected, and the gutter residuals all touch the tile border",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
