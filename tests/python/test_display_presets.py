@@ -52,6 +52,7 @@ from uzpainter.render import display as rd
 create()
 env = resource.import_project_resource(SHIPPED, resource.Usage.ENVIRONMENT, "studio")
 fresh = rd.preset()
+fresh_default = rd.state()["environment_default"]
 preset = rd.presets()[1]
 preset["environment"]["sha256"] = env.identifier().version
 preset["environment"]["rotation"] = 180.0
@@ -70,7 +71,8 @@ loaded = json.dumps(rd.preset(), sort_keys=True)
 project.close()
 project.open(WORK + "/presets.uzp")
 reopened = json.dumps(rd.preset(), sort_keys=True)
-result = {"fresh": fresh, "applied": applied, "first": first, "loaded": loaded,
+result = {"fresh": fresh, "fresh_default": fresh_default, "applied": applied, "first": first,
+          "loaded": loaded,
           "reopened": reopened, "presets": rd.presets(), "state": rd.state()}
 """
 
@@ -91,6 +93,9 @@ def test_preset_round_trip_is_lossless(run: Run) -> None:
     assert fresh == common
     # The shipped environment is not the standard's: the state is a non-parity preview.
     assert result["state"]["parity"] is False
+    # A project that names no environment renders lit by the installation's default (decision
+    # 212); one that names an environment does not.
+    assert result["fresh_default"] is True and result["state"]["environment_default"] is False
 
 
 def standard_presets() -> dict[str, dict[str, Any]]:

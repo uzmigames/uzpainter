@@ -386,6 +386,8 @@ json::Object State(const core::Project& project) {
     const PresetSpec* spec = ActiveSpec(project);
     const auto& resource = project.display.environment.resource;
     state["parity"] = spec != nullptr && resource && *resource == spec->environment;
+    // A project that names no environment renders lit by the installation's default (decision 212).
+    state["environment_default"] = !resource.has_value();
     state["shader"] = Shader(project);
     return state;
 }

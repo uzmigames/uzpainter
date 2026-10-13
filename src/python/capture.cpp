@@ -288,6 +288,7 @@ json::Object CaptureDiagnostic(const CaptureArguments& a, const ParsedMode& pars
     receipt["camera"] = nullptr;
     receipt["size"] = size;
     receipt["display_configuration"] = nullptr;
+    receipt["environment"] = nullptr;
     return Write(a.path, bytes[0], bytes[1], std::move(receipt));
 }
 
@@ -376,6 +377,13 @@ json::Object CaptureViewport(const CaptureArguments& a) {
                                                         *hash + " (RES-03: no substitute)");
         }
         frame.environmentBytes = std::make_shared<const std::string>(std::move(*bytes));
+    } else {
+        // A project that names no environment is lit by the installation's default (decision 212).
+        std::expected<std::shared_ptr<const std::string>, std::string> shipped = preview::DefaultEnvironment();
+        if (!shipped) throw ApiError("RuntimeError", "capture: " + shipped.error());
+        frame.environmentHash = std::string(preview::kDefaultEnvironmentSha256);
+        frame.environmentBytes = *shipped;
+        frame.environmentDefault = true;
     }
     // The display configuration, the environment and the lighting, before any evaluation or device.
     preview::LightingCache cache;
@@ -493,6 +501,7 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     const json::Object renderState{
         {"mode", a.mode},
         {"environment", json::Object{{"sha256", frame.environmentHash},
+                                     {"default", frame.environmentDefault},
                                      {"rotation", scene->environmentRotationDegrees},
                                      {"exposure", scene->environmentExposure}}},
         {"background_linear", json::Array{static_cast<double>(scene->background[0]),
@@ -519,6 +528,7 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     receipt["camera"] = renderState.at("camera");
     receipt["size"] = size;
     receipt["display_configuration"] = displayConfiguration;
+    receipt["environment"] = renderState.at("environment");
     return Write(a.path, exporter::EncodePng(png), exporter::EncodeExr(exr), std::move(receipt));
 }
 

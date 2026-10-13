@@ -14,6 +14,7 @@ from typing import Any
 import numpy as np
 
 from tests.python.conftest import PROBE_IMAGES, REPO_ROOT, Run
+from tools.parity import ocio_srgb_table
 from tools.parity.fit.decode import decode
 
 
@@ -925,6 +926,46 @@ def test_sync_stack_rebuilds_only_the_named_group_and_hides_others(
     assert result["sync"]["imported"] == ["M_left", "T_checker"]
     assert result["resources"] == ["M_c_only", "M_left", "T_checker", "plane.obj"]
     assert result["again"] == ["committed", [], ["M_left", "T_checker"], True]
+
+
+def test_sync_stack_under_ocio_reads_painters_measured_decode(run: Run, tmp_path: Path) -> None:
+    """Decisions 202 and 212: on an OCIO project, `base` on the sRGB8 BaseColor is stored as the
+    facade stores it, Painter's measured working value of each component (the native table
+    generated from `ocio_srgb.py`); a component the table does not record raises
+    `NotYetSupported` and nothing is committed."""
+    (tmp_path / "masks").mkdir()
+    recorded = {
+        "title": "T",
+        "groups": [{"key": "g", "name": "G", "mask": None}],
+        "layers": [{"id": "L1", "group": "g", "name": "base", "base": [204, 51, 26]}],
+    }
+    unrecorded = json.loads(json.dumps(recorded))
+    unrecorded["layers"][0]["base"] = [0.1, 0.2, 0.3]
+    (tmp_path / "stack.json").write_text(
+        json.dumps({"recorded": recorded, "unrecorded": unrecorded}), encoding="utf-8"
+    )
+    result = ok(
+        run("""
+        project.create(PLANE, project.Settings(default_texture_resolution=256,
+            ocio_config_hash="15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"))
+        r = ls.sync_stack(WORK + "/stack.json", WORK + "/masks", stack_key="recorded")
+        root = ls.get_node_by_uid(r.returned["sync"]["root_uid"])
+        layer = ls.get_node_by_name("base", parent=ls.get_node_by_name("G", parent=root))
+        colour = layer.get_source(CT.BaseColor).get_color()
+        rev = project.revision()
+        refused = raises(ls.sync_stack, WORK + "/stack.json", WORK + "/masks",
+                         stack_key="unrecorded")
+        result = {"status": r.status, "base": [list(colour.value_raw), colour.color_space],
+                  "refused": refused, "unchanged": project.revision() == rev}
+        """)
+    )
+    codes = ocio_srgb_table.load_source().CODES
+    assert result["status"] == "committed"
+    assert result["base"] == [[codes[204], codes[51], codes[26]], "Working"]
+    assert result["refused"].startswith(
+        "NotYetSupported: sync_stack: under OCIO, Painter's working value of the sRGB component 0.1"
+    )
+    assert result["unchanged"] is True
 
 
 # ── 3.7 in-place resource replacement (LAY-08) ──────────────────────────────────────────────────

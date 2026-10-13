@@ -3,7 +3,8 @@
 The three pipeline scripts run byte-unchanged (their pins from the committed R9 request manifest)
 through `adapters/assets3d/layer_stack.py` on the wand v1 inputs (`wand.py`). Local run on the
 owner's machine (decision 028): it needs the UzmiGames asset repository at `E:\\UzmiGames\\Assets3D`
-(or `UZP_TEST_ASSETS3D`) and `zig` for a fresh `zig build painter`. CPU only.
+(or `UZP_TEST_ASSETS3D`) and `zig` for a fresh `zig build painter`. CPU only, except the
+pipeline's `capture`, which renders `painter_viewport` on DX12 (skipped under `UZP_NO_GPU=1`).
 """
 
 from __future__ import annotations
@@ -275,22 +276,30 @@ def test_the_shim_is_visible_to_adapter_run_scripts_only(
 # ── 3.4 Missing capabilities in Phase 1; the capture shim (phase2.2 item 3.6) ───────────────────
 
 
-def test_capture_on_the_ocio_wand_needs_an_environment(created: Wand) -> None:
-    """phase2.2 3.6 (decisions 148, 207): `capture` reaches the shim, which calls
+@pytest.mark.skipif(
+    os.environ.get("UZP_NO_GPU") == "1",
+    reason="UZP_NO_GPU=1: painter_viewport needs a DX12 adapter",
+)
+def test_capture_on_the_ocio_wand_runs_lit_by_the_default_environment(created: Wand) -> None:
+    """phase2.2 3.6 (decisions 148, 207, 212): `capture` reaches the shim, which calls
     `uzpainter.render.capture(mode="painter_viewport")`. `painter_create.py` sets `OCIO` to
     Painter's substance config before `create`, so the wand project is in the pinned display
-    configuration (decisions 038, 134) and the capture passes the colour check. A created project
-    names no environment, and the capture has no substitute for it (RES-03), so it is refused
-    before rendering: nothing is written and the revision is unchanged. (The Legacy refusal is
-    `tests/preview/test_preview_capture.py`'s.)"""
+    configuration (decisions 038, 134). A created project names no environment, so the capture is
+    lit by the installation's default, the shipped `studio-small-09.exr`, and its receipt says
+    so: a non-parity preview, never parity evidence. It reads the committed revision and changes
+    nothing. (The Legacy refusal is `tests/preview/test_preview_capture.py`'s.)"""
     before = revision(created)
     out = created.work / "capture.png"
     call = created.call("capture", "--out", str(out), "--size", "640", "480")
-    assert call.status == 1
-    assert "names no environment (RES-03" in call.stderr, call.stderr
-    assert "unsupported_configuration" not in call.stderr
-    assert "CAPTURE_DONE" not in call.stdout and not out.exists()
-    assert not out.with_suffix(".exr").exists()
+    assert call.status == 0, call.stdout + call.stderr
+    assert "CAPTURE_DONE" in call.stdout and out.is_file() and out.with_suffix(".exr").is_file()
+    receipt = json.loads(out.with_suffix(".receipt.json").read_text(encoding="utf-8"))
+    provenance = REPO_ROOT / "assets" / "environments" / "studio-small-09.provenance.json"
+    shipped = json.loads(provenance.read_text(encoding="utf-8"))["sha256"]
+    assert receipt["mode"] == "painter_viewport" and receipt["size"] == [640, 480]
+    assert receipt["environment"]["sha256"] == shipped
+    assert receipt["environment"]["default"] is True
+    assert receipt["revision"] == before
     assert revision(created) == before
 
 
@@ -526,27 +535,22 @@ def titled():
 
 (script_root,) = titled()
 script = document(script_root)
-before = uzpainter.project.revision()
-try:
-    r = nls.sync_stack(__STACK__, __MASKS__)
-except uzpainter.NotYetSupported as error:
-    result = {"script": script, "refused": str(error),
-              "unchanged": uzpainter.project.revision() == before
-              and [n.uid() for n in titled()] == [script_root.uid()]}
-else:
-    (native_root,) = titled()
-    result = {"script": script, "native": document(native_root),
-              "rebuilt": native_root.uid() != script_root.uid(), "status": r.status}
+r = nls.sync_stack(__STACK__, __MASKS__)
+(native_root,) = titled()
+result = {"script": script, "native": document(native_root),
+          "rebuilt": native_root.uid() != script_root.uid(), "status": r.status}
 """
 
 
-def test_native_sync_stack_is_refused_on_the_ocio_wand(created: Wand) -> None:
-    """Decisions 115 and 207: the wand project is OCIO (`painter_create.py` sets `OCIO`), where
-    the facade stores Painter's measured decode of each sRGB base colour (decision 202), which
-    the native module does not hold. `uzpainter.layerstack.sync_stack` on the wand's stack JSON
-    is therefore refused with `NotYetSupported`, and the group `painter_layer_stack.py sync`
-    built stays as it is, with the revision unchanged. The native composite's equality with the
-    script's group on a Legacy project is `tests/python/test_pyapi_native.py`'s sync tests."""
+def test_native_sync_stack_builds_the_document_the_script_builds(created: Wand) -> None:
+    """Decisions 115, 207 and 212: on the OCIO wand (`painter_create.py` sets `OCIO`),
+    `uzpainter.layerstack.sync_stack` on the wand's stack JSON builds the same group as
+    `painter_layer_stack.py sync` through the facade: the tree, every node's blending on every
+    channel (Height LinearDodge from Painter's insert defaults), opacity, active channels, every
+    source (uniform colours with their space, each sRGB base colour as Painter's measured OCIO
+    decode from the one table both read, decision 202; bitmaps by content and colour space),
+    projections and masks. Only the uids differ (a rebuild) and the names the two give the
+    imported images (bitmaps are compared by content)."""
     first = created.sync()
     assert first.status == 0, first.stdout + first.stderr
     stack_json = created.staged["wand-stack"]
@@ -558,9 +562,8 @@ def test_native_sync_stack_is_refused_on_the_ocio_wand(created: Wand) -> None:
         .replace("__MASKS__", repr(str(masks)))
     )
     result = created.probe("native-sync", body)
-    assert result["refused"].startswith("sync_stack: under OCIO"), result
-    assert "measured decode" in result["refused"]
-    assert result["unchanged"] is True
+    assert result["status"] == "committed" and result["rebuilt"] is True
+    assert result["native"] == result["script"]
     heights = {
         layer["name"]: layer["blending"]["Height"][0]
         for group in result["script"]["children"]

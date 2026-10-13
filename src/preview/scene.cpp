@@ -5,8 +5,13 @@
 #include "evaluator/diagnostics.h"
 #include "preview/preview.h"
 #include "python/display.h"
+#include "render/kernel_cache.h"
 
 #include <algorithm>
+#include <fstream>
+#include <iterator>
+
+#include "uzp_core/manifest/sha256.h"
 
 namespace uzp::preview {
 
@@ -37,7 +42,29 @@ std::optional<MaterialMap> MapOfEvaluated(const EvaluatedMap& evaluated, uint32_
     return Components(normal->width, normal->height, 3, normal->texels, components);
 }
 
+std::expected<std::shared_ptr<const std::string>, std::string> ReadDefaultEnvironment() {
+    using Problem = std::expected<std::shared_ptr<const std::string>, std::string>::unexpected_type;
+    const std::filesystem::path path =
+        render::DefaultDxcompilerPath().parent_path() / "assets" / "environments" / kDefaultEnvironmentFile;
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return Problem("the installation's default environment " + path.string() +
+                       " cannot be read (decision 212: a project that names no environment is lit by it)");
+    }
+    auto bytes = std::make_shared<const std::string>(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    if (core::Sha256Hex(*bytes) != kDefaultEnvironmentSha256) {
+        return Problem("the installation's default environment " + path.string() + " is not the shipped file (SHA-256 " +
+                       std::string(kDefaultEnvironmentSha256) + ", decision 212)");
+    }
+    return bytes;
+}
+
 }  // namespace
+
+std::expected<std::shared_ptr<const std::string>, std::string> DefaultEnvironment() {
+    static const std::expected<std::shared_ptr<const std::string>, std::string> shipped = ReadDefaultEnvironment();
+    return shipped;
+}
 
 std::optional<core::ChannelType> ChannelFor(const core::Stack& stack, MaterialSlot slot) {
     using core::ChannelType;

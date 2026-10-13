@@ -57,7 +57,9 @@ void InitialiseNewProject(core::Project& project);
 /// was never set by this API (a file older than decision 132) has `name` null.
 json::Object PresetOf(const core::Project& project);
 /// `PresetOf` plus `parity` (the environment is the preset's standard environment, so the state
-/// is the comparison standard's; any other is a non-parity preview) and the shader.
+/// is the comparison standard's; any other is a non-parity preview), `environment_default` (the
+/// project names no environment, so `painter_viewport` lights it with the installation's default,
+/// decision 212) and the shader.
 json::Object State(const core::Project& project);
 /// Validates `preset` whole, then sets it. `ValueError` for a malformed preset,
 /// `UnsupportedInUzPainter` for a value outside the fixed pipeline, `ResourceNotFoundError` for an

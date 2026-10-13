@@ -165,9 +165,7 @@ void Session::RequireNotBusy(const std::string& what) const {
     }
 }
 
-core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, const CreateSettings& settings,
-                                        const CreateCall& call) {
-    if (IsOpen()) ThrowProjectError("a project is already open");
+void CheckCreateSettings(const CreateSettings& settings) {
     if (settings.workflow && *settings.workflow != core::ProjectWorkflow::Default) {
         ThrowNotYetSupported("project workflow " + std::string(core::ToString(*settings.workflow)) +
                              " is a release gap: the UV-tile workflow (phase4.5_uv-tiles)");
@@ -177,6 +175,12 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
                              ": only Painter's substance config (" + std::string(evaluator::kPainterOcioConfigSha256) +
                              ") is a pinned colour profile (decisions 190, 202 and 207)");
     }
+}
+
+core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, const CreateSettings& settings,
+                                        const CreateCall& call) {
+    if (IsOpen()) ThrowProjectError("a project is already open");
+    CheckCreateSettings(settings);
     const std::string bytes = ReadFile(mesh_path);
     mesh::ImportSettings import;
     import.mesh_unit_scale = settings.mesh_unit_scale;

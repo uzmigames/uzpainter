@@ -81,11 +81,11 @@ Module and class names follow Painter's documented API wherever a Painter symbol
     - `Camera(_camera_id)` and `Camera.get_default_camera()`, with Painter's eight properties. A project has no camera until one is set; until then, reading or setting a property raises `NotYetSupported` (recording R-132-A). `field_of_view` and `focal_length` are set only in a whole record (R-132-B), and `aperture` accepts 0 only.
     - `camera()`, `set_camera(record)`, `camera_to_blender(record)`, `camera_from_blender(record)`: the standard's coordinate contract. Position maps `(x, y, z) → (x, −z, y)`, and the rotation `B @ Rx @ Ry @ Rz` becomes Blender's XYZ Euler angles on the canonical branch. Lens values pass unchanged.
   - `render.display`:
-    - `state()`: the preset's fields, `parity` (the environment is the active preset's standard one) and the shader.
+    - `state()`: the preset's fields, `parity` (the environment is the active preset's standard one), `environment_default` (the project names no environment) and the shader.
     - `preset()` and `presets()`: presets as `uzpainter/display-preset/1` JSON. The standard has two, `common` (the v2 block) and `ref_match` (v3).
     - `apply_preset(preset)`: validates the whole preset, then commits once. An environment the project does not store raises `ResourceNotFoundError`, with no substitute.
     - `set_exposure`, `set_opacity`, `set_blur`: 0 only. `set_rotation`, `set_shadows`, `set_background` (sRGB8): the active preset's values only.
-    - A new project starts on `common` with no environment.
+    - A new project starts on `common` with no environment; `painter_viewport` then lights it with the installation's default (`studio-small-09.exr`), and `state()` reports `environment_default` (decision 212).
   - `render.shader`: `parameters()` and `set_parameters(dict)`. These are the default `open-pbr` instance's settings, read back under OCIO, under UzPainter's identifiers:
     - `diffuse_roughness_enabled`, `anisotropy_enabled`, `specular_ior` (IOR), `specular_color_enabled`, and `transmission_enabled`, `subsurface_enabled`, `coat_enabled`, `fuzz_enabled`, `thin_film_enabled` (each section's enable);
     - `emission_luminance`;
@@ -129,7 +129,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 4. attaches the new group at the top of the stack in one step;
 5. hides every other visible root layer, unless its name starts with a keep-visible prefix. It never deletes them.
 
-Every node it builds starts with the insert defaults of §3, as the script's inserted nodes do, so it builds the document `painter_layer_stack.py sync` builds through the facade on a Legacy project (decision 115). On an OCIO project, a layer's sRGB `base` on an sRGB8 BaseColor raises `NotYetSupported`, and nothing is committed: the facade stores Painter's measured decode there (decision 202), which the native module does not hold (decision 207).
+Every node it builds starts with the insert defaults of §3, as the script's inserted nodes do, so it builds the document `painter_layer_stack.py sync` builds through the facade (decision 115; compared node for node on the OCIO wand in `tests/adapters/assets3d`). On an OCIO project a layer's sRGB `base` reads Painter's measured decode as the facade does (`evaluator::PainterOcioSrgbDecode`, generated from the facade's `ocio_srgb.py` by `tools/parity/ocio_srgb_table.py`; decisions 202 and 212); a component the table does not record, or a BaseColor that does not decode sRGB, raises `NotYetSupported` and nothing is committed.
 
 The result's `returned["sync"]` lists the groups, layers, imported and skipped images, deleted and hidden nodes. The JSON fields and their channels are documented in `stack_sync.h`. The MCP `sync_stack` also names the imported entries `<resource_prefix><name>` in a `resource_group` (`SyncOptions`, decision 164); the API call keeps the image names.
 

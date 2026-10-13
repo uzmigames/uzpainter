@@ -69,6 +69,10 @@ struct CreateSettings {
     std::optional<std::string> ocio_config_hash;
 };
 
+/// `NotYetSupported` for settings `Session::Create` refuses before reading the mesh: a workflow
+/// other than Default, and an OCIO configuration other than Painter's substance config.
+void CheckCreateSettings(const CreateSettings& settings);
+
 /// What the typed MCP tool `project_create` adds to `Session::Create` (decision 164).
 struct CreateCall {
     /// The request the creating transaction decides and records in the new project's first
