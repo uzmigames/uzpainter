@@ -140,6 +140,18 @@ EXCLUDED: dict[str, dict[str, str]] = {
         f"phase1-srgb-uniform-decode-ocio-part{part}": excluded(OCIO_NATIVE, "uzp_plane/basecolor")
         for part in range(1, 5)
     },
+    "phase1-fill-channel-defaults": excluded(
+        "the stack binds the colour checker on the L8, L16F and RGB16F channels and as a mask "
+        "source and the grey bitmap on Normal: on L8 the evaluator's values follow the checker's "
+        "red component and Painter's do not, and the evaluator refuses a grey Normal bitmap; "
+        "Painter's rule is not fitted "
+        "(phase1.15_compositor-colour-fits item 2.8, decision 214)",
+        "uzp_plane/basecolor",
+        "uzp_plane/basemetalness",
+        "uzp_plane/height",
+        "uzp_plane/normal",
+        "uzp_plane/specularroughness",
+    ),
     "phase1-delete-node": excluded(UID_VALUE, "s17/uid"),
     "phase1-resource-update": excluded(UID_VALUE, "s14/uid", "s15/uid"),
     "insert-positions": {
@@ -466,7 +478,7 @@ def compare(probe: str, facade: Run, work: Path) -> list[str]:
         theirs = {
             k: v
             for k, v in expected[condition].items()
-            if probe not in (*R10_PROBES, *OCIO_DECODE_PROBES)
+            if probe not in (*R10_PROBES, *DECODE_PROBES, DEFAULTS_PROBE)
             or not k.endswith(("/events", "/states"))
         }
         for output_id, value in ours.items():
@@ -496,9 +508,17 @@ def compare(probe: str, facade: Run, work: Path) -> list[str]:
     recorded |= {f"defaults/s{step}" for step in inserted}
     for output_id in excluded:
         assert output_id in recorded, f"{probe}: the excluded output {output_id} is not recorded"
+    # An excluded exported map's export call is not compared either: its symbols are no evidence.
+    excluded_exports = {
+        f"export/{o['export_settings']['step']}/{o['map']}"
+        for r in golden["recordings"]
+        for o in r["outputs"]
+        if o["kind"] == "exported_map" and o["output_id"] in excluded
+    }
     if not differences:
         golden_id = f"tier0/api-probes/{probe}"
-        check_trace(f"facade/{probe}", golden_id, exercised(replayed["trace"], excluded))
+        symbols = exercised(replayed["trace"], {*excluded, *excluded_exports})
+        check_trace(f"facade/{probe}", golden_id, symbols)
     return differences
 
 
@@ -517,6 +537,13 @@ R10_PROBES = ("phase1-create-settings", "phase1-delete-node", "phase1-resource-u
 # P20-B's OCIO twin (decisions 198 and 202): the 256 greys c / 255 and 64 random colours set in sRGB
 # on BaseColor and read back in the working space, events aside, under OCIO.
 OCIO_DECODE_PROBES = tuple(f"phase1-srgb-uniform-decode-ocio-part{part}" for part in range(1, 5))
+# P20-B in Legacy (decisions 205 and 214): the same colours, Legacy colour management.
+LEGACY_DECODE_PROBES = tuple(f"phase1-srgb-uniform-decode-part{part}" for part in range(1, 5))
+DECODE_PROBES = (*OCIO_DECODE_PROBES, *LEGACY_DECODE_PROBES)
+# P20-A (decisions 198 and 214): a fresh fill's default source on the default template's five
+# channels, and the default and available colour spaces of a colour and a grey bitmap on each and
+# in a mask, with every channel exported; events aside.
+DEFAULTS_PROBE = "phase1-fill-channel-defaults"
 
 
 @pytest.mark.parametrize("probe", QUIRK_PROBES)
@@ -551,16 +578,31 @@ def test_facade_ocio_uniform_decode_equals_painter(facade: Run, tmp_path: Path, 
     assert differences == [], "\n".join(differences)
 
 
+@pytest.mark.parametrize("probe", LEGACY_DECODE_PROBES)
+def test_facade_legacy_uniform_decode_equals_painter(
+    facade: Run, tmp_path: Path, probe: str
+) -> None:
+    """phase1.15 item 2.1 (decision 214): in Legacy every sRGB uniform colour reads back Painter's
+    float32 decode and exports Painter's BaseColor, both recordings."""
+    differences = compare(probe, facade, tmp_path)
+    assert differences == [], "\n".join(differences)
+
+
+def test_facade_fill_channel_defaults_equal_painter(facade: Run, tmp_path: Path) -> None:
+    """phase1.15 item 2.1 (decision 214): a fill's default sources after the active-channel reset
+    and the bitmaps' default and available colour spaces, both recordings (the exported maps are
+    item 2.8's, `EXCLUDED`)."""
+    differences = compare(DEFAULTS_PROBE, facade, tmp_path)
+    assert differences == [], "\n".join(differences)
+
+
 # ── Colour rules: the readbacks of R5 and its Legacy twin (items 3.6, 3.7) ─────────────────────
 
 SEMANTICS = API_PROBES.parent / "semantics"
-# Painter's Legacy sRGB decode of 70/255 reads 2 float32 ulp below the facade's float32 transfer,
-# which reproduces the six other recorded components exactly (decision 107; the dense conversion
-# probe of the recording list settles it). Under OCIO (`export-ocio-encode`) nothing is excluded.
-COLOUR_GOLDENS = {
-    "export-ocio-encode-legacy": {
-        "readback/get_source/29/BaseColor": "the sRGB decode of 70/255 (decision 107 residual)",
-    },
+# Every readback of both is exact: decision 107's 70/255 residual is Painter's Legacy decode, fitted
+# from P20-B (decision 214).
+COLOUR_GOLDENS: dict[str, dict[str, str]] = {
+    "export-ocio-encode-legacy": {},
     "export-ocio-encode": {},
 }
 

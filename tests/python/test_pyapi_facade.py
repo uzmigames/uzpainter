@@ -532,6 +532,22 @@ for space in (cm.GenericColorSpace.Working, cm.LegacyColorSpace.Linear, cm.Legac
     base.set_color_space(space)
     read = base.get_color_space()
     out["legacy"][type(space).__name__ + "." + space.name] = [type(read).__name__, read.name]
+out["grey_base"] = fill.set_source(CT.BaseColor, grey.identifier()).get_color_space().name
+# Still unrecorded (decision 214): a grey bitmap on BaseColor under OCIO, and the default source of
+# a channel outside the default template's five.
+declared = uzpainter.colormanagement.get_color_management()
+original = uzpainter.colormanagement.get_color_management
+OCIO_HASH = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+uzpainter.colormanagement.get_color_management = lambda: dict(declared, mode="ocio",
+                                                                 config_hash=OCIO_HASH)
+revision = uzpainter.project.revision()
+out["ocio_grey"] = [raises(fill.set_source, CT.BaseColor, grey.identifier()),
+                    uzpainter.project.revision() == revision]
+uzpainter.colormanagement.get_color_management = original
+stack.add_channel(CT.Emissive, ts.ChannelFormat.sRGB8)
+other = ls.insert_fill(top(stack))
+other.active_channels = {CT.Emissive}
+out["emissive_default"] = raises(other.get_source, CT.Emissive)
 result = out
 """
 
@@ -564,6 +580,11 @@ def test_bitmap_spaces_offered_and_refused_as_painter(facade: Run) -> None:
         "LegacyColorSpace.sRGB": ["LegacyColorSpace", "sRGB"],
         "GenericColorSpace.sRGB": ["GenericColorSpace", "sRGB"],
     }
+    assert result["grey_base"] == "sRGB"  # a grey bitmap on BaseColor takes sRGB (P20-A)
+    assert result["ocio_grey"][0].startswith("NotYetSupported: under OCIO"), result["ocio_grey"]
+    assert result["ocio_grey"][1] is True
+    assert result["emissive_default"].startswith("NotYetSupported"), result["emissive_default"]
+    assert "phase1-fill-channel-defaults" in result["emissive_default"]
 
 
 # ── 3.7 ScopedModification ──────────────────────────────────────────────────────────────────────

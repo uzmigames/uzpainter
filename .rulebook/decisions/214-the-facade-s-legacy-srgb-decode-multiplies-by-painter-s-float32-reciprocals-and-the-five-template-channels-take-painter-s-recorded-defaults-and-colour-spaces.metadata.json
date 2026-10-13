@@ -1,0 +1,12 @@
+{
+  "id": 214,
+  "slug": "the-facade-s-legacy-srgb-decode-multiplies-by-painter-s-float32-reciprocals-and-the-five-template-channels-take-painter-s-recorded-defaults-and-colour-spaces",
+  "title": "The facade's Legacy sRGB decode multiplies by Painter's float32 reciprocals, and the five template channels take Painter's recorded defaults and colour spaces",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits",
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

@@ -60,13 +60,17 @@ SOURCE = "substance_painter.source"
 _ls = uzpainter.layerstack
 ChannelType = uzpainter.textureset.ChannelType
 
-# The default source of a channel after a reset, in the working space (`active-channel-reset`,
-# `active-channel-reset-superset`: BaseColor 0.8 grey, Height 0, both recordings). Every other
-# channel's default is unrecorded: its native source is removed, and reading it or exporting it
-# raises NotYetSupported until the defaults probe (colour.CHANNEL_DEFAULTS_PROBE) is recorded.
+# The default source of a channel after a reset, in the working space (P20-A,
+# `phase1-fill-channel-defaults`, the default template's five channels, and `active-channel-reset`,
+# `active-channel-reset-superset`; both recordings; decision 214). Every other channel's default is
+# unrecorded: its native source is removed, and reading it or exporting it raises NotYetSupported
+# until a defaults probe (colour.CHANNEL_DEFAULTS_PROBE) records it.
 DEFAULT_SOURCES: dict[str, tuple[float, float, float]] = {
     "BaseColor": (0.8, 0.8, 0.8),
+    "BaseMetalness": (0.0, 0.0, 0.0),
     "Height": (0.0, 0.0, 0.0),
+    "Normal": (0.5, 0.5, 1.0),
+    "SpecularRoughness": (0.3, 0.3, 0.3),
 }
 # Painter's channel numbers in its context errors ("Channel 0 isn't valid in this context" for
 # BaseColor, `mask-stack` s15, s17, s26); other channels are named.

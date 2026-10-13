@@ -419,12 +419,13 @@ def _f32(value: float) -> float:
 
 def srgb_to_working(value: float) -> float:
     """A uniform colour component in the sRGB space as the working value the Python facade stores
-    on a colour-managed channel (python/uzpainter_facade/colour.py `srgb_to_linear`): float32
-    operands, the power rounded once to float32."""
+    on a colour-managed channel (python/uzpainter_facade/colour.py `srgb_to_linear`, decision 214):
+    float32 operands, products with the float32 reciprocals 1.0f / 12.92f and 1.0f / 1.055f, the
+    power rounded once to float32."""
     x = _f32(value)
     if x <= _f32(0.04045):
-        return _f32(x / _f32(12.92))
-    base = _f32(_f32(x + _f32(0.055)) / _f32(1.055))
+        return _f32(x * _f32(1.0 / _f32(12.92)))
+    base = _f32(_f32(x + _f32(0.055)) * _f32(1.0 / _f32(1.055)))
     return _f32(base ** _f32(2.4))
 
 
