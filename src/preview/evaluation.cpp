@@ -99,6 +99,18 @@ std::optional<std::vector<std::string>> EvaluateFrame(const core::Snapshot& snap
         } catch (const std::exception& error) {
             failed(what + ": " + error.what());
         }
+        // The AO mesh map, passed through (decision 257); a set without one reads ao = 1.
+        if (stale()) return std::nullopt;
+        try {
+            render::Result<std::shared_ptr<const evaluator::DiagnosticMap>> occlusion = OcclusionOf(project, set, resources);
+            if (!occlusion) {
+                failed(set.name + " AO mesh map: " + occlusion.error().Describe());
+            } else if (*occlusion) {
+                feed.Record(set.id, MaterialSlot::Occlusion, std::move(*occlusion));
+            }
+        } catch (const std::exception& error) {
+            failed(set.name + " AO mesh map: " + error.what());
+        }
     }
     if (stale()) return std::nullopt;
     feed.Publish();

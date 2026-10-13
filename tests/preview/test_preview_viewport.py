@@ -127,6 +127,52 @@ def test_viewport_regression_goldens(preview_tests: Path, tmp_path: Path) -> Non
         } <= passed
 
 
+def test_viewport_ao_visibility(preview_tests: Path, tmp_path: Path) -> None:
+    """phase2.3 item 2.5 (decision 257): the AO mesh map as a per-ray visibility weight mu^k
+    inside the self-occlusion rays. UzPainter-against-UzPainter checks, never parity evidence: an
+    AO map of 1 changes no pixel of any golden fixture (colour and both ratios); a flat or tilted
+    normal map without AO darkens nothing (no cavity or micro-shadow term); an AO map of 0 gives
+    exactly 0; the diffuse ratio is a against 1024-ray renders (also at a grazing view) and the
+    shipped rays are within 0.5 / sqrt(N) of them; grazing light is attenuated and light along the
+    normal kept as mu^k predicts; the specular occlusion falls with roughness and view; mirrored and
+    scaled UVs sample the map as the CPU does; with the BVH, every ratio is at most each alone (the
+    double darkening is reported, not bounded); an AO map never brightens a pixel; resident inputs
+    render the same bytes and rebuild after Invalidate."""
+    passed, _ = run_case(preview_tests, "viewport-occlusion", str(tmp_path), gpu=True)
+    expected = {
+        "an AO map of 1 leaves every pixel of the pass without one bit for bit (colour and both "
+        "ratios, the golden fixtures and the concave one)",
+        "no micro-shadow without AO: with an AO map of 1, a flat and a tilted normal map keep "
+        "every diffuse and specular ratio exactly 1",
+        "an AO map of 0 gives exactly 0: both ratios and the colour (dielectric and metal, three "
+        "views)",
+        "a = 0.3 keeps most light along the normal and almost no grazing light (micro-shadows), as "
+        "mu^k over the lit texels; without AO both are kept",
+        "the specular occlusion falls with roughness on a metal plane (1024 rays)",
+        "the specular occlusion falls with the view angle on a metal plane (1024 rays)",
+        "the shipped specular ratio with an AO map (64 rays) is within 0.5 / sqrt(64) of the "
+        "1024-ray one",
+        "mirrored and scaled UVs sample the AO map as the CPU does: exactly 1 and 0 where the "
+        "lookup's texels agree",
+        "the AO weight and the BVH meet per ray: with both, every ratio is at most each one alone "
+        "(the overlap sizes are reported)",
+        "an AO map never brightens a pixel: colour and both ratios are at most those without it "
+        "(studio light, dielectric and metal)",
+        "resident inputs give the bytes of a render without them, and a second render of the scene "
+        "reuses them",
+        "after Invalidate, the next resident render rebuilds its inputs and shows the changed AO "
+        "map",
+    }
+    for a in ("0.25", "0.50", "0.75"):
+        expected |= {
+            f"a = {a}: a 1024-ray render's diffuse ratio is a within 0.01 on the open plane (the "
+            "AO weight's cosine-weighted mean)",
+            f"a = {a}: the 128-ray diffuse ratio is within 0.5 / sqrt(128) of the 1024-ray one",
+            f"a = {a}: at a grazing view the diffuse ratio is still a within 0.01",
+        }
+    assert expected <= passed
+
+
 def test_viewport_self_occlusion(preview_tests: Path, tmp_path: Path) -> None:
     """phase2.3 item 2.4 (decision 251): ray-traced self-occlusion. UzPainter-against-UzPainter
     checks, never parity evidence: a closed box renders exactly 0 (every ray valid and blocked);

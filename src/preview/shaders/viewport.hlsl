@@ -1,8 +1,9 @@
 // The `painter_viewport` pass (src/preview/viewport.h): one thread per pixel casts its centre ray
 // against the triangles binned to its 16 x 16 tile, shades the nearest hit with the split-sum GGX
 // specular and Burley diffuse on the SH irradiance (src/preview/environment.h), each multiplied by
-// its ray-traced visibility ratio (decision 251), and writes the linear colour rounded to binary16
-// and its display codes from the display table (src/preview/display_transform.h).
+// its ray-traced visibility ratio (decision 251) weighted by the AO map's visibility (decision 257),
+// and writes the linear colour rounded to binary16 and its display codes from the display table
+// (src/preview/display_transform.h).
 //
 // Every input is a raw buffer reached through the SM 6.6 descriptor heap; the indices arrive in
 // the root constants. Buffer layouts are those written by src/preview/viewport.cpp and
@@ -32,6 +33,8 @@ cbuffer Params : register(b0) {
 
 #define TILE 16u
 #define TRIANGLE_WORDS 40u
+// Five map references of three words (base colour, metalness, roughness, normal, occlusion), then
+// the base colour, the metalness and the roughness.
 #define MATERIAL_WORDS 20u
 #define NO_MAP 0xFFFFFFFFu
 #define PI 3.14159265358979f
@@ -468,17 +471,35 @@ float3 Ratio(float3 seen, float3 total, bool blocked) {
 struct VisibilityInputs {
     float3 origin;        // the hit point moved off its triangle (OffsetRayOrigin)
     float3 ng;            // the geometric normal, facing the viewer
-    float3 shading;       // the shading normal
+    float3 shading;       // the shading normal, after FadeShadingNormal: AoVisibility's axis
     uint self;            // the hit triangle
     uint2 pixel;
     float rotationTurns;
     uint nodeCount;
+    float aperture;       // a, the AO map's visible fraction in [0, 1] (decision 257)
+    float exponent;       // k = 2 (1 - a) / a of AoVisibility, for 0 < a < 1
 };
+
+// The AO map's visibility of a direction (decision 257, amended at implementation), an assumed
+// directional AO: V_ao(d) = mu^k with mu = dot(s, d) about the shading normal s and
+// k = 2 (1 - a) / a. Under the cosine-weighted measure t = mu^2 is uniform on [0, 1], so the mean
+// of V_ao is the integral of t^(k / 2) over [0, 1], 1 / (1 + k / 2) = a: under uniform light the
+// cosine-weighted visible fraction of the hemisphere is exactly a, the calibration of a visibility
+// cone with sin^2(alpha) = a (Oat and Sander 2007, Ambient Aperture Lighting); the power law
+// itself is UzPainter's construction. It is continuous in s and d, so a narrow specular lobe and
+// the facet clip see no step; it is 1 along s and falls towards the horizon, more for a lower a.
+// a = 1 keeps every direction without the test (the pixel of the pass before the AO map, bit for
+// bit); a = 0 keeps none. `exponent` is k, computed once per hit.
+float AoVisibility(VisibilityInputs v, float3 d) {
+    if (v.aperture >= 1.0f) return 1.0f;
+    if (!(v.aperture > 0.0f)) return 0.0f;
+    return pow(max(dot(v.shading, d), 0.0f), v.exponent);
+}
 
 // R_d: the diffuse term's visibility per channel, sum V w L / sum w L over directions from the
 // balance-heuristic mixture (Veach 1997) of cosine-weighted directions about the shading normal
 // and environment-importance directions, w = cos / p_mix. Directions below the geometric facet
-// are left out of both sums.
+// are left out of both sums. V is V_ao (AoVisibility) for a direction no triangle blocks, else 0.
 float3 DiffuseVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, ByteAddressBuffer occluders,
                          VisibilityInputs v, uint count) {
     if (count == 0u) return float3(1.0f, 1.0f, 1.0f);
@@ -515,8 +536,12 @@ float3 DiffuseVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, By
         if (!(pdf > 0.0f)) continue;
         const float3 c = (cosine / pdf) * SampleLevel(lighting, 0u, d, v.rotationTurns);
         total += c;
-        if (OccludedBvh(nodes, occluders, v.nodeCount, MakeShadowRay(v.origin, d), v.self)) {
+        const float visible = AoVisibility(v, d);
+        if (!(visible > 0.0f) || OccludedBvh(nodes, occluders, v.nodeCount, MakeShadowRay(v.origin, d), v.self)) {
             blocked = true;
+        } else if (visible < 1.0f) {
+            blocked = true;
+            seen += visible * c;
         } else {
             seen += c;
         }
@@ -530,7 +555,9 @@ float3 DiffuseVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, By
 // f cos = F D G2 / (4 n.v) (Schlick's Fresnel with F0, the height-correlated Smith masking of the
 // albedo table) and the visible-normal density G1 D / (4 n.v). Sampling the environment as well
 // keeps a bright light that the lobe only grazes from resting on one heavy ray. Directions below
-// the shading or the geometric facet are left out of both sums.
+// the shading or the geometric facet are left out of both sums. V is V_ao (AoVisibility) for a
+// direction no triangle blocks, else 0: V_ao weighted over the sampled lobe is the specular
+// occlusion, so it depends on the view and the roughness.
 float3 SpecularVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, ByteAddressBuffer occluders,
                           VisibilityInputs v, float3 view, float3 f0, float roughness, uint count) {
     if (count == 0u) return float3(1.0f, 1.0f, 1.0f);
@@ -588,8 +615,12 @@ float3 SpecularVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, B
         const float g2 = 1.0f / (1.0f + lambdaView + SmithLambda(le.z, alpha));
         const float3 c = fresnel * (distribution * g2 / (4.0f * ve.z * pdf)) * SampleLevel(lighting, 0u, d, v.rotationTurns);
         total += c;
-        if (OccludedBvh(nodes, occluders, v.nodeCount, MakeShadowRay(v.origin, d), v.self)) {
+        const float visible = AoVisibility(v, d);
+        if (!(visible > 0.0f) || OccludedBvh(nodes, occluders, v.nodeCount, MakeShadowRay(v.origin, d), v.self)) {
             blocked = true;
+        } else if (visible < 1.0f) {
+            blocked = true;
+            seen += visible * c;
         } else {
             seen += c;
         }
@@ -634,6 +665,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     const uint specularRays = frame.Load(26u * 4u);
     const uint nodeCount = frame.Load(27u * 4u);
     const uint outputMode = frame.Load(28u * 4u);
+    const float occlusionStrength = LoadF(frame, 29u);
 
     // The ray through the pixel centre: from the eye (perspective; tanHalf is the tangent of half
     // the field of view), or along `forward` from the pixel's point on the plane through the eye
@@ -734,22 +766,28 @@ void main(uint3 id : SV_DispatchThreadID) {
         float metalness = 0.0f;
         float roughness = 0.3f;
         float3 tn = float3(0.0f, 0.0f, 1.0f);
+        float ao = 1.0f;
         if (material < materialCount) {
             const uint mw = material * MATERIAL_WORDS;
-            baseColour = LoadF3(materials, mw + 12u);
-            metalness = LoadF(materials, mw + 15u);
-            roughness = LoadF(materials, mw + 16u);
+            baseColour = LoadF3(materials, mw + 15u);
+            metalness = LoadF(materials, mw + 18u);
+            roughness = LoadF(materials, mw + 19u);
             const MapRef baseMap = LoadMap(materials, material, 0u);
             const MapRef metalMap = LoadMap(materials, material, 1u);
             const MapRef roughMap = LoadMap(materials, material, 2u);
             const MapRef normalMap = LoadMap(materials, material, 3u);
+            const MapRef occlusionMap = LoadMap(materials, material, 4u);
             if (baseMap.offset != NO_MAP) baseColour = SampleMap(baseMap, 3u, uv);
             if (metalMap.offset != NO_MAP) metalness = SampleMap(metalMap, 1u, uv).x;
             if (roughMap.offset != NO_MAP) roughness = SampleMap(roughMap, 1u, uv).x;
             if (normalMap.offset != NO_MAP) tn = SampleMap(normalMap, 3u, uv) * 2.0f - 1.0f;
+            if (occlusionMap.offset != NO_MAP) ao = SampleMap(occlusionMap, 1u, uv).x;
         }
         metalness = saturate(metalness);
         roughness = saturate(roughness);
+        // The AO map's visible fraction a = 1 + s (ao - 1) (glTF 2.0 occlusionTexture.strength,
+        // decision 257); ao = 1 (no map) gives exactly 1.
+        const float aperture = ao == 1.0f ? 1.0f : saturate(1.0f + occlusionStrength * (ao - 1.0f));
 
         // MikkTSpace: the perturbed normal in the interpolated, unnormalised corner frame.
         const float3 bitangent = handedness * cross(n, tangent);
@@ -779,6 +817,8 @@ void main(uint3 id : SV_DispatchThreadID) {
         vis.pixel = id.xy;
         vis.rotationTurns = rotationTurns;
         vis.nodeCount = nodeCount;
+        vis.aperture = aperture;
+        vis.exponent = aperture > 0.0f && aperture < 1.0f ? 2.0f * (1.0f - aperture) / aperture : 0.0f;
         const float3 diffuseVisibility = DiffuseVisibility(lighting, nodes, occluders, vis, diffuseRays);
         const float3 specularVisibility =
             SpecularVisibility(lighting, nodes, occluders, vis, view, f0, roughness, specularRays);

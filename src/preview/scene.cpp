@@ -3,6 +3,7 @@
 
 #include "evaluator/arith.h"
 #include "evaluator/diagnostics.h"
+#include "export/virtual_maps.h"
 #include "preview/preview.h"
 #include "python/display.h"
 #include "render/kernel_cache.h"
@@ -36,6 +37,10 @@ std::optional<MaterialMap> MapOfEvaluated(const EvaluatedMap& evaluated, uint32_
         if (!*channel) return std::nullopt;
         const evaluator::DiagnosticMap map = evaluator::MapOf(**channel);
         return Components(map.width, map.height, map.components, map.values, components);
+    }
+    if (const auto* meshMap = std::get_if<std::shared_ptr<const evaluator::DiagnosticMap>>(&evaluated)) {
+        if (!*meshMap) return std::nullopt;
+        return Components((*meshMap)->width, (*meshMap)->height, (*meshMap)->components, (*meshMap)->values, components);
     }
     const auto& normal = std::get<std::shared_ptr<const evaluator::VirtualNormalResult>>(evaluated);
     if (!normal) return std::nullopt;
@@ -81,7 +86,8 @@ std::optional<core::ChannelType> ChannelFor(const core::Stack& stack, MaterialSl
             if (has(ChannelType::SpecularRoughness)) return ChannelType::SpecularRoughness;
             if (has(ChannelType::Roughness)) return ChannelType::Roughness;
             return std::nullopt;
-        case MaterialSlot::Normal: return std::nullopt;  // the combined virtual map, below
+        case MaterialSlot::Normal: return std::nullopt;     // the combined virtual map, below
+        case MaterialSlot::Occlusion: return std::nullopt;  // the AO mesh map, never a channel
     }
     return std::nullopt;
 }
@@ -99,9 +105,22 @@ std::vector<MaterialInputs> MaterialsOf(const PreviewFrame& frame) {
         if (const EvaluatedMap* m = find(MaterialSlot::Metalness)) inputs.metalness = MapOfEvaluated(*m, 1);
         if (const EvaluatedMap* m = find(MaterialSlot::Roughness)) inputs.roughness = MapOfEvaluated(*m, 1);
         if (const EvaluatedMap* m = find(MaterialSlot::Normal)) inputs.normal = MapOfEvaluated(*m, 3);
+        if (const EvaluatedMap* m = find(MaterialSlot::Occlusion)) inputs.occlusion = MapOfEvaluated(*m, 1);
         materials.push_back(std::move(inputs));
     }
     return materials;
+}
+
+render::Result<std::shared_ptr<const evaluator::DiagnosticMap>> OcclusionOf(
+    const core::Project& project, const core::TextureSet& set,
+    const std::shared_ptr<const evaluator::IResourceProvider>& resources) {
+    if (!set.mesh_maps.contains(core::MeshMapUsage::AO)) return std::shared_ptr<const evaluator::DiagnosticMap>();
+    exporter::VirtualMapRequest request;
+    request.textureSet = set.id;
+    request.resources = resources;
+    render::Result<exporter::VirtualMapResult> map = exporter::PassThroughMeshMap(project, core::MeshMapUsage::AO, request);
+    if (!map) return render::Unexpected(map.error());
+    return std::make_shared<const evaluator::DiagnosticMap>(std::move(map->values));
 }
 
 DisplayConfiguration DisplayOf(const core::Project& project) {

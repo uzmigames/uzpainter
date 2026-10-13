@@ -84,7 +84,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
     - `Camera(_camera_id)` and `Camera.get_default_camera()`, with Painter's eight properties. A project has no camera until one is set; until then, reading or setting a property raises `NotYetSupported` (recording R-132-A). `field_of_view` and `focal_length` are set only in a whole record (R-132-B), and `aperture` accepts 0 only.
     - `camera()`, `set_camera(record)`, `camera_to_blender(record)`, `camera_from_blender(record)`: the standard's coordinate contract. Position maps `(x, y, z) → (x, −z, y)`, and the rotation `B @ Rx @ Ry @ Rz` becomes Blender's XYZ Euler angles on the canonical branch. Lens values pass unchanged.
   - `render.display`:
-    - `state()`: the preset's fields, `parity` (the environment is the active preset's standard one), `environment_default` (the project names no environment), `shadows_effect` and the shader.
+    - `state()`: the preset's fields, `parity` (the environment is the active preset's standard one), `environment_default` (the project names no environment), `shadows_effect`, `ao_strength` and `ao_channel` (read-only: `painter_viewport` applies the AO mesh map at strength 1.0 and not the AO channel, decision 257) and the shader.
     - `preset()` and `presets()`: presets as `uzpainter/display-preset/1` JSON. The standard has two, `common` (the v2 block) and `ref_match` (v3).
     - `apply_preset(preset)`: validates the whole preset, then commits once. An environment the project does not store raises `ResourceNotFoundError`, with no substitute.
     - `set_exposure`, `set_opacity`, `set_blur`: 0 only. `set_rotation`, `set_shadows`, `set_background` (sRGB8): the active preset's values only.
@@ -99,7 +99,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 
     `set_parameters` accepts these at their default values only.
 - **Capture** (`capture.{h,cpp}`, bound in `bind_display.cpp`; task phase2.2_preview-capture, decision 148). `render.capture(path, mode, camera=None, size=None, samples=None, seed=None, preset=None, stack=None)` captures the committed revision and returns the receipt (`capture-receipt.schema.json`), which is also written as `<stem>.receipt.json`. Nothing commits.
-  - `painter_viewport` is the preview pass rendered offscreen (needs `size`). Its receipt states the self-occlusion rays (`visibility`) and the requested `shadows` flag with its effect, none (decision 251).
+  - `painter_viewport` is the preview pass rendered offscreen (needs `size`). Its receipt states the self-occlusion rays (`visibility`), the AO mesh map's visibility weight with each texture set's AO source (`occlusion`, decision 257) and the requested `shadows` flag with its effect, none (decision 251).
   - `base_color`, `channel:<name>` and `mask:<uid>` are texture-space files equal to the export. `<name>` is a `ChannelType` name or the export's documentMap name of one (decision 242).
   - `painter_iray` raises `PathTracerUnavailable`, a `NotYetSupported`, before anything else.
   - See `src/preview/PREVIEW.md`.

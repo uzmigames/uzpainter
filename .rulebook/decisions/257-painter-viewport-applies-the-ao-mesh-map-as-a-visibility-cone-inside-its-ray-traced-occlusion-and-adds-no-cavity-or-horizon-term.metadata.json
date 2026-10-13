@@ -1,0 +1,14 @@
+{
+  "id": 257,
+  "slug": "painter-viewport-applies-the-ao-mesh-map-as-a-visibility-cone-inside-its-ray-traced-occlusion-and-adds-no-cavity-or-horizon-term",
+  "title": "painter_viewport applies the AO mesh map as a visibility cone inside its ray-traced occlusion, and adds no cavity or horizon term",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.3_realtime-preview",
+    "phase3.5_path-tracer-materials",
+    "phase1.25_pilot-wand",
+    "phase3.2_proc-generator-families"
+  ],
+  "supersededBy": null
+}

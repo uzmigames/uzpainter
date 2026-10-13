@@ -9,6 +9,7 @@
 - [x] 2.2 Settling report writer for `parity/reports/phase2/preview-settling.json`
 - [x] 2.3 (decision 148's release gap, owned here) Orthographic cameras in `painter_viewport` captures (decision 163)
 - [x] 2.4 (decision 251) Ray-traced self-occlusion in `painter_viewport`: a deterministic CPU-built BVH over every texture set's triangles, diffuse and specular visibility ratios per RGB channel (environment-importance samples mixed with cosine samples for the diffuse and with GGX VNDF samples for the specular), counts chosen by measurement; the `shadows` flag declared inert in the receipt, `render.display.state()`, the capability notes, PREVIEW.md and 07 §6; the AO mesh map stays unapplied
+- [x] 2.5 (decision 257 and its amendment) The AO mesh map in `painter_viewport`: a fifth material slot fed by `exporter::PassThroughMeshMap`, applied inside the diffuse and specular visibility rays as the per-ray weight `μ^k` about the faded shading normal (`k = 2(1 − a)/a`, cosine-weighted mean `a`, glTF strength 1.0); the window's material maps, lighting and BVH resident on the GPU per revision; no cavity or horizon term (cavities stay open, see §9), the AO channel not applied; the receipt's `occlusion` record, `render.display.state()`'s `ao_strength` and `ao_channel`, the capability notes, PREVIEW.md and 07 §6
 
 ## 3. Tests
 - [x] 3.1 Captures in a local run on the owner's machine (decision 028) without any window or desktop focus, in `painter_viewport`, `base_color`, `channel:<name>` and `mask:<uid>` modes
@@ -84,3 +85,13 @@
 - Wand before and after (owner's view and a 3/4 close view of the grip) are for the owner's eye only, never evidence.
   - The base build reproduces the owner's capture byte for byte: PNG `f22b9da6…`, digest `b0ca4cda…`.
 - AO stays unapplied. The factorial AO recording belongs to phase3.5_path-tracer-materials item 3.3.
+
+## 9. Notes (item 2.5, 2026-10-13; decision 257)
+- 2.5: done on branch `wt/viewport-ao`. `painter_viewport` applies each texture set's AO mesh map (`a = 1 + 1.0·(ao − 1)`) inside decision 251's diffuse and specular rays as the per-ray weight `μ^k`, `k = 2(1 − a)/a`, about the faded shading normal.
+  - `MaterialSlot::Occlusion` and `MaterialInputs::occlusion`, fed by `exporter::PassThroughMeshMap` (`preview::OcclusionOf`) in `EvaluateFrame` and in the capture; a set without an AO mesh map reads 1. The AO channel is not applied.
+  - The receipt gains `occlusion` (in the digest); the schema follows; `render.display.state()` gains `ao_strength` and `ao_channel`. Docs: PREVIEW.md, 07 §5-§6, PYAPI.md, the capability notes; approved sources P-OAT, P-JIMENEZ and S-GLTF's scope.
+  - Amendment of decision 257 (A1-A4, for the coordinator's ruling): the hard cone first specified tore smooth metal into black and ended its darkening on triangle edges, so it was replaced by the power-law weight of the same calibration; the 256 specular rays an earlier build traced in the cone are withdrawn (64 meets the grain measure with the weight); the window's camera-independent inputs are resident on the GPU per revision (`ResidentInputs`), which makes the Consequences' 200 ms window and upload-cache claims true (135 ms at 660 × 600 with the Wand's five 2048² maps, Debug); each Consequence is marked met, superseded or tested in A3.
+  - Goldens re-keyed to `12ad333c66b267b6` (CRLF) and `bb1a1bc7ea0a64bd` (LF); all four fixtures keep their hashes.
+  - Tests: `test_preview_viewport.py::test_viewport_ao_visibility` (`uzp-preview-tests viewport-occlusion`), the goldens, `test_preview_capture.py::test_viewport_capture_applies_the_ao_mesh_map` (the real input path) and the receipt checks, the state check of `test_display_presets.py`; `uzp-preview-tests viewport-occlusion-time` (manual, asserts the 200 ms window).
+  - Not done, not claimed: a cavity term. The owner's "cavities" are met only where the AO bake holds them; inlays and grooves whose bake reads close to 1 stay flat. A cavity term needs its own decision (decision 257 item 4: analytic fixtures, texel-density normalisation, a bound Curvature mesh map, which the Wand lacks) and a decision number from the coordinator.
+  - The Wand before and after (four views, 1920 × 1080) are for the owner's eye, never evidence.

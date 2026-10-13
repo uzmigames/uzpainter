@@ -306,7 +306,8 @@ def test_wand_v1_with_the_preview_attached(
         assert kind == "PathTracerUnavailable" and "P3-PATHTRACER" in message, message
 
         shown = wait_for(lambda: (s := status(pipe))["revision_shown"] == session.revision and s)
-        slots = ("BaseColor", "Metalness", "Roughness", "Normal")
+        # The wand binds an AO mesh map: the viewport's Occlusion slot (decision 257).
+        slots = ("BaseColor", "Metalness", "Roughness", "Normal", "Occlusion")
         assert sorted(shown["maps_shown"]) == sorted(f"{TEXTURE_SET}/{s}" for s in slots), shown
         assert shown["display"] == OCIO_DISPLAY and shown["last_error"] == "", shown
         if not QUICK:

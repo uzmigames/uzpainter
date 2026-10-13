@@ -23,8 +23,10 @@
 // - The stall hook (`Stall`) blocks the preview thread while it holds its frame, for the tests of
 //   item 3.2; nothing else ever waits for that thread.
 
+#include "evaluator/diagnostics.h"
 #include "evaluator/evaluate.h"
 #include "evaluator/height_to_normal.h"
+#include "evaluator/resources.h"
 #include "mesh/texturing_mesh.h"
 #include "preview/latest.h"
 #include "preview/viewport.h"
@@ -52,19 +54,23 @@
 
 namespace uzp::preview {
 
-/// The material inputs the viewport reads (viewport.h `MaterialInputs`).
-enum class MaterialSlot : uint8_t { BaseColor, Metalness, Roughness, Normal };
+/// The material inputs the viewport reads (viewport.h `MaterialInputs`). `Occlusion` is the
+/// texture set's AO mesh map, passed through (decision 257), never a channel.
+enum class MaterialSlot : uint8_t { BaseColor, Metalness, Roughness, Normal, Occlusion };
 
 /// The slot an evaluated channel feeds: BaseColor; BaseMetalness or Metallic; SpecularRoughness or
-/// Roughness; Normal. Empty for every other channel.
+/// Roughness; Normal. Empty for every other channel (the AO channel is not applied, decision 257).
 [[nodiscard]] std::optional<MaterialSlot> SlotOf(core::ChannelType channel);
 
 /// The channel of `stack` that feeds `slot`: the OpenPBR name, else the legacy one; none for
 /// `Normal` (the combined virtual map feeds it) and for a slot the stack has no channel for.
 [[nodiscard]] std::optional<core::ChannelType> ChannelFor(const core::Stack& stack, MaterialSlot slot);
 
+/// A channel read-out, the combined virtual normal, or a passed-through mesh map (the AO mesh map
+/// of `Occlusion`).
 using EvaluatedMap =
-    std::variant<std::shared_ptr<const evaluator::ChannelResult>, std::shared_ptr<const evaluator::VirtualNormalResult>>;
+    std::variant<std::shared_ptr<const evaluator::ChannelResult>, std::shared_ptr<const evaluator::VirtualNormalResult>,
+                 std::shared_ptr<const evaluator::DiagnosticMap>>;
 
 /// What the preview shows: the last evaluated revision, as published. Without a project, no project
 /// is open.
@@ -138,7 +144,7 @@ struct PreviewStatus {
     /// The revision of the image shown; -1 while the window shows a message instead.
     std::int64_t revisionShown = -1;
     /// The maps of the image shown, as `<texture set>/<slot>` (slots BaseColor, Metalness,
-    /// Roughness, Normal).
+    /// Roughness, Normal, Occlusion).
     std::vector<std::string> mapsShown;
     /// The panel's display line: the taken frame's display configuration (`DisplayLabel`).
     std::string display;
@@ -205,6 +211,15 @@ private:
 /// The viewport inputs of `frame`: its texture sets' maps in mesh material order (texture set i is
 /// material i), with the defaults of `MaterialInputs` where a slot was never evaluated.
 [[nodiscard]] std::vector<MaterialInputs> MaterialsOf(const PreviewFrame& frame);
+
+/// The `Occlusion` slot of texture set `set` of `project` (scene.cpp, decision 257): its AO mesh
+/// map passed through by `exporter::PassThroughMeshMap` (one linear channel, the UNORM code over
+/// the code maximum, at the set's resolution) from `resources`. Null when the set binds no AO mesh
+/// map, so the viewport reads ao = 1; the pass-through's error for any other image layout or size
+/// (`evaluator:unsupported_source`) or a missing image, never silently 1.
+[[nodiscard]] render::Result<std::shared_ptr<const evaluator::DiagnosticMap>> OcclusionOf(
+    const core::Project& project, const core::TextureSet& set,
+    const std::shared_ptr<const evaluator::IResourceProvider>& resources);
 
 /// The decoded environments' lighting by SHA-256, kept by a caller across frames.
 using LightingCache = std::unordered_map<std::string, std::shared_ptr<const EnvironmentLighting>>;

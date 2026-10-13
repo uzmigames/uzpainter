@@ -16,6 +16,7 @@ import hashlib
 import json
 import math
 import textwrap
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -268,6 +269,7 @@ def test_receipts_have_every_field(painter: Path, tmp_path: Path) -> None:
     assert (receipt["samples"], receipt["seed"], receipt["camera"]) == (None, None, None)
     assert receipt["display_configuration"] is None and receipt["size"] == [256, 256]
     assert receipt["visibility"] is None and receipt["shadows"] is None
+    assert receipt["occlusion"] is None
     assert receipt["encoding"] == {
         "png": {"bit_depth": "16", "layout": "L"},
         "exr": {"bit_depth": "32f", "layout": "L"},
@@ -469,6 +471,21 @@ def check_viewport(receipt: dict[str, Any], size: tuple[int, int]) -> np.ndarray
     }
     assert receipt["shadows"]["effect"] == "none in painter_viewport"
     assert isinstance(receipt["shadows"]["requested"], bool)
+    # Decision 257: the AO record; which texture sets bind an AO mesh map is the caller's to check
+    # (test_viewport_capture_applies_the_ao_mesh_map).
+    occlusion = receipt["occlusion"]
+    assert {k: v for k, v in occlusion.items() if k != "ao_source"} == {
+        "model": "cosine_power_visibility",
+        "ao_strength": 1.0,
+        "ao_channel": "not_applied",
+        "axis": "shading_normal_after_fade",
+        "cavity": None,
+        "painted_occlusion": "may_compound",
+    }
+    assert occlusion["ao_source"] and all(
+        (s["source"], s["sha256"] is None) in {("none", True), ("mesh_map", False)}
+        for s in occlusion["ao_source"]
+    ), occlusion
     codes = values(receipt["files"]["png"])
     linear = values(receipt["files"]["exr"])
     assert codes.shape == linear.shape == (size[1], size[0], 3)
@@ -596,6 +613,85 @@ def test_viewport_capture_after_a_mutation_shows_it(
     assert after["camera"]["source"] == "default_camera"
     assert after["hashes"]["png"] != before["hashes"]["png"]
     assert pipe.call("project_inspect")["result"]["revision"] == revision + 1
+
+
+# ── The AO mesh map (phase2.3_realtime-preview item 2.5; decision 257) ────────────────────────
+
+AO_INPUT = """
+project.open(BUNDLE)
+stack = ts.get_active_stack()
+texture_set = ts.all_texture_sets()[0]
+def shot(name):
+    return capture(WORK + "/ao/" + name + ".png", "painter_viewport", size=(96, 64))
+none = shot("none")
+stack.add_channel(CT.AO, ts.ChannelFormat.L8)
+has_channel = CT.AO in stack.all_channels()
+channel = shot("channel")
+half = resource.import_project_resource(AO_HALF, resource.Usage.TEXTURE, "ao-half")
+texture_set.set_mesh_map_resource(ts.MeshMapUsage.AO, half.identifier())
+mapped = shot("mapped")
+rgb = resource.import_project_resource(IMAGES + "/checker-16.png", resource.Usage.TEXTURE, "ao-rgb")
+texture_set.set_mesh_map_resource(ts.MeshMapUsage.AO, rgb.identifier())
+refused = raises(shot, "rgb")
+stray = sorted(f for f in os.listdir(WORK + "/ao") if f.startswith("rgb"))
+result = {"none": none, "has_channel": has_channel, "channel": channel, "mapped": mapped,
+          "refused": refused, "stray": stray}
+"""
+
+
+def grey_png(path: Path, size: int, code: int) -> None:
+    """A `size` x `size` 8-bit grey PNG whose every code is `code`."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return len(data).to_bytes(4, "big") + body + zlib.crc32(body).to_bytes(4, "big")
+
+    header = size.to_bytes(4, "big") * 2 + bytes([8, 0, 0, 0, 0])
+    rows = (b"\x00" + bytes([code]) * size) * size
+    signature = bytes([0x89]) + b"PNG\r\n\x1a\n"
+    data = chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+    path.write_bytes(signature + data)
+
+
+@GPU
+def test_viewport_capture_applies_the_ao_mesh_map(painter: Path, tmp_path: Path) -> None:
+    """Item 2.5 (decision 257), the real input path: `OcclusionOf` passes the texture set's AO mesh
+    map through to the viewport's occlusion slot. Without one the set reads ao = 1: an AO channel
+    in the stack changes no pixel and the receipt says `ao_channel: "not_applied"` and source
+    `none`. A bound 8-bit grey map of code 128 at the set's resolution darkens the render, never
+    brightens a pixel, and the receipt names it with its image's SHA-256 (in the digest). An RGB
+    image of another size bound as the AO mesh map fails the capture with the pass-through's
+    `unsupported_source`; it is never read as ao = 1."""
+    bundle = ocio_bundle(painter, tmp_path / "fixture")
+    ao_half = tmp_path / "ao-half.png"
+    grey_png(ao_half, 256, 128)
+    script = f"BUNDLE = {str(bundle)!r}\nAO_HALF = {ao_half.as_posix()!r}\n" + AO_INPUT
+    shots = ok(run(painter, tmp_path, script))
+    none, channel, mapped = shots["none"], shots["channel"], shots["mapped"]
+    for receipt in (none, channel, mapped):
+        check_viewport(receipt, (96, 64))
+    assert shots["has_channel"]
+    for receipt in (none, channel):
+        assert [s["source"] for s in receipt["occlusion"]["ao_source"]] == ["none"]
+        assert receipt["occlusion"]["ao_channel"] == "not_applied"
+    assert channel["hashes"]["exr"] == none["hashes"]["exr"]
+    assert channel["hashes"]["png"] == none["hashes"]["png"]
+
+    (source,) = mapped["occlusion"]["ao_source"]
+    assert source["source"] == "mesh_map"
+    assert source["sha256"] == hashlib.sha256(ao_half.read_bytes()).hexdigest()
+    assert mapped["render_state_digest"] != channel["render_state_digest"]
+    before = values(channel["files"]["exr"])
+    after = values(mapped["files"]["exr"])
+    background = before[0, 0]
+    hit = (before != background).any(axis=2)
+    assert hit.sum() > 500
+    assert (after[hit] <= before[hit]).all()
+    assert after[hit].mean() < 0.9 * before[hit].mean()
+
+    refused = shots["refused"]
+    assert refused is not None and "unsupported_source" in refused, refused
+    assert shots["stray"] == []
 
 
 # ── Orthographic cameras (phase2.3_realtime-preview; decision 163) ─────────────────────────────

@@ -28,7 +28,7 @@ constexpr wchar_t kBackBufferProperty[] = L"UzPainterPreviewBackBuffer";
 /// What a frame without a project shows: the project was closed.
 constexpr const char* kNoProject = "no project is open";
 /// The names of `MaterialSlot`, in its order.
-constexpr std::array<std::string_view, 4> kSlotNames{"BaseColor", "Metalness", "Roughness", "Normal"};
+constexpr std::array<std::string_view, 5> kSlotNames{"BaseColor", "Metalness", "Roughness", "Normal", "Occlusion"};
 
 void FillText(HDC dc, RECT rect, const std::string& text, COLORREF colour) {
     SetTextColor(dc, colour);
@@ -282,6 +282,8 @@ void PreviewHost::Run() {
     std::shared_ptr<const PreviewFrame> current;
     std::shared_ptr<const PreviewFrame> sceneOf;  // the frame `scene` was built from
     ViewportScene scene;
+    // The scene's camera-independent inputs on the GPU, kept across the renders of one revision.
+    ResidentInputs resident;
     LightingCache lightingCache;
     // The project's mesh the camera was fitted to. The worker derives a new TexturingMesh for every
     // evaluation; one of the same mesh keeps the user's orbit.
@@ -303,6 +305,7 @@ void PreviewHost::Run() {
         std::expected<ViewportScene, std::string> next = SceneOf(*current, lightingCache);
         if (!next) return next.error();
         scene = std::move(*next);
+        resident.Invalidate();
         sceneOf = current;
         if (!cameraFitted || cameraMesh != current->project->mesh) {
             camera = FitCamera(*scene.mesh);
@@ -334,7 +337,7 @@ void PreviewHost::Run() {
             engine
                 .Submit(current,
                         [&](render::EngineContext& context, const PreviewFrame&) {
-                            return RenderViewport(context, scene, camera, width, height);
+                            return RenderViewport(context, scene, camera, width, height, &resident);
                         })
                 .get();
         if (!image) {
@@ -468,6 +471,19 @@ void PreviewHost::Run() {
     backBuffer.reset();
     window.Destroy();
     input.Shutdown();
+    // The resident inputs are this engine's GPU buffers: released on its thread before it stops.
+    bool released = !sceneOf;
+    if (sceneOf) {
+        released = engine
+                       .Submit(sceneOf,
+                               [&](render::EngineContext&, const PreviewFrame&) -> render::Result<bool> {
+                                   resident.Release();
+                                   return true;
+                               })
+                       .get()
+                       .has_value();
+    }
+    if (!released) resident.Abandon();
     engine.Stop();
 }
 

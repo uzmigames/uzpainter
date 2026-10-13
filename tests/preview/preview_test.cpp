@@ -19,6 +19,14 @@
 //                        every triangle, the thin gap, the shared edges, the shadow geometry predicts,
 //                        per-channel ratios, no self-shadowing on flat and convex surfaces, the
 //                        estimator against a high-count render, the BVH cache (DX12)
+//   viewport-occlusion   the AO mesh map's cone of decision 257: an AO of 1 changes no pixel, a normal
+//                        map alone darkens nothing, an AO of 0 gives exactly 0, the cone's calibration
+//                        against 1024-ray renders, grazing against normal light, the specular occlusion
+//                        over roughness and view, mirrored and scaled UVs, and the overlap with the
+//                        BVH's occlusion (reported) (DX12)
+//   viewport-occlusion-time <mesh> <environment>
+//                        times renders of a mesh without and with an AO map at the window's default size
+//                        and at 1700 x 1250 (DX12)
 //   viewport-ladder <mesh> <environment> [<report.json>]
 //                        measures the visibility ray counts (8, 4) to (256, 128), doubling, on a mesh at
 //                        the preview window's default view (660 x 600) and at 1700 x 1250: render times,
@@ -492,17 +500,20 @@ std::string HashOf(const std::vector<uint16_t>& values) {
 
 using P3 = std::array<float, 3>;
 
+using UV3 = std::array<uzp::mesh::Float2, 3>;
+/// The corner UVs of a triangle without its own: (0, 0), (1, 0), (0, 1).
+constexpr UV3 kTriangleUvs{{{0.0f, 0.0f}, {1.0f, 0.0f}, {0.0f, 1.0f}}};
+
 /// A mesh authored in code: one object, flat corner normals, no tangents (no normal map reads
 /// them), one material per `material` index used.
 class MeshBuilder {
 public:
-    void Triangle(const P3& a, const P3& b, const P3& c, uint32_t material) {
+    void Triangle(const P3& a, const P3& b, const P3& c, uint32_t material, const UV3& uvs = kTriangleUvs) {
         const P3 e1{b[0] - a[0], b[1] - a[1], b[2] - a[2]};
         const P3 e2{c[0] - a[0], c[1] - a[1], c[2] - a[2]};
         const uzp::mesh::Float3 normal{e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
                                        e1[0] * e2[1] - e1[1] * e2[0]};
         uzp::mesh::Triangle triangle;
-        const std::array<uzp::mesh::Float2, 3> uvs{{{0.0f, 0.0f}, {1.0f, 0.0f}, {0.0f, 1.0f}}};
         const std::array<const P3*, 3> corners{&a, &b, &c};
         for (size_t k = 0; k < 3; ++k) {
             m_mesh.positions.push_back({(*corners[k])[0], (*corners[k])[1], (*corners[k])[2]});
@@ -524,6 +535,12 @@ public:
     void Quad(const P3& a, const P3& b, const P3& c, const P3& d, uint32_t material) {
         Triangle(a, b, c, material);
         Triangle(a, c, d, material);
+    }
+    /// The quad with the corner UVs ua, ub, uc, ud.
+    void QuadUv(const P3& a, const P3& b, const P3& c, const P3& d, uint32_t material,
+                const std::array<uzp::mesh::Float2, 4>& uv) {
+        Triangle(a, b, c, material, {uv[0], uv[1], uv[2]});
+        Triangle(a, c, d, material, {uv[0], uv[2], uv[3]});
     }
     /// The six faces of the box from `lo` to `hi`, two triangles each.
     void Box(const P3& lo, const P3& hi, uint32_t material) {
@@ -892,11 +909,11 @@ std::shared_ptr<const EnvironmentLighting> SharedLighting(const EnvironmentImage
 
 /// One render inside one engine request; a failure is a failed check named `what`.
 std::optional<ViewportImage> Render(Engine& engine, const ViewportScene& scene, const CameraPose& pose, uint32_t width,
-                                    uint32_t height, const std::string& what) {
+                                    uint32_t height, const std::string& what, ResidentInputs* resident = nullptr) {
     Result<ViewportImage> image = engine
                                       .Submit(std::make_shared<const int>(0),
                                               [&](EngineContext& context, const int&) {
-                                                  return RenderViewport(context, scene, pose, width, height);
+                                                  return RenderViewport(context, scene, pose, width, height, resident);
                                               })
                                       .get();
     if (!image) {
@@ -1589,6 +1606,750 @@ int RunViewportVisibility(const fs::path& dir) {
     return Finish();
 }
 
+// ── viewport-occlusion (decision 257) ────────────────────────────────────────────────────────
+
+/// A constant `size` x `size` occlusion map of `value`.
+MaterialMap ConstantMap(float value, uint32_t size = 4) {
+    return MaterialMap{size, size, 1, std::vector<float>(size_t{size} * size, value)};
+}
+
+/// The open plane y = 0 from -3 to 3, facing +y, as texture set `material`: u = (x + 3) / 6 and
+/// v = (z + 3) / 6, scaled by `scale`, u mirrored when `mirrored`.
+void OpenPlane(MeshBuilder& builder, uint32_t material, float scale = 1.0f, bool mirrored = false) {
+    const auto uv = [&](float x, float z) {
+        const float u = (x + 3.0f) / 6.0f;
+        return uzp::mesh::Float2{(mirrored ? 1.0f - u : u) * scale, (z + 3.0f) / 6.0f * scale};
+    };
+    builder.QuadUv({-3.0f, 0.0f, -3.0f}, {-3.0f, 0.0f, 3.0f}, {3.0f, 0.0f, 3.0f}, {3.0f, 0.0f, -3.0f}, material,
+                   {uv(-3.0f, -3.0f), uv(-3.0f, 3.0f), uv(3.0f, 3.0f), uv(3.0f, -3.0f)});
+}
+
+/// The u, v of a point of `OpenPlane`.
+std::pair<double, double> PlaneUv(const D3& p, double scale = 1.0, bool mirrored = false) {
+    const double u = (p[0] + 3.0) / 6.0;
+    return {(mirrored ? 1.0 - u : u) * scale, (p[2] + 3.0) / 6.0 * scale};
+}
+
+/// An orthographic view of the plane y = 0 from `degrees` off its normal, towards +x.
+CameraPose PlaneView(double degrees, double height = 4.0) {
+    const double a = degrees * std::numbers::pi / 180.0;
+    CameraPose pose;
+    pose.orthographic = true;
+    pose.orthographicHeight = height;
+    pose.eye = {5.0 * std::sin(a), 5.0 * std::cos(a), 0.0};
+    pose.forward = {-std::sin(a), -std::cos(a), 0.0};
+    pose.right = {0.0, 0.0, 1.0};
+    pose.up = {std::cos(a), -std::sin(a), 0.0};
+    return pose;
+}
+
+/// The mean, the extremes and the count of the channel-mean values of the pixels that hit
+/// something (the clear colour is -1).
+struct HitStats {
+    double mean = 0.0;
+    double low = 0.0;
+    double high = 0.0;
+    size_t pixels = 0;
+};
+
+HitStats StatsOf(const ViewportImage& image) {
+    HitStats s;
+    double sum = 0.0;
+    double low = std::numeric_limits<double>::max();
+    double high = -low;
+    for (size_t i = 0; i < size_t{image.width} * image.height; ++i) {
+        if (image.linear[i * 4] == FloatToHalf(-1.0f)) continue;
+        const double v = (Linear(image, i, 0) + Linear(image, i, 1) + Linear(image, i, 2)) / 3.0;
+        sum += v;
+        low = std::min(low, v);
+        high = std::max(high, v);
+        ++s.pixels;
+    }
+    if (s.pixels > 0) {
+        s.mean = sum / static_cast<double>(s.pixels);
+        s.low = low;
+        s.high = high;
+    }
+    return s;
+}
+
+/// The RMSE between two renders over the pixels both hit, every channel.
+double Rmse(const ViewportImage& a, const ViewportImage& b) {
+    double squared = 0.0;
+    size_t samples = 0;
+    for (size_t i = 0; i < size_t{a.width} * a.height; ++i) {
+        if (a.linear[i * 4] == FloatToHalf(-1.0f) || b.linear[i * 4] == FloatToHalf(-1.0f)) continue;
+        for (size_t c = 0; c < 3; ++c) {
+            const double e = static_cast<double>(Linear(a, i, c)) - Linear(b, i, c);
+            squared += e * e;
+            ++samples;
+        }
+    }
+    return samples ? std::sqrt(squared / static_cast<double>(samples)) : 0.0;
+}
+
+std::string Fixed(double v, int digits = 4) {
+    char text[64];
+    std::snprintf(text, sizeof(text), "%.*f", digits, v);
+    return text;
+}
+
+/// The AO bake of the open plane of `CubeOnUvPlane` (the test's own, UzmiGames-authored): per
+/// texel, the fraction of 32 x 32 stratified cosine-weighted directions (Malley's method) from the
+/// texel's point that leave without entering the cube.
+MaterialMap BakeCubeAo(uint32_t size) {
+    MaterialMap map{size, size, 1, {}};
+    const D3 lo{-0.75, 0.0, -0.75};
+    const D3 hi{0.75, 1.5, 0.75};
+    for (uint32_t r = 0; r < size; ++r) {
+        for (uint32_t c = 0; c < size; ++c) {
+            const double u = (c + 0.5) / size;
+            const double v = 1.0 - (r + 0.5) / size;
+            const D3 p{-3.0 + 6.0 * u, 0.0, -3.0 + 6.0 * v};
+            int open = 0;
+            for (int i = 0; i < 32; ++i) {
+                for (int j = 0; j < 32; ++j) {
+                    const double x1 = (i + 0.5) / 32.0;
+                    const double phi = 2.0 * std::numbers::pi * (j + 0.5) / 32.0;
+                    const D3 d{std::sqrt(x1) * std::cos(phi), std::sqrt(1.0 - x1), std::sqrt(x1) * std::sin(phi)};
+                    if (!(BoxEntry(p, d, lo, hi, 1e-9) < 1e30)) ++open;
+                }
+            }
+            map.values.push_back(static_cast<float>(open / 1024.0));
+        }
+    }
+    return map;
+}
+
+/// The concave fixture with a UV-mapped plane: the 1.5-unit cube (texture set 1) on `OpenPlane`
+/// (texture set 0).
+std::shared_ptr<const uzp::mesh::TexturingMesh> CubeOnUvPlane() {
+    MeshBuilder builder;
+    OpenPlane(builder, 0);
+    builder.Box({-0.75f, 0.0f, -0.75f}, {0.75f, 1.5f, 0.75f}, 1);
+    return builder.Build();
+}
+
+int RunViewportOcclusion(const fs::path& dir) {
+    Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    const auto uniform = SharedLighting(UniformEnvironment(1.0f, 1.0f, 1.0f));
+    const auto sun = SharedLighting(SunEnvironment());
+    const std::expected<EnvironmentImage, std::string> studioImage =
+        DecodeEnvironment(Bytes(RepoRoot() / "assets/environments/studio-small-09.exr"));
+    if (!studioImage) {
+        Check(false, "the shipped environment decodes", studioImage.error());
+        return Finish();
+    }
+    const auto studio = SharedLighting(*studioImage);
+    MeshBuilder openPlane;
+    OpenPlane(openPlane, 0);
+    const auto plane = openPlane.Build();
+    const auto ratioScene = [&](const std::shared_ptr<const uzp::mesh::TexturingMesh>& mesh,
+                                std::vector<MaterialInputs> materials,
+                                const std::shared_ptr<const EnvironmentLighting>& lighting, ViewportOutput output) {
+        ViewportScene scene;
+        scene.mesh = mesh;
+        scene.materials = std::move(materials);
+        scene.lighting = lighting;
+        scene.background = {-1.0f, -1.0f, -1.0f};
+        scene.output = output;
+        return scene;
+    };
+
+    // 1. Negative control: an AO map of exactly 1 takes the early return, so every fixture of the
+    // goldens and the concave one render bit for bit as without an AO map, colour and ratios.
+    {
+        std::string problem;
+        size_t compared = 0;
+        const std::shared_ptr<const EnvironmentLighting> lightings[] = {sun, studio};
+        for (const Fixture& fixture : Fixtures()) {
+            for (const auto& lighting : lightings) {
+                for (const ViewportOutput output :
+                     {ViewportOutput::Colour, ViewportOutput::DiffuseVisibility, ViewportOutput::SpecularVisibility}) {
+                    ViewportScene scene;
+                    scene.mesh = fixture.mesh;
+                    scene.materials = {fixture.material};
+                    if (fixture.second) scene.materials.push_back(*fixture.second);
+                    scene.lighting = lighting;
+                    scene.environmentRotationDegrees = fixture.rotation;
+                    scene.output = output;
+                    OrbitCamera camera = FitCamera(*scene.mesh);
+                    camera.yawDegrees = fixture.yaw;
+                    camera.pitchDegrees = fixture.pitch;
+                    const std::optional<ViewportImage> without = Render(engine, scene, PoseOf(camera), 96, 96, fixture.name);
+                    for (MaterialInputs& m : scene.materials) m.occlusion = ConstantMap(1.0f, 8);
+                    const std::optional<ViewportImage> with = Render(engine, scene, PoseOf(camera), 96, 96, fixture.name);
+                    if (!without || !with) continue;
+                    ++compared;
+                    if ((without->linear != with->linear || without->display != with->display) && problem.empty()) {
+                        problem = fixture.name + " output " + std::to_string(static_cast<int>(output));
+                    }
+                }
+            }
+        }
+        Check(problem.empty() && compared == 24,
+              "an AO map of 1 leaves every pixel of the pass without one bit for bit (colour and both ratios, the "
+              "golden fixtures and the concave one)",
+              problem.empty() ? std::to_string(compared) + " compared" : problem);
+    }
+
+    // 2. No micro-shadow from the normal map: with an AO map of 1, a flat and a tilted normal map on
+    // the open plane keep every diffuse and specular ratio exactly 1 (the AO weight reads only the
+    // AO map; there is no cavity term).
+    {
+        const std::vector<Fixture> fixtures = Fixtures();
+        MaterialInputs flat = Rough(0.35f);
+        flat.normal = MaterialMap{2, 2, 3, {0.5f, 0.5f, 1.0f, 0.5f, 0.5f, 1.0f, 0.5f, 0.5f, 1.0f, 0.5f, 0.5f, 1.0f}};
+        MaterialInputs tilted = fixtures[1].material;
+        std::string problem;
+        size_t pixels = 0;
+        for (MaterialInputs m : {flat, tilted}) {
+            m.occlusion = ConstantMap(1.0f);
+            for (const auto& lighting : {sun, studio}) {
+                for (const double pitch : {8.0, 35.0, 70.0}) {
+                    for (const ViewportOutput output : {ViewportOutput::DiffuseVisibility, ViewportOutput::SpecularVisibility}) {
+                        const ViewportScene scene = ratioScene(fixtures[1].mesh, {m}, lighting, output);
+                        OrbitCamera camera = FitCamera(*scene.mesh);
+                        camera.pitchDegrees = pitch;
+                        camera.yawDegrees = 30.0;
+                        const std::optional<ViewportImage> image = Render(engine, scene, PoseOf(camera), 96, 96, "the normal-mapped plane");
+                        if (!image) continue;
+                        for (size_t i = 0; i < size_t{96} * 96; ++i) {
+                            if (image->linear[i * 4] == FloatToHalf(-1.0f)) continue;
+                            ++pixels;
+                            for (size_t c = 0; c < 3; ++c) {
+                                if (image->linear[i * 4 + c] != FloatToHalf(1.0f) && problem.empty()) {
+                                    problem = "pitch " + std::to_string(pitch) + " pixel " + std::to_string(i) + " ratio " +
+                                              std::to_string(Linear(*image, i, c));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Check(problem.empty() && pixels > 10000,
+              "no micro-shadow without AO: with an AO map of 1, a flat and a tilted normal map keep every diffuse and "
+              "specular ratio exactly 1",
+              problem.empty() ? std::to_string(pixels) + " pixels" : problem);
+    }
+
+    // 3. Fully occluded: an AO map of 0 removes every ray, so on the open plane under a uniform
+    // environment (every denominator valid) both ratios and the colour are exactly 0.
+    {
+        MaterialInputs dielectric = Rough(0.4f);
+        dielectric.occlusion = ConstantMap(0.0f);
+        MaterialInputs metal = dielectric;
+        metal.metalnessValue = 1.0f;
+        metal.baseColorValue = {0.9f, 0.6f, 0.5f};
+        std::string problem;
+        size_t pixels = 0;
+        for (const MaterialInputs& m : {dielectric, metal}) {
+            for (const double view : {0.0, 40.0, 75.0}) {
+                for (const ViewportOutput output :
+                     {ViewportOutput::Colour, ViewportOutput::DiffuseVisibility, ViewportOutput::SpecularVisibility}) {
+                    const ViewportScene scene = ratioScene(plane, {m}, uniform, output);
+                    const std::optional<ViewportImage> image = Render(engine, scene, PlaneView(view), 64, 64, "the plane at a = 0");
+                    if (!image) continue;
+                    for (size_t i = 0; i < size_t{64} * 64; ++i) {
+                        if (image->linear[i * 4] == FloatToHalf(-1.0f)) continue;
+                        ++pixels;
+                        for (size_t c = 0; c < 3; ++c) {
+                            if ((image->linear[i * 4 + c] != 0 || image->display[i * 4 + c] != 0) && problem.empty()) {
+                                problem = "view " + std::to_string(view) + " output " + std::to_string(static_cast<int>(output)) +
+                                          " pixel " + std::to_string(i) + " value " + std::to_string(Linear(*image, i, c));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Check(problem.empty() && pixels > 10000,
+              "an AO map of 0 gives exactly 0: both ratios and the colour (dielectric and metal, three views)",
+              problem.empty() ? std::to_string(pixels) + " pixels" : problem);
+    }
+
+    // 4. Calibration: on the open plane under a uniform environment the AO weight's cosine-weighted
+    // mean is a, so a 1024-ray render's diffuse ratio is a (mean within 0.01; the largest pixel
+    // error is reported), and the shipped 128 rays stay within decision 251's 0.5 / sqrt(N) of it.
+    // A grazing view (82 degrees, inside decision 256's fade band) gives the same: the weight's
+    // axis is the faded shading normal.
+    for (const float a : {0.25f, 0.5f, 0.75f}) {
+        MaterialInputs m = Rough(0.5f);
+        m.occlusion = ConstantMap(a);
+        ViewportScene scene = ratioScene(plane, {m}, uniform, ViewportOutput::DiffuseVisibility);
+        scene.diffuseRays = 1024;
+        const std::optional<ViewportImage> reference = Render(engine, scene, PlaneView(30.0), 96, 96, "the 1024-ray reference");
+        scene.diffuseRays = kDiffuseVisibilityRays;
+        const std::optional<ViewportImage> shipped = Render(engine, scene, PlaneView(30.0), 96, 96, "the shipped rays");
+        const std::optional<ViewportImage> grazing = Render(engine, scene, PlaneView(82.0, 1.0), 96, 96, "the grazing view");
+        if (!reference || !shipped || !grazing) continue;
+        double largest = 0.0;
+        for (size_t i = 0; i < size_t{96} * 96; ++i) {
+            if (reference->linear[i * 4] == FloatToHalf(-1.0f)) continue;
+            largest = std::max(largest, std::abs(static_cast<double>(Linear(*reference, i, 1)) - a));
+        }
+        const HitStats ref = StatsOf(*reference);
+        const HitStats graze = StatsOf(*grazing);
+        const double rmse = Rmse(*shipped, *reference);
+        const double bound = 0.5 / std::sqrt(static_cast<double>(kDiffuseVisibilityRays));
+        Info("a = " + Fixed(a, 2) + ": 1024-ray diffuse ratio mean " + Fixed(ref.mean) + " (largest pixel error " +
+             Fixed(largest) + "), 128-ray RMSE " + Fixed(rmse) + " (bound " + Fixed(bound) + "), grazing view mean " +
+             Fixed(graze.mean) + " over " + std::to_string(graze.pixels) + " pixels");
+        Check(ref.pixels > 5000 && std::abs(ref.mean - a) <= 0.01,
+              "a = " + Fixed(a, 2) + ": a 1024-ray render's diffuse ratio is a within 0.01 on the open plane (the AO "
+              "weight's cosine-weighted mean)",
+              Fixed(ref.mean));
+        Check(rmse <= bound, "a = " + Fixed(a, 2) + ": the 128-ray diffuse ratio is within 0.5 / sqrt(128) of the 1024-ray one",
+              Fixed(rmse));
+        Check(graze.pixels > 1000 && std::abs(graze.mean - a) <= 0.01 && graze.low >= 0.0 && graze.high <= 1.0,
+              "a = " + Fixed(a, 2) + ": at a grazing view the diffuse ratio is still a within 0.01", Fixed(graze.mean));
+    }
+
+    // 5. Directional: with a = 0.3 (k = 14 / 3), light within 25 degrees of the normal keeps most of
+    // its weight and light from 65 to 85 degrees off it, a grazing band, almost none; without an AO
+    // map both are kept whole. The 1024-ray diffuse ratio of each is that of the weight mu^k over
+    // the environment's lit texels, sum L mu^(k + 1) dOmega / sum L mu dOmega, within 0.03 (the
+    // texels' bilinear edges blur the regions).
+    {
+        EnvironmentImage zenith = UniformEnvironment(0.0f, 0.0f, 0.0f, 64, 32);
+        EnvironmentImage band = zenith;
+        constexpr double kExponent = 2.0 * (1.0 - 0.3) / 0.3;
+        double zenithSeen = 0.0;
+        double zenithTotal = 0.0;
+        double bandSeen = 0.0;
+        double bandTotal = 0.0;
+        for (uint32_t y = 0; y < 32; ++y) {
+            for (uint32_t x = 0; x < 64; ++x) {
+                const double cosine = DirectionOf((x + 0.5) / 64.0, (y + 0.5) / 32.0)[1];
+                const double degrees = std::acos(std::clamp(cosine, -1.0, 1.0)) * 180.0 / std::numbers::pi;
+                const bool inZenith = degrees < 25.0;
+                const bool inBand = degrees > 65.0 && degrees < 85.0;
+                for (size_t c = 0; c < 3; ++c) {
+                    zenith.rgb[(size_t{y} * 64 + x) * 3 + c] = inZenith ? 10.0f : 0.0f;
+                    band.rgb[(size_t{y} * 64 + x) * 3 + c] = inBand ? 10.0f : 0.0f;
+                }
+                // Texel solid angle of the equirectangular map: proportional to the sine of the polar angle.
+                const double weight = cosine * std::sqrt(std::max(0.0, 1.0 - cosine * cosine));
+                if (inZenith) {
+                    zenithSeen += weight * std::pow(cosine, kExponent);
+                    zenithTotal += weight;
+                }
+                if (inBand) {
+                    bandSeen += weight * std::pow(cosine, kExponent);
+                    bandTotal += weight;
+                }
+            }
+        }
+        const double zenithExpected = zenithSeen / zenithTotal;
+        const double bandExpected = bandSeen / bandTotal;
+        const auto zenithLight = SharedLighting(zenith);
+        const auto bandLight = SharedLighting(band);
+        MaterialInputs m = Rough(0.5f);
+        m.occlusion = ConstantMap(0.3f);
+        const auto diffuse = [&](const MaterialInputs& material, const std::shared_ptr<const EnvironmentLighting>& light) {
+            ViewportScene scene = ratioScene(plane, {material}, light, ViewportOutput::DiffuseVisibility);
+            scene.diffuseRays = 1024;
+            return scene;
+        };
+        const std::optional<ViewportImage> kept = Render(engine, diffuse(m, zenithLight), PlaneView(30.0), 64, 64, "light along the normal");
+        const std::optional<ViewportImage> removed = Render(engine, diffuse(m, bandLight), PlaneView(30.0), 64, 64, "grazing light");
+        const std::optional<ViewportImage> open =
+            Render(engine, diffuse(Rough(0.5f), bandLight), PlaneView(30.0), 64, 64, "grazing light without AO");
+        if (kept && removed && open) {
+            const HitStats k = StatsOf(*kept);
+            const HitStats r = StatsOf(*removed);
+            const HitStats o = StatsOf(*open);
+            Info("a = 0.3: light within 25 degrees keeps a diffuse ratio of " + Fixed(k.mean) + " (expected " +
+                 Fixed(zenithExpected) + ", lowest " + Fixed(k.low) + "); the 65-85 degree band keeps " + Fixed(r.mean) +
+                 " (expected " + Fixed(bandExpected) + ", highest " + Fixed(r.high) + "); without AO " + Fixed(o.mean));
+            Check(k.pixels > 2000 && std::abs(k.mean - zenithExpected) <= 0.03 && std::abs(r.mean - bandExpected) <= 0.03 &&
+                      k.mean > 0.75 && r.high < 0.05 && o.low == 1.0,
+                  "a = 0.3 keeps most light along the normal and almost no grazing light (micro-shadows), as mu^k over "
+                  "the lit texels; without AO both are kept",
+                  "near " + Fixed(k.mean) + ", grazing " + Fixed(r.mean) + ", open " + Fixed(o.low));
+        }
+    }
+
+    // 6. Specular occlusion: on a metal plane with a = 0.5 under a uniform environment, the 1024-ray
+    // specular ratio falls with roughness (a wider lobe reaches further from the normal) and with
+    // the view angle (the mirror direction moves away from it); the shipped 64 rays are within
+    // 0.5 / sqrt(64) of it.
+    {
+        MaterialInputs metal;
+        metal.metalnessValue = 1.0f;
+        metal.baseColorValue = {1.0f, 1.0f, 1.0f};
+        metal.occlusion = ConstantMap(0.5f);
+        const auto ratio = [&](float roughness, double view, uint32_t rays) {
+            MaterialInputs m = metal;
+            m.roughnessValue = roughness;
+            ViewportScene scene = ratioScene(plane, {m}, uniform, ViewportOutput::SpecularVisibility);
+            scene.specularRays = rays;
+            return Render(engine, scene, PlaneView(view), 64, 64, "the metal plane");
+        };
+        std::string rough;
+        std::string views;
+        std::vector<double> byRoughness;
+        std::vector<double> byView;
+        double worstRmse = 0.0;
+        for (const float r : {0.1f, 0.3f, 0.5f, 0.7f, 0.9f}) {
+            const std::optional<ViewportImage> high = ratio(r, 20.0, 1024);
+            const std::optional<ViewportImage> low = ratio(r, 20.0, kSpecularVisibilityRays);
+            if (!high || !low) continue;
+            byRoughness.push_back(StatsOf(*high).mean);
+            worstRmse = std::max(worstRmse, Rmse(*low, *high));
+            rough += " " + Fixed(byRoughness.back(), 3);
+        }
+        for (const double v : {0.0, 20.0, 40.0, 60.0, 75.0}) {
+            const std::optional<ViewportImage> high = ratio(0.3f, v, 1024);
+            const std::optional<ViewportImage> low = ratio(0.3f, v, kSpecularVisibilityRays);
+            if (!high || !low) continue;
+            byView.push_back(StatsOf(*high).mean);
+            worstRmse = std::max(worstRmse, Rmse(*low, *high));
+            views += " " + Fixed(byView.back(), 3);
+        }
+        const auto falls = [](const std::vector<double>& values) {
+            if (values.size() < 5) return false;
+            for (size_t i = 1; i < values.size(); ++i) {
+                if (values[i] > values[i - 1] + 0.002) return false;
+            }
+            return values.front() - values.back() > 0.1;
+        };
+        const double bound = 0.5 / std::sqrt(static_cast<double>(kSpecularVisibilityRays));
+        Info("metal, a = 0.5: specular ratio over roughness 0.1-0.9 at 20 degrees:" + rough + "; over views 0-75 degrees at "
+             "roughness 0.3:" + views + "; largest " + std::to_string(kSpecularVisibilityRays) + "-ray RMSE " + Fixed(worstRmse) + " (bound " + Fixed(bound) + ")");
+        Check(falls(byRoughness), "the specular occlusion falls with roughness on a metal plane (1024 rays)", rough);
+        Check(falls(byView), "the specular occlusion falls with the view angle on a metal plane (1024 rays)", views);
+        Check(worstRmse <= bound, "the shipped specular ratio with an AO map (64 rays) is within 0.5 / sqrt(64) of the 1024-ray one",
+              Fixed(worstRmse));
+    }
+
+    // 7. Mirrored and scaled UVs: a 2 x 2-block checker AO map of 0 and 1 on a plane whose u is
+    // mirrored and whose UVs are scaled by 2 (so the map wraps) gives exactly 1 or 0 wherever the
+    // four texels of the bilinear lookup, computed on the CPU from the hit point, agree.
+    {
+        MeshBuilder builder;
+        OpenPlane(builder, 0, 2.0f, true);
+        MaterialInputs m = Rough(0.5f);
+        MaterialMap checker{8, 8, 1, {}};
+        for (uint32_t r = 0; r < 8; ++r) {
+            for (uint32_t c = 0; c < 8; ++c) checker.values.push_back(((c / 2 + r / 2) % 2) == 0 ? 1.0f : 0.0f);
+        }
+        m.occlusion = checker;
+        OrbitCamera camera;
+        camera.distance = 9.0;
+        camera.pitchDegrees = 60.0;
+        camera.yawDegrees = 30.0;
+        const CameraPose pose = PoseOf(camera);
+        constexpr uint32_t kSize = 128;
+        const std::optional<ViewportImage> image =
+            Render(engine, ratioScene(builder.Build(), {m}, uniform, ViewportOutput::DiffuseVisibility), pose, kSize, kSize, "the mirrored plane");
+        if (image) {
+            size_t ones = 0;
+            size_t zeros = 0;
+            std::string problem;
+            for (uint32_t y = 0; y < kSize; ++y) {
+                for (uint32_t x = 0; x < kSize; ++x) {
+                    const auto [o, d] = PixelRay(pose, x, y, kSize, kSize);
+                    if (!(d[1] < 0.0)) continue;
+                    const D3 p = Along(o, d, -o[1] / d[1]);
+                    if (std::abs(p[0]) > 2.95 || std::abs(p[2]) > 2.95) continue;
+                    const auto [u, v] = PlaneUv(p, 2.0, true);
+                    const double fx = u * 8.0 - 0.5;
+                    const double fy = (1.0 - v) * 8.0 - 0.5;
+                    const double tx = fx - std::floor(fx);
+                    const double ty = fy - std::floor(fy);
+                    if (tx < 0.02 || tx > 0.98 || ty < 0.02 || ty > 0.98) continue;
+                    const auto wrap = [](int i) { return static_cast<uint32_t>(((i % 8) + 8) % 8); };
+                    const int x0 = static_cast<int>(std::floor(fx));
+                    const int y0 = static_cast<int>(std::floor(fy));
+                    const float t00 = checker.values[wrap(y0) * 8 + wrap(x0)];
+                    const float t01 = checker.values[wrap(y0) * 8 + wrap(x0 + 1)];
+                    const float t10 = checker.values[wrap(y0 + 1) * 8 + wrap(x0)];
+                    const float t11 = checker.values[wrap(y0 + 1) * 8 + wrap(x0 + 1)];
+                    if (t00 != t01 || t00 != t10 || t00 != t11) continue;
+                    const size_t i = size_t{y} * kSize + x;
+                    const uint16_t expected = FloatToHalf(t00);
+                    (t00 == 1.0f ? ones : zeros) += 1;
+                    for (size_t c = 0; c < 3; ++c) {
+                        if (image->linear[i * 4 + c] != expected && problem.empty()) {
+                            problem = "pixel (" + std::to_string(x) + ", " + std::to_string(y) + ") uv (" + Fixed(u) + ", " +
+                                      Fixed(v) + ") expects " + Fixed(t00, 0) + ", got " + Fixed(Linear(*image, i, c));
+                        }
+                    }
+                }
+            }
+            Check(problem.empty() && ones > 300 && zeros > 300,
+                  "mirrored and scaled UVs sample the AO map as the CPU does: exactly 1 and 0 where the lookup's texels agree",
+                  problem.empty() ? std::to_string(ones) + " ones, " + std::to_string(zeros) + " zeros" : problem);
+        }
+    }
+
+    // 8. Overlap, reported and not a pass condition: the AO weight and the BVH meet per ray, so with
+    // both a pixel's ratio is at most each one alone (checked); how much darker it gets than the
+    // darker of the two is the declared double darkening (reported). Fixtures: the concave fixture
+    // with its own AO bake (64 x 64), the cube with a constant a = 0.5 (a one-sided blocker), and a
+    // square floating 2 above the plane with a = 0.5 (a blocker near the normal, where the weight is
+    // close to 1).
+    {
+        MeshBuilder floating;
+        OpenPlane(floating, 0);
+        floating.Quad({-0.5f, 2.0f, -0.5f}, {0.5f, 2.0f, -0.5f}, {0.5f, 2.0f, 0.5f}, {-0.5f, 2.0f, 0.5f}, 1);
+        const MaterialMap bake = BakeCubeAo(64);
+        struct Case {
+            std::string name;
+            std::shared_ptr<const uzp::mesh::TexturingMesh> blocked;
+            MaterialMap map;
+            D3 lo;
+            D3 hi;
+        };
+        const Case cases[] = {
+            {"the concave fixture with its own AO bake", CubeOnUvPlane(), bake, {-0.75, 0.0, -0.75}, {0.75, 1.5, 0.75}},
+            {"the cube with a = 0.5 (one-sided)", CubeOnUvPlane(), ConstantMap(0.5f), {-0.75, 0.0, -0.75}, {0.75, 1.5, 0.75}},
+            {"a square above with a = 0.5 (disjoint)", floating.Build(), ConstantMap(0.5f), {-0.5, 2.0, -0.5}, {0.5, 2.0, 0.5}},
+        };
+        OrbitCamera camera;
+        camera.distance = 10.0;
+        camera.pitchDegrees = 50.0;
+        camera.yawDegrees = 20.0;
+        const CameraPose pose = PoseOf(camera);
+        constexpr uint32_t kSize = 128;
+        std::string problem;
+        size_t checked = 0;
+        for (const Case& c : cases) {
+            MaterialInputs withMap = Rough(0.5f);
+            withMap.occlusion = c.map;
+            const std::optional<ViewportImage> bvh = Render(
+                engine, ratioScene(c.blocked, {Rough(0.5f), Rough(0.5f)}, uniform, ViewportOutput::DiffuseVisibility), pose, kSize, kSize, c.name);
+            const std::optional<ViewportImage> weight =
+                Render(engine, ratioScene(plane, {withMap}, uniform, ViewportOutput::DiffuseVisibility), pose, kSize, kSize, c.name);
+            const std::optional<ViewportImage> both = Render(
+                engine, ratioScene(c.blocked, {withMap, Rough(0.5f)}, uniform, ViewportOutput::DiffuseVisibility), pose, kSize, kSize, c.name);
+            if (!bvh || !weight || !both) continue;
+            double sumBvh = 0.0;
+            double sumCone = 0.0;
+            double sumBoth = 0.0;
+            double excess = 0.0;
+            size_t pixels = 0;
+            for (uint32_t y = 0; y < kSize; ++y) {
+                for (uint32_t x = 0; x < kSize; ++x) {
+                    const auto [o, d] = PixelRay(pose, x, y, kSize, kSize);
+                    if (!(d[1] < 0.0)) continue;
+                    const double tPlane = -o[1] / d[1];
+                    const D3 p = Along(o, d, tPlane);
+                    // The plane near the blocker, where the camera sees the plane.
+                    if (std::abs(p[0]) > 2.0 || std::abs(p[2]) > 2.0) continue;
+                    if (BoxEntry(o, d, c.lo, c.hi) < tPlane) continue;
+                    if (p[0] >= c.lo[0] && p[0] <= c.hi[0] && p[2] >= c.lo[2] && p[2] <= c.hi[2] && c.lo[1] == 0.0) continue;
+                    const size_t i = size_t{y} * kSize + x;
+                    ++pixels;
+                    for (size_t ch = 0; ch < 3; ++ch) {
+                        const float b = Linear(*bvh, i, ch);
+                        const float k = Linear(*weight, i, ch);
+                        const float w = Linear(*both, i, ch);
+                        ++checked;
+                        if ((w > b || w > k) && problem.empty()) {
+                            problem = c.name + ": pixel (" + std::to_string(x) + ", " + std::to_string(y) + ") both " + Fixed(w) +
+                                      ", BVH " + Fixed(b) + ", AO weight " + Fixed(k);
+                        }
+                        if (ch == 1) {
+                            sumBvh += b;
+                            sumCone += k;
+                            sumBoth += w;
+                            excess += std::min(b, k) - w;
+                        }
+                    }
+                }
+            }
+            const double n = pixels ? static_cast<double>(pixels) : 1.0;
+            Info("overlap, " + c.name + ": " + std::to_string(pixels) + " plane pixels near the blocker, mean diffuse ratio "
+                 "BVH only " + Fixed(sumBvh / n) + ", AO weight only " + Fixed(sumCone / n) + ", both " + Fixed(sumBoth / n) +
+                 "; darker than the darker of the two by " + Fixed(excess / n) + " on average (the declared double darkening)");
+        }
+        Check(problem.empty() && checked > 3000,
+              "the AO weight and the BVH meet per ray: with both, every ratio is at most each one alone (the overlap sizes "
+              "are reported)",
+              problem.empty() ? std::to_string(checked) + " values" : problem);
+    }
+
+    // 9. Never brighter: the AO weight only lowers a ray's share, so with the concave fixture's own
+    // bake every pixel of the colour and of both ratios is at most that of the same
+    // render without the AO map (the same rays, the same denominators).
+    {
+        const MaterialMap bake = BakeCubeAo(64);
+        MaterialInputs withMap = Rough(0.35f);
+        withMap.occlusion = bake;
+        MaterialInputs metalWithMap = withMap;
+        metalWithMap.metalnessValue = 1.0f;
+        OrbitCamera camera;
+        camera.distance = 10.0;
+        camera.pitchDegrees = 35.0;
+        camera.yawDegrees = 20.0;
+        std::string problem;
+        size_t compared = 0;
+        size_t darker = 0;
+        for (const MaterialInputs& m : {withMap, metalWithMap}) {
+            for (const ViewportOutput output :
+                 {ViewportOutput::Colour, ViewportOutput::DiffuseVisibility, ViewportOutput::SpecularVisibility}) {
+                MaterialInputs without = m;
+                without.occlusion.reset();
+                const std::optional<ViewportImage> a =
+                    Render(engine, ratioScene(CubeOnUvPlane(), {m, Rough(0.5f)}, studio, output), PoseOf(camera), 96, 96, "with the bake");
+                const std::optional<ViewportImage> b = Render(
+                    engine, ratioScene(CubeOnUvPlane(), {without, Rough(0.5f)}, studio, output), PoseOf(camera), 96, 96, "without it");
+                if (!a || !b) continue;
+                for (size_t i = 0; i < size_t{96} * 96; ++i) {
+                    if (a->linear[i * 4] == FloatToHalf(-1.0f)) continue;
+                    for (size_t c = 0; c < 3; ++c) {
+                        ++compared;
+                        const float x = Linear(*a, i, c);
+                        const float y = Linear(*b, i, c);
+                        if (x < y) ++darker;
+                        if ((x > y || a->display[i * 4 + c] > b->display[i * 4 + c]) && problem.empty()) {
+                            problem = "output " + std::to_string(static_cast<int>(output)) + " pixel " + std::to_string(i) +
+                                      " with " + Fixed(x) + ", without " + Fixed(y);
+                        }
+                    }
+                }
+            }
+        }
+        Check(problem.empty() && compared > 50000 && darker > 1000,
+              "an AO map never brightens a pixel: colour and both ratios are at most those without it (studio light, "
+              "dielectric and metal)",
+              problem.empty() ? std::to_string(compared) + " values, " + std::to_string(darker) + " darker" : problem);
+    }
+
+    // 10. Resident inputs (decision 257): the renders of one scene with resident inputs give the
+    // bytes of renders without them; the second render reuses the first one's buffers; after
+    // `Invalidate`, a changed AO map shows.
+    {
+        MaterialInputs half = Rough(0.4f);
+        half.occlusion = ConstantMap(0.5f, 16);
+        ViewportScene scene = ratioScene(CubeOnUvPlane(), {half, Rough(0.5f)}, studio, ViewportOutput::Colour);
+        OrbitCamera camera;
+        camera.distance = 10.0;
+        camera.pitchDegrees = 40.0;
+        camera.yawDegrees = 25.0;
+        OrbitCamera turned = camera;
+        turned.yawDegrees = 60.0;
+        ResidentInputs resident;
+        const std::optional<ViewportImage> first = Render(engine, scene, PoseOf(camera), 80, 80, "the first resident render", &resident);
+        const std::optional<ViewportImage> second = Render(engine, scene, PoseOf(turned), 80, 80, "the second resident render", &resident);
+        const std::optional<ViewportImage> plainFirst = Render(engine, scene, PoseOf(camera), 80, 80, "the first plain render");
+        const std::optional<ViewportImage> plainSecond = Render(engine, scene, PoseOf(turned), 80, 80, "the second plain render");
+        const bool reused = resident.Builds() == 1 && resident.Reuses() == 1;
+        scene.materials[0].occlusion = ConstantMap(0.2f, 16);
+        resident.Invalidate();
+        const std::optional<ViewportImage> changed = Render(engine, scene, PoseOf(camera), 80, 80, "the changed resident render", &resident);
+        const std::optional<ViewportImage> plainChanged = Render(engine, scene, PoseOf(camera), 80, 80, "the changed plain render");
+        static_cast<void>(engine
+                              .Submit(std::make_shared<const int>(0),
+                                      [&](EngineContext&, const int&) -> Result<bool> {
+                                          resident.Release();
+                                          return true;
+                                      })
+                              .get());
+        if (first && second && plainFirst && plainSecond && changed && plainChanged) {
+            Check(first->linear == plainFirst->linear && first->display == plainFirst->display &&
+                      second->linear == plainSecond->linear && second->display == plainSecond->display && reused,
+                  "resident inputs give the bytes of a render without them, and a second render of the scene reuses them",
+                  std::to_string(resident.Builds()) + " builds, " + std::to_string(resident.Reuses()) + " reuses");
+            Check(changed->linear == plainChanged->linear && changed->linear != first->linear && resident.Builds() == 2,
+                  "after Invalidate, the next resident render rebuilds its inputs and shows the changed AO map",
+                  std::to_string(resident.Builds()) + " builds");
+        }
+    }
+    return Finish();
+}
+
+// ── viewport-occlusion-time (decision 257: the AO map's cost) ─────────────────────────────────
+
+int RunViewportOcclusionTime(const fs::path& dir, const fs::path& meshPath, const fs::path& environmentPath) {
+    Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    uzp::mesh::ImportResult imported = uzp::mesh::ImportMeshFile(meshPath, {});
+    const auto mesh = std::make_shared<const uzp::mesh::TexturingMesh>(std::move(imported.mesh));
+    const std::expected<EnvironmentImage, std::string> environment = DecodeEnvironment(Bytes(environmentPath));
+    if (!environment) {
+        Check(false, "the environment decodes", environment.error());
+        return Finish();
+    }
+    ViewportScene scene;
+    scene.mesh = mesh;
+    scene.lighting = SharedLighting(*environment);
+    const CameraPose pose = PoseOf(FitCamera(*mesh));
+    const std::pair<uint32_t, uint32_t> sizes[] = {{660, 600}, {1700, 1250}};
+    // The Wand's maps at 2048 x 2048: base colour, metalness, roughness and normal, then the AO map.
+    constexpr uint32_t kSide = 2048;
+    const auto constant = [](uint32_t components, std::vector<float> value) {
+        MaterialMap map{kSide, kSide, components, {}};
+        map.values.reserve(size_t{kSide} * kSide * components);
+        for (size_t i = 0; i < size_t{kSide} * kSide; ++i) map.values.insert(map.values.end(), value.begin(), value.end());
+        return map;
+    };
+    MaterialInputs wandMaps;
+    wandMaps.baseColor = constant(3, {0.4f, 0.3f, 0.2f});
+    wandMaps.metalness = constant(1, {0.0f});
+    wandMaps.roughness = constant(1, {0.5f});
+    wandMaps.normal = constant(3, {0.5f, 0.5f, 1.0f});
+    MaterialInputs wandWithAo = wandMaps;
+    wandWithAo.occlusion = constant(1, {0.5f});
+    struct Row {
+        const char* name;
+        const MaterialInputs* material;
+    };
+    const MaterialInputs none;
+    const Row rows[] = {{"no maps", &none}, {"four 2048 x 2048 maps", &wandMaps}, {"four maps and a 2048 x 2048 AO map of 0.5", &wandWithAo}};
+    double windowResident = 0.0;
+    for (const auto& [width, height] : sizes) {
+        for (const Row& row : rows) {
+            scene.materials.assign(std::max<size_t>(1, mesh->materials.size()), *row.material);
+            // Every render uploads every input (a capture), then one scene rendered again and again
+            // from resident inputs (the window between revisions); the first resident render builds them.
+            std::vector<double> plain;
+            std::vector<double> resident;
+            double build = 0.0;
+            for (int run = 0; run < 4; ++run) {
+                const auto start = std::chrono::steady_clock::now();
+                if (!Render(engine, scene, pose, width, height, "the timed render")) return Finish();
+                const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                if (run > 0) plain.push_back(ms);  // the first run also compiles the kernel
+            }
+            ResidentInputs inputs;
+            for (int run = 0; run < 4; ++run) {
+                const auto start = std::chrono::steady_clock::now();
+                if (!Render(engine, scene, pose, width, height, "the timed resident render", &inputs)) return Finish();
+                const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                if (run == 0) {
+                    build = ms;
+                } else {
+                    resident.push_back(ms);
+                }
+            }
+            static_cast<void>(engine
+                                  .Submit(std::make_shared<const int>(0),
+                                          [&](EngineContext&, const int&) -> Result<bool> {
+                                              inputs.Release();
+                                              return true;
+                                          })
+                                  .get());
+            std::sort(plain.begin(), plain.end());
+            std::sort(resident.begin(), resident.end());
+            Info(std::to_string(width) + " x " + std::to_string(height) + ", rays (" + std::to_string(kDiffuseVisibilityRays) +
+                 ", " + std::to_string(kSpecularVisibilityRays) + "), " + row.name + ": " + Fixed(plain[1], 1) +
+                 " ms uploading every input, " + Fixed(build, 1) + " ms building the resident inputs, " +
+                 Fixed(resident[1], 1) + " ms from them (medians of 3)");
+            if (width == 660 && row.material == &wandWithAo) windowResident = resident[1];
+        }
+    }
+    Check(windowResident > 0.0 && windowResident < 200.0,
+          "at the window's default size, with the Wand's five 2048 x 2048 maps, a render from resident inputs fits the "
+          "200 ms period",
+          Fixed(windowResident, 1) + " ms");
+    return Finish();
+}
+
 // ── viewport-ladder (decision 251: the counts are chosen by measurement) ──────────────────────
 
 int RunViewportLadder(const fs::path& dir, const fs::path& meshPath, const fs::path& environmentPath,
@@ -1686,7 +2447,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: uzp-preview-tests display | environment | latest | lighting-cache <work-dir> | viewport-unsupported <work-dir> | "
                      "viewport-normal-fade <work-dir> | viewport-golden <work-dir> <goldens.json> [--bless] | viewport-visibility <work-dir> | "
-                     "viewport-ladder <work-dir> <mesh> <environment> [<report.json>]\n");
+                     "viewport-occlusion <work-dir> | viewport-occlusion-time <work-dir> <mesh> <environment> | viewport-ladder <work-dir> <mesh> <environment> [<report.json>]\n");
         return 2;
     }
     const fs::path dir = argv[2];
@@ -1705,6 +2466,10 @@ int main(int argc, char** argv) {
         code = RunViewportGolden(dir, argv[3], argc >= 5 && std::string_view(argv[4]) == "--bless");
     } else if (mode == "viewport-visibility") {
         code = RunViewportVisibility(dir);
+    } else if (mode == "viewport-occlusion") {
+        code = RunViewportOcclusion(dir);
+    } else if (mode == "viewport-occlusion-time" && argc >= 5) {
+        code = RunViewportOcclusionTime(dir, argv[3], argv[4]);
     } else if (mode == "viewport-ladder" && argc >= 5) {
         code = RunViewportLadder(dir, argv[3], argv[4], argc >= 6 ? fs::path(argv[5]) : fs::path());
     } else {

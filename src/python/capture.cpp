@@ -300,6 +300,7 @@ json::Object CaptureDiagnostic(const CaptureArguments& a, const ParsedMode& pars
     receipt["display_configuration"] = nullptr;
     receipt["environment"] = nullptr;
     receipt["visibility"] = nullptr;
+    receipt["occlusion"] = nullptr;
     receipt["shadows"] = nullptr;
     return Write(a.path, bytes[0], bytes[1], std::move(receipt));
 }
@@ -450,6 +451,11 @@ json::Object CaptureViewport(const CaptureArguments& a) {
         normal.geometry = revision.inputs.geometry;
         frame.maps[{set.id, preview::MaterialSlot::Normal}] = std::make_shared<const evaluator::VirtualNormalResult>(
             Take(revision.cpu.EvaluateNormal(material, snapshot.revision, normal)));
+        // The AO mesh map, passed through (decision 257); a set without one reads ao = 1.
+        if (std::shared_ptr<const evaluator::DiagnosticMap> occlusion =
+                Take(preview::OcclusionOf(material, set, revision.inputs.resources))) {
+            frame.maps[{set.id, preview::MaterialSlot::Occlusion}] = std::move(occlusion);
+        }
     }
     evaluation->Keep();
     evaluation.reset();  // the next call may use it while this one renders
@@ -515,6 +521,24 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     const json::Object visibility{{"model", std::string(preview::kVisibilityModel)},
                                   {"diffuse_rays", static_cast<std::int64_t>(scene->diffuseRays)},
                                   {"specular_rays", static_cast<std::int64_t>(scene->specularRays)}};
+    // The AO mesh map's visibility and its inputs change the image (decision 257): each texture
+    // set's AO source with the bound image's SHA-256, in texture set order.
+    json::Array aoSources;
+    for (const core::TextureSet& set : material.texture_sets) {
+        const auto binding = set.mesh_maps.find(core::MeshMapUsage::AO);
+        const bool applied = frame.maps.contains({set.id, preview::MaterialSlot::Occlusion});
+        aoSources.push_back(json::Object{{"texture_set", set.name},
+                                         {"source", applied ? "mesh_map" : "none"},
+                                         {"sha256", applied ? json::Value(binding->second.resource) : json::Value()}});
+    }
+    static_assert(display::kAoStrength == static_cast<double>(preview::kOcclusionStrength));
+    const json::Object occlusion{{"model", std::string(preview::kOcclusionModel)},
+                                 {"ao_source", std::move(aoSources)},
+                                 {"ao_strength", static_cast<double>(preview::kOcclusionStrength)},
+                                 {"ao_channel", std::string(display::kAoChannel)},
+                                 {"axis", "shading_normal_after_fade"},
+                                 {"cavity", nullptr},
+                                 {"painted_occlusion", "may_compound"}};
     const json::Object renderState{
         {"mode", a.mode},
         {"environment", json::Object{{"sha256", frame.environmentHash},
@@ -531,7 +555,8 @@ json::Object CaptureViewport(const CaptureArguments& a) {
         {"seed", seed},
         {"shader", display::Shader(*project)},
         {"display_configuration", displayConfiguration},
-        {"visibility", visibility}};
+        {"visibility", visibility},
+        {"occlusion", occlusion}};
 
     json::Object receipt = ReceiptBase(*open, snapshot, a.mode);
     receipt["render_state_digest"] = Digest(renderState);
@@ -548,6 +573,7 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     receipt["display_configuration"] = displayConfiguration;
     receipt["environment"] = renderState.at("environment");
     receipt["visibility"] = visibility;
+    receipt["occlusion"] = occlusion;
     // Requested, outside the digest: painter_viewport always traces its self-occlusion and the
     // flag changes nothing (decision 251).
     receipt["shadows"] = json::Object{{"requested", project->display.shadows}, {"effect", std::string(display::kShadowsEffect)}};

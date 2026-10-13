@@ -99,6 +99,9 @@ def test_preset_round_trip_is_lossless(run: Run) -> None:
     # The `shadows` flag (on under ref_match) changes no render (decision 251).
     assert result["state"]["environment"]["shadows"] is True
     assert result["state"]["shadows_effect"] == "none in painter_viewport"
+    # painter_viewport's AO mesh map strength and the AO channel's use, read-only (decision 257).
+    assert result["state"]["ao_strength"] == 1.0
+    assert result["state"]["ao_channel"] == "not_applied"
 
 
 def standard_presets() -> dict[str, dict[str, Any]]:

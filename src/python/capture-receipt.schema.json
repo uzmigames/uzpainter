@@ -8,7 +8,7 @@
   "required": [
     "schema", "revision", "project_uuid", "evaluator_profile", "render_state_digest", "mode", "source",
     "encoding", "backend", "adapter", "driver", "samples", "seed", "camera", "size", "display_configuration",
-    "environment", "visibility", "shadows", "hashes"
+    "environment", "visibility", "occlusion", "shadows", "hashes"
   ],
   "properties": {
     "schema": {"const": "uzpainter/capture-receipt/1"},
@@ -93,6 +93,39 @@
             "model": {"const": "ray_traced_self_occlusion"},
             "diffuse_rays": {"type": "integer", "minimum": 0},
             "specular_rays": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "occlusion": {
+      "description": "The AO of a painter_viewport capture (decision 257): the AO mesh map of each texture set applied inside the self-occlusion rays as the per-ray weight mu^k about the faded shading normal (mu = cos of the ray to it, k = 2 (1 - a) / a, a = 1 + ao_strength (ao - 1)), whose cosine-weighted mean is a, the painted AO channel not applied, no cavity term, and the albedo's painted occlusion compounded with it. Part of render_state_digest. Null for the diagnostic modes.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model", "ao_source", "ao_strength", "ao_channel", "axis", "cavity", "painted_occlusion"],
+          "properties": {
+            "model": {"const": "cosine_power_visibility"},
+            "ao_source": {
+              "description": "Per texture set, in texture set order: the AO mesh map with its image's SHA-256, or none (ao = 1).",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["texture_set", "source", "sha256"],
+                "properties": {
+                  "texture_set": {"type": "string"},
+                  "source": {"enum": ["mesh_map", "none"]},
+                  "sha256": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{64}$"}]}
+                }
+              }
+            },
+            "ao_strength": {"const": 1.0},
+            "ao_channel": {"const": "not_applied"},
+            "axis": {"const": "shading_normal_after_fade"},
+            "cavity": {"type": "null"},
+            "painted_occlusion": {"const": "may_compound"}
           }
         }
       ]

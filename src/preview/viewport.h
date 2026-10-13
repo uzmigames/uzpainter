@@ -39,6 +39,15 @@
 //   skipped. The samples are a Hammersley set scrambled by a hash of the pixel coordinates only.
 //   Visibility only, one bounce, no interreflection; the ratio of two Monte-Carlo sums is a
 //   consistent but biased estimator, a preview approximation that claims no closeness to Iray.
+// - Ambient occlusion (decision 257): the texture set's AO mesh map (`occlusion`, sampled like
+//   the other maps; none reads 1) gives a = 1 + s (ao - 1) with s = `kOcclusionStrength`, an
+//   assumed directional AO: each ray of either term that no triangle blocks counts with the weight
+//   V_ao = mu^k, mu = dot(s, d) about the faded shading normal s and k = 2 (1 - a) / a, whose
+//   cosine-weighted mean over the hemisphere is exactly a (the calibration of Oat and Sander 2007's
+//   visibility cone; the power law is UzPainter's). A ray V_ao weighs below 1 counts as blocked
+//   (the ratio is then the sums' quotient). a = 1 skips the weight (the pixel is that of the pass
+//   without it), a = 0 removes every ray. No cavity, horizon or other occlusion term; the painted
+//   AO channel is not applied.
 // - Output: the linear colour rounded to binary16 (RGBA16Float, alpha 1) and its 16-bit display
 //   codes (RGBA16Unorm) from the display table.
 //
@@ -71,12 +80,14 @@ struct MaterialMap {
 };
 
 /// The channels of one texture set (one mesh material). A missing map uses the constant beside
-/// it: open-pbr's defaults base colour 0.8, metalness 0, specular roughness 0.3, flat normal.
+/// it: open-pbr's defaults base colour 0.8, metalness 0, specular roughness 0.3, flat normal; no
+/// occlusion map reads ao = 1.
 struct MaterialInputs {
     std::optional<MaterialMap> baseColor;  ///< 3 components, linear
     std::optional<MaterialMap> metalness;  ///< 1 component
     std::optional<MaterialMap> roughness;  ///< 1 component
     std::optional<MaterialMap> normal;     ///< 3 components, OpenGL tangent-space normal encoded in [0, 1]
+    std::optional<MaterialMap> occlusion;  ///< 1 component, the AO mesh map, linear (decision 257)
     std::array<float, 3> baseColorValue{0.8f, 0.8f, 0.8f};
     float metalnessValue = 0.0f;
     float roughnessValue = 0.3f;
@@ -128,6 +139,11 @@ inline constexpr uint32_t kDiffuseVisibilityRays = 128;
 inline constexpr uint32_t kSpecularVisibilityRays = 64;
 /// The visibility model's name in a capture's render state and receipt.
 inline constexpr std::string_view kVisibilityModel = "ray_traced_self_occlusion";
+/// The AO strength s of a = 1 + s (ao - 1) (glTF 2.0 `occlusionTexture.strength`): UzPainter's
+/// provisional preview default, a fixed constant that only a decision changes (decision 257).
+inline constexpr float kOcclusionStrength = 1.0f;
+/// The occlusion model's name in a capture's render state and receipt (decision 257).
+inline constexpr std::string_view kOcclusionModel = "cosine_power_visibility";
 
 /// What a render writes in place of the linear colour: the colour, or (tests) the diffuse or
 /// specular visibility ratio of each hit.
@@ -172,12 +188,53 @@ inline constexpr uint32_t kMaxViewportSide = 8192;
 [[nodiscard]] render::Result<void> ValidateViewport(const ViewportScene& scene, const CameraPose& camera,
                                                     uint32_t width, uint32_t height, render::Backend backend);
 
+/// The camera-independent inputs of one scene kept on the GPU between its renders (decision 257):
+/// the materials and their maps, the lighting, the display table and the visibility BVH. A caller
+/// that renders one scene many times (the preview window, one scene per revision) keeps one,
+/// passes it to every render of that scene and calls `Invalidate` when the scene changes; the next
+/// render then rebuilds and uploads them, and the renders after it upload only the camera's inputs
+/// (the frame words, the triangles and their tiles). Renders without one upload everything each
+/// time. It is used and released on the engine thread only: `Release` (from a request on that
+/// engine) before the engine stops, else `Abandon`; `Invalidate` may be called between requests
+/// from any thread.
+class ResidentInputs {
+public:
+    ResidentInputs();
+    ~ResidentInputs();
+    ResidentInputs(const ResidentInputs&) = delete;
+    ResidentInputs& operator=(const ResidentInputs&) = delete;
+
+    /// The next render rebuilds the inputs from its scene.
+    void Invalidate();
+    /// Destroys the buffers (on the engine thread); the next render rebuilds them.
+    void Release();
+    /// Forgets the buffers without destroying them, for when the engine thread cannot release
+    /// them (the GPU may still read them, or the engine has stopped); the engine keeps its device.
+    void Abandon();
+    /// The renders that rebuilt the inputs and those that reused them (tests).
+    [[nodiscard]] uint64_t Builds() const { return m_builds; }
+    [[nodiscard]] uint64_t Reuses() const { return m_reuses; }
+
+    struct State;
+
+private:
+    friend struct ResidentAccess;
+    std::unique_ptr<State> m_state;
+    bool m_stale = true;
+    uint64_t m_builds = 0;
+    uint64_t m_reuses = 0;
+};
+
 /// Renders `scene` from `camera` at `width` x `height` inside one engine request; an unsupported
-/// display configuration fails before any GPU work.
+/// display configuration fails before any GPU work. With `resident`, the scene's
+/// camera-independent inputs are those it holds (built from `scene` when invalidated); the image
+/// is the same bytes either way.
 [[nodiscard]] render::Result<ViewportImage> RenderViewport(render::EngineContext& context, const ViewportScene& scene,
-                                                           const OrbitCamera& camera, uint32_t width, uint32_t height);
+                                                           const OrbitCamera& camera, uint32_t width, uint32_t height,
+                                                           ResidentInputs* resident = nullptr);
 [[nodiscard]] render::Result<ViewportImage> RenderViewport(render::EngineContext& context, const ViewportScene& scene,
-                                                           const CameraPose& camera, uint32_t width, uint32_t height);
+                                                           const CameraPose& camera, uint32_t width, uint32_t height,
+                                                           ResidentInputs* resident = nullptr);
 
 /// XXH64 of the viewport kernel's cache key for the device's bytecode format: the "build" part of
 /// a regression golden's key (it covers the HLSL, the defines, the compile flags and DXC).

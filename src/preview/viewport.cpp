@@ -171,10 +171,8 @@ class Buffers {
 public:
     explicit Buffers(render::IDevice& device) : m_device(device) {}
     ~Buffers() {
-        for (const Pair& pair : m_pairs) {
-            m_device.DestroyBuffer(pair.upload);
-            m_device.DestroyBuffer(pair.gpu);
-        }
+        DropUploads();
+        for (const Pair& pair : m_pairs) m_device.DestroyBuffer(pair.gpu);
     }
     Buffers(const Buffers&) = delete;
     Buffers& operator=(const Buffers&) = delete;
@@ -225,6 +223,15 @@ public:
     }
 
     void Abandon() { m_pairs.clear(); }
+
+    /// Destroys the upload halves once their copies have run; the GPU buffers stay.
+    void DropUploads() {
+        for (Pair& pair : m_pairs) {
+            if (pair.upload == uz::RHIBufferHandle::Invalid()) continue;
+            m_device.DestroyBuffer(pair.upload);
+            pair.upload = uz::RHIBufferHandle::Invalid();
+        }
+    }
 
 private:
     struct Pair {
@@ -355,23 +362,152 @@ Result<void> ValidateViewport(const ViewportScene& scene, const CameraPose& came
         const MaterialInputs& m = scene.materials[i];
         for (Result<void> checked :
              {CheckMap(m.baseColor, 3, "base colour", i, backend), CheckMap(m.metalness, 1, "metalness", i, backend),
-              CheckMap(m.roughness, 1, "roughness", i, backend), CheckMap(m.normal, 3, "normal", i, backend)}) {
+              CheckMap(m.roughness, 1, "roughness", i, backend), CheckMap(m.normal, 3, "normal", i, backend),
+              CheckMap(m.occlusion, 1, "occlusion", i, backend)}) {
             if (!checked) return checked;
         }
     }
     return {};
 }
 
-Result<ViewportImage> RenderViewport(render::EngineContext& context, const ViewportScene& scene,
-                                     const OrbitCamera& camera, uint32_t width, uint32_t height) {
-    if (Result<void> valid = ValidateViewport(scene, camera, width, height, context.Device().GetBackend()); !valid) {
-        return Unexpected(valid.error());
+struct ResidentInputs::State {
+    explicit State(render::IDevice& d) : device(&d), buffers(d) {}
+    render::IDevice* device;
+    Buffers buffers;
+    /// The SRVs of the materials, the maps, the lighting, the display table, the BVH nodes and the
+    /// occluders.
+    std::array<uint32_t, 6> srv{};
+    uint32_t nodeCount = 0;
+    bool uploaded = false;
+};
+
+ResidentInputs::ResidentInputs() = default;
+ResidentInputs::~ResidentInputs() = default;
+
+void ResidentInputs::Invalidate() { m_stale = true; }
+
+void ResidentInputs::Release() {
+    m_state.reset();
+    m_stale = true;
+}
+
+void ResidentInputs::Abandon() {
+    if (m_state) m_state->buffers.Abandon();
+    m_state.reset();
+    m_stale = true;
+}
+
+struct ResidentAccess {
+    /// The inputs of `scene` for `device`: those `resident` holds, else rebuilt (not yet uploaded)
+    /// when invalidated or made for another device. `corners` are the scene's world-space triangle
+    /// corners, the BVH's input.
+    static Result<ResidentInputs::State*> Of(ResidentInputs& resident, render::IDevice& device, const ViewportScene& scene,
+                                             std::vector<float>&& corners);
+    static void Uploaded(ResidentInputs& resident) {
+        resident.m_state->uploaded = true;
+        resident.m_state->buffers.DropUploads();
     }
-    return RenderViewport(context, scene, PoseOf(camera), width, height);
+};
+
+Result<ResidentInputs::State*> ResidentAccess::Of(ResidentInputs& resident, render::IDevice& device,
+                                                  const ViewportScene& scene, std::vector<float>&& corners) {
+    if (!resident.m_stale && resident.m_state && resident.m_state->device == &device) {
+        ++resident.m_reuses;
+        return resident.m_state.get();
+    }
+    resident.m_state.reset();
+    auto fresh = std::make_unique<ResidentInputs::State>(device);
+    ResidentInputs::State& state = *fresh;
+
+    // Materials and their maps: five map references (base colour, metalness, roughness, normal,
+    // occlusion), then the base colour, metalness and roughness constants.
+    std::vector<uint32_t> materials;
+    materials.reserve(scene.materials.size() * kMaterialWords);
+    std::vector<uint32_t> maps;
+    const auto addMap = [&](const std::optional<MaterialMap>& map) {
+        if (!map) {
+            materials.insert(materials.end(), {kNoMap, 0u, 0u});
+            return;
+        }
+        materials.insert(materials.end(), {static_cast<uint32_t>(maps.size()), map->width, map->height});
+        // The float bits, copied whole (a 2048 x 2048 map is 4 Mi values).
+        const size_t at = maps.size();
+        maps.resize(at + map->values.size());
+        std::memcpy(maps.data() + at, map->values.data(), map->values.size() * sizeof(float));
+    };
+    for (const MaterialInputs& m : scene.materials) {
+        addMap(m.baseColor);
+        addMap(m.metalness);
+        addMap(m.roughness);
+        addMap(m.normal);
+        addMap(m.occlusion);
+        for (float value : m.baseColorValue) materials.push_back(std::bit_cast<uint32_t>(value));
+        materials.push_back(std::bit_cast<uint32_t>(m.metalnessValue));
+        materials.push_back(std::bit_cast<uint32_t>(m.roughnessValue));
+    }
+
+    // The visibility rays' BVH, built once per geometry (visibility.h).
+    const std::shared_ptr<const VisibilityBvh> bvh = VisibilityBvhOf(std::move(corners));
+    state.nodeCount = static_cast<uint32_t>(bvh->nodes.size() / kBvhNodeWords);
+
+    // Lighting: header, then the albedo table, the radiance levels and the importance
+    // distribution (marginal, then conditional CDFs).
+    const EnvironmentLighting& lighting = *scene.lighting;
+    std::vector<uint32_t> lightingWords;
+    for (float value : lighting.sh) lightingWords.push_back(std::bit_cast<uint32_t>(value));
+    uint32_t offset = kLightingHeaderWords + static_cast<uint32_t>(lighting.brdf.size());
+    for (const RadianceLevel& level : lighting.radiance) {
+        lightingWords.insert(lightingWords.end(), {offset, level.width, level.height});
+        offset += static_cast<uint32_t>(level.rgb.size());
+    }
+    lightingWords.push_back(kLightingHeaderWords);
+    const ImportanceDistribution& importance = lighting.importance;
+    lightingWords.insert(lightingWords.end(), {offset, importance.width, importance.height});
+    for (float value : lighting.brdf) lightingWords.push_back(std::bit_cast<uint32_t>(value));
+    for (const RadianceLevel& level : lighting.radiance) {
+        for (float value : level.rgb) lightingWords.push_back(std::bit_cast<uint32_t>(value));
+    }
+    for (float value : importance.marginalCdf) lightingWords.push_back(std::bit_cast<uint32_t>(value));
+    for (float value : importance.conditionalCdf) lightingWords.push_back(std::bit_cast<uint32_t>(value));
+
+    // The display table, two codes per word (even index in the low half).
+    const std::vector<uint16_t>& table = DisplayTable();
+    std::vector<uint32_t> tableWords(table.size() / 2);
+    for (size_t i = 0; i < tableWords.size(); ++i) {
+        tableWords[i] = static_cast<uint32_t>(table[2 * i]) | (static_cast<uint32_t>(table[2 * i + 1]) << 16);
+    }
+
+    const std::array<std::pair<const std::vector<uint32_t>*, const char*>, 6> inputs{{
+        {&materials, "viewport_materials"},
+        {&maps, "viewport_maps"},
+        {&lightingWords, "viewport_lighting"},
+        {&tableWords, "viewport_display_table"},
+        {&bvh->nodes, "viewport_bvh_nodes"},
+        {&bvh->occluders, "viewport_occluders"},
+    }};
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        Result<uint32_t> index = state.buffers.Raw(Bytes(*inputs[i].first), inputs[i].second);
+        if (!index) return Unexpected(index.error());
+        state.srv[i] = *index;
+    }
+    resident.m_state = std::move(fresh);
+    resident.m_stale = false;
+    ++resident.m_builds;
+    return resident.m_state.get();
 }
 
 Result<ViewportImage> RenderViewport(render::EngineContext& context, const ViewportScene& scene,
-                                     const CameraPose& view, uint32_t width, uint32_t height) {
+                                     const OrbitCamera& camera, uint32_t width, uint32_t height,
+                                     ResidentInputs* resident) {
+    if (Result<void> valid = ValidateViewport(scene, camera, width, height, context.Device().GetBackend()); !valid) {
+        return Unexpected(valid.error());
+    }
+    return RenderViewport(context, scene, PoseOf(camera), width, height, resident);
+}
+
+Result<ViewportImage> RenderViewport(render::EngineContext& context, const ViewportScene& scene,
+                                     const CameraPose& view, uint32_t width, uint32_t height,
+                                     ResidentInputs* resident) {
     render::IDevice& device = context.Device();
     if (Result<void> valid = ValidateViewport(scene, view, width, height, device.GetBackend()); !valid) {
         return Unexpected(valid.error());
@@ -470,58 +606,12 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
         }
     }
 
-    // Materials and their maps.
-    std::vector<uint32_t> materials;
-    materials.reserve(scene.materials.size() * kMaterialWords);
-    std::vector<uint32_t> maps;
-    const auto addMap = [&](const std::optional<MaterialMap>& map) {
-        if (!map) {
-            materials.insert(materials.end(), {kNoMap, 0u, 0u});
-            return;
-        }
-        materials.insert(materials.end(), {static_cast<uint32_t>(maps.size()), map->width, map->height});
-        for (float value : map->values) maps.push_back(std::bit_cast<uint32_t>(value));
-    };
-    for (const MaterialInputs& m : scene.materials) {
-        addMap(m.baseColor);
-        addMap(m.metalness);
-        addMap(m.roughness);
-        addMap(m.normal);
-        for (float value : m.baseColorValue) materials.push_back(std::bit_cast<uint32_t>(value));
-        materials.push_back(std::bit_cast<uint32_t>(m.metalnessValue));
-        materials.push_back(std::bit_cast<uint32_t>(m.roughnessValue));
-        materials.insert(materials.end(), {0u, 0u, 0u});
-    }
-
-    // The visibility rays' BVH, built once per geometry (visibility.h).
-    const std::shared_ptr<const VisibilityBvh> bvh = VisibilityBvhOf(std::move(corners));
-
-    // Lighting: header, then the albedo table, the radiance levels and the importance
-    // distribution (marginal, then conditional CDFs).
-    const EnvironmentLighting& lighting = *scene.lighting;
-    std::vector<uint32_t> lightingWords;
-    for (float value : lighting.sh) lightingWords.push_back(std::bit_cast<uint32_t>(value));
-    uint32_t offset = kLightingHeaderWords + static_cast<uint32_t>(lighting.brdf.size());
-    for (const RadianceLevel& level : lighting.radiance) {
-        lightingWords.insert(lightingWords.end(), {offset, level.width, level.height});
-        offset += static_cast<uint32_t>(level.rgb.size());
-    }
-    lightingWords.push_back(kLightingHeaderWords);
-    const ImportanceDistribution& importance = lighting.importance;
-    lightingWords.insert(lightingWords.end(), {offset, importance.width, importance.height});
-    for (float value : lighting.brdf) lightingWords.push_back(std::bit_cast<uint32_t>(value));
-    for (const RadianceLevel& level : lighting.radiance) {
-        for (float value : level.rgb) lightingWords.push_back(std::bit_cast<uint32_t>(value));
-    }
-    for (float value : importance.marginalCdf) lightingWords.push_back(std::bit_cast<uint32_t>(value));
-    for (float value : importance.conditionalCdf) lightingWords.push_back(std::bit_cast<uint32_t>(value));
-
-    // The display table, two codes per word (even index in the low half).
-    const std::vector<uint16_t>& table = DisplayTable();
-    std::vector<uint32_t> tableWords(table.size() / 2);
-    for (size_t i = 0; i < tableWords.size(); ++i) {
-        tableWords[i] = static_cast<uint32_t>(table[2 * i]) | (static_cast<uint32_t>(table[2 * i + 1]) << 16);
-    }
+    // The camera-independent inputs: those `resident` holds, else this render's own.
+    ResidentInputs own;
+    ResidentInputs& inputs = resident ? *resident : own;
+    Result<ResidentInputs::State*> held = ResidentAccess::Of(inputs, device, scene, std::move(corners));
+    if (!held) return Unexpected(held.error());
+    ResidentInputs::State& state = **held;
 
     std::vector<uint32_t> frame;
     for (const Vec* v : {&view.eye, &view.right, &view.up, &view.forward}) {
@@ -540,29 +630,24 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     frame.push_back(view.orthographic ? 1u : 0u);
     frame.push_back(scene.diffuseRays);
     frame.push_back(scene.specularRays);
-    frame.push_back(static_cast<uint32_t>(bvh->nodes.size() / kBvhNodeWords));
+    frame.push_back(state.nodeCount);
     frame.push_back(static_cast<uint32_t>(scene.output));
+    frame.push_back(std::bit_cast<uint32_t>(kOcclusionStrength));
 
     Result<render::ComputeKernel> kernel = context.Kernel(ViewportKernel());
     if (!kernel) return Unexpected(kernel.error());
 
     Buffers buffers(device);
-    std::array<uint32_t, 10> srv{};
+    std::array<uint32_t, 4> srv{};
     {
-        const std::array<std::pair<const std::vector<uint32_t>*, const char*>, 10> inputs{{
+        const std::array<std::pair<const std::vector<uint32_t>*, const char*>, 4> perRender{{
             {&frame, "viewport_frame"},
             {&triangles, "viewport_triangles"},
             {&tileOffsets, "viewport_tile_offsets"},
             {&tileTriangles, "viewport_tile_triangles"},
-            {&materials, "viewport_materials"},
-            {&maps, "viewport_maps"},
-            {&lightingWords, "viewport_lighting"},
-            {&tableWords, "viewport_display_table"},
-            {&bvh->nodes, "viewport_bvh_nodes"},
-            {&bvh->occluders, "viewport_occluders"},
         }};
-        for (size_t i = 0; i < inputs.size(); ++i) {
-            Result<uint32_t> index = buffers.Raw(Bytes(*inputs[i].first), inputs[i].second);
+        for (size_t i = 0; i < perRender.size(); ++i) {
+            Result<uint32_t> index = buffers.Raw(Bytes(*perRender[i].first), perRender[i].second);
             if (!index) return Unexpected(index.error());
             srv[i] = *index;
         }
@@ -593,20 +678,22 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
                                         srv[1],
                                         srv[2],
                                         srv[3],
-                                        srv[4],
-                                        srv[5],
-                                        srv[6],
-                                        srv[7],
+                                        state.srv[0],
+                                        state.srv[1],
+                                        state.srv[2],
+                                        state.srv[3],
                                         device.Rhi().GetTextureUAVIndex(*linear),
                                         device.Rhi().GetTextureUAVIndex(*display),
-                                        srv[8],
-                                        srv[9]};
+                                        state.srv[4],
+                                        state.srv[5]};
     const auto transition = [&](uz::IRHICommandList& cmd, uz::RHIResourceState before, uz::RHIResourceState after) {
         const uz::RHIBarrierDesc barriers[2] = {{outputs[0], uz::RHIBufferHandle::Invalid(), before, after},
                                                 {outputs[1], uz::RHIBufferHandle::Invalid(), before, after}};
         cmd.ResourceBarrier(barriers, 2);
     };
+    const bool upload = !state.uploaded;
     Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+        if (upload) state.buffers.RecordUploads(cmd);
         buffers.RecordUploads(cmd);
         transition(cmd, uz::RHIResourceState::Common, uz::RHIResourceState::UnorderedAccess);
         cmd.SetPipeline(kernel->pipeline);
@@ -620,11 +707,14 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     if (!done) {
         if (done.error().code == ErrorCode::Timeout) {
             buffers.Abandon();  // the GPU may still read them; the engine keeps its device
+            inputs.Abandon();
             return Unexpected(done.error());
         }
         release();
+        inputs.Release();  // their upload may not have run
         return Unexpected(done.error());
     }
+    if (upload) ResidentAccess::Uploaded(inputs);
 
     ViewportImage image;
     image.width = width;

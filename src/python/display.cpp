@@ -403,6 +403,9 @@ json::Object State(const core::Project& project) {
     state["environment_default"] = !resource.has_value();
     // The `shadows` flag is recorded but changes no render (decision 251).
     state["shadows_effect"] = std::string(kShadowsEffect);
+    // The AO mesh map's strength in painter_viewport and the AO channel's use, read-only (decision 257).
+    state["ao_strength"] = kAoStrength;
+    state["ao_channel"] = std::string(kAoChannel);
     state["shader"] = Shader(project);
     return state;
 }
