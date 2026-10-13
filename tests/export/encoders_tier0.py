@@ -1081,14 +1081,77 @@ def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
     return report
 
 
+# srgb-bitmap-minification (decisions 174 item 6, 198): one export step of each kind (PNG 16,
+# PNG 8, OpenEXR 32f; each was done twice, the repeats identical). s0-s3 the 8-bit srgb8-ramp and
+# s4-s7 field A (16-bit) in sRGB on BaseColor, BilinearHQ then BilinearSharp at scales 2 and 4,
+# rotation 0, Repeat. Field A's sets are compared; the 8-bit ramp's are refused (decision 203:
+# Painter samples an sRGB8 texture, whose filter and mip chain are not the float32 texture's).
+SRGB_MINIFY_STEPS = (36, 38, 40)
+SRGB_MINIFY_SETS = ("s4", "s5", "s6", "s7")
+SRGB_MINIFY_REFUSED = ("s0", "s1", "s2", "s3")
+
+
+def _minification_golden() -> tuple[Golden, dict[str, Any]]:
+    """srgb-bitmap-minification and its sequence (every step builds the stack)."""
+    golden = _semantics_golden("srgb-bitmap-minification")
+    return golden, golden.manifest
+
+
+def srgb_minification_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """srgb-bitmap-minification rebuilt per texture set on the grid mesh and written by
+    `WriteExport` at each step of `SRGB_MINIFY_STEPS`: the sets of `SRGB_MINIFY_SETS` compared byte
+    for byte with Painter's files of r1 and r2 (the golden is stable), those of
+    `SRGB_MINIFY_REFUSED` expected to be refused. Returns the counts, the refusal messages and the
+    differing files or unexpected outcomes."""
+    golden, manifest = _minification_golden()
+    by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
+    report: dict[str, Any] = {
+        "files": 0,
+        "comparisons": 0,
+        "identical": 0,
+        "refused": {},
+        "problems": [],
+    }
+    for texture_set in (*SRGB_MINIFY_SETS, *SRGB_MINIFY_REFUSED):
+        spec_dir = tmp / texture_set / "spec"
+        spec = _set_spec(manifest, texture_set, spec_dir, template_channels=True)
+        for step in SRGB_MINIFY_STEPS:
+            raw = by_step[step]
+            config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                tmp / texture_set / f"out{step}", [texture_set]
+            )
+            result = write_export(exe, spec, spec_dir, config, tmp / texture_set / f"run{step}")
+            where = f"{texture_set} step {step}"
+            if "error" in result:
+                report["refused"].setdefault(texture_set, result["message"])
+                if texture_set not in SRGB_MINIFY_REFUSED:
+                    report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                continue
+            if texture_set in SRGB_MINIFY_REFUSED:
+                report["problems"].append(f"{where}: written, expected a refusal")
+                continue
+            for written in result["written"]:
+                rel = written["relativePath"]
+                report["files"] += 1
+                for recording in ("r1", "r2"):
+                    theirs = _painter_files(golden, recording, step, texture_set)
+                    report["comparisons"] += 1
+                    if written["sha256"] == theirs.get(rel):
+                        report["identical"] += 1
+                    else:
+                        report["problems"].append(f"{where}: {rel} differs from {recording}")
+    return report
+
+
 # phase1.15_compositor-colour-fits items 3.1 and 4.1: the texture sets whose files the colour fits
-# made byte-identical to Painter's (decisions 145, 152, 174 and 190), each golden with its
+# made byte-identical to Painter's (decisions 145, 152, 174, 190 and 203), each golden with its
 # sequence and spec options as its comparison above builds them.
 LIFTED_COLOUR_SETS: dict[str, tuple[str, ...]] = {
     "export-bit-depth": ("s4", "s5", "s7"),
     "export-ocio-encode-legacy": SRGB8_BITMAP_SETS,
     "srgb-bitmap-variants-v2": SRGB_VARIANT_SETS,
     "export-ocio-encode": OCIO_ENCODE_SETS,
+    "srgb-bitmap-minification": SRGB_MINIFY_SETS,
 }
 
 
@@ -1102,6 +1165,7 @@ def lifted_colour_spec(stem: str, texture_set: str, spec_dir: Path) -> dict[str,
         "export-ocio-encode-legacy": (_legacy_bitmap_golden, {}),
         "srgb-bitmap-variants-v2": (_variants_golden, {"template_channels": True}),
         "export-ocio-encode": (_ocio_encode_golden, {"ocio": True}),
+        "srgb-bitmap-minification": (_minification_golden, {"template_channels": True}),
     }[stem]
     _, manifest = prepare()
     spec = _set_spec(manifest, texture_set, spec_dir, **options)

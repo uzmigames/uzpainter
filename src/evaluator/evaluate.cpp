@@ -294,10 +294,12 @@ private:
             image = decoded;
         }
         if (source.srgbDecode) {
-            if (Minifies(source.projection, m_dag.grid.width, m_dag.grid.height, *image)) {
+            if (image->encoding == render::TexelEncoding::Unorm8 &&
+                Minifies(source.projection, m_dag.grid.width, m_dag.grid.height, *image)) {
                 return EvalFail(EvalErrorKind::UnsupportedSource,
-                                "bilinear minification of an sRGB bitmap is not recorded "
-                                "(phase1.15_compositor-colour-fits item 2.5)", node);
+                                "bilinear minification of an 8-bit sRGB bitmap is a release gap: Painter samples "
+                                "an sRGB8 texture, whose filter and mip chain differ from the float32 texture's "
+                                "(decision 203)", node);
             }
             imageKey += "/srgb";
             std::shared_ptr<const DecodedImage>& decoded = m_env.srgbDecoded[source.sha256];
