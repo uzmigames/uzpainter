@@ -48,7 +48,7 @@
   - `resource_import` (usage gated per value), `resource_list` (`used_only`) and `resource_replace` (everywhere, or one node's source with `uid`).
   - `resource_search` and `assets_search` are gaps until the asset library of phase3.3_procedural-families.
 - 2.3:
-  - `layer_list` (the layer-tree records of one stack), `layer_insert` (fill, group; paint gated), `layer_set`, `layer_delete`, `effect_insert` (fill, levels, compare mask, colour selection; paint, generator, filter and anchor gated), `effect_set` (with levels), `mask_set`, `source_set` (uniform, bitmap, reset; reference gated) and `fill_set` (projection modes gated per value, `source_mode: Material` gated).
+  - `layer_list` (the layer-tree records of one stack), `layer_insert` (fill, group; paint gated), `layer_set`, `layer_delete`, `effect_insert` (fill, levels; paint, generator, filter, anchor, compare mask and colour selection gated on the native `uzpainter.layerstack` inserts the tool performs, decision 182), `effect_set` (with levels), `mask_set`, `source_set` (uniform, bitmap, reset; reference gated) and `fill_set` (projection modes gated per value, `source_mode: Material` gated).
   - `layer_instantiate` is a gap until phase4.1_nodes-instances-anchors, as is `anchor_list`. `procedural_set` is a gap until phase3.3_procedural-families. `smart_material_insert`, `smart_mask_insert` and `smart_export` are gaps until phase3.6_smart-presets-projections.
   - A geometry mask in `layer_set` is gated: the manifest lists `LayerNode.set_geometry_mask` as a release gap.
 - 2.4:

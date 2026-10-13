@@ -20,7 +20,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from tools.capabilities.generate_capabilities import (
-    INVENTORY_PATH,
+    ADDITIONS_PATH,
     MATRIX_PATH,
     REQUIRED_OPERATIONS,
     TOOLS_PATH,
@@ -100,8 +100,11 @@ def generated(
     rows: dict[str, Any] | None = None,
     tools: dict[str, Any] | None = None,
     inventory: dict[str, Any] | None = None,
+    additions: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     arguments: dict[str, Path] = {}
+    if additions is not None:
+        arguments["additions_path"] = write(tmp_path / "additions.json", additions)
     if rows is not None:
         arguments["matrix_path"] = write(tmp_path / "matrix.json", rows)
     if tools is not None:
@@ -272,20 +275,25 @@ def test_a_python_only_operation_needs_python(tmp_path: Path) -> None:
 def test_the_status_follows_the_manifest(tmp_path: Path) -> None:
     """3.3: the status is derived. Once the paint insert leaves the release gaps, the paint rows
     are available, and the build then requires a conformance fixture for each of them."""
-    inventory = load(INVENTORY_PATH)
+    # The typed inserts perform the native insert (`uzpainter.layerstack.insert_paint`).
+    additions = load(ADDITIONS_PATH)
     [entry] = [
         e
-        for e in inventory["entries"]
-        if (e["symbol"], e["context"]) == ("substance_painter.layerstack.insert_paint", "any")
+        for e in additions["entries"]
+        if (e["symbol"], e["context"]) == ("uzpainter.layerstack.insert_paint", "any")
     ]
-    entry.update(status="pending-evidence", notes="Evidence owned by phase4.1_nodes-paint-layers.")
-    message = failure(tmp_path, inventory=inventory)
+    entry.update(
+        status="pending-evidence",
+        notes="Implemented, without Tier 0 evidence yet: evidence owned by "
+        "phase4.1_nodes-paint-layers.",
+    )
+    message = failure(tmp_path, additions=additions)
     assert "row 'effect.insert_paint'" in message and "conformance fixture" in message
     rows = load(MATRIX_PATH)
     row_of(rows, "effect.insert_paint")["fixture"] = row_of(rows, "layer.insert_paint")["fixture"]
     paint = {
         r["operation"]: r
-        for r in generated(tmp_path, rows=rows, inventory=inventory)
+        for r in generated(tmp_path, rows=rows, additions=additions)
         if r["operation"] in ("layer.insert_paint", "effect.insert_paint")
     }
     assert [r["status"] for r in paint.values()] == ["available", "available"]
