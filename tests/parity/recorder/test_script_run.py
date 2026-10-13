@@ -40,7 +40,7 @@ OCIO = r"C:\Program Files\Adobe\Adobe Substance 3D Painter\resources\ocio\substa
 WAND = "_tmp/claude/varinha11-v1"
 REAL_ASSETS = Path(r"E:\UzmiGames\Assets3D")
 COMMITTED = (
-    REPO_ROOT / "parity/envelopes/painter-12.1.5_js-api.1.1.20/requests/phase1/tier1/wand-v1.json"
+    REPO_ROOT / "parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/phase1/tier1/wand-v1.json"
 )
 PINNED_MARK = "pinned-stand-in-7f3a"
 
@@ -627,4 +627,4 @@ def test_committed_manifest_matches_the_real_assets(
     assert job.sync.args["command"] == "sync"
     pinned = tmp_path / "pinned"
     script_run.stage_inputs(job, pinned)
-    assert committed == wand_manifest(pinned)
+    assert {**committed, "private_records": []} == wand_manifest(pinned)

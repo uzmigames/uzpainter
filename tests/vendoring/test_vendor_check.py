@@ -13,7 +13,7 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import yaml
@@ -30,6 +30,9 @@ from tools.vendoring.vendor_check import (
     main,
     zig_toolchain,
 )
+
+if TYPE_CHECKING:
+    from tests.conftest import FreshBuild
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VENDORED = REPO_ROOT / VENDORED_DIR
@@ -90,10 +93,12 @@ def test_fixture_copy_passes(repo: Path) -> None:
 
 
 @pytest.mark.skipif(ZIG is None, reason="zig is not on PATH")
-def test_full_check_with_build_passes(capsys: pytest.CaptureFixture[str]) -> None:
+def test_full_check_with_build_passes(
+    fresh_verbose_build: FreshBuild, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Spec scenario "Clean tree passes in CI": folder rules and the build-path rule over a fresh
-    verbose build of `build.zig` exit zero."""
-    assert main([]) == 0, capsys.readouterr().err
+    verbose build of `build.zig` (the session's shared one, `tests/conftest.py`) exit zero."""
+    assert main(["--build-log", str(fresh_verbose_build.log_path)]) == 0, capsys.readouterr().err
     assert "build paths checked" in capsys.readouterr().out
 
 

@@ -1,0 +1,12 @@
+{
+  "id": 180,
+  "slug": "painter-batch-d-admits-session-o-the-wand-r9-export-presets-legacy-and-four-api-probes-and-stops-the-dense-srgb-probe-at-the-time-cap",
+  "title": "Painter batch D admits Session O, the wand R9, export-presets-legacy and four API probes, and stops the dense sRGB probe at the time cap",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

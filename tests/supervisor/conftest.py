@@ -15,6 +15,13 @@ Settling evidence (task phase2.4_supervisor-worker, decision 150): a test that s
 recoveries its supervisors reported, and the overhead measurements, into that report
 (`tools/parity/settling/report.py`). `UZP_SUPERVISOR_BACKEND` (default `vulkan`) is the backend
 the tagged MCP tests start their supervisors on.
+
+MCP contract evidence (task phase2.8_mcp-server, decision 186): a test that runs a Phase 2
+contract fixture of `docs/architecture/11-mcp-server.md` §7 carries
+`@pytest.mark.mcp_contract(<fixture>, transport=<stdio|http>)`. With
+`UZP_MCP_CONTRACT_REPORT=<path>` the run merges each fixture's result per transport (a fixture
+fails when any of its tests fails), its test count and run time into that report
+(`tools/parity/settling/mcp_contract.py`).
 """
 
 from __future__ import annotations
@@ -37,6 +44,7 @@ from typing import IO, Any
 
 import pytest
 
+from tools.parity.settling import mcp_contract
 from tools.parity.settling import report as settling_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -413,6 +421,8 @@ class _Settled:
         self.statuses: dict[str, list[dict[str, Any]]] = {}
         self.metrics: dict[str, dict[str, float]] = {}
         self.overhead: list[dict[str, Any]] = []
+        # Per (fixture, transport): the outcome and run time of each tagged test.
+        self.contract: dict[tuple[str, str], list[tuple[str, float]]] = {}
 
 
 _settled = _Settled()
@@ -445,6 +455,11 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers", "settling(*cases): the test settles these 02 §7 cases (decision 150)"
     )
+    config.addinivalue_line(
+        "markers",
+        "mcp_contract(*fixtures, transport): the test runs these 11 §7 Phase 2 contract fixtures "
+        "on that transport (decision 186)",
+    )
 
 
 @pytest.hookimpl(wrapper=True)
@@ -453,6 +468,11 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
     marker = item.get_closest_marker("settling")
     if marker is not None and report.when == "call":
         _settled.calls[item.nodeid] = (tuple(marker.args), report.outcome, report.duration)
+    for contract in item.iter_markers("mcp_contract"):
+        if report.when == "call" and report.outcome != "skipped":
+            for fixture in contract.args:
+                key = (fixture, contract.kwargs["transport"])
+                _settled.contract.setdefault(key, []).append((report.outcome, report.duration))
     return report
 
 
@@ -492,3 +512,19 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     target = os.environ.get("UZP_SETTLING_REPORT")
     if target and (_settled.calls or _settled.overhead):
         settling_report.write(Path(target), _case_entries(), _settled.overhead)
+    contract = os.environ.get("UZP_MCP_CONTRACT_REPORT")
+    if contract and _settled.contract:
+        mcp_contract.write(
+            Path(contract),
+            [
+                {
+                    "id": fixture,
+                    "transport": transport,
+                    "result": "pass" if all(o == "passed" for o, _ in runs) else "fail",
+                    "tests": len(runs),
+                    "seconds": round(sum(seconds for _, seconds in runs), 3),
+                    **Settling.stamp(),
+                }
+                for (fixture, transport), runs in _settled.contract.items()
+            ],
+        )

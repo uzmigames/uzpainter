@@ -31,10 +31,14 @@ jobs:
         with:
           python-version: "3.13"
 
+      # setup-zig saves Zig's cache between runs but clears it when it is larger than
+      # cache-size-limit (MiB). One run fills about 3.2 GB, so the default 2048 cleared it on every
+      # run and every test build started cold.
       - name: Zig (pinned, build.zig.zon)
         uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
+          cache-size-limit: 6144
 
       - name: Tools
         run: python -m pip install jsonschema==4.25.1 numpy==2.4.4 pyyaml==6.0.3 ruff==0.14.3 mypy==1.20.1 pytest==9.1.1
