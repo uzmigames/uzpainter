@@ -28,9 +28,20 @@
 
 ## 3. Tests
 - [ ] 3.1 Every fitted output exact against both recordings on CPU and DX12; the refusals of what stays unrecorded still fire before any mutation and name this task
+  - DX12 evidence, 2026-10-13 (open until 2.1, 2.5 and 2.6 lift their cases). The export's comparisons evaluate on the CPU store, so each lifted texture set is now evaluated from the export's own spec on the DX12 and CPU stores, and every channel the export writes is compared byte for byte (`test_lifted_colour_fits_gpu_equals_cpu`, `tests/export/encoders_tier0.py` `LIFTED_COLOUR_SETS`). Identical rasters give the files the CPU comparisons already match to Painter's.
+    - Build: UzPainter `main` 0fffb00 (no `src/` change). The tests are at `wt/cf-dx12` 2d60f02, with the export-bit-depth outputs fix in 00d54f2. Adapter: RTX 4090 (the RTX 4090-gated GPU cases ran instead of skipping).
+    - Command: `python -m pytest -p no:cacheprovider -rA` on `tests/evaluator/test_compositor_sources_projection.py::{test_projection_kernel_equals_cpu, test_bilinear_filter_equals_the_gpu, test_srgb8_tables_equal_the_recording_gpu, test_lifted_colour_fits_gpu_equals_cpu}`. Result: 22 passed, 3 failed, exit code 1, in 304 s (scratchpad `cfdx/dx12-batch.log`).
+    - The 3 failures were export-bit-depth s4, s5 and s7. The test asked for every channel of the stack, including Opacity, which has neither a template base value nor a channel default and which that comparison does not export. The CPU store refused it the same way, so the fault was in the test and there is no evaluator change. After the fix, the re-run of those 3 node ids gave 3 passed, exit code 0, in 24 s (`cfdx/dx12-rerun.log`).
+    - The CPU export comparisons whose golden preparation the new test now shares gave 4 passed, exit code 0 (`cfdx/export-cpu.log`): `test_srgb8_material_channels_equal_painter_files`, `test_srgb8_bitmap_equals_painter_files`, `test_ocio_encode_equals_painter_files`, `test_srgb_variants_equal_painter_files`.
+    - Decision 145 (16-bit grey and 8-bit colour sRGB at 1:1): export-bit-depth s4, s5 and s7, and export-ocio-encode-legacy s3 (s4 Raw beside it). All four are GPU = CPU byte for byte.
+    - Decision 152 (masked s5, r1 the target): export-ocio-encode-legacy s5 is GPU = CPU.
+    - Decision 174 (decoded before filtering, the Nearest tie rule): srgb-bitmap-variants-v2 s0, s2, s3, s4, s5, s6, s7 and s8 are all GPU = CPU. The random sRGB stacks of `projection-gpu-vs-cpu`, the sRGB8 decode tables (`srgb8-hardware`) and `BilinearFilter` (`bilinear-hardware`) also equal the GPU.
+    - Decision 190 (OCIO with the substance config): export-ocio-encode s0-s7 are all GPU = CPU. The evaluator's spec reader now takes `config_hash`.
+    - OCIO cache-key fix (97f8302): its GPU twin in `projection-gpu-vs-cpu` passes. After a legacy evaluation, the warm DX12 evaluator refuses an sRGB bitmap at scale 2 under OCIO for the same reason a fresh evaluator does, and stores a Raw bitmap's OCIO codes at 1:1, not the legacy ones.
 
 ## 4. Acceptance
 - [ ] 4.1 Local DX12 run on the owner's machine exact for every lifted case (decision 028); `compositor:ocio` and `compositor:srgb-unrecorded` registered `supported` only for what is exact
+  - 2026-10-13, local run on RTX 4090: every case lifted so far (decisions 145, 152, 174 and 190, and the OCIO cache-key fix 97f8302) is exact on DX12. The per-case results, commands, exit codes and logs are in 3.1's evidence note. This stays open until 2.1, 2.5 and 2.6 lift their cases, which then need the same run.
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation
