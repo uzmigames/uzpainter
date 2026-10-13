@@ -8,6 +8,7 @@
 
 #include <pybind11/embed.h>
 
+#include "prof_scratch.h"
 #include "python/capture.h"
 #include "python/interpreter.h"
 #include "python/script.h"
@@ -74,6 +75,7 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
     int status = kRunFailed;
     {
         pybind11::gil_scoped_acquire gil;
+        UZP_PROF("run.script");
         json::Object report = RunScript(std::filesystem::path(positional.front()),
                                         std::vector<std::string>(positional.begin() + 1, positional.end()));
         report["gpu_backend"] = backend_name;
@@ -84,6 +86,7 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
     // unless a job still uses it.
     Session& session = Session::Get();
     try {
+        UZP_PROF("run.close");
         if (session.IsOpen()) session.Close();
     } catch (const std::exception& e) {
         std::fprintf(err, "UzPainter.exe run: the project left open was not closed: %s\n", e.what());

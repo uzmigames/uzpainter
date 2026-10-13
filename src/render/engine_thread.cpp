@@ -1,5 +1,7 @@
 #include "render/engine_thread.h"
 
+#include "prof_scratch.h"
+
 #include <cstdio>
 #include <exception>
 #include <string>
@@ -65,7 +67,9 @@ void Engine::Stop() {
 }
 
 void Engine::ThreadMain(std::promise<void> started) {
+    std::optional<uzp_prof::Scope> phase(std::in_place, "gpu.createdevice");
     Result<std::unique_ptr<IDevice>> device = CreateDevice(m_options.device);
+    phase.emplace("gpu.capabilities");
     if (device) {
         m_device = std::move(*device);
     } else {
@@ -83,6 +87,7 @@ void Engine::ThreadMain(std::promise<void> started) {
         const std::filesystem::path root = m_options.kernelCacheRoot.empty()
                                                ? DefaultKernelCacheRoot()
                                                : m_options.kernelCacheRoot;
+        phase.emplace("gpu.dxcload");
         Result<std::unique_ptr<DxcKernelCompiler>> compiler = DxcKernelCompiler::Load(dxc);
         if (!compiler) {
             m_compilerError = std::move(compiler.error());
@@ -94,6 +99,7 @@ void Engine::ThreadMain(std::promise<void> started) {
             m_kernelCache = std::make_unique<KernelCache>(*m_compiler, root);
         }
     }
+    phase.reset();
     started.set_value();
 
     for (;;) {
@@ -133,6 +139,7 @@ void Engine::RunJob(Job& job) {
     }
 
     EngineContext context(*m_device, *this, Clock::now() + m_options.requestDeadline);
+    UZP_PROF("gpu.job");
     try {
         job.run(context);
     } catch (const std::exception& e) {
@@ -170,9 +177,13 @@ Result<ComputeKernel> Engine::KernelFor(const KernelSource& source) {
     const KernelTarget target = m_device->NativeKernelTarget();
     const uint64_t key = KernelKey(source, target, m_kernelCache->CompilerVersion());
     if (const auto found = m_kernels.find(key); found != m_kernels.end()) return found->second;
+    std::optional<uzp_prof::Scope> phase(std::in_place, "gpu.kernel.get(" + source.name + ")");
     Result<CompiledKernel> compiled = m_kernelCache->Get(source, target);
     if (!compiled) return Unexpected(std::move(compiled.error()));
+    phase->name += compiled->cacheHit ? " hit" : " MISS";
+    phase.emplace("gpu.kernel.pso(" + source.name + ")");
     Result<ComputeKernel> kernel = m_device->CreateComputeKernel(compiled->bytecode, source.name);
+    phase.reset();
     if (!kernel) return kernel;
     m_kernels.emplace(key, *kernel);
     return kernel;
@@ -180,6 +191,7 @@ Result<ComputeKernel> Engine::KernelFor(const KernelSource& source) {
 
 void Engine::Teardown() {
     if (!m_device) return;
+    UZP_PROF("gpu.teardown");
     IQueue& queue = m_device->Queue();
     bool drained = true;
     if (queue.Completed() < queue.LastSubmitted()) {

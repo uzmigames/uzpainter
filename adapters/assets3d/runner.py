@@ -47,6 +47,28 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+
+# SCRATCH profiling (wt/loadcache), reverted.
+import time as _prof_time
+
+
+class _Prof:
+    def __init__(self, name):
+        self.name = name
+
+    def __enter__(self):
+        self.t0 = _prof_time.time()
+        return self
+
+    def __exit__(self, *exc):
+        d = os.environ.get("UZP_PROFILE")
+        if d:
+            with builtins.open(os.path.join(d, f"{os.getpid()}.tsv"), "a", encoding="utf-8") as f:
+                f.write(f"{os.getpid()}	py:{self.name}	{(_prof_time.time() - self.t0) * 1000:.2f}	{self.t0 * 1000:.2f}
+")
+        return False
+
+
 CODE_FILE_NAME = "<uzpainter-assets3d-adapter>"
 JOURNAL = "fixed-names.journal.json"
 REDIRECTS_ENV = "UZP_ASSETS3D_OPEN_REDIRECTS"
@@ -207,10 +229,11 @@ def restore_session(session_file: Path) -> dict[str, Any] | None:
         return None
     if not carried:
         return None
-    import substance_painter.project as project
-    import substance_painter.textureset as textureset
-    import uzpainter
-    from uzpainter_facade.state import SESSION
+    with _Prof("import_facade"):
+        import substance_painter.project as project
+        import substance_painter.textureset as textureset
+        import uzpainter
+        from uzpainter_facade.state import SESSION
 
     path = carried["project"]
     try:
@@ -218,7 +241,8 @@ def restore_session(session_file: Path) -> dict[str, Any] | None:
             # A path relative to a directory the earlier call may have changed to (decision 118).
             raise ValueError("the session names a relative path")
         SESSION.projects = int(carried["project_index"]) - 1  # open() counts this project
-        project.open(path)
+        with _Prof("project.open"):
+            project.open(path)
     except Exception as error:
         write_atomically(session_file, "{}")
         raise AdapterSessionError(
@@ -310,14 +334,16 @@ def exports_of_run(uzpainter: Any) -> list[dict[str, Any]]:
 
 def main(argv: list[str]) -> Any:
     code_file, session_file, report_file = (Path(a) for a in argv[1:4])
-    import uzpainter
+    with _Prof("import_uzpainter"):
+        import uzpainter
 
     report: dict[str, Any] = {"session": None, "exports": [], "script_result": None}
     data = code_file.read_bytes()
     report["code_sha256"] = hashlib.sha256(data).hexdigest()
     session: dict[str, Any] | None = None
     try:
-        report["carried"] = restore_session(session_file)
+        with _Prof("restore_session"):
+            report["carried"] = restore_session(session_file)
         install_shim(uzpainter)
         code = data.decode("utf-8")
         linecache.cache[CODE_FILE_NAME] = (len(code), None, code.splitlines(True), CODE_FILE_NAME)
@@ -327,11 +353,13 @@ def main(argv: list[str]) -> Any:
         if redirects:
             namespace["open"] = redirected_open(redirects)
         try:
-            exec(compile(code, CODE_FILE_NAME, "exec", dont_inherit=True), namespace, namespace)
+            with _Prof("exec_code"):
+                exec(compile(code, CODE_FILE_NAME, "exec", dont_inherit=True), namespace, namespace)
         finally:
             report["script_result"] = normalised(namespace.get("result"))
             session = session_left_open()
-        report["exports"] = exports_of_run(uzpainter)
+        with _Prof("exports_of_run"):
+            report["exports"] = exports_of_run(uzpainter)
         if session is not None and session["project"] is None:
             raise AdapterSessionError(
                 "the script left an untitled project open: UzPainter.exe run closes it with the "

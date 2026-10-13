@@ -1,5 +1,7 @@
 #include "evaluator/templates.h"
 
+#include "prof_scratch.h"
+
 #include <algorithm>
 #include <fstream>
 #include <iterator>
@@ -148,6 +150,7 @@ ProjectTemplate ParseTemplate(const Value& document, std::string_view path) {
 }
 
 TemplateLibrary TemplateLibrary::Load(const std::filesystem::path& directory) {
+    UZP_PROF("templates.load");
     TemplateLibrary library;
     std::error_code ec;
     if (!std::filesystem::is_directory(directory, ec)) {

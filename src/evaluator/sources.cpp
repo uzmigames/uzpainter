@@ -1,5 +1,9 @@
 #include "evaluator/sources.h"
 
+#include <optional>
+
+#include "prof_scratch.h"
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -113,9 +117,13 @@ std::shared_ptr<const DecodedImage> DecodingResourceProvider::Fetch(std::string_
     std::lock_guard<std::mutex> lock(m_mutex);
     const auto it = m_cache.find(sha256);
     if (it != m_cache.end()) return it->second;
+    std::optional<uzp_prof::Scope> phase(std::in_place, "bitmap.read");
     std::optional<std::string> bytes = m_fetch ? m_fetch(sha256) : std::nullopt;
+    phase.emplace("bitmap.sha256");
     if (!bytes || core::Sha256Hex(*bytes) != sha256) return nullptr;
+    phase.emplace("bitmap.decode(" + std::to_string(bytes->size()) + " B)");
     render::Result<DecodedImage> decoded = DecodeBitmap(*bytes);
+    phase.reset();
     if (!decoded) return nullptr;
     auto image = std::make_shared<const DecodedImage>(std::move(*decoded));
     m_cache.emplace(std::string(sha256), image);

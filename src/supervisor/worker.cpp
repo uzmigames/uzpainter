@@ -2,6 +2,8 @@
 
 #include "supervisor/worker.h"
 
+#include "prof_scratch.h"
+
 #include <algorithm>
 #include <atomic>
 #include <charconv>
@@ -1631,7 +1633,9 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
         std::fprintf(err, "UzPainter.exe --worker: --test-faults needs a Debug build (the fault hooks are not compiled in)\n");
         return kWorkerExitUsage;
     }
+    std::optional<uzp_prof::Scope> phase(std::in_place, "worker.crashreporting");
     InstallCrashReporting(options.crash_dir);
+    phase.emplace("worker.pipecreate");
 
     HANDLE supervisor = OpenProcess(SYNCHRONIZE, FALSE, options.supervisor_pid);
     if (!supervisor) {
@@ -1647,10 +1651,12 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
 
     // The engine thread creates the device of the requested backend; without one the worker still
     // serves GPU-free calls.
+    phase.emplace("worker.engine");
     render::EngineOptions engine_options;
     engine_options.device.backend = options.backend;
     engine_options.requestDeadline = options.gpu_deadline;
     render::Engine engine(engine_options);
+    phase.reset();
     if (const std::optional<render::Error>& unavailable = engine.DeviceError()) {
         std::fprintf(err, "UzPainter.exe --worker: %s\n", unavailable->Describe().c_str());
     }
@@ -1659,6 +1665,7 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
         return kWorkerExitStartFailed;
     }
 
+    phase.emplace("worker.accept");
     if (!pipe->Accept(options.supervisor_pid, supervisor, options.connect_timeout, error)) {
         std::fprintf(err, "UzPainter.exe --worker: %s (%d other clients refused)\n", error.c_str(), pipe->RefusedClients());
         return kWorkerExitStartFailed;
@@ -1675,7 +1682,9 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
 #if defined(UZP_WORKER_FAULT_HOOKS)
     if (options.test_faults) handshake = fault::OverrideHandshake(std::move(handshake));
 #endif
+    phase.reset();
     if (!pipe->Write(EncodeFrame(handshake))) Exit(kWorkerExitSupervisorGone);
+    uzp_prof::Mark("worker.handshake_sent");
 
     Inbox inbox;
     JobControl jobs;
@@ -1730,7 +1739,9 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
     pybind11::gil_scoped_release release;
     for (;;) {
         const json::Object request = inbox.Pop();
+        std::optional<uzp_prof::Scope> call(std::in_place, "worker.call:" + StringField(request, "method").value_or("") + ":" + StringField(request, "name").value_or(""));
         json::Object reply = worker.Handle(request);
+        call.reset();
 #if defined(UZP_WORKER_FAULT_HOOKS)
         if (StringField(request, "name") != "test_fault" && fault::TakeKillBeforeReply()) fault::KillNow();
 #endif

@@ -1,5 +1,7 @@
 #include "mesh/reload.h"
 
+#include "prof_scratch.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -462,6 +464,7 @@ const json::Object& ObjectMember(const json::Object& object, std::string_view ke
 }  // namespace
 
 ImportResult RederiveMesh(const core::Project& project, const ResourceReader& read, bool beside_origin) {
+    UZP_PROF("mesh.rederive");
     if (!project.mesh) throw core::ValueError("the project has no mesh to reload; import one first");
     const core::MeshReference& ref = *project.mesh;
     const json::Object& report = ref.import_report;
