@@ -224,7 +224,10 @@ def test_compare_mask_and_color_selection_effects_are_gaps(
     for kind in ("compare_mask", "color_selection"):
         reply = session.call("effect_insert", {"uid": fill, "stack": "mask", "kind": kind})
         assert reply["error"]["code"] == "capability_gap", (kind, reply)
-        assert "phase4.1_nodes-mask-effects" in reply["error"]["details"]["reason"], reply
+        [operation] = reply["error"]["details"]["operations"]  # refused before admission
+        assert operation["symbol"] == f"uzpainter.layerstack.insert_{kind}_effect", reply
+        assert (operation["argument"], operation["value"]) == ("/kind", kind), reply
+        assert "phase4.1_nodes-mask-effects" in operation["notes"], reply
     assert session.call("project_inspect")["result"]["revision"] == before
 
 

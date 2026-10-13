@@ -275,7 +275,7 @@ The typed families of 11 §2 (`typed_tools.{h,cpp}`; task phase2.6, decision 164
 
 - A gap tool keeps its schema, declares its release-gap operations and refuses with `capability_gap` naming its owner task.
 - Values gated per argument (`x-uzpainter-capability`):
-  - the insert and effect kinds beyond fill, group, levels, compare mask and colour selection;
+  - the insert and effect kinds beyond fill, group and levels (a kind declares the native `uzpainter.layerstack` insert the tool performs, so compare mask and colour selection are gaps until phase4.1_nodes-mask-effects; decision 182);
   - the projection modes beyond UV and Fill;
   - the source kind `reference`, and `source_mode: Material`;
   - the project workflows beyond Default;

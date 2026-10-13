@@ -1069,10 +1069,11 @@ void StackFamily(const ToolContext& context, std::vector<ToolDefinition>& tools)
 
     json::Object layer_params = Merge(LayerFields(), FillFields());
     json::Object insert_properties{
+        // The native inserts the tool performs (decision 182), as `effect_insert`.
         {"kind", CapabilityByValue(Strings({"fill", "group", "paint"}, "The layer kind."),
-                                   {{"fill", "substance_painter.layerstack.insert_fill"},
-                                    {"group", "substance_painter.layerstack.insert_group"},
-                                    {"paint", "substance_painter.layerstack.insert_paint"}})},
+                                   {{"fill", "uzpainter.layerstack.insert_fill"},
+                                    {"group", "uzpainter.layerstack.insert_group"},
+                                    {"paint", "uzpainter.layerstack.insert_paint"}})},
         {"name", StringProperty("With a name, a layer of that name and kind already in the target list is used "
                                 "instead of inserting another (LAY-06); several such layers fail ambiguous_name.")},
         {"params", ObjectProperty(layer_params, {}, "The layer_set (and, for a fill, fill_set) fields to set in the same transaction.")}};
@@ -1127,15 +1128,17 @@ void StackFamily(const ToolContext& context, std::vector<ToolDefinition>& tools)
          "below one of its effects) and sets its params, in one transaction.",
          Schema({{"uid", UidProperty("The layer whose stack receives the effect.")},
                  {"stack", Strings({"content", "mask"}, "The layer's content or mask stack.")},
+                 // The operations the tool performs: the native inserts of `uzpainter.layerstack`
+                 // (decision 182), not the facade's, whose statuses can differ.
                  {"kind", CapabilityByValue(EnumProperty<core::EffectKind>("The effect kind."),
-                                            {{"fill", "substance_painter.layerstack.insert_fill"},
-                                             {"paint", "substance_painter.layerstack.insert_paint"},
-                                             {"generator", "substance_painter.layerstack.insert_generator_effect"},
-                                             {"filter", "substance_painter.layerstack.insert_filter_effect"},
-                                             {"levels", "substance_painter.layerstack.insert_levels_effect"},
-                                             {"compare_mask", "substance_painter.layerstack.insert_compare_mask_effect"},
-                                             {"color_selection", "substance_painter.layerstack.insert_color_selection_effect"},
-                                             {"anchor", "substance_painter.layerstack.insert_anchor_point_effect"}})},
+                                            {{"fill", "uzpainter.layerstack.insert_fill"},
+                                             {"paint", "uzpainter.layerstack.insert_paint"},
+                                             {"generator", "uzpainter.layerstack.insert_generator_effect"},
+                                             {"filter", "uzpainter.layerstack.insert_filter_effect"},
+                                             {"levels", "uzpainter.layerstack.insert_levels_effect"},
+                                             {"compare_mask", "uzpainter.layerstack.insert_compare_mask_effect"},
+                                             {"color_selection", "uzpainter.layerstack.insert_color_selection_effect"},
+                                             {"anchor", "uzpainter.layerstack.insert_anchor_point_effect"}})},
                  {"above", UidProperty("Insert directly above this effect of the stack.")},
                  {"below", UidProperty("Insert directly below this effect of the stack.")},
                  {"name", StringProperty("With a name, an effect of that name and kind already in the stack is used instead "
