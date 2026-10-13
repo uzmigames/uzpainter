@@ -20,6 +20,7 @@
 #include "mesh/reload.h"
 #include "python/display.h"
 #include "python/errors.h"
+#include "python/evaluation.h"
 #include "python/recipe.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
@@ -472,6 +473,13 @@ void Session::Record(const CallResult& result) {
 }
 
 void Session::NotifyDurableChange() const {
+    std::shared_ptr<OpenProject> project;
+    {
+        std::lock_guard lock(mutex_);
+        project = current_;
+    }
+    // A commit supersedes the evaluation kept for the revision before it (evaluation.h).
+    if (project) DropSupersededEvaluation(*project);
     if (on_durable_change) on_durable_change();
 }
 

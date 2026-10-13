@@ -82,6 +82,8 @@ struct CreateCall {
     std::function<void(core::Edit&, store::ProjectStore&)> extra;
 };
 
+struct RevisionEvaluation;
+
 /// The open project.
 struct OpenProject {
     std::unique_ptr<store::ProjectStore> store;
@@ -100,6 +102,12 @@ struct OpenProject {
     /// The default `(texture set, stack)` address (`textureset.get/set_active_stack`).
     core::Id active_set = core::kNoId;
     core::Id active_stack = core::kNoId;
+    /// The CPU evaluation of the revision an export, capture or diagnostic last read, kept for the
+    /// next call on that revision, and whether a call holds it (evaluation.h). Guarded by
+    /// `evaluation_mutex`.
+    std::mutex evaluation_mutex;
+    std::shared_ptr<RevisionEvaluation> evaluation;
+    bool evaluation_leased = false;
 
     ~OpenProject();
 };

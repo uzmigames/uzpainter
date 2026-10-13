@@ -1139,3 +1139,113 @@ def test_export_plan_dry_run_and_job_errors(run: Run) -> None:
     assert result["job"][0] == "failed" and result["job"][1].startswith("ValueError")
     assert result["busy"][0].startswith("BusyError")
     assert result["closed"] is None
+
+
+# ── B19: the calls on one committed revision share its CPU evaluation (decision 246) ───────────
+
+# The export helpers: the plane's BaseColor (RGB) and Height (L) as 16-bit PNGs, passthrough; and
+# an export timed, with the SHA-256 of every file it wrote.
+EXPORT_HELPERS = """
+def config(folder, **parameters):
+    def doc(name, source, letters):
+        return {"fileName": "$textureSet_" + name, "channels": [
+            {"destChannel": c, "srcChannel": c, "srcMapType": "documentMap", "srcMapName": source}
+            for c in letters]}
+    values = {"fileFormat": "png", "bitDepth": "16", "dithering": False,
+              "paddingAlgorithm": "passthrough"}
+    maps = [doc("BaseColor", "basecolor", "RGB"), doc("Height", "height", "L")]
+    return {"exportShaderParams": False, "exportPath": WORK + "/" + folder,
+            "defaultExportPreset": "p", "exportPresets": [{"name": "p", "maps": maps}],
+            "exportList": [{"rootPath": "uzp_plane"}],
+            "exportParameters": [{"parameters": dict(values, **parameters)}]}
+
+
+def timed(folder, **parameters):
+    start = time.perf_counter()
+    out = export.export_project_textures(config(folder, **parameters))
+    return [time.perf_counter() - start, {f["relative_path"]: f["sha256"] for f in out["files"]}]
+"""
+
+# A bitmap fill magnified under a bitmap mask and a Levels effect, over a uniform base: enough
+# evaluation that a call which evaluates the stack again stands out against one that only encodes.
+REVISION_STACK = (
+    EXPORT_HELPERS
+    + """
+stack = create(512)
+checker = resource.import_project_resource(IMAGES + "/checker-16.png", resource.Usage.TEXTURE)
+left = resource.import_project_resource(IMAGES + "/mask-left-half.png", resource.Usage.TEXTURE)
+base = ls.insert_fill(top(stack))
+base.active_channels = {CT.BaseColor, CT.Height}
+base.set_source(CT.BaseColor, cm.Color(0.2, 0.3, 0.4))
+base.set_source(CT.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+detail = ls.insert_fill(top(stack))
+detail.active_channels = {CT.BaseColor}
+detail.set_source(CT.BaseColor, checker.identifier())
+detail.add_mask(ls.MaskBackground.Black)
+mask = ls.insert_fill(ls.InsertPosition.inside_node(detail, ls.NodeStack.Mask))
+mask.set_source(None, left.identifier())
+ls.insert_levels_effect(ls.InsertPosition.inside_node(detail, ls.NodeStack.Content))
+"""
+)
+
+
+def test_calls_on_one_revision_reuse_its_evaluation(run: Run) -> None:
+    """B19 (decision 246): an export of a revision an earlier export evaluated encodes from the
+    kept tiles: the same bytes in a fraction of the time. A refusal raised before evaluating
+    writes nothing and keeps the evaluation; a texture-space capture of the revision reads it and
+    writes the export's BaseColor bytes."""
+    result = ok(
+        run(
+            REVISION_STACK
+            + """
+cold = timed("cold")
+warm = [timed("warm1"), timed("warm2")]
+refused = raises(export.export_project_textures, config("refused", bitDepth="8", dithering=True))
+after = timed("after-refusal")
+capture = uzpainter.render.capture(WORK + "/capture/base.png", "base_color")
+result = {"cold": cold, "warm": warm, "after": after, "refused": refused,
+          "refused_written": os.path.exists(WORK + "/refused/generations"),
+          "capture": capture["hashes"]["png"]}
+"""
+        )
+    )
+    cold_seconds, cold_files = result["cold"]
+    assert sorted(cold_files) == ["uzp_plane_BaseColor.png", "uzp_plane_Height.png"]
+    assert all(files == cold_files for _, files in [*result["warm"], result["after"]])
+    # The cold export evaluated the stack; the others only encoded it again.
+    warm_seconds = [seconds for seconds, _ in result["warm"]] + [result["after"][0]]
+    assert max(warm_seconds) * 3 < cold_seconds, (cold_seconds, warm_seconds)
+    assert result["refused"].startswith("NotYetSupported"), result["refused"]
+    assert result["refused_written"] is False
+    assert result["capture"] == cold_files["uzp_plane_BaseColor.png"]
+
+
+def test_a_commit_supersedes_the_kept_evaluation(run: Run) -> None:
+    """B19 (decision 246): after a commit, an export evaluates the new revision. Its bytes are
+    the bytes a fresh process writes for that revision, never the bytes of the revision kept
+    before it."""
+    edited = ok(
+        run(
+            REVISION_STACK
+            + """
+before = timed("before")
+detail.set_opacity(0.5, CT.BaseColor)
+after = timed("after")
+project.save_as(WORK + "/edited.uzp")
+result = {"before": before[1], "after": after[1]}
+"""
+        )
+    )
+    fresh = ok(
+        run(
+            EXPORT_HELPERS
+            + """
+project.open(WORK + "/edited.uzp")
+result = timed("fresh")[1]
+"""
+        )
+    )
+    before, after = edited["before"], edited["after"]
+    assert after["uzp_plane_BaseColor.png"] != before["uzp_plane_BaseColor.png"]
+    assert after["uzp_plane_Height.png"] == before["uzp_plane_Height.png"]
+    assert fresh == after

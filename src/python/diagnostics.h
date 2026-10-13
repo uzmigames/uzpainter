@@ -5,11 +5,12 @@
 // (src/supervisor/worker.cpp).
 //
 // - A `DiagnosticRun` reads the committed revision of the open project once (inside an open native
-//   `Transaction` it refuses, as the export does) and evaluates every diagnostic of the call on a
-//   CPU evaluator with the inputs the export reads: the project's template, its resources and the
-//   texturing mesh re-derived from its stored bytes. Each view is computed by the entry point the
-//   export's `diagnosticMap` sources use (`src/evaluator/diagnostics.h`, decisions 075, 076, 111),
-//   so a view equals the export of its source.
+//   `Transaction` it refuses, as the export does) and evaluates every diagnostic of the call on the
+//   revision's CPU evaluation (evaluation.h) with the inputs the export reads: the project's
+//   template, its resources and the texturing mesh re-derived from its stored bytes; the tiles an
+//   earlier export, capture or diagnostic of the revision computed serve it. Each view is computed
+//   by the entry point the export's `diagnosticMap` sources use (`src/evaluator/diagnostics.h`,
+//   decisions 075, 076, 111), so a view equals the export of its source.
 // - The node of a call names its stack: uids are unique in a project.
 // - Decision 126 applies per source (`exporter::RequireIdentifiedBase`): `isolate`, `contribution`
 //   and `region_stats` on a channel whose template base is inferred raise `NotYetSupported`;
@@ -32,6 +33,7 @@
 #include "evaluator/evaluator.h"
 #include "export/plan.h"
 #include "export/publish.h"
+#include "python/evaluation.h"
 #include "python/session.h"
 #include "uzp_core/document/document.h"
 
@@ -71,9 +73,7 @@ private:
 
     std::shared_ptr<OpenProject> m_open;
     core::Snapshot m_snapshot;
-    std::shared_ptr<const evaluator::TemplateLibrary> m_templates;
-    exporter::SourceInputs m_inputs;
-    std::unique_ptr<evaluator::CpuEvaluator> m_cpu;
+    EvaluationLease m_evaluation;
 };
 
 }  // namespace uzp::python

@@ -6,7 +6,9 @@
 // is the dry run in Painter's `{(texture set, stack): [files]}` shape (decision 091). `export.start`
 // queues the export of the current revision as a job: the plan is compiled and checked, every
 // file is evaluated on the CPU evaluator (the evaluator the export tests compare with Painter's
-// goldens), encoded, and published as a new generation under the configuration's `exportPath`
+// goldens; the revision's kept evaluation, evaluation.h, so the tiles an earlier export, capture or
+// diagnostic of the same revision computed are not computed again), encoded, and published as a
+// new generation under the configuration's `exportPath`
 // with its receipt (`PublishExport`, decision 097); `fixed_names` folders then receive the
 // generation's files under their fixed names (`CopyFixedNames`; `exportPath` itself gives Painter's
 // flat layout). `export.export_project_textures` is the synchronous convenience: start, then wait
@@ -25,17 +27,14 @@
 
 #include "evaluator/error.h"
 #include "evaluator/evaluator.h"
-#include "evaluator/geometry_mask.h"
-#include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "export/fixed_names.h"
 #include "export/plan.h"
 #include "export/publish.h"
-#include "mesh/reload.h"
 #include "python/bindings.h"
 #include "python/errors.h"
+#include "python/evaluation.h"
 #include "python/jobs.h"
-#include "store/container.h"
 
 #ifndef UZP_BUILD_MODE
 #error "UZP_BUILD_MODE is defined by build.zig"
@@ -121,26 +120,9 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
         context.SetProgress(0.1, "plan compiled");
         context.Checkpoint();
 
-        store::ProjectStore* store = project->store.get();
-        auto templates = std::make_shared<const evaluator::TemplateLibrary>(
-            evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory()));
-        exporter::SourceInputs inputs;
-        inputs.templateId = p.settings.template_id;
-        inputs.resources = std::make_shared<evaluator::DecodingResourceProvider>(
-            [store](std::string_view sha256) -> std::optional<std::string> {
-                try {
-                    return store->ReadResource(sha256);
-                } catch (const store::StoreError& error) {
-                    if (error.code() == store::StoreError::Code::missing_resource) return std::nullopt;
-                    throw;
-                }
-            });
-        if (p.mesh) {
-            mesh::ImportResult mesh =
-                mesh::RederiveMesh(p, [store](const std::string& sha256) { return store->ReadResource(sha256); });
-            inputs.geometry = std::make_shared<evaluator::MeshGeometryMasks>(
-                std::make_shared<const mesh::TexturingMesh>(std::move(mesh.mesh)));
-        }
+        // The revision's evaluation: the one an earlier call on this revision kept, tiles included.
+        EvaluationLease evaluation = LeaseEvaluation(project, snapshot);
+        exporter::SourceInputs inputs = evaluation->inputs;
         context.SetProgress(0.2, "sources ready");
         context.Checkpoint();
 
@@ -154,17 +136,17 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
                                 "evaluating " + plan.files[file].relativePath);
             return true;
         };
-        evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
-        StoppableTileStore tiles(cpu.store(), context);
+        StoppableTileStore tiles(evaluation->cpu.store(), context);
         exporter::PublishRequest request;
         request.identity = exporter::BuildIdentity{kAppVersion, std::string("uzpainter-") + UZP_BUILD_MODE};
         request.projectPath = project_path;
-        render::Result<exporter::Publication> published =
-            exporter::PublishExport(p, snapshot.revision, plan, inputs, *templates, tiles, cpu.cache(), request);
+        render::Result<exporter::Publication> published = exporter::PublishExport(
+            p, snapshot.revision, plan, inputs, *evaluation->templates, tiles, evaluation->cpu.cache(), request);
         if (!published) {
             if (stopped_at_file || tiles.stopped()) context.Checkpoint();  // nothing was written
             RaiseRender(published.error());
         }
+        evaluation.Keep();
         context.Commit({{"generation", published->generation},
                         {"directory", exporter::Utf8String(published->directory)},
                         {"revision", snapshot.revision}});
