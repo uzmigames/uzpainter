@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Supervisor Settling Evidence
-The runtime SHALL pass every settling case of `docs/architecture/02-runtime-topology.md` §7 on both GPU backends, and each case MUST assert that the MCP session stays alive, the last committed revision is correct and no commit is duplicated.
+The runtime SHALL pass every settling case of `docs/architecture/02-runtime-topology.md` §7 on DX12, and every case that needs no GPU device on Vulkan, and each case MUST assert that the MCP session stays alive, the last committed revision is correct and no commit is duplicated.
 
 #### Scenario: Commit-then-die retry
 Given a worker that committed a mutation durably and was killed before acknowledging it
@@ -18,5 +18,7 @@ The supervisor settling report MUST record the recovery time of every fault case
 
 #### Scenario: Settling report produced
 Given the settling suite has run on DX12 and Vulkan
+And the Vulkan cases that need a Vulkan device are recorded `pending` until `phase3.1_vulkan-compute-parity` settles them (decision 221)
 When the report is written to `parity/reports/phase2/supervisor-settling.json`
-Then it lists every case with pass or fail, recovery time and per-call overhead, and contains no oracle data
+Then it lists every case and backend as `pass`, `fail` or `pending`, with recovery time and per-call overhead for each case that ran, and contains no oracle data
+And every `pending` entry is a Vulkan case that needs a Vulkan device, names decision 121 as its deferral, and is owned by `phase3.1_vulkan-compute-parity` items 3.4 and 4.1 under the decision 221 split

@@ -3,7 +3,7 @@
 
 ## 2. Implementation
 - [ ] 2.1 Define the snapshot signature with every field of `05-procedural-content.md` §4 and its canonical hash
-- [ ] 2.2 Implement `SnapshotBackend.status/canEvaluate/evaluate`: exact signature match only, else `unavailable`; no resampling or extrapolation
+- [ ] 2.2 Implement `SnapshotBackend.status/canEvaluate/evaluate`: exact signature match only, else `unavailable`; no resampling or extrapolation; a snapshot is migration data only: it never counts as calibration or held-out evidence and never widens an asset's certified editable domain (decision 222)
 - [ ] 2.3 Store snapshot rasters as `.uzp` raster planes with `plane_id` and their signatures in the manifest; include them in save/reopen, `inspect` and `export-bundle`
 - [ ] 2.4 Refuse copying a snapshot into another project and keep snapshots out of every shipped asset folder
 - [ ] 2.5 Implement `uzpainter assets snapshot` recording through Painter's documented export API on a licensed machine
