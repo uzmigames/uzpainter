@@ -1,0 +1,13 @@
+{
+  "id": 178,
+  "slug": "the-viewport-decides-coverage-with-watertight-edge-functions-depth-and-barycentrics-stay-moller-trumbores",
+  "title": "The viewport decides coverage with watertight edge functions; depth and barycentrics stay Möller-Trumbore's",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.1_preview-viewport-window",
+    "phase2.3_realtime-preview",
+    "phase2.2_preview-capture"
+  ],
+  "supersededBy": null
+}
