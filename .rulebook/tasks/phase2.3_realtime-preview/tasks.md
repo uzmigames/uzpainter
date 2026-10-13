@@ -12,7 +12,7 @@
 ## 3. Tests
 - [x] 3.1 Captures in a local run on the owner's machine (decision 028) without any window or desktop focus, in `painter_viewport`, `base_color`, `channel:<name>` and `mask:<uid>` modes
 - [ ] 3.2 Preview window open, minimised and stalled while the wand v1 export runs: export bytes and timing unaffected by the preview, no evaluation wait on the preview thread
-- [ ] 3.3 `painter_iray` reported as an explicit unavailable capability in `uzpainter://capabilities` and by `capture`
+- [x] 3.3 `painter_iray` reported as an explicit unavailable capability in `uzpainter://capabilities` and by `capture`
 
 ## 4. Acceptance
 - [ ] 4.1 DAG gate met: captures window-independent and preview never pauses evaluation; report written to `parity/reports/phase2/preview-settling.json`
@@ -48,7 +48,7 @@
   - The full wand run takes about 30 minutes: one Debug CPU export is 7.5 minutes, 6.6 of them BaseColor. That is beyond an agent's 10-minute budget, so it belongs to the coordinator's batch:
     `UZP_PREVIEW_SETTLING_REPORT=<repo>/parity/reports/phase2/preview-settling.json python -m pytest tests/preview/test_preview_settling.py`
   - `UZP_PREVIEW_WAND_QUICK=1` (no BaseColor) passed both wand tests in about 7 minutes. It is never evidence.
-- 3.3: open. `painter_iray` is a `release-gap` in the manifest `UzPainter.exe capabilities` prints (`test_painter_iray_is_an_unavailable_capability`), and it is refused by `uzpainter.render.capture` and by the worker's `capture` before any work. Publication through `uzpainter://capabilities` is phase2.6_mcp-typed-tool-families item 2.9; its 3.5 now names this entry.
+- 3.3: done. `painter_iray` is a `release-gap` in the manifest `UzPainter.exe capabilities` prints (`test_painter_iray_is_an_unavailable_capability`), it is refused by `uzpainter.render.capture` and by the worker's `capture` before any work, and `uzpainter://capabilities` publishes that manifest unchanged with the entry among its release gaps (phase2.6_mcp-typed-tool-families, `tests/supervisor/test_typed_tools.py::test_unavailable_families_fail_before_mutation`, which also checks the `capture` refusal over MCP; decisions 162, 165).
 - 4.1: open until the splits close (decision 162, panel PARTLY ×2): phase1.15 (the wand rendered), decision 121 (Vulkan entries) and phase2.6 (the resource).
 - 5.3: open until the coordinator's batch run of `tests/preview/test_preview_settling.py` at full size. Tests run (2026-10-12, RTX 4090, driver 32.0.16.1714), each command once, re-running only failures:
   - `tests/preview` regression goldens, `painter_iray`, diagnostics, headless viewport, stall, window lifecycle, and `test_painter_iray_is_an_unavailable_capability`: 7 passed.

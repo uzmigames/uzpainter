@@ -439,7 +439,6 @@ LATER_PHASE = [
     ("uzpainter.baking", "bake_async", "phase3.5_embree-bakers"),
     ("uzpainter.baking", "bake_selected_textures_async", "phase3.5_embree-bakers"),
     ("uzpainter.baking", "BakingParameters", "phase3.5_embree-bakers"),
-    ("uzpainter.render", "capture", "phase2.3_realtime-preview"),
 ]
 
 
@@ -469,10 +468,15 @@ def test_later_phase_calls_raise_not_yet_supported_before_mutation(run: Run) -> 
                 ls.InsertPosition.inside_node(fill, ls.NodeStack.Content),
             ),
         ]
+        # `uzpainter.render.capture` is implemented (phase2.2, decision 148); its mode
+        # painter_iray stays a release gap, refused before any work (no file written).
+        iray = raises(uzpainter.render.capture, WORK + "/iray.png", "painter_iray")
+        iray_written = os.path.exists(WORK + "/iray.png")
         result = {
             "out": out,
             "procedural": procedural,
             "gaps": gaps,
+            "iray": [iray, iray_written],
             "before": list(before),
             "after": [project.revision(), project.needs_saving()],
         }
@@ -489,6 +493,8 @@ def test_later_phase_calls_raise_not_yet_supported_before_mutation(run: Run) -> 
     assert result["gaps"][0].startswith("NotYetSupported") and "Triplanar" in result["gaps"][0]
     assert result["gaps"][1].startswith("NotYetSupported")
     assert result["gaps"][2].startswith("ValueError")  # compare masks are mask-stack only
+    iray, iray_written = result["iray"]
+    assert iray.startswith("PathTracerUnavailable") and not iray_written, iray
     assert result["before"] == result["after"]
 
 
