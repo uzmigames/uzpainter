@@ -1,0 +1,11 @@
+{
+  "id": 168,
+  "slug": "five-shipped-template-bases-are-observed-in-openexr-32f-the-other-21-stay-inferred-and-refused-with-one-request-each",
+  "title": "Five shipped template bases are observed in OpenEXR 32f; the other 21 stay inferred and refused, with one request each",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}
