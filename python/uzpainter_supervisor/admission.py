@@ -17,7 +17,11 @@ Every `tools/call` goes through `Admission.call`:
    (known key and request hash first, then the precondition).
 3. **Lease.** One mutation lease per project UUID, recorded in the ledger. A stdio session
    holds it implicitly (its owner is the session); a mutating call from another owner returns
-   `lease_held {holder, since, active_job}`. Reads need no lease.
+   `lease_held {holder, since, active_job}`. Reads need no lease. A call during which the worker
+   switches to another project (`project_create`, `project_open`, a script) takes the new
+   project's lease for its owner when the worker reports the switch, before any other call can
+   see the project, unless another live owner holds it; an HTTP session that has named no owner
+   takes none (decision 243).
 4. **Busy.** A mutating call while another mutating call of the same project runs returns
    `busy {job_id}`; it is not queued. `wait_idle {timeout}` waits for no call to run; its
    timeout is an error.
@@ -163,6 +167,9 @@ class Admission:
         self._unreadable: set[str] = set()
         # The long jobs this supervisor runs, by job id.
         self.live: dict[str, LiveJob] = {}
+        # The admitted calls of an owner that the worker has not answered yet, by job id (an
+        # anonymous call takes no lease, so it is not among them).
+        self._runs: dict[str, _Run] = {}
         self.identity = process_identity(self.pid) or f"{self.pid}:0"
         self._sweep()
 
@@ -248,10 +255,12 @@ class Admission:
         long: bool = False,
         commit_point: str | None = None,
         notify: Notify | None = None,
+        anonymous: bool = False,
     ) -> dict[str, Any]:
         """Admits and forwards one tool call; the reply body with its receipt. A long call
         (`long`, with the worker's `commit_point`) runs as a job: `wait` among its arguments
-        waits for its end, streaming its events to `notify`."""
+        waits for its end, streaming its events to `notify`. `owner` is the stdio session's when
+        omitted; an `anonymous` call (an HTTP session that has named no owner) takes no lease."""
         worker = self.worker
         owner = owner or self.stdio_owner()
         arguments = dict(arguments)
@@ -327,7 +336,11 @@ class Admission:
             frame["idempotency_key"] = key
             if expected is not None:
                 frame["expected_revision"] = expected
-        run = _Run(job_id, scope, project_uuid, owner, key, mutating, long, commit_point, epoch)
+        run = _Run(
+            job_id, scope, project_uuid, owner, key, mutating, long, commit_point, epoch, frame
+        )
+        if not anonymous:
+            self._runs[job_id] = run
         if not long:
             return await self._run(run, frame, receipt, arguments)
         frame["job_id"] = job_id
@@ -354,6 +367,7 @@ class Admission:
             reply = await self.worker.request(frame)
         finally:
             del self.running[run.scope]
+            self._runs.pop(run.job_id, None)
             if not self.running:
                 self._idle.set()
             if run.mutating and run.project_uuid is not None:
@@ -391,6 +405,18 @@ class Admission:
         return error_reply(
             "lease_held", "another client holds the project's mutation lease", lease.to_json()
         )
+
+    def on_project_switch(self, frame: dict[str, Any] | None) -> None:
+        """The worker switched to another project while it ran `frame` (worker.py reports it with
+        the project, before the call's reply): the owner of that call takes the new project's
+        lease now, so a lease taken before `project_create` or `project_open` holds the project
+        they make and no other client can take it first (decision 243). A live holder's lease
+        stays; a call that is not one of an owner's (an anonymous call, a supervisor request)
+        takes none."""
+        project_uuid = self.worker.project_uuid
+        run = next((run for run in self._runs.values() if run.frame is frame), None)
+        if project_uuid is not None and run is not None:
+            self.ledger.acquire(project_uuid, run.owner, self.pid)
 
     async def _resolve(self, run: _Run, committed: dict[str, Any] | None) -> dict[str, Any]:
         """The outcome of a job its worker's death interrupted, read, never re-run (02 §5): a
@@ -684,6 +710,7 @@ class _Run:
     long: bool
     commit_point: str | None
     epoch: int
+    frame: dict[str, Any]  # the request sent for it (on_project_switch finds the call by it)
 
 
 def _state(reply: dict[str, Any]) -> str:

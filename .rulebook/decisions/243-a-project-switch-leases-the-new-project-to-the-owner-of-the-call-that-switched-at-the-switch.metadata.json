@@ -1,0 +1,13 @@
+{
+  "id": 243,
+  "slug": "a-project-switch-leases-the-new-project-to-the-owner-of-the-call-that-switched-at-the-switch",
+  "title": "A project switch leases the new project to the owner of the call that switched, at the switch",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.2_supervisor-admission-ledger",
+    "phase2.5_mcp-transport-registry",
+    "phase2.8_mcp-server"
+  ],
+  "supersededBy": null
+}

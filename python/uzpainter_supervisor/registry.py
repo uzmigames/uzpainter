@@ -28,7 +28,9 @@ each refusal comes before admission (no job row, nothing sent to the worker):
 6. **Lease.** In HTTP mode a mutating call needs an owner (`lease_acquire {owner}`):
    `lease_required` otherwise. The stdio session's owner is implicit. Admission (admission.py)
    then takes the lease, refuses `lease_held` and `busy`, and resolves the key and the
-   precondition.
+   precondition. A project an owner's call opens or creates is leased to that owner when the
+   worker switches to it; a session without an owner is admitted `anonymous` and takes no lease
+   (decision 243).
 
 Every forwarded call's structured result carries the contract of §2: `revision` (the revision it
 was admitted on), `committed_revision` (the project's committed revision after it), `job_id`,
@@ -247,7 +249,8 @@ SUPERVISOR_TOOLS: dict[str, tuple[str, dict[str, Any], bool, bool]] = {
     ),
     "lease_acquire": (
         "Takes the open project's mutation lease for `owner` and binds the owner to this "
-        "session (HTTP mode); refused with lease_held while another live owner holds it.",
+        "session (HTTP mode); a project the session then opens or creates is leased to the owner "
+        "too. Refused with lease_held while another live owner holds it.",
         OWNER_SCHEMA,
         False,
         True,
@@ -671,12 +674,14 @@ class Registry:
             long=bool(tool.get("long")),
             commit_point=tool.get("commit_point"),
             notify=notify,
+            anonymous=self.http and client.owner is None,
         )
         images = await self._images(name, body)
         return self._reply(name, body, scrub=name != "run_python", images=images)
 
     def _owner(self, client: Client) -> str:
-        """The lease owner of `client`'s calls: its acquired owner, or the stdio session's."""
+        """The lease owner of `client`'s calls: its acquired owner, or the stdio session's (an
+        HTTP session without an owner has none: its calls are admitted `anonymous`)."""
         return client.owner or self.admission.stdio_owner()
 
     async def _check(

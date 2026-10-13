@@ -46,6 +46,7 @@ Both transports serve the same `registry.Registry` (decision 159).
   - Ctrl+C or Ctrl+Break stops the server cleanly (exit 0). The worker runs in its own process group, so the signal never reaches it.
 - **Lease.** The stdio session holds the lease implicitly (`stdio:<pid>`). In HTTP mode a session names its owner:
   - `lease_acquire {owner}` binds the owner to the session (by `Mcp-Session-Id`) and takes the open project's lease. If another owner holds it, the call fails `lease_held {holder, since, active_job}`.
+  - An owner bound with no project open still holds the project its session then creates or opens: the lease is taken when the worker switches to it (admission step 3). A second client is then refused `lease_held` (decision 243).
   - A mutating call from a session without an owner fails `lease_required`.
   - The lease belongs to the owner, not to the connection. A client that reconnects names the same owner, gets its lease back, and reads its jobs by id from the ledger.
   - `lease_release` ends the session owner's leases. While that owner's job runs, it fails `busy` instead.
@@ -173,10 +174,13 @@ The supervisor learns which project to reopen from the worker's `revision` event
    | a key only | forwards it without a precondition: the worker returns its stored outcome or `outcome_unknown`, and never runs it |
 
 3. **Lease.** There is one mutation lease per project UUID, held in the ledger.
-   - The stdio session takes it implicitly (`stdio:<supervisor pid>`) at its first mutating call, and releases it on exit.
+   - The stdio session takes it implicitly (`stdio:<supervisor pid>`) at its first mutating call, or when it opens or creates the project, and releases it on exit.
    - A lease whose holder process has ended is taken over.
    - A mutating call from another owner returns `lease_held {holder, since, active_job}`. Reads need no lease.
    - HTTP clients name their own owners with `lease_acquire` (see Transports).
+   - **Project switch** (decision 243). When the worker switches to another project during a call (`project_create`, `project_open`, a script), that call's owner takes the new project's lease. Another live owner's lease stays. The lease is taken in the same step that records the new project from the worker's `revision` event, before the call replies, so no other call sees the project unleased.
+     - The call is the oldest request pending on the pipe, `worker/cancel` aside. The worker's command thread runs requests in order, and each reply reaches the pipe before the next request's events.
+     - A call from an HTTP session that has named no owner is admitted `anonymous`, so the project it opens stays unleased.
 4. **Busy.** A mutating call or long job while another mutating call or long job of the same project runs returns `busy {job_id}`; it is not queued. `wait_idle {timeout}` (seconds) waits until none runs, and a timeout is the error `timeout`.
 5. **Job.** Each admitted mutating call and each long call is a ledger job: `running`, then `succeeded`, `failed`, `cancelled` or `interrupted` (see Jobs).
 6. **Receipt.** Every reply carries `receipt`:
@@ -393,6 +397,7 @@ All tests are in `tests/supervisor/`:
   - `status`, `capabilities` and `batch` (stop on error, keys);
   - the resources and prompts;
   - the HTTP lease across a reconnect;
+  - the lease of a project an owner creates or opens, an anonymous session's open, and the stdio session's (decision 243);
   - roots and scrubbing.
 - `test_typed_tools.py` drives the typed families through `UzPainter.exe --mcp` with Python disabled (phase2.6). It covers:
   - every family listed with its capability status;

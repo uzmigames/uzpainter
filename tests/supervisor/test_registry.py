@@ -16,6 +16,7 @@ import copy
 import hashlib
 import json
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -839,6 +840,119 @@ def test_http_lease_is_explicit_and_survives_a_reconnect(tmp_path: Path) -> None
     assert len(tool_calls(worker, "layer_set")) == 2
     registry.close()
     assert ledger.lease(UUID) is None
+
+
+class SwitchingWorker(FakeWorker):
+    """A FakeWorker with no project open whose `project_create` and `project_open` (long jobs, as
+    the worker lists them) switch it to a new project and report the switch with the request's
+    frame before they reply, as worker.py does on the worker's `revision` event."""
+
+    def __init__(self) -> None:
+        super().__init__(open_project=False)
+        self.on_project_switch: Callable[[dict[str, Any] | None], None] | None = None
+        self.created: list[str] = []
+        self.tools.append(
+            {
+                "name": "project_create",
+                "description": "Creates.",
+                "inputSchema": schema({"mesh": {"type": "string"}}, ["mesh"]),
+                "mutating": True,
+                "long": True,
+                "commit_point": "revision",
+                "capability": [],
+            }
+        )
+        for tool in self.tools:
+            if tool["name"] == "project_open":
+                tool["long"] = True
+
+    async def request(self, frame: dict[str, Any]) -> dict[str, Any]:
+        if frame["method"] == "worker/operations":
+            return {
+                "id": "x",
+                "result": {
+                    "project_uuid": self.project_uuid,
+                    "current_revision": self.durable_revision,
+                    "horizon_revision": 0,
+                    "operations": [],
+                    "unreadable": [],
+                },
+            }
+        if frame["method"] == "tools/call" and frame["name"] in ("project_create", "project_open"):
+            self.frames.append(frame)
+            self.created.append(f"6f1c2a6e-0000-4000-8000-{len(self.created) + 100:012d}")
+            self.project_uuid = self.created[-1]
+            self.project_path = f"C:/p/project-{len(self.created)}.uzp"
+            self.durable_revision = 1
+            self.project_epoch += 1
+            if self.on_project_switch is not None:
+                self.on_project_switch(frame)
+            return {"id": "x", "result": {"status": "committed", "revision": 1}}
+        return await super().request(frame)
+
+
+def switching(tmp_path: Path, *, http: bool) -> tuple[SwitchingWorker, Ledger, Registry]:
+    worker = SwitchingWorker()
+    ledger = Ledger(tmp_path / "ledger.sqlite3")
+    admission = Admission(worker, ledger)
+    worker.on_project_switch = admission.on_project_switch  # as main.py wires the supervisor
+    registry = Registry(worker, admission, Manifest.from_document(MANIFEST), http=http)
+    return worker, ledger, registry
+
+
+def test_a_lease_taken_before_project_create_holds_the_created_project(tmp_path: Path) -> None:
+    """Practical-e2e B8, decision 243: an HTTP owner that took the lease with no project open
+    holds the project its `project_create` makes from the moment the worker switches to it. A
+    second client cannot take it (`lease_acquire` and a mutation are refused `lease_held`), and
+    the creator's next mutation commits. A project an owner opens is leased to that owner too; an
+    HTTP session without an owner leaves the project it opens unleased; the stdio session holds
+    the project it opens."""
+    worker, ledger, registry = switching(tmp_path / "http", http=True)
+
+    async def scenario() -> None:
+        a, b, c = Client("http"), Client("http"), Client("http")
+        free = (await registry.call("lease_acquire", {"owner": "agent-a"}, a, None)).body
+        assert free["result"] == {"owner": "agent-a", "project_uuid": None, "lease": None}
+        assert (
+            "result" in (await registry.call("lease_acquire", {"owner": "agent-b"}, b, None)).body
+        )
+        created = await registry.call(
+            "project_create", {"mesh": "plane.obj", "wait": True}, a, None
+        )
+        assert created.body["result"]["status"] == "committed", created.body
+        project = worker.project_uuid
+        assert project is not None and created.body["receipt"]["project_uuid"] == project
+        status = (await registry.call("lease_status", {}, c, None)).body["result"]
+        assert status["project_uuid"] == project and status["lease"]["holder"] == "agent-a"
+        held = (await registry.call("lease_acquire", {"owner": "agent-c"}, c, None)).body
+        assert held["error"]["code"] == "lease_held", held
+        assert held["error"]["details"]["holder"] == "agent-a" and c.owner is None
+        refused = (await registry.call("layer_set", {"uid": 10}, b, None)).body
+        assert refused["error"]["code"] == "lease_held", refused
+        assert refused["error"]["details"]["holder"] == "agent-a"
+        committed = (await registry.call("layer_set", {"uid": 10}, a, None)).body
+        assert committed["committed_revision"] == 2, committed
+        # The session that opens the next project holds it: agent-b, not agent-a.
+        await registry.call("project_open", {"path": "C:/p/next.uzp", "wait": True}, b, None)
+        lease = ledger.lease(worker.created[-1])
+        assert lease is not None and lease.holder == "agent-b"
+        refused = (await registry.call("layer_set", {"uid": 10}, a, None)).body
+        assert refused["error"]["details"]["holder"] == "agent-b", refused
+        # A session without an owner opens a project: it stays free for whoever names one.
+        await registry.call("project_open", {"path": "C:/p/third.uzp", "wait": True}, c, None)
+        assert ledger.lease(worker.created[-1]) is None
+        taken = (await registry.call("lease_acquire", {"owner": "agent-c"}, c, None)).body
+        assert taken["result"]["lease"]["holder"] == "agent-c", taken
+
+    run(scenario())
+    assert len(tool_calls(worker, "layer_set")) == 1  # the refused calls never reached it
+    registry.close()
+    assert all(ledger.lease(project) is None for project in worker.created)
+
+    worker, ledger, registry = switching(tmp_path / "stdio", http=False)
+    run(registry.call("project_open", {"path": "C:/p/plane.uzp", "wait": True}, STDIO, None))
+    lease = ledger.lease(worker.created[-1])
+    assert lease is not None and lease.holder == registry.admission.stdio_owner()
 
 
 def test_roots_canonicalise_path_arguments_and_scrub_results(tmp_path: Path) -> None:
