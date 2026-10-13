@@ -14,7 +14,8 @@ to the Tier 1 run's (the same pilot rebuilt through the pipeline adapter):
 - `outcome`: `completed` when every call succeeded, `refused` when the export refused before
   writing (a feature UzPainter does not support yet, named in `refusal`), `failed` otherwise;
 - `maps` and `equal_to_tier1`: `equal` only when both runs wrote the same maps byte for byte,
-  `different` when they did not, `not_measured` when either run wrote nothing.
+  `different` when both wrote maps and the map sets or any map's bytes differ, `not_measured` when
+  either run wrote nothing or the round did not complete (nothing was compared).
 
 The file holds numbers, enums, identifiers, dates and SHA-256 digests only, and no oracle data
 (both sides are UzPainter's outputs); the repository guard checks it with `report_problems`.
@@ -161,8 +162,8 @@ def report_problems(document: Any) -> list[str]:
 
 def equality(outcome: str, maps: list[dict[str, Any]]) -> str:
     """`equal_to_tier1` of a round with `outcome` and `maps` (the rule `report_problems` checks)."""
-    measured = bool(maps) and all(m["sha256"] and m["tier1_sha256"] for m in maps)
-    if outcome != "completed" or not measured:
+    wrote = any(m["sha256"] for m in maps) and any(m["tier1_sha256"] for m in maps)
+    if outcome != "completed" or not wrote:
         return "not_measured"
     return "equal" if all(m["sha256"] == m["tier1_sha256"] for m in maps) else "different"
 
