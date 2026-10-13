@@ -16,12 +16,21 @@
 //   they have no exact target (decision 032). A file reading a meshMap or virtualMap source is
 //   refused: what Painter writes outside the islands of an imported mesh map is not recorded
 //   (R-090).
-// - `infinite` with incomplete coverage: refused with `core::NotYetSupported` naming R-090. The
-//   fit of tier0 height-normal-bevelled-cube and -sphere found an 8-neighbour copy dilation
-//   (each uncovered texel copies its first covered neighbour: right, left, up, down, then the
-//   diagonals; x wraps, y does not). It is exact on the bevelled cube's virtual normals, but not
-//   on the spheres' poles. For a document channel it also needs a one-texel ring around each
-//   island whose values blend across the UV seam with weights not identified yet.
+// - `infinite` with incomplete coverage (decision 223, under exception EXC-007): covered texels
+//   keep their evaluated values; the others are filled in two steps.
+//   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), takes the
+//      mean of those neighbours: weight 1 for a side neighbour and f/(1 - f) for a diagonal,
+//      f = 0.4142245 (decisions 176, 206). On a straight edge (three covered neighbours in one
+//      row or column) one diagonal is weakened so that the mean moves 24.875 * 2^-15 texel: +x
+//      on horizontal edges, -row on vertical edges. The mean is rounded to float32 and through
+//      1 - (1 - v); a mean of equal values is that value.
+//   2. Every other texel copies its seed found by a jump flood over the covered and ring texels
+//      (decision 197): steps k = max(width, height)/2 down to 1, eight offsets in a fixed order,
+//      the strictly nearest seed kept.
+//   This is Painter's rule on straight edges away from seams only. Painter's ring across UV seams,
+//   at seam corners and at poles is not identified (decision 220), so outside the islands the
+//   values differ from Painter's; EXC-007 excepts exactly those texels, and the exact rule stays
+//   open (phase1.25_pilot-wand item 2.7).
 
 #include <cstdint>
 #include <vector>
@@ -46,7 +55,8 @@ struct Coverage {
 void CheckPadding(const PlannedFile& file, const Coverage& coverage);
 
 /// Applies `file`'s padding to `raster` (the file's evaluated values) over `coverage`, after
-/// CheckPadding (which it repeats). Every admitted case keeps the evaluated values (see above).
+/// CheckPadding (which it repeats): `infinite` on incomplete coverage fills the uncovered texels
+/// (above); every other admitted case keeps the evaluated values.
 void ApplyPadding(const PlannedFile& file, FileRaster& raster, const Coverage& coverage);
 
 }  // namespace uzp::exporter

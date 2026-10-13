@@ -1,0 +1,13 @@
+{
+  "id": 223,
+  "slug": "223-infinite-padding-on-uv-islands-is-written-under-exception-exc-007-covered-texels-exact-padding-texels-excepted-chosen-by-the-model-panel-on-the-owner-s-delegation",
+  "title": "`infinite` padding on UV islands is written under exception EXC-007: covered texels exact, padding texels excepted, chosen by the model panel on the owner's delegation",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}

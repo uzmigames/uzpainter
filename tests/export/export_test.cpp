@@ -91,6 +91,7 @@
 #include "export/exr_writer.h"
 #include "export/fault.h"
 #include "export/fixed_names.h"
+#include "export/padding.h"
 #include "export/plan.h"
 #include "export/png_writer.h"
 #include "export/preset_aliases.h"
@@ -758,12 +759,34 @@ int RunProcess(const fs::path& casesPath) {
         for (uint32_t i = 0; l8Material && i < channels; ++i) {
             srgbEncoded[i] = exporter::SrgbEncodedRead(ChannelType::Specular, ChannelFormat::L8, kLetters[channels][i]);
         }
-        const exporter::FileRaster raster{width,        height,       channels,
-                                          std::move(values), std::nullopt, std::nullopt,
-                                          std::move(srgbEncoded)};
+        exporter::FileRaster raster{width,        height,       channels,
+                                    std::move(values), std::nullopt, std::nullopt,
+                                    std::move(srgbEncoded)};
+        // `mesh` (and `material`): the case is padded `infinite` over that mesh's texel-centre
+        // coverage first (padding.h); `coverage_out` receives the coverage, one byte per texel.
+        std::int64_t coveredTexels = -1;
+        if (c.contains("mesh")) {
+            const mesh::TexturingMesh mesh = mesh::ImportMeshFile(Str(c.at("mesh"), "mesh"), {}).mesh;
+            const auto mask = evaluator::RasterizeGeometryMask(
+                mesh, evaluator::GeometryMaskQuery{Str(Key(c, "material"), "material"), false, {}, width, height});
+            exporter::Coverage coverage{width, height, {}};
+            for (const uint16_t value : mask->values) coverage.covered.push_back(value != 0 ? 1 : 0);
+            coveredTexels = std::count(coverage.covered.begin(), coverage.covered.end(), uint8_t{1});
+            if (c.contains("coverage_out")) {
+                std::ofstream(Str(c.at("coverage_out"), "coverage_out"), std::ios::binary)
+                    .write(reinterpret_cast<const char*>(coverage.covered.data()),
+                           static_cast<std::streamsize>(coverage.covered.size()));
+            }
+            exporter::ApplyPadding(file, raster, coverage);
+        }
         const exporter::EncodedImage encoded = exporter::EncodeFile(file, raster);
+        if (c.contains("out")) {
+            std::ofstream(Str(c.at("out"), "out"), std::ios::binary)
+                .write(encoded.bytes.data(), static_cast<std::streamsize>(encoded.bytes.size()));
+        }
         const std::string target = ReadText(file.relativePath);
         std::cout << json::WriteCanonical(json::Object{{"target", file.relativePath},
+                                                       {"covered_texels", coveredTexels},
                                                        {"equal", encoded.bytes == target},
                                                        {"layout", std::string(exporter::FileLayoutName(encoded.layout))},
                                                        {"size", static_cast<std::int64_t>(encoded.bytes.size())},

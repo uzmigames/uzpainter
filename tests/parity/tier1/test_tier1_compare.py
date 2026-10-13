@@ -218,6 +218,69 @@ def test_a_divergent_rebuild_fails_with_whole_region_and_normal_diagnostics(
     assert "private_difference_map_sha256" not in entries[f"{SET}/{ROUGH}"]
 
 
+# --- padding (decision 223) ---------------------------------------------------------------------
+
+# One UV triangle pair covering the 2 x 2 texels at the tile's centre of the 4 x 4 maps.
+ISLAND = np.array(
+    [[[0.25, 0.25], [0.75, 0.25], [0.75, 0.75]], [[0.25, 0.25], [0.75, 0.75], [0.25, 0.75]]]
+)
+
+
+def scope_split(domain: str) -> dict[str, Any]:
+    """EXC-007's terms over the synthetic golden's domain."""
+    entries = load_json(REPO_ROOT / "parity" / "exceptions.json")["entries"]
+    (entry,) = [e for e in entries if e["exception_id"] == "EXC-007"]
+    return {**entry, "domain": {**entry["domain"], "selector": domain}}
+
+
+def test_padding_texels_are_excepted_and_published_while_covered_texels_stay_exact(
+    tmp_path: Path,
+) -> None:
+    """A subject with UV triangles: each map's padding block splits it by coverage. A padding
+    difference passes under the owner scope split and shows in the published padding residuals;
+    one covered value off by one code fails under the same entry."""
+    resolved, store = stable_golden(tmp_path)
+    island = Subject(MANIFEST, "2" * 64, REGIONS, frozenset({NORMAL}), {SET: ISLAND})
+    entry = scope_split(MANIFEST["domain"])
+    padded = maps()
+    padded[BASE][0, 0] += 900  # a padding texel, one texel from the island (diagonal)
+    runs = (candidate(tmp_path / "a", padded), candidate(tmp_path / "b", padded))
+    report = compare(island, resolved, store, runs, IDENTITY, [entry])
+    assert validation_errors(report, Schema.COMPARISON_REPORT) == []
+    equality = report["equality_to_painter"]
+    assert equality["outcome"] == "pass"
+    assert equality["exceptions_relied_on"] == [{"exception_id": "EXC-007", "version": 1}]
+    base = by_id(equality["maps"])[f"{SET}/{BASE}"]
+    padding = base["padding"]
+    assert (padding["covered_texels"], padding["uncovered_texels"]) == (4, 12)
+    assert padding["covered"]["differing"]["count"] == 0
+    assert padding["uncovered"]["abs_diff"]["max"] == 900
+    assert padding["uncovered"]["differing"] == {"count": 3, "percent": 100 * 3 / 36, "total": 36}
+    assert [(b["within_texels"], b["texels"]) for b in padding["bands"]] == [
+        (1, 12),
+        (2, 12),
+        (4, 12),
+        (8, 12),
+    ]
+    assert padding["bands"][0]["abs_diff"]["max"] == 900
+    rough = by_id(equality["maps"])[f"{SET}/{ROUGH}"]["padding"]
+    assert rough["uncovered"]["differing"]["count"] == 0
+    # The same entry, one covered value off by one code: a failure.
+    covered = maps()
+    covered[BASE][1, 1, 0] += 1
+    runs = (candidate(tmp_path / "c", covered), candidate(tmp_path / "d", covered))
+    report = compare(island, resolved, store, runs, IDENTITY, [entry])
+    assert report["equality_to_painter"]["outcome"] == "fail"
+    assert report["equality_to_painter"]["exceptions_relied_on"] == []
+    base = by_id(report["equality_to_painter"]["maps"])[f"{SET}/{BASE}"]
+    assert base["padding"]["covered"]["differing"]["count"] == 1
+    # Without the subject's UV triangles there is no padding block and nothing is excepted.
+    runs = (candidate(tmp_path / "e", padded), candidate(tmp_path / "f", padded))
+    report = compare(subject(), resolved, store, runs, IDENTITY, [entry])
+    assert report["equality_to_painter"]["outcome"] == "fail"
+    assert all("padding" not in m for m in report["equality_to_painter"]["maps"])
+
+
 def test_an_unstable_golden_without_an_entry_is_blocked(tmp_path: Path) -> None:
     moved = maps()
     moved[ROUGH][0, 0, 0] += 1

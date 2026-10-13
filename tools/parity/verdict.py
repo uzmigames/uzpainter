@@ -13,6 +13,9 @@
 - Decision 032: against an unstable Painter oracle (Tiers 0-2b) the same-session recording r1 is
   the exact target. The comparison against r1 passes only when every value is equal and an
   instability entry names the domain; any difference from r1 `fail`s, whatever the register holds.
+- Decision 223: an owner scope split (`owner_scope_split`) bounds only the texels the comparison's
+  UV coverage mask marks covered (bound scope `covered`, `max_abs_diff` 0): the texels outside it
+  are the ones the entry excepts. Without a mask, or with no covered texel, it covers nothing.
 - Diagnostics are computed and reported; they never grant a pass on their own.
 
 Envelope (decisions 034, 037; CONTRACT.md §6.5):
@@ -101,7 +104,9 @@ class Comparison:
 
     `oracle_stable` is the oracle-stability result of the golden (its recordings are equal).
     `exact_target` marks, for an unstable oracle, the comparison against the same-session
-    recording r1 (decision 032).
+    recording r1 (decision 032). `covered` is the UV coverage mask of a texture map, rows by
+    columns of its first two axes (`tools/parity/coverage.py`), for entries bounding the covered
+    texels only (decision 223); None when the comparison has none.
 
     `envelope_id` is the envelope of the golden compared against (`ResolvedGolden.envelope_id`);
     None means the caller resolved the golden through the current envelope. `oracle_side` marks
@@ -121,6 +126,7 @@ class Comparison:
     oracle_side: bool = False
     golden_environment: Mapping[str, Any] | None = None
     candidate_environment: Mapping[str, Any] | None = None
+    covered: npt.NDArray[np.bool_] | None = None
 
 
 def _flat(values: Values) -> npt.NDArray[Any]:
@@ -189,6 +195,13 @@ def _bound_holds(
     limit = float(bound["max"])
     if bound["scope"] == "whole":
         return metric in metrics and metrics[metric] <= limit
+    if bound["scope"] == "covered":
+        covered = comparison.covered
+        oracle = np.asarray(comparison.oracle)
+        if covered is None or covered.shape != oracle.shape[:2] or not covered.any():
+            return False
+        inside = diagnose(oracle[covered], np.asarray(comparison.candidate)[covered]).metrics()
+        return metric in inside and inside[metric] <= limit
     regions = comparison.region_metrics
     return bool(regions) and all(
         metric in values and values[metric] <= limit for values in regions.values()
