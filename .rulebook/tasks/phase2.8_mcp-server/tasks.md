@@ -30,3 +30,7 @@
   - `tests/supervisor/test_supervisor_transports.py`: stdio frames under logging load; schema, reference and key refusals; roots with a junction, `file:///` and `\\?\`; `run_python` opt-in and partial changes; HTTP Origin, Host and bearer refusals, the bind usage errors, a reconnect keeping lease and job state, and a clean Ctrl+Break.
   - `test_registry.py`, `test_roots.py` and `test_transport_http.py` (pure Python).
   - These cover the HTTP reconnect of 3.3 here and the out-of-root path of 3.4.
+- phase2.6_mcp-typed-tool-families (decisions 164, 165; tasks.md §6 there). Its §3 tests are green on Vulkan workers with Python disabled:
+  - `tests/supervisor/test_typed_tools.py`: every family listed with its capability status; the stack edit with its receipts; Project, Texture sets, Resources, Stack, Export, Mesh and Render (the downscaled capture block); LAY-06 through MCP; LAY-07 through `sync_stack`; `batch` stop-on-error with per-call results; long tools with and without `wait`; `busy` and `wait_idle`; the gap families refused before admission, also on the worker's own pipe; the resources and prompts.
+  - `tests/supervisor/test_registry.py` (pure Python): the argument-value gate failing closed, `status`, `capabilities`, `batch` keys, the image block, the resources.
+  - These cover 3.6 here: `uzpainter://capabilities` lists every unavailable family and gated value as a gap.

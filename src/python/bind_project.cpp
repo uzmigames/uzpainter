@@ -22,6 +22,7 @@
 #include "mesh/mesh_import.h"
 #include "mesh/reload.h"
 #include "python/bindings.h"
+#include "python/edits.h"
 #include "python/errors.h"
 #include "python/recipe.h"
 
@@ -48,49 +49,9 @@ CallResult ReloadMesh(const std::string& mesh_file_path, std::optional<bool> imp
     if (Session::Get().TransactionOpen()) {
         throw ApiError("RuntimeError", "reload_mesh replaces the committed mesh: commit the open Transaction first");
     }
-    const std::shared_ptr<OpenProject> project = Session::Get().Current();
-    const std::filesystem::path path = PathOf(mesh_file_path);
-    std::ifstream file(path, std::ios::binary);
-    if (!file) ThrowProjectError("cannot read " + mesh_file_path);
-    const std::string bytes{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-
-    const evaluator::TemplateLibrary templates =
-        evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
-    // Texture sets the reload adds start from the project's template.
-    const std::string template_id = project->document->snapshot().project->settings.template_id;
-    const evaluator::ProjectTemplate* fresh = templates.Find(template_id);
-    if (fresh == nullptr) throw ApiError("RuntimeError", "the project template '" + template_id + "' is not installed");
-    mesh::ReloadSettings settings;
-    settings.import.mesh_unit_scale = project->document->snapshot().project->settings.mesh_unit_scale;
-    settings.material_mapping = material_mapping;
-    settings.new_set_channels = fresh->StackChannels();
-
-    store::ProjectStore* store = project->store.get();
-    const mesh::ResourceReader read = [store](const std::string& sha256) { return store->ReadResource(sha256); };
-    const mesh::MeshSource source{Utf8(std::filesystem::absolute(path)), NowUtc()};
-    core::json::Object arguments{{"mesh", Utf8(path.filename())}};
-    if (import_cameras) arguments["import_cameras"] = *import_cameras;
-    CallResult result = Mutate("project.reload_mesh", std::move(arguments), [&](core::Edit& edit) {
-        // A project written before a glTF's external files were stored, whose files are gone, has
-        // a mesh that cannot be re-derived: the reload replaces it without the comparison.
-        std::optional<mesh::ImportResult> current;
-        std::string unavailable;
-        try {
-            current = mesh::RederiveMesh(edit.base(), read);
-        } catch (const mesh::MeshFileMissing& missing) {
-            unavailable = missing.what();
-        }
-        const mesh::ImportResult next =
-            mesh::ImportMesh(bytes, Utf8(path.filename()), settings.import, path.parent_path());
-        store->StageResource(bytes, std::string(mesh::MimeOf(next.format)));
-        for (const mesh::ExternalFile& external : next.external_files) {
-            store->StageResource(external.bytes, std::string(mesh::kExternalFileMime));
-        }
-        if (current) mesh::ApplyReload(edit, *current, next, source, settings);
-        else mesh::ApplyReloadWithoutCurrent(edit, next, source, settings, unavailable);
-        if (import_cameras) edit.project().settings.import_cameras = *import_cameras;
-    });
-    project->mesh_path = Utf8(path);
+    const MeshReloadCall reload(mesh_file_path, import_cameras, material_mapping);
+    CallResult result = Mutate("project.reload_mesh", reload.arguments(), [&](core::Edit& edit) { reload.Apply(edit); });
+    reload.Finish();
     return result;
 }
 

@@ -66,6 +66,15 @@ struct CreateSettings {
     std::optional<std::string> template_id;
 };
 
+/// What the typed MCP tool `project_create` adds to `Session::Create` (decision 164).
+struct CreateCall {
+    /// The request the creating transaction decides and records in the new project's first
+    /// transaction: the client's key and original precondition; a fresh key when absent.
+    std::optional<core::MutationRequest> request;
+    /// Runs inside the creating transaction, after the texture sets are created.
+    std::function<void(core::Edit&, store::ProjectStore&)> extra;
+};
+
 /// The open project.
 struct OpenProject {
     std::unique_ptr<store::ProjectStore> store;
@@ -100,9 +109,12 @@ public:
     static Session& Get();
 
     // ── Lifecycle (`uzpainter.project`) ───────────────────────────────────────────────────────
-    /// Imports the mesh and creates an untitled project with one texture set per material.
-    /// `ProjectError` when a project is open; mesh refusals as `mesh::ImportError`.
-    void Create(const std::filesystem::path& mesh_path, const CreateSettings& settings);
+    /// Imports the mesh and creates an untitled project with one texture set per material, in
+    /// one transaction (`call`: its request and an extra edit); returns that transaction's result.
+    /// `ProjectError` when a project is open; mesh refusals as `mesh::ImportError`; a refused or
+    /// failed transaction raises as `Mutate` does, and no project is opened.
+    core::TransactionResult Create(const std::filesystem::path& mesh_path, const CreateSettings& settings,
+                                   const CreateCall& call = {});
     /// `ProjectError` when a project is open or the file cannot be opened. `untitled`: `path` is
     /// the store of an untitled project (`<untitled folder>/Untitled.uzp`) left by a worker that
     /// died; it is reopened as that untitled project (no file path, the folder removed on close),
@@ -124,6 +136,11 @@ public:
     void SaveAsCopy(const std::filesystem::path& path);
     /// Appends a revision whose project is the one of `revision` (or the checkpoint `name`).
     CallResult Revert(std::optional<std::int64_t> revision, const std::string& checkpoint);
+    /// The revert of the typed tool `project_revert`: `request` as its client sent it, decided
+    /// against the stored operation rows; returns the decision and, when executed, the result
+    /// (recorded like `Submit`'s).
+    core::RequestOutcome RevertRequest(core::MutationRequest request, std::optional<std::int64_t> revision,
+                                       const std::string& checkpoint);
 
     /// The open project (`ProjectError` when none). Holding it keeps the store and the document
     /// alive across a concurrent `Close`.

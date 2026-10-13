@@ -164,7 +164,8 @@ void Session::RequireNotBusy(const std::string& what) const {
     }
 }
 
-void Session::Create(const std::filesystem::path& mesh_path, const CreateSettings& settings) {
+core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, const CreateSettings& settings,
+                                        const CreateCall& call) {
     if (IsOpen()) ThrowProjectError("a project is already open");
     if (settings.workflow && *settings.workflow != core::ProjectWorkflow::Default) {
         ThrowNotYetSupported("project workflow " + std::string(core::ToString(*settings.workflow)) +
@@ -219,9 +220,12 @@ void Session::Create(const std::filesystem::path& mesh_path, const CreateSetting
 
     store::ProjectStore& store = *project->store;
     const std::map<core::ChannelType, core::Channel> channels = fresh->StackChannels();
-    core::MutationRequest request{"project.create",
-                                  core::json::Object{{"mesh", Utf8(mesh_path.filename())}, {"mesh_sha256", imported.sha256}},
-                                  NewKey(), project->document->revision()};
+    core::MutationRequest request =
+        call.request ? *call.request
+                     : core::MutationRequest{"project.create",
+                                             core::json::Object{{"mesh", Utf8(mesh_path.filename())},
+                                                                {"mesh_sha256", imported.sha256}},
+                                             NewKey(), project->document->revision()};
     std::exception_ptr error;
     const core::RequestOutcome outcome = store.Submit(*project->document, request, [&](core::Edit& edit) {
         try {
@@ -230,12 +234,14 @@ void Session::Create(const std::filesystem::path& mesh_path, const CreateSetting
                 store.StageResource(file.bytes, std::string(mesh::kExternalFileMime));
             }
             mesh::CreateTextureSets(edit, imported, mesh::MeshSource{mesh_source, NowUtc()}, channels);
+            if (call.extra) call.extra(edit, store);
         } catch (...) {
             error = std::current_exception();
             throw;
         }
     });
-    Record(FromResult(Settle(outcome, error)));
+    core::TransactionResult result = Settle(outcome, error);
+    Record(FromResult(result));
     SetActiveDefault(*project);
     {
         std::lock_guard lock(mutex_);
@@ -243,6 +249,7 @@ void Session::Create(const std::filesystem::path& mesh_path, const CreateSetting
         current_ = std::move(project);
     }
     NotifyDurableChange();
+    return result;
 }
 
 void Session::Open(const std::filesystem::path& path, bool untitled) {
@@ -408,6 +415,16 @@ CallResult Session::Revert(std::optional<std::int64_t> revision, const std::stri
     CallResult result = FromResult(Settle(outcome, nullptr));
     Record(result);
     return result;
+}
+
+core::RequestOutcome Session::RevertRequest(core::MutationRequest request, std::optional<std::int64_t> revision,
+                                            const std::string& checkpoint) {
+    const std::shared_ptr<OpenProject> project = Current();
+    if (Thread().transaction) throw ApiError("RuntimeError", "a typed tool call inside an open Transaction");
+    core::RequestOutcome outcome = revision ? project->store->Revert(*project->document, request, *revision)
+                                            : project->store->Revert(*project->document, request, checkpoint);
+    if (outcome.result) Record(FromResult(*outcome.result));
+    return outcome;
 }
 
 std::optional<std::filesystem::path> Session::FilePath() const {

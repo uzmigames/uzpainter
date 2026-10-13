@@ -13,6 +13,7 @@ Task `phase1.19_pyapi-native-module` (child of `phase1.24_python-api-facade`, P1
 | `jobs.{h,cpp}` | Worker jobs: one worker thread, `Job.wait` / `cancel`, `BusyError` checks; paused while engine computations are disabled. |
 | `dispatcher.{h,cpp}` | The Python dispatcher thread of `02-runtime-topology.md` §4 (§6 below). |
 | `stack_sync.{h,cpp}` | The `sync_stack` composite (LAY-07), `RemoveNode`, `ImportResource`. |
+| `edits.{h,cpp}` | The native edits the bindings and the worker's typed MCP tools share (decision 164): channel checks, fills, sources, blending, LAY-06 insertion with the insert defaults, levels, texture sets and channels, mesh-map binding, resource import and replacement, the mesh reload (`MeshReloadCall`). An API call submits them with a fresh key (`Mutate`), a typed tool with its client's key (`Submit`). |
 | `script.{h,cpp}` | `RunScript`: a script file as `__main__`, its `result`, output (captured until the dispatcher drained), error, and the revisions it committed. |
 | `run.{h,cpp}` | `UzPainter.exe run` (§7): the arguments, the interpreter, `RunScript`, one `UZP_JSON:` report line, the exit status. |
 | `capabilities.{h,cpp}` | `UzPainter.exe capabilities` and `uzpainter.capabilities` (§7). |
@@ -130,7 +131,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 
 Every node it builds starts with the insert defaults of §3, as the script's inserted nodes do, so it builds the document `painter_layer_stack.py sync` builds through the facade (decision 115; compared node for node in `tests/adapters/assets3d`).
 
-The result's `returned["sync"]` lists the groups, layers, imported and skipped images, deleted and hidden nodes. The JSON fields and their channels are documented in `stack_sync.h`.
+The result's `returned["sync"]` lists the groups, layers, imported and skipped images, deleted and hidden nodes. The JSON fields and their channels are documented in `stack_sync.h`. The MCP `sync_stack` also names the imported entries `<resource_prefix><name>` in a `resource_group` (`SyncOptions`, decision 164); the API call keeps the image names.
 
 ## 5. Tests
 

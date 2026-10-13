@@ -74,6 +74,12 @@ struct SyncOptions {
     core::Id texture_set = core::kNoId;
     core::Id stack = core::kNoId;
     std::vector<std::string> keep_visible;
+    /// The resource entry of the image `<name>` is named `<resource_prefix><name>` and carries
+    /// `resource_group` as its group when one is given (`painter_layer_stack.py sync
+    /// --resource-prefix --resource-group`; the MCP `sync_stack`, decision 164). The reports list
+    /// image names.
+    std::string resource_prefix;
+    std::optional<std::string> resource_group;
 };
 
 /// Rebuilds the stack's group (see above) inside `edit`; returns

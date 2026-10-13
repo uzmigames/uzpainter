@@ -1,0 +1,14 @@
+{
+  "id": 165,
+  "slug": "the-supervisor-serves-status-capabilities-batch-resources-and-prompts-and-builds-capture-s-image-block-with-a-native-downscale-helper",
+  "title": "The supervisor serves status, capabilities, batch, resources and prompts, and builds capture's image block with a native downscale helper",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.5_mcp-transport-registry",
+    "phase2.2_preview-capture",
+    "phase2.8_mcp-server"
+  ],
+  "supersededBy": null
+}

@@ -217,6 +217,7 @@ const pyapi_sources = [_][]const u8{
     "python/diagnostics.cpp",
     "python/dispatcher.cpp",
     "python/display.cpp",
+    "python/edits.cpp",
     "python/errors.cpp",
     "python/jobs.cpp",
     "python/recipe.cpp",
@@ -231,9 +232,12 @@ const pyapi_sources = [_][]const u8{
 /// `UZP_WORKER_FAULT_HOOKS` is defined, which only a Debug build does (decision 120).
 const supervisor_sources = [_][]const u8{
     "supervisor/fault_hooks.cpp",
+    "supervisor/image_block.cpp",
     "supervisor/ipc.cpp",
     "supervisor/pipe.cpp",
     "supervisor/supervisor.cpp",
+    "supervisor/tools.cpp",
+    "supervisor/typed_tools.cpp",
     "supervisor/worker.cpp",
 };
 

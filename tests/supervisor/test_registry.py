@@ -1,5 +1,8 @@
 """The MCP tool registry (python/uzpainter_supervisor/registry.py; task
-phase2.5_mcp-transport-registry items 2.1, 2.4-2.7, 2.9, 3.3, 3.6; decisions 158, 159).
+phase2.5_mcp-transport-registry items 2.1, 2.4-2.7, 2.9, 3.3, 3.6; decisions 158, 159), and the
+supervisor's typed-tool additions of phase2.6_mcp-typed-tool-families (argument-value capability
+gates, `status`, `capabilities`, `batch`, the capture image block, the resources and prompts;
+decisions 164, 165).
 
 Pure Python: the worker is a stand-in that lists tools and records every frame it is sent, so a
 refusal "before admission" is checked as no `tools/call` frame for the tool and no ledger job. The
@@ -10,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -21,13 +25,14 @@ from python.uzpainter_supervisor.admission import Admission, contract
 from python.uzpainter_supervisor.ledger import Ledger
 from python.uzpainter_supervisor.registry import (
     CAPABILITY_META_KEY,
-    IMAGE_LIMIT,
+    IMAGE_EDGE,
     Client,
     Manifest,
     ManifestError,
     Registry,
     summary,
 )
+from python.uzpainter_supervisor.resources import PROMPTS, RESOURCES, ResourceError, Resources
 from python.uzpainter_supervisor.roots import OUTSIDE, Roots
 
 UUID = "6f1c2a6e-0000-4000-8000-000000000002"
@@ -151,9 +156,50 @@ TOOLS: list[dict[str, Any]] = [
         "commit_point": None,
         "capability": [],
     },
+    {
+        "name": "layer_insert",
+        "description": "Inserts a layer; its kind decides the operation.",
+        "inputSchema": schema(
+            {
+                "kind": {
+                    "type": "string",
+                    "enum": ["fill", "paint", "group"],
+                    "x-uzpainter-capability": {
+                        "fill": [{"symbol": "substance_painter.layerstack.insert_fill"}],
+                        "paint": [{"symbol": "substance_painter.layerstack.insert_paint"}],
+                    },
+                },
+                "params": schema(
+                    {
+                        "geometry_mask": {
+                            "type": "object",
+                            "x-uzpainter-capability": {
+                                "*": [{"symbol": "substance_painter.layerstack.set_geometry_mask"}]
+                            },
+                        }
+                    },
+                    [],
+                ),
+            },
+            ["kind"],
+        ),
+        "mutating": True,
+        "long": False,
+        "commit_point": None,
+        "capability": [],
+    },
+    {
+        "name": "resource_list",
+        "description": "A project read.",
+        "inputSchema": schema({}, []),
+        "mutating": False,
+        "long": False,
+        "commit_point": None,
+        "capability": [],
+    },
 ]
 
-MANIFEST = {
+MANIFEST: dict[str, Any] = {
     "entries": [
         {
             "symbol": "substance_painter.textureset.TextureSet.set_resolution",
@@ -167,7 +213,24 @@ MANIFEST = {
             "status": "release-gap",
             "notes": "owner phase3.4_baker-ao",
         },
-    ]
+        {
+            "symbol": "substance_painter.layerstack.insert_fill",
+            "context": "any",
+            "status": "supported",
+        },
+        {
+            "symbol": "substance_painter.layerstack.insert_paint",
+            "context": "any",
+            "status": "release-gap",
+        },
+        {
+            "symbol": "substance_painter.layerstack.set_geometry_mask",
+            "context": "any",
+            "status": "release-gap",
+        },
+        {"symbol": "uzpainter.assets.search", "context": "any", "status": "release-gap"},
+    ],
+    "compat_profile": "painter-12.1.0",
 }
 
 SNAPSHOT = {
@@ -208,7 +271,13 @@ class FakeWorker:
         return None
 
     def status(self) -> dict[str, Any]:
-        return {"project": self.project_path, "crash_dir": "C:/Temp/crashes"}
+        return {
+            "project": self.project_path,
+            "project_uuid": self.project_uuid,
+            "revision": self.durable_revision,
+            "build": "test",
+            "crash_dir": "C:/Temp/crashes",
+        }
 
     async def request(self, frame: dict[str, Any]) -> dict[str, Any]:
         self.frames.append(frame)
@@ -224,6 +293,17 @@ class FakeWorker:
                     "horizon_revision": 0,
                     "operations": [],
                     "unreadable": [],
+                },
+            }
+        if method == "worker/manifest":
+            if self.project_uuid is None:
+                return {"id": "x", "result": {"project_uuid": None}}
+            return {
+                "id": "x",
+                "result": {
+                    "project_uuid": UUID,
+                    "revision": self.durable_revision,
+                    "manifest": {"project_path": "D:/elsewhere/plane.uzp", "texture_sets": []},
                 },
             }
         if frame["name"] == "snapshot_layer_tree":
@@ -269,6 +349,7 @@ def make(
     http: bool = False,
     roots: Roots | None = None,
     manifest: dict[str, Any] | None = None,
+    thumbnail: Any = None,
 ) -> tuple[FakeWorker, Ledger, Registry]:
     worker = FakeWorker(open_project)
     ledger = Ledger(tmp_path / "ledger.sqlite3")
@@ -279,6 +360,9 @@ def make(
         Manifest.from_document(manifest or MANIFEST),
         roots=roots,
         http=http,
+        thumbnail=thumbnail,
+        build="test-build",
+        protocol="uzp-ipc/1",
     )
     return worker, ledger, registry
 
@@ -493,27 +577,199 @@ def test_results_carry_the_contract_fields_and_a_one_line_summary(tmp_path: Path
     assert summary("x", {"result": {}}) == "x: ok"
 
 
+def png_header(width: int, height: int) -> bytes:
+    """The first bytes of a PNG of `width` x `height` (its signature and IHDR)."""
+    signature = bytes([0x89]) + b"PNG\r\n\x1a\n"
+    size = width.to_bytes(4, "big") + height.to_bytes(4, "big")
+    return signature + (13).to_bytes(4, "big") + b"IHDR" + size + bytes(5)
+
+
 def test_images_are_content_blocks_only_for_capture(tmp_path: Path) -> None:
-    """2.4: `capture`'s PNG (its receipt's `files.png`) becomes an image content block, unless it
-    is over the limit (a warning then says so); another tool's PNG never does."""
-    worker, _, registry = make(tmp_path)
+    """2.4, phase2.6 2.6 (decision 165): `capture`'s PNG (its receipt's `files.png`) becomes an
+    image content block built by the image helper (at most IMAGE_EDGE on the long edge), described
+    by `image`; a block that cannot be built leaves the capture answered, with `image.built`
+    false and a warning; another tool's PNG never becomes a block."""
+    seen: list[tuple[bytes, int]] = []
+
+    def thumbnail(png: bytes, edge: int) -> bytes:
+        seen.append((png, edge))
+        if png.startswith(b"bad"):
+            raise ValueError("the file is not a PNG")
+        return png_header(edge, edge // 2)
+
+    worker, _, registry = make(tmp_path, thumbnail=thumbnail)
     png = tmp_path / "shot.png"
-    png.write_bytes(bytes([0x89]) + b"PNG" + bytes([13, 10, 26, 10]) + b"small")
+    png.write_bytes(png_header(2048, 1024))
     worker.reply = {"result": {"files": {"png": str(png)}}}
     captured = run(registry.call("capture", {}, STDIO, None))
-    assert captured.images == [{"mimeType": "image/png", "data": "iVBORw0KGgpzbWFsbA=="}]
+    [block] = captured.images
+    assert block["mimeType"] == "image/png" and seen == [(png.read_bytes(), IMAGE_EDGE)]
+    image = captured.body["image"]
+    assert image["built"] is True and (image["width"], image["height"]) == (IMAGE_EDGE, 256)
+    assert image["source_sha256"] == hashlib.sha256(png.read_bytes()).hexdigest()
     assert captured.body["warnings"] == []
     worker.reply = {"result": {"files": {"png": str(png)}}}
     other = run(registry.call("inspect", {}, STDIO, None))
-    assert other.images == []
-    big = tmp_path / "big.png"
-    big.write_bytes(bytes(IMAGE_LIMIT + 1))
-    worker.reply = {"result": {"files": {"png": str(big)}}}
-    over = run(registry.call("capture", {}, STDIO, None))
-    assert over.images == [] and "over the" in over.body["warnings"][0]
+    assert other.images == [] and "image" not in other.body
+    bad = tmp_path / "bad.png"
+    bad.write_bytes(b"bad")
+    worker.reply = {"result": {"files": {"png": str(bad)}}}
+    refused = run(registry.call("capture", {}, STDIO, None))
+    assert refused.images == [] and refused.body["image"]["built"] is False
+    assert "not a PNG" in refused.body["warnings"][0] and "error" not in refused.body
     worker.reply = {"result": {"files": {"png": str(tmp_path / "missing.png")}}}
     missing = run(registry.call("capture", {}, STDIO, None))
     assert missing.images == [] and "could not be read" in missing.body["warnings"][0]
+    bare_worker, _, bare = make(tmp_path / "bare")
+    bare_worker.reply = {"result": {"files": {"png": str(png)}}}
+    unbuilt = run(bare.call("capture", {}, STDIO, None))
+    assert unbuilt.images == []
+    assert unbuilt.body["image"]["reason"] == "this supervisor has no image helper"
+
+
+def test_argument_values_gate_capabilities_and_fail_closed(tmp_path: Path) -> None:
+    """phase2.6 2.10, 3.5 (decision 164): `x-uzpainter-capability` adds the operations of the
+    value given; a release gap among them fails `capability_gap` before admission, naming the
+    argument and the value; an unlisted value is a gap; the listing carries each value's status."""
+    worker, ledger, registry = make(tmp_path)
+    listed = {tool["name"]: tool for tool in run(registry.list_tools())}
+    values = {
+        (v["argument"], v["value"]): v["status"]
+        for v in listed["layer_insert"]["meta"][CAPABILITY_META_KEY]["values"]
+    }
+    assert values == {
+        ("/kind", "fill"): "available",
+        ("/kind", "paint"): "release-gap",
+        ("/params/geometry_mask", "*"): "release-gap",
+    }
+    paint = run(registry.call("layer_insert", {"kind": "paint"}, STDIO, None)).body
+    assert paint["error"]["code"] == "capability_gap"
+    [operation] = paint["error"]["details"]["operations"]
+    assert operation["argument"] == "/kind" and operation["value"] == "paint"
+    assert operation["symbol"] == "substance_painter.layerstack.insert_paint"
+    group = run(registry.call("layer_insert", {"kind": "group"}, STDIO, None)).body
+    assert group["error"]["code"] == "capability_gap"  # unlisted: fails closed
+    mask = {"kind": "fill", "params": {"geometry_mask": {}}}
+    masked = run(registry.call("layer_insert", mask, STDIO, None)).body
+    assert masked["error"]["details"]["operations"][0]["argument"] == "/params/geometry_mask"
+    assert tool_calls(worker) == [] and jobs(ledger) == 0
+    fill = run(registry.call("layer_insert", {"kind": "fill"}, STDIO, None)).body
+    assert fill["result"]["status"] == "committed" and len(tool_calls(worker)) == 1
+    invalid = run(registry.call("layer_insert", {"kind": "brush"}, STDIO, None)).body
+    assert invalid["error"]["code"] == "invalid_arguments"  # the schema comes first
+
+
+def test_batch_runs_calls_in_order_with_per_call_results(tmp_path: Path) -> None:
+    """phase2.6 2.4, 3.4 (INT-06, decision 165): each call runs through every check and its own
+    admission; with stop_on_error the calls after the first failure are not executed; without it
+    every call runs; a nested batch is refused; a batch key gives each mutating call `<key>/<n>`
+    and the revision current at its admission, so a retried batch replays."""
+    worker, ledger, registry = make(tmp_path)
+    calls = [
+        {"tool": "layer_set", "arguments": {"uid": 10}},
+        {"tool": "layer_set", "arguments": {"uid": 999}},  # a dangling reference
+        {"tool": "layer_set", "arguments": {"uid": 11}},
+    ]
+    stopped = run(registry.call("batch", {"calls": calls}, STDIO, None)).body["result"]
+    assert stopped["status"] == "stopped" and (stopped["executed"], stopped["failed"]) == (2, 1)
+    first, second, third = stopped["results"]
+    assert first["status"] == "succeeded" and first["body"]["committed_revision"] == 6
+    assert second["status"] == "failed"
+    assert second["body"]["error"]["details"]["errors"][0]["reason"] == "dangling_reference"
+    assert third == {"index": 2, "tool": "layer_set", "status": "not_executed"}
+    assert len(tool_calls(worker, "layer_set")) == 1 and jobs(ledger) == 1
+
+    every = run(registry.call("batch", {"calls": calls, "stop_on_error": False}, STDIO, None))
+    result = every.body["result"]
+    assert result["status"] == "completed_with_errors" and result["executed"] == 3
+    assert every.body["committed_revision"] == 8
+
+    nested = [{"tool": "batch", "arguments": {"calls": calls}}]
+    refused = run(registry.call("batch", {"calls": nested}, STDIO, None)).body["result"]
+    assert refused["results"][0]["body"]["error"]["code"] == "invalid_arguments"
+
+    keyed = {"calls": calls[:1] + calls[2:], "idempotency_key": "b-1"}
+    done = run(registry.call("batch", keyed, STDIO, None)).body["result"]
+    assert done["status"] == "completed"
+    receipts = [row["body"]["receipt"] for row in done["results"]]
+    assert [r["idempotency_key"] for r in receipts] == ["b-1/0", "b-1/1"]
+    assert [r["expected_revision"] for r in receipts] == [8, 9]
+    assert {r["key_source"] for r in receipts} == {"client"}
+
+
+def test_status_and_capabilities_tools(tmp_path: Path) -> None:
+    """phase2.6 2.1: `status` names the versions, profile, project, revision, busy jobs and lease;
+    `capabilities` summarises the manifest and lists each tool's gaps."""
+    _, _, registry = make(tmp_path)
+    status = run(registry.call("status", {}, STDIO, None)).body["result"]
+    assert status["versions"] == {
+        "worker_build": "test",
+        "supervisor_build": "test-build",
+        "protocol": "uzp-ipc/1",
+    }
+    assert status["compat_profile"] == "painter-12.1.0"
+    assert status["project"]["project_uuid"] == UUID and status["revision"] == 5
+    assert status["busy"] == [] and status["lease"] is None
+    capabilities = run(registry.call("capabilities", {}, STDIO, None)).body["result"]
+    assert capabilities["entries"] == {"supported": 3, "release-gap": 4}
+    tools = {row["tool"]: row for row in capabilities["tools"]}
+    assert tools["bake_start"]["status"] == "release-gap" and "bake_start" in capabilities["gaps"]
+    assert tools["layer_insert"]["status"] == "available"
+    assert {(g["argument"], g["value"]) for g in tools["layer_insert"]["value_gaps"]} == {
+        ("/kind", "paint"),
+        ("/params/geometry_mask", "*"),
+    }
+
+
+def test_resources_and_prompts_read_through_the_registry(tmp_path: Path) -> None:
+    """phase2.6 2.9, 3.6 (decision 165): each resource reads through the registry with its
+    project identity, paths scrubbed under the roots; no project or an unknown URI is an error;
+    the four prompts are listed and carry a JSON template."""
+    export = tmp_path / "export"
+    export.mkdir()
+    worker, _, registry = make(tmp_path, roots=Roots.parse(f"export={export}"))
+    resources = Resources(registry)
+    assert [r.uri for r in RESOURCES] == [
+        "uzpainter://capabilities",
+        "uzpainter://project/manifest",
+        "uzpainter://project/recipe",
+        "uzpainter://project/layers",
+        "uzpainter://project/resources",
+        "uzpainter://assets/parity",
+        "uzpainter://ledger",
+    ]
+    capabilities = run(resources.read("uzpainter://capabilities", STDIO))
+    assert capabilities["compat_profile"] == "painter-12.1.0"
+    assert len(capabilities["entries"]) == len(MANIFEST["entries"])
+    manifest = run(resources.read("uzpainter://project/manifest", STDIO))
+    assert manifest["project_uuid"] == UUID and manifest["revision"] == 5
+    assert manifest["manifest"]["project_path"] == OUTSIDE
+    listed = run(resources.read("uzpainter://project/resources", STDIO))
+    assert listed["revision"] == 5 and listed["content"] == {"arguments": {}}
+    parity = run(resources.read("uzpainter://assets/parity", STDIO))
+    assert parity["assets"] == [] and parity["status"] == "release-gap"
+    run(registry.call("layer_set", {"uid": 10}, STDIO, None))
+    ledger = run(resources.read("uzpainter://ledger", STDIO))
+    [job] = ledger["jobs"]
+    assert run(resources.read(f"uzpainter://jobs/{job['job_id']}", STDIO))["tool"] == "layer_set"
+    for uri in ("uzpainter://jobs/none", "uzpainter://unknown"):
+        with pytest.raises(ResourceError):
+            run(resources.read(uri, STDIO))
+    worker.project_uuid = None
+    with pytest.raises(ResourceError, match="no project is open"):
+        run(resources.read("uzpainter://project/manifest", STDIO))
+    assert {p.name for p in PROMPTS} == {
+        "stack_json_template",
+        "smart_json_template",
+        "baking_preset_template",
+        "export_config_template",
+    }
+    for prompt in PROMPTS:
+        template = prompt.text.split("```json\n", 1)[1].split("\n```", 1)[0]
+        assert isinstance(json.loads(template), dict), prompt.name
+    assert Resources.prompt("export_config_template").name == "export_config_template"
+    with pytest.raises(ResourceError):
+        Resources.prompt("none")
 
 
 def test_http_lease_is_explicit_and_survives_a_reconnect(tmp_path: Path) -> None:

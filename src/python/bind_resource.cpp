@@ -15,9 +15,8 @@
 #include <set>
 
 #include "python/bindings.h"
-#include "python/display.h"
+#include "python/edits.h"
 #include "python/errors.h"
-#include "python/stack_sync.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/resource_url.h"
 
@@ -25,74 +24,13 @@ namespace uzp::python {
 
 namespace {
 
-enum class Usage { TEXTURE, ENVIRONMENT, COLOR_LUT, GENERATOR, SMART_MATERIAL };
+using Usage = ResourceUsage;
 
 struct ResourceHandle {
     ResourceIdHandle id;
     std::string usage;
 };
 
-std::string Lower(std::string text) {
-    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return text;
-}
-
-
-/// The bitmap source of `node` for `channel` (None: the mono source of a mask-stack fill).
-core::BitmapSource& EditBitmap(core::Edit& edit, core::Id uid, const std::optional<core::ChannelType>& channel) {
-    core::FillContent* fill = nullptr;
-    bool mask = false;
-    if (core::Layer* layer = core::FindLayer(edit.project(), uid)) {
-        if (layer->fill) fill = &*layer->fill;
-    } else if (core::Effect* effect = core::FindEffect(edit.project(), uid)) {
-        if (effect->fill) fill = &*effect->fill;
-        mask = effect->mono_blending.has_value();
-    } else {
-        throw core::ValueError("stale handle: node " + std::to_string(uid) + " no longer exists");
-    }
-    if (fill == nullptr) throw core::ValueError("node " + std::to_string(uid) + " is not a fill: it has no resource source");
-    core::Source* source = nullptr;
-    if (mask) {
-        if (channel) throw core::ValueError("a mask-stack fill takes no channel (None)");
-        if (fill->mono_source) source = &*fill->mono_source;
-    } else {
-        if (!channel) ThrowEditionContext("node " + std::to_string(uid) + " is multichannel: give the channel");
-        const auto it = fill->sources.find(*channel);
-        if (it != fill->sources.end()) source = &it->second;
-    }
-    if (source == nullptr || source->kind() != core::SourceKind::bitmap) {
-        throw core::ValueError("node " + std::to_string(uid) + " has no bitmap source" +
-                               (channel ? " on " + std::string(core::ToString(*channel)) : std::string()));
-    }
-    return std::get<core::BitmapSource>(source->value);
-}
-
-/// Every fill of `layers` whose sources bind `sha256`, rebound to `replacement`; their uids.
-void Rebind(std::vector<core::Layer>& layers, const std::string& sha256, const std::string& replacement,
-            std::vector<core::Id>& nodes) {
-    const auto rebind = [&](std::optional<core::FillContent>& fill, core::Id uid) {
-        if (!fill) return;
-        bool changed = false;
-        const auto visit = [&](core::Source& source) {
-            if (source.kind() != core::SourceKind::bitmap) return;
-            auto& bitmap = std::get<core::BitmapSource>(source.value);
-            if (bitmap.resource.sha256 != sha256) return;
-            bitmap.resource.sha256 = replacement;
-            changed = true;
-        };
-        for (auto& [channel, source] : fill->sources) visit(source);
-        if (fill->mono_source) visit(*fill->mono_source);
-        if (changed) nodes.push_back(uid);
-    };
-    for (core::Layer& layer : layers) {
-        rebind(layer.fill, layer.uid);
-        for (core::Effect& effect : layer.content_effects) rebind(effect.fill, effect.uid);
-        if (layer.mask) {
-            for (core::Effect& effect : layer.mask->effects) rebind(effect.fill, effect.uid);
-        }
-        Rebind(layer.children, sha256, replacement, nodes);
-    }
-}
 
 /// The resource hashes the fills and effects of `layers` bind.
 void CollectBound(const std::vector<core::Layer>& layers, std::set<std::string>& hashes) {
@@ -170,52 +108,14 @@ void BindResource(py::module_& m) {
     m.def(
         "import_project_resource",
         [](const std::string& file_path, Usage usage, std::optional<std::string> name, std::optional<std::string> group) {
-            if (usage == Usage::COLOR_LUT) {
-                ApiError error("UnsupportedInUzPainter",
-                               "uzpainter.resource.import_project_resource is not supported in UzPainter: a COLOR_LUT "
-                               "resource; the colour LUT is pinned to none by the fixed render pipeline (decision 038)");
-                error.symbol = "uzpainter.resource.import_project_resource";
-                error.reason = "a COLOR_LUT resource; the colour LUT is pinned to none by the fixed render pipeline "
-                               "(decision 038)";
-                throw error;
-            }
-            if (usage != Usage::TEXTURE && usage != Usage::ENVIRONMENT) {
-                ThrowNotYetSupported("importing a resource of usage GENERATOR or SMART_MATERIAL "
-                                     "(phase3.3_procedural-families)");
-            }
-            const bool environment = usage == Usage::ENVIRONMENT;
-            const std::filesystem::path path = PathFromUtf8(file_path);
-            if (!environment && Lower(Utf8(path.extension())) != ".png") {
-                ThrowNotYetSupported("importing " + Utf8(path.filename()) +
-                                     ": the bitmap decoder of this build reads PNG files only (src/evaluator/sources.h)");
-            }
-            std::ifstream file(path, std::ios::binary);
-            if (!file) ThrowResourceNotFound("cannot read " + file_path);
-            std::string bytes{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-            // An environment is an OpenEXR equirectangular map, stored as its unmodified bytes under
-            // their SHA-256 (RES-03; display.h).
-            if (environment) {
-                if (const std::string problem = display::EnvironmentProblem(bytes); !problem.empty()) {
-                    throw core::ValueError("cannot import " + Utf8(path.filename()) + " as an environment: " + problem);
-                }
-            }
-            const std::string kind = environment ? "ENVIRONMENT" : "TEXTURE";
-            const std::string mime = environment ? "image/x-exr" : "image/png";
-            const std::string entry = name.value_or(Utf8(path.stem()));
+            const ResourceFile file = ReadResourceFile(file_path, usage, name);
             const std::shared_ptr<OpenProject> project = Session::Get().Current();
             std::string sha256;
-            core::json::Object args{{"name", entry}, {"usage", kind}, {"file", Utf8(path.filename())}};
+            core::json::Object args{{"name", file.entry}, {"usage", file.kind}, {"file", file.file_name}};
             if (group) args["group"] = *group;
-            Mutate("resource.import_project_resource", args, [&](core::Edit& edit) {
-                sha256 = ImportResource(edit, *project->store, bytes, entry, mime, kind, Utf8(path));
-                if (group) {
-                    for (core::ResourceMeta& meta : edit.project().resources.at(sha256)) {
-                        // The resource group (Painter's `group` argument) is kept with the entry.
-                        if (meta.name == entry) meta.extra["group"] = *group;
-                    }
-                }
-            });
-            return ResourceHandle{{"project", entry, sha256}, kind};
+            Mutate("resource.import_project_resource", args,
+                   [&](core::Edit& edit) { sha256 = ImportResourceFile(edit, *project->store, file, group); });
+            return ResourceHandle{{"project", file.entry, sha256}, file.kind};
         },
         py::arg("file_path"), py::arg("usage"), py::arg("name") = py::none(), py::arg("group") = py::none());
 
@@ -280,23 +180,7 @@ void BindResource(py::module_& m) {
             Mutate("resource.update_layer_stack_resource",
                    core::json::Object{{"old", old_resource.name + "@" + old_resource.version},
                                       {"new", new_resource.name + "@" + new_resource.version}},
-                   [&](core::Edit& edit) {
-                       const std::string from = ResolveResource(edit.project(), old_resource);
-                       const std::string to = ResolveResource(edit.project(), new_resource);
-                       nodes.clear();
-                       for (core::TextureSet& set : edit.project().texture_sets) {
-                           // Painter also replaces a mesh map's resource; how is unrecorded
-                           // (recording P22-A, decision 112): refused before any change.
-                           for (const auto& [usage, binding] : set.mesh_maps) {
-                               if (binding.resource == from) {
-                                   throw core::NotYetSupported(
-                                       "resource.update_layer_stack_resource: replacing the resource of a mesh map "
-                                       "is a release gap until recording P22-A (phase1.24_python-api-facade)");
-                               }
-                           }
-                           for (core::Stack& stack : set.stacks) Rebind(stack.root_layers, from, to, nodes);
-                       }
-                   });
+                   [&](core::Edit& edit) { nodes = ReplaceLayerStackResource(edit, old_resource, new_resource); });
             py::list handles;
             const auto project = Read();
             for (const core::Id uid : nodes) handles.append(MakeNode(*project, uid));

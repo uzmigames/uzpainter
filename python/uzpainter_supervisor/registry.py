@@ -13,7 +13,10 @@ each refusal comes before admission (no job row, nothing sent to the worker):
    entry changes, with no change here.
 2. **Schema.** The arguments are validated against the tool's public schema (JSON Schema 2020-12:
    types, numeric bounds, enums, required and unknown properties): `invalid_arguments` with each
-   failure's argument and rule, never the value given.
+   failure's argument and rule, never the value given. Then a property marked
+   `x-uzpainter-capability {<value>: [ops], "*": [ops]}` adds the operations of the value given
+   (`*`: of any value) to the tool's, and a release gap among them fails `capability_gap` naming
+   the argument and value; a value the map does not list counts as a gap (phase2.6, decision 164).
 3. **Key and precondition.** A mutating call may omit `expected_revision` only together with
    `idempotency_key`; one with a key and no precondition fails `invalid_arguments` (§4, decision
    158; the worker's pipe still decides such a request for direct pipe clients, decision 138).
@@ -32,10 +35,19 @@ was admitted on), `committed_revision` (the project's committed revision after i
 `changed` (modified or removed), `created`, `hidden`, `imported` and `skipped` (from its transaction
 result, gathered over the calls a script committed, also when it raised) and `warnings`, besides the
 worker's `result` or `error` and the `receipt` (`admission.contract`). The text content is a
-one-line summary. Images are content blocks only for `capture` (`IMAGE_TOOLS`: its PNG, up to
-4 MiB); every other result references files. With
-`--roots`, path-valued fields outside the roots are replaced (`roots.Roots.scrub`), except a
-`run_python` result's own (roots never sandbox it).
+one-line summary. Images are content blocks only for `capture` (`IMAGE_TOOLS`): its PNG decoded and
+averaged down to at most `IMAGE_EDGE` pixels on the long edge by the supervisor's native helper
+(`_uzpainter_image`, decision 165), described by the result's `image {built, ...}`; a capture whose
+block cannot be built still answers, with `image {built: false, reason}` and a warning. Every other
+result references files. With `--roots`, path-valued fields outside the roots are replaced
+(`roots.Roots.scrub`), except a `run_python` result's own (roots never sandbox it).
+
+The supervisor's own tools also include `status`, `capabilities` and `batch` (11 §2; phase2.6,
+decision 165): `batch {calls, stop_on_error, idempotency_key?}` runs each call in order through
+`call` (every check, its own admission, job and transaction; a long call with `wait`), so a batch is
+not atomic; with `stop_on_error` (the default) the calls after the first failure are reported
+`not_executed`. With a batch key, a mutating call without its own key gets `<key>/<index>` and the
+revision current at its admission, so a retried batch returns each committed call's stored outcome.
 """
 
 from __future__ import annotations
@@ -43,9 +55,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import copy
+import hashlib
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -59,11 +73,17 @@ log = logging.getLogger("uzpainter.supervisor")
 
 STATUS_TOOL = "supervisor_status"
 WAIT_IDLE_TOOL = "wait_idle"
+BATCH_TOOL = "batch"
 JOB_LIST_LIMIT = 50
 CAPABILITY_META_KEY = "uzpainter/capability"
 REF_KEYWORD = "x-uzpainter-ref"
+VALUE_CAPABILITY_KEYWORD = "x-uzpainter-capability"
 IMAGE_TOOLS = frozenset({"capture"})
 IMAGE_LIMIT = 4 * 1024 * 1024  # bytes of a PNG attached as an image content block
+IMAGE_EDGE = 512  # the long edge of a capture's image block, in pixels (decision 165)
+IMAGE_SOURCE_LIMIT = 512 * 1024 * 1024  # the largest capture PNG the helper is given
+# The image helper: `(png bytes, max edge) -> png bytes` (`_uzpainter_image.preview_png`).
+Thumbnail = Callable[[bytes, int], bytes]
 OWNER_PATTERN = re.compile(r"^[A-Za-z0-9._@-][A-Za-z0-9._:@-]{0,127}$")
 # The MCP arguments of a mutating tool carry its key and precondition (02 §2); the supervisor
 # lifts them into the pipe request, so the worker's own schema does not list them. Both may be
@@ -109,8 +129,62 @@ OWNER_SCHEMA: dict[str, Any] = {
     "required": ["owner"],
     "additionalProperties": False,
 }
+BATCH_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "calls": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "tool": {"type": "string", "minLength": 1},
+                    "arguments": {"type": "object"},
+                },
+                "required": ["tool"],
+                "additionalProperties": False,
+            },
+            "description": "The calls, run in order, each as a call of its own.",
+        },
+        "stop_on_error": {
+            "type": "boolean",
+            "description": "Stop at the first failed call (the default); the calls after it are "
+            "reported not_executed.",
+        },
+        "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The batch's key: a mutating call without its own key gets "
+            "`<key>/<index>`, so a retried batch returns each committed call's stored outcome.",
+        },
+    },
+    "required": ["calls"],
+    "additionalProperties": False,
+}
 # The supervisor's own tools: description, schema, read-only, HTTP mode only.
 SUPERVISOR_TOOLS: dict[str, tuple[str, dict[str, Any], bool, bool]] = {
+    "status": (
+        "UzPainter's versions and compatibility profile, the worker's backend and Python policy, "
+        "the open project and its committed revision, the running jobs and the project's lease.",
+        EMPTY_SCHEMA,
+        True,
+        False,
+    ),
+    "capabilities": (
+        "The build's capability manifest summarised: each tool's status (available or release-gap) "
+        "with the operations and argument values that are release gaps; uzpainter://capabilities "
+        "holds every manifest entry.",
+        EMPTY_SCHEMA,
+        True,
+        False,
+    ),
+    BATCH_TOOL: (
+        "Runs calls in order, each with every check, its own admission and its own transaction (a "
+        "batch is not atomic); per-call results; stop_on_error stops at the first failure.",
+        BATCH_SCHEMA,
+        False,
+        False,
+    ),
     STATUS_TOOL: (
         "The supervisor's worker: pid, backend, Python policy, project and every recovery with "
         "its cause, minidump and time; the ledger, the project's lease and the running calls.",
@@ -217,6 +291,7 @@ class Manifest:
     """The build's capability manifest: the status of each (symbol, context)."""
 
     statuses: dict[tuple[str, str], tuple[str, str | None]]
+    document: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
     def load(path: Path) -> Manifest:
@@ -243,7 +318,18 @@ class Manifest:
                 raise ManifestError(f"the capability manifest repeats {pair}")
             notes = entry.get("notes")
             statuses[pair] = (entry["status"], notes if isinstance(notes, str) else None)
-        return Manifest(statuses)
+        return Manifest(statuses, document)
+
+    @property
+    def compat_profile(self) -> Any:
+        return self.document.get("compat_profile")
+
+    def counts(self) -> dict[str, int]:
+        """The number of entries of each status."""
+        counts: dict[str, int] = {}
+        for status, _ in self.statuses.values():
+            counts[status] = counts.get(status, 0) + 1
+        return counts
 
     def operations(self, declared: Any) -> list[dict[str, Any]]:
         """Each declared `{symbol, context}` with its status (`release-gap` when unlisted)."""
@@ -264,6 +350,63 @@ class Client:
 
     transport: str  # "stdio" or "http"
     owner: str | None = None
+
+
+def _value_operations(
+    schema: Any, value: Any, pointer: str = ""
+) -> list[tuple[str, str, list[Any]]]:
+    """The `(argument, value, operations)` of each `x-uzpainter-capability` property `value`
+    gives: the map's entry of a string value (`*` for any value); an unlisted value declares an
+    operation no manifest lists, so it is a gap (fail closed)."""
+    found: list[tuple[str, str, list[Any]]] = []
+    if not isinstance(schema, dict) or value is None:
+        return found
+    mapping = schema.get(VALUE_CAPABILITY_KEYWORD)
+    if isinstance(mapping, dict):
+        if "*" in mapping:
+            found.append((pointer or "/", "*", list(mapping["*"])))
+        elif isinstance(value, str):
+            declared = mapping.get(value)
+            if not isinstance(declared, list):
+                declared = [{"symbol": f"<unlisted value of {pointer or '/'}>", "context": "any"}]
+            found.append((pointer or "/", value, declared))
+    properties = schema.get("properties")
+    additional = schema.get("additionalProperties")
+    if isinstance(value, dict):
+        for name, item in value.items():
+            if isinstance(properties, dict) and name in properties:
+                found += _value_operations(properties[name], item, f"{pointer}/{name}")
+            elif isinstance(additional, dict):
+                found += _value_operations(additional, item, f"{pointer}/{name}")
+    items = schema.get("items")
+    if isinstance(value, list) and isinstance(items, dict):
+        for index, item in enumerate(value):
+            found += _value_operations(items, item, f"{pointer}/{index}")
+    return found
+
+
+def _value_maps(schema: Any, pointer: str = "") -> list[tuple[str, dict[str, Any]]]:
+    """The `(argument, map)` of every `x-uzpainter-capability` property of a schema (`*` stands
+    for any member or item)."""
+    found: list[tuple[str, dict[str, Any]]] = []
+    if not isinstance(schema, dict):
+        return found
+    mapping = schema.get(VALUE_CAPABILITY_KEYWORD)
+    if isinstance(mapping, dict):
+        found.append((pointer or "/", mapping))
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        for name, item in properties.items():
+            found += _value_maps(item, f"{pointer}/{name}")
+    for key in ("additionalProperties", "items"):
+        if isinstance(schema.get(key), dict):
+            found += _value_maps(schema[key], f"{pointer}/*")
+    return found
+
+
+def _png_size(data: bytes) -> tuple[int, int]:
+    """The width and height of a PNG (its IHDR)."""
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
 
 
 @dataclass
@@ -379,12 +522,18 @@ class Registry:
         *,
         roots: Roots | None = None,
         http: bool = False,
+        thumbnail: Thumbnail | None = None,
+        build: str = "",
+        protocol: str = "",
     ) -> None:
         self.worker = worker
         self.admission = admission
         self.manifest = manifest
         self.roots = roots
         self.http = http
+        self.thumbnail = thumbnail
+        self.build = build
+        self.protocol = protocol
         self.known: dict[str, dict[str, Any]] = {}
         # The owners HTTP sessions acquired (their leases end when the supervisor does).
         self.owners: set[str] = set()
@@ -420,26 +569,71 @@ class Registry:
             if self.http or not http_only
         ]
         for tool in await self.worker_tools():
-            operations = self.manifest.operations(tool.get("capability"))
-            meta = None
-            if operations:
-                gap = any(operation["status"] == "release-gap" for operation in operations)
-                meta = {
-                    CAPABILITY_META_KEY: {
-                        "status": "release-gap" if gap else "available",
-                        "operations": operations,
-                    }
-                }
+            capability = self._capability(tool)
             tools.append(
                 {
                     "name": tool["name"],
                     "description": tool["description"],
                     "inputSchema": public_schema(tool),
                     "readOnly": not tool["mutating"],
-                    "meta": meta,
+                    "meta": {CAPABILITY_META_KEY: capability} if capability else None,
                 }
             )
         return tools
+
+    def _capability(self, tool: dict[str, Any]) -> dict[str, Any] | None:
+        """`{status, operations, values}` of a worker tool, or None when it declares nothing:
+        `values` lists the status of each argument value an `x-uzpainter-capability` map names."""
+        operations = self.manifest.operations(tool.get("capability"))
+        values = []
+        for argument, mapping in _value_maps(tool.get("inputSchema")):
+            for value, declared in mapping.items():
+                listed = self.manifest.operations(declared)
+                gap = any(operation["status"] == "release-gap" for operation in listed)
+                values.append(
+                    {
+                        "argument": argument,
+                        "value": value,
+                        "status": "release-gap" if gap else "available",
+                        "operations": listed,
+                    }
+                )
+        if not operations and not values:
+            return None
+        gap = any(operation["status"] == "release-gap" for operation in operations)
+        return {
+            "status": "release-gap" if gap else "available",
+            "operations": operations,
+            "values": values,
+        }
+
+    async def capability_table(self) -> list[dict[str, Any]]:
+        """Every worker tool's capability status (`capabilities`, `uzpainter://capabilities`):
+        `{tool, status, gaps, value_gaps}`, the operations and argument values that are gaps."""
+        table = []
+        for tool in await self.worker_tools():
+            capability = self._capability(tool) or {
+                "status": "available",
+                "operations": [],
+                "values": [],
+            }
+            table.append(
+                {
+                    "tool": tool["name"],
+                    "status": capability["status"],
+                    "gaps": [
+                        operation
+                        for operation in capability["operations"]
+                        if operation["status"] == "release-gap"
+                    ],
+                    "value_gaps": [
+                        {"argument": value["argument"], "value": value["value"]}
+                        for value in capability["values"]
+                        if value["status"] == "release-gap"
+                    ],
+                }
+            )
+        return table
 
     # ── Calls ───────────────────────────────────────────────────────────────────────────────
 
@@ -456,7 +650,7 @@ class Registry:
                 if errors
                 else await self._own(name, arguments, client)
             )
-            return self._reply(name, body, scrub=True)
+            return self._reply(name, body, scrub=name != BATCH_TOOL)
         if name not in self.known:
             await self.worker_tools()
         tool = self.known.get(name)
@@ -502,6 +696,17 @@ class Registry:
         errors = _schema_errors(schema, arguments)
         if errors:
             return _invalid(f"{name}: invalid arguments", errors)
+        value_gaps = []
+        for argument, value, declared in _value_operations(schema, arguments):
+            for operation in self.manifest.operations(declared):
+                if operation["status"] == "release-gap":
+                    value_gaps.append({**operation, "argument": argument, "value": value})
+        if value_gaps:
+            return error_reply(
+                "capability_gap",
+                f"{name}: an argument value needs an operation that is a release gap of this build",
+                {"tool": name, "operations": value_gaps},
+            )
         mutating = bool(tool.get("mutating"))
         if mutating and "idempotency_key" in arguments and "expected_revision" not in arguments:
             return _invalid(
@@ -636,6 +841,20 @@ class Registry:
         admission = self.admission
         if name == STATUS_TOOL:
             return {"result": {**self.worker.status(), **admission.status()}}
+        if name == "status":
+            return {"result": await self._status()}
+        if name == "capabilities":
+            table = await self.capability_table()
+            return {
+                "result": {
+                    "compat_profile": self.manifest.compat_profile,
+                    "entries": self.manifest.counts(),
+                    "tools": table,
+                    "gaps": [row["tool"] for row in table if row["status"] == "release-gap"],
+                }
+            }
+        if name == BATCH_TOOL:
+            return await self._batch(arguments, client)
         if name == WAIT_IDLE_TOOL:
             return await admission.wait_idle(float(arguments["timeout"]))
         if name == "job_list":
@@ -647,6 +866,97 @@ class Registry:
         if name == "job_cancel":
             return await admission.cancel(arguments["job_id"])
         return await self._lease(name, arguments, client)
+
+    async def _status(self) -> dict[str, Any]:
+        """`status`: versions, profile, open project, revision, busy jobs and the lease."""
+        await self.worker.wait_ready()
+        worker = self.worker.status()
+        admission = self.admission.status()
+        return {
+            "versions": {
+                "worker_build": worker.get("build"),
+                "supervisor_build": self.build,
+                "protocol": self.protocol,
+            },
+            "compat_profile": self.manifest.compat_profile,
+            "gpu_backend": worker.get("gpu_backend"),
+            "gpu_status": worker.get("gpu_status"),
+            "python": worker.get("python"),
+            "project": {
+                "path": worker.get("project"),
+                "project_uuid": worker.get("project_uuid"),
+                "untitled": worker.get("untitled"),
+            },
+            "revision": worker.get("revision"),
+            "busy": [
+                {"project_uuid": scope or None, "job_id": job_id}
+                for scope, job_id in admission["running"].items()
+            ],
+            "lease": admission["lease"],
+        }
+
+    async def _batch(self, arguments: dict[str, Any], client: Client) -> dict[str, Any]:
+        """`batch`: each call through `call`, in order (see the module comment)."""
+        calls: list[dict[str, Any]] = arguments["calls"]
+        stop = arguments.get("stop_on_error", True) is not False
+        key = arguments.get("idempotency_key")
+        results: list[dict[str, Any]] = []
+        stopped = False
+        for index, entry in enumerate(calls):
+            name = str(entry["tool"])
+            if stopped:
+                results.append({"index": index, "tool": name, "status": "not_executed"})
+                continue
+            call_arguments = dict(entry.get("arguments") or {})
+            if name == BATCH_TOOL:
+                body = _invalid("a batch cannot hold a batch")
+                reply = self._reply(name, body, scrub=True)
+            else:
+                if name not in self.known and name not in SUPERVISOR_TOOLS:
+                    await self.worker_tools()
+                tool = self.known.get(name)
+                if tool is not None and tool.get("long"):
+                    call_arguments["wait"] = True  # a batch's long call runs to its end
+                if (
+                    key is not None
+                    and tool is not None
+                    and tool.get("mutating")
+                    and "idempotency_key" not in call_arguments
+                ):
+                    call_arguments["idempotency_key"] = f"{key}/{index}"
+                    if "expected_revision" not in call_arguments:
+                        await self.worker.wait_ready()
+                        call_arguments["expected_revision"] = self.worker.durable_revision or 0
+                reply = await self.call(name, call_arguments, client, None)
+            failed = "error" in reply.body
+            results.append(
+                {
+                    "index": index,
+                    "tool": name,
+                    "status": "failed" if failed else "succeeded",
+                    "summary": reply.summary,
+                    "body": reply.body,
+                }
+            )
+            if failed and stop:
+                stopped = True
+        executed = [row for row in results if row["status"] != "not_executed"]
+        failures = [row for row in executed if row["status"] == "failed"]
+        if stopped and len(executed) < len(results):
+            status = "stopped"
+        elif failures:
+            status = "completed_with_errors"
+        else:
+            status = "completed"
+        return {
+            "result": {
+                "status": status,
+                "executed": len(executed),
+                "failed": len(failures),
+                "results": results,
+            },
+            "committed_revision": self.worker.durable_revision,
+        }
 
     async def _lease(self, name: str, arguments: dict[str, Any], client: Client) -> dict[str, Any]:
         """`lease_acquire`, `lease_release` and `lease_status` (HTTP mode, 11 §4, decision 159)."""
@@ -715,22 +1025,49 @@ class Registry:
         return Reply(body, images or [], summary(name, body))
 
     async def _images(self, name: str, body: dict[str, Any]) -> list[dict[str, str]]:
-        """`capture`'s PNG (its receipt's `files.png`) as an image content block, read in the
-        executor; a PNG over `IMAGE_LIMIT` is not attached, and a warning says so."""
+        """`capture`'s image block: its receipt's `files.png` downscaled by the image helper in
+        the executor (decision 165), described by `body["image"]`. A block that cannot be built is
+        `image {built: false, reason}` with a warning; the capture's files stay as they are."""
         result = body.get("result")
         files = result.get("files") if isinstance(result, dict) else None
         png = files.get("png") if isinstance(files, dict) else None
         if name not in IMAGE_TOOLS or not isinstance(png, str):
             return []
-        try:
-            data = await asyncio.to_thread(Path(png).read_bytes)
-        except OSError as error:
-            body["warnings"].append(f"the capture image could not be read: {error.strerror}")
-            return []
-        if len(data) > IMAGE_LIMIT:
+
+        def unbuilt(reason: str) -> list[dict[str, str]]:
+            body["image"] = {"built": False, "reason": reason}
             body["warnings"].append(
-                f"the capture image ({len(data)} bytes) is over the {IMAGE_LIMIT}-byte limit of "
-                "an image block; read files.png"
+                f"the capture's image block was not built: {reason}; read files.png"
             )
             return []
-        return [{"data": base64.b64encode(data).decode("ascii"), "mimeType": "image/png"}]
+
+        if self.thumbnail is None:
+            return unbuilt("this supervisor has no image helper")
+        try:
+            preview, source_sha256 = await asyncio.to_thread(self._preview, png)
+        except OSError as error:
+            return unbuilt(f"the capture image could not be read: {error.strerror}")
+        except ValueError as error:
+            return unbuilt(str(error))
+        if len(preview) > IMAGE_LIMIT:
+            return unbuilt(f"the downscaled image is over the {IMAGE_LIMIT}-byte limit")
+        width, height = _png_size(preview)
+        body["image"] = {
+            "built": True,
+            "mime_type": "image/png",
+            "width": width,
+            "height": height,
+            "max_edge": IMAGE_EDGE,
+            "sha256": hashlib.sha256(preview).hexdigest(),
+            "source_sha256": source_sha256,
+        }
+        return [{"data": base64.b64encode(preview).decode("ascii"), "mimeType": "image/png"}]
+
+    def _preview(self, png: str) -> tuple[bytes, str]:
+        """The downscaled PNG of the capture `png` and the source's SHA-256 (in the executor)."""
+        assert self.thumbnail is not None
+        path = Path(png)
+        if path.stat().st_size > IMAGE_SOURCE_LIMIT:
+            raise ValueError(f"the capture image is over the {IMAGE_SOURCE_LIMIT}-byte limit")
+        source = path.read_bytes()
+        return self.thumbnail(source, IMAGE_EDGE), hashlib.sha256(source).hexdigest()
