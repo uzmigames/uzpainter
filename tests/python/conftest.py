@@ -13,6 +13,7 @@ import json
 import shutil
 import subprocess
 import textwrap
+import zlib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -78,6 +79,28 @@ def raises(call, *args, **kwargs):
 """
 
 Run = Callable[[str], dict[str, Any]]
+
+
+def png_file(path: Path, size: int, channels: int, depth: int) -> None:
+    """A `size` x `size` PNG of `channels` (1 grey, 3 RGB) at `depth` bits, a ramp of codes."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return len(data).to_bytes(4, "big") + body + zlib.crc32(body).to_bytes(4, "big")
+
+    def code(x: int, y: int) -> bytes:
+        return ((x * 37 + y) % (1 << depth)).to_bytes(depth // 8, "big")
+
+    colour_type = 0 if channels == 1 else 2
+    header = size.to_bytes(4, "big") * 2 + bytes([depth, colour_type, 0, 0, 0])
+    rows = b"".join(
+        b"\x00" + b"".join(code(x, y) * channels for x in range(size)) for y in range(size)
+    )
+    signature = bytes([0x89]) + b"PNG\r\n\x1a\n"
+    data = chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+    path.write_bytes(signature + data)
+
+
 # The prefix of the report line of `UzPainter.exe run` and uzp-pyapi-tests.exe (src/python/run.h).
 JSON_PREFIX = "UZP_JSON:"
 

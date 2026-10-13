@@ -68,9 +68,10 @@ public:
 
     /// Opens `path`: takes its lock (`StoreError(locked)` while a live worker holds it; a stale
     /// lock is replaced) and removes the temporary files a killed `compact` left. Throws
-    /// `StoreError(version)` for a `format_version` of another major (the file is not changed),
-    /// `StoreError(not_a_project)`, and `CorruptionError` when the current manifest does not
-    /// verify. Corrupt history, blobs (with `VerifyLevel::full`) and missing dependencies are
+    /// `CorruptionError` (kind `sqlite`) when SQLite's structural check fails (`QuickCheck`),
+    /// before anything is read from the file or written to it, `StoreError(version)` for a
+    /// `format_version` of another major (the file is not changed), `StoreError(not_a_project)`,
+    /// and `CorruptionError` when the current manifest does not verify. Corrupt history, blobs (with `VerifyLevel::full`) and missing dependencies are
     /// reported in `Opened::report`, not thrown. A bundle directory (`IsBundleDirectory`) is first
     /// imported into `BundleImportTarget(path)`, `<dir>.uzp` beside it (`ImportBundle`;
     /// `StoreError(exists)` when that file exists), which is then opened; `ImportBundle` takes
@@ -140,9 +141,12 @@ public:
     std::string StageLocator(const std::filesystem::path& path);
 
     /// The verified bytes of a resource: from `blob`, or through the locator of a non-portable
-    /// project. Throws `CorruptionError` (with the nodes of the current manifest that bind the
-    /// hash) when stored bytes do not verify, `StoreError(missing_dependency)` for an absent or
-    /// changed locator target and `StoreError(missing_resource)` when the hash is unknown.
+    /// project, or, before they are stored, as staged for the running transaction
+    /// (`StageResource`, `StageLocator`: the support check reads a bitmap imported and bound in one
+    /// transaction, decision 240). Throws `CorruptionError` (with the nodes of the current manifest
+    /// that bind the hash) when stored bytes do not verify, `StoreError(missing_dependency)` for an
+    /// absent or changed locator target and `StoreError(missing_resource)` when the hash is
+    /// unknown.
     std::string ReadResource(std::string_view sha256);
 
     /// Creates a raster plane owned by a paint node of the transaction's working copy, bound to

@@ -1,0 +1,13 @@
+{
+  "id": 240,
+  "slug": "every-path-stores-a-uniform-colour-through-one-native-decode-and-ocio-bitmaps-the-evaluator-refuses-are-refused-before-mutation",
+  "title": "Every path stores a uniform colour through one native decode, and OCIO bitmaps the evaluator refuses are refused before mutation",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.6_mcp-typed-tool-families",
+    "phase1.15_compositor-colour-fits",
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

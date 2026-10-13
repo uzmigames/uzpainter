@@ -531,8 +531,9 @@ def _f32(value: float) -> float:
 
 
 def srgb_to_working(value: float) -> float:
-    """A uniform colour component in the sRGB space as the working value the Python facade stores
-    on a colour-managed channel (python/uzpainter_facade/colour.py `srgb_to_linear`, decision 214):
+    """A uniform colour component in the sRGB space as the working value every path stores on a
+    colour-managed channel (`evaluator::PainterLegacySrgbDecode` through `python::WorkingColour`,
+    decisions 214 and 240), an independent mirror of it:
     float32 operands, products with the float32 reciprocals 1.0f / 12.92f and 1.0f / 1.055f, the
     power rounded once to float32."""
     x = _f32(value)

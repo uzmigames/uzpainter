@@ -7,11 +7,14 @@ CPU only: every worker here runs `--gpu-backend vulkan`, which has no device bef
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+import pytest
 
 from tests.supervisor.conftest import INSERT_FILL, Pipe, make_project, wait_until_gone
 
@@ -182,6 +185,28 @@ def test_worker_exits_when_its_supervisor_closes_the_pipe(
     pipe.call("project_open", {"path": str(project)})
     pipe.file.close()
     assert pipe.process.wait(30) == 4
+
+
+def test_crash_reports_go_to_a_crash_dir_outside_the_code_page(
+    painter: Path, tmp_path: Path, pipes: list[Pipe]
+) -> None:
+    """practical-e2e B2 review, UZP-MOD-010: a worker whose `--crash-dir` lies outside the ANSI
+    code page starts (narrowing that path used to abort it with an uncaught `filesystem_error`),
+    and a native fault writes the minidump and both reports into that folder."""
+    folder = tmp_path / "ação ☃ 日本"
+    folder.mkdir()
+    pipe = Pipe(painter, folder, "--gpu-backend", "vulkan", "--test-faults")
+    pipes.append(pipe)
+    assert pipe.handshake["worker_pid"] == pipe.process.pid
+    with pytest.raises(EOFError):  # the worker dies in the fault, before any reply
+        pipe.call("test_fault", {"fault": "seh"})
+    assert pipe.process.wait(60) == 0xC0000005, pipe.log()
+    reports = list((folder / "crashes" / "crashes").iterdir())
+    assert len(reports) == 1, reports
+    assert (reports[0] / "crash.dmp").stat().st_size > 0
+    report = json.loads((reports[0] / "crash.json").read_text(encoding="utf-8", errors="replace"))
+    assert report["exception"]["name"] == "EXCEPTION_ACCESS_VIOLATION"
+    assert (reports[0] / "crash.txt").stat().st_size > 0
 
 
 def test_worker_accepts_only_its_supervisor(painter: Path, tmp_path: Path) -> None:

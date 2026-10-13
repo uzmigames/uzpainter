@@ -429,6 +429,72 @@ UPSTREAM_CITATIONS: tuple[Citation, ...] = (
         r"return VK_FORMAT_BC7_SRGB_BLOCK;\s*default:\s*return VK_FORMAT_UNDEFINED;",
         "the Vulkan format map ends at BC7Srgb",
     ),
+    # UZP-MOD-010
+    _cite(
+        "platform/windows/crash_handler.cpp",
+        59,
+        59,
+        r"char g_crashBaseDir\[MAX_PATH\] = \{\};",
+        "the crash directory is kept as an ANSI char buffer",
+    ),
+    _cite(
+        "platform/windows/crash_handler.cpp",
+        110,
+        113,
+        r"bool WriteMiniDump\(const char\* path[\s\S]*CreateFileA\(",
+        "the minidump is created through CreateFileA",
+    ),
+    _cite(
+        "platform/windows/crash_handler.cpp",
+        143,
+        146,
+        r"void WriteTextReport\(const char\* path[\s\S]*CreateFileA\(",
+        "the text report is created through CreateFileA",
+    ),
+    _cite(
+        "platform/windows/crash_handler.cpp",
+        263,
+        266,
+        r"void WriteJsonReport\(const char\* path[\s\S]*CreateFileA\(",
+        "the JSON report is created through CreateFileA",
+    ),
+    _cite(
+        "platform/windows/crash_handler.cpp",
+        416,
+        452,
+        r"char exeDirBuf\[MAX_PATH\];[\s\S]*GetModuleFileNameA\([\s\S]*"
+        r"CreateDirectoryA\(crashDir, nullptr\);",
+        "the report folder is built in ANSI buffers and created through CreateDirectoryA",
+    ),
+    _cite(
+        "platform/windows/crash_handler.cpp",
+        579,
+        587,
+        r"void CrashHandler_SetCrashDir\(const char\* dir\)[\s\S]*"
+        r"std::strncpy\(g_crashBaseDir, dir, MAX_PATH - 1\);",
+        "CrashHandler_SetCrashDir copies the ANSI path, truncated at MAX_PATH",
+    ),
+    _cite(
+        "engine/logging/log.cpp",
+        63,
+        63,
+        r'std::getenv\("LOCALAPPDATA"\)',
+        "the default log folder comes from the narrow environment",
+    ),
+    _cite(
+        "engine/logging/log.cpp",
+        99,
+        99,
+        r"return logFile\.string\(\);",
+        "the default log path is narrowed to the ANSI code page",
+    ),
+    _cite(
+        "engine/logging/log.cpp",
+        133,
+        134,
+        r"rotating_file_sink_mt>\(\s*resolvedPath, 10 \* 1024 \* 1024, 3\);",
+        "the file sink is opened with the narrow path",
+    ),
     # Kept on purpose
     _cite(
         "engine/rhi/dx12/dx12_command_list.cpp",

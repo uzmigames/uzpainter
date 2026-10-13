@@ -186,6 +186,7 @@ Id ImportBound(Session& s, const std::string& key, const std::string& bytes, con
     Id uid = kNoId;
     RequestOutcome result = s.store->Submit(*s.doc, Req(key, s.doc->revision(), name), [&](Edit& e) {
         const std::string sha = s.store->StageResource(bytes, "image/png");
+        CHECK(s.store->ReadResource(sha) == bytes);  // staged bytes read in the transaction (decision 240)
         e.project().resources[sha].push_back(Meta(e.AllocateId(), name, bytes.size()));
         uid = e.Insert(kTop, NodeType::FillLayer, name);
         Layer& layer = *FindLayer(e.project(), uid);
@@ -442,6 +443,34 @@ void CorruptManifest() {
     CHECK(Contains(error.what(), "manifest_sha256"));
 }
 
+// A file whose SQLite structure is damaged (B9 of parity/reports/phase2/practical-e2e.md: 64 KiB
+// overwritten with 0xAB in the middle of the file) is refused on open, before anything is read
+// from it or written to it: no commit can land in a damaged b-tree.
+void CorruptStructure() {
+    const fs::path dir = WorkDir("corrupt-structure");
+    const fs::path path = CreateProject(dir);
+    {
+        Session s = OpenSession(path);
+        ImportBound(s, "import", Noise(std::size_t{1} << 20, 9), "noise.png");  // overflow pages fill the file
+        CHECK(Committed(AddLayer(s, "after", s.doc->revision())));
+    }
+    std::string bytes = ReadBytes(path);
+    bytes.replace(bytes.size() / 2, 65536, 65536, static_cast<char>(0xAB));
+    WriteBytes(path, bytes);
+    {
+        Container c = Container::OpenReadOnly(path);
+        CHECK(!QuickCheck(c, 8).empty());
+    }
+    for (const VerifyLevel level : {VerifyLevel::standard, VerifyLevel::full}) {
+        const auto error =
+            EXPECT_THROW(CorruptionError, ProjectStore::Open(path, OpenOptions{level, VersionPolicy::Current()}));
+        CHECK(error.code() == StoreError::Code::corrupt);
+        CHECK(error.item().kind == "sqlite" && error.item().key == "quick_check");
+        CHECK(Contains(error.what(), "nothing is written to it: ") && Contains(error.what(), "page"));
+        CHECK(ReadBytes(path) == bytes && !fs::exists(LockPath(path)));
+    }
+}
+
 // ── 3.4 Commit then die ──────────────────────────────────────────────────────────────────────
 
 void CommitThenDie() {
@@ -640,6 +669,7 @@ void NonPortableMissing() {
         CHECK(!s.store->portable());
         const RequestOutcome done = s.store->Submit(*s.doc, Req("link", 0), [&](Edit& e) {
             sha = s.store->StageLocator(hdri);
+            CHECK(s.store->ReadResource(sha) == bytes);  // a staged locator is read too (decision 240)
             e.project().resources[sha] = {Meta(e.AllocateId(), "studio.hdr", bytes.size())};
             uid = e.Insert(kTop, NodeType::FillLayer, "lit");
             Layer& layer = *FindLayer(e.project(), uid);
@@ -1271,6 +1301,7 @@ int Run(const std::string& only) {
         {"disk_full", DiskFull},                      // 3.2
         {"corrupt_blob", CorruptBlob},                // 3.3
         {"corrupt_manifest", CorruptManifest},        // 3.3
+        {"corrupt_structure", CorruptStructure},      // B9
         {"commit_then_die", CommitThenDie},           // 3.4
         {"unknown_key_rules", UnknownKeyRules},       // 3.5
         {"deduplication", Deduplication},             // 3.6

@@ -226,12 +226,12 @@ void BindFillMethods(Class& cls) {
                const std::optional<std::string>& color_space) {
                 core::Source source;
                 core::json::Object args = NodeArgs(n.uid, channel);
+                std::optional<Color> color;
                 std::optional<ResourceIdHandle> resource;
                 if (py::isinstance<Color>(value)) {
-                    const Color color = value.cast<Color>();
-                    source.value = core::UniformColorSource{F32(color.value_raw), color.color_space.value_or(""), {}};
-                    args["color"] = core::json::Array{color.value_raw[0], color.value_raw[1], color.value_raw[2]};
-                    args["color_space"] = color.color_space.value_or("");
+                    color = value.cast<Color>();
+                    args["color"] = core::json::Array{color->value_raw[0], color->value_raw[1], color->value_raw[2]};
+                    args["color_space"] = color->color_space.value_or("");
                 } else if (py::isinstance<ResourceIdHandle>(value)) {
                     resource = value.cast<ResourceIdHandle>();
                 } else if (py::hasattr(value, "identifier") && !py::isinstance<Node>(value)) {
@@ -253,6 +253,10 @@ void BindFillMethods(Class& cls) {
                     bool mask = false;
                     core::FillContent& fill = EditFill(edit, n.uid, &mask);
                     CheckChannel(mask, channel, n.uid);
+                    if (color) {
+                        source.value = StoredUniformColour(edit.project(), n.uid, channel, color->value_raw,
+                                                           color->color_space);
+                    }
                     if (fill.source_mode == core::SourceMode::Material) {
                         throw ApiError("RuntimeError", "the fill is in SourceMode.Material");
                     }
@@ -263,7 +267,8 @@ void BindFillMethods(Class& cls) {
                 return SourceObject(SourceOf(Resolve(*project, n.uid), n.uid, channel), n.uid, channel);
             },
             py::arg("channeltype"), py::arg("source"), py::arg("color_space") = py::none(),
-            "Sets the channel's source. A bitmap is bound in `color_space` (its tag, \"\" when None) in the same "
+            "Sets the channel's source. A uniform colour is stored as Painter stores it, its working value in the "
+            "Working space (decision 240). A bitmap is bound in `color_space` (its tag, \"\" when None) in the same "
             "call, so the support check sees the bitmap as bound (decision 207).")
         .def(
             "reset_source",
@@ -430,8 +435,10 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             return Mutate("source.SourceUniformColor.set_color", args, [&](core::Edit& edit) {
                 auto& u = std::get<core::UniformColorSource>(
                     EditSource(edit, s.node, s.channel, core::SourceKind::uniform_color).value);
-                u.rgb = F32(color.value_raw);
-                u.color_space = color.color_space.value_or("");
+                const core::UniformColorSource stored =
+                    StoredUniformColour(edit.project(), s.node, s.channel, color.value_raw, color.color_space);
+                u.rgb = stored.rgb;
+                u.color_space = stored.color_space;
             });
         });
     SealClass(uniform);

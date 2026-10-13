@@ -25,6 +25,7 @@ NATIVE_CASES = (
     "disk_full",  # 3.2
     "corrupt_blob",  # 3.3
     "corrupt_manifest",  # 3.3
+    "corrupt_structure",  # B9 (parity/reports/phase2/practical-e2e.md)
     "commit_then_die",  # 3.4
     "unknown_key_rules",  # 3.5
     "deduplication",  # 3.6

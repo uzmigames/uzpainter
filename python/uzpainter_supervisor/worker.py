@@ -5,7 +5,9 @@ One `Supervisor` owns at most one worker at a time. Each launch (a generation `n
 the Python policy and the deadline the supervisor was started with; the supervisor connects,
 checks the handshake (a mismatch is fatal) and then forwards requests. The worker reports the
 project it holds and its revision in a `revision` event after every commit and project switch,
-before the reply of the call that caused it.
+before the reply of the call that caused it. A switch to another project goes to admission with
+the frame of that call (the oldest request pending), so its owner takes the new project's lease
+before any other call can see the project (decision 243).
 
 When the worker ends (process exit, or a broken pipe followed by the exit), the supervisor:
 1. notes the cause (`ipc.classify_exit`, refined by a `device_removed` / `timeout` reply just
@@ -103,8 +105,11 @@ class _Generation:
     crash_dir: Path
     process: asyncio.subprocess.Process
     handshake_future: asyncio.Future[dict[str, Any]]
-    on_event: Callable[[dict[str, Any]], None]
+    # Receives each event with the frame of the request the worker ran when it sent it (`running`).
+    on_event: Callable[[dict[str, Any], dict[str, Any] | None], None]
     pending: dict[str, asyncio.Future[dict[str, Any]]] = field(default_factory=dict)
+    # The frame of each pending request, in the order it was sent.
+    sent: dict[str, dict[str, Any]] = field(default_factory=dict)
     transport: asyncio.BaseTransport | None = None
     handshake: ipc.Handshake | None = None
     pipe_lost: asyncio.Event = field(default_factory=asyncio.Event)
@@ -121,12 +126,23 @@ class _Generation:
             if isinstance(error, dict) and error.get("code") in ("device_removed", "timeout"):
                 self.last_fault_code = str(error["code"])
             future = self.pending.pop(request_id)
+            self.sent.pop(request_id, None)
             if not future.done():
                 future.set_result(frame)
         elif "id" in frame:
             log.error("worker %d replied to an unknown request: %s", self.number, frame)
         elif "event" in frame:
-            self.on_event(frame)
+            self.on_event(frame, self.running())
+
+    def running(self) -> dict[str, Any] | None:
+        """The frame of the request the worker's command thread runs: the oldest one pending.
+        The thread runs requests in the order they were sent, and each reply reaches the pipe
+        before the next request's events; `worker/cancel` is the exception, answered at once by
+        the worker's reader thread."""
+        for frame in self.sent.values():
+            if frame.get("method") != "worker/cancel":
+                return frame
+        return None
 
     def on_pipe_lost(self) -> None:
         self.pipe_lost.set()
@@ -182,6 +198,9 @@ class Supervisor:
         self.fatal: str | None = None
         # Receives the worker's `job_progress` events (admission.Admission.on_job_event).
         self.on_job_event: Callable[[dict[str, Any]], None] | None = None
+        # Receives the frame of the request during which the worker switched to another project,
+        # as soon as the new project is recorded (admission.Admission.on_project_switch).
+        self.on_project_switch: Callable[[dict[str, Any] | None], None] | None = None
 
     # ── Lifecycle ────────────────────────────────────────────────────────────────────────────
 
@@ -361,6 +380,7 @@ class Supervisor:
             if not future.done():
                 future.set_result(_interrupted(request_id, recovery))
         dead.pending.clear()
+        dead.sent.clear()
         self._ready.set()
 
     async def _reopen(self, fresh: _Generation) -> tuple[bool, int | None]:
@@ -385,6 +405,7 @@ class Supervisor:
         if not reply.done():
             reply.cancel()
             fresh.pending.clear()
+            fresh.sent.clear()
             try:
                 await asyncio.wait_for(exited, EXIT_GRACE_S)
             except TimeoutError:
@@ -406,11 +427,12 @@ class Supervisor:
         assert isinstance(revision, int)
         return True, revision
 
-    def _on_event(self, frame: dict[str, Any]) -> None:
+    def _on_event(self, frame: dict[str, Any], running: dict[str, Any] | None) -> None:
         """A worker's `revision` event: the absolute store it holds (the saved file, or an
         untitled project's temporary store; None when none is open), its UUID, whether it is
-        untitled, and its revision, sent after every commit and switch. A `job_progress` event
-        goes to `on_job_event`."""
+        untitled, and its revision, sent after every commit and switch. A switch to another
+        project goes to `on_project_switch` with the frame of the request that `running` names.
+        A `job_progress` event goes to `on_job_event`."""
         if frame.get("event") == "job_progress" and self.on_job_event is not None:
             self.on_job_event(frame)
         if frame.get("event") == "revision":
@@ -421,10 +443,13 @@ class Supervisor:
             held = project_uuid if isinstance(project_uuid, str) and path is not None else None
             if (path, held) != (self.project_path, self.project_uuid):
                 self.project_epoch += 1
+            switched = held is not None and held != self.project_uuid
             self.project_path = path
             self.project_uuid = held
             self.project_untitled = frame.get("untitled") is True and self.project_path is not None
             self.durable_revision = revision if isinstance(revision, int) else None
+            if switched and self.on_project_switch is not None:
+                self.on_project_switch(running)
 
     def _fatal(self, message: str) -> None:
         """A fatal supervisor error after the session started: no call reaches a worker again."""
@@ -464,6 +489,7 @@ class Supervisor:
         request_id = str(uuid.uuid4())
         future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
         generation.pending[request_id] = future
+        generation.sent[request_id] = frame
         generation.send({**frame, "id": request_id})
         return future
 
