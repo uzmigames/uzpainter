@@ -27,16 +27,16 @@
         0.800000011920929
       ],
       "base_provenance": {
-        "kind": "inferred",
-        "golden_id": "tier0/semantics/base-values-openpbr-fuzz",
-        "record_sha256": "b03de56059b4a3265100f677ed151bbbd53019890f5b937f838f92c64d36f484",
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-template-base-openpbr-fuzz",
+        "record_sha256": "b3396a9b0e4fcdb8b61b7cc0e2a252604829c31fdb619bdc56f18da7a15144fc",
         "map": "uzp_plane/basecolor",
         "export16": [
           59397,
           59397,
           59397
         ],
-        "note": "linear (decision 126): the 16-bit PNG export of the empty channel is the PNG write of the sRGB export encode of float32(0.8) (src/export/encode.h); this template's OpenEXR export of the empty channel is not recorded: float32(0.8) is the linear value the default template's empty BaseColor exports to OpenEXR 32f with the same 16-bit code (tier0/semantics/export-bit-depth s3)"
+        "note": "linear (decision 126): its OpenEXR 32f export of the empty channel holds float32(0.8) in every texel, r1 and r2 (decisions 172, 169); its 16-bit PNG export, code 59397 in tier0/semantics/base-values-openpbr-fuzz, is the PNG write of the sRGB export encode of that value (src/export/encode.h)"
       }
     },
     {

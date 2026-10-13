@@ -15,6 +15,8 @@ namespace {
 /// Recorded by R-090 and not fitted (decision 103); the owners of the remaining fits.
 constexpr std::string_view kSrgb8NotRecorded =
     "recording R-090 P10 records BaseColor, Specular and Emissive only; decision 126";
+constexpr std::string_view kL8MaterialNotFitted =
+    "tier0/semantics/export-template-base-dota-2 records it, not fitted; decision 169";
 constexpr std::string_view kDitherNotFitted = "recording R-090 P3, decision 103";
 constexpr std::string_view kResizeNotFitted = "recording R-090 P4, decision 103";
 constexpr std::string_view kPaddingNotFitted = "recording R-090 P5 and P9, decision 103";
@@ -39,6 +41,18 @@ std::optional<core::ChannelType> Srgb8Channel(const core::TextureSet& set, const
         if (stack.id != file.stackId) continue;
         const auto it = stack.channels.find(*source.channel);
         if (it != stack.channels.end() && it->second.format == core::ChannelFormat::sRGB8) return *source.channel;
+    }
+    return std::nullopt;
+}
+
+/// The stack channel of `source` when it is an L8 documentMap channel of `file`'s stack.
+std::optional<core::ChannelType> L8Channel(const core::TextureSet& set, const PlannedFile& file,
+                                           const PlannedSource& source) {
+    if (source.type != SourceType::documentMap || !source.channel) return std::nullopt;
+    for (const core::Stack& stack : set.stacks) {
+        if (stack.id != file.stackId) continue;
+        const auto it = stack.channels.find(*source.channel);
+        if (it != stack.channels.end() && it->second.format == core::ChannelFormat::L8) return *source.channel;
     }
     return std::nullopt;
 }
@@ -82,6 +96,17 @@ void CheckProcessing(const core::Project& project, const PlannedFile& file) {
                "the export encoding of the sRGB8 channel " + std::string(core::ToString(*srgb8)) +
                    " (linear like a User channel, or sRGB-encoded like BaseColor) is not recorded",
                kSrgb8NotRecorded);
+    }
+    if (p.fileFormat != FileFormat::png) return;
+    for (const PlannedChannel& channel : file.channels) {
+        // Dota 2's empty L8 Specular holds float32(10/255) (its OpenEXR 32f files) but its RGB PNG
+        // 16 holds (14330, 2570, 14330): the sRGB encode in R and B, the linear write in G.
+        const std::optional<core::ChannelType> l8 = L8Channel(set, file, channel.source);
+        if (!l8 || !SrgbEncodedOnExport(*l8)) continue;
+        Refuse(file,
+               "the PNG encoding of the L8 channel " + std::string(core::ToString(*l8)) +
+                   " (Painter writes neither its linear value nor its sRGB encode in every component)",
+               kL8MaterialNotFitted);
     }
 }
 

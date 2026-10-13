@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -240,11 +241,26 @@ def config(
     }
 
 
-def export(exe: Path, spec_path: Path, cfg: dict[str, Any], tmp: Path) -> dict[str, Any]:
+def export(
+    exe: Path, spec_path: Path, cfg: dict[str, Any], tmp: Path, templates: Path = TEMPLATES
+) -> dict[str, Any]:
     tmp.mkdir(parents=True, exist_ok=True)
     (tmp / "config.json").write_text(json.dumps(cfg), encoding="utf-8")
-    [result] = run(exe, "export", str(TEMPLATES), str(spec_path), str(tmp / "config.json"))
+    [result] = run(exe, "export", str(templates), str(spec_path), str(tmp / "config.json"))
     return result
+
+
+def inferred_templates(root: Path) -> Path:
+    """A copy of the shipped templates in which Blender's BaseColor base is `inferred`. Since
+    decision 169 no shipped template has an inferred base; the guard stays for any that would."""
+    shutil.copytree(TEMPLATES, root)
+    path = root / "blender.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    for channel in document["channels"]:
+        if channel["type"] == "BaseColor":
+            channel["base_provenance"]["kind"] = "inferred"
+    path.write_text(json.dumps(document, indent=2), encoding="utf-8")
+    return root
 
 
 def files_under(root: Path) -> dict[str, bytes]:
@@ -491,7 +507,11 @@ def test_srgb8_material_channels_are_written_encoded(export_tests: Path, tmp_pat
     for c in cfg["exportPresets"][0]["maps"][0]["channels"]:
         c["srcMapName"] = "basecolor"
     result = export(
-        export_tests, tmp_path / "spec" / "blender.json", cfg, tmp_path / "run-inferred"
+        export_tests,
+        tmp_path / "spec" / "blender.json",
+        cfg,
+        tmp_path / "run-inferred",
+        inferred_templates(tmp_path / "templates"),
     )
     # An evaluator refusal (`unsupported_source`, NotYetSupported in the Python API, decision 082)
     # before anything is written.
@@ -502,7 +522,8 @@ def test_srgb8_material_channels_are_written_encoded(export_tests: Path, tmp_pat
 
 
 def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path: Path) -> None:
-    """2.6 (decision 126): on a template whose BaseColor base is inferred (Blender), every
+    """2.6 (decision 126): on a template whose BaseColor base is inferred (Blender, in a copy of
+    the templates: since decision 169 no shipped template has an inferred base), every
     export source that reads BaseColor fails its evaluation (`unsupported_source`) before anything
     is written: the documentMap on sRGB8 and on RGB16, and the diagnosticMap sources isolated,
     contribution, regionStats, materialView and materialLeaks of BaseColor (leaks compare the
@@ -539,12 +560,17 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
         ("diagnosticMap", "materialView/BaseColor/501", "RGB"),
         ("diagnosticMap", "materialLeaks/BaseColor/501", "L"),
     ]
+    templates = inferred_templates(tmp_path / "templates")
     cases = [(variant("blender", "blender"), *src) for src in sources]
     cases.append((variant("blender-rgb16", "blender", "RGB16"), *sources[0]))
     for i, (spec_path, kind, source, layout) in enumerate(cases):
         out = tmp_path / f"inferred{i}"
         result = export(
-            export_tests, spec_path, single(out, kind, source, layout), tmp_path / f"r{i}"
+            export_tests,
+            spec_path,
+            single(out, kind, source, layout),
+            tmp_path / f"r{i}",
+            templates,
         )
         assert result.get("error") == "Failure", (source, result)
         assert result["message"].startswith("evaluator:unsupported_source"), (source, result)
@@ -561,7 +587,7 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
 
     # Specular and Emissive added in a format other than sRGB8: their channel default is recorded
     # on sRGB8 only, so the evaluation fails (`missing_base_value`) before anything is written.
-    for channel, fmt in (("Specular", "RGB16"), ("Emissive", "RGB16"), ("Specular", "L8")):
+    for channel, fmt in (("Specular", "RGB16"), ("Emissive", "RGB16"), ("Specular", "L16")):
         document = json.loads((tmp_path / "spec" / "default.json").read_text(encoding="utf-8"))
         document["channels"].append({"type": channel, "format": fmt})
         path = tmp_path / "spec" / f"{channel}-{fmt}.json"
@@ -692,16 +718,23 @@ def test_srgb8_material_channels_equal_painter_files(export_tests: Path, tmp_pat
 
 
 def test_observed_template_bases_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:
-    """2.6 (decision 168): the empty BaseColor or Specular of the five shipped templates whose
-    linear base an OpenEXR 32f export shows (Unreal Engine, OpenPBR - Anisotropy and Coat, PBR -
-    Metallic Roughness Alpha-blend, PBR - Specular Glossiness), written by WriteExport at OpenEXR
-    32f and PNG 16, are byte-identical to Painter's files (r1 and r2)."""
+    """2.6 (decisions 168, 169, 172): the empty BaseColor or Specular of every shipped template,
+    written by WriteExport at OpenEXR 32f and PNG 16 (the 24 `export-template-base-*` goldens, 25
+    maps) and at OpenEXR 32f (the empty set s7 of three float virtual-map twins), is byte-identical
+    to Painter's files (r1 and r2). Dota 2's L8 Specular is exact in OpenEXR; its PNG 16, which
+    Painter writes (14330, 2570, 14330), is refused before writing (decision 169)."""
     from tests.export import encoders_tier0
 
     report = encoders_tier0.template_bases_written(export_tests, tmp_path)
     assert report["problems"] == [], report["problems"][:10]
-    assert report["files"] == 3 * 4 + 3 * 2, report
+    assert report["files"] == 25 * 4 - 2 + 3 * 2, report
     assert report["identical"] == report["comparisons"] == 2 * report["files"], report
+    assert [where for where, _ in report["refused"]] == [
+        f"export-template-base-dota-2 uzp_plane step {step} specular" for step in (4, 5)
+    ], report["refused"]
+    for _, message in report["refused"]:
+        assert "the PNG encoding of the L8 channel Specular" in message, message
+        assert "decision 169" in message, message
 
 
 def test_srgb8_bitmap_equals_painter_files(export_tests: Path, tmp_path: Path) -> None:

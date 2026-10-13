@@ -27,16 +27,16 @@
         0.800000011920929
       ],
       "base_provenance": {
-        "kind": "inferred",
-        "golden_id": "tier0/semantics/base-values-openpbr-subsurface-scattering",
-        "record_sha256": "6b1a2ae39915f1b7e6852f91c1dfa2e02b3f591c01b70d072f1055ffdd788744",
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-template-base-openpbr-subsurface-scattering",
+        "record_sha256": "d3cdb2b2f796e33b3b35e54915f54bfafe15a87c5fd70ace117a4272ec59d47c",
         "map": "uzp_plane/basecolor",
         "export16": [
           59397,
           59397,
           59397
         ],
-        "note": "linear (decision 126): the 16-bit PNG export of the empty channel is the PNG write of the sRGB export encode of float32(0.8) (src/export/encode.h); this template's OpenEXR export of the empty channel is not recorded: float32(0.8) is the linear value the default template's empty BaseColor exports to OpenEXR 32f with the same 16-bit code (tier0/semantics/export-bit-depth s3)"
+        "note": "linear (decision 126): its OpenEXR 32f export of the empty channel holds float32(0.8) in every texel, r1 and r2 (decisions 172, 169); its 16-bit PNG export, code 59397 in tier0/semantics/base-values-openpbr-subsurface-scattering, is the PNG write of the sRGB export encode of that value (src/export/encode.h)"
       }
     },
     {

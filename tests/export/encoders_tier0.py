@@ -513,23 +513,36 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
     return report
 
 
-# The OpenEXR exports of an empty sRGB8 base on a shipped template (decision 168): golden stem,
-# texture set, export steps, and the map of the template's base.
-TEMPLATE_BASE_FILES = (
-    ("export-template-base-unreal-engine", "uzp_plane", (2, 3, 4, 5), "basecolor"),
-    ("export-template-base-openpbr-anisotropy", "uzp_plane", (2, 3, 4, 5), "basecolor"),
-    ("export-template-base-pbr-specular-glossiness", "uzp_plane", (2, 3, 4, 5), "specular"),
-    ("virtual-maps-template-openpbr-coat-float", "s7", (84, 85), "basecolor"),
-    ("virtual-maps-template-pbr-metallic-roughness-alpha-blend-float", "s7", (84, 85), "basecolor"),
-    ("virtual-maps-template-pbr-specular-glossiness-float", "s7", (84, 85), "specular"),
+# The OpenEXR exports of an empty base on a shipped template (decisions 168, 169, 172): every
+# `export-template-base-*` golden (plane, BaseColor and Specular where the template has them,
+# OpenEXR 32f then PNG 16, each twice), and the empty set s7 of three float virtual-map twins
+# (decision 093): golden stem, texture set, export steps, and the maps or None for every base map
+# Painter wrote.
+TEMPLATE_BASE_MAPS = ("basecolor", "specular")
+TWIN_BASE_FILES = (
+    ("virtual-maps-template-openpbr-coat-float", "s7", (84, 85), ("basecolor",)),
+    (
+        "virtual-maps-template-pbr-metallic-roughness-alpha-blend-float",
+        "s7",
+        (84, 85),
+        ("basecolor",),
+    ),
+    ("virtual-maps-template-pbr-specular-glossiness-float", "s7", (84, 85), ("specular",)),
 )
 
 
+def template_base_files() -> list[tuple[str, str, tuple[int, ...], tuple[str, ...] | None]]:
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    stems = sorted(p.stem for p in root.glob("export-template-base-*.json"))
+    return [(stem, "uzp_plane", (2, 3, 4, 5), None) for stem in stems] + list(TWIN_BASE_FILES)
+
+
 def template_bases_written(exe: Path, tmp: Path) -> dict[str, Any]:
-    """The empty texture set of each `TEMPLATE_BASE_FILES` golden, on its mesh and its shipped
-    template (no layer: the channel is its template base), written by `WriteExport` at each export
-    step with only the base's map: compared byte for byte with Painter's files of r1, and of r2
-    wherever r2 equals r1 (decision 032). Returns the counts and the differing files or refusals."""
+    """The empty texture set of each `template_base_files` golden, on its mesh and its shipped
+    template (no layer: the channel is its template base), written by `WriteExport` one base map
+    per file at each export step: compared byte for byte with Painter's files of r1, and of r2
+    wherever r2 equals r1 (decision 032). Returns the counts, the differing files or evaluation
+    failures (`problems`) and the files refused before writing (`refused`: where, message)."""
     needs_store()
     root = manifest_root(current_envelope()) / "tier0" / "semantics"
     templates = {
@@ -539,8 +552,14 @@ def template_bases_written(exe: Path, tmp: Path) -> dict[str, Any]:
         )
         if document["kind"] == "project" and document["painter_template"] is not None
     }
-    report: dict[str, Any] = {"files": 0, "comparisons": 0, "identical": 0, "problems": []}
-    for stem, texture_set, steps, base_map in TEMPLATE_BASE_FILES:
+    report: dict[str, Any] = {
+        "files": 0,
+        "comparisons": 0,
+        "identical": 0,
+        "problems": [],
+        "refused": [],
+    }
+    for stem, texture_set, steps, maps in template_base_files():
         golden = load(locate(), root / f"{stem}.json")
         manifest = golden.manifest
         by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
@@ -561,30 +580,41 @@ def template_bases_written(exe: Path, tmp: Path) -> dict[str, Any]:
         }
         for step in steps:
             raw = by_step[step]
-            work = tmp / stem / str(step)
-            config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
-                work / "out", [texture_set]
-            )
-            preset = config["exportPresets"][0]
-            preset["maps"] = [m for m in preset["maps"] if m["fileName"].endswith(f"_{base_map}")]
-            result = write_export(exe, spec, work / "spec", config, work / "run")
-            where = f"{stem} {texture_set} step {step}"
-            if "error" in result:
-                report["problems"].append(f"{where}: {result['error']}: {result['message']}")
-                continue
             theirs_r1 = _painter_files(golden, "r1", step, texture_set)
             theirs_r2 = _painter_files(golden, "r2", step, texture_set)
-            for written in result["written"]:
-                rel = written["relativePath"]
-                report["files"] += 1
-                for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
-                    if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
-                        continue
-                    report["comparisons"] += 1
-                    if written["sha256"] == theirs.get(rel):
-                        report["identical"] += 1
-                    else:
-                        report["problems"].append(f"{where}: {rel} differs from {recording}")
+            written_maps = maps or tuple(
+                m
+                for m in TEMPLATE_BASE_MAPS
+                if any(rel.rsplit(".", 1)[0].endswith(f"_{m}") for rel in theirs_r1)
+            )
+            for base_map in written_maps:
+                work = tmp / stem / f"{step}-{base_map}"
+                config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                    work / "out", [texture_set]
+                )
+                preset = config["exportPresets"][0]
+                preset["maps"] = [
+                    m for m in preset["maps"] if m["fileName"].endswith(f"_{base_map}")
+                ]
+                result = write_export(exe, spec, work / "spec", config, work / "run")
+                where = f"{stem} {texture_set} step {step} {base_map}"
+                if result.get("error") == "NotYetSupported":
+                    report["refused"].append((where, result["message"]))
+                    continue
+                if "error" in result:
+                    report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                    continue
+                for written in result["written"]:
+                    rel = written["relativePath"]
+                    report["files"] += 1
+                    for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
+                        if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
+                            continue
+                        report["comparisons"] += 1
+                        if written["sha256"] == theirs.get(rel):
+                            report["identical"] += 1
+                        else:
+                            report["problems"].append(f"{where}: {rel} differs from {recording}")
     return report
 
 

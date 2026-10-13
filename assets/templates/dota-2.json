@@ -33,16 +33,16 @@
         0.49803921580314636
       ],
       "base_provenance": {
-        "kind": "inferred",
-        "golden_id": "tier0/semantics/base-values-dota-2",
-        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-template-base-dota-2",
+        "record_sha256": "06399ec6a82c416fe76dfda86f912d03728f29589f30ec487da7ceabaaeed3bd",
         "map": "uzp_plane/basecolor",
         "export16": [
           48107,
           48107,
           48107
         ],
-        "note": "linear (decision 126): the 16-bit PNG export of the empty channel is the PNG write of the sRGB export encode of float32(127/255) (src/export/encode.h); no OpenEXR export of an empty channel with this code is recorded: float32(127/255) is the value k/255 whose encode writes it (the class of the flat normal's 127/255); every float32 from 0.4980261 to 0.4980471 writes it too"
+        "note": "linear (decision 126): its OpenEXR 32f export of the empty channel holds float32(127/255) in every texel, r1 and r2 (decisions 172, 169); its 16-bit PNG export, code 48107 in tier0/semantics/base-values-dota-2, is the PNG write of the sRGB export encode of that value (src/export/encode.h)"
       }
     },
     {
@@ -133,21 +133,21 @@
       "type": "Specular",
       "format": "L8",
       "base": [
-        0.21866178512573242,
         0.03921568766236305,
-        0.21866178512573242
+        0.03921568766236305,
+        0.03921568766236305
       ],
       "base_provenance": {
         "kind": "observed",
-        "golden_id": "tier0/semantics/base-values-dota-2",
-        "record_sha256": "2023ed8366f0d835faa7a523c1500d92fed150573afec616379bb000c3b1ea60",
+        "golden_id": "tier0/semantics/export-template-base-dota-2",
+        "record_sha256": "06399ec6a82c416fe76dfda86f912d03728f29589f30ec487da7ceabaaeed3bd",
         "map": "uzp_plane/specular",
         "export16": [
           14330,
           2570,
           14330
         ],
-        "note": "the 16-bit PNG export of the empty channel; the base is the float32 whose write (truncate to 20 fractional bits, nearest, ties down) is this code"
+        "note": "linear (decision 169): its OpenEXR 32f export of the empty channel holds float32(10/255) in R, G and B on every texel, r1 and r2; its 16-bit PNG export, (14330, 2570, 14330) in tier0/semantics/base-values-dota-2 and in this golden, is not the write of that value on an L8 channel and is refused before writing (src/export/encode.cpp)"
       }
     },
     {

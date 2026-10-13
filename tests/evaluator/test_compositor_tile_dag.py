@@ -273,6 +273,11 @@ def backends() -> list[str]:
 SRGB_ENCODED_ON_EXPORT = frozenset({"BaseColor", "Specular", "Emissive"})
 
 
+def l8_png_refused(channel: str, fmt: str) -> bool:
+    """The export refuses a PNG of an L8 BaseColor, Specular or Emissive (decision 169)."""
+    return fmt == "L8" and channel in SRGB_ENCODED_ON_EXPORT
+
+
 def write16(v: float) -> int:
     """The evaluator's 16-bit UNORM write rule: truncate to 20 fractional bits, nearest, ties
     down."""
@@ -310,8 +315,8 @@ def raster(result: dict[str, Any], channel: str) -> np.ndarray:
 
 def export16_of_constant(constant: list[float], channel: str, fmt: str) -> list[int]:
     """What a 16-bit PNG export of an empty channel's constant holds, per component: the write
-    rule of the export depth, whatever the channel format (Painter's default maps are not
-    quantised to the channel: the Dota 2 Specular L8 base exports 14330, off the 8-bit lattice).
+    rule of the export depth, whatever the channel format. The PNG of an L8 BaseColor, Specular or
+    Emissive is refused (decision 169: Dota 2's L8 Specular base writes (14330, 2570, 14330)).
     The signed Height channel exports (h + 1) / 2 (its base 0 exports 32767). An sRGB8 BaseColor,
     Specular or Emissive holds its linear constant and exports its sRGB encode (src/export/encode.h,
     decision 126)."""
@@ -386,6 +391,11 @@ def test_base_values_equal_the_empty_project_exports(
         for recording in ("r1", "r2"):
             decoded = golden.map(recording, map_name)
             observed = decoded.values
+            if decoded.integer and l8_png_refused(channel, formats[channel]):
+                # Dota 2's L8 Specular: Painter's PNG 16 holds (14330, 2570, 14330) for the base
+                # float32(10/255) its OpenEXR shows; the export refuses that PNG (decision 169),
+                # and tests/export compares the OpenEXR files.
+                continue
             if decoded.integer:
                 ours = np.asarray(
                     export16_of_constant(entry["constant"], channel, formats[channel]), np.int64
