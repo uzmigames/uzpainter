@@ -23,10 +23,6 @@
 
 #include <memory>
 
-#include <optional>
-
-#include "prof_scratch.h"
-
 #include "evaluator/error.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/geometry_mask.h"
@@ -120,7 +116,6 @@ JobBody ExportBody(std::shared_ptr<OpenProject> project, core::Snapshot snapshot
             project_path = std::move(project_path), project_source = std::move(project_source),
             mesh_source = std::move(mesh_source), fixed_names = std::move(fixed_names)](JobContext& context) {
         const core::Project& p = *snapshot.project;
-        UZP_PROF("export.job");
         const exporter::ExportPlan plan = exporter::CompilePlan(p, config, exporter::PlanContext{project_path});
         exporter::CheckExportable(plan);
         context.SetProgress(0.1, "plan compiled");

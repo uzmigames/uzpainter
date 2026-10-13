@@ -1,9 +1,5 @@
 #include "store/project_store.h"
 
-#include <optional>
-
-#include "prof_scratch.h"
-
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -106,7 +102,6 @@ ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const
         ImportBundle(path, target);
         return Open(target, options);
     }
-    std::optional<uzp_prof::Scope> phase(std::in_place, "store.lock+sqlite");
     ProjectLock lock = ProjectLock::Acquire(path);
     RemoveTemporaryFiles(path);  // left by a worker killed during compact
     Container container = Container::Open(path);
@@ -125,7 +120,6 @@ ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const
 
     const bool portable = container.Meta("portable").value_or("1") != "0";
     const std::int64_t revision = ReadCurrentRevision(container);
-    phase.emplace("store.manifest(rev " + std::to_string(revision) + ")");
     const std::string text = ReadManifestText(container, revision);
     Value manifest;
     try {
@@ -139,7 +133,6 @@ ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const
         throw StoreError(StoreError::Code::corrupt,
                          "the manifest of revision " + std::to_string(revision) + " cannot be read: " + error.what());
     }
-    phase.emplace("store.operations");
     opened.state.project_uuid = *uuid;
     opened.state.revision = revision;
     opened.state.operation_horizon = ReadHorizon(container);
@@ -151,9 +144,7 @@ ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const
         // the records above the horizon.
         if (record.committed_revision > opened.state.operation_horizon) opened.state.operations.push_back(std::move(record));
     }
-    phase.emplace("store.integrity");
     opened.report = CheckIntegrity(container, manifest, options.verify);
-    phase.reset();
     opened.store.reset(new ProjectStore(std::move(lock), std::move(container), *uuid, portable, std::move(manifest)));
     return opened;
 }

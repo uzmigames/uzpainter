@@ -2,8 +2,6 @@
 
 #include "python/session.h"
 
-#include "prof_scratch.h"
-
 #include <array>
 #include <chrono>
 #include <ctime>
@@ -182,15 +180,12 @@ void CheckCreateSettings(const CreateSettings& settings) {
 core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, const CreateSettings& settings,
                                         const CreateCall& call) {
     if (IsOpen()) ThrowProjectError("a project is already open");
-    UZP_PROF("session.create");
     CheckCreateSettings(settings);
     const std::string bytes = ReadFile(mesh_path);
     mesh::ImportSettings import;
     import.mesh_unit_scale = settings.mesh_unit_scale;
-    std::optional<uzp_prof::Scope> importScope(std::in_place, "create.importmesh");
     const mesh::ImportResult imported =
         mesh::ImportMesh(bytes, Utf8(mesh_path.filename()), import, mesh_path.parent_path());
-    importScope.reset();
 
     const evaluator::TemplateLibrary templates =
         evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory());
@@ -274,10 +269,7 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
 void Session::Open(const std::filesystem::path& path, bool untitled) {
     if (IsOpen()) ThrowProjectError("a project is already open");
     if (!std::filesystem::exists(path)) ThrowProjectError("cannot open " + Utf8(path) + ": no such file");
-    UZP_PROF("session.open");
-    std::optional<uzp_prof::Scope> storeScope(std::in_place, "store.open");
     store::ProjectStore::Opened opened = store::ProjectStore::Open(path);
-    storeScope.reset();
     auto project = std::make_shared<OpenProject>();
     project->store = std::move(opened.store);
     project->document = std::make_unique<core::Document>(std::move(opened.state));

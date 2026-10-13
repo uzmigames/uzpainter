@@ -57,17 +57,6 @@ MAX_HTTP_CLIENTS = 10_000  # the SDK's session limit
 
 log = logging.getLogger("uzpainter.supervisor")
 
-# SCRATCH profiling (wt/loadcache), reverted.
-import time as _prof_time  # noqa: E402
-
-
-def _prof(name: str, t0: float) -> None:
-    d = os.environ.get("UZP_PROFILE")
-    if d:
-        with open(os.path.join(d, f"{os.getpid()}.tsv"), "a", encoding="utf-8") as f:
-            f.write(f"{os.getpid()}	py:{name}	{(_prof_time.time() - t0) * 1000:.2f}	{t0 * 1000:.2f}
-")
-
 
 class _UsageError(Exception):
     pass
@@ -157,23 +146,19 @@ def main(argv: list[str], exe: str, build: str, protocol: str, hooks_compiled: b
         protocol=protocol,
     )
     log.info("build %s, backend %s, python %s", build, config.gpu_backend, config.allow_python)
-    _t = _prof_time.time()
     try:
         ledger = Ledger((args.ledger or DEFAULT_PATH).resolve())
     except (OSError, sqlite3.Error) as error:
         log.critical("fatal supervisor error: cannot open the ledger: %s", error)
         return EXIT_FATAL
-    _prof("ledger.open", _t)
     handler = LogHandler(ledger, process_identity(os.getpid()) or f"{os.getpid()}:0")
     logging.getLogger().addHandler(handler)
     try:
-        _t = _prof_time.time()
         try:
             manifest = Manifest.load(Path(exe).parent / "capabilities.json")
         except ManifestError as error:
             log.critical("fatal supervisor error: %s", error)
             return EXIT_FATAL
-        _prof("manifest.load", _t)
         return asyncio.run(_serve(config, build, protocol, ledger, manifest, args))
     finally:
         logging.getLogger().removeHandler(handler)
@@ -199,14 +184,11 @@ async def _serve(
     args: argparse.Namespace,
 ) -> int:
     supervisor = worker_module.Supervisor(config)
-    _t = _prof_time.time()
     try:
         await supervisor.start()
     except worker_module.FatalSupervisorError as error:
         log.critical("fatal supervisor error: %s", error)
         return EXIT_FATAL
-    _prof("supervisor.start(worker launch+handshake)", _t)
-    _t = _prof_time.time()
     admission = Admission(supervisor, ledger)
     supervisor.on_job_event = admission.on_job_event
     registry = Registry(
@@ -219,7 +201,6 @@ async def _serve(
         build=build,
         protocol=protocol,
     )
-    _prof("admission+registry", _t)
     try:
         if args.bind is None:
             await _run_stdio(registry, build)
@@ -263,10 +244,8 @@ def _http_clients() -> Any:
 async def _run_stdio(registry: Registry, build: str) -> None:
     from mcp.server.stdio import stdio_server
 
-    _t = _prof_time.time()
     client = Client("stdio")
     server = _server(registry, build, lambda ctx: client)
-    _prof("stdio.server_build(imports mcp.server)", _t)
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 

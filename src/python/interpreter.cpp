@@ -4,15 +4,12 @@
 
 #include <pybind11/embed.h>
 
-#include "prof_scratch.h"
-
 #include <exception>
 
 namespace uzp::python {
 
 std::string Start() {
     if (Py_IsInitialized()) return "the interpreter is already running";
-    UZP_PROF("python.start");
     PyConfig config;
     // Isolated: no environment variables, no user site-packages, no current directory on the
     // path, no signal handlers. python313._pth beside the DLL then sets the module search path.

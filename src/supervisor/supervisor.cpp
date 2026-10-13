@@ -2,10 +2,6 @@
 
 #include "supervisor/supervisor.h"
 
-#include <optional>
-
-#include "prof_scratch.h"
-
 #include <exception>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -45,9 +41,7 @@ int RunSupervisorCommand(const std::vector<std::string>& args, std::FILE* err) {
     }
     pybind11::gil_scoped_acquire gil;
     try {
-        std::optional<uzp_prof::Scope> phase(std::in_place, "sup.import_main");
         pybind11::object main = pybind11::module_::import("uzpainter_supervisor.main").attr("main");
-        phase.reset();
         const std::vector<std::string> rest(args.begin() + 1, args.end());
         return main(rest, ExecutablePath(), BuildString(), std::string(kProtocol), FaultHooksCompiled()).cast<int>();
     } catch (const std::exception& error) {

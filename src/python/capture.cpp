@@ -2,10 +2,6 @@
 
 #include "python/capture.h"
 
-#include <optional>
-
-#include "prof_scratch.h"
-
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -183,7 +179,6 @@ std::string DiagnosticConfig(const std::string& exportPath, const std::string& r
 }
 
 json::Object CaptureDiagnostic(const CaptureArguments& a, const ParsedMode& parsed) {
-    UZP_PROF("capture.diagnostic");
     for (const auto& [given, name] : {std::pair{a.camera.has_value(), "camera"}, std::pair{a.preset.has_value(), "preset"},
                                       std::pair{a.samples.has_value(), "samples"}, std::pair{a.seed.has_value(), "seed"}}) {
         if (given) Value(std::string(name) + " does not apply to the texture-space capture mode " + a.mode);
@@ -337,7 +332,6 @@ std::pair<preview::CameraPose, json::Object> CameraOf(const CaptureArguments& a,
 }
 
 json::Object CaptureViewport(const CaptureArguments& a) {
-    UZP_PROF("capture.viewport");
     if (a.stack) Value("painter_viewport renders every texture set: stack does not apply");
     if (!a.size) Value("painter_viewport needs a size (width, height)");
     const std::int64_t width64 = a.size->first;
@@ -370,7 +364,6 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     preview::PreviewFrame frame;
     frame.revision = snapshot.revision;
     frame.project = project;
-    std::optional<uzp_prof::Scope> phase(std::in_place, "capture.mesh");
     {
         mesh::ImportResult imported =
             mesh::RederiveMesh(*project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
@@ -394,9 +387,7 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     }
     // The display configuration, the environment and the lighting, before any evaluation or device.
     preview::LightingCache cache;
-    phase.emplace("capture.scene(env decode+lighting)");
     std::expected<preview::ViewportScene, std::string> scene = preview::SceneOf(frame, cache);
-    phase.reset();
     if (!scene) {
         const std::string& message = scene.error();
         if (message.starts_with("unsupported_configuration")) {
@@ -416,7 +407,6 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     }
 
     // The material maps of the committed revision, on a CPU evaluator with the export's inputs.
-    phase.emplace("capture.evaluate");
     auto templates = std::make_shared<const evaluator::TemplateLibrary>(
         evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory()));
     evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
@@ -451,7 +441,6 @@ json::Object CaptureViewport(const CaptureArguments& a) {
             Take(cpu.EvaluateNormal(*project, snapshot.revision, normal)));
     }
     scene->materials = preview::MaterialsOf(frame);
-    phase.emplace("capture.engine");
 
     // The GPU: the worker's engine, or a device of the process's backend for this capture.
     std::unique_lock lock(g_gpuMutex);
@@ -467,7 +456,6 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     if (const std::optional<render::Error>& unavailable = engine->DeviceError()) {
         throw ApiError("RuntimeError", unavailable->Describe());
     }
-    phase.emplace("capture.render");
     const auto submitted = std::make_shared<const core::Snapshot>(snapshot);
     preview::ViewportImage image = Take(engine
                                             ->Submit(submitted,
@@ -478,12 +466,9 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     const render::Result<render::CapabilityReport> capabilities = engine->Capabilities();
     const std::string adapter = capabilities ? capabilities->adapter : "unknown";
     const render::Backend backend = engine->Options().device.backend;
-    phase.emplace("capture.driverversion");
     const std::string driver =
         backend == render::Backend::Dx12 ? preview::DriverVersion(engine->Options().device.adapterIndex) : "unknown";
-    phase.emplace("capture.engine_destroy");
     local.reset();
-    phase.emplace("capture.encode+write");
 
     // RGB of the display codes (16-bit PNG) and of the linear colour (binary16 OpenEXR); alpha is 1.
     exporter::PngImage png{width, height, 3, 16, {}};

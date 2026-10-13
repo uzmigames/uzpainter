@@ -1,9 +1,5 @@
 #include "export/write.h"
 
-#include <optional>
-
-#include "prof_scratch.h"
-
 #include "export/encode.h"
 #include "export/padding.h"
 #include "uzp_core/manifest/sha256.h"
@@ -60,7 +56,6 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
                                                       const evaluator::TemplateLibrary& templates,
                                                       evaluator::ITileStore& store, evaluator::TileCache& cache) {
     // 1. Every file's processing and padding, before any evaluation.
-    std::optional<uzp_prof::Scope> phase(std::in_place, "export.coverage");
     std::map<core::Id, Coverage> coverages;
     for (const PlannedFile& file : plan.files) {
         const core::TextureSet* set = SetOf(project, file.textureSetId);
@@ -87,10 +82,8 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
         if (inputs.beforeFile && !inputs.beforeFile(i, plan.files.size())) {
             return ExportFail("stopped before " + file.relativePath);
         }
-        phase.emplace("export.evaluate(" + file.relativePath + ")");
         render::Result<FileRaster> raster = EvaluateFileOn(project, revision, file, inputs, templates, store, cache);
         if (!raster) return render::Unexpected(raster.error());
-        phase.emplace("export.encode(" + file.relativePath + ")");
         try {
 #if defined(UZP_EXPORT_FAULT_HOOKS)
             if (fault::Fails(fault::Point::fail_encode, i)) throw std::runtime_error("injected encoder failure");
@@ -99,7 +92,6 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
                 file.layout != FileLayout::Statistics ? &coverages.at(file.textureSetId) : nullptr;
             EncodedImage image = EncodeFile(file, *raster, coverage);
             encoded.push_back({std::move(image.bytes), raster->normalTag, image.layout});
-            phase.reset();
         } catch (const std::exception& e) {
             return ExportFail("encoding " + file.relativePath + " failed: " + e.what());
         }

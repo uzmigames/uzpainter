@@ -7,12 +7,6 @@
 // roles `--mcp` and `--worker` (src/supervisor/), the preview window `--preview` (src/preview/cli.h);
 // the other commands are added by their phases.
 
-#include "prof_scratch.h"
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#define NOMINMAX
-#include <windows.h>
 #include "export/cli.h"
 #include "preview/cli.h"
 #include "python/capabilities.h"
@@ -29,19 +23,6 @@
 #include <vector>
 
 int main(int argc, char** argv) {
-    if (uzp_prof::Dir()) {
-        FILETIME c, e, k, u;
-        GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u);
-        ULARGE_INTEGER v;
-        v.LowPart = c.dwLowDateTime;
-        v.HighPart = c.dwHighDateTime;
-        // FILETIME epoch 1601 -> Unix epoch.
-        const double created = static_cast<double>(v.QuadPart) / 1e4 - 11644473600000.0;
-        uzp_prof::Line("process.created", created, 0.0);
-        uzp_prof::Mark("main.entry");
-        std::string verb = argc > 1 ? argv[1] : "";
-        uzp_prof::Mark("verb:" + verb);
-    }
     const std::vector<std::string> args(argv + (argc > 0 ? 1 : 0), argv + argc);
     if (!args.empty() && uzp::supervisor::IsWorkerCommand(args.front())) {
         const int status = uzp::supervisor::RunWorkerCommand(args, stderr);

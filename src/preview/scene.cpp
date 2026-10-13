@@ -2,10 +2,6 @@
 // preview window's thread and the `painter_viewport` capture (python/capture.h).
 
 #include "evaluator/arith.h"
-
-#include <optional>
-
-#include "prof_scratch.h"
 #include "evaluator/diagnostics.h"
 #include "preview/preview.h"
 #include "python/display.h"
@@ -155,13 +151,11 @@ std::expected<ViewportScene, std::string> SceneOf(const PreviewFrame& frame, Lig
     }
     std::shared_ptr<const EnvironmentLighting>& lighting = cache[frame.environmentHash];
     if (!lighting) {
-        std::optional<uzp_prof::Scope> phase(std::in_place, "env.decode");
         std::expected<EnvironmentImage, std::string> image = DecodeEnvironment(*frame.environmentBytes);
         if (!image) {
             cache.erase(frame.environmentHash);
             return Problem(image.error());
         }
-        phase.emplace("env.precompute_lighting(" + std::to_string(image->width) + "x" + std::to_string(image->height) + ")");
         lighting = std::make_shared<const EnvironmentLighting>(PrecomputeLighting(*image));
     }
     next.mesh = frame.mesh;
