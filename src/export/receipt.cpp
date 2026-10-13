@@ -1,6 +1,7 @@
 #include "export/receipt.h"
 
 #include "evaluator/dag.h"
+#include "export/padding.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/recipe.h"
 #include "uzp_core/manifest/sha256.h"
@@ -207,7 +208,8 @@ render::Result<std::set<std::string>> ReadResourceHashes(const core::Project& pr
         return {};
     };
     for (const PlannedFile& file : plan.files) {
-        if (file.layout != FileLayout::Statistics) walk.geometry = true;  // the padding's UV coverage
+        // The UV coverage of the padding, and of the island check of a combined virtual normal.
+        if (file.layout != FileLayout::Statistics || ReadsCombinedNormal(file)) walk.geometry = true;
         for (const PlannedChannel& planned : file.channels) {
             const PlannedSource& s = planned.source;
             render::Result<void> read{};

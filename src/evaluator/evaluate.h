@@ -66,9 +66,9 @@ struct EvalEnvironment {
     const IResourceProvider* resources = nullptr;
     /// May be null when the DAG has no geometry mask (geometry_mask.h).
     const IGeometryMaskProvider* geometry = nullptr;
-    /// Normal-channel bitmaps with their green codes inverted (the channel's import rule), by
-    /// resource hash, made once per evaluation.
-    std::unordered_map<std::string, std::shared_ptr<const DecodedImage>> greenInverted{};
+    /// Normal-channel bitmaps as the 16-bit textures the channel samples (its import rule,
+    /// evaluate.cpp `NormalTexture`), by resource hash, made once per evaluation.
+    std::unordered_map<std::string, std::shared_ptr<const DecodedImage>> normalTextures{};
     /// sRGB bitmaps as the float32 linear images Painter samples (sources.h), by resource hash
     /// (suffixed `/l8` for the decode of an L8 BaseColor, Specular or Emissive), made once per
     /// evaluation.

@@ -295,6 +295,47 @@ def test_a_second_writer_receives_lease_held(
     assert revision_of(first) == revision + 3
 
 
+@contract("two_writers", "http")
+def test_a_lease_taken_before_project_create_holds_the_created_project(
+    painter: Path,
+    tmp_path: Path,
+    supervisors: list[Supervisor],
+    contract_project: Path,
+    transport: str,
+) -> None:
+    """Practical-e2e B8, decision 243: two owners take the lease with no project open; the
+    project the first one creates is its own from the switch, so the second owner's mutation and a
+    third client's `lease_acquire` are refused `lease_held` and the creator commits. The project
+    the second owner then opens is the second owner's."""
+    project = project_copy(contract_project, tmp_path / "projects")
+    supervisor = Supervisor(painter, tmp_path, transport)
+    supervisors.append(supervisor)
+    first, second = supervisor.client("client-a"), supervisor.client("client-b")
+    created = first.call(
+        "project_create",
+        {"mesh": str(PLANE), "settings": {"default_texture_resolution": 256}, "wait": True},
+    )
+    assert created["result"]["status"] == "committed", created
+    revision = revision_of(first)
+
+    held = insert(second, "B", None, None)
+    assert held["error"]["code"] == "lease_held", held
+    assert held["error"]["details"]["holder"] == "client-a"
+    third = Http(supervisor.url)
+    assert third.call("lease_status")["result"]["lease"]["holder"] == "client-a"
+    refused = third.call("lease_acquire", {"owner": "client-c"})
+    assert refused["error"]["code"] == "lease_held", refused
+    assert insert(first, "A", None, None)["committed_revision"] == revision + 1
+
+    assert "error" not in first.call("project_close", {"discard": True})
+    opened = second.call("project_open", {"path": str(project), "wait": True})
+    assert isinstance(opened["result"]["revision"], int), opened
+    held = insert(first, "A", None, None)
+    assert held["error"]["code"] == "lease_held", held
+    assert held["error"]["details"]["holder"] == "client-b"
+    assert insert(second, "B", None, None)["committed_revision"] == opened["result"]["revision"] + 1
+
+
 # ── 3.2 lost acknowledgement, commit-then-die ───────────────────────────────────────────────────
 
 

@@ -38,9 +38,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "9f384107d455ddaccde580a16c1c6d632d0e989d",
       "upstream_sha256": "bc2ac8d5b3e502e2861ed37cc29da1bebce4512d23ab2dba85a8d4d2897fea34",
-      "vendored_sha256": "bc2ac8d5b3e502e2861ed37cc29da1bebce4512d23ab2dba85a8d4d2897fea34",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "1ccd824448edecde1d8234648e3ab7219edcd670af5fd1f70132b0dd61cb5c58",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-010"
+      ]
     },
     {
       "upstream_path": "runtime/engine/logging/log.h",
@@ -48,9 +50,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "d96029a6e57590a6f8b6dbe16fb64bc61421d801",
       "upstream_sha256": "2ceed482f8fe0ff4b6367f5f76e94cea851cadaed66259d847e550c918e2b2a6",
-      "vendored_sha256": "2ceed482f8fe0ff4b6367f5f76e94cea851cadaed66259d847e550c918e2b2a6",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "b51a142a15e4725e03b53061b691981cf8dfbeaeda27bb1cf85e157c89923c6f",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-010"
+      ]
     },
     {
       "upstream_path": "runtime/engine/math/basis.h",
@@ -913,9 +917,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "0d1ee1eca921ad091bf02f68f9e619251d802211",
       "upstream_sha256": "9ef1bbe0d5ad7af09e420db70bd67cf413f5d08e4f07bce34c79bfd39b0cd54e",
-      "vendored_sha256": "9ef1bbe0d5ad7af09e420db70bd67cf413f5d08e4f07bce34c79bfd39b0cd54e",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "b8c4068ca4aed501e167b6f1fbd50e204bdfbc8526b52620db0967dbfbcce852",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-010"
+      ]
     },
     {
       "upstream_path": "runtime/platform/windows/crash_handler.h",
@@ -923,9 +929,11 @@
       "upstream_commit": "380c142e481d56fe16b045f63315b42359e86a7d",
       "upstream_blob_sha1": "c048adf25a57c47287945a52c313239f0b308309",
       "upstream_sha256": "b62412ccca5358e20552b671b10df6b6af9aa9948b1b82992afdfedf0648a1da",
-      "vendored_sha256": "b62412ccca5358e20552b671b10df6b6af9aa9948b1b82992afdfedf0648a1da",
-      "status": "verbatim",
-      "modifications": []
+      "vendored_sha256": "3783d917906cdfd14d33c7d00825b1c2f46ebf8f8f9f3e6329f1c7e7ce94d6f4",
+      "status": "modified",
+      "modifications": [
+        "UZP-MOD-010"
+      ]
     },
     {
       "upstream_path": "runtime/platform/windows/file_system.cpp",

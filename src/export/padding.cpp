@@ -9,15 +9,23 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace uzp::exporter {
 
 namespace {
 
-[[noreturn]] void Unfitted(const PlannedFile& file, const std::string& what) {
+/// The owner of padding on UV-islanded sets (decisions 103, 223 and 245).
+constexpr std::string_view kIslandsOwner = "owner phase1.25_pilot-wand item 2.7";
+
+[[noreturn]] void Unfitted(const PlannedFile& file, const std::string& what,
+                           std::string_view owner = kProcessingRecording) {
     throw core::NotYetSupported("export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
-                                "): " + what + " (" + std::string(kProcessingRecording) + ")");
+                                "): " + what + " (" + std::string(owner) + ")");
 }
+
+/// A channel reading a combined virtual normal.
+bool ChannelReadsCombinedNormal(const PlannedChannel& channel) { return ReadsCombinedNormal(channel.source); }
 
 // The ring's weights (decisions 176, 206): f = 0.4142245, a diagonal weighs f / (1 - f) against a
 // side's 1. On a straight edge one diagonal is weakened by kAsymmetry so that the mean moves
@@ -204,10 +212,43 @@ void CheckPadding(const PlannedFile& file, const Coverage& coverage) {
     for (const PlannedChannel& channel : file.channels) {
         const SourceType type = channel.source.type;
         if (type == SourceType::meshMap || type == SourceType::virtualMap) {
-            Unfitted(file, "the padding \"passthrough\" of a " + std::string(SourceTypeName(type)) +
-                               " source outside the UV islands is not recorded");
+            Unfitted(file,
+                     "the padding \"passthrough\" of a " + std::string(SourceTypeName(type)) +
+                         " source outside the UV islands is not recorded (R-090 records it for a virtual normal "
+                         "from layers without a mesh map only, where Painter's values there differ between "
+                         "recordings)",
+                     std::string(kIslandsOwner) + ", " + std::string(kProcessingRecording) + ", decision 245");
         }
     }
+}
+
+bool ReadsCombinedNormal(const PlannedSource& source) {
+    if (source.type == SourceType::virtualMap) return source.normalRole == core::MeshMapRole::combined;
+    if (source.type != SourceType::diagnosticMap || !source.diagnostic) return false;
+    using Kind = evaluator::DiagnosticSource::Kind;
+    const evaluator::DiagnosticSource& d = *source.diagnostic;
+    return (d.kind == Kind::Isolated || d.kind == Kind::Contribution || d.kind == Kind::RegionStats) &&
+           d.map.kind == evaluator::DiagnosticMapId::Kind::VirtualNormal;
+}
+
+bool ReadsCombinedNormal(const PlannedFile& file) {
+    return std::any_of(file.channels.begin(), file.channels.end(), ChannelReadsCombinedNormal);
+}
+
+std::string IslandNormalRefusal(const PlannedSource& source) {
+    return "the " + std::string(SourceTypeName(source.type)) + " \"" + source.name +
+           "\" reads the combined virtual normal on a texture set whose UV islands do not cover the whole tile: its "
+           "island-edge texels read the Height outside the islands, where Painter's Height (the same under every "
+           "padding of recording R-090) is not reproduced, and no recording shows it for a Height without layers (" +
+           std::string(kIslandsOwner) + ": the Height outside the UV islands; decision 245)";
+}
+
+void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage) {
+    if (coverage.Complete()) return;
+    const auto normal = std::find_if(file.channels.begin(), file.channels.end(), ChannelReadsCombinedNormal);
+    if (normal == file.channels.end()) return;
+    throw core::NotYetSupported("export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
+                                "): " + IslandNormalRefusal(normal->source));
 }
 
 bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored) {

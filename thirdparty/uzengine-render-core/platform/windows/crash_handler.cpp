@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-010. Original: UzEngine runtime/platform/windows/crash_handler.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// UzEngine Crash Handler — Windows SEH implementation.
 ///
 /// Installs an unhandled exception filter that writes minidump, text, and
@@ -23,6 +25,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <cwchar>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Log category
@@ -56,7 +59,8 @@ char g_gpuAdapter[256] = {};
 
 /// Override crash output base directory. When non-empty, crash reports go to
 /// `{g_crashBaseDir}/crashes/{timestamp}/` instead of `{exe_dir}/crashes/`.
-char g_crashBaseDir[MAX_PATH] = {};
+/// UTF-16, so the reports can be written to any path (UZP-MOD-010).
+wchar_t g_crashBaseDir[MAX_PATH] = {};
 
 /// Previous exception filter, restored on uninstall.
 LPTOP_LEVEL_EXCEPTION_FILTER g_previousFilter = nullptr;
@@ -107,8 +111,8 @@ const char* ExceptionCodeToString(DWORD code) {
 
 /// Writes a MiniDump file at the given path using the exception pointers.
 /// Returns true on success.
-bool WriteMiniDump(const char* path, EXCEPTION_POINTERS* exceptionInfo) {
-    const HANDLE file = CreateFileA(
+bool WriteMiniDump(const wchar_t* path, EXCEPTION_POINTERS* exceptionInfo) {
+    const HANDLE file = CreateFileW(
         path, GENERIC_WRITE, 0, nullptr,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
 
@@ -140,8 +144,8 @@ bool WriteMiniDump(const char* path, EXCEPTION_POINTERS* exceptionInfo) {
 }
 
 /// Writes the human-readable crash report (.txt) using only stack buffers.
-void WriteTextReport(const char* path, const CrashContext& ctx) {
-    const HANDLE file = CreateFileA(
+void WriteTextReport(const wchar_t* path, const CrashContext& ctx) {
+    const HANDLE file = CreateFileW(
         path, GENERIC_WRITE, 0, nullptr,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
 
@@ -260,8 +264,8 @@ void WriteTextReport(const char* path, const CrashContext& ctx) {
 
 /// Writes the machine-parseable crash report (.json) using only stack buffers.
 /// Uses manual snprintf — no JSON library to avoid heap allocation.
-void WriteJsonReport(const char* path, const CrashContext& ctx) {
-    const HANDLE file = CreateFileA(
+void WriteJsonReport(const wchar_t* path, const CrashContext& ctx) {
+    const HANDLE file = CreateFileW(
         path, GENERIC_WRITE, 0, nullptr,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
 
@@ -412,62 +416,70 @@ LONG WINAPI UzExceptionFilter(EXCEPTION_POINTERS* exceptionInfo) {
 
     // 3. Build crash directory path: {base_dir}/crashes/{timestamp}/
     //    Use override dir if set (for .node addon running inside Electron),
-    //    otherwise fall back to exe directory.
-    char exeDirBuf[MAX_PATH];
-    if (g_crashBaseDir[0] != '\0') {
-        std::strncpy(exeDirBuf, g_crashBaseDir, MAX_PATH - 1);
-        exeDirBuf[MAX_PATH - 1] = '\0';
+    //    otherwise fall back to exe directory. UTF-16 paths and the W file
+    //    functions, so any directory works (UZP-MOD-010).
+    wchar_t exeDirBuf[MAX_PATH];
+    if (g_crashBaseDir[0] != L'\0') {
+        std::wcsncpy(exeDirBuf, g_crashBaseDir, MAX_PATH - 1);
+        exeDirBuf[MAX_PATH - 1] = L'\0';
     } else {
         // Get exe directory without std::filesystem (crash-safe).
-        const DWORD exeLen = GetModuleFileNameA(nullptr, exeDirBuf, MAX_PATH);
+        const DWORD exeLen = GetModuleFileNameW(nullptr, exeDirBuf, MAX_PATH);
         if (exeLen == 0 || exeLen >= MAX_PATH) {
             // Fallback to current directory.
-            exeDirBuf[0] = '.';
-            exeDirBuf[1] = '\0';
+            exeDirBuf[0] = L'.';
+            exeDirBuf[1] = L'\0';
         } else {
             // Strip filename to get directory.
-            char* lastSlash = nullptr;
-            for (char* p = exeDirBuf; *p != '\0'; ++p) {
-                if (*p == '\\' || *p == '/') {
+            wchar_t* lastSlash = nullptr;
+            for (wchar_t* p = exeDirBuf; *p != L'\0'; ++p) {
+                if (*p == L'\\' || *p == L'/') {
                     lastSlash = p;
                 }
             }
             if (lastSlash != nullptr) {
-                *lastSlash = '\0';
+                *lastSlash = L'\0';
             }
         }
     }
 
     char timestamp[64];
     FormatTimestamp(timestamp, sizeof(timestamp));
+    // The timestamp is ASCII digits, '-' and '_'.
+    wchar_t wideTimestamp[64];
+    size_t timestampLen = 0;
+    for (; timestamp[timestampLen] != '\0' && timestampLen + 1 < 64; ++timestampLen) {
+        wideTimestamp[timestampLen] = static_cast<wchar_t>(timestamp[timestampLen]);
+    }
+    wideTimestamp[timestampLen] = L'\0';
 
-    char crashDir[MAX_PATH];
-    std::snprintf(crashDir, sizeof(crashDir), "%s\\crashes\\%s",
-                  exeDirBuf, timestamp);
+    wchar_t crashDir[MAX_PATH];
+    std::swprintf(crashDir, MAX_PATH, L"%ls\\crashes\\%ls",
+                  exeDirBuf, wideTimestamp);
 
     // Create directory hierarchy: {exe}/crashes/ then {exe}/crashes/{timestamp}/
-    char crashesParent[MAX_PATH];
-    std::snprintf(crashesParent, sizeof(crashesParent), "%s\\crashes", exeDirBuf);
-    CreateDirectoryA(crashesParent, nullptr);
-    CreateDirectoryA(crashDir, nullptr);
+    wchar_t crashesParent[MAX_PATH];
+    std::swprintf(crashesParent, MAX_PATH, L"%ls\\crashes", exeDirBuf);
+    CreateDirectoryW(crashesParent, nullptr);
+    CreateDirectoryW(crashDir, nullptr);
 
     // 4. Initialize DbgHelp for symbol resolution in crash reports.
     SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
     SymInitialize(GetCurrentProcess(), nullptr, TRUE);
 
     // 5. Write minidump.
-    char dumpPath[MAX_PATH];
-    std::snprintf(dumpPath, sizeof(dumpPath), "%s\\crash.dmp", crashDir);
+    wchar_t dumpPath[MAX_PATH];
+    std::swprintf(dumpPath, MAX_PATH, L"%ls\\crash.dmp", crashDir);
     WriteMiniDump(dumpPath, exceptionInfo);
 
     // 6. Write human-readable crash log.
-    char txtPath[MAX_PATH];
-    std::snprintf(txtPath, sizeof(txtPath), "%s\\crash.txt", crashDir);
+    wchar_t txtPath[MAX_PATH];
+    std::swprintf(txtPath, MAX_PATH, L"%ls\\crash.txt", crashDir);
     WriteTextReport(txtPath, ctx);
 
     // 7. Write machine-parseable JSON crash log.
-    char jsonPath[MAX_PATH];
-    std::snprintf(jsonPath, sizeof(jsonPath), "%s\\crash.json", crashDir);
+    wchar_t jsonPath[MAX_PATH];
+    std::swprintf(jsonPath, MAX_PATH, L"%ls\\crash.json", crashDir);
     WriteJsonReport(jsonPath, ctx);
 
     return EXCEPTION_EXECUTE_HANDLER;
@@ -578,12 +590,17 @@ void CrashHandler_SetLibraryMode(bool enabled) {
 
 void CrashHandler_SetCrashDir(const char* dir) {
     if (!dir || dir[0] == '\0') {
-        g_crashBaseDir[0] = '\0';
+        g_crashBaseDir[0] = L'\0';
         return;
     }
-    std::strncpy(g_crashBaseDir, dir, MAX_PATH - 1);
-    g_crashBaseDir[MAX_PATH - 1] = '\0';
-    UZ_LOG(CrashHandler, Info, "Crash output directory set to: {}", g_crashBaseDir);
+    // UZP-MOD-010: `dir` is UTF-8, kept as UTF-16. A directory that is not UTF-8 or does not
+    // fit in MAX_PATH UTF-16 units is refused instead of truncated (back to the default).
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, dir, -1, g_crashBaseDir, MAX_PATH) == 0) {
+        g_crashBaseDir[0] = L'\0';
+        UZ_LOG(CrashHandler, Error, "Crash output directory refused (not UTF-8 or longer than MAX_PATH): {}", dir);
+        return;
+    }
+    UZ_LOG(CrashHandler, Info, "Crash output directory set to: {}", dir);
 }
 
 } // namespace uz

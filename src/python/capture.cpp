@@ -17,6 +17,7 @@
 #include "evaluator/error.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/templates.h"
+#include "export/config.h"
 #include "export/exr_writer.h"
 #include "export/plan.h"
 #include "export/png_writer.h"
@@ -34,6 +35,7 @@
 #include "store/container.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/sha256.h"
+#include "uzp_core/types/enums.h"
 #include "uzp_core/types/errors.h"
 
 namespace uzp::python {
@@ -52,9 +54,11 @@ enum class Mode : uint8_t { Viewport, BaseColor, Channel, Mask };
 
 struct ParsedMode {
     Mode mode = Mode::Viewport;
-    /// `channel:<name>`: the export's map name; `mask:<uid>`: the node.
+    /// `base_color`, `channel:<name>`: the export's map name; `mask:<uid>`: the node.
     std::string channel;
     core::Id node = core::kNoId;
+    /// `base_color`, `channel:<name>`: the channel type.
+    core::ChannelType member = core::ChannelType::BaseColor;
 };
 
 [[noreturn]] void Value(const std::string& message) { throw ApiError("ValueError", message); }
@@ -74,8 +78,21 @@ T Take(render::Result<T> result) {
 
 ParsedMode ParseMode(const std::string& mode) {
     if (mode == "painter_viewport") return {Mode::Viewport, {}, core::kNoId};
-    if (mode == "base_color") return {Mode::BaseColor, "baseColor", core::kNoId};
-    if (mode.starts_with("channel:") && mode.size() > 8) return {Mode::Channel, mode.substr(8), core::kNoId};
+    if (mode == "base_color") return {Mode::BaseColor, "baseColor", core::kNoId, core::ChannelType::BaseColor};
+    if (mode.starts_with("channel:") && mode.size() > 8) {
+        // A channel type, as evaluate_channel and source_set take it (`SpecularRoughness`), or the
+        // export's documentMap name of one (`specularroughness`); the source is the documentMap the
+        // export records for it (decision 242).
+        const std::string name = mode.substr(8);
+        std::optional<core::ChannelType> member = core::FromString<core::ChannelType>(name);
+        if (!member) member = exporter::DocumentMapMember(name);
+        if (!member) {
+            Value("channel:" + name +
+                  " names no channel: give a channel type, e.g. BaseColor or SpecularRoughness (the export's "
+                  "documentMap names, e.g. specularroughness, are accepted too)");
+        }
+        return {Mode::Channel, exporter::DocumentMapName(*member), core::kNoId, *member};
+    }
     if (mode.starts_with("mask:")) {
         const std::string_view digits = std::string_view(mode).substr(5);
         std::uint64_t uid = 0;
@@ -232,7 +249,10 @@ json::Object CaptureDiagnostic(const CaptureArguments& a, const ParsedMode& pars
         exporter::CompilePlan(project, DiagnosticConfig(exportPath, rootPath, sourceType, sourceName, false, "png", "16"), context);
     exporter::CheckExportable(probe);
     if (probe.files.size() != 1) {
-        Value("the stack " + rootPath + " has no source " + sourceName +
+        const std::string missing = parsed.mode == Mode::Mask
+                                        ? "source " + sourceName
+                                        : "channel " + std::string(core::ToString(parsed.member));
+        Value("the stack " + rootPath + " has no " + missing +
               (probe.skipped.empty() ? std::string() : ": " + probe.skipped.front().reason));
     }
     const bool rgb = probe.files.front().channels.front().source.components == 3;

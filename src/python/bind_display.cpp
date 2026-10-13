@@ -252,8 +252,9 @@ void BindCapture(py::module_& render) {
         py::arg("samples") = py::none(), py::arg("seed") = py::none(), py::arg("preset") = py::none(),
         py::arg("stack") = py::none(),
         "Captures the committed revision to `path` (a .png; an .exr and a .receipt.json beside it) and returns the "
-        "receipt. Modes: painter_viewport (the preview pass, offscreen; needs size), base_color, channel:<name>, "
-        "mask:<uid> (texture-space, equal to the export). painter_iray raises PathTracerUnavailable (P3-PATHTRACER).");
+        "receipt. Modes: painter_viewport (the preview pass, offscreen; needs size), base_color, channel:<name> "
+        "(a ChannelType name, or the export's documentMap name), mask:<uid> (texture-space, equal to the export). "
+        "painter_iray raises PathTracerUnavailable (P3-PATHTRACER).");
 }
 
 }  // namespace uzp::python

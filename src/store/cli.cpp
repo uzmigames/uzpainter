@@ -31,6 +31,14 @@ struct UsageError {
     std::string message;
 };
 
+// Arguments are UTF-8 (src/main.cpp); a narrow `fs::path` would read them in the ANSI code page.
+std::string Utf8(const fs::path& path) {
+    const std::u8string text = path.u8string();
+    return std::string(text.begin(), text.end());
+}
+
+fs::path FromUtf8(std::string_view text) { return fs::path(std::u8string(text.begin(), text.end())); }
+
 std::int64_t Number(const std::string& text, const char* option) {
     std::int64_t value = 0;
     const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
@@ -84,12 +92,12 @@ int Inspect(const std::vector<std::string>& args, std::FILE* out, const core::Re
     if (parsed.recipe) {
         if (parsed.verify) throw UsageError{"inspect takes --verify or --recipe, not both"};
         if (recipe == nullptr) throw std::runtime_error(std::string(kRecipeHostMissing));
-        const Object dump = InspectRecipe(fs::path(parsed.positional[0]), parsed.revision, *recipe);
+        const Object dump = InspectRecipe(FromUtf8(parsed.positional[0]), parsed.revision, *recipe);
         std::fputs(WriteIndented(Value(dump)).c_str(), out);
         return kCliOk;
     }
     const Value report =
-        store::Inspect(fs::path(parsed.positional[0]), InspectOptions{parsed.revision, parsed.verify, recipe});
+        store::Inspect(FromUtf8(parsed.positional[0]), InspectOptions{parsed.revision, parsed.verify, recipe});
     std::fputs(WriteIndented(report).c_str(), out);
     if (parsed.verify) {
         const auto& verify = std::get<Object>(std::get<Object>(report.data).at("verify").data);
@@ -101,7 +109,7 @@ int Inspect(const std::vector<std::string>& args, std::FILE* out, const core::Re
 int ExportBundleCommand(const std::vector<std::string>& args, std::FILE* out) {
     const Parsed parsed = Parse(args, {"--revision"}, false);
     if (parsed.positional.size() != 2) throw UsageError{"export-bundle takes a project file and a target"};
-    const BundleSummary summary = ExportBundle(fs::path(parsed.positional[0]), fs::path(parsed.positional[1]), parsed.revision);
+    const BundleSummary summary = ExportBundle(FromUtf8(parsed.positional[0]), FromUtf8(parsed.positional[1]), parsed.revision);
     std::fputs(WriteIndented(Object{{"target", parsed.positional[1]},
                                     {"revision", summary.revision},
                                     {"manifest_sha256", summary.manifest_sha256},
@@ -116,26 +124,26 @@ int ExportBundleCommand(const std::vector<std::string>& args, std::FILE* out) {
 int Census(const std::vector<std::string>& args, std::FILE* out) {
     const Parsed parsed = Parse(args, {"--inputs", "--assets-root", "--work", "--out", "--edits"}, false);
     if (!parsed.positional.empty()) throw UsageError{"store-census takes options only"};
-    const fs::path inputs_path(Required(parsed, "--inputs"));
+    const fs::path inputs_path = FromUtf8(Required(parsed, "--inputs"));
     std::ifstream file(inputs_path, std::ios::binary);
-    if (!file) throw StoreError(StoreError::Code::io, "cannot read " + inputs_path.string());
+    if (!file) throw StoreError(StoreError::Code::io, "cannot read " + Utf8(inputs_path));
     std::ostringstream text;
     text << file.rdbuf();
     CensusOptions options;
-    options.work_dir = fs::path(Required(parsed, "--work"));
+    options.work_dir = FromUtf8(Required(parsed, "--work"));
     if (const auto it = parsed.values.find("--edits"); it != parsed.values.end()) {
         options.one_parameter_edits = static_cast<int>(Number(it->second, "--edits"));
     }
     const std::vector<CensusProjectInput> inputs =
-        ReadCensusInputs(core::json::Parse(text.str()), fs::path(Required(parsed, "--assets-root")));
+        ReadCensusInputs(core::json::Parse(text.str()), FromUtf8(Required(parsed, "--assets-root")));
     const Value report = RunCensus(inputs, options);
-    const fs::path out_path(Required(parsed, "--out"));
+    const fs::path out_path = FromUtf8(Required(parsed, "--out"));
     std::ofstream report_file(out_path, std::ios::binary | std::ios::trunc);
     const std::string body = WriteIndented(report);
     report_file.write(body.data(), static_cast<std::streamsize>(body.size()));
     report_file.close();
-    if (!report_file) throw StoreError(StoreError::Code::io, "cannot write " + out_path.string());
-    std::fprintf(out, "store-census: %zu projects, report %s\n", inputs.size(), out_path.string().c_str());
+    if (!report_file) throw StoreError(StoreError::Code::io, "cannot write " + Utf8(out_path));
+    std::fprintf(out, "store-census: %zu projects, report %s\n", inputs.size(), Utf8(out_path).c_str());
     return kCliOk;
 }
 

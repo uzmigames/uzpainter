@@ -3062,6 +3062,64 @@ int RunSources(const fs::path& assets) {
         Check(greyRefused, "a colour bitmap on a one-channel tile outside P20-A (another format, 16-bit, Nearest, minified) "
                            "fails with unsupported_source naming item 2.9 (decision 218)",
               greyRefusedDetail);
+
+        // A bitmap on the Normal channel (decision 226, P20-A): an 8-bit colour image's blue codes below 127 become 127 and
+        // its green codes are inverted, a grey image feeds its value to the three components unchanged, and the filter's
+        // result is written as a 16-bit code before the channel stores it half toward zero. P20-A's checker magnified 16
+        // times: at (71, 32) the taps weigh 8/256 of (204, 51, 26) and 248/256 of (26, 128, 204), whose red filters to
+        // 0.12377451, 8112 / 65535 at 16 bits, stored 0.123779296875 (0.12371826171875 without the 16-bit code); at (8, 32)
+        // the first colour alone stores green 204 / 255 and blue 127 / 255 (0.7998046875 and 0.497802734375). The grey
+        // half-left image at (124, 32) filters to 184 / 256, 47103 / 65535 at 16 bits, stored 0.71826171875.
+        const std::string shaChecker = std::string(63, 'a') + "e";
+        const std::string shaHalf = std::string(63, 'a') + "f";
+        const std::string shaHalf16 = std::string(62, 'a') + "f0";
+        auto checker = std::make_shared<DecodedImage>();
+        checker->width = 16;
+        checker->height = 16;
+        checker->channels = 3;
+        checker->encoding = render::TexelEncoding::Unorm8;
+        auto half = [&](render::TexelEncoding encoding, uint32_t max) {
+            auto image = std::make_shared<DecodedImage>();
+            image->width = 16;
+            image->height = 16;
+            image->channels = 1;
+            image->encoding = encoding;
+            for (uint32_t t = 0; t < 16 * 16; ++t) image->values.push_back(t % 16 < 8 ? max : 0u);
+            return image;
+        };
+        for (uint32_t t = 0; t < 16 * 16; ++t) {
+            const bool first = ((t % 16) / 4 + (t / 16) / 4) % 2 == 0;
+            for (const uint32_t code : first ? std::array<uint32_t, 3>{204u, 51u, 26u} : std::array<uint32_t, 3>{26u, 128u, 204u}) {
+                checker->values.push_back(code);
+            }
+        }
+        provider->Add(shaChecker, checker);
+        provider->Add(shaHalf, half(render::TexelEncoding::Unorm8, 255));
+        provider->Add(shaHalf16, half(render::TexelEncoding::Unorm16, 65535));
+        render::Result<ChannelResult> normalChecker =
+            mono(ChannelType::Normal, ChannelFormat::RGB16F, shaChecker, core::FilteringMode::BilinearHQ, 1.0);
+        render::Result<ChannelResult> normalGrey =
+            mono(ChannelType::Normal, ChannelFormat::RGB16F, shaHalf, core::FilteringMode::BilinearHQ, 1.0);
+        bool normalExact = normalChecker && normalGrey;
+        if (normalExact) {
+            const std::vector<uint32_t> colour = Samples(*normalChecker);
+            const std::vector<uint32_t> grey = Samples(*normalGrey);
+            auto at = [](const std::vector<uint32_t>& samples, uint32_t x, uint32_t y, uint32_t c) {
+                return arith::HalfToFloat(static_cast<uint16_t>(samples[(size_t{y} * kRamp + x) * 3 + c]));
+            };
+            normalExact = at(colour, 71, 32, 0) == 0.123779296875f && at(colour, 8, 32, 1) == 0.7998046875f &&
+                          at(colour, 8, 32, 2) == 0.497802734375f && at(grey, 124, 32, 0) == 0.71826171875f &&
+                          at(grey, 124, 32, 1) == 0.71826171875f && at(grey, 124, 32, 2) == 0.71826171875f;
+        }
+        Check(normalExact, "an 8-bit colour and grey bitmap on the Normal channel are imported, filtered and written as 16-bit "
+                           "codes as P20-A records (decision 226)",
+              normalExact ? "" : Describe(normalChecker) + " " + Describe(normalGrey));
+        render::Result<ChannelResult> normalGrey16 =
+            mono(ChannelType::Normal, ChannelFormat::RGB16F, shaHalf16, core::FilteringMode::BilinearHQ, 1.0);
+        Check(!normalGrey16 && KindName(normalGrey16.error()) == "unsupported_source" &&
+                  normalGrey16.error().reason.find("item 2.9, decision 226") != std::string::npos,
+              "a 16-bit grey bitmap on the Normal channel fails with unsupported_source naming item 2.9 (decision 226)",
+              Describe(normalGrey16));
     }
     {
         // Nearest at scale 2 puts every texel on a tie: across, the right texel (2 i + 1 - W / 2); down the rows, the
@@ -3864,6 +3922,57 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
         Check(greyEqual, "a colour 8-bit bitmap magnified on an L8 and an L16F channel evaluates to the same bytes on the GPU "
                          "and on the CPU (" + std::to_string(greySamples) + " samples)",
               greyDetail);
+    }
+
+    // An 8-bit colour and grey bitmap magnified on the Normal channel (decision 226): the blue codes below 127 raised to
+    // 127, the 16-bit code of the filter's result and the half store, as on the CPU, upright and rotated.
+    {
+        bool normalEqual = true;
+        std::string normalDetail;
+        size_t normalSamples = 0;
+        auto provider = std::make_shared<MapResourceProvider>();
+        const std::string colourSha = std::string(63, 'e') + "9";
+        const std::string greySha = std::string(62, 'e') + "a0";
+        provider->Add(colourSha, PatternImage(16, 16, 3, render::TexelEncoding::Unorm8, 31));
+        provider->Add(greySha, PatternImage(16, 16, 1, render::TexelEncoding::Unorm8, 37));
+        for (const std::string& sha : {colourSha, greySha}) {
+            for (const double rotation : {0.0, 30.0}) {
+                Builder builder(256, 256, {{ChannelType::Normal, ChannelFormat::RGB16F}});
+                builder.AddResource(sha, 100);
+                const std::vector<ChannelType> channels{ChannelType::Normal};
+                core::Layer layer =
+                    builder.Fill("normal", SameSource(channels, Bitmap(sha)), Same(channels, BlendingMode::Normal, 1.0));
+                SetUv(layer, core::FilteringMode::BilinearHQ, core::UVWrapMode::Repeat, {1.0, 1.0}, rotation, {0.1, 0.0});
+                builder.SetRoot({layer});
+                EvaluateRequest request;
+                request.textureSet = builder.SetId();
+                request.stack = builder.StackId();
+                request.channel = ChannelType::Normal;
+                request.resources = provider;
+                CpuEvaluator cpu(templates, kWideLimits);
+                render::Result<ChannelResult> cpuResult = cpu.Evaluate(builder.project, request);
+                auto project = std::make_shared<const core::Project>(builder.project);
+                std::future<render::Result<ChannelResult>> future = gpu.Evaluate(core::Snapshot{1, project}, request);
+                render::Result<ChannelResult> gpuResult = Get(future);
+                const std::string label = std::string(sha == colourSha ? "colour" : "grey") + " at " + std::to_string(rotation);
+                if (!cpuResult || !gpuResult) {
+                    normalEqual = false;
+                    normalDetail += label + ": " + Describe(cpuResult) + " / " + Describe(gpuResult) + " ";
+                    continue;
+                }
+                std::string first;
+                const std::vector<uint32_t> expected = Samples(*cpuResult);
+                const size_t mismatches = Mismatches(expected, Samples(*gpuResult), first, cpuResult->tileFormat.encoding);
+                normalSamples += expected.size();
+                if (mismatches != 0) {
+                    normalEqual = false;
+                    normalDetail += label + ": " + std::to_string(mismatches) + " mismatches; " + first + " ";
+                }
+            }
+        }
+        Check(normalEqual, "an 8-bit colour and grey bitmap magnified on the Normal channel evaluate to the same bytes on the "
+                           "GPU and on the CPU (" + std::to_string(normalSamples) + " samples)",
+              normalDetail);
     }
 
     // The grid size reaches the GPU cache keys too.

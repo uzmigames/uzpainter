@@ -165,6 +165,10 @@ struct ExportConfig {
 /// `baseColor`), `ambientOcclusion` for `AO`; nullopt for any other name.
 [[nodiscard]] std::optional<core::ChannelType> DocumentMapMember(std::string_view name);
 
+/// The documentMap name of `member` that the export records (decision 085): `ambientOcclusion`
+/// for AO, `baseColor` for BaseColor, the lower-cased member name otherwise.
+[[nodiscard]] std::string DocumentMapName(core::ChannelType member);
+
 /// The OpenPBR member a legacy alias member reads when the stack lacks the alias itself, for the
 /// pairings Painter 12.1.5 was observed to export: Roughness → SpecularRoughness, Metallic →
 /// BaseMetalness, Emissive → EmissionColor, Anisotropylevel → SpecularRoughnessAnisotropy,

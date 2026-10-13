@@ -95,4 +95,9 @@ std::string ReadManifestText(Container& container, std::int64_t revision);
 /// file cannot be read at all.
 IntegrityReport CheckIntegrity(Container& container, const core::json::Value& current_manifest, VerifyLevel level);
 
+/// SQLite's structural check of the file (`PRAGMA quick_check`): every b-tree page, cell and
+/// overflow pointer, the free list and the record formats, each page read once. Returns the
+/// problems it reports, at most `limit`, one line each; none when the structure is sound.
+std::vector<std::string> QuickCheck(Container& container, int limit);
+
 }  // namespace uzp::store

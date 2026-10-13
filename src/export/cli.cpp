@@ -30,14 +30,14 @@ json::Value Optional(const std::optional<std::string>& value) {
 int RunProjectExport(const std::vector<std::string>& args, std::FILE* out, std::FILE* err) {
     ProjectExportRequest request;
     std::optional<fs::path> configPath;
-    request.project = fs::path(args.front());
+    request.project = Utf8Path(args.front());
     for (size_t i = 1; i < args.size(); ++i) {
         if (i + 1 >= args.size()) {
             std::fprintf(err, "%s", kUsage);
             return kCliUsage;
         }
         if (args[i] == "--config" && !configPath) {
-            configPath = fs::path(args[++i]);
+            configPath = Utf8Path(args[++i]);
         } else if (args[i] == "--app-version" && request.identity.appVersion.empty()) {
             request.identity.appVersion = args[++i];
         } else if (args[i] == "--build" && request.identity.build.empty()) {
@@ -100,9 +100,9 @@ int RunExportCommand(const std::vector<std::string>& args, std::FILE* out, std::
     for (size_t i = 1; i < args.size(); ++i) {
         if (args[i] == "--recover" && i + 1 < args.size() && !exportPath) {
             recover = true;
-            exportPath = fs::path(args[++i]);
+            exportPath = Utf8Path(args[++i]);
         } else if (args[i] == "--fixed-names" && i + 1 < args.size()) {
-            fixedNames.emplace_back(args[++i]);
+            fixedNames.push_back(Utf8Path(args[++i]));
         } else {
             std::fprintf(err, "%s", kUsage);
             return kCliUsage;

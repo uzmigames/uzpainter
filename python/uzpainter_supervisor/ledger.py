@@ -304,11 +304,15 @@ class Ledger:
         error_code: str | None,
         reply: dict[str, Any] | None = None,
         resolution: dict[str, Any] | None = None,
+        progress: float | None = None,
+        message: str | None = None,
     ) -> None:
-        """The job's terminal state; `reply` is the body it answered (with its receipt)."""
+        """The job's terminal state; `reply` is the body it answered (with its receipt). A long
+        job's `progress` and `message` are its terminal receipt's; None keeps the last reported."""
         self._db.execute(
             "UPDATE job SET state = ?, finished = ?, request_hash = ?, committed_revision = ?, "
-            "error_code = ?, reply = ?, resolution = ? WHERE job_id = ?",
+            "error_code = ?, reply = ?, resolution = ?, progress = COALESCE(?, progress), "
+            "message = COALESCE(?, message) WHERE job_id = ?",
             (
                 state,
                 now_utc(),
@@ -317,6 +321,8 @@ class Ledger:
                 error_code,
                 None if reply is None else json.dumps(reply, sort_keys=True),
                 None if resolution is None else json.dumps(resolution, sort_keys=True),
+                progress,
+                message,
                 job_id,
             ),
         )

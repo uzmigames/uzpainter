@@ -28,7 +28,7 @@ from typing import Any
 
 import pytest
 
-from tests.supervisor.conftest import Mcp, make_project
+from tests.supervisor.conftest import Mcp, make_project, wait_until_gone
 
 BASE = ("--gpu-backend", "vulkan", "--test-faults")
 TOKEN = "phase2.5-test-token"
@@ -489,3 +489,40 @@ def test_http_transport_guards_and_reconnect(painter: Path, tmp_path: Path) -> N
     assert ledger_rows(ledger, "SELECT count(*) FROM log WHERE message LIKE ?", f"%{TOKEN}%") == [
         (0,)
     ]
+
+
+def test_console_break_stops_stdio_through_the_shutdown_of_http(
+    painter: Path, tmp_path: Path
+) -> None:
+    """B14 of parity/reports/phase2/practical-e2e.md: Ctrl+Break on the stdio supervisor, with a
+    saved project open, an unsaved commit and the client's stdin still open, ends it as the HTTP
+    transport ends: exit 0, the worker gone, the project's lock sidecar gone and the ledger closed
+    (no -wal/-shm left); the project then reopens with the commit."""
+    project = make_project(painter, tmp_path)
+    lock = project.with_name(project.name + ".lock")
+    session = Mcp(painter, tmp_path, *BASE, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+    try:
+        revision = session.call("project_open", {"path": str(project), "wait": True})["result"][
+            "revision"
+        ]
+        assert session.call("test_mutation", {"name": "unsaved"})["committed_revision"] == (
+            revision + 1
+        )
+        worker = session.status()["worker_pid"]
+        assert lock.is_file()
+        os.kill(session.process.pid, signal.CTRL_BREAK_EVENT)
+        assert session.process.wait(60) == 0, session.log()
+    finally:
+        session.close()
+    assert "console stop" in session.log()
+    assert wait_until_gone(worker, 30)
+    assert not lock.exists()
+    assert not Path(f"{session.ledger}-wal").exists()
+    assert not Path(f"{session.ledger}-shm").exists()
+    reopened = Mcp(painter, tmp_path, *BASE)
+    try:
+        assert reopened.call("project_open", {"path": str(project), "wait": True})["result"][
+            "revision"
+        ] == (revision + 1)
+    finally:
+        reopened.close()

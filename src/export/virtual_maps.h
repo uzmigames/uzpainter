@@ -8,6 +8,9 @@
 //
 // - `Normal_OpenGL`, `Normal_DirectX`: the combined normal of phase1.12 (mesh normal, Normal
 //   channel and the height-derived normal, `evaluator/height_to_normal.h`), tagged `combined`.
+//   The fits hold on every texel of a fully covered set and on the interior of UV islands; the
+//   island-edge texels read the Height outside the islands, so an export refuses them there
+//   (padding.h `CheckIslandNormal`, decision 245).
 // - The geometry-only pass-through is the meshMap `normal_base` (the bound Normal mesh map,
 //   green inverted across conventions), tagged `geometry_only` (EXP-09).
 // - `AO_Mixed`: the best model of the opacity sweep (the AO mesh map times the AO channel before

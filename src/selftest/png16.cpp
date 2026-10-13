@@ -30,6 +30,12 @@ std::string SpngError(const char* call, int code) {
     return std::string(call) + " failed: " + spng_strerror(code);
 }
 
+/// `path` in UTF-8; `path.string()` throws for a folder outside the ANSI code page.
+std::string Utf8(const std::filesystem::path& path) {
+    const std::u8string text = path.u8string();
+    return std::string(text.begin(), text.end());
+}
+
 }  // namespace
 
 StageOutcome RunPng16(SelftestContext& context) {
@@ -43,7 +49,7 @@ StageOutcome Png16RoundTrip(const std::vector<uint16_t>& source, const char* sou
                             const std::filesystem::path& file) {
     const std::vector<uint16_t> expected = ExpectedPattern();
     Details details = {{"source", sourceName},
-                       {"file", file.string()},
+                       {"file", Utf8(file)},
                        {"spng_version", spng_version_string()}};
 
     // Encode: 16-bit grayscale; SPNG_FMT_PNG takes host-endian samples and writes big-endian.
@@ -70,7 +76,7 @@ StageOutcome Png16RoundTrip(const std::vector<uint16_t>& source, const char* sou
         std::ofstream out(file, std::ios::binary);
         out.write(static_cast<const char*>(png.get()), static_cast<std::streamsize>(size));
         out.close();
-        if (!out) return StageOutcome::Fail("cannot write " + file.string(), details);
+        if (!out) return StageOutcome::Fail("cannot write " + Utf8(file), details);
         details.emplace_back("png_bytes", std::to_string(size));
     }
 
@@ -78,7 +84,7 @@ StageOutcome Png16RoundTrip(const std::vector<uint16_t>& source, const char* sou
     std::ifstream in(file, std::ios::binary);
     const std::vector<char> bytes((std::istreambuf_iterator<char>(in)),
                                   std::istreambuf_iterator<char>());
-    if (bytes.empty()) return StageOutcome::Fail("cannot read back " + file.string(), details);
+    if (bytes.empty()) return StageOutcome::Fail("cannot read back " + Utf8(file), details);
     SpngContext dec(0);
     if (!dec.ctx) return StageOutcome::Fail("spng decoder context not created", details);
     int rc = spng_set_png_buffer(dec.ctx, bytes.data(), bytes.size());
