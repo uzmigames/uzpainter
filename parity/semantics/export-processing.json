@@ -28,6 +28,7 @@
     "phase0/procedural-feasibility/position/sphere/defaults",
     "phase0/template-default-material/ocio-sphere",
     "phase1/mesh-import/polygon-triangulation",
+    "phase2/tier1/tunic-v10",
     "tier0/api-probes/active-channel-order-control",
     "tier0/api-probes/active-channel-reset",
     "tier0/api-probes/active-channel-reset-superset",
@@ -37,6 +38,7 @@
     "tier0/api-probes/phase1-delete-node",
     "tier0/api-probes/phase1-engine-computations",
     "tier0/api-probes/phase1-execute-when-not-busy",
+    "tier0/api-probes/phase1-fill-channel-defaults",
     "tier0/api-probes/phase1-mesh-map-update",
     "tier0/api-probes/phase1-reload-mesh",
     "tier0/api-probes/phase1-reload-resources",
@@ -44,6 +46,14 @@
     "tier0/api-probes/phase1-restored-values",
     "tier0/api-probes/phase1-save-as-existing",
     "tier0/api-probes/phase1-save-modes",
+    "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part1",
+    "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part2",
+    "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part3",
+    "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part4",
+    "tier0/api-probes/phase1-srgb-uniform-decode-part1",
+    "tier0/api-probes/phase1-srgb-uniform-decode-part2",
+    "tier0/api-probes/phase1-srgb-uniform-decode-part3",
+    "tier0/api-probes/phase1-srgb-uniform-decode-part4",
     "tier0/recorder-sample/blend-multiply-plane",
     "tier0/semantics-ui/group-passthrough-masks",
     "tier0/semantics-ui/height-normal-sharp-bevelled-cube",
@@ -102,11 +112,13 @@
     "tier0/semantics/export-alpha-layouts",
     "tier0/semantics/export-bit-depth",
     "tier0/semantics/export-dither",
+    "tier0/semantics/export-l8-material",
     "tier0/semantics/export-ocio-encode",
     "tier0/semantics/export-ocio-encode-legacy",
     "tier0/semantics/export-padding",
     "tier0/semantics/export-padding-bevelled-cube",
     "tier0/semantics/export-padding-ramp-r1-p0",
+    "tier0/semantics/export-padding-ramp-r1-p0-box17",
     "tier0/semantics/export-padding-ramp-r1-p0-v2",
     "tier0/semantics/export-padding-ramp-r1-p25",
     "tier0/semantics/export-padding-ramp-r1-p25-v2",
@@ -128,10 +140,12 @@
     "tier0/semantics/export-padding-seam-256",
     "tier0/semantics/export-padding-seam-field-1024",
     "tier0/semantics/export-padding-seam-field-256",
+    "tier0/semantics/export-padding-seam-ramp-1024",
     "tier0/semantics/export-padding-sphere",
     "tier0/semantics/export-padding-tie-2048",
     "tier0/semantics/export-padding-tie-2048-v2",
     "tier0/semantics/export-padding-tie-512",
+    "tier0/semantics/export-padding-tie-512-box16",
     "tier0/semantics/export-resize",
     "tier0/semantics/export-template-base-asm-pbr-metallic-roughness",
     "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-anisotropy-angle",
@@ -178,11 +192,14 @@
     "tier0/semantics/resample-uv",
     "tier0/semantics/resample-uv-anisotropic",
     "tier0/semantics/resample-uv-anisotropic-impulse",
+    "tier0/semantics/resample-uv-heldout-128px",
+    "tier0/semantics/resample-uv-heldout-32px",
     "tier0/semantics/resample-uv-impulse",
     "tier0/semantics/resample-uv-lod",
     "tier0/semantics/resample-uv-lod-boundaries",
     "tier0/semantics/resample-uv-minify",
     "tier0/semantics/resample-uv-rotation",
+    "tier0/semantics/srgb-bitmap-minification",
     "tier0/semantics/srgb-bitmap-variants-v2",
     "tier0/semantics/view-2d-state-camera",
     "tier0/semantics/view-2d-state-default",
@@ -247,7 +264,7 @@
         },
         {
           "name": "files",
-          "value": 1852,
+          "value": 1945,
           "origin": "fitted"
         }
       ],
@@ -943,6 +960,51 @@
           }
         },
         {
+          "golden_id": "phase2/tier1/tunic-v10",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
+          "golden_id": "phase2/tier1/tunic-v10",
+          "map": "png files re-encoded",
+          "compared_against": "r1-repeat",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
+          "golden_id": "phase2/tier1/tunic-v10",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
           "golden_id": "tier0/api-probes/active-channel-order-control",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -1213,6 +1275,36 @@
           }
         },
         {
+          "golden_id": "tier0/api-probes/phase1-fill-channel-defaults",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-fill-channel-defaults",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 5,
+            "affected_texels": 0,
+            "texels": 5
+          }
+        },
+        {
           "golden_id": "tier0/api-probes/phase1-mesh-map-update",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -1409,6 +1501,246 @@
         },
         {
           "golden_id": "tier0/api-probes/phase1-save-modes",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part1",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part1",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part2",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part2",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part3",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part3",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part4",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-ocio-part4",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-part1",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-part1",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-part2",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-part2",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-part3",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-part3",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-part4",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-srgb-uniform-decode-part4",
           "map": "png files re-encoded",
           "compared_against": "r2",
           "unit": "file (bytes identical)",
@@ -3070,6 +3402,36 @@
             "total": 56,
             "affected_texels": 0,
             "texels": 56
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-l8-material",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-l8-material",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
           }
         },
         {
@@ -4723,6 +5085,66 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/resample-uv-heldout-128px",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/resample-uv-heldout-128px",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/resample-uv-heldout-32px",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/resample-uv-heldout-32px",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 23,
+            "affected_texels": 0,
+            "texels": 23
+          }
+        },
+        {
           "golden_id": "tier0/semantics/resample-uv-impulse",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -4870,6 +5292,36 @@
             "total": 33,
             "affected_texels": 0,
             "texels": 33
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-minification",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-minification",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
           }
         },
         {
@@ -5142,7 +5594,7 @@
         },
         {
           "name": "files",
-          "value": 847,
+          "value": 865,
           "origin": "fitted"
         }
       ],
@@ -5808,6 +6260,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-l8-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 12,
+            "affected_texels": 0,
+            "texels": 12
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-l8-material",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 12,
+            "affected_texels": 0,
+            "texels": 12
+          }
+        },
+        {
           "golden_id": "tier0/semantics/export-ocio-encode",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -5958,6 +6440,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p0-box17",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p0-box17",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
           "golden_id": "tier0/semantics/export-padding-ramp-r1-p0-v2",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -6585,6 +7097,36 @@
             "total": 2,
             "affected_texels": 0,
             "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-ramp-1024",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-seam-ramp-1024",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
           }
         },
         {
@@ -6708,6 +7250,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-padding-tie-512-box16",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-512-box16",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
           "golden_id": "tier0/semantics/export-resize",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -7995,6 +8567,36 @@
             "total": 16,
             "affected_texels": 0,
             "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-minification",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-minification",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
           }
         },
         {
