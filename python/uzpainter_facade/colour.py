@@ -4,9 +4,15 @@
 Two colour-management configurations are pinned profiles: Painter's Legacy mode (`PROFILES`; the
 working space is linear sRGB and images come in and go out as sRGB, the Assets3D contract PRJ-05)
 and OCIO with Painter's substance config, identified by its SHA-256 (`PAINTER_OCIO_CONFIG_SHA256`,
-the evaluator's `kPainterOcioConfigSha256`; the file is never read). A project declaring any other
-configuration fails with `NotYetSupported` before anything is evaluated. The facade never rewrites
-a project's declared mode, working space, input rules or display transform.
+the evaluator's `kPainterOcioConfigSha256`; the file is hashed, never parsed). A project declaring
+any other configuration fails with `NotYetSupported` before anything is evaluated. The facade never
+rewrites a project's declared mode, working space, input rules or display transform.
+
+Creation (decision 207). `project.create` takes the mode from the environment at the call, as
+Painter documents: `OCIO` naming a configuration gives an OCIO project, else `PAINTER_ACE_CONFIG`
+an ACE project, else Legacy (`creation_ocio_config_hash`). The pipeline sets `OCIO` in-process
+before `create`, so the variable is read at the call, not at start-up. Only Painter's substance
+config is created; any other configuration raises before anything is created.
 
 Uniform colours. A colour without a space is sRGB on a colour-managed channel (an sRGB8 channel:
 BaseColor in the templates) and Raw elsewhere, as Painter documents and the
@@ -40,6 +46,8 @@ Under OCIO (decision 202) only what Session O records is admitted; everything el
 from __future__ import annotations
 
 import enum
+import hashlib
+import os
 import struct
 from typing import Any
 
@@ -115,6 +123,48 @@ def require_supported_configuration() -> str:
         "Legacy mode and OCIO with Painter's substance config (SHA-256 "
         f"{PAINTER_OCIO_CONFIG_SHA256[:8]}...) are supported (decisions 107, 190 and 202)"
     )
+
+
+def _configuration_sha256(variable: str, path: str) -> str:
+    """The SHA-256 of the configuration file `variable` names; `ProjectError` when it cannot be
+    read (Painter refuses an invalid configuration at create)."""
+    try:
+        with open(path, "rb") as file:
+            return hashlib.sha256(file.read()).hexdigest()
+    except OSError as error:
+        raise uzpainter.ProjectError(
+            f"the {variable} configuration {path!r} cannot be read ({error.strerror}): Painter "
+            "refuses an invalid configuration at create"
+        ) from None
+
+
+def creation_ocio_config_hash() -> str | None:
+    """The OCIO configuration hash `project.create` gives the new project; None for Legacy.
+
+    Painter's documented rule: `OCIO` naming a configuration selects OCIO (it wins over
+    `PAINTER_ACE_CONFIG`), `PAINTER_ACE_CONFIG` alone selects ACE, neither selects Legacy, and an
+    invalid configuration raises `ProjectError`. The file `OCIO` names is hashed; only Painter's
+    substance config is created, and ACE is not fitted: both raise `NotYetSupported`. Every
+    refusal comes before anything is created."""
+    ocio = os.environ.get("OCIO")
+    if ocio:
+        digest = _configuration_sha256("OCIO", ocio)
+        if digest != PAINTER_OCIO_CONFIG_SHA256:
+            raise uzpainter.NotYetSupported(
+                f"create under the OCIO configuration {ocio!r} (SHA-256 {digest}): only "
+                f"Painter's substance config (SHA-256 {PAINTER_OCIO_CONFIG_SHA256[:8]}...) is a "
+                "pinned colour profile (decisions 190, 202 and 207)"
+            )
+        return digest
+    ace = os.environ.get("PAINTER_ACE_CONFIG")
+    if ace:
+        _configuration_sha256("PAINTER_ACE_CONFIG", ace)
+        raise uzpainter.NotYetSupported(
+            "create under PAINTER_ACE_CONFIG: Painter's ACE colour management is not a pinned "
+            "colour profile (decision 207); unset it for a Legacy project, or set OCIO to "
+            "Painter's substance config"
+        )
+    return None
 
 
 def active_profile() -> str:

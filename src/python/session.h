@@ -64,6 +64,9 @@ struct CreateSettings {
     std::optional<bool> import_cameras;
     /// The id of an installed project template (`assets/templates/<id>.json`); none = "default".
     std::optional<std::string> template_id;
+    /// The SHA-256 of the OCIO configuration the project is created under; none = Legacy. Only
+    /// Painter's substance config (`evaluator::kPainterOcioConfigSha256`) is supported (decision 207).
+    std::optional<std::string> ocio_config_hash;
 };
 
 /// What the typed MCP tool `project_create` adds to `Session::Create` (decision 164).

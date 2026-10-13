@@ -222,7 +222,8 @@ void BindFillMethods(Class& cls) {
             py::arg("channeltype") = py::none())
         .def(
             "set_source",
-            [](const Handle& n, const ChannelArg& channel, const py::object& value) {
+            [](const Handle& n, const ChannelArg& channel, const py::object& value,
+               const std::optional<std::string>& color_space) {
                 core::Source source;
                 core::json::Object args = NodeArgs(n.uid, channel);
                 std::optional<ResourceIdHandle> resource;
@@ -240,11 +241,14 @@ void BindFillMethods(Class& cls) {
                 } else {
                     throw py::type_error("source must be a colormanagement.Color or a resource.ResourceID");
                 }
+                if (color_space && !resource) throw py::type_error("color_space is given for a bitmap source only");
                 if (resource) args["resource"] = resource->name + "@" + resource->version;
+                if (color_space) args["bitmap_color_space"] = *color_space;
                 Mutate("layerstack.FillLayerNode.set_source", args, [&](core::Edit& edit) {
                     if (resource) {
                         const std::string sha256 = ResolveResource(edit.project(), *resource);
-                        source.value = core::BitmapSource{core::ResourceBinding{sha256, std::nullopt, {}}, "", {}};
+                        source.value = core::BitmapSource{core::ResourceBinding{sha256, std::nullopt, {}},
+                                                          color_space.value_or(""), {}};
                     }
                     bool mask = false;
                     core::FillContent& fill = EditFill(edit, n.uid, &mask);
@@ -258,7 +262,9 @@ void BindFillMethods(Class& cls) {
                 const auto project = Read();
                 return SourceObject(SourceOf(Resolve(*project, n.uid), n.uid, channel), n.uid, channel);
             },
-            py::arg("channeltype"), py::arg("source"))
+            py::arg("channeltype"), py::arg("source"), py::arg("color_space") = py::none(),
+            "Sets the channel's source. A bitmap is bound in `color_space` (its tag, \"\" when None) in the same "
+            "call, so the support check sees the bitmap as bound (decision 207).")
         .def(
             "reset_source",
             [](const Handle& n, const ChannelArg& channel) {
