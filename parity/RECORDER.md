@@ -337,6 +337,8 @@ $later += foreach ($m in "r1", "r2", "r15") { foreach ($p in "p0", "p25", "p75")
 $later += "export-padding-tie-2048-v2"
 # Decision 168: the 21 shipped templates whose sRGB8 base is still inferred, one golden each.
 $later += (Get-ChildItem "$req/tier0/semantics/export-template-base-*.json").BaseName
+# Decision 174 item 6 (sRGB bitmap minification) and decision 169 (L8 material channels).
+$later += "srgb-bitmap-minification", "export-l8-material"
 foreach ($g in $later) {
   python -m tools.parity.recorder record "$req/tier0/semantics/$g.json"
 }
