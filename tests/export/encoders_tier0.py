@@ -1111,9 +1111,11 @@ def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
 # B17 of the practical end-to-end run (parity/reports/phase2/practical-e2e.md, decision 190).
 # Painter's PNG 16 of an sRGB8 BaseColor under OCIO differs from its Legacy twin's by one code on
 # these 73 of the 256 sRGB8 codes (one higher on code 6, one lower on the others) and on the empty
-# BaseColor, float32(0.8): 74 of the 257 recorded values. Its PNG 8 and OpenEXR files are the
-# same. Measured on Painter's own files: export-ocio-encode against export-ocio-encode-legacy, s3
-# (every code of the authored 8-bit ramp) and s7 (the empty BaseColor), r1 and r2 identical.
+# BaseColor, float32(0.8): 74 of the 257 recorded values. Measured on Painter's own files:
+# export-ocio-encode against export-ocio-encode-legacy, s3 (every code of the authored 8-bit ramp)
+# and s7 (the empty BaseColor), r1 and r2 identical; s3's and s7's PNG 8 and OpenEXR files are
+# the same. s4's are not: OCIO stores four codes of its 8-bit Raw bitmap one sRGB8 code lower
+# (decision 190 fact 3).
 OCIO_PNG16_DIFFERING_CODES = (
     4, 6, 9, 11, 13, 18, 20, 23, 24, 30, 31, 32, 34, 41, 42, 46, 48, 50, 52, 54, 58, 60, 62, 63,
     68, 73, 76, 78, 80, 81, 85, 86, 87, 90, 92, 97, 98, 100, 105, 107, 111, 113, 114, 116, 119,

@@ -1016,14 +1016,14 @@ def test_painter_ocio_png16_differs_from_legacy_on_74_values() -> None:
 def test_ocio_png16_differs_from_legacy_where_painter_does(
     export_tests: Path, tmp_path: Path
 ) -> None:
-    """B17 of the practical end-to-end run (decision 190): one stack exported from a Legacy and
-    from an OCIO project gives the same PNG 8 and OpenEXR 32f files, and PNG 16 files that differ
-    by one code exactly where Painter's do (`OCIO_PNG16_DIFFERING_CODES` and the empty BaseColor,
-    pinned on Painter's files by `test_painter_ocio_png16_differs_from_legacy_on_74_values`):
-    export-ocio-encode's s3 (every sRGB8 code of the authored ramp on BaseColor at 1:1) and s7
-    (the empty BaseColor), rebuilt from the repository's manifest. A value outside the recorded
-    ones, the luma of the ramp, is written under Legacy and refused under OCIO before anything is
-    written."""
+    """B17 of the practical end-to-end run (decision 190): a stack that stores the same values
+    under Legacy and OCIO, exported from a Legacy and from an OCIO project, gives the same PNG 8
+    and OpenEXR 32f files, and PNG 16 files that differ by one code exactly where Painter's do
+    (`OCIO_PNG16_DIFFERING_CODES` and the empty BaseColor, pinned on Painter's files by
+    `test_painter_ocio_png16_differs_from_legacy_on_74_values`): export-ocio-encode's s3 (every
+    sRGB8 code of the authored ramp on BaseColor at 1:1) and s7 (the empty BaseColor), rebuilt
+    from the repository's manifest. A value outside the recorded ones, the luma of the ramp, is
+    written under Legacy and refused under OCIO before anything is written."""
     from tests.export import encoders_tier0
     from tools.parity.fit.decode import decode
 
