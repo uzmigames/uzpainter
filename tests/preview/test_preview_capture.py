@@ -578,7 +578,7 @@ def test_orthographic_capture_casts_parallel_rays(painter: Path, tmp_path: Path)
     every aspect). The lens fields do not apply, the distance does not change the image, only hits
     in front of the plane through the camera count (a camera under the plane sees nothing, a tilted
     camera on it sees the half in front), and a perspective camera at the same place frames the
-    plane by its vertical field of view."""
+    plane by its vertical field of view, with no hole on its shared diagonal (decision 178)."""
     bundle = ocio_bundle(painter, tmp_path / "fixture", mesh=PLANE)
     shots = ok(run(painter, tmp_path, f"BUNDLE = {str(bundle)!r}\n" + ORTHOGRAPHIC))
     sizes = {"landscape": (96, 64), "portrait": (64, 96)}
@@ -597,7 +597,6 @@ def test_orthographic_capture_casts_parallel_rays(painter: Path, tmp_path: Path)
     # Eye plane through the plane's centre, tilted 45 degrees: the half with z < 0 is in front
     # and shows above the image centre, sin(45) * 10 = 7.07 high.
     assert covered(codes["crossing"], background) == (21, 31, 16, 47)
-    # tan(20 degrees) * 50 = 18.2 at the plane: the plane's 10 is 17.6 pixels of the 32. The
-    # perspective rays are not watertight: a ray along the plane's shared diagonal can miss both
-    # triangles (Moller-Trumbore in binary32), so only the bounds are compared.
-    assert covered(codes["perspective"], background, solid=False) == (14, 49, 14, 49)
+    # tan(20 degrees) * 50 = 18.2 at the plane: the plane's 10 is 17.6 pixels of the 32. Coverage
+    # is watertight (decision 178): the rays along the plane's shared diagonal hit it too.
+    assert covered(codes["perspective"], background) == (14, 49, 14, 49)

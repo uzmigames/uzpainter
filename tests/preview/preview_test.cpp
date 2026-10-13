@@ -530,6 +530,9 @@ int RunViewportGolden(const fs::path& dir, const fs::path& goldens, bool bless) 
         std::ofstream(dir / (fixture.name + ".display.rgba16"), std::ios::binary)
             .write(reinterpret_cast<const char*>(image.display.data()),
                    static_cast<std::streamsize>(image.display.size() * 2));
+        std::ofstream(dir / (fixture.name + ".linear.rgba16"), std::ios::binary)
+            .write(reinterpret_cast<const char*>(image.linear.data()),
+                   static_cast<std::streamsize>(image.linear.size() * 2));
     }
 
     // The goldens file: {"schema", "entries": [{"kernel", "adapter", "driver", "size", "fixtures"}]}.

@@ -199,7 +199,22 @@ void main(uint3 id : SV_DispatchThreadID) {
     const float3 dir = orthographic ? forward : normalize(forward + right * sx + up * sy);
     const float3 origin = orthographic ? eye + right * sx + up * sy : eye;
 
-    // Nearest hit among the tile's triangles (Moller-Trumbore), ascending index, strict nearer.
+    // Coverage is decided watertight (Woop, Benthin and Wald 2013): each corner relative to the
+    // origin is sheared so the ray runs along the axis kz, and each edge function is the 2D cross
+    // product of two sheared corners. A shared corner is sheared to the same values in every
+    // triangle, and fl(a b - c d) has the sign of the exact a b - c d of those values or is zero,
+    // so a ray inside the projected mesh is inside, or on an edge of, some triangle: no ray
+    // through a shared edge or corner misses both sides. Both faces are visible: the triangle
+    // covers the ray when no edge function is negative or none is positive.
+    const float3 absDir = abs(dir);
+    const uint kz = absDir.x > absDir.y ? (absDir.x > absDir.z ? 0u : 2u) : (absDir.y > absDir.z ? 1u : 2u);
+    const uint kx = kz == 2u ? 0u : kz + 1u;
+    const uint ky = kx == 2u ? 0u : kx + 1u;
+    const float shearX = dir[kx] / dir[kz];
+    const float shearY = dir[ky] / dir[kz];
+
+    // Nearest hit among the tile's covering triangles, ascending index, strict nearer. The depth
+    // and barycentrics of a covering triangle are Moller-Trumbore's.
     const uint tile = (id.y / TILE) * tilesX + id.x / TILE;
     const uint first = tileOffsets.Load(tile * 4u);
     const uint last = tileOffsets.Load((tile + 1u) * 4u);
@@ -213,6 +228,20 @@ void main(uint3 id : SV_DispatchThreadID) {
         const float3 p0 = LoadF3(triangles, base);
         const float3 p1 = LoadF3(triangles, base + 12u);
         const float3 p2 = LoadF3(triangles, base + 24u);
+        const float3 r0 = p0 - origin;
+        const float3 r1 = p1 - origin;
+        const float3 r2 = p2 - origin;
+        precise const float x0 = r0[kx] - shearX * r0[kz];
+        precise const float y0 = r0[ky] - shearY * r0[kz];
+        precise const float x1 = r1[kx] - shearX * r1[kz];
+        precise const float y1 = r1[ky] - shearY * r1[kz];
+        precise const float x2 = r2[kx] - shearX * r2[kz];
+        precise const float y2 = r2[ky] - shearY * r2[kz];
+        precise const float f0 = x1 * y2 - y1 * x2;
+        precise const float f1 = x2 * y0 - y2 * x0;
+        precise const float f2 = x0 * y1 - y0 * x1;
+        if ((f0 < 0.0f || f1 < 0.0f || f2 < 0.0f) && (f0 > 0.0f || f1 > 0.0f || f2 > 0.0f)) continue;
+        if (f0 == 0.0f && f1 == 0.0f && f2 == 0.0f) continue;  // seen edge-on: covers nothing
         const float3 e1 = p1 - p0;
         const float3 e2 = p2 - p0;
         const float3 pv = cross(dir, e2);
@@ -221,10 +250,8 @@ void main(uint3 id : SV_DispatchThreadID) {
         const float inv = 1.0f / det;
         const float3 tv = origin - p0;
         const float u = dot(tv, pv) * inv;
-        if (u < 0.0f || u > 1.0f) continue;
         const float3 qv = cross(tv, e1);
         const float v = dot(dir, qv) * inv;
-        if (v < 0.0f || u + v > 1.0f) continue;
         const float hit = dot(e2, qv) * inv;
         if (hit <= 0.0f || hit >= bestT) continue;
         bestT = hit;
