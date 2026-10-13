@@ -52,10 +52,10 @@
 //   every magnifying golden (decision 060).
 // - Nearest samples float32(c / M) of the texel.
 // - A float32 image (a decoded sRGB bitmap, sources.h) gives its stored values in place of
-//   float32(c / M), through the same addressing, filters and mip chain (`BitmapChain`; minified
-//   only when decoded from a 16-bit bitmap, decision 203). Decoded from an 8-bit bitmap
-//   (`DecodedImage::srgb8`), it is an sRGB8 texture: the bilinear filter of magnification and 1:1
-//   is `Srgb8BilinearFilter` on its codes (decisions 209, 224).
+//   float32(c / M), through the same addressing, filters and mip chain (`BitmapChain`; decision
+//   203). Decoded from an 8-bit bitmap, the texture unit filters its codes as an sRGB8 texture
+//   on level 0 only (`ReadsMipLevels`, decision 219); magnified or at 1:1, the four taps and
+//   weights above are one probe of its sRGB8 sums (`tu::Srgb8Probe`, decision 224).
 //
 // The channel stores the sampled value with its own write rule (cpu_store.h `StoreValue`): at
 // 1:1 a bitmap is copied exactly. Wrap modes: `Repeat` takes tap
@@ -150,21 +150,20 @@ inline constexpr int kFilterOperandBits = 28;
 /// The sRGB8 code whose decode `Srgb8Operand` is `decode` (the decode rises strictly); a value that
 /// is no decode is a logic error and throws.
 [[nodiscard]] uint32_t Srgb8Code(float decode);
-/// A code's segment exponent: the binary exponent (frexp) of the decode of c | 7, the largest code
-/// of its group of eight (decision 209; 26 codes lie one above their own exponent).
-[[nodiscard]] int Srgb8SegmentExponent(uint32_t code);
-/// The recording GPU's bilinear filter of an R8G8B8A8_SRGB texture for one probe (magnification
-/// and 1:1; decisions 209 and 224), with 8-bit weights summing to 256: E the largest segment
-/// exponent of the codes of non-zero weight; each code enters as floor(d 2^(8 - E)), d its decode;
-/// the weighted sum, times 2^(E - 16), is rounded once to binary16, to nearest with ties away from
-/// zero. A single code of non-zero weight (weighed 256) returns its decode.
-[[nodiscard]] float Srgb8BilinearFilter(const std::array<uint32_t, 4>& weights,
-                                        const std::array<uint32_t, 4>& codes);
 
 /// The bitmap's float32 RGB mip chain for the texture unit: level 0 holds float32(c / M), or the
 /// stored value of a float32 image (a decoded 16-bit sRGB bitmap, decision 203), rows bottom up
-/// (the GPU's orientation); a grey bitmap feeds all three channels.
+/// (the GPU's orientation); a grey bitmap feeds all three channels. A decoded 8-bit sRGB bitmap
+/// (`DecodedImage::srgb8`) gives an sRGB8 texture's chain of its codes, level 0 only
+/// (`tu::BuildSrgb8Chain`, decision 219).
 [[nodiscard]] tu::Chain BitmapChain(const DecodedImage& image);
+
+/// Whether the texture unit reads a mip level other than 0 when the projection minifies `image`
+/// on a `setWidth` x `setHeight` set (`Minifies`): the axis-aligned footprint of BilinearSharp
+/// (bias -1.5) or of BilinearHQ's samples (a third of the gradients, bias 0) resolves above
+/// lambda' = 0 (texture_unit.h, step 3). The domain is `CheckSampling`'s.
+[[nodiscard]] bool ReadsMipLevels(const UvProjection& projection, uint32_t setWidth, uint32_t setHeight,
+                                  const DecodedImage& image);
 
 /// Painter's float32 UV matrix (m00, m01, m02, m10, m11, m12) of a projection (decision 060).
 [[nodiscard]] std::array<float, 6> PainterMatrix(const UvProjection& projection);

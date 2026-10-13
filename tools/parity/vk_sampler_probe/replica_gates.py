@@ -60,14 +60,16 @@ def sample(
     ddy: tuple[Any, Any],
     bias: float,
     clamp: bool = False,
+    srgb8: bool = False,
 ) -> np.ndarray:
-    """SampleGrad at each (u, v): the RGBA results, one row per sample."""
+    """SampleGrad at each (u, v): the RGBA results, one row per sample (an R8G8B8A8_SRGB
+    texture of codes with `srgb8`)."""
     count = u.size
     params = np.zeros((-(-count // LINE) * LINE, 2, 4), np.float32)
     params[:count, 0, 0], params[:count, 0, 1] = u, v
     for (row, column), value in zip(((0, 2), (0, 3), (1, 0), (1, 1)), (*ddx, *ddy), strict=True):
         params[:count, row, column] = np.broadcast_to(np.asarray(value, np.float32), (count,))
-    out = probe.run(levels, params.reshape(-1, 4), width=LINE, bias=bias, clamp=clamp)
+    out = probe.run(levels, params.reshape(-1, 4), width=LINE, bias=bias, clamp=clamp, srgb8=srgb8)
     result: np.ndarray = out.reshape(-1, 4)[:count].astype(np.float64)
     return result
 

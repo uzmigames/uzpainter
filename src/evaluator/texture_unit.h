@@ -49,6 +49,19 @@
 //
 // Domain: texels 0 or at least 2^-18 and at most 1 (8- and 16-bit codes and their mip means), so
 // every sum fits 64 bits; W a power of two; finite non-zero gradients.
+//
+// An R8G8B8A8_SRGB texture (decisions 209, 213, 219) takes steps 1-4 unchanged and its own sums:
+// 5'. A code's segment exponent is the binary exponent (frexp) of the decode of c | 7. A probe's E
+//    is the largest segment exponent of its taps; S = sum over its taps of w floor(d 2^(8 - E)),
+//    d = Srgb8Operand(c), worth S 2^(E - 18). A pair at p = 0 is two probes (one per weight, in
+//    the table's order) when the cell of the opposite sign holds that pair at p != 0, the pair's
+//    true offset being non-zero; otherwise it is one probe.
+// 6'. Each probe enters truncated to a multiple of 2^(max(coarse(L), -6) - 16), L the largest E
+//    of its level's probes. Before each addition after the first, the running sum is truncated
+//    to a multiple of 2^(coarse(G) - 16), G the largest E of the probes of non-zero value whose
+//    pair is at or before the incoming probe's; after the last, to 2^(coarse(G) - 16) over every
+//    probe. The sum is rounded to the nearest binary16, ties away from zero. One tap of non-zero
+//    weight in the whole sample returns its decode.
 
 #include <array>
 #include <cstdint>
@@ -82,6 +95,10 @@ struct Chain {
     uint32_t size = 0;
     std::vector<uint32_t> offsets;
     std::vector<float> texels;
+    /// An sRGB8 texture (decisions 209, 213, 219): the sRGB8 code of each stored texel channel,
+    /// whose decode `Srgb8Operand` `texels` holds. A sample that reads a level past the stored
+    /// ones throws. Empty for a float32 texture.
+    std::vector<uint8_t> codes;
 };
 
 /// Painter's mip chain of level-0 texels (rows bottom up, three per texel; decisions 060, 084):
@@ -89,6 +106,11 @@ struct Chain {
 /// centre, the four weights 64/256 (operands floor(t 2^(28 - E)) below the largest texel's
 /// exponent E, the sum rounded to float32 ties up).
 [[nodiscard]] Chain BuildChain(uint32_t size, std::vector<float> level0);
+
+/// An sRGB8 bitmap's chain (`Chain::codes`): level 0's codes (rows bottom up, three per texel)
+/// and the level offsets of its full mip chain. Painter's sRGB8 mip levels are not measured
+/// (decision 219), so none is stored.
+[[nodiscard]] Chain BuildSrgb8Chain(uint32_t size, std::vector<uint8_t> level0);
 
 /// What a sample resolves to before the texels are read (for tests and the kernel's mirror).
 struct Footprint {
@@ -109,10 +131,17 @@ struct Footprint {
                                 uint32_t levels, int bias);
 
 /// SampleGrad of the three channels of `chain` at (u, v) (GPU coordinates: v up), repeat or
-/// clamp-to-edge per axis.
+/// clamp-to-edge per axis. An sRGB8 chain is filtered with the sRGB8 texture's arithmetic
+/// (decision 219); it throws when the sample reads a level other than 0.
 [[nodiscard]] std::array<float, 3> Sample(const Chain& chain, float u, float v,
                                           std::array<float, 2> ddx, std::array<float, 2> ddy,
                                           int bias, bool repeatU, bool repeatV);
+
+/// One bilinear probe of an sRGB8 texture, summed as steps 5' and 6' sum a single probe: four
+/// codes with weights in 1/256 that sum to 256 (projection_uv.cpp's magnification and 1:1 weights,
+/// decision 224). It equals decision 209's single-probe rule on every two-tap probe (all code
+/// pairs and weights) and on 8 000 000 random four-tap probes (decision 224).
+[[nodiscard]] float Srgb8Probe(const std::array<uint32_t, 4>& weights, const std::array<uint32_t, 4>& codes);
 
 /// SampleLevel(u, v, 0): one bilinear probe of weight 256 on level 0 (step 3's magnification).
 [[nodiscard]] std::array<float, 3> SampleLevel0(const Chain& chain, float u, float v, bool repeatU,

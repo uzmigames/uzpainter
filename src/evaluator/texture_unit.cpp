@@ -6,6 +6,7 @@
 #include <mutex>
 #include <stdexcept>
 
+#include "evaluator/arith.h"
 #include "zlib.h"
 
 namespace uzp::evaluator::tu {
@@ -108,10 +109,12 @@ float TiesUp(const Sum& s) {
     return static_cast<float>(std::ldexp(static_cast<double>(q), s.e + shift));
 }
 
-/// One probe's taps: texel indices into its level and weights (1/1024).
+/// One probe's taps: texel indices into its level and weights (1/1024). `half` is the tap count
+/// of the first of a p = 0 pair's two probes when the sRGB8 unit sums them apart (0: one probe).
 struct Probe {
     int offset = 0;
     uint32_t count = 0;
+    uint32_t half = 0;
     std::array<uint32_t, 8> texel{};
     std::array<uint32_t, 8> weight{};
 };
@@ -195,6 +198,20 @@ Chain BuildChain(uint32_t size, std::vector<float> level0) {
     return chain;
 }
 
+Chain BuildSrgb8Chain(uint32_t size, std::vector<uint8_t> level0) {
+    Chain chain;
+    chain.size = size;
+    chain.codes = std::move(level0);
+    chain.texels.resize(chain.codes.size());
+    for (size_t i = 0; i < chain.codes.size(); ++i) chain.texels[i] = arith::Srgb8Operand(chain.codes[i]);
+    uint32_t offset = 0;
+    for (uint32_t side = size; side >= 1; side /= 2) {
+        chain.offsets.push_back(offset);
+        offset += side * side;
+    }
+    return chain;
+}
+
 Footprint Resolve(std::array<float, 2> ddx, std::array<float, 2> ddy, uint32_t size,
                   uint32_t levels, int bias) {
     const Axis gx = AxisOf(ddx);
@@ -241,6 +258,105 @@ Footprint Resolve(std::array<float, 2> ddx, std::array<float, 2> ddy, uint32_t s
 
 namespace {
 
+/// The binary exponent (frexp) of the largest decode of the eight sRGB8 codes c & ~7 .. c | 7.
+int SegmentExponent(uint32_t code) {
+    int e = 0;
+    (void)std::frexp(arith::Srgb8Operand(code | 7u), &e);
+    return e;
+}
+
+/// x (>= 0, in units of 2^-26) rounded to the nearest binary16, ties away from zero.
+float HalfNearestAway(int64_t x) {
+    if (x == 0) return 0.0f;
+    const int length = 64 - std::countl_zero(static_cast<uint64_t>(x));
+    const int lsb = std::max(length - 11, 2);  // 11 significant bits; binary16 subnormals step 2^-24
+    const int64_t q = (x + (int64_t{1} << (lsb - 1))) >> lsb;
+    return static_cast<float>(std::ldexp(static_cast<double>(q), lsb - 26));
+}
+
+/// x (in units of 2^-26) truncated to a multiple of 2^lsb.
+int64_t Truncate26(int64_t x, int lsb) {
+    const int shift = lsb + 26;
+    return shift <= 0 ? x : (x >> shift) << shift;
+}
+
+/// The sRGB8 texture's sums of channel `c` over the probes in the unit's order (texture_unit.h,
+/// steps 5' and 6'); `codes` holds three codes per texel the probes index (`Chain::codes`).
+float Srgb8Filter(std::span<const uint8_t> codes, const std::array<Probe, 8>& probes,
+                  const std::array<uint32_t, 8>& group, uint32_t count, uint32_t c) {
+    uint32_t live = 0;
+    uint32_t last = 0;
+    for (uint32_t k = 0; k < count; ++k) {
+        for (uint32_t q = 0; q < probes[k].count; ++q) {
+            if (probes[k].weight[q] != 0) {
+                ++live;
+                last = probes[k].texel[q];
+            }
+        }
+    }
+    if (live == 1) return arith::Srgb8Operand(codes[last * 3 + c]);
+    // The summed probes: a split p = 0 pair gives two, in its pair group.
+    struct Part {
+        uint32_t group;
+        uint32_t begin;
+        uint32_t end;
+        const Probe* probe;
+    };
+    std::array<Part, 16> parts{};
+    uint32_t n = 0;
+    for (uint32_t k = 0; k < count; ++k) {
+        const Probe& probe = probes[k];
+        if (probe.half != 0) {
+            parts[n++] = {group[k], 0, probe.half, &probe};
+            parts[n++] = {group[k], probe.half, probe.count, &probe};
+        } else {
+            parts[n++] = {group[k], 0, probe.count, &probe};
+        }
+    }
+    std::array<int, 16> exponent{};
+    std::array<int64_t, 16> value{};
+    std::array<int, 2> levelExponent{-1000, -1000};
+    for (uint32_t k = 0; k < n; ++k) {
+        int e = -1000;
+        for (uint32_t q = parts[k].begin; q < parts[k].end; ++q) {
+            e = std::max(e, SegmentExponent(codes[parts[k].probe->texel[q] * 3 + c]));
+        }
+        exponent[k] = e;
+        levelExponent[parts[k].group / 2] = std::max(levelExponent[parts[k].group / 2], e);
+    }
+    for (uint32_t k = 0; k < n; ++k) {
+        const int e = exponent[k];
+        if (parts[k].begin == parts[k].end) continue;  // a probe of weight 0 adds nothing
+        int64_t sum = 0;
+        for (uint32_t q = parts[k].begin; q < parts[k].end; ++q) {
+            const double d = static_cast<double>(arith::Srgb8Operand(codes[parts[k].probe->texel[q] * 3 + c]));
+            sum += int64_t{parts[k].probe->weight[q]} * static_cast<int64_t>(std::ldexp(d, 8 - e));
+        }
+        // S 2^(E - 18) in units of 2^-26 (every segment exponent is at least -8).
+        const int grid = std::max(Coarse(levelExponent[parts[k].group / 2]), -6) - 16;
+        value[k] = Truncate26(sum << (e + 8), grid);
+    }
+    // G over the probes of non-zero value whose pair group is at most `upTo`.
+    const auto largest = [&](uint32_t upTo) {
+        int g = -1000;
+        for (uint32_t q = 0; q < n; ++q) {
+            if (parts[q].group <= upTo && value[q] != 0) g = std::max(g, exponent[q]);
+        }
+        return g;
+    };
+    int64_t acc = 0;
+    for (uint32_t k = 0; k < n; ++k) {
+        if (k >= 1) {
+            const int g = largest(parts[k].group);
+            if (g > -1000) acc = Truncate26(acc, Coarse(g) - 16);
+        }
+        acc += value[k];
+    }
+    const int g = largest(3u);
+    if (g > -1000) acc = Truncate26(acc, Coarse(g) - 16);
+    return HalfNearestAway(acc);
+}
+
 std::array<float, 3> SampleAt(const Chain& chain, const Footprint& fp, float u, float v, bool repeatU,
                               bool repeatV) {
     const uint32_t levels = static_cast<uint32_t>(chain.offsets.size());
@@ -271,6 +387,21 @@ std::array<float, 3> SampleAt(const Chain& chain, const Footprint& fp, float u, 
                 throw std::runtime_error("evaluator: texture-unit geometry cell not measured");
             }
         }
+        if (!chain.codes.empty() && size_t{chain.offsets[level]} * 3 >= chain.codes.size()) {
+            throw std::runtime_error("evaluator: an sRGB8 texture's mip levels are not measured (decision 219)");
+        }
+        // The cell of the opposite sign, whose pair at p != 0 splits an sRGB8 pair at p = 0
+        // (texture_unit.h, step 5').
+        std::array<uint32_t, 4> opposite{};
+        if (!chain.codes.empty() && !fp.magnify) {
+            const uint32_t s = fp.sign > 0 ? 1u : 0u;
+            const uint32_t r = static_cast<uint32_t>(fp.rho);
+            const uint32_t index =
+                fp.f >= kFractions
+                    ? (kRhoCells * kFractions * 4u + r * 2u + s) * 4u
+                    : (((r * kFractions + fp.f) * 2u + s) * 2u + role) * 4u;
+            for (uint32_t k = 0; k < 4; ++k) opposite[k] = geometry[index + k];
+        }
         const uint32_t side = chain.size >> level;
         const int64_t x = static_cast<int64_t>(std::floor(256.0 * (static_cast<double>(u) * side - 0.5) + 0.5));
         const int64_t y = static_cast<int64_t>(std::floor(256.0 * (static_cast<double>(v) * side - 0.5) + 0.5));
@@ -290,7 +421,12 @@ std::array<float, 3> SampleAt(const Chain& chain, const Footprint& fp, float u, 
             if (p == 0) {
                 found[n].offset = 0;
                 place(found[n], wl, 0);
+                const uint32_t first = found[n].count;
                 place(found[n], wr, 0);
+                const uint32_t pairsOpposite = opposite[0] & 0xFFu;
+                const bool apart = pairsOpposite != kUnmeasured && k < pairsOpposite &&
+                                   ((opposite[1] >> (16 * k)) & 0xFFFFu) != 0;
+                if (apart && first != 0 && first != found[n].count) found[n].half = first;
                 ++n;
             } else {
                 found[n].offset = -p;
@@ -311,6 +447,10 @@ std::array<float, 3> SampleAt(const Chain& chain, const Footprint& fp, float u, 
     }
 
     std::array<float, 3> result{};
+    if (!chain.codes.empty()) {
+        for (uint32_t c = 0; c < 3; ++c) result[c] = Srgb8Filter(chain.codes, probes, group, count, c);
+        return result;
+    }
     for (uint32_t c = 0; c < 3; ++c) {
         std::array<int, 8> exponent{};
         std::array<uint64_t, 8> sum{};
@@ -358,6 +498,21 @@ std::array<float, 3> Sample(const Chain& chain, float u, float v, std::array<flo
                             std::array<float, 2> ddy, int bias, bool repeatU, bool repeatV) {
     const uint32_t levels = static_cast<uint32_t>(chain.offsets.size());
     return SampleAt(chain, Resolve(ddx, ddy, chain.size, levels, bias), u, v, repeatU, repeatV);
+}
+
+float Srgb8Probe(const std::array<uint32_t, 4>& weights, const std::array<uint32_t, 4>& codes) {
+    // The probe holds its taps of non-zero weight only, as step 4 places them (`SplitInto`).
+    std::array<uint8_t, 12> texels{};
+    std::array<Probe, 8> probes{};
+    for (uint32_t k = 0; k < 4; ++k) {
+        if (weights[k] == 0) continue;
+        Probe& probe = probes[0];
+        texels[probe.count * 3] = static_cast<uint8_t>(codes[k]);
+        probe.texel[probe.count] = probe.count;
+        probe.weight[probe.count] = weights[k] * 4u;  // 1/256 to the unit's 1/1024
+        ++probe.count;
+    }
+    return Srgb8Filter(texels, probes, std::array<uint32_t, 8>{}, 1, 0);
 }
 
 std::array<float, 3> SampleLevel0(const Chain& chain, float u, float v, bool repeatU, bool repeatV) {

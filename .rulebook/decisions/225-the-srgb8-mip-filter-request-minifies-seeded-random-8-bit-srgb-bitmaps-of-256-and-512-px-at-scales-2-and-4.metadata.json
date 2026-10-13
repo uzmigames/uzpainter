@@ -1,0 +1,11 @@
+{
+  "id": 225,
+  "slug": "225-the-srgb8-mip-filter-request-minifies-seeded-random-8-bit-srgb-bitmaps-of-256-and-512-px-at-scales-2-and-4",
+  "title": "The sRGB8 mip filter request minifies seeded random 8-bit sRGB bitmaps of 256 and 512 px at scales 2 and 4",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

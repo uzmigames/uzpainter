@@ -410,6 +410,8 @@ Decision 160 admitted the template bases, `export-padding-tie-512` and the void 
 
 Decision 216 adds three Legacy padding probes, recorded as in 11.1 step 3: `export-padding-tie-512-box16` and `export-padding-ramp-r1-p0-box17` (decision 210 §5, P-tie-dyadic-box and P-ramp-17) and `export-padding-seam-ramp-1024` (the seam mesh of `export-padding-seam-field-1024` with the float UV ramp, decision 211 §5). The decision-129 void rule applies to all three. Decision 216 recorded and admitted all three.
 
+Decision 225 adds `srgb-bitmap-minification-random` (decision 219's sRGB8 mip filter), Legacy, recorded as in 11.1 step 3: `python -m tools.parity.recorder record "$req/tier0/semantics/srgb-bitmap-minification-random.json"`. Its seeded random 256 and 512 px bitmaps are minified at scales 2 and 4; it reads none of the held-out goldens. Open: Painter was in other use at batch H.
+
 ### 11.3 After the sessions
 
 - For each admitted Tier 0 golden, add its name to `recording_requests.ADMITTED` (the generator then plans its manifest under `manifests/`) and delete its request file. `python -m tools.parity.tier0_semantics check` must pass.

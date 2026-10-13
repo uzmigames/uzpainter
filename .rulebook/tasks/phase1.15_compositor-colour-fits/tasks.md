@@ -35,7 +35,7 @@
     - Every readback equals Painter's, both recordings: `test_facade_ocio_uniform_decode_equals_painter[part1..4]` and `test_colour_rule_readbacks_equal_painter[export-ocio-encode]`.
     - Refused before any change under OCIO (`compositor:ocio-unrecorded`): any other component, sRGB on a non-decoding channel, other uniform spaces, the encode of a working value, unrecorded listings, defaults and reset default sources.
   - Split (decision 202) to the owner of project creation (phase1.24/phase1.25): no creation path yields an OCIO project, so the Wand's `painter_create.py` still builds a Legacy project; the Wand's export also waits on phase1.25 item 2.7 (UV-island padding).
-- [ ] 2.7 (decision 203, split from 2.5) Bilinear minification of an 8-bit sRGB bitmap: replicate the recording GPU's sRGB8 texture filter and validate it sample for sample against the hardware, then fit `srgb-bitmap-minification` s0-s3 and lift `compositor:srgb-unrecorded`
+- [x] 2.7 (decision 203, split from 2.5) Bilinear minification of an 8-bit sRGB bitmap: replicate the recording GPU's sRGB8 texture filter and validate it sample for sample against the hardware, then fit `srgb-bitmap-minification` s0-s3 and lift `compositor:srgb-unrecorded`
   - Painter samples an `R8G8B8A8_SRGB` texture whose mip levels hold sRGB8 codes. With sRGB8 mip levels the float32 filter still misses 1 024 to 3 072 values per file.
   - Measured with `vk_sampler_probe` (flag 8), the filter returns binary16 values, rounded to nearest with ties away from zero. It is not the linear blend of the decoded texels.
     - With operands cut to 8 bits below the largest texel's exponent, a model misses 611 of 12 288 random two-tap samples.
@@ -52,7 +52,13 @@
   - Decision 213 (2-hour cap reached; no replica code committed):
     - Each probe's sum is truncated to 2^(max(Coarse(E), -6) - 16), and the running sum to 2^(Coarse(g) - 16) before every probe after the first. With these rules 52 of 96 000 samples differ (seed 0) and 53 of 96 000 (seed 1), down from 515.
     - Still open: a p = 0 probe pair sometimes truncates its two halves separately, and neither the sign nor the weight decides when; the sRGB8 mip build is not measured.
-  - Refused until then with `evaluator:unsupported_source` ("bilinear minification of an 8-bit sRGB bitmap is a release gap ... (decision 203)").
+  - Done (decision 219), with a scope split.
+    - The p = 0 pair is two probes when the opposite sign's cell holds it at p != 0, because its true offset is non-zero.
+    - Each probe is truncated on its level's grid, and the running sum is truncated once more after the last probe.
+    - The sRGB8 unit (`texture_unit.h` steps 5' and 6', mirrored in `evaluator_project.hlsl`) equals the hardware on 1 056 000 of 1 056 000 random samples and 917 504 of 917 504 level-separated ones. The random samples include decision 084's plan over six seeds and `tables.py validate-srgb8`.
+    - An 8-bit sRGB bitmap whose footprint reads level 0 only (`ReadsMipLevels`) is now evaluated. `srgb-bitmap-minification` s0 and s2 are byte-identical, r1 and r2: `test_srgb_minification_equals_painter_files`.
+    - Hardware samples on candidate chains reproduce s0-s3 whenever the mip codes are stored round-to-nearest. The ramp does not separate the exact mean, the float32 mean and a hardware probe at the block centre.
+    - Split (decision 219): a footprint that reads a mip level (s1 and s3) stays refused with `evaluator:unsupported_source` naming decision 219, and `compositor:srgb-unrecorded` stays a release gap for it. It waits only on one owner recording: a random-content 8-bit sRGB bitmap minified by BilinearSharp and BilinearHQ at scale 4 on a square set.
 - [x] 2.8 (decisions 174 and 204) An sRGB grey bitmap on an L8 BaseColor, Specular or Emissive, which Painter reads decoded (`export-l8-material` s0 and s1, admitted by decision 198), while decision 174's message said Painter refuses the space there: fit the decode exactly, lift the refusal only for the recorded cases, correct the message, and write s0 and s1 end to end byte-identical
   - Done (decision 208). A 16-bit code uses decision 174's float32 shader decode. An 8-bit code uses the same decode of float32(c / 255), rounded toward zero to a binary16 (decision 190's rounding), not the sRGB8 texel. Both are stored with the L8 write rule, and the result is exact on all 256 codes of each set, every channel, r1 and r2. For comparison, the IEC rounding misses 13 and 10 codes, the sRGB8 texel 30, and the decode without the binary16 3.
   - Lifted for a grey 8- or 16-bit bitmap at 1:1 under Legacy (`SrgbL8MaterialChannel`, `CheckSrgbL8MaterialBitmap`). Decision 174's message now covers only user channels and mask sources. Every other non-sRGB8 channel is refused as not recorded.
@@ -66,8 +72,8 @@
     - Admitted: an 8-bit colour bitmap, magnified or at 1:1 by a bilinear filter, on L8 or L16F or as a mask source. Refused before any change, naming this item: other one-channel formats (L16, L32F), 16-bit colour, Nearest and minification. No colour bitmap is read through its red component any more.
   - Open:
     - the grey bitmap on Normal (still refused, Normal map excluded);
-    - a 16-bit colour bitmap on a one-channel tile (refused): `export-bit-depth` s3 records 16-bit field A on Height at 1:1, where Painter follows the component mean, not red; not yet fitted exactly;
-    - BaseColor (8 264 texels one sRGB8 code off), moved to item 2.7: the 8-bit sRGB checker magnified 16 times needs decision 209's single-probe sRGB8 filter. A CPU prototype of that rule made BaseColor exact, both recordings (decision 218).
+    - a 16-bit colour bitmap on a one-channel tile (refused): `export-bit-depth` s3 records 16-bit field A on Height at 1:1, where Painter follows the component mean, not red; not yet fitted exactly.
+  - BaseColor done (decision 224). 8-bit sRGB magnification and 1:1 are now one probe of the sRGB8 texture unit's sums (`tu::Srgb8Probe`, HLSL `Srgb8Probe` over `TuSrgb8Channel`), with the projection's own taps and weights. That is decision 209's single-probe rule. BaseColor is exact on 65 536 of 65 536 texels, r1 and r2, and its exclusion is removed from `test_facade_fill_channel_defaults_equal_painter`. `srgb-bitmap-variants-v2` s0-s8, `export-ocio-encode`, `export-ocio-encode-legacy` s3/s5, `export-bit-depth` and `export-l8-material` stay exact. Normal is still open (above).
 
 ## 3. Tests
 - [ ] 3.1 Every fitted output exact against both recordings on CPU and DX12; the refusals of what stays unrecorded still fire before any mutation and name this task

@@ -1,0 +1,11 @@
+{
+  "id": 219,
+  "slug": "the-srgb8-texture-unit-is-exact-and-8-bit-srgb-minification-is-lifted-where-only-level-0-is-read-while-the-srgb8-mip-build-stays-unseparated",
+  "title": "The sRGB8 texture unit is exact, and 8-bit sRGB minification is lifted where only level 0 is read, while the sRGB8 mip build stays unseparated",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

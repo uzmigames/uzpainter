@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
-#include <limits>
 #include <numbers>
 #include <stdexcept>
 #include <string>
@@ -155,6 +154,20 @@ bool Minifies(const UvProjection& projection, uint32_t setWidth, uint32_t setHei
 }
 
 tu::Chain BitmapChain(const DecodedImage& image) {
+    if (image.srgb8) {
+        // The codes behind the decodes.
+        std::vector<uint8_t> codes(size_t{image.width} * image.height * 3);
+        for (uint32_t row = 0; row < image.height; ++row) {
+            const uint32_t y = image.height - 1 - row;  // the GPU's rows go bottom up
+            for (uint32_t x = 0; x < image.width; ++x) {
+                for (uint32_t c = 0; c < 3; ++c) {
+                    codes[(size_t{row} * image.width + x) * 3 + c] =
+                        static_cast<uint8_t>(Srgb8Code(TexelValue(image, x, y, c)));
+                }
+            }
+        }
+        return tu::BuildSrgb8Chain(image.width, std::move(codes));
+    }
     std::vector<float> level0(size_t{image.width} * image.height * 3);
     for (uint32_t row = 0; row < image.height; ++row) {
         const uint32_t y = image.height - 1 - row;  // the GPU's rows go bottom up
@@ -165,6 +178,25 @@ tu::Chain BitmapChain(const DecodedImage& image) {
         }
     }
     return tu::BuildChain(image.width, std::move(level0));
+}
+
+bool ReadsMipLevels(const UvProjection& projection, uint32_t setWidth, uint32_t setHeight,
+                    const DecodedImage& image) {
+    if (!Minifies(projection, setWidth, setHeight, image)) return false;
+    const std::array<float, 6> m = PainterMatrix(projection);
+    const float texel = static_cast<float>(1.0 / setWidth);
+    std::array<float, 2> ddx{m[0] * texel, m[3] * texel};
+    std::array<float, 2> ddy{m[1] * texel, m[4] * texel};
+    int bias = kSharpBias;
+    if (projection.filter != core::FilteringMode::BilinearSharp) {
+        const float third = static_cast<float>(1.0 / 3.0);
+        ddx = {third * ddx[0], third * ddx[1]};
+        ddy = {third * ddy[0], third * ddy[1]};
+        bias = 0;
+    }
+    const uint32_t levels = static_cast<uint32_t>(std::countr_zero(image.width)) + 1u;
+    const tu::Footprint fp = tu::Resolve(ddx, ddy, image.width, levels, bias);
+    return !fp.magnify && fp.biased > 0;
 }
 
 std::array<float, 6> PainterMatrix(const UvProjection& p) {
@@ -221,33 +253,6 @@ uint32_t Srgb8Code(float decode) {
         throw std::logic_error("evaluator: a texel of an sRGB8 image is not an sRGB8 decode");
     }
     return static_cast<uint32_t>(at - table.begin());
-}
-
-int Srgb8SegmentExponent(uint32_t code) {
-    int exponent = 0;
-    (void)std::frexp(arith::Srgb8Operand(code | 7u), &exponent);
-    return exponent;
-}
-
-float Srgb8BilinearFilter(const std::array<uint32_t, 4>& weights, const std::array<uint32_t, 4>& codes) {
-    uint32_t live = 0;
-    size_t last = 0;
-    int exponent = std::numeric_limits<int>::min();
-    for (size_t k = 0; k < 4; ++k) {
-        if (weights[k] == 0) continue;
-        ++live;
-        last = k;
-        exponent = std::max(exponent, Srgb8SegmentExponent(codes[k]));
-    }
-    if (live == 1) return arith::Srgb8Operand(codes[last]);
-    // Each operand floor(d 2^(8 - E)) is below 2^8 and the sum below 2^16: S 2^(E - 16) is exact.
-    int64_t sum = 0;
-    for (size_t k = 0; k < 4; ++k) {
-        const double scaled = std::ldexp(static_cast<double>(arith::Srgb8Operand(codes[k])), 8 - exponent);
-        sum += static_cast<int64_t>(weights[k]) * static_cast<int64_t>(std::floor(scaled));
-    }
-    const float value = static_cast<float>(std::ldexp(static_cast<double>(sum), exponent - 16));
-    return arith::HalfToFloat(arith::HalfNearestAway(value));
 }
 
 namespace {
@@ -372,10 +377,11 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
             texels[k] = RangeValue(TexelValue(image, taps[k][0], taps[k][1], c), signedRange);
         }
         if (image.srgb8) {
-            // An sRGB8 texture's filter (decisions 209, 224): its codes, not their float32 decodes.
+            // An sRGB8 texture: one probe of the texture unit's sRGB8 sums on its codes, with these
+            // weights (decisions 209, 219, 224).
             std::array<uint32_t, 4> codes{};
             for (size_t k = 0; k < 4; ++k) codes[k] = Srgb8Code(texels[k]);
-            result.value[c] = Srgb8BilinearFilter(weights, codes);
+            result.value[c] = tu::Srgb8Probe(weights, codes);
             continue;
         }
         result.value[c] = BilinearFilter(weights, texels);

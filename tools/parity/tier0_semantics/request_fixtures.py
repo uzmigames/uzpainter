@@ -218,6 +218,24 @@ def srgb8_grey_ramp() -> bytes:
     return png16(256, 256, 1, lambda x, y: (x,), bits=8)
 
 
+# Decision 219: the ramp builds the same mip chain under every candidate sRGB8 mip filter, so the
+# filter is separated on random codes, at a 256 px and a 512 px bitmap (decision 225).
+SRGB8_RANDOM_SIZES = (256, 512)
+
+
+def srgb8_random(size: int) -> bytes:
+    """8-bit RGB `size` x `size` of deterministic pseudo-random codes (the top byte of a 32-bit
+    LCG, a seed per size)."""
+    state = [20262190 + size]
+
+    def nxt() -> int:
+        state[0] = (state[0] * 1664525 + 1013904223) % (1 << 32)
+        return state[0] >> 24
+
+    values = [(nxt(), nxt(), nxt()) for _ in range(size * size)]
+    return png16(size, size, 3, lambda x, y: values[y * size + x], bits=8)
+
+
 # --- Held-out minification of decision 084 -----------------------------------------------------
 
 # Square power-of-two bitmap sizes no fitted minification golden used (decisions 078, 084 used
