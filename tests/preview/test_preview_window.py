@@ -16,14 +16,17 @@ import hashlib
 import json
 import shutil
 import subprocess
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
+import numpy as np
+import numpy.typing as npt
 import pytest
 
-from tests.preview.conftest import NO_GPU
+from tests.preview.conftest import NO_GPU, ocio_bundle
 from tests.supervisor.conftest import JSON_PREFIX, Pipe, make_project
 
 pytestmark = pytest.mark.skipif(
@@ -37,6 +40,13 @@ SW_RESTORE = 9
 WM_CLOSE = 0x0010
 SWP_NOMOVE = 0x0002
 SWP_NOZORDER = 0x0004
+SWP_NOACTIVATE = 0x0010
+HWND_TOPMOST = ctypes.c_void_p(-1)
+GCLP_HBRBACKGROUND = -10
+RDW_INVALIDATE = 0x0001
+RDW_ERASE = 0x0004
+RDW_UPDATENOW = 0x0100
+PANEL_WIDTH = 300  # src/preview/preview.cpp kPanelWidth
 
 EXPORT = """
 import hashlib, os
@@ -237,6 +247,195 @@ def test_window_lifecycle_during_evaluation_changes_nothing(
     # A Legacy project (every project UzPainter creates today) is shown as the unsupported
     # configuration of decision 038, never drawn.
     assert "decision 038" in status(pipe)["last_error"]
+
+
+class BitmapInfoHeader(ctypes.Structure):
+    _fields_: ClassVar[list[tuple[str, type[Any]]]] = [
+        ("size", ctypes.wintypes.DWORD),
+        ("width", ctypes.wintypes.LONG),
+        ("height", ctypes.wintypes.LONG),
+        ("planes", ctypes.wintypes.WORD),
+        ("bit_count", ctypes.wintypes.WORD),
+        ("compression", ctypes.wintypes.DWORD),
+        ("size_image", ctypes.wintypes.DWORD),
+        ("x_pels_per_meter", ctypes.wintypes.LONG),
+        ("y_pels_per_meter", ctypes.wintypes.LONG),
+        ("colours_used", ctypes.wintypes.DWORD),
+        ("colours_important", ctypes.wintypes.DWORD),
+        ("colours", ctypes.wintypes.DWORD * 4),  # BITMAPINFO's colour table, unused at 32 bpp
+    ]
+
+
+class Sampler(threading.Thread):
+    """The window's client area as the desktop compositor (DWM) shows it, sampled once per
+    composition (`DwmFlush`, then a BitBlt from the screen), and the samples that show an
+    unbuffered window: a view that is uniformly (0, 0, 0), the class brush's erase, or a panel
+    status box without one pixel of its text (every channel at least 150), cleared before its
+    text was drawn. A sample whose client rectangle changed while it was taken is discarded."""
+
+    def __init__(self, hwnd: int) -> None:
+        super().__init__(daemon=True)
+        self.hwnd = hwnd
+        self.stop = threading.Event()
+        self.paused = threading.Event()
+        self.samples = 0
+        self.failures: list[str] = []
+        self.error: BaseException | None = None
+        # Own function pointers: GDI handles are pointer-sized, so these need their types.
+        handle = ctypes.c_void_p
+        self.user32 = ctypes.WinDLL("user32", use_last_error=True)
+        self.gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
+        self.dwmapi = ctypes.WinDLL("dwmapi")
+        self.user32.GetDC.restype = handle
+        self.user32.GetDC.argtypes = [handle]
+        self.user32.ReleaseDC.argtypes = [handle, handle]
+        self.user32.SetThreadDpiAwarenessContext.argtypes = [handle]
+        self.gdi32.CreateCompatibleDC.restype = handle
+        self.gdi32.CreateCompatibleDC.argtypes = [handle]
+        self.gdi32.CreateCompatibleBitmap.restype = handle
+        self.gdi32.CreateCompatibleBitmap.argtypes = [handle, ctypes.c_int, ctypes.c_int]
+        self.gdi32.SelectObject.restype = handle
+        self.gdi32.SelectObject.argtypes = [handle, handle]
+        self.gdi32.DeleteObject.argtypes = [handle]
+        self.gdi32.DeleteDC.argtypes = [handle]
+        integer, unsigned = ctypes.c_int, ctypes.c_uint
+        self.gdi32.BitBlt.argtypes = [handle, *[integer] * 4, handle, integer, integer, unsigned]
+        self.gdi32.GetDIBits.argtypes = [*[handle] * 2, unsigned, unsigned, *[handle] * 2, unsigned]
+
+    def client(self) -> tuple[int, int, int, int] | None:
+        """The client area on the screen (left, top, width, height); none while minimised."""
+        if self.user32.IsIconic(self.hwnd):
+            return None
+        rect = ctypes.wintypes.RECT()
+        origin = ctypes.wintypes.POINT(0, 0)
+        if not self.user32.GetClientRect(self.hwnd, ctypes.byref(rect)):
+            return None
+        self.user32.ClientToScreen(self.hwnd, ctypes.byref(origin))
+        if rect.right <= PANEL_WIDTH + 24 or rect.bottom <= 24:
+            return None
+        return origin.x, origin.y, rect.right, rect.bottom
+
+    def grab(self, screen: int, area: tuple[int, int, int, int]) -> npt.NDArray[np.uint8]:
+        """The BGRA pixels of `area` of the screen, rows top first."""
+        left, top, width, height = area
+        memory = self.gdi32.CreateCompatibleDC(screen)
+        bitmap = self.gdi32.CreateCompatibleBitmap(screen, width, height)
+        try:
+            previous = self.gdi32.SelectObject(memory, bitmap)
+            self.gdi32.BitBlt(memory, 0, 0, width, height, screen, left, top, 0x00CC0020)
+            self.gdi32.SelectObject(memory, previous)  # GetDIBits needs it deselected
+            header = BitmapInfoHeader(40, width, -height)  # 40: BITMAPINFOHEADER's size
+            header.planes, header.bit_count = 1, 32
+            pixels = np.zeros((height, width, 4), np.uint8)
+            lines = self.gdi32.GetDIBits(
+                memory, bitmap, 0, height, pixels.ctypes.data, ctypes.addressof(header), 0
+            )
+            assert lines == height, f"GetDIBits: {lines} lines, error {ctypes.get_last_error()}"
+            return pixels
+        finally:
+            self.gdi32.DeleteObject(bitmap)
+            self.gdi32.DeleteDC(memory)
+
+    def check(self, pixels: npt.NDArray[np.uint8]) -> str | None:
+        height, width = pixels.shape[:2]
+        view_width = width - PANEL_WIDTH
+        # Inside the window's rounded corners, which show the desktop behind it.
+        if not pixels[16:-16, 16 : view_width - 16, :3].any():
+            return "the view is uniformly (0, 0, 0): the window was erased"
+        box = pixels[12 : height // 2, view_width + 12 : width - 12, :3]
+        if not (box >= 150).all(axis=-1).any():
+            return "the panel shows no text: it was cleared before its text was drawn"
+        return None
+
+    def run(self) -> None:
+        try:
+            # Physical pixels, as the per-monitor-aware preview window uses them.
+            self.user32.SetThreadDpiAwarenessContext(-4)
+            screen = self.user32.GetDC(None)
+            try:
+                while not self.stop.is_set():
+                    self.dwmapi.DwmFlush()
+                    area = None if self.paused.is_set() else self.client()
+                    if area is None:
+                        continue
+                    pixels = self.grab(screen, area)
+                    if self.client() != area:
+                        continue
+                    self.samples += 1
+                    problem = self.check(pixels)
+                    if problem:
+                        self.failures.append(f"sample {self.samples} {area[2:]}: {problem}")
+            finally:
+                self.user32.ReleaseDC(None, screen)
+        except BaseException as error:  # reported by the test's thread
+            self.error = error
+
+
+def test_window_presents_only_complete_frames(
+    painter: Path, tmp_path: Path, pipes: list[Pipe]
+) -> None:
+    """Decision 227 (the owner saw the window flicker): the window is double buffered. Each frame
+    is composed off screen and presented whole by one BitBlt in WM_PAINT, nothing erases the
+    window (no class background brush, WM_ERASEBKGND answered without erasing), and an unchanged
+    window is not redrawn. Through resizes, a minimise and restore, forced repaints and a new
+    evaluation, the screen never shows an erased view or a panel cleared of its text."""
+    bundle = ocio_bundle(painter, tmp_path / "fixture")
+    pipe = Pipe(painter, tmp_path, *WORKER, "--preview")
+    pipes.append(pipe)
+    if pipe.handshake["gpu_status"] != "ready":
+        pytest.skip("no DX12 device on this machine")
+    (hwnd,) = wait_for(lambda: windows_of(pipe.process.pid))
+    run = Run(pipe, bundle, tmp_path / "export")
+    run.evaluate("BaseColor")
+    wait_for(lambda: status(pipe)["frames_rendered"] >= 1)
+    user32.SetWindowPos(hwnd, HWND_TOPMOST, 40, 40, 960, 640, SWP_NOACTIVATE)
+
+    # Nothing erases the window, and an unchanged window is not redrawn.
+    class_long = ctypes.WinDLL("user32").GetClassLongPtrW
+    class_long.restype = ctypes.c_size_t
+    class_long.argtypes = [ctypes.wintypes.HWND, ctypes.c_int]
+    assert class_long(hwnd, GCLP_HBRBACKGROUND) == 0, "the window class erases with a brush"
+    wait_for(lambda: status(pipe)["frames_rendered"] >= 2)  # the resize's render
+    time.sleep(1.0)
+    idle = status(pipe)
+    time.sleep(1.0)
+    assert status(pipe)["presents"] == idle["presents"], "an unchanged window was redrawn"
+    # A repaint Windows asks for presents the frame again.
+    user32.RedrawWindow(hwnd, None, None, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW)
+    wait_for(lambda: status(pipe)["presents"] > idle["presents"])
+
+    sampler = Sampler(hwnd)
+    sampler.start()
+    try:
+        # Resizes further apart than the 200 ms render period: each one renders again.
+        for width, height in ((700, 450), (1100, 700), (640, 360), (1000, 640), (800, 520)):
+            user32.SetWindowPos(hwnd, 0, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER)
+            time.sleep(0.3)
+        # The compositor animates a minimise and a restore; the screen then shows the
+        # animation, not the window.
+        sampler.paused.set()
+        user32.ShowWindow(hwnd, SW_MINIMIZE)
+        time.sleep(0.5)
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        time.sleep(0.6)
+        sampler.paused.clear()
+        for _ in range(10):
+            user32.RedrawWindow(hwnd, None, None, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW)
+            time.sleep(0.1)
+        rendered = status(pipe)["frames_rendered"]
+        run.python(INSERT_FILL)
+        run.evaluate("BaseColor")
+        wait_for(lambda: status(pipe)["frames_rendered"] > rendered)
+        time.sleep(0.5)
+    finally:
+        sampler.stop.set()
+        sampler.join(30)
+    assert sampler.error is None, sampler.error
+    assert sampler.samples >= 20, f"only {sampler.samples} samples"
+    assert not sampler.failures, (
+        f"{len(sampler.failures)} of {sampler.samples} samples: {sampler.failures[:5]}"
+    )
+    print(f"{sampler.samples} composed frames sampled, none erased or half drawn")
 
 
 def test_standalone_preview_opens_and_closes(painter: Path, tmp_path: Path) -> None:

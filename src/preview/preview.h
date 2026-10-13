@@ -13,8 +13,10 @@
 //   rendering never queues behind or in front of evaluation), the read-only window (vendored
 //   `platform_window` and `input`) with an orbit camera only (left drag orbits, the wheel zooms),
 //   and a low frame rate (at most one `painter_viewport` render per `period`, none while
-//   minimised). The `painter_iray` panel states that the mode is unavailable: no capture can exist
-//   before the path tracer (P3-PATHTRACER). Errors (an unsupported display configuration, a
+//   minimised). The window is double buffered (decision 227): each frame is composed off screen
+//   and presented whole, only when it changed or Windows asks, and never erased. The
+//   `painter_iray` panel states that the mode is unavailable: no capture can exist before the path
+//   tracer (P3-PATHTRACER). Errors (an unsupported display configuration, a
 //   missing environment, no mesh) are shown in place of the image, and nothing is drawn.
 // - The stall hook (`Stall`) blocks the preview thread while it holds its frame, for the tests of
 //   item 3.2; nothing else ever waits for that thread.
@@ -119,6 +121,8 @@ struct PreviewStatus {
     std::uint64_t framesPublished = 0;
     std::uint64_t framesTaken = 0;
     std::uint64_t framesRendered = 0;
+    /// Frames presented: one BitBlt of the whole back buffer each (a composed frame, or WM_PAINT).
+    std::uint64_t presents = 0;
     std::int64_t revisionShown = -1;
     std::string lastError;
 };
@@ -166,6 +170,7 @@ private:
     std::atomic<bool> m_windowOpen{false};
     std::atomic<std::uint64_t> m_taken{0};
     std::atomic<std::uint64_t> m_rendered{0};
+    std::atomic<std::uint64_t> m_presents{0};
     std::atomic<std::int64_t> m_revisionShown{-1};
     mutable std::mutex m_errorMutex;  // guards m_lastError only; the publisher never takes it
     std::string m_lastError;

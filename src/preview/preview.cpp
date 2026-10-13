@@ -20,11 +20,124 @@ namespace {
 constexpr int kPanelWidth = 300;
 /// The largest side the viewport renders at; the window stretches the image beyond it.
 constexpr uint32_t kMaxRenderSide = 1024;
+/// The window property that holds its `BackBuffer` (the vendored window procedure keeps
+/// `GWLP_USERDATA` for itself).
+constexpr wchar_t kBackBufferProperty[] = L"UzPainterPreviewBackBuffer";
 
 void FillText(HDC dc, RECT rect, const std::string& text, COLORREF colour) {
     SetTextColor(dc, colour);
     DrawTextA(dc, text.c_str(), static_cast<int>(text.size()), &rect, DT_LEFT | DT_TOP | DT_WORDBREAK);
 }
+
+/// The window's back buffer (double buffering, decision 227). A whole frame (the image or the
+/// message, then the panel and its text) is composed off screen into a bitmap the size of the
+/// client area, and WM_PAINT presents it with one BitBlt, so the window never shows a cleared or
+/// half-drawn frame. Nothing erases the window: the vendored class's black background brush is
+/// removed and WM_ERASEBKGND is answered without erasing. The vendored window procedure is
+/// subclassed, not edited (it is verbatim, thirdparty/uzengine-render-core/MANIFEST.json). Every
+/// call runs on the window's thread.
+class BackBuffer {
+public:
+    /// Draws a whole frame of `width` x `height` into `dc`.
+    using Composer = std::function<void(HDC dc, int width, int height)>;
+
+    BackBuffer(HWND hwnd, Composer compose, std::atomic<std::uint64_t>& presents)
+        : m_hwnd(hwnd), m_compose(std::move(compose)), m_presents(presents), m_dc(CreateCompatibleDC(nullptr)) {
+        SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, 0);
+        SetPropW(hwnd, kBackBufferProperty, this);
+        m_original = reinterpret_cast<WNDPROC>(
+            SetWindowLongPtrW(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&BackBuffer::Procedure)));
+    }
+
+    ~BackBuffer() {
+        SetWindowLongPtrW(m_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(m_original));
+        RemovePropW(m_hwnd, kBackBufferProperty);
+        if (m_dc) {
+            if (m_bitmap) SelectObject(m_dc, m_initialBitmap);
+            DeleteDC(m_dc);
+        }
+        if (m_bitmap) DeleteObject(m_bitmap);
+    }
+
+    BackBuffer(const BackBuffer&) = delete;
+    BackBuffer& operator=(const BackBuffer&) = delete;
+
+    /// Composes a new frame at the client size and presents it; nothing while the client area is
+    /// empty (minimised).
+    void Refresh() {
+        RECT client{};
+        GetClientRect(m_hwnd, &client);
+        if (!Compose(client.right, client.bottom)) return;
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+        UpdateWindow(m_hwnd);
+    }
+
+private:
+    static LRESULT CALLBACK Procedure(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
+        auto* self = static_cast<BackBuffer*>(GetPropW(hwnd, kBackBufferProperty));
+        switch (message) {
+            case WM_ERASEBKGND: return 1;  // the frame covers the whole client area
+            case WM_PAINT: self->Present(); return 0;
+            case WM_SIZE: {
+                const LRESULT result = CallWindowProcW(self->m_original, hwnd, message, wparam, lparam);
+                // Presented inside the size change, so the compositor never shows the new size
+                // holding the old frame.
+                if (wparam != SIZE_MINIMIZED) RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
+                return result;
+            }
+            default: return CallWindowProcW(self->m_original, hwnd, message, wparam, lparam);
+        }
+    }
+
+    /// Composes a frame of `width` x `height`; false for an empty client area.
+    bool Compose(int width, int height) {
+        if (!m_dc || width <= 0 || height <= 0) return false;
+        if (width != m_width || height != m_height) {
+            HDC window = GetDC(m_hwnd);
+            if (!window) return false;
+            HBITMAP bitmap = CreateCompatibleBitmap(window, width, height);
+            ReleaseDC(m_hwnd, window);
+            if (!bitmap) return false;
+            HGDIOBJ previous = SelectObject(m_dc, bitmap);
+            if (m_bitmap) {
+                DeleteObject(m_bitmap);
+            } else {
+                m_initialBitmap = previous;
+            }
+            m_bitmap = bitmap;
+            m_width = width;
+            m_height = height;
+        }
+        m_compose(m_dc, width, height);
+        return true;
+    }
+
+    /// WM_PAINT: one BitBlt of the whole frame. At a client size the frame was not composed at (a
+    /// resize, also a live one while the preview loop waits inside the modal size loop) the last
+    /// image is composed again first, stretched, so the window never shows an erase.
+    void Present() {
+        PAINTSTRUCT paint{};
+        HDC dc = BeginPaint(m_hwnd, &paint);
+        RECT client{};
+        GetClientRect(m_hwnd, &client);
+        if (dc && ((client.right == m_width && client.bottom == m_height && m_bitmap) ||
+                   Compose(client.right, client.bottom))) {
+            BitBlt(dc, 0, 0, m_width, m_height, m_dc, 0, 0, SRCCOPY);
+            ++m_presents;
+        }
+        EndPaint(m_hwnd, &paint);
+    }
+
+    HWND m_hwnd;
+    Composer m_compose;
+    std::atomic<std::uint64_t>& m_presents;
+    WNDPROC m_original = nullptr;
+    HDC m_dc;
+    HBITMAP m_bitmap = nullptr;
+    HGDIOBJ m_initialBitmap = nullptr;
+    int m_width = 0;
+    int m_height = 0;
+};
 
 }  // namespace
 
@@ -100,6 +213,7 @@ PreviewStatus PreviewHost::Status() const {
     status.framesPublished = m_feed->Frames().Published();
     status.framesTaken = m_taken;
     status.framesRendered = m_rendered;
+    status.presents = m_presents;
     status.revisionShown = m_revisionShown;
     std::lock_guard lock(m_errorMutex);
     status.lastError = m_lastError;
@@ -134,8 +248,6 @@ void PreviewHost::Run() {
         engine.Stop();
         return;
     }
-    window.Show();
-    m_windowOpen = true;
     HWND hwnd = static_cast<HWND>(window.GetNativeHandle());
 
     std::shared_ptr<const PreviewFrame> current;
@@ -209,13 +321,10 @@ void PreviewHost::Run() {
         m_revisionShown = current->revision;
     };
 
-    const auto paint = [&]() {
-        RECT client{};
-        GetClientRect(hwnd, &client);
-        const int viewWidth = std::max(1, static_cast<int>(client.right) - kPanelWidth);
-        HDC dc = GetDC(hwnd);
-        if (!dc) return;
-        RECT view{0, 0, viewWidth, client.bottom};
+    // One whole frame of the window, drawn into the back buffer.
+    const auto compose = [&](HDC dc, int width, int height) {
+        const int viewWidth = std::max(1, width - kPanelWidth);
+        RECT view{0, 0, viewWidth, height};
         if (!pixels.empty()) {
             BITMAPINFO info{};
             info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -225,17 +334,18 @@ void PreviewHost::Run() {
             info.bmiHeader.biBitCount = 32;
             info.bmiHeader.biCompression = BI_RGB;
             SetStretchBltMode(dc, HALFTONE);
-            StretchDIBits(dc, 0, 0, viewWidth, client.bottom, 0, 0, static_cast<int>(imageWidth),
+            SetBrushOrgEx(dc, 0, 0, nullptr);  // required after selecting HALFTONE
+            StretchDIBits(dc, 0, 0, viewWidth, height, 0, 0, static_cast<int>(imageWidth),
                           static_cast<int>(imageHeight), pixels.data(), &info, DIB_RGB_COLORS, SRCCOPY);
         } else {
             HBRUSH brush = CreateSolidBrush(RGB(32, 32, 32));
             FillRect(dc, &view, brush);
             DeleteObject(brush);
             SetBkMode(dc, TRANSPARENT);
-            RECT text{16, 16, viewWidth - 16, client.bottom - 16};
+            RECT text{16, 16, viewWidth - 16, height - 16};
             FillText(dc, text, message, RGB(230, 160, 120));
         }
-        RECT panel{viewWidth, 0, client.right, client.bottom};
+        RECT panel{viewWidth, 0, width, height};
         HBRUSH brush = CreateSolidBrush(RGB(24, 24, 28));
         FillRect(dc, &panel, brush);
         DeleteObject(brush);
@@ -245,11 +355,16 @@ void PreviewHost::Run() {
             "display: OCIO, Painter's substance config, Default - sRGB (decision 042)\n\n" +
             (current ? "revision " + std::to_string(current->revision) : std::string("no evaluation yet")) +
             "\n\nleft drag: orbit    wheel: zoom\n\n";
-        FillText(dc, RECT{viewWidth + 12, 12, client.right - 12, client.bottom / 2}, status, RGB(200, 200, 200));
-        FillText(dc, RECT{viewWidth + 12, client.bottom / 2, client.right - 12, client.bottom - 12}, kIrayUnavailable,
-                 RGB(220, 190, 90));
-        ReleaseDC(hwnd, dc);
+        FillText(dc, RECT{viewWidth + 12, 12, width - 12, height / 2}, status, RGB(200, 200, 200));
+        FillText(dc, RECT{viewWidth + 12, height / 2, width - 12, height - 12}, kIrayUnavailable, RGB(220, 190, 90));
     };
+
+    // Subclassed before the window is first shown, so no frame of it is ever erased.
+    std::optional<BackBuffer> backBuffer;
+    backBuffer.emplace(hwnd, compose, m_presents);
+    bool composed = false;  // the back buffer holds the frame of the current state
+    window.Show();
+    m_windowOpen = true;
 
     while (!m_stop && window.PumpMessages()) {
         input.PrepareFrame();
@@ -257,6 +372,7 @@ void PreviewHost::Run() {
             current = std::move(*taken);
             ++m_taken;
             dirty = true;
+            composed = false;  // the panel names the frame's revision
         }
         // Test hook (item 3.2): the thread blocks here, holding `current`.
         while (m_stall && !m_stop) {
@@ -284,12 +400,21 @@ void PreviewHost::Run() {
                 renderFrame();
                 dirty = false;
                 lastRender = now;
+                composed = false;
             }
-            paint();
+            // Only a changed frame is composed and presented; WM_PAINT presents it again whenever
+            // Windows asks.
+            if (!composed) {
+                backBuffer->Refresh();
+                composed = true;
+            }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        // At most 15 ms until the next pass, and none once a message arrives: a resize sent from
+        // another thread is answered, and painted, at once.
+        MsgWaitForMultipleObjectsEx(0, nullptr, 15, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
     }
     m_windowOpen = false;
+    backBuffer.reset();
     window.Destroy();
     input.Shutdown();
     engine.Stop();
