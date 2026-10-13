@@ -742,6 +742,80 @@ def test_every_release_gap_is_one_capability_gap(
     assert not any(out.rglob("*.png")) and not any(out.rglob("*.exr"))
 
 
+def test_mesh_refusals_keep_their_api_class(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """Decision 242 (review of practical-e2e B4): a mesh refusal of `project_create` or
+    `mesh_reload` has the class the `uzpainter` API raises, with its details, not `call_failed
+    {type: RuntimeError}`. A `.ply` or `.dae` mesh is the release gap `ReleaseGap`, so
+    `capability_gap {tool, type, reason, operations: []}`. An unknown format (`UnsupportedFormat`)
+    and renamed materials (`MaterialMappingError`) are `ProjectError`s, so `project_error {type,
+    details}`; the reload's proposal, passed back as `material_mapping`, then commits. Nothing is
+    created or committed by a refusal."""
+    meshes = tmp_path / "meshes"
+    meshes.mkdir()
+    for suffix in ("ply", "dae", "stl"):
+        shutil.copy(PLANE, meshes / f"plane.{suffix}")
+    renamed = meshes / "renamed.obj"
+    text = PLANE.read_text(encoding="utf-8")
+    renamed.write_text(text.replace("usemtl uzp_plane", "usemtl renamed"), encoding="utf-8")
+    project = make_project(painter, tmp_path)
+    ply, stl = (meshes / "plane.ply").as_posix(), (meshes / "plane.stl").as_posix()
+    api = run_script(
+        painter,
+        tmp_path,
+        f"""
+        from uzpainter import project
+        result = {{}}
+        for name, path in (("ply", {ply!r}), ("stl", {stl!r})):
+            try:
+                project.create(path)
+            except Exception as error:
+                result[name] = [type(error).__name__, error.details]
+        project.open({project.as_posix()!r})
+        try:
+            project.reload_mesh({renamed.as_posix()!r})
+        except Exception as error:
+            result["renamed"] = [type(error).__name__, error.details]
+        """,
+    )
+
+    session = Mcp(painter, tmp_path, *BASE)
+    sessions.append(session)
+    gap = session.call("project_create", {"mesh": str(meshes / "plane.ply"), "wait": True})["error"]
+    assert gap["code"] == "capability_gap" and set(gap["details"]) == GAP_FIELDS, gap
+    assert (gap["details"]["tool"], gap["details"]["type"]) == ("project_create", api["ply"][0])
+    assert gap["details"]["operations"] == [] and "'.ply' meshes" in gap["details"]["reason"]
+    unknown = session.call("project_create", {"mesh": str(meshes / "plane.stl"), "wait": True})
+    error = unknown["error"]
+    assert error["code"] == "project_error", unknown
+    assert [error["details"]["type"], error["details"]["details"]] == api["stl"]
+    assert api["stl"] == ["UnsupportedFormat", {"format": "stl"}]
+    assert session.call("project_inspect")["result"] == {"open": False}
+
+    opened_reply = session.call("project_open", {"path": str(project), "wait": True})
+    revision = opened_reply["result"]["revision"]
+    dae = session.call("mesh_reload", {"path": str(meshes / "plane.dae"), "wait": True})["error"]
+    assert dae["code"] == "capability_gap" and set(dae["details"]) == GAP_FIELDS, dae
+    assert (dae["details"]["tool"], dae["details"]["type"]) == ("mesh_reload", "ReleaseGap")
+    assert dae["details"]["operations"] == []
+    mapping = session.call("mesh_reload", {"path": str(renamed), "wait": True})["error"]
+    assert mapping["code"] == "project_error", mapping
+    assert [mapping["details"]["type"], mapping["details"]["details"]] == api["renamed"]
+    assert mapping["details"]["details"]["mapping"] == {"uzp_plane": "renamed"}
+    assert revision_of(session) == revision
+    arguments = {
+        "path": str(renamed),
+        "settings": {"material_mapping": mapping["details"]["details"]["mapping"]},
+        "wait": True,
+    }
+    accepted = session.call("mesh_reload", arguments)
+    assert accepted["result"]["status"] == "committed", accepted
+    assert accepted["result"]["returned"]["reload"]["sets"]["renamed"] == [
+        {"from": "uzp_plane", "to": "renamed"}
+    ]
+
+
 def test_an_invalid_export_configuration_is_invalid_arguments(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:

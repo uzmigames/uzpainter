@@ -9,6 +9,11 @@ bool IsGapClass(std::string_view cls) {
            cls == "PathTracerUnavailable";
 }
 
+bool IsProjectErrorClass(std::string_view cls) {
+    return cls == "ProjectError" || cls == "MeshParseError" || cls == "UnsupportedFormat" ||
+           cls == "DuplicateMaterialNames" || cls == "UVOutsideTile" || cls == "MaterialMappingError";
+}
+
 CallError GapError(const std::string& tool, const std::string& reason, const std::string& type, json::Array operations) {
     return CallError{"capability_gap", tool + ": a release gap of this build: " + reason,
                      json::Object{{"tool", tool},

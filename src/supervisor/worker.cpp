@@ -37,6 +37,7 @@
 #include "evaluator/templates.h"
 #include "export/plan.h"
 #include "export/preset_aliases.h"
+#include "mesh/import_error.h"
 #include "mesh/reload.h"
 #include "preview/preview.h"
 #include "python/capture.h"
@@ -239,6 +240,33 @@ private:
 /// opened or saved as (resolved when that call ran), or the temporary store of an untitled one.
 std::string DurableStore(const python::OpenProject& open) {
     return python::Utf8(open.untitled_dir.empty() ? open.project_source : std::filesystem::absolute(open.store->path()));
+}
+
+/// The reply to the API error `error` that `tool` met: a release gap is `capability_gap {tool, type,
+/// reason, operations}` (decision 242); a `ProjectError`, a mesh refusal's subclass included,
+/// `project_error`; `StaleRevisionError` `stale_revision {expected, current}`; `BusyError` `busy
+/// {job_id}`; any other class `call_failed`. `type` is the class, `details` the error's own.
+json::Object ApiErrorReply(const json::Value& id, const std::string& tool, const python::ApiError& error) {
+    if (IsGapClass(error.cls())) {
+        // A release gap the API's code meets: the evaluator's (a source it does not sample yet),
+        // a capture mode's (painter_iray), a typed edit's, a mesh format's.
+        const CallError gap = GapError(tool, error.what(), error.cls());
+        return ErrorReply(id, gap.code, gap.message, gap.details);
+    }
+    json::Object details{{"type", error.cls()}};
+    std::string code = "call_failed";
+    if (error.cls() == "StaleRevisionError") {
+        code = "stale_revision";
+        details["expected"] = error.expected;
+        details["current"] = error.current;
+    } else if (error.cls() == "BusyError") {
+        code = "busy";
+        details["job_id"] = error.job_id;
+    } else if (IsProjectErrorClass(error.cls())) {
+        code = "project_error";
+    }
+    if (!error.details.empty()) details["details"] = error.details;
+    return ErrorReply(id, std::move(code), error.what(), std::move(details));
 }
 
 /// `{"event": "revision", "revision", "project", "project_uuid", "untitled"}`: the open project's
@@ -747,26 +775,13 @@ json::Object Worker::Execute(const json::Value& id, const json::Object& request,
         }
         return ErrorReply(id, error.code, error.message, error.details);
     } catch (const python::ApiError& error) {
-        if (IsGapClass(error.cls())) {
-            // A release gap the API's code meets: the evaluator's (a source it does not sample yet),
-            // a capture mode's (painter_iray), a typed edit's (decision 242).
-            const CallError gap = GapError(tool.name, error.what(), error.cls());
-            return ErrorReply(id, gap.code, gap.message, gap.details);
-        }
-        json::Object details{{"type", error.cls()}};
-        std::string code = "call_failed";
-        if (error.cls() == "StaleRevisionError") {
-            code = "stale_revision";
-            details["expected"] = error.expected;
-            details["current"] = error.current;
-        } else if (error.cls() == "BusyError") {
-            code = "busy";
-            details["job_id"] = error.job_id;
-        } else if (error.cls() == "ProjectError") {
-            code = "project_error";
-        }
-        if (!error.details.empty()) details["details"] = error.details;
-        return ErrorReply(id, std::move(code), error.what(), std::move(details));
+        return ApiErrorReply(id, tool.name, error);
+    } catch (const mesh::ImportError& error) {
+        // A mesh refusal (`project_create`, `mesh_reload`) under the class the bindings raise:
+        // `ReleaseGap` and `NotYetSupported` are release gaps, the others `ProjectError`s.
+        return ApiErrorReply(id, tool.name, python::FromImportError(error));
+    } catch (const mesh::MaterialMappingError& error) {
+        return ApiErrorReply(id, tool.name, python::FromMaterialMappingError(error));
     } catch (const core::NotYetSupported& error) {
         // A release gap the native code meets (an export's unfitted setting, refused before anything
         // is written; a typed edit's): `capability_gap`.
