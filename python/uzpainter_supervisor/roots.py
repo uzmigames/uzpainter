@@ -53,6 +53,8 @@ PATH_KEYS = frozenset(
         "ledger",
         "crash_dir",
         "minidump",
+        "png",
+        "exr",
     }
 )
 

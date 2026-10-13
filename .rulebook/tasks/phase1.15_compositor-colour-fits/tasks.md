@@ -9,7 +9,8 @@
   - Fitted (decision 145): a 16-bit grey and an 8-bit colour sRGB bitmap at 1:1 on an sRGB8 channel, exact byte for byte against `export-ocio-encode-legacy` s3 (8-bit ramp, PNG 16, PNG 8, OpenEXR 32f) and `export-bit-depth` s4, s5, s7 (16-bit grey), r1 and r2; refusal lifted in `evaluate.cpp`.
   - Open, blocked only by the recording `tier0/semantics/srgb-bitmap-variants` (decision 145 §3, owner action): an 8-bit grey sRGB bitmap, a resampled sRGB bitmap, an sRGB bitmap on a channel that is not sRGB8 or as a mask source, the Working and Linear spaces; each still refused before any work.
 - [ ] 2.3 (decisions 101, 108 §2 and 130) Fit OCIO colour management against the Session O goldens (`export-ocio-encode`, `export-presets-ocio`) and lift its refusal (evaluator and facade) and the `compositor:ocio` release gap
-- [ ] 2.4 (decisions 108 and 130) R5 Legacy twin s5 (the masked group of `export-ocio-encode-legacy`, unstable in the oracle): exact against r1 (decision 032), r2 only through the exception register
+- [x] 2.4 (decisions 108 and 130) R5 Legacy twin s5 (the masked group of `export-ocio-encode-legacy`, unstable in the oracle): exact against r1 (decision 032), r2 only through the exception register
+  - Done (decision 152): s5's BaseColor (the 8-bit sRGB ramp in a group masked by grey A) is written byte for byte as r1 at PNG 16, PNG 8 and OpenEXR 32f, with no evaluator change (the export tests' spec loader now reads masks). r2 differs from r1 on 15 947 values per file and is judged through EXC-006 (`parity/exceptions.json`, decision 032's standing approval, flagged for the owner's review); `test_srgb8_bitmap_equals_painter_files`.
 
 ## 3. Tests
 - [ ] 3.1 Every fitted output exact against both recordings on CPU and DX12; the refusals of what stays unrecorded still fire before any mutation and name this task

@@ -1,0 +1,14 @@
+{
+  "id": 157,
+  "slug": "the-inferred-template-base-padding-probe-and-queued-api-probe-requests-are-authored-from-decisions-107-111-113-126-and-129",
+  "title": "The inferred-template-base, padding-probe and queued API-probe requests are authored from decisions 107, 111, 113, 126 and 129",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.15_compositor-colour-fits",
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

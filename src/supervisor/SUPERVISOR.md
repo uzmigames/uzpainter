@@ -91,7 +91,7 @@ The registry then calls the admission. Two calls skip the checks and go straight
 
 The text content is one line: `<tool>: <status>[; revision a -> b][; <counts>][; job <id>]`, or `<tool>: error <code>: <message>`.
 
-Images are content blocks only for `capture`, built from its result's `image {mimeType, data}`.
+Images are content blocks only for `capture`: the PNG its receipt names (`files.png`), read in the executor and attached when it is at most 4 MiB. A larger one is not attached, and a warning names its size. Downscaling it belongs to phase2.6's capture family.
 
 ## Roots
 
@@ -236,6 +236,7 @@ It then answers one request at a time on the interpreter's thread; a long tool's
 | `display_set {preset?, environment?, exposure?, rotation?, opacity?, blur?, shadows?, background?, color_lut?}` | mutating: the lease, key and precondition; one transaction (the preset first) | the transaction result, stored for the key (`display_get` reads the state); a value outside the fixed pipeline fails `call_failed` (`UnsupportedInUzPainter`, decision 038) with nothing committed |
 | `shader_get` / `shader_set {parameters}` | read / mutating (lease, key, precondition) | `shader_get`: `{shader, parameters}`, the setters return the transaction result; the default `open-pbr` instance; other values are refused (decision 042) |
 | `camera_get` / `camera_set {camera \| blender}` | read / mutating (lease, key, precondition) | `camera_get`: `{camera, blender}`, the default camera in Painter's and Blender's conventions, null when none is set |
+| `capture {mode, path, camera?, size?, samples?, seed?, preset?, texture_set?, stack?}` | non-mutating; listed `gpu: true`, but only `painter_viewport` needs the device (`gpu_backend_unavailable` otherwise), so the CPU modes run without one | the capture receipt with `files` (`src/python/capture.h`, decision 148). `path` is the PNG and lies inside `--output-root` (relative paths are taken under it; with `--roots`, the supervisor confines it to the export root first); the OpenEXR and the receipt go beside it. Over MCP the PNG also comes back as an image content block when it is at most 4 MiB (see Registry). `painter_iray` is `call_failed` with `details.type` `PathTracerUnavailable`, decided before the path is looked at. `texture_set` and `stack` apply to `base_color` and `channel:<name>` only |
 | `run_python {code \| path, args?}` | mutating; listed and run only with `--allow-python`; its MCP schema also takes `idempotency_key` and `expected_revision`; `path` is a script file, which the roots never confine | the report `{result, stdout, stderr, last_committed_revision, committed}`; a raising script is `script_failed`, with that report (the calls it committed) in `details` |
 | `preview_status` | GPU-free; listed only with `--preview` | `{window_open, stalled, frames_published, frames_taken, frames_rendered, revision_shown, last_error}` of the attached preview (`src/preview/PREVIEW.md`) |
 | `test_fault {fault}` | Debug builds under `--test-faults` only; `preview_stall` and `preview_resume` only with `--preview` (the stall hook of the preview thread) | `{armed}` |

@@ -7,7 +7,8 @@
 // `EditionContextException` (raised where Painter raises them), with Python's own `ValueError` and
 // `RuntimeError`. UzPainter additions: `UnsupportedInUzPainter(symbol, reason, alternative)`,
 // `NotYetSupported` (a release gap, raised before any mutation, decision 082),
-// `UnsupportedProcedural` (a `NotYetSupported` for procedural content), `BusyError(job_id)`,
+// `UnsupportedProcedural` (a `NotYetSupported` for procedural content), `PathTracerUnavailable` (a
+// `NotYetSupported` for the capture mode `painter_iray`, decision 148), `BusyError(job_id)`,
 // `StaleRevisionError(expected, current)` and `AmbiguousNameError(name, candidates)` (a
 // `ValueError` listing every matching node id, LAY-06). Mesh import refusals keep the class names
 // of `mesh::ErrorClassName`: `MeshParseError`, `UnsupportedFormat`, `DuplicateMaterialNames` and

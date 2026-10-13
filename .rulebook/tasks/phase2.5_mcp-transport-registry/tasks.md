@@ -49,7 +49,7 @@
 - 2.4:
   - JSON Schema 2020-12 validation. An error names the argument and the rule, never the value.
   - `x-uzpainter-ref` references (`node`, `texture_set`, `stack`) are checked against the committed layer tree.
-  - The text content is a one-line summary. Image blocks are produced only for `capture`, whose `image` field phase2.6 fills.
+  - The text content is a one-line summary. Image blocks are produced only for `capture` (phase2.2_preview-capture, decision 148): the PNG its receipt names (`files.png`), read in the executor and attached up to 4 MiB; a larger one gets a warning instead. Downscaling the block (11 §2) is phase2.6's capture family. After the merge with main, `capture`'s `path` is confined to the export root, its `texture_set` and `stack` are references, and it declares `uzpainter.render.capture`; its `painter_iray` gap (`mode:painter_iray`) stays the tool's own refusal (PathTracerUnavailable).
   - The worker's schemas gained the annotations, `uniqueItems` on `isolate_layer.channels`, and `run_python`'s `code | path`. `display_set.color_lut` admits a SHA-256 string, so a LUT stays an `UnsupportedInUzPainter` refusal (decision 038) rather than a malformed argument.
 - 2.5:
   - Every forwarded reply carries `revision`, `committed_revision`, `job_id`, `changed` (modified ∪ removed), `created`, `hidden`, `imported`, `skipped` and `warnings` (`admission.contract`). The ledger keeps the reply as answered, so `job_result` matches it after a restart.

@@ -171,13 +171,13 @@ void BindMisc(py::module_& m) {
          "phase3.5_embree-bakers");
 
     py::module_ render = submodule(m, "render", "uzpainter.render", "Renders and captures (phase2.3_realtime-preview).");
-    Gaps(render, "uzpainter.render", {"capture"}, "phase2.3_realtime-preview");
     py::module_ shader = submodule(render, "shader", "uzpainter.render.shader",
                                    "Shader parameters: the default open-pbr instance (decision 042).");
     py::module_ render_display = submodule(render, "display", "uzpainter.render.display",
                                            "The fixed pipeline's display values and presets (decisions 038, 042).");
     py::module_ display = submodule(m, "display", "uzpainter.display", "Viewport display state: environment, camera.");
     BindDisplay(display, render_display, shader);
+    BindCapture(render);
 
     py::module_ diagnostics = submodule(m, "diagnostics", "uzpainter.diagnostics",
                                         "Diagnostic views of the stack and layer-tree snapshots (bind_diagnostics.cpp).");

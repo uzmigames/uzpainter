@@ -1,9 +1,11 @@
 // `uzpainter.display`, `uzpainter.render.display` and `uzpainter.render.shader`: the display state
 // of the fixed render pipeline (display.h; decisions 038, 042 and 132). Getters return the
 // current state; every setter is one transaction that accepts only the pipeline's values and
-// raises before any change for anything else.
+// raises before any change for anything else. `uzpainter.render.capture` (capture.h, decision
+// 148) changes nothing.
 
 #include "python/bindings.h"
+#include "python/capture.h"
 #include "python/display.h"
 #include "python/errors.h"
 #include "uzp_core/types/resource_url.h"
@@ -27,6 +29,15 @@ py::object CameraValue(const char* property) { return FromJson(display::CameraPr
 py::object SetCameraValue(const char* property, const json::Value& value) {
     return ResultObject(Mutate("display.Camera." + std::string(property), json::Object{{property, value}},
                                [&](core::Edit& edit) { display::SetCameraProperty(edit, property, value); }));
+}
+
+/// An optional non-negative-or-any integer argument (not a bool).
+std::optional<std::int64_t> IntArg(const py::object& value, const char* name) {
+    if (value.is_none()) return std::nullopt;
+    if (!py::isinstance<py::int_>(value) || py::isinstance<py::bool_>(value)) {
+        throw ApiError("TypeError", std::string(name) + " must be an integer or None");
+    }
+    return value.cast<std::int64_t>();
 }
 
 py::object SetDisplayValue(const char* name, const char* key, const json::Value& value) {
@@ -205,6 +216,44 @@ void BindDisplay(py::module_& display_module, py::module_& render_display, py::m
             }));
         },
         py::arg("parameters"), "Accepts only the default open-pbr instance's values (decision 042).");
+}
+
+void BindCapture(py::module_& render) {
+    render.def(
+        "capture",
+        [](const py::object& path, const std::string& mode, const py::object& camera, const py::object& size,
+           const py::object& samples, const py::object& seed, const py::object& preset,
+           const std::optional<StackHandle>& stack) {
+            RefuseUnavailableMode(mode);  // before anything else (decision 148)
+            CaptureArguments arguments;
+            arguments.mode = mode;
+            arguments.path = PathFromUtf8(py::module_::import("os").attr("fspath")(path).cast<std::string>());
+            if (!camera.is_none()) arguments.camera = ToJson(camera);
+            if (!size.is_none()) {
+                const py::sequence pair = size.cast<py::sequence>();
+                if (pair.size() != 2) throw ApiError("ValueError", "size is (width, height)");
+                const std::optional<std::int64_t> width = IntArg(pair[0], "the width");
+                const std::optional<std::int64_t> height = IntArg(pair[1], "the height");
+                if (!width || !height) throw ApiError("TypeError", "size is (width, height), two integers");
+                arguments.size = std::pair{*width, *height};
+            }
+            arguments.samples = IntArg(samples, "samples");
+            arguments.seed = IntArg(seed, "seed");
+            if (!preset.is_none()) arguments.preset = ToJson(preset);
+            if (stack) arguments.stack = std::pair{stack->texture_set, stack->stack};
+            json::Object receipt;
+            {
+                py::gil_scoped_release release;
+                receipt = Capture(arguments);
+            }
+            return FromJson(receipt);
+        },
+        py::arg("path"), py::arg("mode"), py::arg("camera") = py::none(), py::arg("size") = py::none(),
+        py::arg("samples") = py::none(), py::arg("seed") = py::none(), py::arg("preset") = py::none(),
+        py::arg("stack") = py::none(),
+        "Captures the committed revision to `path` (a .png; an .exr and a .receipt.json beside it) and returns the "
+        "receipt. Modes: painter_viewport (the preview pass, offscreen; needs size), base_color, channel:<name>, "
+        "mask:<uid> (texture-space, equal to the export). painter_iray raises PathTracerUnavailable (P3-PATHTRACER).");
 }
 
 }  // namespace uzp::python

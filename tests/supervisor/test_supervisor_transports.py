@@ -11,6 +11,7 @@ test_registry.py, test_roots.py and test_transport_http.py.
 from __future__ import annotations
 
 import _winapi
+import base64
 import json
 import os
 import shutil
@@ -193,6 +194,19 @@ def test_roots_confine_paths_and_never_echo_them(
     )
     assert escape["error"]["code"] == "path_outside_roots"
     assert escape["error"]["details"]["root"] == "export"
+    # capture (decision 148): its path is confined to the export root, and its PNG comes back as
+    # the one image content block.
+    shot = session.request(
+        "tools/call", {"name": "capture", "arguments": {"mode": "base_color", "path": "caps/b.png"}}
+    )
+    png = Path(Mcp.content(shot)["result"]["files"]["png"])
+    assert png.is_relative_to(exports.resolve() / "caps"), shot
+    [text, image] = shot["content"]
+    assert text["type"] == "text" and text["text"].startswith("capture: ")
+    assert image["type"] == "image" and image["mimeType"] == "image/png"
+    assert base64.b64decode(image["data"]) == png.read_bytes()
+    away = session.call("capture", {"mode": "base_color", "path": "..\\outside\\b.png"})
+    assert away["error"]["code"] == "path_outside_roots"
     assert revision_of(session) == revision + 1
     # Roots never sandbox run_python, and its own result is not scrubbed.
     script = session.call("run_python", {"code": f"result = {str(outside)!r}"})

@@ -23,6 +23,7 @@
 // - A camera is Painter's documented camera in its Y-up scene space (`CameraFromJson`), with
 //   conversion to and from Blender's convention per the standard's `coordinate_contract`.
 
+#include <array>
 #include <string>
 #include <string_view>
 
@@ -62,6 +63,8 @@ json::Object State(const core::Project& project);
 /// `UnsupportedInUzPainter` for a value outside the fixed pipeline, `ResourceNotFoundError` for an
 /// environment the project does not store.
 void ApplyPreset(core::Edit& edit, const json::Value& preset);
+/// `ApplyPreset` on `project` itself (a capture's in-memory copy, never committed).
+void ApplyPreset(core::Project& project, const json::Value& preset);
 
 /// One display value (`symbol` names the call in the error): `exposure`, `rotation`, `opacity`,
 /// `blur`, `shadows` or `background` (sRGB8 `[r, g, b]`), checked against the active preset.
@@ -108,6 +111,10 @@ json::Value CameraProperty(const core::Project& project, const std::string& prop
 json::Object CameraToBlender(const json::Value& camera);
 /// The inverse of `CameraToBlender`.
 json::Object CameraFromBlender(const json::Value& blender);
+/// The rotation of a camera record (validated as `CameraFromJson`): `Rx @ Ry @ Rz` of its Euler
+/// angles, rows first. Its columns are the camera's right, up and backward axes in Painter's
+/// Y-up scene space (the camera looks along `-column 2`).
+std::array<std::array<double, 3>, 3> CameraRotation(const json::Value& camera, const std::string& symbol);
 
 /// Whether `bytes` are an OpenEXR image a display environment can be: a single-part scanline or
 /// tiled file whose data window is twice as wide as it is high (an equirectangular map). The

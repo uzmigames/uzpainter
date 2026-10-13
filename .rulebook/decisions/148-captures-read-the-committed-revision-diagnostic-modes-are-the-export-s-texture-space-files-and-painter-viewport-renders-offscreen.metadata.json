@@ -1,0 +1,16 @@
+{
+  "id": 148,
+  "slug": "captures-read-the-committed-revision-diagnostic-modes-are-the-export-s-texture-space-files-and-painter-viewport-renders-offscreen",
+  "title": "Captures read the committed revision; diagnostic modes are the export's texture-space files, and painter_viewport renders offscreen",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.2_preview-capture",
+    "phase2.3_realtime-preview",
+    "phase2.6_mcp-typed-tool-families",
+    "phase1.15_compositor-colour-fits",
+    "phase1.18_export-engine",
+    "phase3.7_path-tracer"
+  ],
+  "supersededBy": null
+}

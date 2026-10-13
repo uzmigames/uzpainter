@@ -390,7 +390,9 @@ json::Object State(const core::Project& project) {
     return state;
 }
 
-void ApplyPreset(core::Edit& edit, const json::Value& value) {
+void ApplyPreset(core::Edit& edit, const json::Value& value) { ApplyPreset(edit.project(), value); }
+
+void ApplyPreset(core::Project& project, const json::Value& value) {
     const std::string symbol = "uzpainter.render.display.apply_preset";
     const json::Object& preset = AsObject(value, "the preset");
     OnlyKeys(preset,
@@ -442,9 +444,9 @@ void ApplyPreset(core::Edit& edit, const json::Value& value) {
         Invalid("seed must be an integer in 0.." + std::to_string(kMaxSeed) + " (UzPainter's own sampler)");
     }
     // Everything is valid; the environment must be stored before anything changes.
-    if (sha256) RequireEnvironment(edit.project(), *sha256, symbol);
+    if (sha256) RequireEnvironment(project, *sha256, symbol);
 
-    core::DisplayState& d = edit.project().display;
+    core::DisplayState& d = project.display;
     d.environment.resource = sha256;
     d.environment.rotation = rotation;
     d.environment.exposure = 0.0;
@@ -670,6 +672,12 @@ json::Object CameraToBlender(const json::Value& value) {
             {"ortho_scale", camera.at("orthographic_height")},
             {"focus_distance", camera.at("focus_distance")},
             {"aperture_radius", camera.at("aperture")}};
+}
+
+std::array<std::array<double, 3>, 3> CameraRotation(const json::Value& value, const std::string& symbol) {
+    const json::Object camera = CameraFromJson(value, symbol);
+    const std::array<double, 3> r = Vector3(camera.at("rotation"), "rotation");
+    return Multiply(Rx(r[0]), Multiply(Ry(r[1]), Rz(r[2])));
 }
 
 json::Object CameraFromBlender(const json::Value& value) {

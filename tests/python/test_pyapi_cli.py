@@ -139,28 +139,36 @@ def test_run_usage_errors(painter: Path, args: list[str]) -> None:
 
 
 def test_run_with_an_unavailable_backend(painter: Path, tmp_path: Path) -> None:
-    """3.3 (scope split, decision 111): under `--gpu-backend vulkan`, which this build cannot serve,
-    the host still runs the script and project create, save and reopen succeed; the GPU calls of
-    the API are release gaps and refuse before any change. The `gpu_backend_unavailable` refusal
-    itself comes with the first Python call that uses the GPU (phase2.1_supervisor-ipc-worker
-    item 2.6, phase2.2_preview-capture)."""
+    """3.3 (decision 111): under `--gpu-backend vulkan`, which this build cannot serve, the host
+    still runs the script and project create, save and reopen succeed. The first Python call that
+    uses the GPU, a `painter_viewport` capture (phase2.2_preview-capture, decision 148), creates
+    its device on that backend and raises `gpu_backend_unavailable` before anything is written,
+    with the revision unchanged. It needs an OCIO project (the bundle of tests/preview/conftest.py):
+    on a Legacy one the display configuration is refused first."""
+    from tests.preview.conftest import ocio_bundle
+
+    bundle = ocio_bundle(painter, tmp_path / "fixture")
     path = script(
         tmp_path,
         f"""
-        import sys, uzpainter
+        import os, sys, uzpainter
         from uzpainter import project
         project.create({str(PLANE.as_posix())!r})
         project.save_as(sys.argv[1] + "/vulkan.uzp")
         project.close()
         project.open(sys.argv[1] + "/vulkan.uzp")
+        reopened = project.file_path()
+        project.close()
+        project.open({str(bundle)!r})
         before = project.revision()
         try:
-            uzpainter.render.capture()
+            uzpainter.render.capture(sys.argv[1] + "/vp.png", "painter_viewport", size=(8, 8))
             refused = None
-        except uzpainter.NotYetSupported as error:
+        except RuntimeError as error:
             refused = str(error)
         result = {{"refused": refused, "same": project.revision() == before,
-                  "open": project.is_open(), "path": project.file_path()}}
+                  "open": project.is_open(), "path": reopened,
+                  "written": os.path.exists(sys.argv[1] + "/vp.png")}}
         """,
     )
     status, documents, _ = cli(painter, "run", path, str(tmp_path), "--gpu-backend", "vulkan")
@@ -168,8 +176,9 @@ def test_run_with_an_unavailable_backend(painter: Path, tmp_path: Path) -> None:
     (report,) = documents
     assert report["gpu_backend"] == "vulkan"
     result = report["result"]
-    assert result["refused"] and "release gap" in result["refused"]
-    assert result["same"] and result["open"]
+    assert result["refused"] and result["refused"].startswith("gpu_backend_unavailable"), result
+    assert "vulkan" in result["refused"]
+    assert result["same"] and result["open"] and not result["written"]
     assert Path(result["path"]).name == "vulkan.uzp"
 
 

@@ -32,8 +32,8 @@ was admitted on), `committed_revision` (the project's committed revision after i
 `changed` (modified or removed), `created`, `hidden`, `imported` and `skipped` (from its transaction
 result, gathered over the calls a script committed, also when it raised) and `warnings`, besides the
 worker's `result` or `error` and the `receipt` (`admission.contract`). The text content is a
-one-line summary. Images are content blocks only for `capture` (`IMAGE_TOOLS`); every other
-result references files. With
+one-line summary. Images are content blocks only for `capture` (`IMAGE_TOOLS`: its PNG, up to
+4 MiB); every other result references files. With
 `--roots`, path-valued fields outside the roots are replaced (`roots.Roots.scrub`), except a
 `run_python` result's own (roots never sandbox it).
 """
@@ -41,6 +41,7 @@ result references files. With
 from __future__ import annotations
 
 import asyncio
+import base64
 import copy
 import json
 import logging
@@ -62,6 +63,7 @@ JOB_LIST_LIMIT = 50
 CAPABILITY_META_KEY = "uzpainter/capability"
 REF_KEYWORD = "x-uzpainter-ref"
 IMAGE_TOOLS = frozenset({"capture"})
+IMAGE_LIMIT = 4 * 1024 * 1024  # bytes of a PNG attached as an image content block
 OWNER_PATTERN = re.compile(r"^[A-Za-z0-9._@-][A-Za-z0-9._:@-]{0,127}$")
 # The MCP arguments of a mutating tool carry its key and precondition (02 §2); the supervisor
 # lifts them into the pipe request, so the worker's own schema does not list them. Both may be
@@ -476,7 +478,8 @@ class Registry:
             commit_point=tool.get("commit_point"),
             notify=notify,
         )
-        return self._reply(name, body, scrub=name != "run_python")
+        images = await self._images(name, body)
+        return self._reply(name, body, scrub=name != "run_python", images=images)
 
     def _owner(self, client: Client) -> str:
         """The lease owner of `client`'s calls: its acquired owner, or the stdio session's."""
@@ -689,7 +692,14 @@ class Registry:
             "lease": None if lease is None else lease.to_json(),
         }
 
-    def _reply(self, name: str, body: dict[str, Any], *, scrub: bool) -> Reply:
+    def _reply(
+        self,
+        name: str,
+        body: dict[str, Any],
+        *,
+        scrub: bool,
+        images: list[dict[str, str]] | None = None,
+    ) -> Reply:
         error = body.get("error")
         log.info(
             "call %s: %s (job %s)",
@@ -697,19 +707,30 @@ class Registry:
             f"error {error.get('code')}" if isinstance(error, dict) else "ok",
             (body.get("receipt") or {}).get("job_id"),
         )
-        images: list[dict[str, str]] = []
-        result = body.get("result")
-        if name in IMAGE_TOOLS and isinstance(result, dict):
-            image = result.pop("image", None)
-            if (
-                isinstance(image, dict)
-                and isinstance(image.get("data"), str)
-                and isinstance(image.get("mimeType"), str)
-            ):
-                images.append({"data": image["data"], "mimeType": image["mimeType"]})
         if self.roots is not None:
             if scrub:
                 body = self.roots.scrub(body)
             elif isinstance(body.get("receipt"), dict):
                 body = {**body, "receipt": self.roots.scrub(body["receipt"])}
-        return Reply(body, images, summary(name, body))
+        return Reply(body, images or [], summary(name, body))
+
+    async def _images(self, name: str, body: dict[str, Any]) -> list[dict[str, str]]:
+        """`capture`'s PNG (its receipt's `files.png`) as an image content block, read in the
+        executor; a PNG over `IMAGE_LIMIT` is not attached, and a warning says so."""
+        result = body.get("result")
+        files = result.get("files") if isinstance(result, dict) else None
+        png = files.get("png") if isinstance(files, dict) else None
+        if name not in IMAGE_TOOLS or not isinstance(png, str):
+            return []
+        try:
+            data = await asyncio.to_thread(Path(png).read_bytes)
+        except OSError as error:
+            body["warnings"].append(f"the capture image could not be read: {error.strerror}")
+            return []
+        if len(data) > IMAGE_LIMIT:
+            body["warnings"].append(
+                f"the capture image ({len(data)} bytes) is over the {IMAGE_LIMIT}-byte limit of "
+                "an image block; read files.png"
+            )
+            return []
+        return [{"data": base64.b64encode(data).decode("ascii"), "mimeType": "image/png"}]

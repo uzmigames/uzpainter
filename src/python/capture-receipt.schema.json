@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "uzpainter/capture-receipt/1",
+  "title": "UzPainter capture receipt",
+  "description": "The receipt of uzpainter.render.capture and of the worker's capture tool (src/python/capture.h; docs/architecture/07-preview-and-render-parity.md §5; decision 148), written beside the PNG as <stem>.receipt.json. Every member is always present; null where the mode has no such thing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "revision", "project_uuid", "evaluator_profile", "render_state_digest", "mode", "source",
+    "encoding", "backend", "adapter", "driver", "samples", "seed", "camera", "size", "display_configuration",
+    "hashes"
+  ],
+  "properties": {
+    "schema": {"const": "uzpainter/capture-receipt/1"},
+    "revision": {"type": "integer", "minimum": 1},
+    "project_uuid": {"type": "string", "minLength": 1},
+    "evaluator_profile": {"type": "string"},
+    "render_state_digest": {"$ref": "#/$defs/sha256"},
+    "mode": {"type": "string", "pattern": "^(painter_viewport|base_color|channel:.+|mask:[1-9][0-9]*)$"},
+    "source": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "name", "texture_set", "stack", "root_path"],
+          "properties": {
+            "type": {"enum": ["documentMap", "diagnosticMap"]},
+            "name": {"type": "string", "minLength": 1},
+            "texture_set": {"type": "string"},
+            "stack": {"type": "string"},
+            "root_path": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "encoding": {
+      "type": "object",
+      "required": ["png", "exr"],
+      "properties": {
+        "png": {"$ref": "#/$defs/file_encoding"},
+        "exr": {"$ref": "#/$defs/file_encoding"},
+        "padding": {"const": "passthrough"}
+      }
+    },
+    "backend": {"enum": ["dx12", "vulkan", "cpu"]},
+    "adapter": {"type": ["string", "null"]},
+    "driver": {"type": ["string", "null"]},
+    "samples": {"oneOf": [{"type": "null"}, {"const": 1}]},
+    "seed": {"type": ["integer", "null"], "minimum": 0},
+    "camera": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["source"],
+          "properties": {"source": {"enum": ["argument", "default_camera", "fit"]}}
+        }
+      ]
+    },
+    "size": {
+      "type": "array",
+      "prefixItems": [{"type": "integer", "minimum": 1}, {"type": "integer", "minimum": 1}],
+      "items": false,
+      "minItems": 2
+    },
+    "display_configuration": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "config_sha256", "view"],
+          "properties": {
+            "mode": {"const": "ocio"},
+            "config_sha256": {"$ref": "#/$defs/sha256"},
+            "view": {"const": "Default - sRGB"}
+          }
+        }
+      ]
+    },
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["png", "exr"],
+      "properties": {"png": {"$ref": "#/$defs/sha256"}, "exr": {"$ref": "#/$defs/sha256"}}
+    },
+    "files": {
+      "description": "Returned with the receipt (absolute paths), never written into the receipt file.",
+      "type": "object",
+      "required": ["png", "exr", "receipt"]
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "file_encoding": {
+      "type": "object",
+      "required": ["bit_depth", "layout"],
+      "properties": {
+        "bit_depth": {"enum": ["16", "16f", "32f"]},
+        "layout": {"enum": ["L", "RGB"]},
+        "content": {"enum": ["display_codes", "linear"]}
+      }
+    }
+  }
+}

@@ -21,6 +21,7 @@ from python.uzpainter_supervisor.admission import Admission, contract
 from python.uzpainter_supervisor.ledger import Ledger
 from python.uzpainter_supervisor.registry import (
     CAPABILITY_META_KEY,
+    IMAGE_LIMIT,
     Client,
     Manifest,
     ManifestError,
@@ -493,15 +494,26 @@ def test_results_carry_the_contract_fields_and_a_one_line_summary(tmp_path: Path
 
 
 def test_images_are_content_blocks_only_for_capture(tmp_path: Path) -> None:
-    """2.4: `capture`'s image becomes an image content block; another tool's never does."""
+    """2.4: `capture`'s PNG (its receipt's `files.png`) becomes an image content block, unless it
+    is over the limit (a warning then says so); another tool's PNG never does."""
     worker, _, registry = make(tmp_path)
-    image = {"mimeType": "image/png", "data": "iVBORw0KGgo="}
-    worker.reply = {"result": {"receipt": "r", "image": image}}
+    png = tmp_path / "shot.png"
+    png.write_bytes(bytes([0x89]) + b"PNG" + bytes([13, 10, 26, 10]) + b"small")
+    worker.reply = {"result": {"files": {"png": str(png)}}}
     captured = run(registry.call("capture", {}, STDIO, None))
-    assert captured.images == [image] and "image" not in captured.body["result"]
-    worker.reply = {"result": {"image": image}}
+    assert captured.images == [{"mimeType": "image/png", "data": "iVBORw0KGgpzbWFsbA=="}]
+    assert captured.body["warnings"] == []
+    worker.reply = {"result": {"files": {"png": str(png)}}}
     other = run(registry.call("inspect", {}, STDIO, None))
-    assert other.images == [] and other.body["result"]["image"] == image
+    assert other.images == []
+    big = tmp_path / "big.png"
+    big.write_bytes(bytes(IMAGE_LIMIT + 1))
+    worker.reply = {"result": {"files": {"png": str(big)}}}
+    over = run(registry.call("capture", {}, STDIO, None))
+    assert over.images == [] and "over the" in over.body["warnings"][0]
+    worker.reply = {"result": {"files": {"png": str(tmp_path / "missing.png")}}}
+    missing = run(registry.call("capture", {}, STDIO, None))
+    assert missing.images == [] and "could not be read" in missing.body["warnings"][0]
 
 
 def test_http_lease_is_explicit_and_survives_a_reconnect(tmp_path: Path) -> None:

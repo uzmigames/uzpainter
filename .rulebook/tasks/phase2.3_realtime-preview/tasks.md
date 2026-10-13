@@ -23,3 +23,4 @@
 
 ## 6. Notes (child results)
 - phase2.1_preview-viewport-window (2026-10-12, owner machine, RTX 4090 driver 32.0.16.1714): `tests/preview` all green (display, environment, hand-over, unsupported configuration, regression goldens of sphere/plane/bevelled cube, stalled preview, window lifecycle, standalone `--preview`); details in that task's notes.
+- phase2.2_preview-capture (2026-10-12, owner machine, RTX 4090 driver 32.0.16.1714; decision 148): `tests/preview/test_preview_capture.py` 7 passed. These are the headless `painter_viewport` capture, `painter_iray` refused before any work, diagnostic captures equal to the exports, the receipt schema, and freshness after mutations. The viewport goldens still hold, and the adapter shim writes the viewport under `UzPainter.exe run`. `painter_viewport` renders only OCIO projects without fill sources until phase1.15; the diagnostic modes are Legacy-only until phase1.18. Details in that task's notes.

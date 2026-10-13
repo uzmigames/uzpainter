@@ -1,3 +1,5 @@
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include "preview/viewport.h"
 
 #include "render/image_pass.h"
@@ -12,6 +14,9 @@
 #include <limits>
 #include <numbers>
 #include <span>
+
+#include <dxgi1_6.h>
+#include <wrl/client.h>
 
 namespace uzp::preview {
 
@@ -52,29 +57,7 @@ Vec Normalised(const Vec& a) {
     return {a[0] / length, a[1] / length, a[2] / length};
 }
 
-/// The camera's eye and orthonormal basis (right, up, forward).
-struct CameraFrame {
-    Vec eye;
-    Vec right;
-    Vec up;
-    Vec forward;
-    double tanHalf = 0.0;
-};
-
-CameraFrame FrameOf(const OrbitCamera& camera) {
-    constexpr double kDegree = std::numbers::pi / 180.0;
-    const double yaw = camera.yawDegrees * kDegree;
-    const double pitch = camera.pitchDegrees * kDegree;
-    const Vec offset{std::cos(pitch) * std::sin(yaw), std::sin(pitch), std::cos(pitch) * std::cos(yaw)};
-    CameraFrame frame;
-    frame.eye = {camera.target[0] + camera.distance * offset[0], camera.target[1] + camera.distance * offset[1],
-                 camera.target[2] + camera.distance * offset[2]};
-    frame.forward = {-offset[0], -offset[1], -offset[2]};
-    frame.right = Normalised(Cross(frame.forward, Vec{0.0, 1.0, 0.0}));
-    frame.up = Cross(frame.right, frame.forward);
-    frame.tanHalf = std::tan(camera.fovDegrees * kDegree / 2.0);
-    return frame;
-}
+constexpr double kDegree = std::numbers::pi / 180.0;
 
 /// The world-space data of one corner: position, normal, uv, tangent and sign.
 struct WorldCorner {
@@ -226,6 +209,36 @@ private:
 
 }  // namespace
 
+CameraPose PoseOf(const OrbitCamera& camera) {
+    const double yaw = camera.yawDegrees * kDegree;
+    const double pitch = camera.pitchDegrees * kDegree;
+    const Vec offset{std::cos(pitch) * std::sin(yaw), std::sin(pitch), std::cos(pitch) * std::cos(yaw)};
+    CameraPose pose;
+    pose.eye = {camera.target[0] + camera.distance * offset[0], camera.target[1] + camera.distance * offset[1],
+                camera.target[2] + camera.distance * offset[2]};
+    pose.forward = {-offset[0], -offset[1], -offset[2]};
+    pose.right = Normalised(Cross(pose.forward, Vec{0.0, 1.0, 0.0}));
+    pose.up = Cross(pose.right, pose.forward);
+    pose.fovDegrees = camera.fovDegrees;
+    pose.nearPlane = camera.distance * 1e-6;
+    return pose;
+}
+
+std::string DriverVersion(uint32_t adapterIndex) {
+    Microsoft::WRL::ComPtr<IDXGIFactory6> factory;
+    if (FAILED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)))) return "unknown";
+    Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
+    if (FAILED(factory->EnumAdapterByGpuPreference(adapterIndex, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
+                                                   IID_PPV_ARGS(&adapter)))) {
+        return "unknown";
+    }
+    LARGE_INTEGER umd{};
+    if (FAILED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umd))) return "unknown";
+    const uint64_t v = static_cast<uint64_t>(umd.QuadPart);
+    return std::to_string(v >> 48) + "." + std::to_string((v >> 32) & 0xFFFF) + "." + std::to_string((v >> 16) & 0xFFFF) +
+           "." + std::to_string(v & 0xFFFF);
+}
+
 OrbitCamera FitCamera(const mesh::TexturingMesh& mesh) {
     Vec lo{std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()};
     Vec hi{-lo[0], -lo[1], -lo[2]};
@@ -258,6 +271,19 @@ Result<void> ValidateViewport(const ViewportScene& scene, const OrbitCamera& cam
     if (const std::optional<std::string> unsupported = UnsupportedConfiguration(scene.display)) {
         return render::Fail(ErrorCode::RequestFailed, backend, *unsupported);
     }
+    if (!(camera.distance > 0.0) || !(camera.fovDegrees > 0.0 && camera.fovDegrees < 180.0) ||
+        !(std::abs(camera.pitchDegrees) < 90.0)) {
+        return Invalid(backend, "the camera needs a positive distance, a field of view in (0, 180) and a pitch "
+                                "in (-90, 90)");
+    }
+    return ValidateViewport(scene, PoseOf(camera), width, height, backend);
+}
+
+Result<void> ValidateViewport(const ViewportScene& scene, const CameraPose& camera, uint32_t width, uint32_t height,
+                              render::Backend backend) {
+    if (const std::optional<std::string> unsupported = UnsupportedConfiguration(scene.display)) {
+        return render::Fail(ErrorCode::RequestFailed, backend, *unsupported);
+    }
     if (width == 0 || height == 0 || width > kMaxViewportSide || height > kMaxViewportSide) {
         return Invalid(backend, "the size " + std::to_string(width) + " x " + std::to_string(height) +
                                     " is outside 1 to " + std::to_string(kMaxViewportSide));
@@ -267,10 +293,14 @@ Result<void> ValidateViewport(const ViewportScene& scene, const OrbitCamera& cam
         scene.lighting->brdf.size() != size_t{kBrdfTableSize} * kBrdfTableSize * 3) {
         return Invalid(backend, "no precomputed environment lighting");
     }
-    if (!(camera.distance > 0.0) || !(camera.fovDegrees > 0.0 && camera.fovDegrees < 180.0) ||
-        !(std::abs(camera.pitchDegrees) < 90.0)) {
-        return Invalid(backend, "the camera needs a positive distance, a field of view in (0, 180) and a pitch "
-                                "in (-90, 90)");
+    const auto finite = [](const Vec& v) { return std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]); };
+    const auto unit = [&](const Vec& v) { return finite(v) && std::abs(Dot(v, v) - 1.0) < 1e-9; };
+    if (!(camera.fovDegrees > 0.0 && camera.fovDegrees < 180.0) || !(camera.nearPlane > 0.0) ||
+        !std::isfinite(camera.nearPlane) || !finite(camera.eye) || !unit(camera.right) || !unit(camera.up) ||
+        !unit(camera.forward) || std::abs(Dot(camera.right, camera.up)) > 1e-9 ||
+        std::abs(Dot(camera.up, camera.forward)) > 1e-9 || std::abs(Dot(camera.forward, camera.right)) > 1e-9) {
+        return Invalid(backend, "the camera needs a finite eye, an orthonormal basis, a field of view in (0, 180) "
+                                "and a positive near distance");
     }
     const mesh::TexturingMesh& mesh = *scene.mesh;
     for (const mesh::Object& object : mesh.objects) {
@@ -295,12 +325,20 @@ Result<void> ValidateViewport(const ViewportScene& scene, const OrbitCamera& cam
 
 Result<ViewportImage> RenderViewport(render::EngineContext& context, const ViewportScene& scene,
                                      const OrbitCamera& camera, uint32_t width, uint32_t height) {
+    if (Result<void> valid = ValidateViewport(scene, camera, width, height, context.Device().GetBackend()); !valid) {
+        return Unexpected(valid.error());
+    }
+    return RenderViewport(context, scene, PoseOf(camera), width, height);
+}
+
+Result<ViewportImage> RenderViewport(render::EngineContext& context, const ViewportScene& scene,
+                                     const CameraPose& view, uint32_t width, uint32_t height) {
     render::IDevice& device = context.Device();
-    if (Result<void> valid = ValidateViewport(scene, camera, width, height, device.GetBackend()); !valid) {
+    if (Result<void> valid = ValidateViewport(scene, view, width, height, device.GetBackend()); !valid) {
         return Unexpected(valid.error());
     }
     const mesh::TexturingMesh& mesh = *scene.mesh;
-    const CameraFrame view = FrameOf(camera);
+    const double tanHalf = std::tan(view.fovDegrees * kDegree / 2.0);
     const double aspect = static_cast<double>(width) / height;
     const uint32_t tilesX = (width + kTile - 1) / kTile;
     const uint32_t tilesY = (height + kTile - 1) / kTile;
@@ -309,7 +347,7 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     std::vector<uint32_t> triangles;
     triangles.reserve(mesh.corners.size() / 3 * kTriangleWords);
     std::vector<std::array<uint32_t, 4>> bounds;  // tile x0, y0, x1, y1 (inclusive); x0 > x1: none
-    const double nearPlane = camera.distance * 1e-6;
+    const double nearPlane = view.nearPlane;
     for (const mesh::Object& object : mesh.objects) {
         const Transform transform(object.transform, UnitScale(mesh));
         for (const mesh::Triangle& triangle : object.triangles) {
@@ -342,8 +380,8 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
                     ++behind;
                     continue;
                 }
-                const double sx = Dot(rel, view.right) / (z * view.tanHalf * aspect);
-                const double sy = Dot(rel, view.up) / (z * view.tanHalf);
+                const double sx = Dot(rel, view.right) / (z * tanHalf * aspect);
+                const double sy = Dot(rel, view.up) / (z * tanHalf);
                 minX = std::min(minX, (sx + 1.0) / 2.0 * width);
                 maxX = std::max(maxX, (sx + 1.0) / 2.0 * width);
                 minY = std::min(minY, (1.0 - sy) / 2.0 * height);
@@ -433,7 +471,7 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     for (const Vec* v : {&view.eye, &view.right, &view.up, &view.forward}) {
         for (double value : *v) PushFloat(frame, value);
     }
-    PushFloat(frame, view.tanHalf);
+    PushFloat(frame, tanHalf);
     PushFloat(frame, aspect);
     for (float value : scene.background) frame.push_back(std::bit_cast<uint32_t>(value));
     PushFloat(frame, scene.environmentRotationDegrees / 360.0);

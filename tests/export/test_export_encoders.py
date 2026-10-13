@@ -689,17 +689,22 @@ def test_srgb8_material_channels_equal_painter_files(export_tests: Path, tmp_pat
 
 
 def test_srgb8_bitmap_equals_painter_files(export_tests: Path, tmp_path: Path) -> None:
-    """phase1.15_compositor-colour-fits item 2.2: export-ocio-encode-legacy's BaseColor filled
-    from the authored 8-bit sRGB ramp at 1:1 (UV, BilinearHQ, RepeatNone) in the sRGB space (s3:
-    each 8-bit code is its own sRGB8 code, sources.h) and in Raw (s4), rebuilt per texture set
-    and written by WriteExport at PNG 16, PNG 8 and OpenEXR 32f, is byte-identical to Painter's
-    files (r1 and r2)."""
+    """phase1.15_compositor-colour-fits items 2.2 and 2.4: export-ocio-encode-legacy's BaseColor
+    filled from the authored 8-bit sRGB ramp at 1:1 (UV, BilinearHQ, RepeatNone) in the sRGB space
+    (s3: each 8-bit code is its own sRGB8 code, sources.h), in Raw (s4) and in the sRGB space
+    inside a group masked by grey A (s5), rebuilt per texture set and written by WriteExport at
+    PNG 16, PNG 8 and OpenEXR 32f, is byte-identical to Painter's files: r1 and r2 of s3 and s4,
+    r1 of s5. Painter is unstable on s5 (decision 032): its r2 is judged through the exception
+    register, where EXC-006 covers it (decision 152)."""
     from tests.export import encoders_tier0
 
     report = encoders_tier0.srgb8_bitmap_written(export_tests, tmp_path)
     assert report["problems"] == [], report["problems"][:10]
-    assert report["files"] == 2 * 3, report
-    assert report["identical"] == report["comparisons"] == 2 * report["files"], report
+    assert report["files"] == 3 * 3, report
+    assert report["identical"] == report["comparisons"] == 2 * report["files"] - 3, report
+    assert [(where, outcomes, relied) for where, _, outcomes, relied in report["register"]] == [
+        (f"s5 step {step}", ["pass", "pass"], [("EXC-006", 1)]) for step in (46, 47, 48)
+    ], report["register"]
 
 
 def test_published_export_processing_reproduces(

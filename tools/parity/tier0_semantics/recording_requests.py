@@ -10,6 +10,10 @@ them all). After the Painter session admits a golden (`python -m tools.parity.st
 generator plans its manifest under `manifests/` instead (`current.api_goldens` cannot take it,
 because its inputs are the request fixtures).
 
+Later decisions add requests the same way (`later_goldens`): decision 145's sRGB bitmap variants
+(decision 156), decision 126's inferred template bases and decision 129's padding probes P-ramp
+and P-tie (decision 157).
+
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
 two that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`), which
 run in a session started with Painter's `resources/ocio/substance/config.ocio`.
@@ -33,8 +37,9 @@ from tools.parity.tier0_semantics.corpus import (
     Golden,
     Sequence,
     start,
+    template_slug,
 )
-from tools.parity.tier0_semantics.fixtures import Config
+from tools.parity.tier0_semantics.fixtures import Config, grid
 
 REQUESTS = "requests"
 REQUEST_SEMANTICS_DIR = f"{REQUESTS}/tier0/semantics"
@@ -103,7 +108,39 @@ REQUEST_FIXTURES: dict[str, tuple[str, str, Generate]] = {
         lambda: rf.half_steps(grey=True),
     ),
     "srgb8-ramp": ("image", f"{FIXTURE_DIR}/bitmaps/srgb8-ramp.png", rf.srgb8_ramp),
+    "srgb8-grey-ramp": (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/srgb8-grey-ramp.png",
+        rf.srgb8_grey_ramp,
+    ),
+    "tie": ("mesh", f"{FIXTURE_DIR}/meshes/tie.obj", rf.tie),
+    # Decision 145's nine sets s0-s8 (decision 156: the 4x2 grid has eight).
+    "grid3x3": ("mesh", f"{FIXTURE_DIR}/meshes/grid3x3.obj", lambda: grid(3, 3)),
 }
+
+
+def ramp_mesh_generator(mesh: str, phase: str) -> Generate:
+    return lambda: rf.ramp_seam(mesh, phase)
+
+
+def uv_ramp_generator(size: int) -> Generate:
+    return lambda: rf.uv_ramp(size)
+
+
+# Decision 129's padding probes: the P-ramp meshes and the float UV ramps.
+for _mesh in rf.RAMP_MESHES:
+    for _phase in rf.RAMP_PHASES:
+        REQUEST_FIXTURES[f"seam-ramp-{_mesh}-{_phase}"] = (
+            "mesh",
+            f"{FIXTURE_DIR}/meshes/seam-ramp-{_mesh}-{_phase}.obj",
+            ramp_mesh_generator(_mesh, _phase),
+        )
+for _size in (rf.RAMP_RESOLUTION, *rf.TIE_RESOLUTIONS):
+    REQUEST_FIXTURES[f"uv-ramp-{_size}"] = (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/uv-ramp-{_size}.exr",
+        uv_ramp_generator(_size),
+    )
 for _group, _probes in probe_groups().items():
     for _probe in _probes:
         REQUEST_FIXTURES[f"probe-{_group}-{_probe}"] = (
@@ -119,6 +156,10 @@ MESH_SETS = {
     "sphere": ["uzp_sphere"],
     "grid2x2": [f"s{i}" for i in range(4)],
     "grid4x2": [f"s{i}" for i in range(8)],
+    "grid3x3": [f"s{i}" for i in range(9)],
+    "plane": ["uzp_plane"],
+    "tie": ["uzp_tie"],
+    **{f"seam-ramp-{m}-{p}": ["uzp_seam"] for m in rf.RAMP_MESHES for p in rf.RAMP_PHASES},
 }
 
 
@@ -776,6 +817,212 @@ def export_presets(ocio: bool) -> Golden:
     )
 
 
+# --- Decision 145: the sRGB bitmap uses still refused ------------------------------------------
+
+SRGB_CHANNELS = (
+    ("Emissive", "sRGB8"),
+    ("User1", "RGB8"),
+    ("User2", "L8"),
+    ("User3", "RGB16"),
+    ("User4", "L16"),
+    ("User5", "RGB16F"),
+    ("User7", "RGB32F"),
+)
+SRGB_MAPS = [
+    "documentMap/basecolor:RGB",
+    *(f"documentMap/{c.lower()}:{'L' if f.startswith('L') else 'RGB'}" for c, f in SRGB_CHANNELS),
+]
+# s1-s3: UV projection per set (filtering, scale, rotation, offset), wrap Repeat.
+SRGB_RESAMPLING = (
+    ("BilinearHQ", [2.0, 2.0], 30.0, [0.1, 0.2]),
+    ("BilinearHQ", [0.5, 0.5], 0.0, [0.0, 0.0]),
+    ("Nearest", [2.0, 2.0], 0.0, [0.0, 0.0]),
+)
+# s6-s8: the bitmap colour spaces outside the fitted Raw and sRGB (decision 156 names a Legacy
+# space by its qualified member name).
+SRGB_SPACES = ("Working", "LegacyColorSpace.Linear", "LegacyColorSpace.sRGB")
+
+
+def srgb_bitmap_variants() -> Golden:
+    s = start("grid3x3")
+    s.channels(SRGB_CHANNELS)
+    res = s.imports("srgb8-grey-ramp", "field-a", "srgb8-ramp", "grey-a")
+    sets = MESH_SETS["grid3x3"]
+    bitmaps: list[tuple[int, str | None]] = []
+
+    def bitmap(node: int, channel: str, source: str, space: str) -> None:
+        s.add(
+            ps.SET_SOURCE,
+            node_step=node,
+            channel=channel,
+            resource_step=res[source],
+            color_space=space,
+        )
+        bitmaps.append((node, channel))
+
+    node = s.fill(["BaseColor"], position="top", texture_set=sets[0])
+    bitmap(node, "BaseColor", "srgb8-grey-ramp", "sRGB")
+    for texture_set, (filtering, scale, rotation, offset) in zip(
+        sets[1:4], SRGB_RESAMPLING, strict=True
+    ):
+        node = s.fill(["BaseColor", "Emissive"], position="top", texture_set=texture_set)
+        bitmap(node, "BaseColor", "field-a", "sRGB")
+        bitmap(node, "Emissive", "srgb8-ramp", "sRGB")
+        s.add(
+            ps.SET_PROJECTION,
+            node_step=node,
+            filtering_mode=filtering,
+            uv_wrapping_mode="Repeat",
+            scale_mode="Factors",
+            scale=scale,
+            rotation=rotation,
+            offset=offset,
+        )
+    users = [(c, f) for c, f in SRGB_CHANNELS if c.startswith("User")]
+    node = s.fill([c for c, _ in users], position="top", texture_set=sets[4])
+    for channel, fmt in users:
+        bitmap(node, channel, grey_of(fmt, "field-a", "grey-a"), "sRGB")
+    node = s.fill(["BaseColor"], position="top", texture_set=sets[5])
+    s.add(ps.SET_SOURCE, node_step=node, channel="BaseColor", color=BASE_SRGB, color_space="sRGB")
+    s.add(ps.ADD_MASK, node_step=node, background="Black")
+    effect = s.add(ps.INSERT_FILL, inside_step=node, stack="Mask")
+    s.bitmap(effect, None, res["grey-a"], effect=True)
+    s.add(ps.SET_COLOR_SPACE, node_step=effect, channel=None, color_space="sRGB")
+    bitmaps.append((effect, None))
+    for texture_set, space in zip(sets[6:], SRGB_SPACES, strict=True):
+        node = s.fill(["BaseColor"], position="top", texture_set=texture_set)
+        bitmap(node, "BaseColor", "field-a", space)
+    for bitmap_node, bitmap_channel in bitmaps:
+        s.add(COLOUR_SPACES, node_step=bitmap_node, channel=bitmap_channel)
+    for container in (PNG16, PNG8, EXR32F):
+        export(s, SRGB_MAPS, container, "infinite")
+    return Golden(
+        "srgb-bitmap-variants",
+        "tier0/colour/srgb-bitmaps",
+        "The sRGB bitmap uses decision 145 leaves refused (phase1.15_compositor-colour-fits item "
+        "2.2, decisions 145 and 156), under Legacy on the authored 3x3 plane grid (nine sets) at "
+        "256 px, Emissive added as sRGB8 and User1 RGB8, User2 L8, User3 RGB16, User4 L16, User5 "
+        "RGB16F, User7 RGB32F. s0: the authored 8-bit grey ramp (column x holds code x) on "
+        "BaseColor set to sRGB, default projection (1:1). s1-s3: field A (16-bit) on BaseColor "
+        "and the 8-bit srgb8-ramp on Emissive, both set to sRGB, UV projection with wrap Repeat: "
+        "BilinearHQ at scale (2, 2), rotation 30, offset (0.1, 0.2) (s1); BilinearHQ at scale "
+        "(0.5, 0.5) (s2); Nearest at scale (2, 2) (s3). s4: User1, User3, User5 and User7 field A"
+        " and the L channels User2 and User4 grey A (decision 048), each set to sRGB. s5: "
+        "BaseColor uniform (0.2, 0.5, 0.8) sRGB under a black mask whose fill effect's source is "
+        "grey A, with set_color_space(sRGB) attempted on that source (decision 156: Painter's "
+        "refusal, if it refuses, is recorded). s6-s8: field A on BaseColor set to Working, Legacy"
+        " Linear and Legacy sRGB. Captures: get_color_space and list_available_color_spaces of "
+        "every bitmap. BaseColor, Emissive and the six user channels at PNG 16, PNG 8 and OpenEXR"
+        " 32f, infinite padding, no dithering, every export step done twice in the session.",
+        "grid3x3",
+        ["grid3x3", "srgb8-grey-ramp", "field-a", "srgb8-ramp", "grey-a"],
+        s,
+    )
+
+
+# --- Decision 126: the linear bases of shipped templates ---------------------------------------
+
+# One template per recorded PNG 16 code of an empty sRGB8 base: 48107 (Unreal Engine), 59397
+# (the OpenPBR templates) and 14330 (the sRGB8 Specular templates).
+INFERRED_BASE_TEMPLATES = (
+    "templates/Unreal Engine.spt",
+    "templates/OpenPBR - Anisotropy.spt",
+    "templates/PBR - Specular Glossiness.spt",
+)
+TEMPLATE_BASE_MAPS = ["documentMap/basecolor:RGB", "documentMap/specular:RGB"]
+
+
+def template_base(template: str) -> Golden:
+    s = start("plane", template)
+    export(s, TEMPLATE_BASE_MAPS, EXR32F, "infinite")
+    export(s, TEMPLATE_BASE_MAPS, PNG16, "infinite")
+    return Golden(
+        f"export-template-base-{template_slug(template)}",
+        "tier0/stack/base-values",
+        "The linear value of an empty sRGB8 base (phase1.25_pilot-wand item 2.6, decision 126): "
+        f"an empty project on the authored plane created with the shipped template {template}; "
+        "BaseColor and Specular (Painter skips a map the template lacks) at OpenEXR 32f, and at "
+        "PNG 16 as the control against the recorded base-values code; infinite padding, no "
+        "dithering, every export step done twice in the session.",
+        "plane",
+        ["plane"],
+        s,
+        template=template,
+    )
+
+
+# --- Decision 129: padding probes P-ramp and P-tie ----------------------------------------------
+
+USER0_MAP = ["documentMap/user0:RGB"]
+
+
+def padding_probe(mesh: str, resolution: int) -> Sequence:
+    """One fill with only User0 (RGB32F) active, the float UV ramp at `resolution` as its source
+    with the default projection (read back), Normal at opacity 1; User0 at OpenEXR 32f with
+    infinite padding and with passthrough (the covered-texel control)."""
+    s = start(mesh, resolution=resolution)
+    s.channels((("User0", "RGB32F"),))
+    ramp = f"uv-ramp-{resolution}"
+    res = s.imports(ramp)
+    (texture_set,) = MESH_SETS[mesh]
+    node = s.fill(["User0"], position="top", texture_set=texture_set)
+    s.bitmap(node, "User0", res[ramp])
+    s.blend(node, "User0", "Normal", 1.0)
+    s.add(ps.GET_PROJECTION, node_step=node)
+    export(s, USER0_MAP, EXR32F, "infinite")
+    export(s, USER0_MAP, EXR32F, "passthrough")
+    return s
+
+
+RAMP_RATIOS = {"r1": "1", "r2": "2", "r15": "1.5"}
+RAMP_SHIFTS = {"p0": "phase 0", "p25": "every UV shifted by +0.25/1024", "p75": "+0.75/1024"}
+PROBE_TAIL = (
+    "User0 added as RGB32F (the template capture of both recordings records its stored format; "
+    "a record where it is not 32F is void); one fill with only User0 active, source the "
+    "authored float32 UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5 at the document size, "
+    "default projection (read back), Normal at opacity 1. User0 at OpenEXR 32f with infinite "
+    "padding and with passthrough (every covered texel must equal the ramp bit for bit, or the "
+    "probe is void), every export step done twice in the session."
+)
+
+
+def padding_ramp(mesh: str, phase: str) -> Golden:
+    name = f"seam-ramp-{mesh}-{phase}"
+    return Golden(
+        f"export-padding-ramp-{mesh}-{phase}",
+        EXPORT_DOMAIN,
+        "P-ramp of decision 129 (phase1.25_pilot-wand item 2.7: the ring across a UV seam), "
+        f"exploratory: the seam mesh of scale ratio {RAMP_RATIOS[mesh]}, {RAMP_SHIFTS[phase]}, "
+        "its OBJ the text decision 129 fixes by SHA-256; document resolution 1024. " + PROBE_TAIL,
+        name,
+        [name, "uv-ramp-1024"],
+        padding_probe(name, rf.RAMP_RESOLUTION),
+    )
+
+
+def padding_tie(resolution: int) -> Golden:
+    return Golden(
+        f"export-padding-tie-{resolution}",
+        EXPORT_DOMAIN,
+        "P-tie of decision 129 (phase1.25_pilot-wand item 2.7: the propagation rule), "
+        "exploratory: three axis-aligned UV islands of side 0.125 at (0.1875, 0.1875), "
+        f"(0.6875, 0.1875) and (0.4375, 0.6875); document resolution {resolution}. " + PROBE_TAIL,
+        "tie",
+        ["tie", f"uv-ramp-{resolution}"],
+        padding_probe("tie", resolution),
+    )
+
+
+def later_goldens() -> list[Golden]:
+    """Requested goldens of later decisions (145, 126, 129), in the order of the runbook."""
+    return [
+        srgb_bitmap_variants(),
+        *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
+        *(padding_ramp(m, p) for m in rf.RAMP_MESHES for p in rf.RAMP_PHASES),
+        *(padding_tie(r) for r in rf.TIE_RESOLUTIONS),
+    ]
+
+
 # Goldens of decision 100 that the Painter session of 2026-10-12 recorded and the store admitted:
 # their manifests live under the envelope's `manifests/`, and their requests are deleted.
 ADMITTED = frozenset(
@@ -815,17 +1062,21 @@ def decision_100_goldens() -> list[Golden]:
     ]
 
 
+def all_goldens() -> list[Golden]:
+    return [*decision_100_goldens(), *later_goldens()]
+
+
 def requested_goldens() -> list[Golden]:
-    """The goldens of decision 100 still waiting for their recording."""
-    return [g for g in decision_100_goldens() if g.name not in ADMITTED]
+    """The requested goldens still waiting for their recording."""
+    return [g for g in all_goldens() if g.name not in ADMITTED]
 
 
 def admitted_goldens() -> list[Golden]:
-    return [g for g in decision_100_goldens() if g.name in ADMITTED]
+    return [g for g in all_goldens() if g.name in ADMITTED]
 
 
 def ocio_goldens() -> frozenset[str]:
-    return frozenset(g.name for g in decision_100_goldens() if OCIO_SETTING in g.settings)
+    return frozenset(g.name for g in all_goldens() if OCIO_SETTING in g.settings)
 
 
 # --- Manifests --------------------------------------------------------------------------------
