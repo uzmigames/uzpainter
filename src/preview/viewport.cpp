@@ -298,6 +298,16 @@ OrbitCamera FitCamera(const mesh::TexturingMesh& mesh) {
     return camera;
 }
 
+bool SceneUnitKnown(const mesh::TexturingMesh& mesh) {
+    return mesh.units.scale_to_internal > 0.0 &&
+           (mesh.units.from == "mesh_unit_scale" || mesh.units.source_meters_per_unit > 0.0);
+}
+
+double CavityRadiusOf(const mesh::TexturingMesh& mesh) {
+    // A known unit puts the scene in centimetres (texturing_mesh.h `Units`).
+    return SceneUnitKnown(mesh) ? kCavityRadiusMetres * 100.0 : kCavityRadiusMetres;
+}
+
 uint64_t ViewportKernelKey(render::KernelTarget target, std::string_view compilerVersion) {
     return render::KernelKey(ViewportKernel(), target, compilerVersion);
 }
@@ -633,6 +643,7 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     frame.push_back(state.nodeCount);
     frame.push_back(static_cast<uint32_t>(scene.output));
     frame.push_back(std::bit_cast<uint32_t>(kOcclusionStrength));
+    PushFloat(frame, scene.cavity ? CavityRadiusOf(mesh) : 0.0);
 
     Result<render::ComputeKernel> kernel = context.Kernel(ViewportKernel());
     if (!kernel) return Unexpected(kernel.error());

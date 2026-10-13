@@ -406,6 +406,8 @@ json::Object State(const core::Project& project) {
     // The AO mesh map's strength in painter_viewport and the AO channel's use, read-only (decision 257).
     state["ao_strength"] = kAoStrength;
     state["ao_channel"] = std::string(kAoChannel);
+    // The cavity radius of painter_viewport, in metres, read-only (decision 258).
+    state["cavity_radius"] = kCavityRadius;
     state["shader"] = Shader(project);
     return state;
 }

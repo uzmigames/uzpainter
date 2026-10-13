@@ -55,6 +55,10 @@ inline constexpr double kAoStrength = 1.0;
 /// What `painter_viewport` does with the painted AO channel and its mix with the mesh map: nothing
 /// (decision 257; the mix rule of decision 131 is unrecorded).
 inline constexpr std::string_view kAoChannel = "not_applied";
+/// The cavity radius `painter_viewport` applies to the normal map's curvature, in metres,
+/// read-only: UzPainter's provisional preview default, changed only by a decision (decision 258;
+/// `preview::kCavityRadiusMetres`). `State` and the capture receipt say so.
+inline constexpr double kCavityRadius = 0.00025;
 
 /// The standard's presets, `common` then `ref_match`, each with no camera and seed 0.
 json::Array StandardPresets();
@@ -72,7 +76,8 @@ json::Object PresetOf(const core::Project& project);
 /// is the comparison standard's; any other is a non-parity preview), `environment_default` (the
 /// project names no environment, so `painter_viewport` lights it with the installation's default,
 /// decision 212), `shadows_effect` (`kShadowsEffect`, decision 251), `ao_strength` and
-/// `ao_channel` (`kAoStrength`, `kAoChannel`, decision 257) and the shader.
+/// `ao_channel` (`kAoStrength`, `kAoChannel`, decision 257), `cavity_radius` (`kCavityRadius`,
+/// decision 258) and the shader.
 json::Object State(const core::Project& project);
 /// Validates `preset` whole, then sets it. `ValueError` for a malformed preset,
 /// `UnsupportedInUzPainter` for a value outside the fixed pipeline, `ResourceNotFoundError` for an

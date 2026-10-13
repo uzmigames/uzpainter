@@ -63,13 +63,16 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <numbers>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <vector>
 
 #include <xmmintrin.h>
@@ -504,15 +507,40 @@ using UV3 = std::array<uzp::mesh::Float2, 3>;
 /// The corner UVs of a triangle without its own: (0, 0), (1, 0), (0, 1).
 constexpr UV3 kTriangleUvs{{{0.0f, 0.0f}, {1.0f, 0.0f}, {0.0f, 1.0f}}};
 
-/// A mesh authored in code: one object, flat corner normals, no tangents (no normal map reads
-/// them), one material per `material` index used.
+/// A mesh authored in code: one object, flat corner normals, the tangent frame of each triangle's
+/// own UVs (the tangent along dP/du, the sign of dP/dv against cross(normal, tangent), as
+/// MikkTSpace gives a flat triangle; none for a zero-area UV triangle), one material per
+/// `material` index used.
 class MeshBuilder {
 public:
-    void Triangle(const P3& a, const P3& b, const P3& c, uint32_t material, const UV3& uvs = kTriangleUvs) {
+    // An overload, not a default argument: the bundled clang folds a const local initialised
+    // through a reference parameter to the value of its constexpr default argument (decision 258's
+    // tests measured the tangent of `kTriangleUvs` for every triangle).
+    void Triangle(const P3& a, const P3& b, const P3& c, uint32_t material) { Triangle(a, b, c, material, kTriangleUvs); }
+    void Triangle(const P3& a, const P3& b, const P3& c, uint32_t material, const UV3& uvs) {
         const P3 e1{b[0] - a[0], b[1] - a[1], b[2] - a[2]};
         const P3 e2{c[0] - a[0], c[1] - a[1], c[2] - a[2]};
         const uzp::mesh::Float3 normal{e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
                                        e1[0] * e2[1] - e1[1] * e2[0]};
+        std::array<float, 4> tangent{};
+        const double du1 = uvs[1].u - uvs[0].u;
+        const double dv1 = uvs[1].v - uvs[0].v;
+        const double du2 = uvs[2].u - uvs[0].u;
+        const double dv2 = uvs[2].v - uvs[0].v;
+        const double area = du1 * dv2 - du2 * dv1;
+        if (area != 0.0) {
+            std::array<double, 3> pu{};
+            std::array<double, 3> pv{};
+            for (size_t k = 0; k < 3; ++k) {
+                pu[k] = (e1[k] * dv2 - e2[k] * dv1) / area;
+                pv[k] = (e2[k] * du1 - e1[k] * du2) / area;
+            }
+            const double length = std::sqrt(pu[0] * pu[0] + pu[1] * pu[1] + pu[2] * pu[2]);
+            const std::array<double, 3> b{normal.y * pu[2] - normal.z * pu[1], normal.z * pu[0] - normal.x * pu[2],
+                                          normal.x * pu[1] - normal.y * pu[0]};
+            tangent = {static_cast<float>(pu[0] / length), static_cast<float>(pu[1] / length),
+                       static_cast<float>(pu[2] / length), b[0] * pv[0] + b[1] * pv[1] + b[2] * pv[2] < 0.0 ? -1.0f : 1.0f};
+        }
         uzp::mesh::Triangle triangle;
         const std::array<const P3*, 3> corners{&a, &b, &c};
         for (size_t k = 0; k < 3; ++k) {
@@ -521,6 +549,7 @@ public:
             corner.position = static_cast<uint32_t>(m_mesh.positions.size() - 1);
             corner.normal = normal;
             corner.uv0 = uvs[k];
+            corner.tangent = tangent;
             corner.material = material;
             m_mesh.corners.push_back(corner);
             triangle.corners[k] = static_cast<uint32_t>(m_mesh.corners.size() - 1);
@@ -1156,6 +1185,15 @@ MaterialInputs Rough(float roughness) {
     return m;
 }
 
+/// `Rough(roughness)` with a 2 x 2 normal map whose every texel is the encoded (x, y, z): a
+/// uniformly tilted normal, which does not curve (no cavity, decision 258).
+MaterialInputs UniformNormal(float roughness, float x, float y, float z) {
+    MaterialInputs m = Rough(roughness);
+    m.normal = MaterialMap{2, 2, 3, {}};
+    for (int i = 0; i < 4; ++i) m.normal->values.insert(m.normal->values.end(), {x, y, z});
+    return m;
+}
+
 int RunViewportVisibility(const fs::path& dir) {
     Engine engine(TestOptions(dir));
     if (NoAdapter(engine)) return kExitSkip;
@@ -1469,14 +1507,15 @@ int RunViewportVisibility(const fs::path& dir) {
         }
     }
 
-    // 7. No self-shadowing on flat and convex surfaces: on the plane (with and without a tilted
-    // normal map) and on the sphere every diffuse and specular ratio is exactly 1, at grazing and
-    // steep views, under the sun and the shipped environment.
+    // 7. No self-shadowing on flat and convex surfaces: on the plane (with and without a uniformly
+    // tilted normal map, which has no cavity, decision 258) and on the sphere every diffuse and
+    // specular ratio is exactly 1, at grazing and steep views, under the sun and the shipped
+    // environment.
     {
         const std::vector<Fixture> fixtures = Fixtures();
         std::vector<std::pair<std::string, std::pair<std::shared_ptr<const uzp::mesh::TexturingMesh>, MaterialInputs>>> cases = {
             {"plane", {fixtures[1].mesh, Rough(0.35f)}},
-            {"normal-mapped plane", {fixtures[1].mesh, fixtures[1].material}},
+            {"normal-mapped plane", {fixtures[1].mesh, UniformNormal(0.35f, 0.65f, 0.5f, 0.9f)}},
             {"sphere", {fixtures[0].mesh, Rough(0.5f)}},
         };
         std::string problem;
@@ -1513,8 +1552,8 @@ int RunViewportVisibility(const fs::path& dir) {
             }
         }
         Check(problem.empty() && pixels > 10000,
-              "no self-shadowing: on a plane (with and without a tilted normal map) and on the sphere every diffuse and "
-              "specular ratio is exactly 1 at grazing and steep views",
+              "no self-shadowing: on a plane (with and without a uniformly tilted normal map) and on the sphere every "
+              "diffuse and specular ratio is exactly 1 at grazing and steep views",
               problem.empty() ? std::to_string(pixels) + " pixels" : problem);
     }
 
@@ -1794,14 +1833,14 @@ int RunViewportOcclusion(const fs::path& dir) {
               problem.empty() ? std::to_string(compared) + " compared" : problem);
     }
 
-    // 2. No micro-shadow from the normal map: with an AO map of 1, a flat and a tilted normal map on
-    // the open plane keep every diffuse and specular ratio exactly 1 (the AO weight reads only the
-    // AO map; there is no cavity term).
+    // 2. No micro-shadow from a normal map that does not curve: with an AO map of 1, a flat and a
+    // uniformly tilted normal map on the open plane keep every diffuse and specular ratio exactly 1
+    // (the AO weight reads only the AO map, and the cavity of decision 258 is 1 where the normal map
+    // does not curve).
     {
         const std::vector<Fixture> fixtures = Fixtures();
-        MaterialInputs flat = Rough(0.35f);
-        flat.normal = MaterialMap{2, 2, 3, {0.5f, 0.5f, 1.0f, 0.5f, 0.5f, 1.0f, 0.5f, 0.5f, 1.0f, 0.5f, 0.5f, 1.0f}};
-        MaterialInputs tilted = fixtures[1].material;
+        const MaterialInputs flat = UniformNormal(0.35f, 0.5f, 0.5f, 1.0f);
+        const MaterialInputs tilted = UniformNormal(0.35f, 0.65f, 0.5f, 0.9f);
         std::string problem;
         size_t pixels = 0;
         for (MaterialInputs m : {flat, tilted}) {
@@ -1830,8 +1869,8 @@ int RunViewportOcclusion(const fs::path& dir) {
             }
         }
         Check(problem.empty() && pixels > 10000,
-              "no micro-shadow without AO: with an AO map of 1, a flat and a tilted normal map keep every diffuse and "
-              "specular ratio exactly 1",
+              "no micro-shadow without AO or curvature: with an AO map of 1, a flat and a uniformly tilted normal map "
+              "keep every diffuse and specular ratio exactly 1",
               problem.empty() ? std::to_string(pixels) + " pixels" : problem);
     }
 
@@ -2263,6 +2302,781 @@ int RunViewportOcclusion(const fs::path& dir) {
     return Finish();
 }
 
+// ── viewport-cavity (decision 258) ───────────────────────────────────────────────────────────
+
+/// The cavity fixtures' plane: y = 0, 1 cm square at the Wand's scale (a mesh without a unit, so
+/// its unit is read as the metre).
+constexpr double kPlaneSide = 0.01;
+
+/// An affine UV layout of the plane y = 0: (u, v) = A (x, z) + o, A in 1 / scene unit.
+struct UvLayout {
+    double a00 = 1.0 / kPlaneSide;
+    double a01 = 0.0;
+    double a10 = 0.0;
+    double a11 = 1.0 / kPlaneSide;
+    double o0 = 0.5;
+    double o1 = 0.5;
+
+    [[nodiscard]] uzp::mesh::Float2 Uv(double x, double z) const {
+        return {static_cast<float>(a00 * x + a01 * z + o0), static_cast<float>(a10 * x + a11 * z + o1)};
+    }
+    [[nodiscard]] double Det() const { return a00 * a11 - a01 * a10; }
+    /// The point (x, z) of (u, v).
+    [[nodiscard]] std::pair<double, double> Point(double u, double v) const {
+        const double du = u - o0;
+        const double dv = v - o1;
+        return {(a11 * du - a01 * dv) / Det(), (-a10 * du + a00 * dv) / Det()};
+    }
+};
+
+/// A part of the plane: the rectangle [x0, x1] x [z0, z1] with its layout; the normal map's texels
+/// with u in [uFrom, uTo) are those of this part's layout (extended past its rectangle).
+struct PlanePart {
+    double x0, x1, z0, z1;
+    UvLayout layout;
+    double uFrom = 0.0;
+    double uTo = 1.0;
+};
+
+/// A height profile of x alone (UzmiGames-authored): its slope h'(x) and Laplacian h''(x).
+struct Profile {
+    std::function<double(double)> slope;
+    std::function<double(double)> laplacian;
+};
+
+/// h = A cos(k x) with peak slope A k: concave where cos(k x) < 0.
+Profile Sinusoid(double wavelength, double peakSlope) {
+    const double k = 2.0 * std::numbers::pi / wavelength;
+    const double a = peakSlope / k;
+    return {[=](double x) { return -a * k * std::sin(k * x); }, [=](double x) { return -a * k * k * std::cos(k * x); }};
+}
+
+/// A cylindrical trough of radius r along z, centred at x = 0, out to |x| = edge (flat beyond).
+Profile Trough(double r, double edge) {
+    return {[=](double x) { return std::abs(x) < edge ? x / std::sqrt(r * r - x * x) : 0.0; },
+            [=](double x) { return std::abs(x) < edge ? r * r / std::pow(r * r - x * x, 1.5) : 0.0; }};
+}
+
+/// h = -x^2 / (2 r) everywhere: a convex ridge, h'' = -1 / r.
+Profile Ridge(double r) {
+    return {[=](double x) { return -x / r; }, [=](double) { return -1.0 / r; }};
+}
+
+/// The plane's parts as a mesh, texture set 0.
+std::shared_ptr<const uzp::mesh::TexturingMesh> CavityPlane(const std::vector<PlanePart>& parts) {
+    MeshBuilder builder;
+    for (const PlanePart& p : parts) {
+        const UvLayout& l = p.layout;
+        builder.QuadUv({static_cast<float>(p.x0), 0.0f, static_cast<float>(p.z0)},
+                       {static_cast<float>(p.x0), 0.0f, static_cast<float>(p.z1)},
+                       {static_cast<float>(p.x1), 0.0f, static_cast<float>(p.z1)},
+                       {static_cast<float>(p.x1), 0.0f, static_cast<float>(p.z0)}, 0,
+                       {l.Uv(p.x0, p.z0), l.Uv(p.x0, p.z1), l.Uv(p.x1, p.z1), l.Uv(p.x1, p.z0)});
+    }
+    return builder.Build();
+}
+
+/// The OpenGL tangent-space normal map of `profile` on the parts' layouts, `size` x `size`, float:
+/// per texel the world normal normalize(-h'(x), 1, 0) of its point, in the frame MeshBuilder gives
+/// the layout (T along dP/du, B = sign cross(N, T), N = +y).
+MaterialMap GrooveNormalMap(uint32_t size, const std::vector<PlanePart>& parts, const Profile& profile) {
+    MaterialMap map{size, size, 3, {}};
+    map.values.reserve(size_t{size} * size * 3);
+    for (uint32_t r = 0; r < size; ++r) {
+        for (uint32_t c = 0; c < size; ++c) {
+            const double u = (c + 0.5) / size;
+            const double v = 1.0 - (r + 0.5) / size;
+            const PlanePart* part = &parts.front();
+            for (const PlanePart& p : parts) {
+                if (u >= p.uFrom && u < p.uTo) part = &p;
+            }
+            const UvLayout& l = part->layout;
+            const double x = l.Point(u, v).first;
+            const double s = profile.slope(x);
+            const double length = std::sqrt(1.0 + s * s);
+            const D3 n{-s / length, 1.0 / length, 0.0};
+            // dP/du and dP/dv of the layout, in (x, 0, z).
+            const D3 pu{l.a11 / l.Det(), 0.0, -l.a10 / l.Det()};
+            const D3 pv{-l.a01 / l.Det(), 0.0, l.a00 / l.Det()};
+            const double tl = std::sqrt(pu[0] * pu[0] + pu[2] * pu[2]);
+            const D3 t{pu[0] / tl, 0.0, pu[2] / tl};
+            const D3 nt{t[2], 0.0, -t[0]};  // cross(+y, t)
+            const double sign = nt[0] * pv[0] + nt[2] * pv[2] < 0.0 ? -1.0 : 1.0;
+            const D3 b{sign * nt[0], 0.0, sign * nt[2]};
+            const double tx = n[0] * t[0] + n[2] * t[2];
+            const double ty = n[0] * b[0] + n[2] * b[2];
+            map.values.insert(map.values.end(), {static_cast<float>(0.5 + 0.5 * tx), static_cast<float>(0.5 + 0.5 * ty),
+                                                 static_cast<float>(0.5 + 0.5 * n[1])});
+        }
+    }
+    return map;
+}
+
+/// The whole plane under one layout.
+std::vector<PlanePart> WholePlane(const UvLayout& layout = {}) {
+    return {{-kPlaneSide / 2, kPlaneSide / 2, -kPlaneSide / 2, kPlaneSide / 2, layout}};
+}
+
+/// A top-down orthographic view of the plane's centre, `extent` wide and high, from `height`.
+CameraPose TopView(double extent, double height = 0.05) {
+    CameraPose pose;
+    pose.orthographic = true;
+    pose.orthographicHeight = extent;
+    pose.eye = {0.0, height, 0.0};
+    pose.forward = {0.0, -1.0, 0.0};
+    pose.right = {0.0, 0.0, 1.0};
+    pose.up = {1.0, 0.0, 0.0};
+    return pose;
+}
+
+/// A perspective view of the plane's centre from `degrees` off its normal (towards +x), at
+/// `distance`.
+CameraPose ObliqueView(double degrees, double distance, double fov = 30.0) {
+    const double a = degrees * std::numbers::pi / 180.0;
+    CameraPose pose;
+    pose.fovDegrees = fov;
+    pose.eye = {distance * std::sin(a), distance * std::cos(a), 0.0};
+    pose.forward = {-std::sin(a), -std::cos(a), 0.0};
+    pose.right = {0.0, 0.0, 1.0};
+    pose.up = {std::cos(a), -std::sin(a), 0.0};
+    pose.nearPlane = distance * 1e-6;
+    return pose;
+}
+
+/// Where pixel (x, y)'s centre ray meets y = 0, as (x, z), for both projections.
+std::optional<std::pair<double, double>> PlaneHit(const CameraPose& pose, uint32_t x, uint32_t y, uint32_t width,
+                                                  uint32_t height) {
+    D3 o = pose.eye;
+    D3 d = pose.forward;
+    if (pose.orthographic) {
+        const double half = pose.orthographicHeight / 2.0;
+        const double sx = ((x + 0.5) / width * 2.0 - 1.0) * half * width / height;
+        const double sy = (1.0 - (y + 0.5) / height * 2.0) * half;
+        for (int a = 0; a < 3; ++a) o[a] += pose.right[a] * sx + pose.up[a] * sy;
+    } else {
+        std::tie(o, d) = PixelRay(pose, x, y, width, height);
+    }
+    if (!(d[1] < 0.0)) return std::nullopt;
+    const D3 p = Along(o, d, -o[1] / d[1]);
+    return std::pair{p[0], p[2]};
+}
+
+/// a_cav as the pass forms it (decision 258) from the closed-form Laplacian of `profile` at pixel
+/// (x, y): the footprint h per axis from the next pixels' hits on the plane (at least 1 texel of
+/// the `mapSize` map), n = min(ceil(h), 3) points per axis spread over h - g with g = max(1, h / n),
+/// each point's x from the layout of the part whose texels hold its u (as GrooveNormalMap writes
+/// them), and the mean of 1 / (1 + r max(0, h''(x))) over them.
+std::optional<double> FootprintCavity(const CameraPose& pose, uint32_t x, uint32_t y, uint32_t size,
+                                      const std::vector<PlanePart>& parts, uint32_t mapSize, const Profile& profile,
+                                      double radius) {
+    const auto at = PlaneHit(pose, x, y, size, size);
+    const auto nextX = PlaneHit(pose, x + 1, y, size, size);
+    const auto nextY = PlaneHit(pose, x, y + 1, size, size);
+    if (!at || !nextX || !nextY) return std::nullopt;
+    const PlanePart* hitPart = &parts.front();
+    for (const PlanePart& p : parts) {
+        if (at->first >= p.x0 && at->first <= p.x1 && at->second >= p.z0 && at->second <= p.z1) hitPart = &p;
+    }
+    const UvLayout& l = hitPart->layout;
+    const uzp::mesh::Float2 uv = l.Uv(at->first, at->second);
+    const uzp::mesh::Float2 ux = l.Uv(nextX->first, nextX->second);
+    const uzp::mesh::Float2 uy = l.Uv(nextY->first, nextY->second);
+    const double w = mapSize;
+    const double hu = std::max(1.0, w * std::max(std::abs(double{ux.u} - uv.u), std::abs(double{uy.u} - uv.u)));
+    const double hv = std::max(1.0, w * std::max(std::abs(double{ux.v} - uv.v), std::abs(double{uy.v} - uv.v)));
+    const auto points = [](double h) {
+        const int n = std::min(static_cast<int>(std::ceil(h)), 3);
+        const double g = std::max(1.0, h / n);
+        const double spread = n > 1 ? (h - g) / (n - 1) : 0.0;
+        std::vector<double> offsets;
+        for (int i = 0; i < n; ++i) offsets.push_back((i - 0.5 * (n - 1)) * spread);
+        return offsets;
+    };
+    double sum = 0.0;
+    size_t count = 0;
+    for (const double ov : points(hv)) {
+        for (const double ou : points(hu)) {
+            const double u = uv.u + ou / w;
+            const double v = uv.v + ov / w;
+            const double wrapped = u - std::floor(u);
+            const PlanePart* part = &parts.front();
+            for (const PlanePart& p : parts) {
+                if (wrapped >= p.uFrom && wrapped < p.uTo) part = &p;
+            }
+            const double laplacian = profile.laplacian(part->layout.Point(u, v).first);
+            sum += 1.0 / (1.0 + radius * std::max(0.0, laplacian));
+            ++count;
+        }
+    }
+    return sum / static_cast<double>(count);
+}
+
+/// A cavity render's per-pixel values (decision 258's output mode), -1 where the pixel shows the
+/// clear colour.
+struct CavityValues {
+    std::vector<double> cavity;
+    std::vector<double> kappa;
+    std::vector<double> traced;
+};
+
+CavityValues CavityOf(const ViewportImage& image) {
+    CavityValues v;
+    for (size_t i = 0; i < size_t{image.width} * image.height; ++i) {
+        const bool hit = image.linear[i * 4 + 2] != FloatToHalf(-1.0f);
+        v.cavity.push_back(hit ? Linear(image, i, 0) : -1.0);
+        v.kappa.push_back(hit ? Linear(image, i, 1) : -1.0);
+        v.traced.push_back(hit ? Linear(image, i, 2) : -1.0);
+    }
+    return v;
+}
+
+/// The result of one analytic comparison: whether it held, the largest error as a fraction of
+/// its bound, and the hits compared.
+struct Analytic {
+    bool ok = false;
+    double worst = 0.0;
+    size_t checked = 0;
+};
+
+int RunViewportCavity(const fs::path& dir) {
+    Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    const auto sun = SharedLighting(SunEnvironment());
+    const std::expected<EnvironmentImage, std::string> studioImage =
+        DecodeEnvironment(Bytes(RepoRoot() / "assets/environments/studio-small-09.exr"));
+    if (!studioImage) {
+        Check(false, "the shipped environment decodes", studioImage.error());
+        return Finish();
+    }
+    const auto studio = SharedLighting(*studioImage);
+    const double radius = kCavityRadiusMetres;
+    const auto scene = [&](const std::shared_ptr<const uzp::mesh::TexturingMesh>& mesh, MaterialInputs material,
+                           const std::shared_ptr<const EnvironmentLighting>& lighting, ViewportOutput output,
+                           bool cavity = true) {
+        ViewportScene s;
+        s.mesh = mesh;
+        s.materials = {std::move(material)};
+        s.lighting = lighting;
+        s.background = {-1.0f, -1.0f, -1.0f};
+        s.output = output;
+        s.cavity = cavity;
+        return s;
+    };
+    const auto withNormal = [](const MaterialMap& normal, float roughness = 0.4f) {
+        MaterialInputs m = Rough(roughness);
+        m.normal = normal;
+        return m;
+    };
+    // The views of the analytic checks: top-down over the plane's central 8 mm (a footprint of 2
+    // texels of a 512 map) and oblique in perspective.
+    constexpr uint32_t kSize = 200;
+    const std::pair<std::string, CameraPose> views[] = {{"top view", TopView(0.008)},
+                                                        {"oblique view", ObliqueView(35.0, 0.011)}};
+
+    // 1. Neutral without a normal map: on the golden fixtures that bind none the cavity is never
+    // computed (the third channel of the cavity output is 0 on every hit, a_cav 1, kappa 0), and
+    // on the plane fixture, which binds one, it is computed on every hit.
+    {
+        std::string problem;
+        size_t hits = 0;
+        for (const Fixture& fixture : Fixtures()) {
+            ViewportScene s;
+            s.mesh = fixture.mesh;
+            s.materials = {fixture.material};
+            if (fixture.second) s.materials.push_back(*fixture.second);
+            s.lighting = sun;
+            s.background = {-1.0f, -1.0f, -1.0f};
+            s.output = ViewportOutput::Cavity;
+            OrbitCamera camera = FitCamera(*s.mesh);
+            camera.yawDegrees = fixture.yaw;
+            camera.pitchDegrees = fixture.pitch;
+            const std::optional<ViewportImage> image = Render(engine, s, PoseOf(camera), 96, 96, fixture.name);
+            if (!image) continue;
+            const bool mapped = fixture.material.normal.has_value();
+            const CavityValues v = CavityOf(*image);
+            for (size_t i = 0; i < v.traced.size(); ++i) {
+                if (v.traced[i] < 0.0) continue;
+                ++hits;
+                if (v.traced[i] != (mapped ? 1.0 : 0.0) && problem.empty()) {
+                    problem = fixture.name + " pixel " + std::to_string(i) + " traced " + Fixed(v.traced[i], 0);
+                }
+                if (!mapped && (v.cavity[i] != 1.0 || v.kappa[i] != 0.0) && problem.empty()) {
+                    problem = fixture.name + " pixel " + std::to_string(i) + " a_cav " + Fixed(v.cavity[i]);
+                }
+            }
+        }
+        Check(problem.empty() && hits > 5000,
+              "without a normal map the cavity is not computed (the golden fixtures without one), and with one it is",
+              problem.empty() ? std::to_string(hits) + " hits" : problem);
+    }
+
+    // 2. Neutral where the normal map does not curve: a flat, a uniformly tilted and a convex
+    // (ridge) normal map give a_cav exactly 1 on every hit (the views keep every tap on the
+    // ridge's convex region, away from its wrap), and the colour and both ratios equal those of
+    // the pass with the cavity off bit for bit (both views, sun and studio light, dielectric and
+    // metal).
+    {
+        const auto parts = WholePlane();
+        const auto plane = CavityPlane(parts);
+        std::vector<std::pair<std::string, MaterialInputs>> materials = {
+            {"flat", UniformNormal(0.4f, 0.5f, 0.5f, 1.0f)},
+            {"tilted", UniformNormal(0.4f, 0.7f, 0.35f, 0.9f)},
+            {"ridge", withNormal(GrooveNormalMap(256, parts, Ridge(0.004)))},
+        };
+        MaterialInputs metalRidge = materials[2].second;
+        metalRidge.metalnessValue = 1.0f;
+        metalRidge.baseColorValue = {0.9f, 0.6f, 0.5f};
+        materials.push_back({"metal ridge", metalRidge});
+        std::string problem;
+        size_t compared = 0;
+        for (const auto& [name, m] : materials) {
+            for (const auto& [viewName, pose] : views) {
+                if (const std::optional<ViewportImage> cav =
+                        Render(engine, scene(plane, m, sun, ViewportOutput::Cavity), pose, 96, 96, name)) {
+                    const CavityValues v = CavityOf(*cav);
+                    for (size_t i = 0; i < v.cavity.size(); ++i) {
+                        if (v.cavity[i] >= 0.0 && v.cavity[i] != 1.0 && problem.empty()) {
+                            problem = name + ", " + viewName + ": pixel " + std::to_string(i) + " a_cav " + Fixed(v.cavity[i]) +
+                                      " kappa " + Fixed(v.kappa[i], 1);
+                        }
+                    }
+                }
+                for (const auto& lighting : {sun, studio}) {
+                    for (const ViewportOutput output :
+                         {ViewportOutput::Colour, ViewportOutput::DiffuseVisibility, ViewportOutput::SpecularVisibility}) {
+                        const std::optional<ViewportImage> on = Render(engine, scene(plane, m, lighting, output), pose, 96, 96, name);
+                        const std::optional<ViewportImage> off =
+                            Render(engine, scene(plane, m, lighting, output, false), pose, 96, 96, name);
+                        if (!on || !off) continue;
+                        ++compared;
+                        if ((on->linear != off->linear || on->display != off->display) && problem.empty()) {
+                            problem = name + ", " + viewName + ", output " + std::to_string(static_cast<int>(output)) +
+                                      ": differs from the pass with the cavity off";
+                        }
+                    }
+                }
+            }
+        }
+        Check(problem.empty() && compared == 48,
+              "a flat, a uniformly tilted and a convex normal map give a_cav exactly 1 and the bytes of the pass with "
+              "the cavity off (colour and both ratios, dielectric and metal)",
+              problem.empty() ? std::to_string(compared) + " renders compared" : problem);
+    }
+
+    // 3-5. Analytic curvature: kappa against the closed-form Laplacian h''(x) at the hit point, on
+    // a sinusoidal groove (peak slope 1), a cylindrical groove whose walls reach n.z = 0.44 (slope
+    // 2.06, the steep case) and a sinusoid of peak slope 5 (n.z down to 0.2) that the clamp at
+    // n.z = 0.3 limits. Bounds: the sinusoid within 1 % of its peak Laplacian A k^2 (central
+    // differences over a footprint of 1-3 texels and bilinear taps, both second order), the steep
+    // sinusoid within 2 % of its own (the normal changes faster per texel); the cylinder within 3 %
+    // of h''(x) where every tap lies inside it. a_cav is the mean of 1 / (1 + r max(0, h'')) over
+    // the footprint's points (FootprintCavity) within r times the kappa bound plus the binary16
+    // rounding of the output (0.002).
+    const double wavelength = 0.0025;  // the 1 cm plane holds 4 periods, so the map tiles seamlessly
+    const Profile sinusoid = Sinusoid(wavelength, 1.0);
+    const double peak = 2.0 * std::numbers::pi / wavelength;  // A k^2 with A k = 1
+    const auto analytic = [&](const std::string& what, const std::vector<PlanePart>& parts, uint32_t mapSize,
+                              const Profile& profile, const std::function<std::optional<double>(double)>& bound,
+                              std::vector<std::vector<double>>* cavities = nullptr) {
+        Analytic result;
+        const auto plane = CavityPlane(parts);
+        const MaterialInputs m = withNormal(GrooveNormalMap(mapSize, parts, profile));
+        double worstMapping = 0.0;
+        std::string where;
+        std::string mappingWhere;
+        for (const auto& [viewName, pose] : views) {
+            const std::optional<ViewportImage> image = Render(engine, scene(plane, m, sun, ViewportOutput::Cavity), pose, kSize, kSize, what);
+            if (!image) return result;
+            const CavityValues v = CavityOf(*image);
+            if (cavities) cavities->push_back(v.cavity);
+            for (uint32_t y = 0; y < kSize; ++y) {
+                for (uint32_t x = 0; x < kSize; ++x) {
+                    const size_t i = size_t{y} * kSize + x;
+                    const auto at = PlaneHit(pose, x, y, kSize, kSize);
+                    if (!at || v.traced[i] != 1.0) continue;
+                    const std::optional<double> allowed = bound(at->first);
+                    if (!allowed) continue;
+                    const double expected = profile.laplacian(at->first);
+                    const double error = std::abs(v.kappa[i] - expected);
+                    ++result.checked;
+                    if (error / *allowed > result.worst) {
+                        result.worst = error / *allowed;
+                        where = viewName + " x = " + Fixed(at->first * 1000.0, 3) + " mm: kappa " + Fixed(v.kappa[i], 1) +
+                                ", h'' " + Fixed(expected, 1);
+                    }
+                    const std::optional<double> mapped = FootprintCavity(pose, x, y, kSize, parts, mapSize, profile, radius);
+                    if (!mapped) continue;
+                    const double mappingError = std::abs(v.cavity[i] - *mapped) / (radius * *allowed + 2e-3);
+                    if (mappingError > worstMapping) {
+                        worstMapping = mappingError;
+                        mappingWhere = viewName + " x = " + Fixed(at->first * 1000.0, 3) + " mm: a_cav " + Fixed(v.cavity[i]) +
+                                       ", expected " + Fixed(*mapped);
+                    }
+                }
+            }
+        }
+        Info(what + ": " + std::to_string(result.checked) + " hits, largest error " + Fixed(result.worst, 3) +
+             " of the bound (" + where + "); a_cav against the footprint's mean of 1 / (1 + r max(0, h'')): " +
+             Fixed(worstMapping, 3) + " of its bound (" + mappingWhere + ")");
+        result.ok = result.worst <= 1.0 && worstMapping <= 1.0;
+        return result;
+    };
+    const auto sinusoidBound = [&](double) { return std::optional<double>{0.01 * peak}; };
+    std::vector<std::vector<double>> base;
+    {
+        const Analytic a = analytic("sinusoid, 512 map", WholePlane(), 512, sinusoid, sinusoidBound, &base);
+        double darkest = 1.0;
+        for (const auto& c : base) {
+            for (double value : c) {
+                if (value >= 0.0) darkest = std::min(darkest, value);
+            }
+        }
+        const double expectedDarkest = 1.0 / (1.0 + radius * peak);
+        Check(a.ok && a.checked > 50000 && std::abs(darkest - expectedDarkest) < 0.01,
+              "a sinusoidal groove: kappa is the closed-form Laplacian within 1 % of its peak, and a_cav darkens the "
+              "groove as 1 / (1 + r kappa) with r = 0.25 mm",
+              Fixed(a.worst, 3) + " of the bound, darkest " + Fixed(darkest, 4) + " (closed form " + Fixed(expectedDarkest, 4) + ")");
+    }
+    {
+        const double r = 0.0025;
+        const double edge = 0.9 * r;
+        const double tap = 4.0 * kPlaneSide / 512.0;
+        const Analytic a = analytic("cylindrical groove", WholePlane(), 512, Trough(r, edge), [&](double x) {
+            // Every tap inside the trough.
+            if (std::abs(x) > edge - tap) return std::optional<double>{};
+            return std::optional<double>{0.03 * r * r / std::pow(r * r - x * x, 1.5)};
+        });
+        // The walls are steep: n.z = 1 / sqrt(1 + h'^2) < 0.5 where |x| > 0.866 r.
+        Check(a.ok && a.checked > 20000,
+              "a cylindrical groove with steep walls (n.z down to 0.44): kappa is the closed-form Laplacian within 3 %",
+              Fixed(a.worst, 3) + " of the bound over " + std::to_string(a.checked) + " hits");
+    }
+    {
+        const Profile steep = Sinusoid(wavelength, 5.0);
+        const double steepPeak = 5.0 * 2.0 * std::numbers::pi / wavelength;
+        const double clampSlope = std::sqrt(1.0 - 0.09) / 0.3;  // the clamped slope's largest value, 3.18
+        const double tap = 4.0 * kPlaneSide / 512.0;
+        const auto slopes = [&](double x) {
+            const double a = std::abs(steep.slope(x - tap));
+            const double b = std::abs(steep.slope(x));
+            const double c = std::abs(steep.slope(x + tap));
+            return std::pair{std::min({a, b, c}), std::max({a, b, c})};
+        };
+        // Where the slope stays below 2.5 across the taps, kappa is the closed form h''; where it
+        // exceeds the clamp across them, the slope is t.x / 0.3 and kappa its derivative
+        // h'' / (0.3 (1 + h'^2)^1.5) (checked below); between, neither is asserted.
+        const Analytic a = analytic("clamped sinusoid", WholePlane(), 512, steep, [&](double x) {
+            return slopes(x).second < 2.5 ? std::optional<double>{0.02 * steepPeak} : std::optional<double>{};
+        });
+        const auto plane = CavityPlane(WholePlane());
+        const MaterialInputs m = withNormal(GrooveNormalMap(512, WholePlane(), steep));
+        double clampedWorst = 0.0;
+        double clampedLargest = 0.0;
+        double unclamped = 0.0;
+        size_t clamped = 0;
+        if (const std::optional<ViewportImage> image =
+                Render(engine, scene(plane, m, sun, ViewportOutput::Cavity), views[0].second, kSize, kSize, "the clamp")) {
+            const CavityValues v = CavityOf(*image);
+            for (uint32_t y = 0; y < kSize; ++y) {
+                for (uint32_t x = 0; x < kSize; ++x) {
+                    const auto at = PlaneHit(views[0].second, x, y, kSize, kSize);
+                    if (!at || slopes(at->first).first <= clampSlope + 0.5) continue;
+                    ++clamped;
+                    const double s = steep.slope(at->first);
+                    const double expected = steep.laplacian(at->first) / (0.3 * std::pow(1.0 + s * s, 1.5));
+                    const double kappa = v.kappa[size_t{y} * kSize + x];
+                    clampedWorst = std::max(clampedWorst, std::abs(kappa - expected));
+                    clampedLargest = std::max(clampedLargest, std::abs(kappa));
+                    unclamped = std::max(unclamped, std::abs(steep.laplacian(at->first)));
+                }
+            }
+        }
+        Info("clamp: " + std::to_string(clamped) + " hits where every tap's slope exceeds 3.68: largest |kappa| " +
+             Fixed(clampedLargest, 1) + ", largest error against the clamped closed form " + Fixed(clampedWorst, 1) +
+             " (the unclamped Laplacian there reaches " + Fixed(unclamped, 1) + ")");
+        Check(a.ok && a.checked > 5000 && clamped > 1000 && clampedWorst <= 0.01 * steepPeak && unclamped > 0.3 * steepPeak &&
+                  clampedLargest < 0.1 * unclamped,
+              "the slope clamp at n.z = 0.3: on a sinusoid of peak slope 5, kappa is the clamped slope's derivative where "
+              "the clamp holds every tap (within 1 % of the peak) and the closed form (within 2 %) where the slope stays "
+              "below 2.5",
+              Fixed(clampedWorst, 1) + " where clamped, " + Fixed(a.worst, 3) + " of the bound elsewhere");
+    }
+
+    // 6. Invariance: the same sinusoidal groove under other UV layouts gives kappa within the
+    // bound of check 3 and a_cav within 0.01 of the base layout's on every hit: half the map's
+    // resolution, twice the texel density (the map tiles twice), u mirrored, the layout rotated by
+    // 30 degrees, sheared (u along x + 0.6 z), and two islands meeting along z = 0, the second
+    // mirrored, turned and squeezed, whose texels outside each island continue its own layout (as
+    // padding does).
+    {
+        const double c30 = std::cos(std::numbers::pi / 6.0);
+        const double s30 = std::sin(std::numbers::pi / 6.0);
+        const double fit = 1.0 / (c30 + s30);
+        UvLayout twice;
+        twice.a00 = twice.a11 = 2.0 / kPlaneSide;
+        twice.o0 = twice.o1 = 0.0;
+        UvLayout mirrored;
+        mirrored.a00 = -1.0 / kPlaneSide;
+        UvLayout rotated;
+        rotated.a00 = fit * c30 / kPlaneSide;
+        rotated.a01 = -fit * s30 / kPlaneSide;
+        rotated.a10 = fit * s30 / kPlaneSide;
+        rotated.a11 = fit * c30 / kPlaneSide;
+        UvLayout sheared;
+        sheared.a00 = 0.625 / kPlaneSide;
+        sheared.a01 = 0.6 * 0.625 / kPlaneSide;
+        sheared.a11 = 0.625 / kPlaneSide;
+        const double half = kPlaneSide / 2.0;
+        UvLayout islandA;  // z < 0: u = 0.02 + 0.45 (x + L/2) / L, v = 0.05 + 0.9 (z + L/2) / (L/2)
+        islandA.a00 = 0.45 / kPlaneSide;
+        islandA.o0 = 0.245;
+        islandA.a11 = 1.8 / kPlaneSide;
+        islandA.o1 = 0.95;
+        UvLayout islandB;  // z >= 0: u = 0.53 + 0.9 z / L, v = 0.5 + 0.9 x / L (mirrored and turned)
+        islandB.a00 = 0.0;
+        islandB.a01 = 0.9 / kPlaneSide;
+        islandB.o0 = 0.53;
+        islandB.a10 = 0.9 / kPlaneSide;
+        islandB.a11 = 0.0;
+        islandB.o1 = 0.5;
+        const std::vector<PlanePart> seam = {{-half, half, -half, 0.0, islandA, 0.0, 0.5},
+                                             {-half, half, 0.0, half, islandB, 0.5, 1.0}};
+        struct Layout {
+            std::string name;
+            std::vector<PlanePart> parts;
+            uint32_t size;
+            bool seam;
+        };
+        const Layout layouts[] = {
+            {"half the resolution (256 map)", WholePlane(), 256, false},
+            {"twice the texel density (the map tiles twice)", WholePlane(twice), 512, false},
+            {"u mirrored", WholePlane(mirrored), 512, false},
+            {"rotated 30 degrees", WholePlane(rotated), 512, false},
+            {"sheared", WholePlane(sheared), 512, false},
+            {"two islands across a seam, one mirrored", seam, 512, true},
+        };
+        std::string problem;
+        double worstShift = 0.0;
+        double seamShift = 0.0;
+        size_t seamPixels = 0;
+        for (const Layout& layout : layouts) {
+            std::vector<std::vector<double>> other;
+            const Analytic a = analytic("sinusoid, " + layout.name, layout.parts, layout.size, sinusoid, sinusoidBound, &other);
+            double shift = 0.0;
+            for (size_t view = 0; view < std::min(base.size(), other.size()); ++view) {
+                for (size_t i = 0; i < base[view].size(); ++i) {
+                    if (base[view][i] < 0.0 || other[view][i] < 0.0) continue;
+                    const double d = std::abs(base[view][i] - other[view][i]);
+                    shift = std::max(shift, d);
+                    if (layout.seam) {
+                        const auto at = PlaneHit(views[view].second, static_cast<uint32_t>(i % kSize),
+                                                 static_cast<uint32_t>(i / kSize), kSize, kSize);
+                        if (at && std::abs(at->second) < 0.0002) {
+                            seamShift = std::max(seamShift, d);
+                            ++seamPixels;
+                        }
+                    }
+                }
+            }
+            worstShift = std::max(worstShift, shift);
+            Info(layout.name + ": a_cav within " + Fixed(shift, 4) + " of the base layout's");
+            if ((!a.ok || a.checked < 50000 || other.size() != base.size() || shift > 0.01) && problem.empty()) {
+                problem = layout.name + ": " + Fixed(a.worst, 3) + " of the kappa bound, a_cav shift " + Fixed(shift, 4);
+            }
+        }
+        Info("seam: on " + std::to_string(seamPixels) + " hits within 0.2 mm of z = 0, a_cav within " + Fixed(seamShift, 4) +
+             " of the base layout's");
+        Check(!base.empty() && problem.empty() && seamPixels > 500,
+              "the cavity does not change with the map's resolution, the texel density, mirrored, rotated or sheared UVs, "
+              "or across a UV seam: kappa within the bound and a_cav within 0.01",
+              problem.empty() ? "largest a_cav shift " + Fixed(worstShift, 4) : problem);
+    }
+
+    // 7. The radius is a world length: the same groove modelled in centimetres, in a file that
+    // states its unit (the scene is then in centimetres), gives the a_cav of the mesh without a
+    // unit read in metres.
+    {
+        uzp::mesh::TexturingMesh centimetres = *CavityPlane(WholePlane());
+        for (auto& p : centimetres.positions) {
+            p.x *= 100.0f;
+            p.z *= 100.0f;
+        }
+        centimetres.units.source = "centimeter";
+        centimetres.units.source_meters_per_unit = 0.01;
+        centimetres.units.scale_to_internal = 1.0;
+        const auto stated = std::make_shared<const uzp::mesh::TexturingMesh>(std::move(centimetres));
+        const auto unstated = CavityPlane(WholePlane());
+        const MaterialInputs m = withNormal(GrooveNormalMap(512, WholePlane(), sinusoid));
+        const std::optional<ViewportImage> metres =
+            Render(engine, scene(unstated, m, sun, ViewportOutput::Cavity), TopView(0.008), 96, 96, "the groove in metres");
+        const std::optional<ViewportImage> cm =
+            Render(engine, scene(stated, m, sun, ViewportOutput::Cavity), TopView(0.8, 5.0), 96, 96, "the groove in centimetres");
+        if (metres && cm) {
+            const CavityValues a = CavityOf(*metres);
+            const CavityValues b = CavityOf(*cm);
+            double shift = 0.0;
+            double darkest = 1.0;
+            for (size_t i = 0; i < a.cavity.size(); ++i) {
+                shift = std::max(shift, std::abs(a.cavity[i] - b.cavity[i]));
+                darkest = std::min(darkest, b.cavity[i]);
+            }
+            Check(SceneUnitKnown(*stated) && !SceneUnitKnown(*unstated) && shift <= 0.002 && darkest < 0.7,
+                  "the radius is 0.25 mm in the world: a mesh that states centimetres gives the a_cav of the same groove "
+                  "without a unit, read in metres",
+                  "largest difference " + Fixed(shift, 4) + ", darkest " + Fixed(darkest, 3));
+        }
+    }
+
+    // 8. Never brighter, and metal too: on the sinusoidal groove (dielectric and metal, both views,
+    // studio light) the colour and both ratios are at most those of the pass with the cavity off,
+    // and a metal's colour, all specular, is at most that pass's colour times a_cav (the specular
+    // term keeps the darker of the weighted ratio and a_cav times the ratio without the cavity),
+    // within the binary16 rounding of the three outputs (relative 2e-3).
+    {
+        const auto plane = CavityPlane(WholePlane());
+        const MaterialInputs dielectric = withNormal(GrooveNormalMap(512, WholePlane(), sinusoid), 0.35f);
+        MaterialInputs metal = dielectric;
+        metal.metalnessValue = 1.0f;
+        metal.baseColorValue = {0.9f, 0.6f, 0.5f};
+        std::string problem;
+        size_t compared = 0;
+        size_t metalDarker = 0;
+        double metalDarkest = 1.0;
+        for (const MaterialInputs* m : std::initializer_list<const MaterialInputs*>{&dielectric, &metal}) {
+            for (const auto& [viewName, pose] : views) {
+                const std::optional<ViewportImage> cav = Render(engine, scene(plane, *m, studio, ViewportOutput::Cavity), pose, 96, 96, "a_cav");
+                if (!cav) continue;
+                const CavityValues v = CavityOf(*cav);
+                for (const ViewportOutput output :
+                     {ViewportOutput::Colour, ViewportOutput::DiffuseVisibility, ViewportOutput::SpecularVisibility}) {
+                    const std::optional<ViewportImage> on = Render(engine, scene(plane, *m, studio, output), pose, 96, 96, "with the cavity");
+                    const std::optional<ViewportImage> off =
+                        Render(engine, scene(plane, *m, studio, output, false), pose, 96, 96, "without it");
+                    if (!on || !off) continue;
+                    const std::string where = viewName + " output " + std::to_string(static_cast<int>(output));
+                    for (size_t i = 0; i < size_t{96} * 96; ++i) {
+                        if (on->linear[i * 4] == FloatToHalf(-1.0f) || v.cavity[i] < 0.0) continue;
+                        for (size_t c = 0; c < 3; ++c) {
+                            ++compared;
+                            const double a = Linear(*on, i, c);
+                            const double b = Linear(*off, i, c);
+                            const bool metalColour = m == &metal && output == ViewportOutput::Colour;
+                            if (metalColour && a < b) {
+                                ++metalDarker;
+                                metalDarkest = std::min(metalDarkest, a / b);
+                            }
+                            if ((a > b || on->display[i * 4 + c] > off->display[i * 4 + c] ||
+                                 (metalColour && a > b * v.cavity[i] + 2e-3 * b + 1e-7)) &&
+                                problem.empty()) {
+                                problem = where + " pixel " + std::to_string(i) + ": with " + Fixed(a, 6) + ", without " +
+                                          Fixed(b, 6) + ", a_cav " + Fixed(v.cavity[i], 4);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Info("metal: " + std::to_string(metalDarker) + " values darker with the cavity, the darkest at " +
+             Fixed(metalDarkest, 3) + " of the pass without it");
+        Check(problem.empty() && compared > 50000 && metalDarker > 5000 && metalDarkest < 0.7,
+              "the cavity never brightens a pixel (colour and both ratios at most those with it off) and darkens a metal's "
+              "colour at least by a_cav within the binary16 rounding (studio light)",
+              problem.empty() ? std::to_string(compared) + " values" : problem);
+    }
+
+    // 9. Minification: the groove tiled over a 10 cm plane seen from far away at a grazing angle,
+    // where a pixel spans up to tens of texels. The high-pass energy of a_cav (the RMS of a_cav
+    // minus its 3 x 3 mean) in the 128 x 128 render stays within twice, plus 0.005, that of the
+    // same view rendered at 8 x 8 times the pixels and box-filtered down (a supersampled
+    // reference): the footprint spacing keeps the cavity from aliasing into speckle.
+    {
+        UvLayout tiled;
+        tiled.o0 = tiled.o1 = 0.0;
+        const double big = 0.1;
+        const std::vector<PlanePart> wide = {{-big / 2, big / 2, -big / 2, big / 2, tiled}};
+        const auto plane = CavityPlane(wide);
+        const MaterialInputs m = withNormal(GrooveNormalMap(512, WholePlane(tiled), sinusoid));
+        const CameraPose distant = ObliqueView(70.0, 0.12, 30.0);
+        constexpr uint32_t kSmall = 128;
+        constexpr uint32_t kSuper = 8;
+        const std::optional<ViewportImage> low = Render(engine, scene(plane, m, sun, ViewportOutput::Cavity), distant, kSmall, kSmall, "the far groove");
+        const std::optional<ViewportImage> high = Render(engine, scene(plane, m, sun, ViewportOutput::Cavity), distant,
+                                                         kSmall * kSuper, kSmall * kSuper, "the supersampled far groove");
+        if (low && high) {
+            const CavityValues lv = CavityOf(*low);
+            const CavityValues hv = CavityOf(*high);
+            std::vector<double> reference(size_t{kSmall} * kSmall, -1.0);
+            for (uint32_t y = 0; y < kSmall; ++y) {
+                for (uint32_t x = 0; x < kSmall; ++x) {
+                    double sum = 0.0;
+                    bool all = true;
+                    for (uint32_t j = 0; j < kSuper; ++j) {
+                        for (uint32_t i = 0; i < kSuper; ++i) {
+                            const double a = hv.cavity[size_t{y * kSuper + j} * kSmall * kSuper + x * kSuper + i];
+                            all = all && a >= 0.0;
+                            sum += a;
+                        }
+                    }
+                    if (all) reference[size_t{y} * kSmall + x] = sum / (kSuper * kSuper);
+                }
+            }
+            const auto highPass = [&](const std::vector<double>& image) {
+                double squared = 0.0;
+                size_t count = 0;
+                for (uint32_t y = 1; y + 1 < kSmall; ++y) {
+                    for (uint32_t x = 1; x + 1 < kSmall; ++x) {
+                        double sum = 0.0;
+                        bool all = true;
+                        for (uint32_t j = y - 1; j <= y + 1; ++j) {
+                            for (uint32_t i = x - 1; i <= x + 1; ++i) {
+                                const double a = image[size_t{j} * kSmall + i];
+                                all = all && a >= 0.0 && reference[size_t{j} * kSmall + i] >= 0.0 && lv.cavity[size_t{j} * kSmall + i] >= 0.0;
+                                sum += a;
+                            }
+                        }
+                        if (!all) continue;
+                        const double e = image[size_t{y} * kSmall + x] - sum / 9.0;
+                        squared += e * e;
+                        ++count;
+                    }
+                }
+                return std::pair{count ? std::sqrt(squared / static_cast<double>(count)) : 0.0, count};
+            };
+            const auto [lowEnergy, lowCount] = highPass(lv.cavity);
+            const auto [refEnergy, refCount] = highPass(reference);
+            // The mean darkening 1 - a_cav over the hits of both renders.
+            const auto darkening = [&](const std::vector<double>& image) {
+                double sum = 0.0;
+                size_t count = 0;
+                for (size_t i = 0; i < image.size(); ++i) {
+                    if (image[i] < 0.0 || reference[i] < 0.0 || lv.cavity[i] < 0.0) continue;
+                    sum += 1.0 - image[i];
+                    ++count;
+                }
+                return count ? sum / static_cast<double>(count) : 0.0;
+            };
+            const double lowDarkening = darkening(lv.cavity);
+            const double refDarkening = darkening(reference);
+            Info("minification: high-pass RMS of a_cav " + Fixed(lowEnergy, 4) + " against " + Fixed(refEnergy, 4) +
+                 " supersampled, mean darkening " + Fixed(lowDarkening, 4) + " against " + Fixed(refDarkening, 4) + ", over " +
+                 std::to_string(lowCount) + " pixels");
+            Check(lowCount > 3000 && lowCount == refCount && lowEnergy <= 2.0 * refEnergy + 0.005,
+                  "minified, the cavity's high-pass energy stays within twice (plus 0.005) that of a supersampled reference",
+                  Fixed(lowEnergy, 4) + " against " + Fixed(refEnergy, 4));
+            // The footprint is covered by at most 3 x 3 curvature points, so at the far pixels
+            // (about 75 texels along the grazing axis) their spacing reaches 25 texels of the
+            // groove's 128-texel period and the central differences keep about
+            // sin(k g) / (k g) = 0.77 of the curvature: the bound is three quarters.
+            Check(lowCount > 3000 && lowEnergy >= 0.75 * refEnergy && lowDarkening >= 0.75 * refDarkening && refDarkening > 0.01,
+                  "minified, the cavity keeps at least three quarters of a supersampled reference's high-pass energy and "
+                  "mean darkening (a crease and its convex shoulders in one footprint do not cancel)",
+                  Fixed(lowEnergy / std::max(refEnergy, 1e-12), 3) + " of the energy, " +
+                      Fixed(lowDarkening / std::max(refDarkening, 1e-12), 3) + " of the darkening");
+        }
+    }
+    return Finish();
+}
+
 // ── viewport-occlusion-time (decision 257: the AO map's cost) ─────────────────────────────────
 
 int RunViewportOcclusionTime(const fs::path& dir, const fs::path& meshPath, const fs::path& environmentPath) {
@@ -2298,13 +3112,20 @@ int RunViewportOcclusionTime(const fs::path& dir, const fs::path& meshPath, cons
     struct Row {
         const char* name;
         const MaterialInputs* material;
+        bool cavity = true;
     };
     const MaterialInputs none;
-    const Row rows[] = {{"no maps", &none}, {"four 2048 x 2048 maps", &wandMaps}, {"four maps and a 2048 x 2048 AO map of 0.5", &wandWithAo}};
+    // The normal map is flat: the cavity (decision 258) runs its taps (four per point, up to 3 x 3 points over the footprint) on every hit and gives 1.
+    const Row rows[] = {{"no maps", &none},
+                        {"four 2048 x 2048 maps, the cavity off", &wandMaps, false},
+                        {"four 2048 x 2048 maps", &wandMaps},
+                        {"four maps and a 2048 x 2048 AO map of 0.5", &wandWithAo}};
     double windowResident = 0.0;
+    double windowP95 = 0.0;
     for (const auto& [width, height] : sizes) {
         for (const Row& row : rows) {
             scene.materials.assign(std::max<size_t>(1, mesh->materials.size()), *row.material);
+            scene.cavity = row.cavity;
             // Every render uploads every input (a capture), then one scene rendered again and again
             // from resident inputs (the window between revisions); the first resident render builds them.
             std::vector<double> plain;
@@ -2317,7 +3138,7 @@ int RunViewportOcclusionTime(const fs::path& dir, const fs::path& meshPath, cons
                 if (run > 0) plain.push_back(ms);  // the first run also compiles the kernel
             }
             ResidentInputs inputs;
-            for (int run = 0; run < 4; ++run) {
+            for (int run = 0; run < 21; ++run) {
                 const auto start = std::chrono::steady_clock::now();
                 if (!Render(engine, scene, pose, width, height, "the timed resident render", &inputs)) return Finish();
                 const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
@@ -2336,17 +3157,23 @@ int RunViewportOcclusionTime(const fs::path& dir, const fs::path& meshPath, cons
                                   .get());
             std::sort(plain.begin(), plain.end());
             std::sort(resident.begin(), resident.end());
+            // The median and the 95th percentile (the 19th of 20) of the resident renders.
+            const double median = (resident[9] + resident[10]) / 2.0;
+            const double p95 = resident[18];
             Info(std::to_string(width) + " x " + std::to_string(height) + ", rays (" + std::to_string(kDiffuseVisibilityRays) +
                  ", " + std::to_string(kSpecularVisibilityRays) + "), " + row.name + ": " + Fixed(plain[1], 1) +
-                 " ms uploading every input, " + Fixed(build, 1) + " ms building the resident inputs, " +
-                 Fixed(resident[1], 1) + " ms from them (medians of 3)");
-            if (width == 660 && row.material == &wandWithAo) windowResident = resident[1];
+                 " ms uploading every input (median of 3), " + Fixed(build, 1) + " ms building the resident inputs, " +
+                 Fixed(median, 1) + " ms from them (median of 20, p95 " + Fixed(p95, 1) + " ms)");
+            if (width == 660 && row.material == &wandWithAo) {
+                windowResident = median;
+                windowP95 = p95;
+            }
         }
     }
-    Check(windowResident > 0.0 && windowResident < 200.0,
-          "at the window's default size, with the Wand's five 2048 x 2048 maps, a render from resident inputs fits the "
-          "200 ms period",
-          Fixed(windowResident, 1) + " ms");
+    Check(windowResident > 0.0 && windowP95 < 200.0,
+          "at the window's default size, with the Wand's five 2048 x 2048 maps and the cavity, a render from resident "
+          "inputs fits the 200 ms period (p95 of 20)",
+          "median " + Fixed(windowResident, 1) + " ms, p95 " + Fixed(windowP95, 1) + " ms");
     return Finish();
 }
 
@@ -2447,7 +3274,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: uzp-preview-tests display | environment | latest | lighting-cache <work-dir> | viewport-unsupported <work-dir> | "
                      "viewport-normal-fade <work-dir> | viewport-golden <work-dir> <goldens.json> [--bless] | viewport-visibility <work-dir> | "
-                     "viewport-occlusion <work-dir> | viewport-occlusion-time <work-dir> <mesh> <environment> | viewport-ladder <work-dir> <mesh> <environment> [<report.json>]\n");
+                     "viewport-occlusion <work-dir> | viewport-cavity <work-dir> | viewport-occlusion-time <work-dir> <mesh> <environment> | viewport-ladder <work-dir> <mesh> <environment> [<report.json>]\n");
         return 2;
     }
     const fs::path dir = argv[2];
@@ -2468,6 +3295,8 @@ int main(int argc, char** argv) {
         code = RunViewportVisibility(dir);
     } else if (mode == "viewport-occlusion") {
         code = RunViewportOcclusion(dir);
+    } else if (mode == "viewport-cavity") {
+        code = RunViewportCavity(dir);
     } else if (mode == "viewport-occlusion-time" && argc >= 5) {
         code = RunViewportOcclusionTime(dir, argv[3], argv[4]);
     } else if (mode == "viewport-ladder" && argc >= 5) {

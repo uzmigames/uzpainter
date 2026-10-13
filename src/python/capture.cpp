@@ -532,12 +532,27 @@ json::Object CaptureViewport(const CaptureArguments& a) {
                                          {"sha256", applied ? json::Value(binding->second.resource) : json::Value()}});
     }
     static_assert(display::kAoStrength == static_cast<double>(preview::kOcclusionStrength));
+    // The normal map's cavity (decision 258): its estimator, radius and the unit the radius is
+    // read in (a scene unit the mesh does not state is read as the metre).
+    static_assert(display::kCavityRadius == preview::kCavityRadiusMetres);
+    const json::Object cavity{
+        {"model", std::string(preview::kCavityModel)},
+        {"version", std::int64_t{1}},
+        {"source", "normal_slot"},
+        {"estimator", "central_difference_4tap_uv_jacobian"},
+        {"slope_nz_min", 0.3},
+        {"radius", preview::kCavityRadiusMetres},
+        {"radius_unit", preview::SceneUnitKnown(*scene->mesh) ? "metre" : "mesh_unit_as_metre"},
+        {"mapping", "1/(1+r*max(0,kappa))"},
+        {"combine", "weight_product_and_specular_min"},
+        {"spacing", "footprint_grid_up_to_3x3_min_1_texel"},
+        {"stacks_with", json::Array{"ao_mesh_map", "painted_albedo_occlusion"}}};
     const json::Object occlusion{{"model", std::string(preview::kOcclusionModel)},
                                  {"ao_source", std::move(aoSources)},
                                  {"ao_strength", static_cast<double>(preview::kOcclusionStrength)},
                                  {"ao_channel", std::string(display::kAoChannel)},
                                  {"axis", "shading_normal_after_fade"},
-                                 {"cavity", nullptr},
+                                 {"cavity", cavity},
                                  {"painted_occlusion", "may_compound"}};
     const json::Object renderState{
         {"mode", a.mode},

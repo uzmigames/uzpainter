@@ -472,14 +472,27 @@ def check_viewport(receipt: dict[str, Any], size: tuple[int, int]) -> np.ndarray
     assert receipt["shadows"]["effect"] == "none in painter_viewport"
     assert isinstance(receipt["shadows"]["requested"], bool)
     # Decision 257: the AO record; which texture sets bind an AO mesh map is the caller's to check
-    # (test_viewport_capture_applies_the_ao_mesh_map).
+    # (test_viewport_capture_applies_the_ao_mesh_map). Decision 258: the cavity record; the
+    # fixtures' meshes state no unit, so the radius is read in mesh units as metres.
     occlusion = receipt["occlusion"]
     assert {k: v for k, v in occlusion.items() if k != "ao_source"} == {
         "model": "cosine_power_visibility",
         "ao_strength": 1.0,
         "ao_channel": "not_applied",
         "axis": "shading_normal_after_fade",
-        "cavity": None,
+        "cavity": {
+            "model": "normal_divergence",
+            "version": 1,
+            "source": "normal_slot",
+            "estimator": "central_difference_4tap_uv_jacobian",
+            "slope_nz_min": 0.3,
+            "radius": 0.00025,
+            "radius_unit": "mesh_unit_as_metre",
+            "mapping": "1/(1+r*max(0,kappa))",
+            "combine": "weight_product_and_specular_min",
+            "spacing": "footprint_grid_up_to_3x3_min_1_texel",
+            "stacks_with": ["ao_mesh_map", "painted_albedo_occlusion"],
+        },
         "painted_occlusion": "may_compound",
     }
     assert occlusion["ao_source"] and all(

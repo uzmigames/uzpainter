@@ -174,7 +174,8 @@ void BindDisplay(py::module_& display_module, py::module_& render_display, py::m
         "state", [] { return FromJson(display::State(*Read())); },
         "The display state: the preset's fields, `parity` (the environment is the preset's standard one), "
         "`environment_default`, `shadows_effect` (the shadows flag changes no render), `ao_strength` and "
-        "`ao_channel` (painter_viewport's AO mesh map strength and the AO channel's use, read-only) and the shader.");
+        "`ao_channel` (painter_viewport's AO mesh map strength and the AO channel's use, read-only), "
+        "`cavity_radius` (painter_viewport's cavity radius in metres, read-only) and the shader.");
     render_display.def(
         "preset", [] { return FromJson(display::PresetOf(*Read())); },
         "The display state as a preset (uzpainter/display-preset/1), which apply_preset takes back.");

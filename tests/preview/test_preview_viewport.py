@@ -142,8 +142,8 @@ def test_viewport_ao_visibility(preview_tests: Path, tmp_path: Path) -> None:
     expected = {
         "an AO map of 1 leaves every pixel of the pass without one bit for bit (colour and both "
         "ratios, the golden fixtures and the concave one)",
-        "no micro-shadow without AO: with an AO map of 1, a flat and a tilted normal map keep "
-        "every diffuse and specular ratio exactly 1",
+        "no micro-shadow without AO or curvature: with an AO map of 1, a flat and a uniformly "
+        "tilted normal map keep every diffuse and specular ratio exactly 1",
         "an AO map of 0 gives exactly 0: both ratios and the colour (dielectric and metal, three "
         "views)",
         "a = 0.3 keeps most light along the normal and almost no grazing light (micro-shadows), as "
@@ -173,6 +173,44 @@ def test_viewport_ao_visibility(preview_tests: Path, tmp_path: Path) -> None:
     assert expected <= passed
 
 
+def test_viewport_cavity(preview_tests: Path, tmp_path: Path) -> None:
+    """phase2.3 item 2.6 (decision 258): the normal map's cavity, kappa = trace(J^-1 D) and
+    a_cav the mean of 1 / (1 + r max(0, kappa)) over the pixel footprint's points, r = 0.25 mm.
+    UzPainter-against-UzPainter checks on analytic fixtures, never parity evidence: without a
+    normal map it is not computed; flat,
+    uniformly tilted and convex normal maps change no byte; kappa is the closed-form Laplacian of
+    a sinusoidal and a steep cylindrical groove, and the clamped slope's derivative where n.z <
+    0.3; it does not change with resolution, texel density, mirrored, rotated or sheared UVs or
+    across a seam; the radius is a world length; it never brightens a pixel and darkens a metal at
+    least by a_cav; minified, it neither aliases into speckle nor loses the crease to its
+    shoulders."""
+    passed, _ = run_case(preview_tests, "viewport-cavity", str(tmp_path), gpu=True)
+    assert {
+        "without a normal map the cavity is not computed (the golden fixtures without one), and "
+        "with one it is",
+        "a flat, a uniformly tilted and a convex normal map give a_cav exactly 1 and the bytes of "
+        "the pass with the cavity off (colour and both ratios, dielectric and metal)",
+        "a sinusoidal groove: kappa is the closed-form Laplacian within 1 % of its peak, and "
+        "a_cav darkens the groove as 1 / (1 + r kappa) with r = 0.25 mm",
+        "a cylindrical groove with steep walls (n.z down to 0.44): kappa is the closed-form "
+        "Laplacian within 3 %",
+        "the slope clamp at n.z = 0.3: on a sinusoid of peak slope 5, kappa is the clamped "
+        "slope's derivative where the clamp holds every tap (within 1 % of the peak) and the "
+        "closed form (within 2 %) where the slope stays below 2.5",
+        "the cavity does not change with the map's resolution, the texel density, mirrored, "
+        "rotated or sheared UVs, or across a UV seam: kappa within the bound and a_cav within 0.01",
+        "the radius is 0.25 mm in the world: a mesh that states centimetres gives the a_cav of "
+        "the same groove without a unit, read in metres",
+        "the cavity never brightens a pixel (colour and both ratios at most those with it off) and "
+        "darkens a metal's colour at least by a_cav within the binary16 rounding (studio light)",
+        "minified, the cavity's high-pass energy stays within twice (plus 0.005) that of a "
+        "supersampled reference",
+        "minified, the cavity keeps at least three quarters of a supersampled reference's "
+        "high-pass energy and mean darkening (a crease and its convex shoulders in one footprint "
+        "do not cancel)",
+    } <= passed
+
+
 def test_viewport_self_occlusion(preview_tests: Path, tmp_path: Path) -> None:
     """phase2.3 item 2.4 (decision 251): ray-traced self-occlusion. UzPainter-against-UzPainter
     checks, never parity evidence: a closed box renders exactly 0 (every ray valid and blocked);
@@ -197,8 +235,8 @@ def test_viewport_self_occlusion(preview_tests: Path, tmp_path: Path) -> None:
         "an occluded point is darker: the umbra's mean colour is below half the lit plane's",
         "a two-colour environment gives per-channel ratios: beside a wall that hides the red half, "
         "the red ratio falls below 0.5 while the blue one stays above 0.98",
-        "no self-shadowing: on a plane (with and without a tilted normal map) and on the sphere "
-        "every diffuse and specular ratio is exactly 1 at grazing and steep views",
+        "no self-shadowing: on a plane (with and without a uniformly tilted normal map) and on the "
+        "sphere every diffuse and specular ratio is exactly 1 at grazing and steep views",
         "the diffuse ratio converges: four times the rays at least nearly halve its RMSE against "
         "a 1024-ray render of the same estimator",
         "the specular ratio converges: four times the rays at least nearly halve its RMSE against "

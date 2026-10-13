@@ -1,0 +1,12 @@
+{
+  "id": 258,
+  "slug": "painter-viewport-adds-a-cavity-term-from-the-normal-map-s-world-space-curvature-and-keeps-the-ao-strength-at-1",
+  "title": "painter_viewport adds a cavity term from the normal map's world-space curvature, and keeps the AO strength at 1",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.3_realtime-preview",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

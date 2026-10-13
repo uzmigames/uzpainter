@@ -46,8 +46,26 @@
 //   cosine-weighted mean over the hemisphere is exactly a (the calibration of Oat and Sander 2007's
 //   visibility cone; the power law is UzPainter's). A ray V_ao weighs below 1 counts as blocked
 //   (the ratio is then the sums' quotient). a = 1 skips the weight (the pixel is that of the pass
-//   without it), a = 0 removes every ray. No cavity, horizon or other occlusion term; the painted
-//   AO channel is not applied.
+//   without it), a = 0 removes every ray. No horizon or other occlusion term; the painted AO
+//   channel is not applied.
+// - Cavity (decision 258): where the texture set has a normal map, a = a_ao a_cav in the weight
+//   above, and the specular ratio is the lesser of that weighted ratio and a_cav times the ratio
+//   with a = a_ao (both over the same rays): seen head-on the specular lobe sits on the weight's
+//   axis, where mu^k stays near 1. The normal map is read as a height field whose slope along the
+//   shading tangent T and bitangent B is (-t.x, -t.y) / max(t.z, 0.3) of its unit tangent-space
+//   normal t; kappa = trace(J^-1 D) is the divergence of that slope per world length (the Laplacian
+//   of the implied height, positive where concave), with D the slope's central differences per
+//   texel from four bilinear taps at +- (g_u / W, 0) and +- (0, g_v / H) about a point and J the
+//   world length of a texel step on (T, B) from the hit triangle's dP/du and dP/dv, so it holds
+//   under any texel density, mirroring, shear or rotation of the UVs. h is the pixel's footprint in
+//   texels per axis, at least 1, from the ray differentials of the next pixel's rays on the hit
+//   plane (Igehy 1999); n = min(ceil(h), 3) points per axis spread over it, with spacing g = max(1,
+//   h / n), and a_cav is the mean over them of 1 / (1 + r max(0, kappa)), with r =
+//   `kCavityRadiusMetres` in scene units (`CavityRadiusOf`): a box filter of a_cav, so a crease and
+//   its convex shoulders in one footprint do not cancel. h <= 1 is one point. No normal map, kappa
+//   <= 0, a zero-area UV triangle, a degenerate frame and a footprint that does not resolve (the
+//   next pixel's ray misses the hit plane, or the taps span the whole map) give a_cav = 1 exactly,
+//   so the pixel is that of the pass without it.
 // - Output: the linear colour rounded to binary16 (RGBA16Float, alpha 1) and its 16-bit display
 //   codes (RGBA16Unorm) from the display table.
 //
@@ -144,10 +162,23 @@ inline constexpr std::string_view kVisibilityModel = "ray_traced_self_occlusion"
 inline constexpr float kOcclusionStrength = 1.0f;
 /// The occlusion model's name in a capture's render state and receipt (decision 257).
 inline constexpr std::string_view kOcclusionModel = "cosine_power_visibility";
+/// The cavity radius r of a_cav = 1 / (1 + r max(0, kappa)), in metres: UzPainter's provisional
+/// preview default, a fixed constant that only a decision changes (decision 258).
+inline constexpr double kCavityRadiusMetres = 0.00025;
+/// The cavity model's name in a capture's render state and receipt (decision 258).
+inline constexpr std::string_view kCavityModel = "normal_divergence";
+
+/// Whether the scene unit of `mesh` is known: the file states its unit or the caller gave a mesh
+/// unit scale, so the scene is in centimetres (`units.scale_to_internal`). Otherwise (an OBJ
+/// without a scale) the scene unit is the file's, read as the metre (decision 258).
+[[nodiscard]] bool SceneUnitKnown(const mesh::TexturingMesh& mesh);
+/// `kCavityRadiusMetres` in the scene units of `mesh` (`SceneUnitKnown`).
+[[nodiscard]] double CavityRadiusOf(const mesh::TexturingMesh& mesh);
 
 /// What a render writes in place of the linear colour: the colour, or (tests) the diffuse or
-/// specular visibility ratio of each hit.
-enum class ViewportOutput : uint32_t { Colour = 0, DiffuseVisibility = 1, SpecularVisibility = 2 };
+/// specular visibility ratio of each hit, or its cavity (a_cav, kappa, 1 where the cavity was
+/// computed and 0 where the hit has no normal map or the cavity is off).
+enum class ViewportOutput : uint32_t { Colour = 0, DiffuseVisibility = 1, SpecularVisibility = 2, Cavity = 3 };
 
 struct ViewportScene {
     std::shared_ptr<const mesh::TexturingMesh> mesh;
@@ -164,6 +195,9 @@ struct ViewportScene {
     /// the defaults; tests and the measurement of the counts set others.
     uint32_t diffuseRays = kDiffuseVisibilityRays;
     uint32_t specularRays = kSpecularVisibilityRays;
+    /// The cavity term (decision 258). Captures and the window keep it on; tests turn it off to
+    /// compare against the pass without it.
+    bool cavity = true;
     ViewportOutput output = ViewportOutput::Colour;
 };
 

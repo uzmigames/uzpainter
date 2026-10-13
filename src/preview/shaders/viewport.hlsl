@@ -1,9 +1,9 @@
 // The `painter_viewport` pass (src/preview/viewport.h): one thread per pixel casts its centre ray
 // against the triangles binned to its 16 x 16 tile, shades the nearest hit with the split-sum GGX
 // specular and Burley diffuse on the SH irradiance (src/preview/environment.h), each multiplied by
-// its ray-traced visibility ratio (decision 251) weighted by the AO map's visibility (decision 257),
-// and writes the linear colour rounded to binary16 and its display codes from the display table
-// (src/preview/display_transform.h).
+// its ray-traced visibility ratio (decision 251) weighted by the AO map's visibility (decision 257)
+// and the normal map's cavity (decision 258), and writes the linear colour rounded to binary16 and
+// its display codes from the display table (src/preview/display_transform.h).
 //
 // Every input is a raw buffer reached through the SM 6.6 descriptor heap; the indices arrive in
 // the root constants. Buffer layouts are those written by src/preview/viewport.cpp and
@@ -42,6 +42,7 @@ cbuffer Params : register(b0) {
 #define OCCLUDER_BYTES 48u
 #define OUTPUT_DIFFUSE_VISIBILITY 1u
 #define OUTPUT_SPECULAR_VISIBILITY 2u
+#define OUTPUT_CAVITY 3u
 
 float LoadF(ByteAddressBuffer b, uint word) { return asfloat(b.Load(word * 4u)); }
 float3 LoadF3(ByteAddressBuffer b, uint word) { return asfloat(b.Load3(word * 4u)); }
@@ -188,6 +189,119 @@ float3 FadeShadingNormal(float3 s, float3 n, float3 ng, float3 view) {
     if (sv <= 0.0f || e <= 0.0f) return interpolated;
     const float3 blend = lerp(interpolated, s, smoothstep(0.0f, FADE_BAND, e));
     return dot(blend, blend) > 0.0f ? normalize(blend) : interpolated;
+}
+
+// ── Cavity (decision 258) ────────────────────────────────────────────────────────────────────
+
+// The normal map read as a height field: its slope (-t.x, -t.y) / t.z along the shading tangent
+// and bitangent, from the unit tangent-space normal t at uv with t.z clamped at CAVITY_NZ_MIN (the
+// slope stays below about 3.18, 73 degrees). A zero normal has no slope.
+#define CAVITY_NZ_MIN 0.3f
+float2 CavitySlope(MapRef m, float2 uv) {
+    const float3 t = SampleMap(m, 3u, uv) * 2.0f - 1.0f;
+    const float length2 = dot(t, t);
+    if (!(length2 > 0.0f)) return float2(0.0f, 0.0f);
+    return float2(-t.x, -t.y) / max(t.z, CAVITY_NZ_MIN * sqrt(length2));
+}
+
+struct CavityInputs {
+    float3 p[3];         // the hit triangle's corners
+    float2 uv[3];        // and their uvs
+    float2 at;           // the hit's uv
+    float3 n;            // the interpolated normal, facing the viewer (unnormalised)
+    float3 tangent;      // the interpolated tangent (unnormalised)
+    float handedness;
+    float3 dpdx;         // the hit point's offset to where the next pixel's ray meets the hit plane,
+    float3 dpdy;         // along x and along y (Igehy 1999), or not finite where it does not
+};
+
+// (a_cav, kappa) of the normal slot m at a hit (decision 258). kappa = trace(J^-1 D) is the
+// divergence of the slope field per world length, the Laplacian of the implied height, positive
+// where the surface is concave: D holds the slope's central differences per texel from four
+// bilinear taps at +- (g_u / W, 0) and +- (0, g_v / H) about a point, and J the world length of a
+// texel step projected on the orthonormal shading frame (T, B), from the hit triangle's dP/du and
+// dP/dv, so kappa does not change with texel density, mirroring, shear or rotation of the UV
+// layout. The pixel footprint h (texels per axis, at least 1, from the ray differentials) is
+// covered by n = min(ceil(h), CAVITY_GRID) points per axis, centred on uv and spread over h - g,
+// with spacing g = max(1, h / n): the cavity is the mean over them of a_cav = 1 / (1 + radius
+// max(0, kappa)), radius in scene units, a box filter of a_cav rather than a_cav of the box-filtered
+// kappa (a crease and its convex shoulders in one footprint do not cancel). h <= 1 is the single
+// point with g = 1. The returned kappa is the mean of the points'. A zero-area UV triangle, a
+// degenerate frame or Jacobian, and a footprint that does not resolve (the next pixel's ray misses
+// the hit plane, or the taps span the whole map) give exactly 1, as does kappa <= 0 at every point.
+#define CAVITY_GRID 3u
+float2 Cavity(MapRef m, CavityInputs c, float radius) {
+    const float2 none = float2(1.0f, 0.0f);
+    const float3 e1 = c.p[1] - c.p[0];
+    const float3 e2 = c.p[2] - c.p[0];
+    const float2 d1 = c.uv[1] - c.uv[0];
+    const float2 d2 = c.uv[2] - c.uv[0];
+    const float uvArea = d1.x * d2.y - d2.x * d1.y;
+    if (!(abs(uvArea) > 0.0f)) return none;
+    const float3 pu = (e1 * d2.y - e2 * d1.y) / uvArea;
+    const float3 pv = (e2 * d1.x - e1 * d2.x) / uvArea;
+
+    // The footprint: the uv gradients on the triangle's plane, then the pixel's offsets in uv.
+    if (!all(abs(c.dpdx) < 3.402823e38f) || !all(abs(c.dpdy) < 3.402823e38f)) return none;
+    const float puu = dot(pu, pu);
+    const float puv = dot(pu, pv);
+    const float pvv = dot(pv, pv);
+    const float gram = puu * pvv - puv * puv;
+    if (!(gram > 0.0f)) return none;
+    const float3 gradU = (pvv * pu - puv * pv) / gram;
+    const float3 gradV = (puu * pv - puv * pu) / gram;
+    const float w = float(m.width);
+    const float h = float(m.height);
+    const float hu = max(1.0f, w * max(abs(dot(gradU, c.dpdx)), abs(dot(gradU, c.dpdy))));
+    const float hv = max(1.0f, h * max(abs(dot(gradV, c.dpdx)), abs(dot(gradV, c.dpdy))));
+    if (!(2.0f * hu < w) || !(2.0f * hv < h)) return none;
+
+    // The orthonormal shading frame the normal map is decoded in.
+    const float3 nn = normalize(c.n);
+    const float3 projected = c.tangent - nn * dot(nn, c.tangent);
+    if (!(dot(projected, projected) > 0.0f)) return none;
+    const float3 t = normalize(projected);
+    const float3 b = c.handedness * cross(nn, t);
+    const float j00 = dot(t, pu) / w;
+    const float j01 = dot(t, pv) / h;
+    const float j10 = dot(b, pu) / w;
+    const float j11 = dot(b, pv) / h;
+    const float jacobian = j00 * j11 - j01 * j10;
+    if (!(abs(jacobian) > 0.0f)) return none;
+
+    // The points over the footprint, per axis: n of them, spacing g, spread over h - g.
+    const uint nu = min(uint(ceil(hu)), CAVITY_GRID);
+    const uint nv = min(uint(ceil(hv)), CAVITY_GRID);
+    const float gu = max(1.0f, hu / float(nu));
+    const float gv = max(1.0f, hv / float(nv));
+    const float spreadU = nu > 1u ? (hu - gu) / float(nu - 1u) : 0.0f;
+    const float spreadV = nv > 1u ? (hv - gv) / float(nv - 1u) : 0.0f;
+    const float2 stepU = float2(gu / w, 0.0f);
+    const float2 stepV = float2(0.0f, gv / h);
+    float cavity = 0.0f;
+    float kappaSum = 0.0f;
+    for (uint j = 0u; j < nv; ++j) {
+        for (uint i = 0u; i < nu; ++i) {
+            const float2 at = c.at + float2((float(i) - 0.5f * float(nu - 1u)) * spreadU / w,
+                                            (float(j) - 0.5f * float(nv - 1u)) * spreadV / h);
+            const float2 dsdu = (CavitySlope(m, at + stepU) - CavitySlope(m, at - stepU)) / (2.0f * gu);
+            const float2 dsdv = (CavitySlope(m, at + stepV) - CavitySlope(m, at - stepV)) / (2.0f * gv);
+            // trace(J^-1 D) with D = [[dsdu.x, dsdv.x], [dsdu.y, dsdv.y]].
+            const float kappa = (dsdu.x * j11 - dsdv.x * j10 - dsdu.y * j01 + dsdv.y * j00) / jacobian;
+            if (!(abs(kappa) < 3.402823e38f)) return none;
+            kappaSum += kappa;
+            cavity += kappa > 0.0f ? 1.0f / (1.0f + radius * kappa) : 1.0f;
+        }
+    }
+    const float count = float(nu * nv);
+    return float2(count == 1.0f ? cavity : min(1.0f, cavity / count), kappaSum / count);
+}
+
+// Where the ray (o, d) meets the plane through p with normal ng, minus p; not finite where the ray
+// is parallel to the plane or meets it behind its origin.
+float3 PlaneOffset(float3 o, float3 d, float3 p, float3 ng) {
+    const float t = dot(p - o, ng) / dot(d, ng);
+    return t > 0.0f ? o + d * t - p : float3(asfloat(0x7F800000u), 0.0f, 0.0f);
 }
 
 // ── Visibility (decision 251) ────────────────────────────────────────────────────────────────
@@ -476,7 +590,7 @@ struct VisibilityInputs {
     uint2 pixel;
     float rotationTurns;
     uint nodeCount;
-    float aperture;       // a, the AO map's visible fraction in [0, 1] (decision 257)
+    float aperture;       // a, the AO map's visible fraction in [0, 1] (decision 257), or that times a_cav (decision 258)
     float exponent;       // k = 2 (1 - a) / a of AoVisibility, for 0 < a < 1
 };
 
@@ -557,9 +671,12 @@ float3 DiffuseVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, By
 // keeps a bright light that the lobe only grazes from resting on one heavy ray. Directions below
 // the shading or the geometric facet are left out of both sums. V is V_ao (AoVisibility) for a
 // direction no triangle blocks, else 0: V_ao weighted over the sampled lobe is the specular
-// occlusion, so it depends on the view and the roughness.
+// occlusion, so it depends on the view and the roughness. `withCavity` is the same ratio over the
+// same rays with the weight of `cavityWeight` (the aperture times the cavity, decision 258).
 float3 SpecularVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, ByteAddressBuffer occluders,
-                          VisibilityInputs v, float3 view, float3 f0, float roughness, uint count) {
+                          VisibilityInputs v, VisibilityInputs cavityWeight, float3 view, float3 f0, float roughness,
+                          uint count, out float3 withCavity) {
+    withCavity = float3(1.0f, 1.0f, 1.0f);
     if (count == 0u) return float3(1.0f, 1.0f, 1.0f);
     float3 t;
     float3 b;
@@ -578,8 +695,10 @@ float3 SpecularVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, B
     const uint h6 = PixelHash(v.pixel, 6u);
     const uint h7 = PixelHash(v.pixel, 7u);
     float3 seen = float3(0.0f, 0.0f, 0.0f);
+    float3 seenCavity = float3(0.0f, 0.0f, 0.0f);
     float3 total = float3(0.0f, 0.0f, 0.0f);
     bool blocked = false;
+    bool blockedCavity = false;
     for (uint i = 0u; i < count; ++i) {
         float3 d;
         float3 le;
@@ -616,7 +735,10 @@ float3 SpecularVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, B
         const float3 c = fresnel * (distribution * g2 / (4.0f * ve.z * pdf)) * SampleLevel(lighting, 0u, d, v.rotationTurns);
         total += c;
         const float visible = AoVisibility(v, d);
-        if (!(visible > 0.0f) || OccludedBvh(nodes, occluders, v.nodeCount, MakeShadowRay(v.origin, d), v.self)) {
+        const float visibleCavity = AoVisibility(cavityWeight, d);
+        const bool occluded = (visible > 0.0f || visibleCavity > 0.0f) &&
+                              OccludedBvh(nodes, occluders, v.nodeCount, MakeShadowRay(v.origin, d), v.self);
+        if (!(visible > 0.0f) || occluded) {
             blocked = true;
         } else if (visible < 1.0f) {
             blocked = true;
@@ -624,7 +746,16 @@ float3 SpecularVisibility(ByteAddressBuffer lighting, ByteAddressBuffer nodes, B
         } else {
             seen += c;
         }
+        if (!(visibleCavity > 0.0f) || occluded) {
+            blockedCavity = true;
+        } else if (visibleCavity < 1.0f) {
+            blockedCavity = true;
+            seenCavity += visibleCavity * c;
+        } else {
+            seenCavity += c;
+        }
     }
+    withCavity = Ratio(seenCavity, total, blockedCavity);
     return Ratio(seen, total, blocked);
 }
 
@@ -666,6 +797,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     const uint nodeCount = frame.Load(27u * 4u);
     const uint outputMode = frame.Load(28u * 4u);
     const float occlusionStrength = LoadF(frame, 29u);
+    const float cavityRadius = LoadF(frame, 30u);
 
     // The ray through the pixel centre: from the eye (perspective; tanHalf is the tangent of half
     // the field of view), or along `forward` from the pixel's point on the plane through the eye
@@ -767,6 +899,8 @@ void main(uint3 id : SV_DispatchThreadID) {
         float roughness = 0.3f;
         float3 tn = float3(0.0f, 0.0f, 1.0f);
         float ao = 1.0f;
+        float2 cavity = float2(1.0f, 0.0f);  // (a_cav, kappa), decision 258
+        bool cavityTraced = false;
         if (material < materialCount) {
             const uint mw = material * MATERIAL_WORDS;
             baseColour = LoadF3(materials, mw + 15u);
@@ -782,6 +916,33 @@ void main(uint3 id : SV_DispatchThreadID) {
             if (roughMap.offset != NO_MAP) roughness = SampleMap(roughMap, 1u, uv).x;
             if (normalMap.offset != NO_MAP) tn = SampleMap(normalMap, 3u, uv) * 2.0f - 1.0f;
             if (occlusionMap.offset != NO_MAP) ao = SampleMap(occlusionMap, 1u, uv).x;
+            // The cavity of the normal slot (decision 258), with the footprint of the next
+            // pixel's rays on the hit triangle's plane (perspective: from the eye; orthographic:
+            // from the next pixel's point, along `forward`).
+            if (normalMap.offset != NO_MAP && cavityRadius > 0.0f) {
+                const float3 hit = p0 * w0 + p1 * bestU + p2 * bestV;
+                const float sxNext = sx + 2.0f * tanHalf * aspect / float(g_width);
+                const float syNext = sy - 2.0f * tanHalf / float(g_height);
+                const float3 dirX = orthographic ? forward : normalize(forward + right * sxNext + up * sy);
+                const float3 dirY = orthographic ? forward : normalize(forward + right * sx + up * syNext);
+                const float3 originX = orthographic ? eye + right * sxNext + up * sy : eye;
+                const float3 originY = orthographic ? eye + right * sx + up * syNext : eye;
+                CavityInputs c;
+                c.p[0] = p0;
+                c.p[1] = p1;
+                c.p[2] = p2;
+                c.uv[0] = asfloat(triangles.Load2((base + 6u) * 4u));
+                c.uv[1] = asfloat(triangles.Load2((base + 18u) * 4u));
+                c.uv[2] = asfloat(triangles.Load2((base + 30u) * 4u));
+                c.at = uv;
+                c.n = n;
+                c.tangent = tangent;
+                c.handedness = handedness;
+                c.dpdx = PlaneOffset(originX, dirX, hit, ng);
+                c.dpdy = PlaneOffset(originY, dirY, hit, ng);
+                cavity = Cavity(normalMap, c, cavityRadius);
+                cavityTraced = true;
+            }
         }
         metalness = saturate(metalness);
         roughness = saturate(roughness);
@@ -819,12 +980,25 @@ void main(uint3 id : SV_DispatchThreadID) {
         vis.nodeCount = nodeCount;
         vis.aperture = aperture;
         vis.exponent = aperture > 0.0f && aperture < 1.0f ? 2.0f * (1.0f - aperture) / aperture : 0.0f;
-        const float3 diffuseVisibility = DiffuseVisibility(lighting, nodes, occluders, vis, diffuseRays);
-        const float3 specularVisibility =
-            SpecularVisibility(lighting, nodes, occluders, vis, view, f0, roughness, specularRays);
+        // The cavity a_cav (decision 258) enters the weight as a = a_ao a_cav, so a crease's light
+        // loses its grazing directions first. The specular lobe is centred on the view reflected
+        // about the shading normal, where that weight stays near 1 seen head-on, so the specular
+        // term also has a_cav as a plain multiplier and keeps the darker of the two. a_cav = 1
+        // changes nothing (the same weight, a multiplier of exactly 1).
+        VisibilityInputs withCavity = vis;
+        withCavity.aperture = aperture * cavity.x;
+        withCavity.exponent = withCavity.aperture > 0.0f && withCavity.aperture < 1.0f
+                                  ? 2.0f * (1.0f - withCavity.aperture) / withCavity.aperture
+                                  : 0.0f;
+        const float3 diffuseVisibility = DiffuseVisibility(lighting, nodes, occluders, withCavity, diffuseRays);
+        float3 specularDirectional;
+        const float3 specularPlain =
+            SpecularVisibility(lighting, nodes, occluders, vis, withCavity, view, f0, roughness, specularRays, specularDirectional);
+        const float3 specularVisibility = min(specularPlain * cavity.x, specularDirectional);
         colour = (specular * specularVisibility + diffuse * diffuseVisibility) * intensity;
         if (outputMode == OUTPUT_DIFFUSE_VISIBILITY) colour = diffuseVisibility;
         if (outputMode == OUTPUT_SPECULAR_VISIBILITY) colour = specularVisibility;
+        if (outputMode == OUTPUT_CAVITY) colour = float3(cavity.x, cavity.y, cavityTraced ? 1.0f : 0.0f);
     }
 
     const float4 linearColour = float4(RoundToHalf(colour.x), RoundToHalf(colour.y), RoundToHalf(colour.z), 1.0f);

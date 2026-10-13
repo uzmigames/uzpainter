@@ -98,7 +98,7 @@
       ]
     },
     "occlusion": {
-      "description": "The AO of a painter_viewport capture (decision 257): the AO mesh map of each texture set applied inside the self-occlusion rays as the per-ray weight mu^k about the faded shading normal (mu = cos of the ray to it, k = 2 (1 - a) / a, a = 1 + ao_strength (ao - 1)), whose cosine-weighted mean is a, the painted AO channel not applied, no cavity term, and the albedo's painted occlusion compounded with it. Part of render_state_digest. Null for the diagnostic modes.",
+      "description": "The AO of a painter_viewport capture (decision 257): the AO mesh map of each texture set applied inside the self-occlusion rays as the per-ray weight mu^k about the faded shading normal (mu = cos of the ray to it, k = 2 (1 - a) / a, a = 1 + ao_strength (ao - 1)), whose cosine-weighted mean is a, the painted AO channel not applied, the normal map's cavity a_cav multiplied into a (decision 258), with the specular ratio the lesser of that one and a_cav times the ratio without it, and the albedo's painted occlusion compounded with it. Part of render_state_digest. Null for the diagnostic modes.",
       "oneOf": [
         {"type": "null"},
         {
@@ -124,7 +124,25 @@
             "ao_strength": {"const": 1.0},
             "ao_channel": {"const": "not_applied"},
             "axis": {"const": "shading_normal_after_fade"},
-            "cavity": {"type": "null"},
+            "cavity": {
+              "description": "The normal map's cavity (decision 258): kappa = trace(J^-1 D), the divergence per world length of the slope (-t.x, -t.y) / max(t.z, slope_nz_min) of the normal slot's tangent-space normal t (D: central differences from four bilinear taps about a point, J: the hit triangle's UV Jacobian on the shading frame); the pixel footprint h from ray differentials (at least one texel per axis) is covered by min(ceil(h), 3) points per axis with tap spacing max(1, h / n) texels, and a_cav is the mean over them of 1 / (1 + radius max(0, kappa)); it is multiplied into the AO map's visible fraction, and the specular ratio is the lesser of that weighted ratio and a_cav times the ratio without it. radius is the physical radius in metres: radius_unit metre where the mesh states its unit or a mesh unit scale was given (the scene is in centimetres and the radius is applied as 0.025 scene units), mesh_unit_as_metre where it does not and its unit is read as the metre (0.00025 scene units).",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["model", "version", "source", "estimator", "slope_nz_min", "radius", "radius_unit", "mapping", "combine", "spacing", "stacks_with"],
+              "properties": {
+                "model": {"const": "normal_divergence"},
+                "version": {"const": 1},
+                "source": {"const": "normal_slot"},
+                "estimator": {"const": "central_difference_4tap_uv_jacobian"},
+                "slope_nz_min": {"const": 0.3},
+                "radius": {"const": 0.00025},
+                "radius_unit": {"enum": ["metre", "mesh_unit_as_metre"]},
+                "mapping": {"const": "1/(1+r*max(0,kappa))"},
+                "combine": {"const": "weight_product_and_specular_min"},
+                "spacing": {"const": "footprint_grid_up_to_3x3_min_1_texel"},
+                "stacks_with": {"const": ["ao_mesh_map", "painted_albedo_occlusion"]}
+              }
+            },
             "painted_occlusion": {"const": "may_compound"}
           }
         }

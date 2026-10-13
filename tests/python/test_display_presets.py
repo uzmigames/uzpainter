@@ -102,6 +102,8 @@ def test_preset_round_trip_is_lossless(run: Run) -> None:
     # painter_viewport's AO mesh map strength and the AO channel's use, read-only (decision 257).
     assert result["state"]["ao_strength"] == 1.0
     assert result["state"]["ao_channel"] == "not_applied"
+    # painter_viewport's cavity radius in metres, read-only (decision 258).
+    assert result["state"]["cavity_radius"] == 0.00025
 
 
 def standard_presets() -> dict[str, dict[str, Any]]:
