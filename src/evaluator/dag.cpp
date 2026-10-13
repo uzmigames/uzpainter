@@ -146,7 +146,9 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             // give the same samples (sources.h).
             writer.Str("bitmap").Str(result.sha256);
             if (result.srgbDecode) writer.Str("srgb");
-            if (result.ocio == DagSource::Ocio::Raw8Fill) writer.Str("ocio-raw");
+            // The OCIO use is checked when its content tile is made (evaluate.cpp CheckOcioBitmap):
+            // a tile cached under legacy or under another use never serves it.
+            if (result.ocio != DagSource::Ocio::None) writer.Str("ocio").U32(static_cast<uint32_t>(result.ocio));
             writer.U32(static_cast<uint32_t>(result.projection.filter));
             writer.U32(static_cast<uint32_t>(result.projection.wrap));
             for (const double value : {result.projection.cosR, result.projection.sinR,

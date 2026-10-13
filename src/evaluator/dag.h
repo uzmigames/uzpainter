@@ -89,7 +89,7 @@ struct DagSource {
     /// 16-bit grey image in a linear space as a mask source at 1:1, read as under legacy.
     enum class Ocio : uint8_t { None, Srgb8Fill, Raw8Fill, Grey16Mask };
     Ocio ocio = Ocio::None;
-    /// Hash of the content (source, projection, channel, format, profile).
+    /// Hash of the content (source, projection, channel, format, profile, OCIO use).
     Digest hash{};
 };
 
