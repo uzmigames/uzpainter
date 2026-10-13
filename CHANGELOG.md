@@ -3,13 +3,12 @@
 All notable changes to UzPainter are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-No source code exists yet. The entries below record the documentation foundation
-that engineers and AI agents build UzPainter from; start with the reading order in
-`docs/README.md`. The build contract is `docs/`; the files under `docs/analysis/`
+The entries below record the documentation foundation and the implementation
+built from it, task by task; start with the reading order in `docs/README.md`. The build contract is `docs/`; the files under `docs/analysis/`
 are historical evidence and are not implementation inputs until the approved-source
 index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
-## [Unreleased] - 2026-10-10
+## [Unreleased]
 
 ### Added
 
