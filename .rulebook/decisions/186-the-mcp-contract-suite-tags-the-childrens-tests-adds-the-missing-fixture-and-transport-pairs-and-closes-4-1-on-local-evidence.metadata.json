@@ -1,0 +1,15 @@
+{
+  "id": 186,
+  "slug": "the-mcp-contract-suite-tags-the-childrens-tests-adds-the-missing-fixture-and-transport-pairs-and-closes-4-1-on-local-evidence",
+  "title": "The MCP contract suite tags the children's tests, adds the missing fixture and transport pairs, and closes 4.1 on local evidence",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.8_mcp-server",
+    "phase2.5_mcp-transport-registry",
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.7_mcp-operation-matrix",
+    "phase2.4_supervisor-worker"
+  ],
+  "supersededBy": null
+}

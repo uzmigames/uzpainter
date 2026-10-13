@@ -56,6 +56,7 @@ def ledger_rows(ledger: Path, sql: str, *params: Any) -> list[tuple[Any, ...]]:
 
 
 @pytest.mark.settling("commit_then_die_retry")
+@pytest.mark.mcp_contract("commit_then_die_retry", transport="stdio")
 def test_lost_acknowledgement_returns_the_stored_outcome(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:
@@ -95,6 +96,9 @@ def test_lost_acknowledgement_returns_the_stored_outcome(
 
 
 @pytest.mark.settling("replay_inside_window", "replay_beyond_retention_lost_ledger")
+@pytest.mark.mcp_contract(
+    "replay_inside_window", "replay_beyond_retention_lost_ledger", transport="stdio"
+)
 def test_a_replay_beyond_retention_with_a_lost_ledger_never_mutates(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:

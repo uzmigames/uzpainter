@@ -19,8 +19,10 @@ Checks the content of files, never only their names or signatures:
   text only in its identifier fields.
   The supervisor's settling report (`parity/reports/<phase>/supervisor-settling.json`) is checked
   against its own schema (`tools/parity/settling/report.py`): numbers, identifiers, dates and
-  SHA-256 digests. So is the preview's settling report
-  (`parity/reports/<phase>/preview-settling.json`, `tools/parity/settling/preview.py`).
+  SHA-256 digests. So are the preview's settling report
+  (`parity/reports/<phase>/preview-settling.json`, `tools/parity/settling/preview.py`) and the
+  MCP contract report (`parity/reports/<phase>/mcp-contract.json`,
+  `tools/parity/settling/mcp_contract.py`).
 """
 
 from __future__ import annotations
@@ -362,6 +364,12 @@ def _preview_settling(path: str, document: Any, data: bytes, ctx: _Context) -> l
     return report_problems(document)
 
 
+def _mcp_contract(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.settling.mcp_contract import report_problems
+
+    return report_problems(document)
+
+
 _Rule = Callable[[str, Any, bytes, _Context], list[str]]
 
 # First match wins: (path pattern, schema it assigns, check).
@@ -431,6 +439,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         re.compile(r"^parity/reports/[^/]+/preview-settling\.json$"),
         "preview settling report (numbers, identifiers and hashes only)",
         _preview_settling,
+    ),
+    (
+        re.compile(r"^parity/reports/[^/]+/mcp-contract\.json$"),
+        "MCP contract report (numbers, identifiers and hashes only)",
+        _mcp_contract,
     ),
 )
 

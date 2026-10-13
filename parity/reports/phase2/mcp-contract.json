@@ -1,0 +1,150 @@
+{
+  "fixtures": [
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "two_writers",
+      "result": "pass",
+      "seconds": 4.957,
+      "tests": 1,
+      "transport": "http"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "lost_acknowledgement_retry",
+      "result": "pass",
+      "seconds": 3.234,
+      "tests": 1,
+      "transport": "stdio"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "lost_acknowledgement_retry",
+      "result": "pass",
+      "seconds": 5.708,
+      "tests": 1,
+      "transport": "http"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "commit_then_die_retry",
+      "result": "pass",
+      "seconds": 2.245,
+      "tests": 1,
+      "transport": "stdio"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "commit_then_die_retry",
+      "result": "pass",
+      "seconds": 1.666,
+      "tests": 1,
+      "transport": "http"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "http_reconnect",
+      "result": "pass",
+      "seconds": 9.309,
+      "tests": 1,
+      "transport": "http"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "path_outside_roots",
+      "result": "pass",
+      "seconds": 5.267,
+      "tests": 1,
+      "transport": "stdio"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "path_outside_roots",
+      "result": "pass",
+      "seconds": 1.648,
+      "tests": 1,
+      "transport": "http"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "stale_revision",
+      "result": "pass",
+      "seconds": 1.344,
+      "tests": 1,
+      "transport": "stdio"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "stale_revision",
+      "result": "pass",
+      "seconds": 1.463,
+      "tests": 1,
+      "transport": "http"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "replay_inside_window",
+      "result": "pass",
+      "seconds": 6.063,
+      "tests": 1,
+      "transport": "stdio"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "replay_inside_window",
+      "result": "pass",
+      "seconds": 7.466,
+      "tests": 1,
+      "transport": "http"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "replay_beyond_retention_lost_ledger",
+      "result": "pass",
+      "seconds": 6.063,
+      "tests": 1,
+      "transport": "stdio"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "replay_beyond_retention_lost_ledger",
+      "result": "pass",
+      "seconds": 7.466,
+      "tests": 1,
+      "transport": "http"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "capability_gaps",
+      "result": "pass",
+      "seconds": 1.704,
+      "tests": 1,
+      "transport": "stdio"
+    },
+    {
+      "date": "2026-10-12",
+      "exe_sha256": "cad312379c5e4ad8fa939f66d1a52e2f2b1ff1d99a5dca56d4e869967a4915f9",
+      "id": "capability_gaps",
+      "result": "pass",
+      "seconds": 1.905,
+      "tests": 1,
+      "transport": "http"
+    }
+  ],
+  "schema": "uzpainter/mcp-contract/1",
+  "task": "phase2.8_mcp-server"
+}
