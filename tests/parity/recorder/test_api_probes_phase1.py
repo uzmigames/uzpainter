@@ -51,7 +51,7 @@ STEMS = [
     "phase1-restored-values",
     "phase1-save-as-existing",
     "phase1-save-modes",
-    "phase1-srgb-uniform-decode",
+    *(f"phase1-srgb-uniform-decode-part{part}" for part in range(1, 5)),
 ]
 
 
@@ -337,12 +337,17 @@ def test_execute_when_not_busy_runs_after_the_busy_period(
 
 
 def test_dense_srgb_decode_reads_back_every_code_and_the_seeded_floats() -> None:
-    """P20-B (decision 107): each set_source probe is followed by its get_source readback."""
-    steps = load_json(probe_path("phase1-srgb-uniform-decode"))["instruction_sequence"]["steps"]
-    sets = [s for s in steps if s["call"].endswith("FillLayerNode.set_source")]
-    gets = [s for s in steps if s["call"].endswith("FillLayerNode.get_source")]
-    assert len(sets) == len(gets) == 256 + 64
-    assert all(g["step"] == s["step"] + 1 for s, g in zip(sets, gets, strict=True))
+    """P20-B (decision 107): each set_source probe is followed by its get_source readback; the
+    four parts set 80 colours each, in order (decision 180: one request did not fit a window)."""
+    sets: list[dict[str, Any]] = []
+    for part in range(1, 5):
+        path = probe_path(f"phase1-srgb-uniform-decode-part{part}")
+        steps = load_json(path)["instruction_sequence"]["steps"]
+        part_sets = [s for s in steps if s["call"].endswith("FillLayerNode.set_source")]
+        gets = [s for s in steps if s["call"].endswith("FillLayerNode.get_source")]
+        assert len(part_sets) == len(gets) == 80
+        assert all(g["step"] == s["step"] + 1 for s, g in zip(part_sets, gets, strict=True))
+        sets += part_sets
     rng = random.Random(20261012)
     expected = [[c / 255] * 3 for c in range(256)] + [
         [rng.random() for _ in range(3)] for _ in range(64)

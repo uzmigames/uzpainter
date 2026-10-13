@@ -347,7 +347,9 @@ foreach ($g in $later) {
 Then the queued API probes (decision 157), as in 11.1 step 4:
 
 ```powershell
-foreach ($g in "phase1-srgb-uniform-decode", "phase1-mesh-map-update", "phase1-restored-values",
+# P20-B in four parts of 80 colours (decision 180: the single 645-step request did not fit a window).
+$parts = foreach ($n in 1..4) { "phase1-srgb-uniform-decode-part$n" }
+foreach ($g in @($parts) + "phase1-mesh-map-update", "phase1-restored-values",
   "phase1-save-as-existing") {
   python -m tools.parity.recorder.probes record "$req/tier0/api-probes/$g.json"
 }
