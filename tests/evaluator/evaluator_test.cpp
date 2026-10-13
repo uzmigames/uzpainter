@@ -3085,8 +3085,24 @@ int RunSources(const fs::path& assets) {
         ocio.SetRoot({ocio.Fill("uniform", SameSource(user0, Uniform(0.5, 0.5, 0.5)), Same(user0, BlendingMode::Normal, 1.0))});
         CpuEvaluator cpu2(templates, kWideLimits);
         render::Result<ChannelResult> managed = evaluate(ocio, ChannelType::User0, cpu2);
-        Check(!managed && KindName(managed.error()) == "unsupported_source", "an OCIO colour-managed project fails with unsupported_source",
-              Describe(managed));
+        Check(!managed && KindName(managed.error()) == "unsupported_source",
+              "an OCIO project without Painter's substance config fails with unsupported_source", Describe(managed));
+        // Painter's substance config (decision 190): uniforms evaluate as under legacy; a bitmap use
+        // Session O does not record (here Raw on an RGB16 channel) fails.
+        ocio.project.settings.color_management.config_hash = std::string(kPainterOcioConfigSha256);
+        CpuEvaluator cpu4(templates, kWideLimits);
+        render::Result<ChannelResult> pinned = evaluate(ocio, ChannelType::User0, cpu4);
+        Builder ocioBitmap(kSize, kSize, {{ChannelType::User0, ChannelFormat::RGB16}});
+        ocioBitmap.project.settings.color_management.mode = "ocio";
+        ocioBitmap.project.settings.color_management.config_hash = std::string(kPainterOcioConfigSha256);
+        ocioBitmap.AddResource(sha16, 100);
+        ocioBitmap.SetRoot({ocioBitmap.Fill("bitmap", SameSource(user0, Bitmap(sha16)), Same(user0, BlendingMode::Normal, 1.0))});
+        CpuEvaluator cpu5(templates, kWideLimits);
+        render::Result<ChannelResult> unrecorded = evaluate(ocioBitmap, ChannelType::User0, cpu5);
+        Check(pinned.has_value() && !unrecorded && KindName(unrecorded.error()) == "unsupported_source",
+              "under Painter's OCIO config a uniform evaluates and a Raw bitmap on an RGB16 channel fails with "
+              "unsupported_source",
+              Describe(unrecorded));
         Builder odd(96, 64, {{ChannelType::User0, ChannelFormat::RGB16}});
         odd.AddResource(sha16, 100);
         odd.SetRoot({odd.Fill("bitmap", SameSource(user0, Bitmap(sha16)), Same(user0, BlendingMode::Normal, 1.0))});

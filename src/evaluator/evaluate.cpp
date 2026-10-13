@@ -59,6 +59,40 @@ render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedIma
     return std::shared_ptr<const DecodedImage>(std::move(decoded));
 }
 
+/// An 8-bit Raw bitmap under OCIO with Painter's substance config as the texture Painter samples
+/// (sources.h, decision 190): each code c is float32(c / 255) rounded toward zero to a binary16.
+/// Exact on all 256 codes of `export-ocio-encode` s4 (the authored 8-bit ramp at 1:1 on BaseColor),
+/// r1 and r2; c / 255 itself stores one sRGB8 code higher for c = 176, 245, 247 and 254, and the
+/// binary16 rounded to nearest one code higher for c = 120, 123 and 126.
+std::shared_ptr<const DecodedImage> OcioRawDecoded(const DecodedImage& image) {
+    auto decoded = std::make_shared<DecodedImage>(image);
+    decoded->encoding = render::TexelEncoding::Float32;
+    for (uint32_t& value : decoded->values) {
+        value = std::bit_cast<uint32_t>(arith::HalfToFloat(arith::HalfTowardZero(arith::UnormOperand(value, 8))));
+    }
+    return decoded;
+}
+
+/// Fails unless `image` sampled by `projection` on a `width` x `height` set is the bitmap use
+/// `role` names, at 1:1: the image is the set's size and the projection is the identity (the only
+/// sampling Session O records under OCIO; decision 190).
+render::Result<void> CheckOcioBitmap(DagSource::Ocio role, const UvProjection& projection, uint32_t width,
+                                     uint32_t height, const DecodedImage& image, core::Id node) {
+    const bool sixteenGrey = image.encoding == render::TexelEncoding::Unorm16 && image.channels == 1;
+    const bool eightColour = image.encoding == render::TexelEncoding::Unorm8 && image.channels == 3;
+    const bool kind = role == DagSource::Ocio::Grey16Mask ? sixteenGrey : eightColour;
+    const bool oneToOne = image.width == width && image.height == height && projection.scale[0] == 1.0 &&
+                          projection.scale[1] == 1.0 && projection.cosR == 1.0 && projection.sinR == 0.0 &&
+                          projection.offset[0] == 0.0 && projection.offset[1] == 0.0;
+    if (kind && oneToOne) return {};
+    return EvalFail(EvalErrorKind::UnsupportedSource,
+                    std::string("under OCIO, only ") +
+                        (role == DagSource::Ocio::Grey16Mask ? "a 16-bit grey mask source"
+                                                             : "an 8-bit colour bitmap on an sRGB8 channel") +
+                        " sampled 1:1 is recorded (Session O; phase1.15_compositor-colour-fits, decision 190)",
+                    node);
+}
+
 /// One tile evaluation: pins, deferred unpins and the retry that flushes the store when the
 /// budget is full of tiles whose operations are only queued.
 class TileEvaluation {
@@ -248,6 +282,17 @@ private:
         render::Result<void> sampling = CheckSampling(source.projection, m_dag.grid.width,
                                                       m_dag.grid.height, *image, source.signedRange, node);
         if (!sampling) return render::Unexpected(sampling.error());
+        if (source.ocio != DagSource::Ocio::None) {
+            render::Result<void> recorded =
+                CheckOcioBitmap(source.ocio, source.projection, m_dag.grid.width, m_dag.grid.height, *image, node);
+            if (!recorded) return render::Unexpected(recorded.error());
+        }
+        if (source.ocio == DagSource::Ocio::Raw8Fill) {
+            imageKey += "/ocio-raw";
+            std::shared_ptr<const DecodedImage>& decoded = m_env.ocioRawDecoded[source.sha256];
+            if (!decoded) decoded = OcioRawDecoded(*image);
+            image = decoded;
+        }
         if (source.srgbDecode) {
             if (Minifies(source.projection, m_dag.grid.width, m_dag.grid.height, *image)) {
                 return EvalFail(EvalErrorKind::UnsupportedSource,

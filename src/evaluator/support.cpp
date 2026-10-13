@@ -24,9 +24,35 @@ Gap Make(core::Id node, std::string feature, std::string owner) {
     return SupportGap{node, std::move(feature), std::move(owner)};
 }
 
+/// Legacy colour management, or OCIO with Painter's substance config (sources.h, decision 190).
 bool LegacyColour(const core::Project& project) {
     const std::string& mode = project.settings.color_management.mode;
-    return mode.empty() || mode == "legacy";
+    return mode.empty() || mode == "legacy" || PainterOcio(project);
+}
+
+/// Under OCIO with Painter's substance config, a bitmap whose use Session O does not record
+/// (sources.h): only sRGB and Raw on an sRGB8 channel, and a linear space as a mask source. The
+/// image's kind and its 1:1 sampling are checked at evaluation.
+Gap OcioBitmapGap(const core::Project& project, const core::Stack* stack, const core::BitmapSource& bitmap,
+                  std::optional<ChannelType> channel, core::Id node) {
+    if (!PainterOcio(project)) return std::nullopt;
+    const BitmapColourSpace space = BitmapColourSpaceOf(bitmap.color_space);
+    if (!channel) {
+        if (space == BitmapColourSpace::Linear) return std::nullopt;
+    } else if (stack != nullptr) {
+        const auto it = stack->channels.find(*channel);
+        if (it == stack->channels.end()) return std::nullopt;
+        if (it->second.format == core::ChannelFormat::sRGB8 &&
+            (space == BitmapColourSpace::Srgb || bitmap.color_space == "Raw")) {
+            return std::nullopt;
+        }
+    } else {
+        return std::nullopt;
+    }
+    return Make(node,
+                "under OCIO, a bitmap in the colour space '" + bitmap.color_space + "' " +
+                    (channel ? "on the channel " + std::string(core::ToString(*channel)) : std::string("as a mask source")),
+                "phase1.15_compositor-colour-fits");
 }
 
 /// The colour space of a bitmap source in `stack` for `channel` (sources.h): an sRGB bitmap
@@ -66,8 +92,11 @@ Gap SourceGap(const core::Project& project, const core::Stack* stack, const core
                             "phase1.12_compositor-height-normal");
             }
             return std::nullopt;
-        case SourceKind::bitmap:
-            return BitmapColourSpaceGap(stack, std::get<core::BitmapSource>(source.value), channel, node);
+        case SourceKind::bitmap: {
+            const auto& bitmap = std::get<core::BitmapSource>(source.value);
+            if (Gap gap = BitmapColourSpaceGap(stack, bitmap, channel, node)) return gap;
+            return OcioBitmapGap(project, stack, bitmap, channel, node);
+        }
         case SourceKind::vector: return Make(node, "a vector source", "phase4.1_nodes-vector-font-sources");
         case SourceKind::font: return Make(node, "a font source", "phase4.1_nodes-vector-font-sources");
         case SourceKind::procedural: return Make(node, "a procedural source", "phase3.3_procedural-families");

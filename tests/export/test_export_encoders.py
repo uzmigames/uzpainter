@@ -756,6 +756,31 @@ def test_srgb8_bitmap_equals_painter_files(export_tests: Path, tmp_path: Path) -
     ], report["register"]
 
 
+def test_ocio_encode_equals_painter_files(export_tests: Path, tmp_path: Path) -> None:
+    """phase1.15_compositor-colour-fits item 2.3 (decision 190): export-ocio-encode (Session O,
+    OCIO with Painter's substance config) rebuilt per texture set as an OCIO project and written by
+    WriteExport, every map of steps 46-49 and the `$colorSpace` probes 50 and 51, is byte-identical
+    to Painter's files: r1 everywhere, r2 wherever r2 equals r1 (s5's BaseColor, an sRGB bitmap
+    in a group masked by grey A, is unstable in Painter: r1 is its exact target, decision 032).
+    This covers the measured PNG 16 encode of the sRGB8 codes and the empty BaseColor (s0-s7), the
+    8-bit Raw bitmap read through a binary16 rounded toward zero (s4), and the probes' names
+    (`sRGB`, `Raw`)."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.ocio_encode_written(export_tests, tmp_path)
+    assert report["problems"] == [], report["problems"][:10]
+    assert report["files"] == 8 * (4 + 4 + 1 + 1 + 3 + 3), report
+    assert report["names"] == 8 * 3 * 2, report
+    assert report["unstable"] == [
+        "s5 step 46: s5_basecolor.png",
+        "s5 step 47: s5_basecolor.png",
+        "s5 step 48: s5_basecolor.exr",
+        "s5 probe 50: s5_basecolor_sRGB.png",
+        "s5 probe 51: s5_basecolor_sRGB.png",
+    ], report["unstable"]
+    assert report["identical"] == report["comparisons"] == 2 * report["files"] - 5, report
+
+
 def test_srgb_variants_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:
     """phase1.15_compositor-colour-fits item 2.2 (decision 174): srgb-bitmap-variants-v2 rebuilt
     per texture set and written by WriteExport at PNG 16, PNG 8 and OpenEXR 32f, every map, is

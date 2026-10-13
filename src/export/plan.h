@@ -250,6 +250,9 @@ struct FileRaster {
     /// Per channel, 1 where a PNG writes the sRGB encode of the linear value (`SrgbEncodedOnExport`
     /// of a documentMap source stored as sRGB8; encode.h). Empty: no channel is encoded.
     std::vector<uint8_t> srgbEncoded;
+    /// OCIO with Painter's substance config (decision 190): a PNG 16 writes an sRGB-encoded
+    /// channel through `OcioSrgbPng16Code` (encode.h).
+    bool ocio = false;
 };
 
 /// True for the material channels Painter exports sRGB-encoded when they are stored as sRGB8:

@@ -1,0 +1,14 @@
+{
+  "id": 190,
+  "slug": "ocio-with-painter-s-substance-config-is-fitted-in-the-evaluator-and-export-for-what-session-o-records-and-the-facade-keeps-refusing-it",
+  "title": "OCIO with Painter's substance config is fitted in the evaluator and export for what Session O records, and the facade keeps refusing it",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits",
+    "phase1.25_pilot-wand",
+    "phase2.1_preview-viewport-window",
+    "phase3.3_unreal-gltf-presets"
+  ],
+  "supersededBy": null
+}

@@ -37,7 +37,8 @@
 // colour-selection and anchor effects (P4-NODES), `UVTile` geometry masks, content effects on a
 // group, `Material` source mode, procedural, vector,
 // font and reference sources, the 3D projections, symmetry, physical-size UV scale modes,
-// bilinear minification outside the texture unit's domain (texture_unit.h), OCIO colour management.
+// bilinear minification outside the texture unit's domain (texture_unit.h), OCIO colour management
+// outside what Session O records (sources.h).
 
 #include "evaluator/arith.h"
 #include "evaluator/formats.h"
@@ -81,6 +82,13 @@ struct DagSource {
     /// An sRGB bitmap (sources.h): its codes are decoded with the sRGB transfer function onto an
     /// sRGB8 channel.
     bool srgbDecode = false;
+    /// Under OCIO with Painter's substance config (sources.h): the one recorded use this bitmap
+    /// must be, checked against the image at evaluation (decision 190). `Srgb8Fill`: an 8-bit
+    /// colour image in sRGB on an sRGB8 channel at 1:1, decoded as under legacy; `Raw8Fill`: an
+    /// 8-bit colour image in Raw on an sRGB8 channel at 1:1 (`OcioRawDecoded`); `Grey16Mask`: a
+    /// 16-bit grey image in a linear space as a mask source at 1:1, read as under legacy.
+    enum class Ocio : uint8_t { None, Srgb8Fill, Raw8Fill, Grey16Mask };
+    Ocio ocio = Ocio::None;
     /// Hash of the content (source, projection, channel, format, profile).
     Digest hash{};
 };

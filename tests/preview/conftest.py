@@ -116,8 +116,8 @@ def ocio_bundle(exe: Path, folder: Path, mesh: Path = SPHERE) -> Path:
     """An OCIO project bundle of `mesh` (the sphere fixture) with the shipped environment and no
     layer.
 
-    No creation path yields an OCIO project yet (phase1.15) and the evaluator refuses fill sources
-    under OCIO, so the bundle is a Legacy project's `export-bundle` whose manifest declares OCIO
+    No creation path yields an OCIO project yet (the facade refuses OCIO, phase1.15 item 2.6), so
+    the bundle is a Legacy project's `export-bundle` whose manifest declares OCIO
     with Painter's substance config, re-hashed: what `painter_viewport` renders today (decision
     148). `project.open(<bundle>)` imports it as `<bundle>.uzp`.
     """
