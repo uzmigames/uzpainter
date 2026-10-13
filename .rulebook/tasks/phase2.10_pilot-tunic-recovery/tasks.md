@@ -3,7 +3,7 @@
 
 ## 2. Implementation
 - [ ] 2.1 Tunic v10 fixture manifest in `parity/manifests/`: stack JSON, resources and external mesh maps by SHA-256, per-layer binding overrides, instruction sequence, export configuration
-- [ ] 2.2 Tunic v10 Tier 1 goldens recorded twice through the recorder (documented API, migration readback kept private); oracle stability classified
+- [x] 2.2 Tunic v10 Tier 1 goldens recorded twice through the recorder (documented API, migration readback kept private); oracle stability classified
 - [ ] 2.3 Tunic v10 rebuilt through the typed MCP tools with per-layer bindings (C07 → `Source_v10_M_piping`, F03 → `Source_v9_M_piping`, `F03 → M_piping_lining_v9`), `replace_height` and the double-sided state
 - [ ] 2.4 Dump-and-rebuild of the rebuilt tunic into a new project
 - [ ] 2.5 Tier 1 comparison and report `parity/reports/phase2/tunic-v10-tier1.json`
@@ -43,3 +43,5 @@
   - `--pilot tunic` wrote the golden's request.
   - `--pilot tunic-rebuild` pins the stack working copy (override on F03 only), 21 bindings over 17 files by SHA-256 and resource version, the Normal map, the mesh (the delivered FBX, an assumption the readback's `last_imported_mesh_path` checks) and the double-sided value. On the real Assets3D it refuses, listing the nine masks.
 - 2.2 (open): the recorder records migration goldens (`tools/parity/recorder/migration.py`, schema kind `painter_project`, interface `painter_project_migration`). The request is committed; the recording is the owner's.
+- 2.2 (done, decision 215, Painter batch G, 2026-10-13): the golden is recorded under OCIO and admitted to `manifests/phase2/tier1/tunic-v10.json`. The open showed no dialog and the project stayed OCIO. All five maps (4096 px, 16-bit PNG) are stable, byte-identical in r1, r1-repeat and r2. The readback is equal between r1 and r2 except for the project counter and the file path. The Recording blocker above is cleared.
+  - New for 2.3: the readback's `last_imported_mesh_path` is `_tmp/astra-tunica/normalized_low.obj`, which is gone from Assets3D. It is not the `Export/18-Tunica-v10.fbx` the rebuild fixture assumes. Settle the mesh before the rebuild.

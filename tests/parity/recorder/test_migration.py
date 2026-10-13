@@ -2,7 +2,7 @@
 generator, job parsing and the r1 / r1-repeat / r2 recordings of a project opened from a private
 copy, against a fake Painter and a temporary stand-in asset repository; and the rebuild fixture
 over a synthetic report, with the recovered bitmaps in a temporary private store. The owner's real
-store and Assets3D are read only by the tests of the committed request."""
+store and Assets3D are read only by the tests of the committed manifest."""
 
 from __future__ import annotations
 
@@ -41,7 +41,9 @@ BUILD = "12.1.5+js-api.1.1.20"
 OCIO = r"C:\Program Files\Adobe\Adobe Substance 3D Painter\resources\ocio\substance\config.ocio"
 REAL_ASSETS = Path(r"E:\UzmiGames\Assets3D")
 COMMITTED = (
-    REPO_ROOT / "parity/envelopes/painter-12.1.5_js-api.1.1.20/requests/phase2/tier1/tunic-v10.json"
+    REPO_ROOT
+    / "parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/phase2/tier1"
+    / "tunic-v10.json"
 )
 MESH = "E:/UzmiGames/Assets3D/_tmp/astra-tunica/tunic_low.obj"
 # A configuration the fake Painter exports (it resolves no shipped preset): an inline preset.
@@ -528,17 +530,18 @@ def test_rebuild_command_lists_the_missing_inputs_as_json(
     ]
 
 
-# --- the committed request against the real asset repository --------------------------------
+# --- the committed manifest against the real asset repository -------------------------------
 
 
-def test_committed_request_matches_the_real_assets(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The committed request is what the generator writes over the real project, and its pin
-    resolves in Assets3D or in the owner's private store."""
+def test_committed_manifest_matches_the_real_assets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The admitted manifest (decision 215) is what the generator writes over the real project,
+    and its pin resolves in Assets3D or in the owner's private store."""
     monkeypatch.undo()  # the owner's store, read only
     if not (REAL_ASSETS / "AGENTS.md").is_file():
         pytest.skip(f"the UzmiGames asset repository is not at {REAL_ASSETS}")
     committed = load_json(COMMITTED)
-    assert committed == tunic_manifest(REAL_ASSETS)
+    assert validation_errors(committed, Schema.GOLDEN_PUBLIC) == []
+    assert {**committed, "private_records": []} == tunic_manifest(REAL_ASSETS)
     job = load_migration_job(COMMITTED, REAL_ASSETS, locate_store())
     assert (
         job.config["defaultExportPreset"] == "resource://starter_assets/Blender (Principled BSDF)"

@@ -1,0 +1,11 @@
+{
+  "id": 215,
+  "slug": "painter-batch-g-admits-the-tunic-v10-migration-golden-stable-in-r1-r1-repeat-and-r2-under-ocio",
+  "title": "Painter batch G admits the Tunic v10 migration golden, stable in r1, r1-repeat and r2 under OCIO",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.10_pilot-tunic-recovery"
+  ],
+  "supersededBy": null
+}
