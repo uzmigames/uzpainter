@@ -1,0 +1,11 @@
+{
+  "id": 208,
+  "slug": "an-srgb-bitmap-on-an-l8-material-channel-decodes-through-the-float32-shader-decode-an-8-bit-code-s-rounded-toward-zero-to-a-binary16",
+  "title": "An sRGB bitmap on an L8 material channel decodes through the float32 shader decode, an 8-bit code's rounded toward zero to a binary16",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

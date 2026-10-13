@@ -80,8 +80,11 @@ struct DagSource {
     /// blend-modes.json `blend-normal-channel-import`, height_to_normal.h).
     bool invertGreen = false;
     /// An sRGB bitmap (sources.h): its codes are decoded with the sRGB transfer function onto an
-    /// sRGB8 channel.
+    /// sRGB8 channel, or with `l8Material` onto an L8 BaseColor, Specular or Emissive.
     bool srgbDecode = false;
+    /// An sRGB bitmap on an L8 BaseColor, Specular or Emissive (sources.h, decision 208): a grey
+    /// image at 1:1, checked at evaluation, whose 8-bit codes decode through a binary16.
+    bool l8Material = false;
     /// Under OCIO with Painter's substance config (sources.h): the one recorded use this bitmap
     /// must be, checked against the image at evaluation (decision 190). `Srgb8Fill`: an 8-bit
     /// colour image in sRGB on an sRGB8 channel at 1:1, decoded as under legacy; `Raw8Fill`: an

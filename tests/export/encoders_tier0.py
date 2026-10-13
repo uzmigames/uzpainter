@@ -656,17 +656,12 @@ L8_MATERIAL_SETS = ("s0", "s1", "s2", "s3")
 L8_MATERIAL_STEPS = tuple(range(40, 52))
 
 
-def l8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
-    """export-l8-material's sets rebuilt on the grid mesh (the BaseColor edit an L8 channel of the
-    stack, every uniform colour in the sRGB space as the facade stores it, each grey bitmap in the
-    sRGB space: Painter's files of s0 and s1 hold the bitmaps' codes decoded close to sRGB) and
-    written by `WriteExport` at every export step: compared byte for byte with Painter's files of
-    r1, and of r2 wherever r2 equals r1 (decision 032). Returns the counts, the differing files or
-    evaluation failures (`problems`) and per set the first refusal of its evaluation (`refused`:
-    set, message)."""
-    needs_store()
-    root = manifest_root(current_envelope()) / "tier0" / "semantics"
-    golden = load(locate(), root / "export-l8-material.json")
+def _l8_material_golden() -> tuple[Golden, dict[str, Any]]:
+    """export-l8-material and its sequence as the evaluator builds it: the BaseColor edit an L8
+    channel of the stack, every uniform colour in the sRGB space as the facade stores it, each grey
+    bitmap in the sRGB space (Painter's files of s0 and s1 hold the bitmaps' codes decoded,
+    decision 208)."""
+    golden = _semantics_golden("export-l8-material")
     sequence = golden.manifest["instruction_sequence"]
     steps = []
     for raw in sequence["steps"]:
@@ -679,7 +674,16 @@ def l8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
         elif raw["call"].endswith("set_source") and "resource_step" in args:
             raw = dict(raw, args=dict(args, color_space="sRGB"))
         steps.append(raw)
-    manifest = dict(golden.manifest, instruction_sequence=dict(sequence, steps=steps))
+    return golden, dict(golden.manifest, instruction_sequence=dict(sequence, steps=steps))
+
+
+def l8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """export-l8-material's sets rebuilt on the grid mesh (`_l8_material_golden`) and written by
+    `WriteExport` at every export step: compared byte for byte with Painter's files of r1, and of
+    r2 wherever r2 equals r1 (decision 032). Returns the counts, the differing files or
+    evaluation failures (`problems`) and per set the first refusal of its evaluation (`refused`:
+    set, message)."""
+    golden, manifest = _l8_material_golden()
     by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
     report: dict[str, Any] = {
         "files": 0,
@@ -1089,24 +1093,28 @@ LIFTED_COLOUR_SETS: dict[str, tuple[str, ...]] = {
     "export-ocio-encode-legacy": SRGB8_BITMAP_SETS,
     "srgb-bitmap-variants-v2": SRGB_VARIANT_SETS,
     "export-ocio-encode": OCIO_ENCODE_SETS,
+    "export-l8-material": ("s0", "s1"),
 }
 
 
 def lifted_colour_spec(stem: str, texture_set: str, spec_dir: Path) -> dict[str, Any]:
     """The spec `WriteExport` evaluates for `texture_set` of `stem` (`LIFTED_COLOUR_SETS`), for the
     evaluator's `evaluate` case: its outputs are every channel of the stack, except on
-    export-bit-depth, whose comparison writes only the sRGB8 material channels (its Opacity has
-    neither a template base value nor a channel default and is not exported there)."""
+    export-bit-depth and export-l8-material, whose comparisons write only the material channels
+    BaseColor, Specular and Emissive (export-bit-depth's Opacity has neither a template base value
+    nor a channel default and is not exported there)."""
     prepare, options = {
         "export-bit-depth": (_bit_depth_golden, {"template_channels": True}),
         "export-ocio-encode-legacy": (_legacy_bitmap_golden, {}),
         "srgb-bitmap-variants-v2": (_variants_golden, {"template_channels": True}),
         "export-ocio-encode": (_ocio_encode_golden, {"ocio": True}),
+        "export-l8-material": (_l8_material_golden, {"template_channels": True}),
     }[stem]
     _, manifest = prepare()
     spec = _set_spec(manifest, texture_set, spec_dir, **options)
     channels = [c["type"] for c in spec["channels"]]
-    exported = SRGB8_CHANNELS if stem == "export-bit-depth" else channels
+    material_only = stem in ("export-bit-depth", "export-l8-material")
+    exported = SRGB8_CHANNELS if material_only else channels
     spec["outputs"] = [c for c in channels if c in exported]
     return spec
 

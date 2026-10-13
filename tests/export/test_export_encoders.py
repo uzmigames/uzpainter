@@ -827,9 +827,10 @@ def test_l8_material_channels_equal_painter_files(export_tests: Path, tmp_path: 
       its PNG 8 and PNG 16 files, encodes to those files byte for byte (r1 and r2): the sRGB encode
       of the linear value in R, B and L, its linear write in G.
     - Rebuilt per texture set and written by WriteExport at every export step (PNG 8, PNG 16 and
-      OpenEXR 32f), the uniform colour (s2) and the empty stack's bases (s3) are byte-identical to
-      Painter's files (r1 and r2). The grey bitmaps of s0 and s1, which Painter decodes close to
-      sRGB on an L8 channel, are refused at evaluation (decision 174)."""
+      OpenEXR 32f), every set is byte-identical to Painter's files (r1 and r2): grey A (s0) and the
+      8-bit grey ramp (s1) in sRGB at 1:1, read through the float32 shader decode, an 8-bit code's
+      rounded toward zero to a binary16 (decision 208), the uniform colour (s2) and the empty
+      stack's bases (s3)."""
     from tests.export import encoders_tier0
 
     processed = encoders_tier0.l8_material_processed(export_tests, tmp_path / "process")
@@ -839,10 +840,8 @@ def test_l8_material_channels_equal_painter_files(export_tests: Path, tmp_path: 
 
     report = encoders_tier0.l8_material_written(export_tests, tmp_path / "written")
     assert report["problems"] == [], report["problems"][:10]
-    assert [texture_set for texture_set, _ in report["refused"]] == ["s0", "s1"], report["refused"]
-    for _, message in report["refused"]:
-        assert "an sRGB bitmap on a channel that is not sRGB8" in message, message
-    assert report["files"] == 2 * 12 * 3, report
+    assert report["refused"] == [], report["refused"]
+    assert report["files"] == 4 * 12 * 3, report
     assert report["identical"] == report["comparisons"] == 2 * report["files"], report
 
 
