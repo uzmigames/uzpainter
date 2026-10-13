@@ -333,14 +333,18 @@ def test_every_recorded_manifest_keeps_its_record_ids() -> None:
     of the golden name, or whose name holds a `/`. No golden recorded before the change has an
     output of such a map under the earlier id (two outputs under one id were refused, and the
     base-values goldens' repeated `defaultMap/white` is never written), so every record id
-    already in a manifest is the id the recorder now gives."""
+    already in a manifest is the id the recorder now gives. An export probe step (`probe`:
+    true, the probe recorder's) is a readback that lists its files' hashes and writes no
+    exported-map record, so only the capture exports are counted."""
     manifests = recorded_manifests()
     assert len(manifests) > 100
     for data in manifests:
         steps = [
             s
             for s in data["instruction_sequence"]["steps"]
-            if s["call"] == EXPORT and "maps" in s.get("args", {})
+            if s["call"] == EXPORT
+            and "maps" in s.get("args", {})
+            and s["args"].get("probe") is not True
         ]
         named = [{parse_output_map(str(m)).name for m in s["args"]["maps"]} for s in steps]
         counts = Counter(name for names in named for name in names)

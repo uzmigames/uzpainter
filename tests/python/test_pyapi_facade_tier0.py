@@ -71,15 +71,14 @@ MASK_LEVELS = (
     "the native support check refuses a levels effect in a mask stack (release gap "
     "phase4.2_remaining-nodes, decision 081): this step and the steps on its node"
 )
+MASKED_EXPORT = (
+    "the mask holds Painter's levels effect (s13, s14), which the native support check refuses "
+    "(release gap phase4.2_remaining-nodes, decision 081), so the masked BaseColor differs"
+)
 COMPARE = (
     "the native support check refuses a compare-mask effect (release gap "
     "phase4.1_nodes-mask-effects, decision 081)"
 )
-BASECOLOR_EXPORT = (
-    "the export engine refuses the 16-bit PNG export of the sRGB8 BaseColor channel: recorded by "
-    "R-090, not fitted (phase1.25_pilot-wand item 2.6, decision 103)"
-)
-EXPORTS = {"uzp_plane/basecolor": BASECOLOR_EXPORT}
 UID_VALUE = (
     "a uid's value is Painter's own allocation, not part of the instruction sequence; the "
     "identity outputs compare what a uid resolves to"
@@ -94,10 +93,6 @@ def excluded(reason: str, *ids: str) -> dict[str, str]:
 # Outputs that cannot equal Painter's yet, by probe: output id -> reason and owner. Applies to
 # both recordings where the output exists (decision 107). Every other output is exact.
 EXCLUDED: dict[str, dict[str, str]] = {
-    "active-channel-reset": EXPORTS,
-    "active-channel-reset-superset": EXPORTS,
-    "active-channel-order-control": EXPORTS,
-    "fill-layer-readback": EXPORTS,
     "set-source-none-multichannel": {
         **excluded(
             CONTENT_FILL,
@@ -128,11 +123,10 @@ EXCLUDED: dict[str, dict[str, str]] = {
             "defaults/s13",
         ),
         "identity/reopen": REOPEN,
-        "uzp_plane/basecolor": BASECOLOR_EXPORT,
+        "uzp_plane/basecolor": MASKED_EXPORT,
     },
-    "phase1-create-settings": EXPORTS,
-    "phase1-delete-node": {**EXPORTS, **excluded(UID_VALUE, "s17/uid")},
-    "phase1-resource-update": {**EXPORTS, **excluded(UID_VALUE, "s14/uid", "s15/uid")},
+    "phase1-delete-node": excluded(UID_VALUE, "s17/uid"),
+    "phase1-resource-update": excluded(UID_VALUE, "s14/uid", "s15/uid"),
     "insert-positions": {
         **excluded(
             CONTENT_FILL,
