@@ -1,23 +1,21 @@
 # Supervisor and worker (`src/supervisor/`, `python/uzpainter_supervisor/`)
 
-This folder holds the process boundary of `docs/architecture/02-runtime-topology.md` §1, §2 and §5 (task `phase2.1_supervisor-ipc-worker`, decisions 120 and 121) the command admission of §3 (task `phase2.2_supervisor-admission-ledger`, decisions 138 and 139) and the long jobs of §3 and 11 §3 (task `phase2.3_supervisor-jobs`, decisions 140 and 141). One executable has two roles:
+This folder holds the process boundary of `docs/architecture/02-runtime-topology.md` §1, §2 and §5 (task `phase2.1_supervisor-ipc-worker`, decisions 120 and 121) the command admission of §3 (task `phase2.2_supervisor-admission-ledger`, decisions 138 and 139) and the long jobs of §3 and 11 §3 (task `phase2.3_supervisor-jobs`, decisions 140 and 141), and the MCP transports, tool registry and roots of 11 §1, §2 and §4-§6 (task `phase2.5_mcp-transport-registry`, decisions 158 and 159). One executable has two roles:
 
 | Role | Command | Code |
 |---|---|---|
-| Supervisor | `UzPainter.exe --mcp [--gpu-backend dx12\|vulkan] [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>] [--ledger <file>] [--test-faults] [--preview]` | `supervisor.{h,cpp}` starts the embedded interpreter and calls `uzpainter_supervisor.main.main` |
+| Supervisor | `UzPainter.exe --mcp [--mcp-http <host>:<port> [--token <token>] [--allow-remote]] [--roots <kind>=<dir>;...] [--gpu-backend dx12\|vulkan] [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>] [--ledger <file>] [--test-faults] [--preview]` | `supervisor.{h,cpp}` starts the embedded interpreter and calls `uzpainter_supervisor.main.main` |
 | Worker | `UzPainter.exe --worker --pipe \\.\pipe\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12\|vulkan [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>] [--connect-timeout-ms <ms>] [--test-faults] [--preview]` | `worker.{h,cpp}`, `pipe.{h,cpp}`, `ipc.{h,cpp}`, `fault_hooks.{h,cpp}` |
 | Single process | `UzPainter.exe run`, the CLI verbs | hosts the worker's state (the `Session`, the interpreter) directly, `src/python/run.h` |
-
-`--mcp-http` and `--roots` are refused with a usage error that names `phase2.5_mcp-transport-registry`, the task that delivers them.
 
 ## Supervisor
 
 `uzpainter_supervisor` runs inside the embedded interpreter, on the pinned MCP SDK (`thirdparty/python-wheels/`):
 
-- **`main.py`** parses the command line and serves the stdio MCP session through the SDK's low-level `Server` and `stdio_server`. While the session runs, stdout carries protocol frames only. Logs go to stderr, and the worker's own stdout is sent to stderr.
-  - `tools/list` returns the worker's tools plus `supervisor_status`, `wait_idle`, `job_status`, `job_result`, `job_cancel` and `job_list`. A long tool's schema also takes `wait` (see Jobs).
-  - `tools/call` goes through the admission (below) and is then forwarded to the worker. A mutating call may carry `idempotency_key` and `expected_revision` among its arguments, and the supervisor lifts them into the pipe request.
-  - The final MCP contract belongs to phase2.5-phase2.8: the registry, schema validation, roots, HTTP, resources and prompts.
+- **`main.py`** parses the command line and serves one tool registry over the SDK's low-level `Server`, on stdio or Streamable HTTP (see Transports).
+- **`registry.py`** lists the tools and checks every call before admission (see Registry). A mutating call may carry `idempotency_key` and `expected_revision` among its arguments, and the supervisor lifts them into the pipe request. Resources and prompts belong to phase2.6-phase2.8.
+- **`roots.py`** canonicalises path arguments and scrubs results under `--roots` (see Roots).
+- **`transport_http.py`** is the HTTP mode's guard and server (see Transports).
 - **`admission.py`** admits every call, and **`ledger.py`** is the durable ledger (see Admission).
 - **`worker.py`** owns the worker lifecycle:
   - It launches generation `n` with the same backend, Python policy and deadline every time.
@@ -27,6 +25,96 @@ This folder holds the process boundary of `docs/architecture/02-runtime-topology
 - **`ipc.py`** holds the frame codec, the handshake check and the worker's exit codes. It uses the standard library only, so `tests/supervisor/test_ipc_codec.py` imports it directly.
 
 The supervisor never creates a GPU device, never opens a project and never runs user Python.
+
+## Transports
+
+Both transports serve the same `registry.Registry` (decision 159).
+
+- **stdio** (the default) uses the SDK's `stdio_server`.
+  - While it serves, the SDK points file descriptor 1 at stderr and writes frames to a private duplicate. So stdout carries protocol frames only, whatever else in the process writes.
+  - The worker's own stdout goes to stderr.
+  - Logs at INFO and above go to stderr and to the ledger's `log` table (`ledger.LogHandler`, newest 10 000 rows). Each call is logged as `call <tool>: ok|error <code> (job <id>)`.
+- **Streamable HTTP**: `--mcp-http <host>:<port>` serves `http://<host>:<port>/mcp` on uvicorn, in the supervisor's event loop. The address is logged once the server listens.
+  - A host that is not loopback is a usage error without `--allow-remote`. `--token` and `--allow-remote` need `--mcp-http`.
+  - `transport_http.Guard` checks every request before the SDK sees it:
+    - A present `Origin` must be an `http` origin on a loopback host (`localhost`, `127.0.0.0/8` or `[::1]`, any port). Otherwise 403.
+    - With a loopback bind, `Host` must name a loopback host. Otherwise 421.
+    - `Authorization: Bearer <token>` is required and compared in constant time. Otherwise 401.
+  - The token comes from `--token`, or is generated at start, printed once on stderr and never logged.
+  - With `--allow-remote` the Host check is off. A stderr warning says that the token is then the only guard and that the traffic is plain HTTP.
+  - Ctrl+C or Ctrl+Break stops the server cleanly (exit 0). The worker runs in its own process group, so the signal never reaches it.
+- **Lease.** The stdio session holds the lease implicitly (`stdio:<pid>`). In HTTP mode a session names its owner:
+  - `lease_acquire {owner}` binds the owner to the session (by `Mcp-Session-Id`) and takes the open project's lease. If another owner holds it, the call fails `lease_held {holder, since, active_job}`.
+  - A mutating call from a session without an owner fails `lease_required`.
+  - The lease belongs to the owner, not to the connection. A client that reconnects names the same owner, gets its lease back, and reads its jobs by id from the ledger.
+  - `lease_release` ends the session owner's leases. While that owner's job runs, it fails `busy` instead.
+  - `lease_status` reports the session's owner and the project's lease.
+  - The supervisor releases its owners' leases when it ends.
+  - Owner names coordinate clients; they do not authenticate them, since every HTTP client holds the bearer token. Names starting with `stdio:` are reserved.
+
+## Registry
+
+`tools/list` returns the supervisor's tools first, then the worker's.
+
+- The supervisor's tools are `supervisor_status`, `wait_idle`, `job_status`, `job_result`, `job_cancel` and `job_list`. In HTTP mode they also include `lease_acquire`, `lease_release` and `lease_status`.
+- A mutating tool's schema also takes `idempotency_key` and `expected_revision`. A long tool's schema also takes `wait`.
+- A tool that declares capability-manifest operations carries `_meta["uzpainter/capability"] = {status: available | release-gap, operations}`.
+
+Every `tools/call` is checked in the order below (decision 158). Each refusal comes before admission: no ledger job is written, and nothing is sent to the worker.
+
+1. **Capability.**
+   - The worker lists each tool's `capability: [{symbol, context}]`.
+   - The supervisor reads `capabilities.json` beside `UzPainter.exe` at start. A missing or malformed manifest is a fatal start error.
+   - While one of a tool's operations is a `release-gap`, or is missing from the manifest, the call fails `capability_gap {tool, operations}`.
+   - The tool becomes callable when its manifest entry changes, with no MCP change.
+2. **Schema.** The arguments are validated against the public schema (JSON Schema 2020-12). A failure is `invalid_arguments {errors: [{argument, rule, message}]}`, and a message never repeats the value given.
+3. **Key and precondition.**
+   - A mutating call may omit `expected_revision` only together with `idempotency_key`. A key without its precondition fails `invalid_arguments` (`/expected_revision`).
+   - The worker's pipe still decides such a request for direct pipe clients (decision 138).
+4. **Object references.**
+   - A property marked `x-uzpainter-ref` (`node`, `texture_set` or `stack`) must name an object of the committed revision.
+   - The layer tree is read once per project, revision and epoch.
+   - A reference that names nothing fails `invalid_arguments` with `reason: dangling_reference`.
+   - A mutating or long call that admission would refuse as `busy` skips this lookup.
+5. **Roots** (see Roots): a path outside fails `path_outside_roots {argument, root, reason}`.
+6. **HTTP owner**: `lease_required`.
+
+The registry then calls the admission. Two calls skip the checks and go straight to the worker, which answers at its own boundary: an unknown tool (`unknown_tool`), and `run_python` without `--allow-python` (`python_disabled`).
+
+**Results.** Every forwarded result's `structuredContent` carries the worker's `result` or `error`, the `receipt`, and these fields:
+
+- `revision`: the revision the call was admitted on;
+- `committed_revision`: the project's committed revision after the call;
+- `job_id`: null when the call ran no job;
+- `changed` (modified or removed), `created`, `hidden`, `imported` and `skipped`: gathered over the call's committed transactions, including the calls a raising script committed;
+- `warnings`.
+
+The text content is one line: `<tool>: <status>[; revision a -> b][; <counts>][; job <id>]`, or `<tool>: error <code>: <message>`.
+
+Images are content blocks only for `capture`, built from its result's `image {mimeType, data}`.
+
+## Roots
+
+`--roots project=<dir>;mesh=<dir>;bake_mesh=<dir>;resource=<dir>;export=<dir>` (11 §5; decision 158). Without it, nothing is confined. With it, the roots are an allowlist, and every root must be an existing folder.
+
+- A worker schema names a path argument's root in one of two ways:
+  - with `x-uzpainter-root` (`project_open.path`, the diagnostic exports' `path`, `export.fixed_names`);
+  - with `x-uzpainter-paths {member: root}`, for an object or JSON text (`export.config.exportPath`).
+- Each path is canonicalised in this order:
+  1. A `file:` URI becomes a path, a `\\?\` prefix is dropped, and `/` becomes `\`.
+  2. A relative path is taken under its root.
+  3. The lexical form must lie in the root, so another drive or share is refused without a lookup.
+  4. Reparse points are resolved (`realpath`), and the result must lie in the root.
+
+  Comparisons ignore case.
+- The worker receives the canonical path. A refusal names the argument and the root kind, never the path.
+- A root kind that `--roots` does not name refuses every path of that kind.
+- The worker's output root is the export root by default. A given `--output-root` must lie inside a root. With neither, the command is a usage error.
+- Results replace any path-valued field that lies outside the roots with `<outside the roots>`.
+  - The fields are `path`, `directory`, `receipt`, `project`, `project_path`, `mesh_path`, `output_root`, `exportPath`, `ledger`, `crash_dir` and `minidump`.
+  - This applies to `supervisor_status` and to receipts too.
+  - A `run_python` result's own body is exempt, because roots never sandbox it (11 §6).
+- The canonicalisation runs in the default executor (`asyncio.to_thread`). Every other handler step is a coroutine over the overlapped pipe, so the event loop keeps serving progress and cancellation.
 
 ### Handshake
 
@@ -79,7 +167,7 @@ The supervisor learns which project to reopen from the worker's `revision` event
    - The stdio session takes it implicitly (`stdio:<supervisor pid>`) at its first mutating call, and releases it on exit.
    - A lease whose holder process has ended is taken over.
    - A mutating call from another owner returns `lease_held {holder, since, active_job}`. Reads need no lease.
-   - phase2.5 gives HTTP clients their own owners.
+   - HTTP clients name their own owners with `lease_acquire` (see Transports).
 4. **Busy.** A mutating call or long job while another mutating call or long job of the same project runs returns `busy {job_id}`; it is not queued. `wait_idle {timeout}` (seconds) waits until none runs, and a timeout is the error `timeout`.
 5. **Job.** Each admitted mutating call and each long call is a ledger job: `running`, then `succeeded`, `failed`, `cancelled` or `interrupted` (see Jobs).
 6. **Receipt.** Every reply carries `receipt`:
@@ -148,7 +236,7 @@ It then answers one request at a time on the interpreter's thread; a long tool's
 | `display_set {preset?, environment?, exposure?, rotation?, opacity?, blur?, shadows?, background?, color_lut?}` | mutating: the lease, key and precondition; one transaction (the preset first) | the transaction result, stored for the key (`display_get` reads the state); a value outside the fixed pipeline fails `call_failed` (`UnsupportedInUzPainter`, decision 038) with nothing committed |
 | `shader_get` / `shader_set {parameters}` | read / mutating (lease, key, precondition) | `shader_get`: `{shader, parameters}`, the setters return the transaction result; the default `open-pbr` instance; other values are refused (decision 042) |
 | `camera_get` / `camera_set {camera \| blender}` | read / mutating (lease, key, precondition) | `camera_get`: `{camera, blender}`, the default camera in Painter's and Blender's conventions, null when none is set |
-| `run_python {code, args?}` | mutating; listed and run only with `--allow-python`; its MCP schema also takes `idempotency_key` and `expected_revision` | the `RunScript` report; a raising script is `script_failed`, with the calls it committed in `details` |
+| `run_python {code \| path, args?}` | mutating; listed and run only with `--allow-python`; its MCP schema also takes `idempotency_key` and `expected_revision`; `path` is a script file, which the roots never confine | the report `{result, stdout, stderr, last_committed_revision, committed}`; a raising script is `script_failed`, with that report (the calls it committed) in `details` |
 | `preview_status` | GPU-free; listed only with `--preview` | `{window_open, stalled, frames_published, frames_taken, frames_rendered, revision_shown, last_error}` of the attached preview (`src/preview/PREVIEW.md`) |
 | `test_fault {fault}` | Debug builds under `--test-faults` only; `preview_stall` and `preview_resume` only with `--preview` (the stall hook of the preview thread) | `{armed}` |
 | `test_mutation {name, fail?}` | mutating and typed (one transaction); Debug builds under `--test-faults` only (decision 138) | the committed `TransactionResult` (`{status, revision, committed_revision, created, ...}`). It inserts the fill layer `name` on the active stack. With `fail`, the call fails after its edit (`call_failed`) and commits nothing. |
@@ -176,7 +264,7 @@ The checks run in this order, and every refusal comes before the call runs:
 
 Replies carry `committed_revision` while a project is open. A bad frame gets `{"id": null, "error": {"code": "invalid_frame"}}`, and the worker keeps serving.
 
-The Diagnostics tools (task phase2.1_recipe-diagnostic-views, decision 136) read the committed revision through `python::DiagnosticRun` (`src/python/diagnostics.h`), the code behind `uzpainter.diagnostics`. They are listed with `mutating: false`, so admission forwards them as reads: no lease, key, precondition or operation row. Their `path` must lie inside `--output-root`; a relative path is taken under it, and anything else is `invalid_arguments` until MCP roots exist (phase2.5). Each export is an ordinary generation with its plan and receipt, so a call never overwrites an earlier one.
+The Diagnostics tools (task phase2.1_recipe-diagnostic-views, decision 136) read the committed revision through `python::DiagnosticRun` (`src/python/diagnostics.h`), the code behind `uzpainter.diagnostics`. They are listed with `mutating: false`, so admission forwards them as reads: no lease, key, precondition or operation row. Their `path` must lie inside `--output-root`, and a relative path is taken under it; anything else is `invalid_arguments`. With `--roots`, the supervisor first confines the path to the export root (see Roots). Each export is an ordinary generation with its plan and receipt, so a call never overwrites an earlier one.
 
 In this task the GPU operations are exactly the tools that run on the engine thread (decision 120). The Phase 1 export computes on the CPU evaluator (decision 111), so it is not refused on a worker without a device. It joins the GPU set when it moves to the GPU evaluator.
 
@@ -236,6 +324,21 @@ All tests are in `tests/supervisor/`:
   - terminal states read after a restart, and a job a killed supervisor left running;
   - `uzpainter.jobs` receipts in the single-process path.
 - `test_admission.py` also covers the migration of a version 0 ledger and the sweep of orphaned jobs.
+- `test_registry.py` is pure Python, with a stand-in worker. It covers:
+  - schema and reference refusals before admission;
+  - the omission rule;
+  - the capability gap, and a manifest change that makes the tool callable;
+  - the result contract and its summary;
+  - the image blocks of `capture`;
+  - the HTTP lease across a reconnect;
+  - roots and scrubbing.
+- `test_roots.py` covers the canonicalisation on real folders, with a junction out of the root. `test_transport_http.py` covers the guard and the bind rules.
+- `test_supervisor_transports.py` drives `UzPainter.exe --mcp` (phase2.5). It covers:
+  - stdout under logging load;
+  - schema, reference and key refusals;
+  - roots, with a junction and the `file:///` and `\\?\` forms;
+  - `run_python` with and without `--allow-python`;
+  - HTTP mode: the guard, the bind usage errors, a reconnect that keeps the lease and the job, and a clean Ctrl+Break.
 - `test_supervisor_gpu.py` runs on DX12 and skips under `UZP_NO_GPU=1`. It checks that the device lives only in the worker, the evaluation payload by path and hash, and device removal and GPU stall with relaunch on the same backend.
 - `test_settling.py` holds the settling cases of 02 §7 that the children's tests do not cover, over stdio MCP (phase2.4_supervisor-worker, decisions 150 and 151):
   - the worker killed inside a save's checkpoint commit and inside a full save's compaction;

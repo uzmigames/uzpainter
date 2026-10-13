@@ -1,0 +1,14 @@
+{
+  "id": 158,
+  "slug": "the-mcp-registry-refuses-a-key-without-its-precondition-gates-release-gaps-confines-paths-to-roots-and-shapes-every-result",
+  "title": "The MCP registry refuses a key without its precondition, gates release gaps, confines paths to roots and shapes every result",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.5_mcp-transport-registry",
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.7_mcp-operation-matrix",
+    "phase2.2_supervisor-admission-ledger"
+  ],
+  "supersededBy": null
+}

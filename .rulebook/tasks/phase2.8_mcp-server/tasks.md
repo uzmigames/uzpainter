@@ -24,3 +24,9 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Notes (children's evidence)
+- phase2.5_mcp-transport-registry (decisions 158, 159; tasks.md §6 there). Its §3 tests are green on Vulkan workers:
+  - `tests/supervisor/test_supervisor_transports.py`: stdio frames under logging load; schema, reference and key refusals; roots with a junction, `file:///` and `\\?\`; `run_python` opt-in and partial changes; HTTP Origin, Host and bearer refusals, the bind usage errors, a reconnect keeping lease and job state, and a clean Ctrl+Break.
+  - `test_registry.py`, `test_roots.py` and `test_transport_http.py` (pure Python).
+  - These cover the HTTP reconnect of 3.3 here and the out-of-root path of 3.4.

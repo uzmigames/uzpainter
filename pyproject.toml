@@ -63,9 +63,10 @@ module = ["scipy", "scipy.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# The pinned MCP SDK runs only inside the embedded interpreter (thirdparty/python-wheels/,
-# python/uzpainter_supervisor/main.py); the development Python need not have it.
-module = ["mcp", "mcp.*", "mcp_types", "mcp_types.*"]
+# The pinned MCP SDK and its HTTP server run only inside the embedded interpreter
+# (thirdparty/python-wheels/, python/uzpainter_supervisor/main.py, transport_http.py); the
+# development Python need not have them.
+module = ["mcp", "mcp.*", "mcp_types", "mcp_types.*", "uvicorn", "uvicorn.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 

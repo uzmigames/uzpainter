@@ -39,6 +39,9 @@ Every `tools/call` goes through `Admission.call`:
    reconciliation reads (the key's row, or none), never by running the job again. Running jobs a
    supervisor that has ended left in the ledger are marked `interrupted` (outcome unknown) when
    the next supervisor starts; a later reconciliation that finds their key's row resolves them.
+7. **Result contract** (phase2.5, decision 158). Every reply also carries `revision`,
+   `committed_revision`, `job_id`, `changed`, `created`, `hidden`, `imported`, `skipped` and
+   `warnings` at its top level (`contract`), and the ledger keeps it as answered.
 """
 
 from __future__ import annotations
@@ -73,6 +76,54 @@ class Worker(Protocol):
 
 def error_reply(code: str, message: str, details: dict[str, Any]) -> dict[str, Any]:
     return {"error": {"code": code, "message": message, "details": details}}
+
+
+CHANGE_LISTS = ("created", "hidden", "imported", "skipped")
+
+
+def _ordered(values: list[Any]) -> list[Any]:
+    seen: list[Any] = []
+    for value in values:
+        if value not in seen:
+            seen.append(value)
+    return seen
+
+
+def contract(body: dict[str, Any], durable_revision: int | None = None) -> dict[str, Any]:
+    """`body` with the result contract of 11 §2 at its top level; `committed_revision` falls back
+    to `durable_revision`, the project's committed revision the worker last reported (an error
+    reply carries none of its own)."""
+    receipt = body.get("receipt") if isinstance(body.get("receipt"), dict) else {}
+    assert isinstance(receipt, dict)
+    result = body.get("result")
+    error = body.get("error")
+    transactions: list[dict[str, Any]] = []
+    details = error.get("details") if isinstance(error, dict) else None
+    for source in (result, details):
+        committed = source.get("committed") if isinstance(source, dict) else None
+        if isinstance(committed, list):  # a script's committed calls (also when it raised)
+            transactions += [item for item in committed if isinstance(item, dict)]
+    changes = (*CHANGE_LISTS, "modified", "removed")
+    if isinstance(result, dict) and any(key in result for key in changes):
+        transactions.append(result)  # one transaction's result
+    lists: dict[str, list[Any]] = {name: [] for name in ("changed", *CHANGE_LISTS)}
+    for transaction in transactions:
+        for name in ("modified", "removed"):
+            lists["changed"] += list(transaction.get(name) or [])
+        for name in CHANGE_LISTS:
+            lists[name] += list(transaction.get(name) or [])
+    warnings = result.get("warnings") if isinstance(result, dict) else None
+    committed_revision = body.get("committed_revision", receipt.get("committed_revision"))
+    if committed_revision is None:
+        committed_revision = durable_revision
+    return {
+        **body,
+        "revision": receipt.get("revision"),
+        "committed_revision": committed_revision,
+        "job_id": receipt.get("job_id"),
+        **{name: _ordered(values) for name, values in lists.items()},
+        "warnings": list(warnings) if isinstance(warnings, list) else [],
+    }
 
 
 @dataclass
@@ -321,6 +372,16 @@ class Admission:
         self._record(run, reply, state, body, resolution)
         self.live.pop(run.job_id, None)
         return body
+
+    def refused(self, name: str, reply: dict[str, Any]) -> dict[str, Any]:
+        """A call the registry refused before admission (registry.py): its error with the receipt
+        of a call that was never admitted (no job, no key)."""
+        receipt: dict[str, Any] = {
+            "tool": name,
+            "job_id": None,
+            "revision": self.worker.durable_revision,
+        }
+        return self._finish(reply, receipt, {})
 
     def check_lease(self, project_uuid: str, owner: str) -> dict[str, Any] | None:
         """Takes the project's lease for `owner`, or the `lease_held` error of its holder."""
@@ -578,7 +639,9 @@ class Admission:
             }
         )
         body["receipt"] = receipt
-        return body
+        # The result contract of 11 §2 (phase2.5, decision 158), part of the reply as answered, so
+        # `job_result` returns the same body after a restart.
+        return contract(body, self.worker.durable_revision)
 
     # ── Idle ────────────────────────────────────────────────────────────────────────────────
 

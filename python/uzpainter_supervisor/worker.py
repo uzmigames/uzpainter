@@ -213,8 +213,14 @@ class Supervisor:
         stdout: int = subprocess.DEVNULL
         with contextlib.suppress(AttributeError, OSError, ValueError):
             stdout = sys.stderr.fileno()  # the worker's stdout never reaches the MCP stream
+        # A process group of its own: a console Ctrl+C or Ctrl+Break stops the supervisor (HTTP
+        # mode), never the worker behind it, which ends when its supervisor does (02 §5).
         process = await asyncio.create_subprocess_exec(
-            *self.config.argv(pipe, crash_dir), stdin=subprocess.DEVNULL, stdout=stdout, stderr=None
+            *self.config.argv(pipe, crash_dir),
+            stdin=subprocess.DEVNULL,
+            stdout=stdout,
+            stderr=None,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
         )
         loop = asyncio.get_running_loop()
         generation = _Generation(
