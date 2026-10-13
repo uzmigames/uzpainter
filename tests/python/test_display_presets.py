@@ -96,6 +96,9 @@ def test_preset_round_trip_is_lossless(run: Run) -> None:
     # A project that names no environment renders lit by the installation's default (decision
     # 212); one that names an environment does not.
     assert result["fresh_default"] is True and result["state"]["environment_default"] is False
+    # The `shadows` flag (on under ref_match) changes no render (decision 251).
+    assert result["state"]["environment"]["shadows"] is True
+    assert result["state"]["shadows_effect"] == "none in painter_viewport"
 
 
 def standard_presets() -> dict[str, dict[str, Any]]:

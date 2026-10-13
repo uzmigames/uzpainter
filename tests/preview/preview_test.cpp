@@ -11,9 +11,18 @@
 //   viewport-unsupported an unsupported display configuration fails before any GPU work (DX12)
 //   viewport-normal-fade a normal map tilted past the viewer's horizon shades continuously (DX12)
 //   viewport-golden <goldens.json> [--bless]
-//                        the sphere, plane and bevelled-cube fixtures rendered twice: byte-identical,
-//                        display codes equal to the CPU table, and equal to the stored golden of this
-//                        (kernel, adapter, driver) key; `--bless` records the key's golden instead (DX12)
+//                        the sphere, plane, bevelled-cube and cube-on-plane fixtures rendered twice:
+//                        byte-identical, display codes equal to the CPU table, and equal to the stored
+//                        golden of this (kernel, adapter, driver) key; `--bless` records the key's
+//                        golden instead (DX12)
+//   viewport-visibility  the self-occlusion of decision 251: the closed box, the traversal against
+//                        every triangle, the thin gap, the shared edges, the shadow geometry predicts,
+//                        per-channel ratios, no self-shadowing on flat and convex surfaces, the
+//                        estimator against a high-count render, the BVH cache (DX12)
+//   viewport-ladder <mesh> <environment> [<report.json>]
+//                        measures the visibility ray counts (8, 4) to (256, 128), doubling, on a mesh at
+//                        the preview window's default view (660 x 600) and at 1700 x 1250: render times,
+//                        the BVH build time and the RMSE against a (1024, 1024) render (DX12)
 //
 // Output: `PASS <check>` / `FAIL <check>: <detail>` and `INFO` lines. Exit code 0 when every check
 // passed, 1 when one failed, 2 on a usage error, 77 when the case needs a DX12 adapter and there
@@ -26,6 +35,7 @@
 #include "preview/environment.h"
 #include "preview/latest.h"
 #include "preview/viewport.h"
+#include "preview/visibility.h"
 #include "render/engine_thread.h"
 #include "render/disk_cache.h"
 #include "render/kernel_cache.h"
@@ -272,10 +282,66 @@ int RunEnvironment() {
     const std::array<float, 3> rough = BrdfEntry(uniform, kBrdfTableSize - 1, kBrdfTableSize - 1);
     Check(rough[0] + rough[1] < 0.95f, "a rough lobe at normal incidence loses energy to single scattering");
 
+    // The importance distribution of the visibility rays (decision 251).
+    const auto cdfValid = [](const std::vector<float>& cdf, size_t offset, size_t size) {
+        if (cdf[offset] != 0.0f || cdf[offset + size - 1] != 1.0f) return false;
+        for (size_t i = 1; i < size; ++i) {
+            if (cdf[offset + i] < cdf[offset + i - 1]) return false;
+        }
+        return true;
+    };
+    const ImportanceDistribution& skyImportance = PrecomputeLighting(*sky).importance;
+    bool cdfs = skyImportance.width == kRadianceWidth && skyImportance.height == kRadianceWidth / 2 &&
+                skyImportance.marginalCdf.size() == skyImportance.height + 1 &&
+                skyImportance.conditionalCdf.size() == size_t{skyImportance.height} * (skyImportance.width + 1) &&
+                cdfValid(skyImportance.marginalCdf, 0, skyImportance.height + 1);
+    for (uint32_t y = 0; cdfs && y < skyImportance.height; ++y) {
+        cdfs = cdfValid(skyImportance.conditionalCdf, size_t{y} * (skyImportance.width + 1), skyImportance.width + 1);
+    }
+    Check(cdfs, "the importance distribution's marginal and conditional CDFs rise from 0 to 1");
+    // One bright texel of a 64 x 32 image covers an 8 x 8 block of the level-0 radiance; its mass
+    // is its light times sin(theta) over that of the whole image, row by row (in double).
+    EnvironmentImage spot = UniformEnvironment(0.01f, 0.01f, 0.01f, 64, 32);
+    for (int c = 0; c < 3; ++c) spot.rgb[(size_t{9} * 64 + 21) * 3 + static_cast<size_t>(c)] = 1000.0f;
+    const ImportanceDistribution& spotImportance = PrecomputeLighting(spot).importance;
+    double spotMass = 0.0;
+    double spotLight = 0.0;
+    double allLight = 0.0;
+    for (uint32_t y = 0; y < spotImportance.height; ++y) {
+        const double sinTheta = std::sin(std::numbers::pi * (y + 0.5) / spotImportance.height);
+        const bool spotRow = y >= 9 * 8 && y < 10 * 8;
+        allLight += sinTheta * (spotRow ? (spotImportance.width - 8) * 0.01 + 8 * 1000.0 : spotImportance.width * 0.01);
+        if (!spotRow) continue;
+        spotLight += sinTheta * 8 * 1000.0;
+        const double row = static_cast<double>(spotImportance.marginalCdf[y + 1]) - spotImportance.marginalCdf[y];
+        const size_t base = size_t{y} * (spotImportance.width + 1);
+        spotMass += row * (static_cast<double>(spotImportance.conditionalCdf[base + 22 * 8]) -
+                           spotImportance.conditionalCdf[base + 21 * 8]);
+    }
+    Check(std::abs(spotMass - spotLight / allLight) < 1e-5,
+          "a bright texel holds the importance distribution's mass in proportion to its light",
+          std::to_string(spotMass) + " vs " + std::to_string(spotLight / allLight));
+    const ImportanceDistribution& dark = PrecomputeLighting(UniformEnvironment(0.0f, 0.0f, 0.0f)).importance;
+    double worstUniform = 0.0;
+    double sinSum = 0.0;
+    for (uint32_t y = 0; y < dark.height; ++y) sinSum += std::sin(std::numbers::pi * (y + 0.5) / dark.height);
+    for (uint32_t y = 0; y < dark.height; ++y) {
+        const double expected = std::sin(std::numbers::pi * (y + 0.5) / dark.height) / sinSum;
+        worstUniform = std::max(worstUniform, std::abs(static_cast<double>(dark.marginalCdf[y + 1]) - dark.marginalCdf[y] - expected));
+        const size_t base = size_t{y} * (dark.width + 1);
+        for (uint32_t x = 0; x < dark.width; ++x) {
+            worstUniform = std::max(worstUniform, std::abs(static_cast<double>(dark.conditionalCdf[base + x + 1]) -
+                                                           dark.conditionalCdf[base + x] - 1.0 / dark.width));
+        }
+    }
+    Check(worstUniform < 1e-6, "an environment without light gets the uniform distribution over the sphere",
+          std::to_string(worstUniform));
+
     // Deterministic.
     const EnvironmentLighting a = PrecomputeLighting(*sky);
     const EnvironmentLighting b = PrecomputeLighting(*sky);
-    bool same = a.sh == b.sh && a.brdf == b.brdf;
+    bool same = a.sh == b.sh && a.brdf == b.brdf && a.importance.marginalCdf == b.importance.marginalCdf &&
+                a.importance.conditionalCdf == b.importance.conditionalCdf;
     for (size_t l = 0; same && l < kRadianceLevels; ++l) same = a.radiance[l].rgb == b.radiance[l].rgb;
     Check(same, "the precomputation is repeatable bit for bit");
     return Finish();
@@ -424,6 +490,72 @@ std::string HashOf(const std::vector<uint16_t>& values) {
     return uzp::core::Sha256Hex(std::string_view(reinterpret_cast<const char*>(values.data()), values.size() * 2));
 }
 
+using P3 = std::array<float, 3>;
+
+/// A mesh authored in code: one object, flat corner normals, no tangents (no normal map reads
+/// them), one material per `material` index used.
+class MeshBuilder {
+public:
+    void Triangle(const P3& a, const P3& b, const P3& c, uint32_t material) {
+        const P3 e1{b[0] - a[0], b[1] - a[1], b[2] - a[2]};
+        const P3 e2{c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+        const uzp::mesh::Float3 normal{e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
+                                       e1[0] * e2[1] - e1[1] * e2[0]};
+        uzp::mesh::Triangle triangle;
+        const std::array<uzp::mesh::Float2, 3> uvs{{{0.0f, 0.0f}, {1.0f, 0.0f}, {0.0f, 1.0f}}};
+        const std::array<const P3*, 3> corners{&a, &b, &c};
+        for (size_t k = 0; k < 3; ++k) {
+            m_mesh.positions.push_back({(*corners[k])[0], (*corners[k])[1], (*corners[k])[2]});
+            uzp::mesh::Corner corner;
+            corner.position = static_cast<uint32_t>(m_mesh.positions.size() - 1);
+            corner.normal = normal;
+            corner.uv0 = uvs[k];
+            corner.material = material;
+            m_mesh.corners.push_back(corner);
+            triangle.corners[k] = static_cast<uint32_t>(m_mesh.corners.size() - 1);
+        }
+        m_mesh.objects[0].triangles.push_back(triangle);
+        while (m_mesh.materials.size() <= material) {
+            m_mesh.materials.push_back({"m" + std::to_string(m_mesh.materials.size()),
+                                        static_cast<uint32_t>(m_mesh.materials.size())});
+        }
+    }
+    /// The quad a, b, c, d as the triangles (a, b, c) and (a, c, d).
+    void Quad(const P3& a, const P3& b, const P3& c, const P3& d, uint32_t material) {
+        Triangle(a, b, c, material);
+        Triangle(a, c, d, material);
+    }
+    /// The six faces of the box from `lo` to `hi`, two triangles each.
+    void Box(const P3& lo, const P3& hi, uint32_t material) {
+        const auto at = [&](int x, int y, int z) { return P3{x ? hi[0] : lo[0], y ? hi[1] : lo[1], z ? hi[2] : lo[2]}; };
+        Quad(at(0, 0, 0), at(0, 1, 0), at(1, 1, 0), at(1, 0, 0), material);  // -z
+        Quad(at(0, 0, 1), at(1, 0, 1), at(1, 1, 1), at(0, 1, 1), material);  // +z
+        Quad(at(0, 0, 0), at(0, 0, 1), at(0, 1, 1), at(0, 1, 0), material);  // -x
+        Quad(at(1, 0, 0), at(1, 1, 0), at(1, 1, 1), at(1, 0, 1), material);  // +x
+        Quad(at(0, 0, 0), at(1, 0, 0), at(1, 0, 1), at(0, 0, 1), material);  // -y
+        Quad(at(0, 1, 0), at(0, 1, 1), at(1, 1, 1), at(1, 1, 0), material);  // +y
+    }
+    std::shared_ptr<const uzp::mesh::TexturingMesh> Build() {
+        return std::make_shared<const uzp::mesh::TexturingMesh>(m_mesh);
+    }
+
+private:
+    uzp::mesh::TexturingMesh m_mesh = [] {
+        uzp::mesh::TexturingMesh mesh;
+        mesh.objects.push_back({"fixture", uzp::mesh::kIdentity, {}});
+        return mesh;
+    }();
+};
+
+/// The concave fixture of decision 251: a 1.5-unit cube (texture set 1) resting on a 6 x 6 plane
+/// (texture set 0) at y = 0.
+std::shared_ptr<const uzp::mesh::TexturingMesh> CubeOnPlane() {
+    MeshBuilder builder;
+    builder.Quad({-3.0f, 0.0f, -3.0f}, {-3.0f, 0.0f, 3.0f}, {3.0f, 0.0f, 3.0f}, {3.0f, 0.0f, -3.0f}, 0);
+    builder.Box({-0.75f, 0.0f, -0.75f}, {0.75f, 1.5f, 0.75f}, 1);
+    return builder.Build();
+}
+
 struct Fixture {
     std::string name;
     std::shared_ptr<const uzp::mesh::TexturingMesh> mesh;
@@ -431,6 +563,8 @@ struct Fixture {
     double rotation = 0.0;
     double yaw = 0.0;
     double pitch = 0.0;
+    /// A second texture set's material, when the fixture has one.
+    std::optional<MaterialInputs> second{};
 };
 
 std::vector<Fixture> Fixtures() {
@@ -463,6 +597,16 @@ std::vector<Fixture> Fixtures() {
         f.material.baseColorValue = {0.95f, 0.64f, 0.54f};
         f.material.metalnessValue = 1.0f;
         f.material.roughnessValue = 0.2f;
+        fixtures.push_back(std::move(f));
+    }
+    {
+        // Concave (decision 251): the cube shadows the plane, another texture set.
+        Fixture f{"cube-on-plane", CubeOnPlane(), {}, 30.0, 35.0, 30.0};
+        f.material.roughnessValue = 0.5f;
+        MaterialInputs cube;
+        cube.baseColorValue = {0.9f, 0.3f, 0.2f};
+        cube.roughnessValue = 0.4f;
+        f.second = cube;
         fixtures.push_back(std::move(f));
     }
     return fixtures;
@@ -563,6 +707,7 @@ int RunViewportGolden(const fs::path& dir, const fs::path& goldens, bool bless) 
         ViewportScene scene;
         scene.mesh = fixture.mesh;
         scene.materials = {fixture.material};
+        if (fixture.second) scene.materials.push_back(*fixture.second);
         scene.lighting = lighting;
         scene.environmentRotationDegrees = fixture.rotation;
         OrbitCamera camera = FitCamera(*scene.mesh);
@@ -661,6 +806,11 @@ bool SameLighting(const EnvironmentLighting& a, const EnvironmentLighting& b) {
         return x.size() == y.size() && std::memcmp(x.data(), y.data(), x.size() * sizeof(float)) == 0;
     };
     if (!bits(a.sh, b.sh) || !bits(a.brdf, b.brdf) || a.radiance.size() != b.radiance.size()) return false;
+    if (a.importance.width != b.importance.width || a.importance.height != b.importance.height ||
+        !bits(a.importance.marginalCdf, b.importance.marginalCdf) ||
+        !bits(a.importance.conditionalCdf, b.importance.conditionalCdf)) {
+        return false;
+    }
     for (size_t l = 0; l < a.radiance.size(); ++l) {
         const RadianceLevel& x = a.radiance[l];
         const RadianceLevel& y = b.radiance[l];
@@ -734,6 +884,797 @@ int RunLightingCache(const fs::path& dir) {
     return Finish();
 }
 
+// ── viewport-visibility (decision 251) ───────────────────────────────────────────────────────
+
+std::shared_ptr<const EnvironmentLighting> SharedLighting(const EnvironmentImage& image) {
+    return std::make_shared<const EnvironmentLighting>(PrecomputeLighting(image));
+}
+
+/// One render inside one engine request; a failure is a failed check named `what`.
+std::optional<ViewportImage> Render(Engine& engine, const ViewportScene& scene, const CameraPose& pose, uint32_t width,
+                                    uint32_t height, const std::string& what) {
+    Result<ViewportImage> image = engine
+                                      .Submit(std::make_shared<const int>(0),
+                                              [&](EngineContext& context, const int&) {
+                                                  return RenderViewport(context, scene, pose, width, height);
+                                              })
+                                      .get();
+    if (!image) {
+        Check(false, what + " renders", image.error().Describe());
+        return std::nullopt;
+    }
+    return std::move(*image);
+}
+
+float Linear(const ViewportImage& image, size_t pixel, size_t channel) {
+    return HalfToFloat(image.linear[pixel * 4 + channel]);
+}
+
+/// The 64 x 32 environment of the shadow checks: a grey sky of 0.02 and a sun, texel (21, 9) at
+/// 300 (37 degrees above the horizon, towards -x and +z), which gives most of a floor's light.
+EnvironmentImage SunEnvironment() {
+    EnvironmentImage image = UniformEnvironment(0.02f, 0.02f, 0.02f, 64, 32);
+    for (size_t c = 0; c < 3; ++c) image.rgb[(size_t{9} * 64 + 21) * 3 + c] = 300.0f;
+    return image;
+}
+
+using D3 = std::array<double, 3>;
+
+D3 Along(const D3& o, const D3& d, double t) { return {o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t}; }
+
+/// The entry distance of the ray (o, d) into the box [lo, hi] beyond `from`, or +infinity.
+double BoxEntry(const D3& o, const D3& d, const D3& lo, const D3& hi, double from = 0.0) {
+    double enter = from;
+    double leave = std::numeric_limits<double>::infinity();
+    for (int a = 0; a < 3; ++a) {
+        if (d[a] == 0.0) {
+            if (o[a] < lo[a] || o[a] > hi[a]) return std::numeric_limits<double>::infinity();
+            continue;
+        }
+        const double t0 = (lo[a] - o[a]) / d[a];
+        const double t1 = (hi[a] - o[a]) / d[a];
+        enter = std::max(enter, std::min(t0, t1));
+        leave = std::min(leave, std::max(t0, t1));
+    }
+    return enter <= leave ? enter : std::numeric_limits<double>::infinity();
+}
+
+/// The centre ray of pixel (x, y), as the kernel casts it (perspective).
+std::pair<D3, D3> PixelRay(const CameraPose& pose, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+    const double tanHalf = std::tan(pose.fovDegrees * std::numbers::pi / 360.0);
+    const double aspect = static_cast<double>(width) / height;
+    const double sx = ((x + 0.5) / width * 2.0 - 1.0) * tanHalf * aspect;
+    const double sy = (1.0 - (y + 0.5) / height * 2.0) * tanHalf;
+    D3 d{};
+    for (int a = 0; a < 3; ++a) d[a] = pose.forward[a] + pose.right[a] * sx + pose.up[a] * sy;
+    const double length = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    for (double& v : d) v /= length;
+    return {pose.eye, d};
+}
+
+/// The CPU reference of the kernel's `Blocks` for a ray whose largest direction component is
+/// exactly +-1: the same float operations in the same order (this file is compiled without
+/// contraction), so its decisions equal the GPU's bit for bit.
+struct CpuRay {
+    P3 origin;
+    int kx = 0;
+    int ky = 0;
+    int kz = 0;
+    float shearX = 0.0f;
+    float shearY = 0.0f;
+    float shearZ = 0.0f;
+};
+
+CpuRay MakeCpuRay(const P3& origin, const P3& dir) {
+    CpuRay r{origin};
+    const P3 a{std::abs(dir[0]), std::abs(dir[1]), std::abs(dir[2])};
+    r.kz = a[0] > a[1] ? (a[0] > a[2] ? 0 : 2) : (a[1] > a[2] ? 1 : 2);
+    r.kx = r.kz == 2 ? 0 : r.kz + 1;
+    r.ky = r.kx == 2 ? 0 : r.kx + 1;
+    r.shearX = dir[static_cast<size_t>(r.kx)] / dir[static_cast<size_t>(r.kz)];
+    r.shearY = dir[static_cast<size_t>(r.ky)] / dir[static_cast<size_t>(r.kz)];
+    r.shearZ = 1.0f / dir[static_cast<size_t>(r.kz)];
+    return r;
+}
+
+bool CpuBlocks(const CpuRay& r, const float* corners) {
+    std::array<P3, 3> rel{};
+    for (size_t k = 0; k < 3; ++k) {
+        for (size_t a = 0; a < 3; ++a) rel[k][a] = corners[k * 3 + a] - r.origin[a];
+    }
+    const auto kx = static_cast<size_t>(r.kx);
+    const auto ky = static_cast<size_t>(r.ky);
+    const auto kz = static_cast<size_t>(r.kz);
+    std::array<float, 3> x{};
+    std::array<float, 3> y{};
+    std::array<float, 3> z{};
+    for (size_t k = 0; k < 3; ++k) {
+        const float sx = r.shearX * rel[k][kz];
+        x[k] = rel[k][kx] - sx;
+        const float sy = r.shearY * rel[k][kz];
+        y[k] = rel[k][ky] - sy;
+        z[k] = r.shearZ * rel[k][kz];
+    }
+    const float a0 = x[1] * y[2];
+    const float b0 = y[1] * x[2];
+    const float f0 = a0 - b0;
+    const float a1 = x[2] * y[0];
+    const float b1 = y[2] * x[0];
+    const float f1 = a1 - b1;
+    const float a2 = x[0] * y[1];
+    const float b2 = y[0] * x[1];
+    const float f2 = a2 - b2;
+    if ((f0 < 0.0f || f1 < 0.0f || f2 < 0.0f) && (f0 > 0.0f || f1 > 0.0f || f2 > 0.0f)) return false;
+    if (f0 == 0.0f && f1 == 0.0f && f2 == 0.0f) return false;
+    const float det01 = f0 + f1;
+    const float det = det01 + f2;
+    const float t0 = f0 * z[0];
+    const float t1 = f1 * z[1];
+    const float t2 = f2 * z[2];
+    const float t01 = t0 + t1;
+    const float t = t01 + t2;
+    return det > 0.0f ? t > 0.0f : t < 0.0f;
+}
+
+/// Whether some triangle other than `self` blocks the ray, testing every triangle.
+bool CpuOccluded(const std::vector<float>& corners, const VisibilityRay& ray) {
+    const CpuRay r = MakeCpuRay(ray.point, ray.direction);
+    for (size_t t = 0; t < corners.size() / 9; ++t) {
+        if (t == ray.self) continue;
+        if (CpuBlocks(r, &corners[t * 9])) return true;
+    }
+    return false;
+}
+
+/// The traced visibility of `rays` against `mesh`, or none (a failed check).
+std::optional<VisibilityHits> Trace(Engine& engine, const std::shared_ptr<const uzp::mesh::TexturingMesh>& mesh,
+                                    const std::vector<VisibilityRay>& rays, const std::string& what) {
+    Result<VisibilityHits> hits = engine
+                                      .Submit(std::make_shared<const int>(0),
+                                              [&](EngineContext& context, const int&) {
+                                                  return TraceVisibility(context, *mesh, rays);
+                                              })
+                                      .get();
+    if (!hits) {
+        Check(false, what + ": the rays are traced", hits.error().Describe());
+        return std::nullopt;
+    }
+    return std::move(*hits);
+}
+
+std::string RayText(const VisibilityRay& ray) {
+    char text[256];
+    std::snprintf(text, sizeof(text), "point (%.9g, %.9g, %.9g) normal (%g, %g, %g) direction (%.9g, %.9g, %.9g) self %u",
+                  ray.point[0], ray.point[1], ray.point[2], ray.normal[0], ray.normal[1], ray.normal[2], ray.direction[0],
+                  ray.direction[1], ray.direction[2], ray.self);
+    return text;
+}
+
+/// The BVH holds every triangle once, its boxes bound their children and triangles, and its depth
+/// is within `cap`; an empty string, or what is wrong.
+std::string BvhProblem(const VisibilityBvh& bvh, const std::vector<float>& corners, uint32_t cap) {
+    const size_t triangles = corners.size() / 9;
+    if (triangles == 0) return bvh.nodes.empty() ? "" : "nodes without triangles";
+    if (bvh.depth > cap) return "depth " + std::to_string(bvh.depth) + " beyond the cap";
+    std::vector<uint32_t> seen(triangles, 0);
+    const auto f = [&](size_t word) { return std::bit_cast<float>(bvh.nodes[word]); };
+    const size_t nodes = bvh.nodes.size() / kBvhNodeWords;
+    for (size_t n = 0; n < nodes; ++n) {
+        const size_t base = n * kBvhNodeWords;
+        const auto inside = [&](float v, size_t axis) { return v >= f(base + axis) && v <= f(base + 4 + axis); };
+        const uint32_t first = bvh.nodes[base + 3];
+        const uint32_t count = bvh.nodes[base + 7];
+        if (count == 0) {
+            if (first + 1 >= nodes) return "node " + std::to_string(n) + " names children out of range";
+            for (const uint32_t child : {first, first + 1}) {
+                for (size_t a = 0; a < 3; ++a) {
+                    if (!inside(f(child * kBvhNodeWords + a), a) || !inside(f(child * kBvhNodeWords + 4 + a), a)) {
+                        return "node " + std::to_string(n) + " does not bound child " + std::to_string(child);
+                    }
+                }
+            }
+            continue;
+        }
+        for (uint32_t j = first; j < first + count; ++j) {
+            const size_t o = size_t{j} * kOccluderWords;
+            if (o + kOccluderWords > bvh.occluders.size()) return "a leaf names occluders out of range";
+            const uint32_t t = bvh.occluders[o + 3];
+            if (t >= triangles) return "an occluder names triangle " + std::to_string(t);
+            ++seen[t];
+            for (size_t k = 0; k < 3; ++k) {
+                for (size_t a = 0; a < 3; ++a) {
+                    const float v = std::bit_cast<float>(bvh.occluders[o + k * 4 + a]);
+                    if (v != corners[t * 9 + k * 3 + a]) return "occluder " + std::to_string(j) + " is not its triangle";
+                    if (!inside(v, a)) return "leaf " + std::to_string(n) + " does not bound triangle " + std::to_string(t);
+                }
+            }
+        }
+    }
+    for (size_t t = 0; t < triangles; ++t) {
+        if (seen[t] != 1) return "triangle " + std::to_string(t) + " is in " + std::to_string(seen[t]) + " leaves";
+    }
+    return "";
+}
+
+/// Rays from a deterministic generator around the bounds of `corners`: origins on a 2^-12 grid
+/// inside the bounds grown by a fifth, directions with one component exactly +-1 and the others
+/// on a 2^-9 grid in [-1, 1] (so the CPU reference shears exactly as the GPU), every fourth ray
+/// skipping a triangle.
+std::vector<VisibilityRay> RandomRays(const std::vector<float>& corners, size_t count, uint32_t seed) {
+    P3 lo{std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
+    P3 hi{-lo[0], -lo[1], -lo[2]};
+    for (size_t i = 0; i < corners.size(); ++i) {
+        lo[i % 3] = std::min(lo[i % 3], corners[i]);
+        hi[i % 3] = std::max(hi[i % 3], corners[i]);
+    }
+    uint64_t state = 0x9E3779B97F4A7C15ull ^ seed;
+    const auto next = [&] {
+        state = state * 6364136223846793005ull + 1442695040888963407ull;
+        return static_cast<uint32_t>(state >> 33);
+    };
+    const auto unit = [&] { return static_cast<double>(next() % 4097) / 4096.0; };
+    std::vector<VisibilityRay> rays(count);
+    const size_t triangles = corners.size() / 9;
+    for (size_t i = 0; i < count; ++i) {
+        VisibilityRay& ray = rays[i];
+        for (size_t a = 0; a < 3; ++a) {
+            const double margin = (static_cast<double>(hi[a]) - lo[a]) * 0.2 + 0.01;
+            const double v = lo[a] - margin + unit() * ((static_cast<double>(hi[a]) - lo[a]) + 2.0 * margin);
+            ray.point[a] = static_cast<float>(std::round(v * 4096.0) / 4096.0);
+        }
+        const size_t major = next() % 3;
+        for (size_t a = 0; a < 3; ++a) {
+            ray.direction[a] = a == major ? (next() % 2 ? 1.0f : -1.0f)
+                                          : static_cast<float>(static_cast<int>(next() % 1025) - 512) / 512.0f;
+        }
+        if (i % 4 == 3 && triangles > 0) ray.self = next() % static_cast<uint32_t>(triangles);
+    }
+    return rays;
+}
+
+/// Material slots of the ratio renders: the base colour does not change a ratio.
+MaterialInputs Rough(float roughness) {
+    MaterialInputs m;
+    m.roughnessValue = roughness;
+    return m;
+}
+
+int RunViewportVisibility(const fs::path& dir) {
+    Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    const auto uniform = SharedLighting(UniformEnvironment(1.0f, 1.0f, 1.0f));
+    const auto sun = SharedLighting(SunEnvironment());
+    const std::expected<EnvironmentImage, std::string> studioImage =
+        DecodeEnvironment(Bytes(RepoRoot() / "assets/environments/studio-small-09.exr"));
+    if (!studioImage) {
+        Check(false, "the shipped environment decodes", studioImage.error());
+        return Finish();
+    }
+    const auto studio = SharedLighting(*studioImage);
+
+    // 1. A camera inside a closed box under a constant environment: every visibility ray of every
+    // pixel is valid (its weight and radiance are positive) and blocked, so both ratios are 0 and
+    // the pixel is exactly 0; the ratio-1 fallback of an empty sum would light it.
+    {
+        MeshBuilder builder;
+        builder.Box({-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}, 0);
+        ViewportScene scene;
+        scene.mesh = builder.Build();
+        scene.materials = {Rough(0.5f)};
+        scene.lighting = uniform;
+        CameraPose pose;
+        pose.eye = {0.1, -0.2, 0.15};
+        pose.fovDegrees = 100.0;
+        if (const std::optional<ViewportImage> image = Render(engine, scene, pose, 64, 64, "the closed box")) {
+            size_t lit = 0;
+            for (size_t i = 0; i < size_t{64} * 64; ++i) {
+                for (size_t c = 0; c < 3; ++c) {
+                    if (image->linear[i * 4 + c] != 0 || image->display[i * 4 + c] != 0) ++lit;
+                }
+            }
+            Check(lit == 0, "closed box: every pixel renders exactly 0 (every visibility ray valid and blocked)",
+                  std::to_string(lit) + " channels are not 0");
+        }
+        scene.diffuseRays = 0;
+        scene.specularRays = 0;
+        if (const std::optional<ViewportImage> image = Render(engine, scene, pose, 64, 64, "the closed box, no rays")) {
+            bool all = true;
+            for (size_t i = 0; i < size_t{64} * 64; ++i) all = all && Linear(*image, i, 1) > 0.0f;
+            Check(all, "closed box without visibility rays: every pixel is lit (the 0 comes from the rays)");
+        }
+    }
+
+    // 2. The traversal against every triangle: the BVH's visibility of each ray equals a CPU cast
+    // against all triangles (and the kernel's own linear test), on the concave fixture, the
+    // sphere, the closed box and a BVH whose depth cap is reached.
+    {
+        MeshBuilder box;
+        box.Box({-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}, 0);
+        const std::pair<const char*, std::shared_ptr<const uzp::mesh::TexturingMesh>> meshes[] = {
+            {"cube-on-plane", CubeOnPlane()},
+            {"sphere", LoadMesh("parity/fixtures/render-procedure/sphere.obj")},
+            {"closed box", box.Build()},
+        };
+        uint32_t seed = 1;
+        for (const auto& [name, mesh] : meshes) {
+            const std::vector<float> corners = WorldCorners(*mesh);
+            const VisibilityBvh bvh = BuildVisibilityBvh(corners);
+            const std::string problem = BvhProblem(bvh, corners, kBvhMaxDepth);
+            Check(problem.empty(),
+                  std::string(name) + ": the BVH holds every triangle once, bounds its contents and is within the depth cap",
+                  problem);
+            Info(std::string(name) + ": " + std::to_string(corners.size() / 9) + " triangles, " +
+                 std::to_string(bvh.nodes.size() / kBvhNodeWords) + " nodes, depth " + std::to_string(bvh.depth));
+            const std::vector<VisibilityRay> rays = RandomRays(corners, 20000, seed++);
+            const std::optional<VisibilityHits> hits = Trace(engine, mesh, rays, name);
+            if (!hits) continue;
+            size_t blocked = 0;
+            std::string mismatch;
+            for (size_t i = 0; i < rays.size(); ++i) {
+                const bool cpu = CpuOccluded(corners, rays[i]);
+                blocked += cpu ? 1 : 0;
+                if (mismatch.empty() && (hits->bvh[i] != (cpu ? 1 : 0) || hits->linear[i] != (cpu ? 1 : 0))) {
+                    mismatch = "ray " + std::to_string(i) + " " + RayText(rays[i]) + ": CPU " + std::to_string(cpu) +
+                               ", BVH " + std::to_string(hits->bvh[i]) + ", every triangle " + std::to_string(hits->linear[i]);
+                }
+            }
+            Check(mismatch.empty() && blocked > rays.size() / 10 && blocked < rays.size() * 9 / 10,
+                  std::string(name) + ": the BVH's visibility of every ray equals a CPU cast against every triangle",
+                  mismatch.empty() ? std::to_string(blocked) + " of " + std::to_string(rays.size()) + " blocked" : mismatch);
+        }
+        // The depth cap: a cap of 2 makes leaves of whatever remains at depth 2.
+        const std::vector<float> corners = WorldCorners(*LoadMesh("parity/fixtures/render-procedure/sphere.obj"));
+        const VisibilityBvh capped = BuildVisibilityBvh(corners, 2);
+        const std::string problem = BvhProblem(capped, corners, 2);
+        Check(problem.empty() && capped.depth == 2,
+              "a depth cap makes leaves at the cap that still hold every triangle once",
+              problem.empty() ? "depth " + std::to_string(capped.depth) : problem);
+    }
+
+    // 3. A thin gap: an occluder twice the origin offset above the surface blocks; one at half of
+    // it lies behind the moved origin and leaks (the documented limit of the offset). The offset
+    // is 256 units in the last place at y = 1 (2^-15) and 2^-16 within 1/32 of zero.
+    for (const auto& [y0, offset] : {std::pair<float, float>{1.0f, 0x1p-15f}, std::pair<float, float>{0.0f, 0x1p-16f}}) {
+        for (const float factor : {2.0f, 0.5f}) {
+            const float y1 = y0 + factor * offset;
+            MeshBuilder builder;
+            builder.Quad({-1.0f, y0, -1.0f}, {-1.0f, y0, 1.0f}, {1.0f, y0, 1.0f}, {1.0f, y0, -1.0f}, 0);
+            builder.Quad({-1.0f, y1, -1.0f}, {1.0f, y1, -1.0f}, {1.0f, y1, 1.0f}, {-1.0f, y1, 1.0f}, 0);
+            const auto mesh = builder.Build();
+            std::vector<VisibilityRay> rays;
+            for (int i = 0; i < 8; ++i) {
+                for (const P3& d : {P3{0.0f, 1.0f, 0.0f}, P3{0.25f, 1.0f, -0.25f}, P3{-0.5f, 1.0f, 0.125f}}) {
+                    VisibilityRay ray;
+                    ray.point = {-0.7f + 0.2f * static_cast<float>(i), y0, 0.3f - 0.1f * static_cast<float>(i)};
+                    ray.normal = {0.0f, 1.0f, 0.0f};
+                    ray.direction = d;
+                    rays.push_back(ray);
+                }
+            }
+            const std::string what = "y " + std::to_string(y0) + ", gap " + std::to_string(factor) + " x the offset";
+            const std::optional<VisibilityHits> hits = Trace(engine, mesh, rays, what);
+            if (!hits) continue;
+            size_t blocked = 0;
+            for (size_t i = 0; i < rays.size(); ++i) blocked += hits->bvh[i] && hits->linear[i] ? 1 : 0;
+            if (factor > 1.0f) {
+                Check(blocked == rays.size(),
+                      "at y = " + std::string(y0 == 0.0f ? "0" : "1") + " an occluder twice the origin offset above blocks",
+                      std::to_string(blocked) + " of " + std::to_string(rays.size()) + " blocked");
+            } else {
+                Check(blocked == 0,
+                      "at y = " + std::string(y0 == 0.0f ? "0" : "1") +
+                          " an occluder at half the origin offset leaks (documented)",
+                      std::to_string(blocked) + " of " + std::to_string(rays.size()) + " blocked");
+            }
+        }
+    }
+
+    // 4. Watertight: rays through the shared diagonal of every face, through every box edge and
+    // through every corner of a closed box are blocked, through the BVH and every triangle.
+    {
+        MeshBuilder builder;
+        builder.Box({-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}, 0);
+        const auto mesh = builder.Build();
+        std::vector<VisibilityRay> rays;
+        const float ts[] = {-0.75f, -0.3f, 0.0f, 0.4f, 0.875f};
+        for (size_t axis = 0; axis < 3; ++axis) {
+            for (const float side : {-1.0f, 1.0f}) {
+                const size_t u = (axis + 1) % 3;
+                const size_t v = (axis + 2) % 3;
+                for (const float t : ts) {
+                    for (const float flip : {1.0f, -1.0f}) {  // both diagonals: one is shared by the face's triangles
+                        VisibilityRay ray;
+                        ray.point[axis] = 3.0f * side;
+                        ray.point[u] = t;
+                        ray.point[v] = t * flip;
+                        ray.direction[axis] = -side;
+                        rays.push_back(ray);
+                    }
+                    // Along a box edge: the ray grazes the face it runs along and meets the edge.
+                    VisibilityRay edge;
+                    edge.point[axis] = 3.0f * side;
+                    edge.point[u] = 1.0f;
+                    edge.point[v] = t;
+                    edge.direction[axis] = -side;
+                    rays.push_back(edge);
+                }
+            }
+        }
+        for (int corner = 0; corner < 8; ++corner) {
+            VisibilityRay ray;
+            for (size_t a = 0; a < 3; ++a) {
+                const float s = (corner >> a) & 1 ? 1.0f : -1.0f;
+                ray.point[a] = 3.0f * s;
+                ray.direction[a] = -s;
+            }
+            rays.push_back(ray);
+        }
+        if (const std::optional<VisibilityHits> hits = Trace(engine, mesh, rays, "the box's shared edges")) {
+            std::string missed;
+            for (size_t i = 0; i < rays.size(); ++i) {
+                if ((!hits->bvh[i] || !hits->linear[i]) && missed.empty()) missed = RayText(rays[i]);
+            }
+            Check(missed.empty(), "every ray through a shared edge or corner of a closed box is blocked (watertight)", missed);
+        }
+    }
+
+    // 5. The cube (texture set 1) shadows the plane (texture set 0) where the geometry predicts,
+    // under a sun that gives most of the light: the diffuse ratio is low where every direction of
+    // the sun's texel is hidden by the cube (umbra) and high where none is; the umbra is darker.
+    {
+        ViewportScene scene;
+        scene.mesh = CubeOnPlane();
+        scene.materials = {Rough(0.5f), Rough(0.4f)};
+        scene.lighting = sun;
+        scene.background = {-1.0f, -1.0f, -1.0f};
+        OrbitCamera camera;
+        camera.distance = 10.0;
+        camera.pitchDegrees = 80.0;
+        camera.yawDegrees = 20.0;
+        const CameraPose pose = PoseOf(camera);
+        constexpr uint32_t kSize = 192;
+        scene.output = ViewportOutput::DiffuseVisibility;
+        const std::optional<ViewportImage> ratios = Render(engine, scene, pose, kSize, kSize, "the sun's shadow (ratio)");
+        scene.output = ViewportOutput::Colour;
+        const std::optional<ViewportImage> colours = Render(engine, scene, pose, kSize, kSize, "the sun's shadow (colour)");
+        if (ratios && colours) {
+            const D3 cubeLo{-0.75, 0.0, -0.75};
+            const D3 cubeHi{0.75, 1.5, 0.75};
+            std::vector<D3> sunDirections;
+            for (const double du : {-1.0, 0.0, 1.0}) {
+                for (const double dv : {-1.0, 0.0, 1.0}) {
+                    // The sun's texel, grown by one level-0 texel for the bilinear lookups.
+                    const double u = (21.5 + du * (0.5 + 1.0 / 8.0)) / 64.0;
+                    const double v = (9.5 + dv * (0.5 + 1.0 / 8.0)) / 32.0;
+                    sunDirections.push_back(DirectionOf(u, v));
+                }
+            }
+            double umbraMax = 0.0;
+            double litMin = 1.0;
+            double umbraColour = 0.0;
+            double litColour = 0.0;
+            size_t umbra = 0;
+            size_t lit = 0;
+            for (uint32_t y = 0; y < kSize; ++y) {
+                for (uint32_t x = 0; x < kSize; ++x) {
+                    const auto [o, d] = PixelRay(pose, x, y, kSize, kSize);
+                    if (!(d[1] < 0.0)) continue;
+                    const double tPlane = -o[1] / d[1];
+                    const D3 p = Along(o, d, tPlane);
+                    if (std::abs(p[0]) > 2.9 || std::abs(p[2]) > 2.9) continue;
+                    if (BoxEntry(o, d, cubeLo, cubeHi) < tPlane) continue;  // the camera sees the cube
+                    int hidden = 0;
+                    for (const D3& s : sunDirections) hidden += BoxEntry(p, s, cubeLo, cubeHi, 1e-9) < 1e30 ? 1 : 0;
+                    const size_t i = size_t{y} * kSize + x;
+                    const double ratio = (Linear(*ratios, i, 0) + Linear(*ratios, i, 1) + Linear(*ratios, i, 2)) / 3.0;
+                    const double colour = Linear(*colours, i, 1);
+                    if (hidden == static_cast<int>(sunDirections.size())) {
+                        ++umbra;
+                        umbraMax = std::max(umbraMax, ratio);
+                        umbraColour += colour;
+                    } else if (hidden == 0) {
+                        ++lit;
+                        litMin = std::min(litMin, ratio);
+                        litColour += colour;
+                    }
+                }
+            }
+            Info("sun shadow: " + std::to_string(umbra) + " umbra pixels (largest diffuse ratio " + std::to_string(umbraMax) +
+                 "), " + std::to_string(lit) + " lit pixels (smallest " + std::to_string(litMin) + ")");
+            Check(umbra > 200 && lit > 2000 && umbraMax < 0.3 && litMin > 0.7,
+                  "the cube (texture set 1) shadows the plane (texture set 0) where geometry predicts: the diffuse "
+                  "ratio is below 0.3 in the umbra and above 0.7 where the sun is in view",
+                  "umbra " + std::to_string(umbra) + " max " + std::to_string(umbraMax) + ", lit " + std::to_string(lit) +
+                      " min " + std::to_string(litMin));
+            const double umbraMean = umbra ? umbraColour / umbra : 0.0;
+            const double litMean = lit ? litColour / lit : 0.0;
+            Check(umbra > 0 && lit > 0 && umbraMean < 0.5 * litMean,
+                  "an occluded point is darker: the umbra's mean colour is below half the lit plane's",
+                  std::to_string(umbraMean) + " vs " + std::to_string(litMean));
+        }
+    }
+
+    // 6. Per-channel ratios: red light comes only from +x, blue only from -x; beside a wall at
+    // x = 0.5 that hides +x, the floor's red ratio falls while its blue ratio stays near 1.
+    {
+        EnvironmentImage twoColour = UniformEnvironment(0.0f, 0.0f, 0.0f, 64, 32);
+        for (uint32_t y = 0; y < 32; ++y) {
+            for (uint32_t x = 0; x < 64; ++x) {
+                const bool red = DirectionOf((x + 0.5) / 64, (y + 0.5) / 32)[0] > 0.0;
+                float* texel = &twoColour.rgb[(size_t{y} * 64 + x) * 3];
+                texel[0] = red ? 1.0f : 0.0f;
+                texel[2] = red ? 0.0f : 1.0f;
+            }
+        }
+        MeshBuilder builder;
+        builder.Quad({-3.0f, 0.0f, -3.0f}, {-3.0f, 0.0f, 3.0f}, {0.5f, 0.0f, 3.0f}, {0.5f, 0.0f, -3.0f}, 0);
+        builder.Quad({0.5f, 0.0f, -3.0f}, {0.5f, 0.0f, 3.0f}, {0.5f, 3.0f, 3.0f}, {0.5f, 3.0f, -3.0f}, 0);
+        ViewportScene scene;
+        scene.mesh = builder.Build();
+        scene.materials = {Rough(0.5f)};
+        scene.lighting = SharedLighting(twoColour);
+        scene.background = {-1.0f, -1.0f, -1.0f};
+        scene.output = ViewportOutput::DiffuseVisibility;
+        OrbitCamera camera;
+        camera.target = {-0.5, 0.0, 0.0};
+        camera.distance = 6.0;
+        camera.pitchDegrees = 70.0;
+        camera.yawDegrees = -90.0;
+        const CameraPose pose = PoseOf(camera);
+        constexpr uint32_t kSize = 128;
+        if (const std::optional<ViewportImage> image = Render(engine, scene, pose, kSize, kSize, "the two-colour wall")) {
+            double redSum = 0.0;
+            size_t beside = 0;
+            double blueMin = 1.0;
+            size_t floor = 0;
+            for (uint32_t y = 0; y < kSize; ++y) {
+                for (uint32_t x = 0; x < kSize; ++x) {
+                    const auto [o, d] = PixelRay(pose, x, y, kSize, kSize);
+                    if (!(d[1] < 0.0)) continue;
+                    const D3 p = Along(o, d, -o[1] / d[1]);
+                    if (p[0] > 0.49 || p[0] < -2.9 || std::abs(p[2]) > 2.9) continue;
+                    const size_t i = size_t{y} * kSize + x;
+                    ++floor;
+                    blueMin = std::min(blueMin, static_cast<double>(Linear(*image, i, 2)));
+                    if (p[0] > 0.0 && std::abs(p[2]) < 2.0) {
+                        ++beside;
+                        redSum += Linear(*image, i, 0);
+                    }
+                }
+            }
+            const double redMean = beside ? redSum / beside : 1.0;
+            Info("two-colour wall: " + std::to_string(floor) + " floor pixels, smallest blue ratio " + std::to_string(blueMin) +
+                 "; " + std::to_string(beside) + " beside the wall, mean red ratio " + std::to_string(redMean));
+            Check(beside > 100 && redMean < 0.5 && blueMin > 0.98,
+                  "a two-colour environment gives per-channel ratios: beside a wall that hides the red half, the red "
+                  "ratio falls below 0.5 while the blue one stays above 0.98",
+                  "red " + std::to_string(redMean) + ", blue " + std::to_string(blueMin));
+        }
+    }
+
+    // 7. No self-shadowing on flat and convex surfaces: on the plane (with and without a tilted
+    // normal map) and on the sphere every diffuse and specular ratio is exactly 1, at grazing and
+    // steep views, under the sun and the shipped environment.
+    {
+        const std::vector<Fixture> fixtures = Fixtures();
+        std::vector<std::pair<std::string, std::pair<std::shared_ptr<const uzp::mesh::TexturingMesh>, MaterialInputs>>> cases = {
+            {"plane", {fixtures[1].mesh, Rough(0.35f)}},
+            {"normal-mapped plane", {fixtures[1].mesh, fixtures[1].material}},
+            {"sphere", {fixtures[0].mesh, Rough(0.5f)}},
+        };
+        std::string problem;
+        size_t pixels = 0;
+        for (const auto& [name, input] : cases) {
+            for (const auto& lighting : {sun, studio}) {
+                for (const double pitch : {8.0, 35.0, 70.0}) {
+                    for (const double yaw : {0.0, 120.0}) {
+                        ViewportScene scene;
+                        scene.mesh = input.first;
+                        scene.materials = {input.second};
+                        scene.lighting = lighting;
+                        scene.background = {-1.0f, -1.0f, -1.0f};
+                        OrbitCamera camera = FitCamera(*scene.mesh);
+                        camera.pitchDegrees = pitch;
+                        camera.yawDegrees = yaw;
+                        for (const ViewportOutput output : {ViewportOutput::DiffuseVisibility, ViewportOutput::SpecularVisibility}) {
+                            scene.output = output;
+                            const std::optional<ViewportImage> image = Render(engine, scene, PoseOf(camera), 96, 96, name);
+                            if (!image) continue;
+                            for (size_t i = 0; i < size_t{96} * 96; ++i) {
+                                if (image->linear[i * 4] == FloatToHalf(-1.0f)) continue;
+                                ++pixels;
+                                for (size_t c = 0; c < 3; ++c) {
+                                    if (image->linear[i * 4 + c] != FloatToHalf(1.0f) && problem.empty()) {
+                                        problem = name + " pitch " + std::to_string(pitch) + " yaw " + std::to_string(yaw) +
+                                                  ": pixel " + std::to_string(i) + " ratio " + std::to_string(Linear(*image, i, c));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Check(problem.empty() && pixels > 10000,
+              "no self-shadowing: on a plane (with and without a tilted normal map) and on the sphere every diffuse and "
+              "specular ratio is exactly 1 at grazing and steep views",
+              problem.empty() ? std::to_string(pixels) + " pixels" : problem);
+    }
+
+    // 8. The estimator against a high-count render of the same estimator (1024 rays of each kind),
+    // over the concave fixture's pixels the reference shows occluded:
+    // - it converges: four times the rays at least nearly halve the RMSE (Monte-Carlo rate, 0.6);
+    // - the RMSE at the shipped count N is within 0.5 / sqrt(N), the largest standard deviation of
+    //   a ratio in [0, 1] estimated from N equally weighted rays. Both terms mix their own lobe's
+    //   directions with environment-importance ones, so no bright light rests on one heavy ray.
+    {
+        ViewportScene scene;
+        scene.mesh = CubeOnPlane();
+        scene.materials = {Rough(0.5f), Rough(0.3f)};
+        scene.lighting = studio;
+        scene.background = {-1.0f, -1.0f, -1.0f};
+        OrbitCamera camera = FitCamera(*scene.mesh);
+        camera.yawDegrees = 35.0;
+        camera.pitchDegrees = 30.0;
+        constexpr uint32_t kSize = 128;
+        for (const ViewportOutput output : {ViewportOutput::DiffuseVisibility, ViewportOutput::SpecularVisibility}) {
+            const bool diffuse = output == ViewportOutput::DiffuseVisibility;
+            const uint32_t rays = diffuse ? kDiffuseVisibilityRays : kSpecularVisibilityRays;
+            const auto renderWith = [&](uint32_t count, const char* what) {
+                scene.output = output;
+                scene.diffuseRays = diffuse ? count : kDiffuseVisibilityRays;
+                scene.specularRays = diffuse ? kSpecularVisibilityRays : count;
+                return Render(engine, scene, PoseOf(camera), kSize, kSize, what);
+            };
+            const std::optional<ViewportImage> low = renderWith(rays, "the estimator");
+            const std::optional<ViewportImage> four = renderWith(rays * 4, "the estimator at four times the rays");
+            const std::optional<ViewportImage> high = renderWith(1024, "the reference");
+            if (!low || !four || !high) continue;
+            double squared = 0.0;
+            double fourSquared = 0.0;
+            size_t pixels = 0;
+            size_t occluded = 0;
+            for (size_t i = 0; i < size_t{kSize} * kSize; ++i) {
+                if (high->linear[i * 4] == FloatToHalf(-1.0f)) continue;
+                for (size_t c = 0; c < 3; ++c) {
+                    ++pixels;
+                    if (!(Linear(*high, i, c) < 0.999f)) continue;
+                    const double e = static_cast<double>(Linear(*low, i, c)) - Linear(*high, i, c);
+                    const double e4 = static_cast<double>(Linear(*four, i, c)) - Linear(*high, i, c);
+                    squared += e * e;
+                    fourSquared += e4 * e4;
+                    ++occluded;
+                }
+            }
+            const double rmse = occluded ? std::sqrt(squared / occluded) : 0.0;
+            const double fourRmse = occluded ? std::sqrt(fourSquared / occluded) : 0.0;
+            const double tolerance = 0.5 / std::sqrt(static_cast<double>(rays));
+            const std::string name = diffuse ? "diffuse" : "specular";
+            Info(name + " ratio over " + std::to_string(occluded / 3) + " occluded of " + std::to_string(pixels / 3) +
+                 " pixels, RMSE against 1024 rays: " + std::to_string(fourRmse) + " at " + std::to_string(rays * 4) +
+                 " rays, " + std::to_string(rmse) + " at " + std::to_string(rays) + " (tolerance " +
+                 std::to_string(tolerance) + ")");
+            Check(pixels > 3000 && occluded > 300 && fourRmse <= 0.6 * rmse,
+                  "the " + name + " ratio converges: four times the rays at least nearly halve its RMSE against a "
+                  "1024-ray render of the same estimator",
+                  std::to_string(fourRmse) + " > 0.6 x " + std::to_string(rmse));
+            Check(pixels > 3000 && occluded > 300 && rmse <= tolerance,
+                  "the " + name + " ratio's RMSE against a 1024-ray render of the same estimator is within 0.5 / "
+                  "sqrt(N) on the occluded pixels",
+                  std::to_string(rmse) + " > " + std::to_string(tolerance));
+        }
+    }
+
+    // 9. The BVH is built once per geometry: a new mesh object of the same geometry reuses it.
+    {
+        ViewportScene scene;
+        scene.mesh = CubeOnPlane();
+        scene.materials = {Rough(0.5f), Rough(0.4f)};
+        scene.lighting = sun;
+        const CameraPose pose = PoseOf(FitCamera(*scene.mesh));
+        static_cast<void>(Render(engine, scene, pose, 32, 32, "the cache's first render"));
+        const uint64_t before = VisibilityBvhBuilds();
+        scene.mesh = CubeOnPlane();
+        static_cast<void>(Render(engine, scene, pose, 32, 32, "the cache's second render"));
+        const uint64_t same = VisibilityBvhBuilds();
+        MeshBuilder other;
+        other.Box({-2.0f, -2.0f, -2.0f}, {2.0f, 2.0f, 2.0f}, 0);
+        scene.mesh = other.Build();
+        scene.materials = {Rough(0.5f)};
+        static_cast<void>(Render(engine, scene, pose, 32, 32, "the cache's other geometry"));
+        Check(same == before && VisibilityBvhBuilds() == same + 1,
+              "a new mesh object of the same geometry reuses its BVH; another geometry builds one",
+              std::to_string(before) + " " + std::to_string(same) + " " + std::to_string(VisibilityBvhBuilds()));
+    }
+    return Finish();
+}
+
+// ── viewport-ladder (decision 251: the counts are chosen by measurement) ──────────────────────
+
+int RunViewportLadder(const fs::path& dir, const fs::path& meshPath, const fs::path& environmentPath,
+                      const fs::path& reportPath) {
+    Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    uzp::mesh::ImportResult imported = uzp::mesh::ImportMeshFile(meshPath, {});
+    const auto mesh = std::make_shared<const uzp::mesh::TexturingMesh>(std::move(imported.mesh));
+    const std::expected<EnvironmentImage, std::string> environment = DecodeEnvironment(Bytes(environmentPath));
+    if (!environment) {
+        Check(false, "the environment decodes", environment.error());
+        return Finish();
+    }
+    ViewportScene scene;
+    scene.mesh = mesh;
+    scene.materials.resize(mesh->materials.size());
+    scene.lighting = SharedLighting(*environment);
+    const CameraPose pose = PoseOf(FitCamera(*mesh));
+
+    const std::vector<float> corners = WorldCorners(*mesh);
+    std::vector<double> builds;
+    for (int run = 0; run < 5; ++run) {
+        const auto start = std::chrono::steady_clock::now();
+        const VisibilityBvh bvh = BuildVisibilityBvh(corners);
+        builds.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+        static_cast<void>(bvh);
+    }
+    std::sort(builds.begin(), builds.end());
+    Info("mesh " + meshPath.filename().string() + ": " + std::to_string(corners.size() / 9) + " triangles; BVH build " +
+         std::to_string(builds[2]) + " ms (median of 5)");
+    json::Array rows;
+    const std::pair<uint32_t, uint32_t> sizes[] = {{660, 600}, {1700, 1250}};
+    const std::pair<uint32_t, uint32_t> counts[] = {{0, 0}, {8, 4}, {16, 8}, {32, 16}, {64, 32}, {128, 64}, {256, 128}};
+    for (const auto& [width, height] : sizes) {
+        scene.diffuseRays = 1024;
+        scene.specularRays = 1024;
+        const std::optional<ViewportImage> reference = Render(engine, scene, pose, width, height, "the reference");
+        if (!reference) return Finish();
+        for (const auto& [diffuse, specular] : counts) {
+            scene.diffuseRays = diffuse;
+            scene.specularRays = specular;
+            std::vector<double> times;
+            std::optional<ViewportImage> image;
+            for (int run = 0; run < 4; ++run) {
+                const auto start = std::chrono::steady_clock::now();
+                image = Render(engine, scene, pose, width, height, "the ladder");
+                const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                if (run > 0) times.push_back(ms);  // the first run also compiles the kernel
+                if (!image) return Finish();
+            }
+            std::sort(times.begin(), times.end());
+            double squared = 0.0;
+            double sum = 0.0;
+            size_t samples = 0;
+            for (size_t i = 0; i < size_t{width} * height; ++i) {
+                if (reference->linear[i * 4] == image->linear[i * 4] && reference->linear[i * 4] == FloatToHalf(0.1f)) continue;
+                for (size_t c = 0; c < 3; ++c) {
+                    const double e = static_cast<double>(Linear(*image, i, c)) - Linear(*reference, i, c);
+                    squared += e * e;
+                    sum += Linear(*reference, i, c);
+                    ++samples;
+                }
+            }
+            const double rmse = samples ? std::sqrt(squared / samples) : 0.0;
+            const double mean = samples ? sum / samples : 0.0;
+            Info(std::to_string(width) + " x " + std::to_string(height) + " (" + std::to_string(diffuse) + ", " +
+                 std::to_string(specular) + "): " + std::to_string(times[1]) + " ms (median of 3), RMSE " +
+                 std::to_string(rmse) + " against (1024, 1024), mean " + std::to_string(mean));
+            rows.push_back(json::Object{{"size", json::Array{static_cast<std::int64_t>(width), static_cast<std::int64_t>(height)}},
+                                        {"diffuse_rays", static_cast<std::int64_t>(diffuse)},
+                                        {"specular_rays", static_cast<std::int64_t>(specular)},
+                                        {"milliseconds", times[1]},
+                                        {"rmse", rmse},
+                                        {"mean", mean}});
+        }
+    }
+    if (!reportPath.empty()) {
+        const json::Object report{{"mesh", meshPath.filename().string()},
+                                  {"triangles", static_cast<std::int64_t>(corners.size() / 9)},
+                                  {"bvh_build_milliseconds", builds[2]},
+                                  {"rows", rows}};
+        std::ofstream(reportPath, std::ios::binary) << json::WriteCanonical(json::Value(report)) << "\n";
+    }
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -744,7 +1685,8 @@ int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: uzp-preview-tests display | environment | latest | lighting-cache <work-dir> | viewport-unsupported <work-dir> | "
-                     "viewport-normal-fade <work-dir> | viewport-golden <work-dir> <goldens.json> [--bless]\n");
+                     "viewport-normal-fade <work-dir> | viewport-golden <work-dir> <goldens.json> [--bless] | viewport-visibility <work-dir> | "
+                     "viewport-ladder <work-dir> <mesh> <environment> [<report.json>]\n");
         return 2;
     }
     const fs::path dir = argv[2];
@@ -761,6 +1703,10 @@ int main(int argc, char** argv) {
         code = RunViewportNormalFade(dir);
     } else if (mode == "viewport-golden" && argc >= 4) {
         code = RunViewportGolden(dir, argv[3], argc >= 5 && std::string_view(argv[4]) == "--bless");
+    } else if (mode == "viewport-visibility") {
+        code = RunViewportVisibility(dir);
+    } else if (mode == "viewport-ladder" && argc >= 5) {
+        code = RunViewportLadder(dir, argv[3], argv[4], argc >= 6 ? fs::path(argv[5]) : fs::path());
     } else {
         std::fprintf(stderr, "unknown case %.*s\n", static_cast<int>(mode.size()), mode.data());
     }

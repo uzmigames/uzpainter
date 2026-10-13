@@ -43,6 +43,11 @@ inline constexpr std::string_view kStandardSha256 = "2ec4281f7a1414c836eb59aec4f
 inline constexpr std::string_view kOcioConfigSha256 = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4";
 /// The resource usage of an environment map.
 inline constexpr std::string_view kEnvironmentUsage = "ENVIRONMENT";
+/// What the preset's `shadows` flag does in UzPainter's renders: nothing. Painter's flag acts only
+/// on its realtime viewport, which is not a target, and Painter disables it in Iray mode;
+/// `painter_viewport` always traces its self-occlusion (decision 251). `State` and the capture
+/// receipt say so.
+inline constexpr std::string_view kShadowsEffect = "none in painter_viewport";
 
 /// The standard's presets, `common` then `ref_match`, each with no camera and seed 0.
 json::Array StandardPresets();
@@ -59,7 +64,7 @@ json::Object PresetOf(const core::Project& project);
 /// `PresetOf` plus `parity` (the environment is the preset's standard environment, so the state
 /// is the comparison standard's; any other is a non-parity preview), `environment_default` (the
 /// project names no environment, so `painter_viewport` lights it with the installation's default,
-/// decision 212) and the shader.
+/// decision 212), `shadows_effect` (`kShadowsEffect`, decision 251) and the shader.
 json::Object State(const core::Project& project);
 /// Validates `preset` whole, then sets it. `ValueError` for a malformed preset,
 /// `UnsupportedInUzPainter` for a value outside the fixed pipeline, `ResourceNotFoundError` for an

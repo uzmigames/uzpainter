@@ -13,6 +13,8 @@
 //   Fresnel (1994): `A` and `B` with `F0 A + B` the specular albedo. Its third column `D` is the
 //   directional albedo of Burley's diffuse lobe (2012) under uniform lighting, which scales the
 //   SH irradiance.
+// - Importance distribution (decision 251): the environment-luminance distribution the
+//   viewport's visibility rays sample (`ImportanceDistribution`).
 //
 // Environment images are equirectangular, row 0 at +Y (up), with the direction mapping of
 // parity/semantics/iray.json `environment-mapping`: u = frac(atan2(-d.x, d.z) / (2 pi) + 1/4 +
@@ -64,6 +66,21 @@ struct RadianceLevel {
     std::vector<float> rgb;
 };
 
+/// A piecewise-constant 2D distribution over the texels of the level-0 radiance (Pharr, Jakob and
+/// Humphreys, PBRT 4th ed., `PiecewiseConstant2D`): texel (x, y) is weighted by the mean of its
+/// three channels times sin(theta) at its centre (the equirectangular image's solid angle), so
+/// no channel's light has zero probability. An environment without light gets sin(theta) alone,
+/// the uniform distribution over the sphere. Built in double, stored as float.
+struct ImportanceDistribution {
+    uint32_t width = 0;
+    uint32_t height = 0;
+    /// The rows' cumulative distribution: `height + 1` values from 0 to 1.
+    std::vector<float> marginalCdf;
+    /// Each row's cumulative distribution over its texels: `height` rows of `width + 1` values
+    /// from 0 to 1 (a row without weight is uniform).
+    std::vector<float> conditionalCdf;
+};
+
 struct EnvironmentLighting {
     /// sh[3 i + c]: coefficient i (Y00, Y1-1, Y10, Y11, Y2-2, Y2-1, Y20, Y21, Y22) of channel c,
     /// already convolved with the clamped cosine (A0 = pi, A1 = 2 pi / 3, A2 = pi / 4).
@@ -71,6 +88,8 @@ struct EnvironmentLighting {
     std::vector<RadianceLevel> radiance;
     /// (A, B, D) per entry, rows by roughness, columns by n.v (see `kBrdfTableSize`).
     std::vector<float> brdf;
+    /// Over `radiance[0]` (`kRadianceWidth` x `kRadianceWidth / 2`).
+    ImportanceDistribution importance;
 };
 
 /// The direction of equirectangular coordinates (u, v) at rotation 0 (the inverse of the mapping

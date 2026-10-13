@@ -1,0 +1,15 @@
+{
+  "id": 251,
+  "slug": "painter-viewport-shades-with-ray-traced-self-occlusion-as-a-preview-approximation-of-iray-s-the-ao-mesh-map-stays-unapplied-and-the-shadows-flag-is-declared-inert",
+  "title": "painter_viewport shades with ray-traced self-occlusion as a preview approximation of Iray's; the AO mesh map stays unapplied and the shadows flag is declared inert",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.3_realtime-preview",
+    "phase2.1_preview-viewport-window",
+    "phase2.2_preview-capture",
+    "phase3.4_path-tracer-transport",
+    "phase3.5_path-tracer-materials"
+  ],
+  "supersededBy": null
+}

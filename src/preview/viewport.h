@@ -26,6 +26,19 @@
 //   Burley diffuse on the SH irradiance, scaled by (1 - the dielectric specular albedo); the
 //   environment radiance is multiplied by 2^exposure and the intensity scale of
 //   parity/semantics/iray.json `environment-mapping`. Pixels without a hit show the clear colour.
+// - Self-occlusion (decision 251): each term is multiplied, per RGB channel, by its visibility
+//   ratio sum V w L / sum w L over rays traced from the hit against every triangle of every
+//   texture set (visibility.h). Diffuse: `diffuseRays` directions from the balance-heuristic
+//   mixture of cosine-weighted and environment-importance directions (environment.h
+//   `ImportanceDistribution`), w = cos / p_mix. Specular: `specularRays` directions from the
+//   balance-heuristic mixture of reflections about GGX visible normals (Heitz 2018) and
+//   environment-importance directions, w = F D G2 / (4 n.v p_mix). Directions below the
+//   geometric facet are left out of both sums; a ratio is 1 where no ray is blocked and where its
+//   denominator is zero or not finite, otherwise clamped to [0, 1]. Ray origins are moved off the
+//   triangle along its geometric normal (Wachter and Binder 2019) and the hit triangle is
+//   skipped. The samples are a Hammersley set scrambled by a hash of the pixel coordinates only.
+//   Visibility only, one bounce, no interreflection; the ratio of two Monte-Carlo sums is a
+//   consistent but biased estimator, a preview approximation that claims no closeness to Iray.
 // - Output: the linear colour rounded to binary16 (RGBA16Float, alpha 1) and its 16-bit display
 //   codes (RGBA16Unorm) from the display table.
 //
@@ -42,7 +55,9 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace uzp::preview {
@@ -105,6 +120,19 @@ struct CameraPose {
 /// The intensity scale of parity/semantics/iray.json `environment-mapping` (fitted once).
 inline constexpr float kEnvironmentIntensityScale = 1.01919f;
 
+/// The visibility rays of every hit (decision 251), chosen by measurement on the ladder (8, 4) to
+/// (256, 128): the smallest pair whose ratios meet the 0.5 / sqrt(N) noise bound on the concave
+/// fixture, and whose render of the Wand at the preview window's default view fits its 200 ms
+/// period on the owner's RTX 4090 (src/preview/PREVIEW.md).
+inline constexpr uint32_t kDiffuseVisibilityRays = 128;
+inline constexpr uint32_t kSpecularVisibilityRays = 64;
+/// The visibility model's name in a capture's render state and receipt.
+inline constexpr std::string_view kVisibilityModel = "ray_traced_self_occlusion";
+
+/// What a render writes in place of the linear colour: the colour, or (tests) the diffuse or
+/// specular visibility ratio of each hit.
+enum class ViewportOutput : uint32_t { Colour = 0, DiffuseVisibility = 1, SpecularVisibility = 2 };
+
 struct ViewportScene {
     std::shared_ptr<const mesh::TexturingMesh> mesh;
     /// Indexed by the mesh's material index (texture set order); a material without an entry uses
@@ -116,6 +144,11 @@ struct ViewportScene {
     /// The clear colour, linear: the v2 common standard's 0.1 (display code 89 in 8 bits).
     std::array<float, 3> background{0.1f, 0.1f, 0.1f};
     DisplayConfiguration display = PinnedConfiguration();
+    /// The visibility rays per hit; 0 leaves that term unoccluded. Captures and the window keep
+    /// the defaults; tests and the measurement of the counts set others.
+    uint32_t diffuseRays = kDiffuseVisibilityRays;
+    uint32_t specularRays = kSpecularVisibilityRays;
+    ViewportOutput output = ViewportOutput::Colour;
 };
 
 /// One rendered frame.
@@ -149,6 +182,32 @@ inline constexpr uint32_t kMaxViewportSide = 8192;
 /// XXH64 of the viewport kernel's cache key for the device's bytecode format: the "build" part of
 /// a regression golden's key (it covers the HLSL, the defines, the compile flags and DXC).
 [[nodiscard]] uint64_t ViewportKernelKey(render::KernelTarget target, std::string_view compilerVersion);
+
+/// The corners of every triangle of `mesh` in world space, nine floats per triangle in the
+/// viewport's triangle order (object, then triangle): what its visibility rays are traced against.
+[[nodiscard]] std::vector<float> WorldCorners(const mesh::TexturingMesh& mesh);
+
+/// A ray of `TraceVisibility`: it leaves `point` moved along `normal` by the pass's origin offset
+/// (a zero normal moves nothing), runs along `direction` (any length) and skips triangle `self`.
+struct VisibilityRay {
+    std::array<float, 3> point{};
+    std::array<float, 3> normal{};
+    std::array<float, 3> direction{};
+    uint32_t self = 0xFFFFFFFFu;
+};
+
+/// Per ray, whether a triangle blocks it: through the BVH and by testing every triangle in order.
+struct VisibilityHits {
+    std::vector<uint8_t> bvh;
+    std::vector<uint8_t> linear;
+};
+
+/// Traces `rays` against the triangles of `mesh` on the GPU with the pass's own visibility
+/// functions (`probe` entry of the viewport kernel), inside one engine request (tests: the
+/// traversal against every triangle, decision 251).
+[[nodiscard]] render::Result<VisibilityHits> TraceVisibility(render::EngineContext& context,
+                                                             const mesh::TexturingMesh& mesh,
+                                                             std::span<const VisibilityRay> rays);
 
 /// The user-mode driver version of the DXGI adapter `adapterIndex` (high-performance order) as
 /// `a.b.c.d`, or "unknown": the "driver" part of a golden's key and of a capture receipt.

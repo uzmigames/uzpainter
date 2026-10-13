@@ -84,10 +84,11 @@ Module and class names follow Painter's documented API wherever a Painter symbol
     - `Camera(_camera_id)` and `Camera.get_default_camera()`, with Painter's eight properties. A project has no camera until one is set; until then, reading or setting a property raises `NotYetSupported` (recording R-132-A). `field_of_view` and `focal_length` are set only in a whole record (R-132-B), and `aperture` accepts 0 only.
     - `camera()`, `set_camera(record)`, `camera_to_blender(record)`, `camera_from_blender(record)`: the standard's coordinate contract. Position maps `(x, y, z) → (x, −z, y)`, and the rotation `B @ Rx @ Ry @ Rz` becomes Blender's XYZ Euler angles on the canonical branch. Lens values pass unchanged.
   - `render.display`:
-    - `state()`: the preset's fields, `parity` (the environment is the active preset's standard one), `environment_default` (the project names no environment) and the shader.
+    - `state()`: the preset's fields, `parity` (the environment is the active preset's standard one), `environment_default` (the project names no environment), `shadows_effect` and the shader.
     - `preset()` and `presets()`: presets as `uzpainter/display-preset/1` JSON. The standard has two, `common` (the v2 block) and `ref_match` (v3).
     - `apply_preset(preset)`: validates the whole preset, then commits once. An environment the project does not store raises `ResourceNotFoundError`, with no substitute.
     - `set_exposure`, `set_opacity`, `set_blur`: 0 only. `set_rotation`, `set_shadows`, `set_background` (sRGB8): the active preset's values only.
+    - The `shadows` flag is recorded but changes no render: `painter_viewport` always traces its self-occlusion. `state()` reports `shadows_effect` "none in painter_viewport", and a capture receipt records the requested flag with the same effect (decision 251).
     - A new project starts on `common` with no environment; `painter_viewport` then lights it with the installation's default (`studio-small-09.exr`), and `state()` reports `environment_default` (decision 212).
   - `render.shader`: `parameters()` and `set_parameters(dict)`. These are the default `open-pbr` instance's settings, read back under OCIO, under UzPainter's identifiers:
     - `diffuse_roughness_enabled`, `anisotropy_enabled`, `specular_ior` (IOR), `specular_color_enabled`, and `transmission_enabled`, `subsurface_enabled`, `coat_enabled`, `fuzz_enabled`, `thin_film_enabled` (each section's enable);
@@ -98,7 +99,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 
     `set_parameters` accepts these at their default values only.
 - **Capture** (`capture.{h,cpp}`, bound in `bind_display.cpp`; task phase2.2_preview-capture, decision 148). `render.capture(path, mode, camera=None, size=None, samples=None, seed=None, preset=None, stack=None)` captures the committed revision and returns the receipt (`capture-receipt.schema.json`), which is also written as `<stem>.receipt.json`. Nothing commits.
-  - `painter_viewport` is the preview pass rendered offscreen (needs `size`).
+  - `painter_viewport` is the preview pass rendered offscreen (needs `size`). Its receipt states the self-occlusion rays (`visibility`) and the requested `shadows` flag with its effect, none (decision 251).
   - `base_color`, `channel:<name>` and `mask:<uid>` are texture-space files equal to the export. `<name>` is a `ChannelType` name or the export's documentMap name of one (decision 242).
   - `painter_iray` raises `PathTracerUnavailable`, a `NotYetSupported`, before anything else.
   - See `src/preview/PREVIEW.md`.

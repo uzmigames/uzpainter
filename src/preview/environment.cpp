@@ -93,6 +93,44 @@ EnvironmentImage ResampleArea(const EnvironmentImage& source, uint32_t width, ui
     return out;
 }
 
+/// The cumulative distribution of `weights`, from 0 to 1 (uniform when they sum to zero).
+std::vector<float> Cdf(const std::vector<double>& weights) {
+    double total = 0.0;
+    for (const double w : weights) total += w;
+    std::vector<float> cdf(weights.size() + 1, 0.0f);
+    double sum = 0.0;
+    for (size_t i = 0; i < weights.size(); ++i) {
+        sum += weights[i];
+        cdf[i + 1] = static_cast<float>(total > 0.0 ? sum / total : static_cast<double>(i + 1) / weights.size());
+    }
+    cdf.back() = 1.0f;
+    return cdf;
+}
+
+ImportanceDistribution BuildImportance(const RadianceLevel& level) {
+    ImportanceDistribution d{level.width, level.height, {}, {}};
+    bool lit = false;
+    for (const float value : level.rgb) lit = lit || value > 0.0f;
+    std::vector<double> rows(level.height);
+    std::vector<double> texels(level.width);
+    d.conditionalCdf.reserve(size_t{level.height} * (level.width + 1));
+    for (uint32_t y = 0; y < level.height; ++y) {
+        const double sinTheta = std::sin(kPi * (y + 0.5) / level.height);
+        double row = 0.0;
+        for (uint32_t x = 0; x < level.width; ++x) {
+            const float* texel = &level.rgb[(size_t{y} * level.width + x) * 3];
+            const double mean = lit ? (static_cast<double>(texel[0]) + texel[1] + texel[2]) / 3.0 : 1.0;
+            texels[x] = mean * sinTheta;
+            row += texels[x];
+        }
+        rows[y] = row;
+        const std::vector<float> cdf = Cdf(texels);
+        d.conditionalCdf.insert(d.conditionalCdf.end(), cdf.begin(), cdf.end());
+    }
+    d.marginalCdf = Cdf(rows);
+    return d;
+}
+
 std::expected<EnvironmentImage, std::string> Checked(EnvironmentImage image) {
     for (const float value : image.rgb) {
         if (!std::isfinite(value) || value < 0.0f) {
@@ -217,7 +255,8 @@ render::CacheKey LightingKey(std::string_view sha256) {
 }
 
 /// The payload of `PrecomputeLighting`'s result: the SH coefficients, each level's width, height,
-/// roughness and texels, the albedo table; 32-bit little-endian words.
+/// roughness and texels, the albedo table; 32-bit little-endian words. The importance distribution
+/// is not stored: it is a function of level 0 alone, rebuilt on load (decision 251).
 constexpr uint64_t LightingBytes() {
     uint64_t floats = 27 + uint64_t{kBrdfTableSize} * kBrdfTableSize * 3;
     for (uint32_t l = 0; l < kRadianceLevels; ++l) {
@@ -270,6 +309,7 @@ std::optional<EnvironmentLighting> DeserializeLighting(std::span<const std::byte
     if (!read(lighting.brdf.data(), lighting.brdf.size() * sizeof(float)) || offset != payload.size()) {
         return std::nullopt;
     }
+    lighting.importance = BuildImportance(lighting.radiance[0]);
     return lighting;
 }
 
@@ -394,6 +434,7 @@ EnvironmentLighting PrecomputeLighting(const EnvironmentImage& image) {
         }
         lighting.radiance.push_back(std::move(level));
     }
+    lighting.importance = BuildImportance(lighting.radiance[0]);
 
     // SH projection over the 128 x 64 copy, each texel weighted by its solid angle.
     {

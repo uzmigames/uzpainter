@@ -268,6 +268,7 @@ const preview_sources = [_][]const u8{
     "preview/display_transform.cpp",
     "preview/environment.cpp",
     "preview/viewport.cpp",
+    "preview/visibility.cpp",
 };
 /// The viewport scene of a published frame (`src/preview/scene.cpp`), relative to `src/`: shared
 /// by the preview window and the `painter_viewport` capture (`python/capture.cpp`), so compiled

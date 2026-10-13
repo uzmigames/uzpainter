@@ -8,6 +8,7 @@
 - [ ] 2.1 Integration scenario on the wand v1 project: worker with an attached preview window running evaluation, export and captures in all Phase 2 modes
 - [x] 2.2 Settling report writer for `parity/reports/phase2/preview-settling.json`
 - [x] 2.3 (decision 148's release gap, owned here) Orthographic cameras in `painter_viewport` captures (decision 163)
+- [x] 2.4 (decision 251) Ray-traced self-occlusion in `painter_viewport`: a deterministic CPU-built BVH over every texture set's triangles, diffuse and specular visibility ratios per RGB channel (environment-importance samples mixed with cosine samples for the diffuse and with GGX VNDF samples for the specular), counts chosen by measurement; the `shadows` flag declared inert in the receipt, `render.display.state()`, the capability notes, PREVIEW.md and 07 §6; the AO mesh map stays unapplied
 
 ## 3. Tests
 - [x] 3.1 Captures in a local run on the owner's machine (decision 028) without any window or desktop focus, in `painter_viewport`, `base_color`, `channel:<name>` and `mask:<uid>` modes
@@ -57,3 +58,29 @@
   - The wand tests first failed at setup: `passthrough` refuses the Normal virtualMap. A 512 px variant refused the wand's sRGB bitmap at non-1:1. The quick run then gave 2 passed.
   - `tests/parity/test_guard.py` preview-settling cases: 12 passed. `tests/capabilities/test_capabilities.py`: 28 passed.
   - ruff, ruff format and mypy --strict pass on the touched Python. `zig build painter preview-tests` builds with -Werror.
+
+## 8. Notes (item 2.4, 2026-10-13; decision 251)
+- 2.4: done on branch `wt/viewport-shadows`.
+  - `src/preview/visibility.{h,cpp}` builds the BVH: binned SAH, leaves of at most 4 triangles, a depth cap of 32 that the kernel's stack matches. It is cached by the world-space corners bit for bit.
+  - `PrecomputeLighting` builds the environment-importance distribution.
+  - `viewport.hlsl` multiplies the specular and the diffuse by their per-channel visibility ratios.
+  - The receipt gains `visibility` (in the digest) and `shadows` (requested, effect none). `render.display.state()` gains `shadows_effect`.
+  - Docs: PREVIEW.md (Lighting, Pass, Captures, goldens), 07 §5-§6, PYAPI.md and the capability notes.
+- Counts: (128, 64), after the review (below).
+  - It is the smallest pair of the ladder (8, 4) to (256, 128) whose ratios meet the `0.5 / sqrt(N)` noise bound on the concave fixture. On the Wand v1 low mesh (1248 triangles, Debug build) its window-size render took 170.0 ms, within the 200 ms period, while another agent's GPU test ran.
+  - At 1700 × 1250 it took 689 ms. The RMSE against (1024, 1024) is 0.0042, and 0.0354 without occlusion.
+  - The table is in PREVIEW.md.
+- Goldens re-keyed to `e570812a72826a6c` (CRLF) and `6f233e84d741c0ac` (LF), then, after the review, to `87e4fbc2537c02f2` (CRLF) and `4e1b7a7f23a5ebfb` (LF).
+  - Sphere, plane and bevelled cube: 0 changed pixels against the `51810c8132b4cdc5` renders, display and linear.
+  - `cube-on-plane` is added.
+- Found while testing and fixed:
+  - **Shared-edge leak.** The BVH slab test replaced a zero direction component by 1e-20. A ray running along a box face then got a far distance of 0 in that slab and skipped the node, so a ray along a box edge leaked (BVH only; the test of every triangle blocked it). A component of 0 now checks the origin against the slab.
+  - **Specular estimator.** The `0.5 / sqrt(N)` bound held for the diffuse ratio (0.073 at 32 rays) but not for the specular one (0.217 at 16 rays), because VNDF rays alone do not sample the radiance. Fixed in the review, below; the bound is kept for both terms.
+- Review fixes (2026-10-13):
+  - **Specular estimator.** The specular ratio now mixes VNDF directions with environment-importance directions under the balance heuristic, as the diffuse one does: `w = F·D·G2 / (4·n·v·p_mix)`. At 16 rays its RMSE fell from 0.217 to 0.130, still above the 0.125 bound. The count was raised, not the bound: at 64 rays it is 0.051 (bound 0.0625). The interim `N_eff = N / 4` was removed.
+  - **Black pixels and speckle.** Root cause: the old specular estimator, not self-hits. The three pure-black pixels of the 3/4 close view (e.g. (x 1243, y 734), 156 before, 0 after) show 144 in a 1024-ray render. Their diffuse ratio was 0.98-1.0; they are metal, so one blocked heavy VNDF ray zeroed the only term. The rim glint at (x 1068, y 607) of the owner's view (255 before, 39 after) shows 194 at 1024 rays. No pixel of the 1024-ray render has a ratio of 0, and only 1 of 213 029 wand pixels has a diffuse ratio below 0.05, so no origin is buried in a shell. The glint at (x 1358, y 741), 255 to 29, is real: 35 at 1024 rays, diffuse ratio 0.14, inside the pommel step.
+  - **Renders at (128, 64).** Compared with a (1024, 1024) render of the same views, the 3/4 close view has RMSE 0.82 codes (8-bit), against 3.04 before the fix. It has no pure-black pixel, and 55 groups darkened by more than 40 codes, against 38 in the reference and 354 before the fix. The owner's view has RMSE 0.78 codes, against 2.87.
+  - **What the owner will see.** Self-occlusion only: there is no floor under the standard, and the AO mesh map is not applied. In the owner's full frame, 8458 of 44 299 wand pixels change, darkened by 4.35 codes on average, and the wand's mean drops from 64.51 to 63.68. To the eye that looks the same as before. The darkening shows only in 4x crops: the ferrule and pommel rims, the ring and the pommel's inner step. The leather-wrap seams do not change, because they are normal-map detail, not geometry. The crevice darkening of Painter's realtime viewport comes from the AO map, an open question for phase3.5 item 3.3.
+- Wand before and after (owner's view and a 3/4 close view of the grip) are for the owner's eye only, never evidence.
+  - The base build reproduces the owner's capture byte for byte: PNG `f22b9da6…`, digest `b0ca4cda…`.
+- AO stays unapplied. The factorial AO recording belongs to phase3.5_path-tracer-materials item 3.3.

@@ -2,6 +2,7 @@
 #define NOMINMAX
 #include "preview/viewport.h"
 
+#include "preview/visibility.h"
 #include "render/image_pass.h"
 #include "render/kernel_cache.h"
 #include "render/texture_readback.h"
@@ -38,12 +39,27 @@ constexpr uint32_t kTile = 16;
 constexpr uint32_t kTriangleWords = 40;
 constexpr uint32_t kMaterialWords = 20;
 constexpr uint32_t kNoMap = 0xFFFFFFFFu;
-/// The lighting buffer's header: 27 SH words, 3 words per radiance level, the albedo table offset.
-constexpr uint32_t kLightingHeaderWords = 27 + 3 * kRadianceLevels + 1;
+/// The lighting buffer's header: 27 SH words, 3 words per radiance level, the albedo table offset,
+/// then the importance distribution's offset, width and height.
+constexpr uint32_t kLightingHeaderWords = 27 + 3 * kRadianceLevels + 1 + 3;
+/// The probe's output rows are this many texels wide.
+constexpr uint32_t kProbeWidth = 256;
+
+/// The viewport kernel with entry `entry`; its traversal stack is the BVH's depth cap.
+render::KernelSource ViewportSource(const char* name, const char* entry) {
+    render::KernelSource source =
+        render::image_pass_detail::Kernel(name, std::string_view(kViewportHlsl, sizeof(kViewportHlsl)), entry);
+    source.defines.push_back("BVH_STACK=" + std::to_string(kBvhMaxDepth) + "u");
+    return source;
+}
 
 const render::KernelSource& ViewportKernel() {
-    static const render::KernelSource source = render::image_pass_detail::Kernel(
-        "painter_viewport", std::string_view(kViewportHlsl, sizeof(kViewportHlsl)), "main");
+    static const render::KernelSource source = ViewportSource("painter_viewport", "main");
+    return source;
+}
+
+const render::KernelSource& ProbeKernel() {
+    static const render::KernelSource source = ViewportSource("painter_viewport_probe", "probe");
     return source;
 }
 
@@ -124,6 +140,19 @@ std::span<const std::byte> Bytes(const std::vector<uint32_t>& words) {
 
 Unexpected Invalid(render::Backend backend, std::string reason) {
     return render::Fail(ErrorCode::RequestFailed, backend, "painter_viewport: " + std::move(reason));
+}
+
+Result<void> CheckIndices(const mesh::TexturingMesh& mesh, render::Backend backend) {
+    for (const mesh::Object& object : mesh.objects) {
+        for (const mesh::Triangle& triangle : object.triangles) {
+            for (const uint32_t corner : triangle.corners) {
+                if (corner >= mesh.corners.size() || mesh.corners[corner].position >= mesh.positions.size()) {
+                    return Invalid(backend, "a triangle names a corner or position out of range");
+                }
+            }
+        }
+    }
+    return {};
 }
 
 Result<void> CheckMap(const std::optional<MaterialMap>& map, uint32_t components, const char* name, size_t material,
@@ -266,6 +295,22 @@ uint64_t ViewportKernelKey(render::KernelTarget target, std::string_view compile
     return render::KernelKey(ViewportKernel(), target, compilerVersion);
 }
 
+std::vector<float> WorldCorners(const mesh::TexturingMesh& mesh) {
+    std::vector<float> corners;
+    corners.reserve(mesh.TriangleCount() * 9);
+    for (const mesh::Object& object : mesh.objects) {
+        const Transform transform(object.transform, UnitScale(mesh));
+        for (const mesh::Triangle& triangle : object.triangles) {
+            for (const uint32_t corner : triangle.corners) {
+                for (double value : transform.Point(mesh.positions[mesh.corners[corner].position])) {
+                    corners.push_back(static_cast<float>(value));
+                }
+            }
+        }
+    }
+    return corners;
+}
+
 Result<void> ValidateViewport(const ViewportScene& scene, const OrbitCamera& camera, uint32_t width, uint32_t height,
                               render::Backend backend) {
     if (const std::optional<std::string> unsupported = UnsupportedConfiguration(scene.display)) {
@@ -305,16 +350,7 @@ Result<void> ValidateViewport(const ViewportScene& scene, const CameraPose& came
     if (camera.orthographic && !(camera.orthographicHeight > 0.0 && std::isfinite(camera.orthographicHeight))) {
         return Invalid(backend, "an orthographic camera needs a positive, finite orthographic height");
     }
-    const mesh::TexturingMesh& mesh = *scene.mesh;
-    for (const mesh::Object& object : mesh.objects) {
-        for (const mesh::Triangle& triangle : object.triangles) {
-            for (const uint32_t corner : triangle.corners) {
-                if (corner >= mesh.corners.size() || mesh.corners[corner].position >= mesh.positions.size()) {
-                    return Invalid(backend, "a triangle names a corner or position out of range");
-                }
-            }
-        }
-    }
+    if (Result<void> indices = CheckIndices(*scene.mesh, backend); !indices) return indices;
     for (size_t i = 0; i < scene.materials.size(); ++i) {
         const MaterialInputs& m = scene.materials[i];
         for (Result<void> checked :
@@ -347,9 +383,12 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     const uint32_t tilesX = (width + kTile - 1) / kTile;
     const uint32_t tilesY = (height + kTile - 1) / kTile;
 
-    // Triangles in world space, in object then triangle order, and their tiles.
+    // Triangles in world space, in object then triangle order, and their tiles; their corners
+    // also feed the visibility rays' BVH (the same float values).
     std::vector<uint32_t> triangles;
     triangles.reserve(mesh.corners.size() / 3 * kTriangleWords);
+    std::vector<float> corners;
+    corners.reserve(mesh.corners.size() / 3 * 9);
     std::vector<std::array<uint32_t, 4>> bounds;  // tile x0, y0, x1, y1 (inclusive); x0 > x1: none
     const double nearPlane = view.nearPlane;
     for (const mesh::Object& object : mesh.objects) {
@@ -359,7 +398,10 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
             for (int k = 0; k < 3; ++k) {
                 const mesh::Corner& corner = mesh.corners[triangle.corners[static_cast<size_t>(k)]];
                 positions[static_cast<size_t>(k)] = transform.Point(mesh.positions[corner.position]);
-                for (double value : positions[static_cast<size_t>(k)]) PushFloat(triangles, value);
+                for (double value : positions[static_cast<size_t>(k)]) {
+                    PushFloat(triangles, value);
+                    corners.push_back(static_cast<float>(value));
+                }
                 for (double value : transform.Normal(corner.normal)) PushFloat(triangles, value);
                 triangles.push_back(std::bit_cast<uint32_t>(corner.uv0.u));
                 triangles.push_back(std::bit_cast<uint32_t>(corner.uv0.v));
@@ -451,7 +493,11 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
         materials.insert(materials.end(), {0u, 0u, 0u});
     }
 
-    // Lighting: header, then the albedo table and the radiance levels.
+    // The visibility rays' BVH, built once per geometry (visibility.h).
+    const std::shared_ptr<const VisibilityBvh> bvh = VisibilityBvhOf(std::move(corners));
+
+    // Lighting: header, then the albedo table, the radiance levels and the importance
+    // distribution (marginal, then conditional CDFs).
     const EnvironmentLighting& lighting = *scene.lighting;
     std::vector<uint32_t> lightingWords;
     for (float value : lighting.sh) lightingWords.push_back(std::bit_cast<uint32_t>(value));
@@ -461,10 +507,14 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
         offset += static_cast<uint32_t>(level.rgb.size());
     }
     lightingWords.push_back(kLightingHeaderWords);
+    const ImportanceDistribution& importance = lighting.importance;
+    lightingWords.insert(lightingWords.end(), {offset, importance.width, importance.height});
     for (float value : lighting.brdf) lightingWords.push_back(std::bit_cast<uint32_t>(value));
     for (const RadianceLevel& level : lighting.radiance) {
         for (float value : level.rgb) lightingWords.push_back(std::bit_cast<uint32_t>(value));
     }
+    for (float value : importance.marginalCdf) lightingWords.push_back(std::bit_cast<uint32_t>(value));
+    for (float value : importance.conditionalCdf) lightingWords.push_back(std::bit_cast<uint32_t>(value));
 
     // The display table, two codes per word (even index in the low half).
     const std::vector<uint16_t>& table = DisplayTable();
@@ -488,14 +538,18 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     frame.push_back(kBrdfTableSize);
     frame.push_back(tilesX);
     frame.push_back(view.orthographic ? 1u : 0u);
+    frame.push_back(scene.diffuseRays);
+    frame.push_back(scene.specularRays);
+    frame.push_back(static_cast<uint32_t>(bvh->nodes.size() / kBvhNodeWords));
+    frame.push_back(static_cast<uint32_t>(scene.output));
 
     Result<render::ComputeKernel> kernel = context.Kernel(ViewportKernel());
     if (!kernel) return Unexpected(kernel.error());
 
     Buffers buffers(device);
-    std::array<uint32_t, 8> srv{};
+    std::array<uint32_t, 10> srv{};
     {
-        const std::array<std::pair<const std::vector<uint32_t>*, const char*>, 8> inputs{{
+        const std::array<std::pair<const std::vector<uint32_t>*, const char*>, 10> inputs{{
             {&frame, "viewport_frame"},
             {&triangles, "viewport_triangles"},
             {&tileOffsets, "viewport_tile_offsets"},
@@ -504,6 +558,8 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
             {&maps, "viewport_maps"},
             {&lightingWords, "viewport_lighting"},
             {&tableWords, "viewport_display_table"},
+            {&bvh->nodes, "viewport_bvh_nodes"},
+            {&bvh->occluders, "viewport_occluders"},
         }};
         for (size_t i = 0; i < inputs.size(); ++i) {
             Result<uint32_t> index = buffers.Raw(Bytes(*inputs[i].first), inputs[i].second);
@@ -531,9 +587,20 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     }
     const std::array<uz::RHITextureHandle, 2> outputs{*linear, *display};
 
-    const std::array<uint32_t, 12> root{width,  height, srv[0], srv[1], srv[2], srv[3], srv[4], srv[5], srv[6], srv[7],
+    const std::array<uint32_t, 14> root{width,
+                                        height,
+                                        srv[0],
+                                        srv[1],
+                                        srv[2],
+                                        srv[3],
+                                        srv[4],
+                                        srv[5],
+                                        srv[6],
+                                        srv[7],
                                         device.Rhi().GetTextureUAVIndex(*linear),
-                                        device.Rhi().GetTextureUAVIndex(*display)};
+                                        device.Rhi().GetTextureUAVIndex(*display),
+                                        srv[8],
+                                        srv[9]};
     const auto transition = [&](uz::IRHICommandList& cmd, uz::RHIResourceState before, uz::RHIResourceState after) {
         const uz::RHIBarrierDesc barriers[2] = {{outputs[0], uz::RHIBufferHandle::Invalid(), before, after},
                                                 {outputs[1], uz::RHIBufferHandle::Invalid(), before, after}};
@@ -584,6 +651,101 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     }
     release();
     return image;
+}
+
+Result<VisibilityHits> TraceVisibility(render::EngineContext& context, const mesh::TexturingMesh& mesh,
+                                       std::span<const VisibilityRay> rays) {
+    render::IDevice& device = context.Device();
+    if (Result<void> indices = CheckIndices(mesh, device.GetBackend()); !indices) return Unexpected(indices.error());
+    VisibilityHits hits;
+    if (rays.empty()) return hits;
+    const auto count = static_cast<uint32_t>(rays.size());
+    std::vector<float> corners = WorldCorners(mesh);
+    const auto occluderCount = static_cast<uint32_t>(corners.size() / 9);
+    const std::shared_ptr<const VisibilityBvh> bvh = VisibilityBvhOf(std::move(corners));
+    std::vector<uint32_t> rayWords{count, occluderCount, static_cast<uint32_t>(bvh->nodes.size() / kBvhNodeWords), 0u};
+    for (const VisibilityRay& ray : rays) {
+        for (const std::array<float, 3>* v : {&ray.point, &ray.normal, &ray.direction}) {
+            for (float value : *v) rayWords.push_back(std::bit_cast<uint32_t>(value));
+        }
+        rayWords.insert(rayWords.end(), {ray.self, 0u, 0u});
+    }
+
+    Result<render::ComputeKernel> kernel = context.Kernel(ProbeKernel());
+    if (!kernel) return Unexpected(kernel.error());
+    Buffers buffers(device);
+    std::array<uint32_t, 3> srv{};
+    {
+        const std::array<std::pair<const std::vector<uint32_t>*, const char*>, 3> inputs{{
+            {&rayWords, "viewport_probe_rays"},
+            {&bvh->nodes, "viewport_bvh_nodes"},
+            {&bvh->occluders, "viewport_occluders"},
+        }};
+        for (size_t i = 0; i < inputs.size(); ++i) {
+            Result<uint32_t> index = buffers.Raw(Bytes(*inputs[i].first), inputs[i].second);
+            if (!index) return Unexpected(index.error());
+            srv[i] = *index;
+        }
+    }
+    const uint32_t width = std::min(count, kProbeWidth);
+    const uint32_t height = (count + kProbeWidth - 1) / kProbeWidth;
+    uz::RHITextureDesc desc;
+    desc.width = width;
+    desc.height = height;
+    desc.format = uz::RHIFormat::RGBA16Float;
+    desc.usage = uz::RHITextureUsage::ShaderResource | uz::RHITextureUsage::UnorderedAccess | uz::RHITextureUsage::CopySrc;
+    desc.debugName = "viewport_probe_result";
+    Result<uz::RHITextureHandle> result = device.CreateTexture(desc);
+    if (!result) return Unexpected(result.error());
+    const std::array<uint32_t, 14> root{width, height, srv[0], 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+                                        device.Rhi().GetTextureUAVIndex(*result), 0u, srv[1], srv[2]};
+    Result<void> done = context.SubmitAndWait([&](uz::IRHICommandList& cmd) {
+        buffers.RecordUploads(cmd);
+        const uz::RHIBarrierDesc toWrite{*result, uz::RHIBufferHandle::Invalid(), uz::RHIResourceState::Common,
+                                         uz::RHIResourceState::UnorderedAccess};
+        cmd.ResourceBarrier(&toWrite, 1);
+        cmd.SetPipeline(kernel->pipeline);
+        cmd.SetRootConstants(render::kRootConstantsParam, root.data(), static_cast<uint32_t>(root.size()));
+        cmd.Dispatch((count + 63) / 64, 1, 1);
+        const uz::RHIBarrierDesc toCommon{*result, uz::RHIBufferHandle::Invalid(), uz::RHIResourceState::UnorderedAccess,
+                                          uz::RHIResourceState::Common};
+        cmd.ResourceBarrier(&toCommon, 1);
+    });
+    if (!done) {
+        if (done.error().code == ErrorCode::Timeout) {
+            buffers.Abandon();  // the GPU may still read them; the engine keeps its device
+        } else {
+            device.DestroyTexture(*result);
+        }
+        return Unexpected(done.error());
+    }
+    std::vector<uint16_t> texels;
+    {
+        render::TextureReadback readback(context);
+        render::ReadbackDesc request;
+        request.texture = *result;
+        Result<render::ReadbackId> id = readback.Request(request);
+        if (!id) {
+            device.DestroyTexture(*result);
+            return Unexpected(id.error());
+        }
+        Result<render::ReadbackImage> read = readback.Complete(*id);
+        if (!read) {
+            if (read.error().code != ErrorCode::Timeout) device.DestroyTexture(*result);
+            return Unexpected(read.error());
+        }
+        texels.resize(size_t{width} * height * 4);
+        std::memcpy(texels.data(), read->texels.data(), texels.size() * sizeof(uint16_t));
+    }
+    device.DestroyTexture(*result);
+    hits.bvh.resize(count);
+    hits.linear.resize(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        const size_t texel = (size_t{i / width} * width + i % width) * 4;
+        hits.bvh[i] = texels[texel] == FloatToHalf(1.0f) ? 1 : 0;
+        hits.linear[i] = texels[texel + 1] == FloatToHalf(1.0f) ? 1 : 0;
+    }
+    return hits;
 }
 
 }  // namespace uzp::preview

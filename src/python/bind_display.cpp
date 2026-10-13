@@ -172,8 +172,8 @@ void BindDisplay(py::module_& display_module, py::module_& render_display, py::m
     // ── uzpainter.render.display (the fixed pipeline's values and presets) ────────────────────
     render_display.def(
         "state", [] { return FromJson(display::State(*Read())); },
-        "The display state: the preset's fields, `parity` (the environment is the preset's standard one) and the "
-        "shader.");
+        "The display state: the preset's fields, `parity` (the environment is the preset's standard one), "
+        "`environment_default`, `shadows_effect` (the shadows flag changes no render) and the shader.");
     render_display.def(
         "preset", [] { return FromJson(display::PresetOf(*Read())); },
         "The display state as a preset (uzpainter/display-preset/1), which apply_preset takes back.");
@@ -197,7 +197,9 @@ void BindDisplay(py::module_& display_module, py::module_& render_display, py::m
     render_display.def("set_blur", [](double v) { return SetDisplayValue("set_blur", "blur", v); }, py::arg("blur"),
                        "Environment blur: 0 only.");
     render_display.def("set_shadows", [](bool v) { return SetDisplayValue("set_shadows", "shadows", v); },
-                       py::arg("shadows"), "Shadows: the active preset's value only.");
+                       py::arg("shadows"),
+                       "Shadows: the active preset's value only. Recorded, but it changes no render: painter_viewport "
+                       "always traces its self-occlusion (decision 251).");
     render_display.def(
         "set_background",
         [](const py::object& rgb) { return SetDisplayValue("set_background", "background", ToJson(rgb)); },

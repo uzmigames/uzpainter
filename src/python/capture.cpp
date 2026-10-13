@@ -299,6 +299,8 @@ json::Object CaptureDiagnostic(const CaptureArguments& a, const ParsedMode& pars
     receipt["size"] = size;
     receipt["display_configuration"] = nullptr;
     receipt["environment"] = nullptr;
+    receipt["visibility"] = nullptr;
+    receipt["shadows"] = nullptr;
     return Write(a.path, bytes[0], bytes[1], std::move(receipt));
 }
 
@@ -509,6 +511,10 @@ json::Object CaptureViewport(const CaptureArguments& a) {
         poseRecord["projection"] = "orthographic";
         poseRecord["orthographic_height"] = pose.orthographicHeight;
     }
+    // The self-occlusion model and its ray counts change the image (decision 251).
+    const json::Object visibility{{"model", std::string(preview::kVisibilityModel)},
+                                  {"diffuse_rays", static_cast<std::int64_t>(scene->diffuseRays)},
+                                  {"specular_rays", static_cast<std::int64_t>(scene->specularRays)}};
     const json::Object renderState{
         {"mode", a.mode},
         {"environment", json::Object{{"sha256", frame.environmentHash},
@@ -524,7 +530,8 @@ json::Object CaptureViewport(const CaptureArguments& a) {
         {"samples", std::int64_t{1}},
         {"seed", seed},
         {"shader", display::Shader(*project)},
-        {"display_configuration", displayConfiguration}};
+        {"display_configuration", displayConfiguration},
+        {"visibility", visibility}};
 
     json::Object receipt = ReceiptBase(*open, snapshot, a.mode);
     receipt["render_state_digest"] = Digest(renderState);
@@ -540,6 +547,10 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     receipt["size"] = size;
     receipt["display_configuration"] = displayConfiguration;
     receipt["environment"] = renderState.at("environment");
+    receipt["visibility"] = visibility;
+    // Requested, outside the digest: painter_viewport always traces its self-occlusion and the
+    // flag changes nothing (decision 251).
+    receipt["shadows"] = json::Object{{"requested", project->display.shadows}, {"effect", std::string(display::kShadowsEffect)}};
     return Write(a.path, exporter::EncodePng(png), exporter::EncodeExr(exr), std::move(receipt));
 }
 

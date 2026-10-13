@@ -8,7 +8,7 @@
   "required": [
     "schema", "revision", "project_uuid", "evaluator_profile", "render_state_digest", "mode", "source",
     "encoding", "backend", "adapter", "driver", "samples", "seed", "camera", "size", "display_configuration",
-    "environment", "hashes"
+    "environment", "visibility", "shadows", "hashes"
   ],
   "properties": {
     "schema": {"const": "uzpainter/capture-receipt/1"},
@@ -77,6 +77,37 @@
             "default": {"type": "boolean"},
             "rotation": {"type": "number"},
             "exposure": {"type": "number"}
+          }
+        }
+      ]
+    },
+    "visibility": {
+      "description": "The self-occlusion of a painter_viewport capture (decision 251): its model and the visibility rays traced per hit for the diffuse and the specular term, also part of render_state_digest. Null for the diagnostic modes.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model", "diffuse_rays", "specular_rays"],
+          "properties": {
+            "model": {"const": "ray_traced_self_occlusion"},
+            "diffuse_rays": {"type": "integer", "minimum": 0},
+            "specular_rays": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "shadows": {
+      "description": "The display state's shadows flag as requested and its effect on a painter_viewport capture: none, the pass always traces its self-occlusion (decision 251). Outside render_state_digest. Null for the diagnostic modes.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requested", "effect"],
+          "properties": {
+            "requested": {"type": "boolean"},
+            "effect": {"const": "none in painter_viewport"}
           }
         }
       ]

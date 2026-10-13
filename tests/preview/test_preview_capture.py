@@ -267,6 +267,7 @@ def test_receipts_have_every_field(painter: Path, tmp_path: Path) -> None:
     assert (receipt["backend"], receipt["adapter"], receipt["driver"]) == ("cpu", None, None)
     assert (receipt["samples"], receipt["seed"], receipt["camera"]) == (None, None, None)
     assert receipt["display_configuration"] is None and receipt["size"] == [256, 256]
+    assert receipt["visibility"] is None and receipt["shadows"] is None
     assert receipt["encoding"] == {
         "png": {"bit_depth": "16", "layout": "L"},
         "exr": {"bit_depth": "32f", "layout": "L"},
@@ -459,6 +460,15 @@ def check_viewport(receipt: dict[str, Any], size: tuple[int, int]) -> np.ndarray
         "config_sha256": OCIO_CONFIG,
         "view": "Default - sRGB",
     }
+    # Decision 251: the self-occlusion rays are stated, and the `shadows` flag (off under the
+    # `common` preset) is recorded with its effect, none.
+    assert receipt["visibility"] == {
+        "model": "ray_traced_self_occlusion",
+        "diffuse_rays": 128,
+        "specular_rays": 64,
+    }
+    assert receipt["shadows"]["effect"] == "none in painter_viewport"
+    assert isinstance(receipt["shadows"]["requested"], bool)
     codes = values(receipt["files"]["png"])
     linear = values(receipt["files"]["exr"])
     assert codes.shape == linear.shape == (size[1], size[0], 3)

@@ -401,6 +401,8 @@ json::Object State(const core::Project& project) {
     state["parity"] = spec != nullptr && resource && *resource == spec->environment;
     // A project that names no environment renders lit by the installation's default (decision 212).
     state["environment_default"] = !resource.has_value();
+    // The `shadows` flag is recorded but changes no render (decision 251).
+    state["shadows_effect"] = std::string(kShadowsEffect);
     state["shader"] = Shader(project);
     return state;
 }
