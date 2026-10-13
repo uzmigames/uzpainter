@@ -964,8 +964,10 @@ LIFTED_COLOUR_SETS: dict[str, tuple[str, ...]] = {
 
 
 def lifted_colour_spec(stem: str, texture_set: str, spec_dir: Path) -> dict[str, Any]:
-    """The spec `WriteExport` evaluates for `texture_set` of `stem` (`LIFTED_COLOUR_SETS`), every
-    channel of its stack an output, for the evaluator's `evaluate` case."""
+    """The spec `WriteExport` evaluates for `texture_set` of `stem` (`LIFTED_COLOUR_SETS`), for the
+    evaluator's `evaluate` case: its outputs are every channel of the stack, except on
+    export-bit-depth, whose comparison writes only the sRGB8 material channels (its Opacity has
+    neither a template base value nor a channel default and is not exported there)."""
     prepare, options = {
         "export-bit-depth": (_bit_depth_golden, {"template_channels": True}),
         "export-ocio-encode-legacy": (_legacy_bitmap_golden, {}),
@@ -974,7 +976,9 @@ def lifted_colour_spec(stem: str, texture_set: str, spec_dir: Path) -> dict[str,
     }[stem]
     _, manifest = prepare()
     spec = _set_spec(manifest, texture_set, spec_dir, **options)
-    spec["outputs"] = [c["type"] for c in spec["channels"]]
+    channels = [c["type"] for c in spec["channels"]]
+    exported = SRGB8_CHANNELS if stem == "export-bit-depth" else channels
+    spec["outputs"] = [c for c in channels if c in exported]
     return spec
 
 
