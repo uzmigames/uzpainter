@@ -919,6 +919,67 @@ def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
     return report
 
 
+# srgb-bitmap-minification (decisions 174 item 6, 198): one export step of each kind (PNG 16,
+# PNG 8, OpenEXR 32f; each was done twice, the repeats identical). s0-s3 the 8-bit srgb8-ramp and
+# s4-s7 field A (16-bit) in sRGB on BaseColor, BilinearHQ then BilinearSharp at scales 2 and 4,
+# rotation 0, Repeat. Field A's sets are compared; the 8-bit ramp's are refused (decision 203:
+# Painter samples an sRGB8 texture, whose filter and mip chain are not the float32 texture's).
+SRGB_MINIFY_STEPS = (36, 38, 40)
+SRGB_MINIFY_SETS = ("s4", "s5", "s6", "s7")
+SRGB_MINIFY_REFUSED = ("s0", "s1", "s2", "s3")
+
+
+def srgb_minification_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """srgb-bitmap-minification rebuilt per texture set on the grid mesh and written by
+    `WriteExport` at each step of `SRGB_MINIFY_STEPS`: the sets of `SRGB_MINIFY_SETS` compared byte
+    for byte with Painter's files of r1 and r2 (the golden is stable), those of
+    `SRGB_MINIFY_REFUSED` expected to be refused. Returns the counts, the refusal messages and the
+    differing files or unexpected outcomes."""
+    needs_store()
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    golden = load(locate(), root / "srgb-bitmap-minification.json")
+    manifest = golden.manifest
+    by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
+    report: dict[str, Any] = {
+        "files": 0,
+        "comparisons": 0,
+        "identical": 0,
+        "refused": {},
+        "problems": [],
+    }
+    for texture_set in (*SRGB_MINIFY_SETS, *SRGB_MINIFY_REFUSED):
+        spec_dir = tmp / texture_set / "spec"
+        spec = export_spec(manifest, texture_set, spec_dir)
+        spec["mesh"] = str(_mesh_of(manifest))
+        _add_template_channels(spec)
+        for step in SRGB_MINIFY_STEPS:
+            raw = by_step[step]
+            config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                tmp / texture_set / f"out{step}", [texture_set]
+            )
+            result = write_export(exe, spec, spec_dir, config, tmp / texture_set / f"run{step}")
+            where = f"{texture_set} step {step}"
+            if "error" in result:
+                report["refused"].setdefault(texture_set, result["message"])
+                if texture_set not in SRGB_MINIFY_REFUSED:
+                    report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                continue
+            if texture_set in SRGB_MINIFY_REFUSED:
+                report["problems"].append(f"{where}: written, expected a refusal")
+                continue
+            for written in result["written"]:
+                rel = written["relativePath"]
+                report["files"] += 1
+                for recording in ("r1", "r2"):
+                    theirs = _painter_files(golden, recording, step, texture_set)
+                    report["comparisons"] += 1
+                    if written["sha256"] == theirs.get(rel):
+                        report["identical"] += 1
+                    else:
+                        report["problems"].append(f"{where}: {rel} differs from {recording}")
+    return report
+
+
 # ── parity/semantics/export-processing.json ─────────────────────────────────
 
 PYDOC = source(

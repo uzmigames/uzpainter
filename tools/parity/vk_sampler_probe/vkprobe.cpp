@@ -1,15 +1,16 @@
 // Measurement probe of the recording GPU's texture unit through Vulkan (decision 056; task
 // phase1.9_compositor-resample-gaps). Painter 12 renders through Vulkan; the render layer is DX12
-// only until Phase 3, so this standalone program samples a float32 or UNORM16 RGBA texture with
-// a mip chain through one VkSampler from an HLSL compute kernel (compiled to SPIR-V by the
+// only until Phase 3, so this standalone program samples a float32, UNORM16 or SRGB8 RGBA texture
+// with a mip chain through one VkSampler from an HLSL compute kernel (compiled to SPIR-V by the
 // vendored dxcompiler.dll) and writes the RGBA32F result. Driven by measure.py in this folder.
 //
 // Input folder: probe.bin = 8 uint32 (width, height, mip levels, output width, output height,
 // filter 0 nearest / 1 linear / 2 anisotropic, maxAnisotropy, flags: 1 clamp, 2 UNORM16,
-// 4 nearest mip), 3 float32 (LOD bias, min LOD, max LOD), then each level's texels with rows
-// padded to 256 bytes and levels to 512 bytes; probe.hlsl = the kernel (t0 texture `src`, s1
-// sampler `s`, u2 output `dst`, t3 `StructuredBuffer<float4> params`, entry `main`, cs_6_6);
-// optional params.bin = the contents of `params` (designed per-sample inputs). Output: out.bin.
+// 4 nearest mip, 8 SRGB8: R8G8B8A8_SRGB, four bytes per texel, decision 203), 3 float32 (LOD
+// bias, min LOD, max LOD), then each level's texels with rows padded to 256 bytes and levels to
+// 512 bytes; probe.hlsl = the kernel (t0 texture `src`, s1 sampler `s`, u2 output `dst`, t3
+// `StructuredBuffer<float4> params`, entry `main`, cs_6_6); optional params.bin = the contents of
+// `params` (designed per-sample inputs). Output: out.bin.
 //
 // Build: zig c++ -std=c++20 -O2 -fms-extensions -I thirdparty/volk
 //        -I thirdparty/vulkan-headers/include -I thirdparty/dxc/inc
@@ -84,6 +85,7 @@ int main(int argc, char** argv) {
     std::memcpy(f, blob.data() + sizeof h, sizeof f);
     const uint32_t width = h[0], height = h[1], mips = h[2], outW = h[3], outH = h[4], filter = h[5], aniso = h[6], flags = h[7];
     const bool unorm16 = (flags & 2) != 0;
+    const bool srgb8 = (flags & 8) != 0;
     const size_t dataOffset = sizeof h + sizeof f;
     const size_t dataSize = blob.size() - dataOffset;
     const std::vector<uint32_t> spirv = CompileSpirv(argv[1], hlsl);
@@ -173,8 +175,9 @@ int main(int argc, char** argv) {
         CHECK(vkAllocateMemory(device, &mai, nullptr, &memory));
         CHECK(vkBindImageMemory(device, image, memory, 0));
     };
-    const VkFormat srcFormat = unorm16 ? VK_FORMAT_R16G16B16A16_UNORM : VK_FORMAT_R32G32B32A32_SFLOAT;
-    const uint32_t texelBytes = unorm16 ? 8 : 16;
+    const VkFormat srcFormat = srgb8 ? VK_FORMAT_R8G8B8A8_SRGB
+                                     : (unorm16 ? VK_FORMAT_R16G16B16A16_UNORM : VK_FORMAT_R32G32B32A32_SFLOAT);
+    const uint32_t texelBytes = srgb8 ? 4 : (unorm16 ? 8 : 16);
     VkImage src, dst;
     VkDeviceMemory srcMem, dstMem;
     makeImage(width, height, mips, srcFormat, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, src, srcMem);

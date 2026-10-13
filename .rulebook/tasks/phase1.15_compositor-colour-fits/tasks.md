@@ -20,11 +20,21 @@
   - Split to `phase3.3_unreal-gltf-presets` 3.5: per-preset pixel parity of `export-presets-ocio`, as for its Legacy twin.
 - [x] 2.4 (decisions 108 and 130) R5 Legacy twin s5 (the masked group of `export-ocio-encode-legacy`, unstable in the oracle): exact against r1 (decision 032), r2 only through the exception register
   - Done (decision 152): s5's BaseColor (the 8-bit sRGB ramp in a group masked by grey A) is written byte for byte as r1 at PNG 16, PNG 8 and OpenEXR 32f, with no evaluator change (the export tests' spec loader now reads masks). r2 differs from r1 on 15 947 values per file and is judged through EXC-006 (`parity/exceptions.json`, decision 032's standing approval, flagged for the owner's review); `test_srgb8_bitmap_equals_painter_files`.
-- [ ] 2.5 (decision 174, split from 2.2) Bilinear minification of an sRGB bitmap: record a Tier 0 set of the 8-bit ramp and field A in sRGB on BaseColor at BilinearHQ and BilinearSharp, scales 2 and 4, rotation 0, Repeat (owner action at Painter), then fit the decoded texels' mip chain through the texture unit and lift `compositor:srgb-unrecorded`
-  - Refused until then with `evaluator:unsupported_source` ("bilinear minification of an sRGB bitmap is not recorded").
+- [x] 2.5 (decision 174, split from 2.2) Bilinear minification of an sRGB bitmap: record a Tier 0 set of the 8-bit ramp and field A in sRGB on BaseColor at BilinearHQ and BilinearSharp, scales 2 and 4, rotation 0, Repeat (owner action at Painter), then fit the decoded texels' mip chain through the texture unit and lift `compositor:srgb-unrecorded`
+  - Recorded as `srgb-bitmap-minification` (decision 198, stable).
+  - Done for 16-bit sRGB bitmaps (decision 203): the decoded float32 image is level 0 of the texture unit's mip chain (`BitmapChain`), in decision 084's axis-aligned domain. Field A (s4-s7) is byte for byte through `WriteExport` at PNG 16, PNG 8 and OpenEXR 32f: 12 files, 24 of 24 comparisons, r1 and r2 (`test_srgb_minification_equals_painter_files`). The GPU kernel samples the same chain (`projection-gpu-vs-cpu`, minifying 16-bit sRGB stacks).
+  - Split to 2.7: the 8-bit ramp (s0-s3). It stays refused with `evaluator:unsupported_source` naming decision 203.
 - [ ] 2.6 (decision 190, split from 2.3) The facade under OCIO with Painter's substance config: fit the working value of a uniform colour in the sRGB space as Painter reads it back under OCIO, and the eleven-space bitmap listing (`export-ocio-encode` readbacks: 1e-7 to 7e-6 relative from the Legacy float32 rule on every recorded component). Then lift `colour.require_supported_configuration`'s OCIO refusal and `compositor:ocio-unrecorded` where exact. This unblocks the Wand pilot (phase1.25), which runs under OCIO.
   - Recording that settles it (owner action at Painter): P20-B's OCIO twin, the dense uniform sRGB decode readbacks in a Session O window.
   - Refused until then: the facade raises `NotYetSupported` on an OCIO project before any evaluation.
+- [ ] 2.7 (decision 203, split from 2.5) Bilinear minification of an 8-bit sRGB bitmap: replicate the recording GPU's sRGB8 texture filter and validate it sample for sample against the hardware, then fit `srgb-bitmap-minification` s0-s3 and lift `compositor:srgb-unrecorded`
+  - Painter samples an `R8G8B8A8_SRGB` texture whose mip levels hold sRGB8 codes. With sRGB8 mip levels the float32 filter still misses 1 024 to 3 072 values per file.
+  - Measured with `vk_sampler_probe` (flag 8), the filter returns binary16 values, rounded to nearest with ties away from zero. It is not the linear blend of the decoded texels.
+    - With operands cut to 8 bits below the largest texel's exponent, a model misses 611 of 12 288 random two-tap samples.
+    - Code 47 enters the pair (47, 48) as 0.0283203125.
+    - Painter's BilinearHQ composed from hardware samples equals s0 on every column tested.
+  - Needs no Painter recording. The measurement runs on the owner's machine (RTX 4090) without Painter.
+  - Refused until then with `evaluator:unsupported_source` ("bilinear minification of an 8-bit sRGB bitmap is a release gap ... (decision 203)").
 
 ## 3. Tests
 - [ ] 3.1 Every fitted output exact against both recordings on CPU and DX12; the refusals of what stays unrecorded still fire before any mutation and name this task

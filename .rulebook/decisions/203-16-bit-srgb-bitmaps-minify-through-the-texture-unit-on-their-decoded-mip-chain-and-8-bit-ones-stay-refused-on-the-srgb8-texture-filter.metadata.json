@@ -1,0 +1,11 @@
+{
+  "id": 203,
+  "slug": "16-bit-srgb-bitmaps-minify-through-the-texture-unit-on-their-decoded-mip-chain-and-8-bit-ones-stay-refused-on-the-srgb8-texture-filter",
+  "title": "16-bit sRGB bitmaps minify through the texture unit on their decoded mip chain, and 8-bit ones stay refused on the sRGB8 texture filter",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

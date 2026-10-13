@@ -112,7 +112,7 @@ render::Result<void> CheckSampling(const UvProjection& projection, uint32_t setW
     if (image.encoding == render::TexelEncoding::Float16 ||
         (image.encoding == render::TexelEncoding::Float32 && Minifies(projection, setWidth, setHeight, image))) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "bitmap sources are 8- or 16-bit images (a decoded sRGB bitmap is not minified)", node);
+                        "bitmap sources are 8- or 16-bit images (a float32 bitmap is not minified)", node);
     }
     if (Minifies(projection, setWidth, setHeight, image)) {
         const std::string what = std::string(core::ToString(projection.filter)) + " minification (" +
@@ -151,13 +151,12 @@ bool Minifies(const UvProjection& projection, uint32_t setWidth, uint32_t setHei
 }
 
 tu::Chain BitmapChain(const DecodedImage& image) {
-    const uint32_t bits = image.encoding == render::TexelEncoding::Unorm8 ? 8u : 16u;
     std::vector<float> level0(size_t{image.width} * image.height * 3);
     for (uint32_t row = 0; row < image.height; ++row) {
         const uint32_t y = image.height - 1 - row;  // the GPU's rows go bottom up
         for (uint32_t x = 0; x < image.width; ++x) {
             for (uint32_t c = 0; c < 3; ++c) {
-                level0[(size_t{row} * image.width + x) * 3 + c] = arith::UnormOperand(Code(image, x, y, c), bits);
+                level0[(size_t{row} * image.width + x) * 3 + c] = TexelValue(image, x, y, c);
             }
         }
     }
