@@ -184,7 +184,7 @@ on the owner's machine ([probe report](parity/reports/phase0/toolchain-probes.md
 |------|--------|
 | Analyses: Assets3D pipeline, UzEngine renderer, technology options, Substance parity | Done |
 | Product and architecture documents (`docs/`) | Done |
-| Decisions 001–206 (`.rulebook/decisions/`) | Recorded |
+| Decisions 001–209 (`.rulebook/decisions/`) | Recorded |
 | Approved-source index; parity contract and schemas | Done |
 | Render core and third-party libraries vendored; own Zig build | Done |
 | Private oracle store, repository guard, Painter oracle recorder | Done |

@@ -23,7 +23,7 @@ Decision context: `docs/analysis/architecture-discussion/05-resolution.md` (D1â€
 | **Plane** | An authoritative raster that cannot be re-evaluated from a recipe (a bitmap received by a paint layer, a frozen procedural snapshot); identified by a persistent `plane_id` referenced by its owning node and stored in the project at native precision. Brush strokes are out of scope (Q5, decision 019). |
 | **Render core** | The rendering code vendored from UzEngine plus UzPainter's own GPU layer on top of it (`TextureReadback`, UV raster, kernels, path tracer) on DX12 or Vulkan (`13-engine-integration.md`). |
 | **Job** | A long operation (bake, export, capture, import, reload) with a `job_id`, progress, cancellation and a terminal status bound to that id. |
-| **Capability manifest** | The generated list of every Painter Python symbol and every UzPainter operation with its status: `supported`, `desktop-only-omitted`, `release-gap`. |
+| **Capability manifest** | The generated list of every Painter Python symbol and every UzPainter operation with its status: `supported`, `desktop-only-omitted`, `release-gap`, `pending-evidence` (decision 112). |
 | **Golden** | A recorded Painter output (map, intermediate plane, Iray render or API readback) with its full input manifest, used as the private oracle for parity tests; only its hash is public. |
 | **Exception register** | The owner-approved, versioned exceptions (`parity/exceptions.json` plus a decision each); the only way a non-zero difference passes (`14-parity-testing.md` Â§5). |
 | **Tier 0â€“3** | Parity test tiers: semantics micro-tests, recipes, procedurals and bakes, renders (path tracer vs converged Iray references) (`14-parity-testing.md`). |
@@ -34,7 +34,7 @@ Decision context: `docs/analysis/architecture-discussion/05-resolution.md` (D1â€
 |---|---|---|---|
 | Supervisor | C++ host + embedded CPython running the official MCP SDK | Launched by the AI client (`UzPainter.exe --mcp`); owns MCP connectivity, admission, the job ledger, the mutation lease and worker lifecycle; never initialises a GPU | 02, 11 |
 | Worker | C++ (`UzPainter.exe --worker`) + embedded CPython | Owns one document, the render core on the selected backend, the evaluator, bakers, exporter, renderers and the compatibility interpreter | 02 |
-| Document model | C++ (`uzp_core`) | Typed project model, JSON manifest, revisions, operation records, capability manifest generator | 03, 04 |
+| Document model | C++ (`uzp_core`) | Typed project model, JSON manifest, revisions, operation records; the capability manifest generator is Python in `tools/capabilities/` (`zig build capabilities`) | 03, 04 |
 | Resource store | C++ | Content-addressed blobs, decoded raster cache in RAM/VRAM, provenance | 03, 09 |
 | Mesh module | C++ | OBJ/FBX/glTF raw import, texturing mesh, MikkTSpace tangents, UV/TBN certificate, UV-space rasterisation, high-poly streaming | 12 |
 | Render core | C++ (vendored from a clean UzEngine commit) + UzPainter-owned layer | RHI with DX12 and Vulkan backends, shader pipeline (DXC to DXIL and SPIR-V), DXR and Vulkan ray-query acceleration structures, `TextureReadback`, capability queries, VRAM admission | 13 |
@@ -44,7 +44,7 @@ Decision context: `docs/analysis/architecture-discussion/05-resolution.md` (D1â€
 | Renderers | C++/HLSL | `painter_iray`: clean-room path tracer on DXR and Vulkan ray query â€” the render-parity target; `painter_viewport`: realtime forward pass â€” human preview and fast check only; diagnostic channel captures | 07 |
 | Exporter | C++ | Painter JSON export plan compiler, encoders, presets, `.uztexture`/`.uzmat` writers (UzPainter's own code), receipts | 08 |
 | Project store | C++ (SQLite + zstd) | Self-contained `.uzp` file, revisions, operation records, autosave, checkpoints, `inspect`, `export-bundle` | 09 |
-| `uzpainter` module | C++ (pybind11, linked into the exe) + Python | Native API; `substance_painter` facade (documented symbols only); `uzpainter.cli`; `uzpainter.mcp`; the UzmiGames pipeline adapter is separate UzmiGames code | 10, 11 |
+| `uzpainter` module | C++ (pybind11, linked into the exe) + Python | Native API; `substance_painter` facade (documented symbols only); the supervisor's MCP package `uzpainter_supervisor` (`python/`); the CLI verbs are C++ (`src/main.cpp`); the UzmiGames pipeline adapter is separate UzmiGames code | 10, 11 |
 | Preview window | C++ | Optional read-only window on its own thread; shows `painter_viewport` frames and the latest `painter_iray` capture; never pauses work | 07 |
 
 ## 4. Process roles and entry points
