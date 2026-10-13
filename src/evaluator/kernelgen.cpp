@@ -276,7 +276,7 @@ std::array<uint32_t, kBlendParamsStride> EncodeProjectParams(const ProjectOp& op
     params[8] = image.channels;
     params[9] = image.encoding == render::TexelEncoding::Float16   ? 3u
                 : image.encoding == render::TexelEncoding::Float32 ? 2u
-                : image.encoding == render::TexelEncoding::Unorm16 ? 1u
+                : image.encoding == render::TexelEncoding::Unorm16 ? (image.unorm16Target ? 4u : 1u)
                                                                     : 0u;
     params[10] = static_cast<uint32_t>(op.projection.filter);
     params[11] = static_cast<uint32_t>(op.projection.wrap);

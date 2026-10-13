@@ -307,6 +307,15 @@ std::array<float, 3> Minified(const UvProjection& p, const tu::Chain& chain, uin
     return value;
 }
 
+/// `texel` as the projection writes it: through a 16-bit UNORM code for a Normal-channel bitmap
+/// (`DecodedImage::unorm16Target`, decision 226), else unchanged.
+ProjectedTexel Written(const DecodedImage& image, ProjectedTexel texel) {
+    if (image.unorm16Target) {
+        for (float& v : texel.value) v = arith::UnormOperand(arith::WriteUnorm(v, 16), 16);
+    }
+    return texel;
+}
+
 }  // namespace
 
 ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, uint32_t i,
@@ -318,7 +327,7 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
         ProjectedTexel result;
         result.covered = repeat || (uv[0] >= 0.0f && uv[0] < 1.0f && uv[1] >= 0.0f && uv[1] < 1.0f);
         if (result.covered) result.value = Minified(p, *chain, i, j, setWidth, setHeight, repeat);
-        return result;
+        return Written(image, result);
     }
     // Power-of-two resolutions: multiplying by the inverse is the exact division.
     const double invWidth = 1.0 / setWidth;
@@ -352,7 +361,7 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
         for (uint32_t c = 0; c < 3; ++c) {
             result.value[c] = RangeValue(TexelValue(image, xi, yi, c), signedRange);
         }
-        return result;
+        return Written(image, result);
     }
     const int64_t fixedX = static_cast<int64_t>(std::floor(x * kSubtexel + 0.5));
     const int64_t fixedY = static_cast<int64_t>(std::floor(y * kSubtexel + 0.5));
@@ -378,7 +387,7 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
             result.value[c] = arith::HalfToFloat(arith::HalfNearestAway(result.value[c]));
         }
     }
-    return result;
+    return Written(image, result);
 }
 
 float RangeValue(float v, bool signedRange) {

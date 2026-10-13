@@ -70,8 +70,10 @@
   - Fitted (decision 218): a colour bitmap read by a one-channel tile is an R16F texture. Each texel is the mean ((r + g) + b) / 3 of its float32(c / 255) components (2 m - 1 on Height), rounded toward zero to a binary16, and the bilinear filter's result is rounded to a binary16, to nearest with ties away from zero. CPU and DX12 (`IMAGE_FLOAT16`).
     - BaseMetalness, Height and SpecularRoughness are byte for byte, both recordings; their exclusions are removed from `test_facade_fill_channel_defaults_equal_painter`.
     - Admitted: an 8-bit colour bitmap, magnified or at 1:1 by a bilinear filter, on L8 or L16F or as a mask source. Refused before any change, naming this item: other one-channel formats (L16, L32F), 16-bit colour, Nearest and minification. No colour bitmap is read through its red component any more.
+  - Fitted (decision 226): a bitmap on Normal is a 16-bit UNORM texture. A colour image has its green inverted and an 8-bit blue code below 127 raised to 127; a grey image feeds its value to the three components unchanged. The filter's result is written as a 16-bit code before the channel's half store. CPU and DX12 (`IMAGE_UNORM16_TARGET`).
+    - The Normal map is byte for byte, 65 536 of 65 536 texels, both recordings; its exclusion is removed from `test_facade_fill_channel_defaults_equal_painter`.
+    - The recorded 1:1 imports are unchanged. A 16-bit grey bitmap on Normal is refused, naming this item.
   - Open:
-    - the grey bitmap on Normal (still refused, Normal map excluded);
     - a 16-bit colour bitmap on a one-channel tile (refused): `export-bit-depth` s3 records 16-bit field A on Height at 1:1, where Painter follows the component mean, not red; not yet fitted exactly;
     - BaseColor (8 264 texels one sRGB8 code off), moved to item 2.7: the 8-bit sRGB checker magnified 16 times needs decision 209's single-probe sRGB8 filter. A CPU prototype of that rule made BaseColor exact, both recordings (decision 218).
 
