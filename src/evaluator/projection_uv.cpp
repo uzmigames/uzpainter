@@ -1,8 +1,11 @@
 #include "evaluator/projection_uv.h"
 
+#include <algorithm>
 #include <bit>
 #include <cmath>
+#include <limits>
 #include <numbers>
+#include <stdexcept>
 #include <string>
 
 #include "evaluator/arith.h"
@@ -211,6 +214,42 @@ float BilinearFilter(const std::array<uint32_t, 4>& weights, const std::array<fl
     return negative ? -result : result;
 }
 
+uint32_t Srgb8Code(float decode) {
+    const std::array<float, 256>& table = arith::Srgb8OperandTable();
+    const auto at = std::lower_bound(table.begin(), table.end(), decode);
+    if (at == table.end() || *at != decode) {
+        throw std::logic_error("evaluator: a texel of an sRGB8 image is not an sRGB8 decode");
+    }
+    return static_cast<uint32_t>(at - table.begin());
+}
+
+int Srgb8SegmentExponent(uint32_t code) {
+    int exponent = 0;
+    (void)std::frexp(arith::Srgb8Operand(code | 7u), &exponent);
+    return exponent;
+}
+
+float Srgb8BilinearFilter(const std::array<uint32_t, 4>& weights, const std::array<uint32_t, 4>& codes) {
+    uint32_t live = 0;
+    size_t last = 0;
+    int exponent = std::numeric_limits<int>::min();
+    for (size_t k = 0; k < 4; ++k) {
+        if (weights[k] == 0) continue;
+        ++live;
+        last = k;
+        exponent = std::max(exponent, Srgb8SegmentExponent(codes[k]));
+    }
+    if (live == 1) return arith::Srgb8Operand(codes[last]);
+    // Each operand floor(d 2^(8 - E)) is below 2^8 and the sum below 2^16: S 2^(E - 16) is exact.
+    int64_t sum = 0;
+    for (size_t k = 0; k < 4; ++k) {
+        const double scaled = std::ldexp(static_cast<double>(arith::Srgb8Operand(codes[k])), 8 - exponent);
+        sum += static_cast<int64_t>(weights[k]) * static_cast<int64_t>(std::floor(scaled));
+    }
+    const float value = static_cast<float>(std::ldexp(static_cast<double>(sum), exponent - 16));
+    return arith::HalfToFloat(arith::HalfNearestAway(value));
+}
+
 namespace {
 
 /// Painter's float32 (u', v') of set texel (i, j) (decision 060).
@@ -331,6 +370,13 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
         std::array<float, 4> texels{};
         for (size_t k = 0; k < 4; ++k) {
             texels[k] = RangeValue(TexelValue(image, taps[k][0], taps[k][1], c), signedRange);
+        }
+        if (image.srgb8) {
+            // An sRGB8 texture's filter (decisions 209, 224): its codes, not their float32 decodes.
+            std::array<uint32_t, 4> codes{};
+            for (size_t k = 0; k < 4; ++k) codes[k] = Srgb8Code(texels[k]);
+            result.value[c] = Srgb8BilinearFilter(weights, codes);
+            continue;
         }
         result.value[c] = BilinearFilter(weights, texels);
         // An R16F texture's filter returns a binary16, to nearest, ties away from zero (decision 218).

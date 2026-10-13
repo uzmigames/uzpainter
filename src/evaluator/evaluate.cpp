@@ -47,6 +47,7 @@ render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedIma
     }
     auto decoded = std::make_shared<DecodedImage>(image);
     decoded->encoding = render::TexelEncoding::Float32;
+    decoded->srgb8 = !sixteen && !l8Material;
     const float invLow = static_cast<float>(1.0 / 12.92);
     const float invHigh = static_cast<float>(1.0 / 1.055);
     auto shaderDecode = [&](float x) {
