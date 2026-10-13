@@ -46,6 +46,11 @@ def test_persistent_results_are_served_bit_for_bit_and_only_for_their_inputs(
         "a combined virtual normal is stored cold and served to a fresh evaluator bit for bit, "
         "tag included",
         "with the Height bitmap missing, the stored virtual normal is not served: missing_resource",
+        "the flat virtual normal of empty Height and Normal stacks is stored and served",
+        "a profile whose root list is not isolated misses the stored flat normal and fails with "
+        "unsupported_source exactly as without the cache",
+        "a template with another Height base misses the stored flat normal, is computed as "
+        "without the cache and stored under its own key",
         "a geometry-masked read-out's hash changes with the mesh's stored external files, "
         "geometry hashes, objects and import settings, not with its file name",
         "over its cap the area removes the least recently used entry (a hit counts as a use)",

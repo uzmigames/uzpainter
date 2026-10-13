@@ -7933,6 +7933,30 @@ std::vector<std::byte> PayloadOf(uint8_t seed, size_t size) {
     return payload;
 }
 
+/// The templates of `assets` plus "raised-height": the default template with a Height base of
+/// 0.25, written under `dir`.
+std::shared_ptr<const TemplateLibrary> RaisedHeightTemplates(const fs::path& assets, const fs::path& dir) {
+    const fs::path out = dir / "templates-raised";
+    std::error_code ec;
+    fs::remove_all(out, ec);
+    fs::create_directories(out);
+    for (const fs::directory_entry& entry : fs::directory_iterator(assets)) {
+        if (entry.path().extension() == ".json") fs::copy_file(entry.path(), out / entry.path().filename());
+    }
+    std::ifstream in(assets / "default.json", std::ios::binary);
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    core::json::Value document = core::json::Parse(text);
+    core::json::Object& object = std::get<core::json::Object>(document.data);
+    object["id"] = "raised-height";
+    object["name"] = "Default with a raised Height base";
+    for (core::json::Value& channel : std::get<core::json::Array>(object["channels"].data)) {
+        core::json::Object& entry = std::get<core::json::Object>(channel.data);
+        if (entry["type"] == core::json::Value("Height")) entry["base"] = core::json::Array{0.25, 0.25, 0.25};
+    }
+    std::ofstream(out / "raised-height.json", std::ios::binary) << core::json::WriteCanonical(document);
+    return LoadTemplates(out);
+}
+
 /// `persistent <assets> <work-dir>`: the persistent evaluation results (result_cache.h) and the
 /// disk cache under them (render/disk_cache.h; decision 253). A fresh evaluator (a new process's
 /// empty tile cache) serves a stored read-out or virtual normal bit for bit and computes nothing;
@@ -8162,6 +8186,65 @@ int RunPersistent(const fs::path& assets, const fs::path& dir) {
             const render::Result<VirtualNormalResult> lost = normalOf(none);
             Check(!lost && EvalErrorKindOf(lost.error()) == EvalErrorKind::MissingResource,
                   "with the Height bitmap missing, the stored virtual normal is not served: missing_resource");
+
+            // Every input of the virtual normal is in its key. An isolated project whose Height
+            // and Normal stacks are empty stores the flat normal; the same project under a
+            // profile whose root list is not isolated, with its Height layers, and the empty
+            // project under a template with another Height base each miss it.
+            std::shared_ptr<const TemplateLibrary> raised = RaisedHeightTemplates(assets, dir);
+            auto normalIn = [&](const Builder& at, std::shared_ptr<const TemplateLibrary> library,
+                                const std::string& templateId) {
+                CpuEvaluator cpu(std::move(library), kWideLimits);
+                VirtualNormalRequest request;
+                request.textureSet = b.SetId();
+                request.stack = b.StackId();
+                request.kind = NormalSourceKind::Combined;
+                request.convention = core::NormalMapFormat::OpenGL;
+                request.templateId = templateId;
+                request.resources = heights;
+                return cpu.EvaluateNormal(at.project, 3, request);
+            };
+            auto sameBits = [](const render::Result<VirtualNormalResult>& x, const render::Result<VirtualNormalResult>& y) {
+                return x && y && x->texels.size() == y->texels.size() &&
+                       std::memcmp(x->texels.data(), y->texels.data(), x->texels.size() * sizeof(float)) == 0;
+            };
+            auto hits = [](const render::Result<VirtualNormalResult>& r) {
+                return r ? "persistent " + std::to_string(r->stats.persistentHits) : Describe(r);
+            };
+            Builder emptyStacks = b;
+            emptyStacks.SetRoot({});
+            Builder overBase = b;
+            overBase.project.versions.evaluator_profile = std::string(kProfileLayerqLinear);
+            if (emptyStacks.Validate("persistent empty stacks") && overBase.Validate("persistent over the base")) {
+                const render::Result<VirtualNormalResult> emptyCold =
+                    normalIn(emptyStacks, templates, std::string(kDefaultTemplateId));
+                const render::Result<VirtualNormalResult> emptyWarm =
+                    normalIn(emptyStacks, templates, std::string(kDefaultTemplateId));
+                Check(emptyCold && emptyCold->stats.persistentHits == 0 && emptyWarm &&
+                          emptyWarm->stats.persistentHits == 1 && sameBits(emptyWarm, emptyCold),
+                      "the flat virtual normal of empty Height and Normal stacks is stored and served",
+                      hits(emptyCold) + " / " + hits(emptyWarm));
+
+                render::DisableCaches();
+                const render::Result<VirtualNormalResult> overPlain =
+                    normalIn(overBase, templates, std::string(kDefaultTemplateId));
+                const render::Result<VirtualNormalResult> raisedPlain = normalIn(emptyStacks, raised, "raised-height");
+                render::EnableCaches(root);
+                const size_t entries = EntryFiles(area).size();
+                const render::Result<VirtualNormalResult> overCached =
+                    normalIn(overBase, templates, std::string(kDefaultTemplateId));
+                Check(!overPlain && !overCached && EvalErrorKindOf(overCached.error()) == EvalErrorKind::UnsupportedSource &&
+                          overCached.error().reason == overPlain.error().reason && EntryFiles(area).size() == entries,
+                      "a profile whose root list is not isolated misses the stored flat normal and fails with "
+                      "unsupported_source exactly as without the cache",
+                      hits(overCached));
+                const render::Result<VirtualNormalResult> raisedCold = normalIn(emptyStacks, raised, "raised-height");
+                Check(raisedPlain && raisedCold && raisedCold->stats.persistentHits == 0 &&
+                          sameBits(raisedCold, raisedPlain) && EntryFiles(area).size() == entries + 1,
+                      "a template with another Height base misses the stored flat normal, is computed as without the "
+                      "cache and stored under its own key",
+                      hits(raisedCold));
+            }
         }
     }
 

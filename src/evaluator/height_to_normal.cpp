@@ -173,6 +173,21 @@ render::Result<VirtualNormalResult> PassThrough(const core::Project& project, co
     return result;
 }
 
+/// What the virtual normal reads of the Height or Normal channel `dag` (null: no such channel).
+/// Its read-out hash is zero unless its root list is isolated with layers, so the profile, the
+/// isolation, whether the list is empty and the base it reads as are written beside it: a
+/// profile whose root list is not isolated fails, an empty Height stack reads as its base, and
+/// neither may share a key with another channel's result (decision 253).
+void WriteChannelInputs(HashWriter& writer, const ChannelDag* dag) {
+    if (dag == nullptr) {
+        writer.U32(0);
+        return;
+    }
+    writer.U32(1).Sub(dag->readoutHash).Str(dag->profile.id).U32(dag->root.isolated ? 1u : 0u);
+    writer.U64(dag->root.layers.size());
+    for (const float component : dag->base) writer.F32(component);
+}
+
 }  // namespace
 
 float HeightZ(HeightToNormalMethod method, uint32_t width) {
@@ -283,8 +298,10 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
                                     set->height_to_normal_method};
 
     HashWriter readoutKey;
-    readoutKey.Str("virtual-normal").Sub(heightDag ? heightDag->readoutHash : Digest{}).F32(heightConstant);
-    readoutKey.Sub(normalDag ? normalDag->readoutHash : Digest{});
+    readoutKey.Str("virtual-normal");
+    WriteChannelInputs(readoutKey, heightDag ? &*heightDag : nullptr);
+    readoutKey.F32(heightConstant);
+    WriteChannelInputs(readoutKey, normalDag ? &*normalDag : nullptr);
     readoutKey.U32(static_cast<uint32_t>(set->height_to_normal_method)).U32(static_cast<uint32_t>(request.convention));
     HashWriter meshKey;
     meshKey.Str("normal-mesh-map").Str(meshImage ? set->mesh_maps.at(core::MeshMapUsage::Normal).resource : std::string());
