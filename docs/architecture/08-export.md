@@ -34,10 +34,10 @@ Implemented in `src/export/` (`phase1.16_export-processing-encoders` and `phase1
 
 - **Exact in the recorded domain.**
   - Painter's PNG and OpenEXR files re-encode byte for byte (8-bit grey PNGs choose among all five row filters with zlib's default strategy, every other layout among None, Sub and Paeth with Z_FILTERED).
-  - PNG 8 and 16 (UNORM write rule; Height written as v * 0.5 + 0.5; an sRGB8 BaseColor, Specular or Emissive as the GPU sRGB encode of its linear value, decision 126), OpenEXR 16f (half rounded toward zero) and 32f; L+A and RGB+A, an alpha of 1 everywhere dropped; dithering at PNG 16 (no change); the AO, Curvature and Position mesh maps passed through.
+  - PNG 8 and 16 (UNORM write rule; Height written as v * 0.5 + 0.5; an sRGB8 BaseColor, Specular or Emissive as the GPU sRGB encode of its linear value, decision 126, and an L8 one the same but its G, which holds the linear write, decision 204), OpenEXR 16f (half rounded toward zero) and 32f; L+A and RGB+A, an alpha of 1 everywhere dropped; dithering at PNG 16 (no change); the AO, Curvature and Position mesh maps passed through.
   - The recorded PNG 16 and OpenEXR 32f exports, written end to end, equal Painter's files where the UV islands cover the tile.
   - `passthrough` on islanded sets writes the evaluated values.
-- **Recorded but not fitted, refused before writing** (decision 103): dithering at PNG 8 and in OpenEXR, resize (partly fitted), the `color`, `transparent` and `diffusion` paddings, and `infinite` on islanded sets (decision 127). Also refused: a file depending on a template base inferred from its PNG export only (none ships since decision 169), an sRGB8 channel other than User, BaseColor, Specular and Emissive (decision 126), and a PNG of an L8 BaseColor, Specular or Emissive (Dota 2's Specular; decision 169).
+- **Recorded but not fitted, refused before writing** (decision 103): dithering at PNG 8 and in OpenEXR, resize (partly fitted), the `color`, `transparent` and `diffusion` paddings, and `infinite` on islanded sets (decision 127). Also refused: a file depending on a template base inferred from its PNG export only (none ships since decision 169), an sRGB8 channel other than User, BaseColor, Specular and Emissive (decision 126), and a PNG of an L8 BaseColor, Specular or Emissive under OCIO or outside the RGB and L files of the one channel (decision 204).
 
 ## 4. Presets
 

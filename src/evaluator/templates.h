@@ -38,7 +38,8 @@ inline constexpr std::string_view kChannelDefaultsId = "channel-defaults";
 struct TemplateChannel {
     core::ChannelType type = core::ChannelType::BaseColor;
     /// Absent in a channel-defaults entry that applies to any format; present in one that applies
-    /// to that format only (its base is recorded on that format alone).
+    /// to that format only (its base is recorded on that format alone; the type may have one such
+    /// entry per format).
     std::optional<core::ChannelFormat> format;
     std::array<float, 3> base{0.0f, 0.0f, 0.0f};
     /// "observed", "fitted", "inferred" or "unobserved" (EVALUATOR.md §3).

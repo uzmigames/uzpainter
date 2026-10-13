@@ -464,16 +464,45 @@ def _add_template_channels(spec: dict[str, Any]) -> None:
     ]
 
 
+def _semantics_golden(stem: str) -> Golden:
+    needs_store()
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    return load(locate(), root / f"{stem}.json")
+
+
+def _set_spec(
+    manifest: dict[str, Any],
+    texture_set: str,
+    spec_dir: Path,
+    *,
+    template_channels: bool = False,
+    ocio: bool = False,
+) -> dict[str, Any]:
+    """`export_spec` of `texture_set` on the grid mesh it was recorded on; with the default
+    template's channels added, and as an OCIO project with Painter's substance config."""
+    spec = export_spec(manifest, texture_set, spec_dir)
+    spec["mesh"] = str(_mesh_of(manifest))
+    if template_channels:
+        _add_template_channels(spec)
+    if ocio:
+        spec["color_management"] = "ocio"
+        spec["config_hash"] = OCIO_CONFIG_SHA256
+    return spec
+
+
+def _bit_depth_golden() -> tuple[Golden, dict[str, Any]]:
+    """export-bit-depth and its sequence with the colours the facade stores (`working_colours`)."""
+    golden = _semantics_golden("export-bit-depth")
+    return golden, working_colours(golden.manifest)
+
+
 def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
     """export-bit-depth's BaseColor, Specular and Emissive maps (bitmaps, uniform colours, empty
     channels over their linear template constants) rebuilt per texture set on the grid mesh and
     written by `WriteExport` at PNG 8, PNG 16, OpenEXR 16f and OpenEXR 32f: compared byte for
     byte with Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032). Returns the
     counts and the differing files or refusals."""
-    needs_store()
-    root = manifest_root(current_envelope()) / "tier0" / "semantics"
-    golden = load(locate(), root / "export-bit-depth.json")
-    manifest = working_colours(golden.manifest)
+    golden, manifest = _bit_depth_golden()
     by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
     report: dict[str, Any] = {
         "files": 0,
@@ -483,9 +512,7 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
     }
     for texture_set in sorted({k.split("/")[0] for k in golden.maps("r1")}):
         spec_dir = tmp / texture_set / "spec"
-        spec = export_spec(manifest, texture_set, spec_dir)
-        spec["mesh"] = str(_mesh_of(manifest))
-        _add_template_channels(spec)
+        spec = _set_spec(manifest, texture_set, spec_dir, template_channels=True)
         for step in SRGB8_STEPS:
             raw = by_step[step]
             out_dir = tmp / texture_set / f"out{step}"
@@ -622,11 +649,149 @@ def template_bases_written(exe: Path, tmp: Path) -> dict[str, Any]:
     return report
 
 
+# export-l8-material (decision 204): BaseColor edited to L8, Specular and Emissive added as L8,
+# filled per set (s3 empty), the three maps as RGB and as L at PNG 8 (steps 40-43), PNG 16 (44-47)
+# and OpenEXR 32f (48-51), each export twice.
+L8_MATERIAL_SETS = ("s0", "s1", "s2", "s3")
+L8_MATERIAL_STEPS = tuple(range(40, 52))
+
+
+def l8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """export-l8-material's sets rebuilt on the grid mesh (the BaseColor edit an L8 channel of the
+    stack, every uniform colour in the sRGB space as the facade stores it, each grey bitmap in the
+    sRGB space: Painter's files of s0 and s1 hold the bitmaps' codes decoded close to sRGB) and
+    written by `WriteExport` at every export step: compared byte for byte with Painter's files of
+    r1, and of r2 wherever r2 equals r1 (decision 032). Returns the counts, the differing files or
+    evaluation failures (`problems`) and per set the first refusal of its evaluation (`refused`:
+    set, message)."""
+    needs_store()
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    golden = load(locate(), root / "export-l8-material.json")
+    sequence = golden.manifest["instruction_sequence"]
+    steps = []
+    for raw in sequence["steps"]:
+        args = raw.get("args", {})
+        if raw["call"].endswith("Stack.edit_channel"):
+            raw = dict(raw, call="substance_painter.textureset.Stack.add_channel")
+        elif raw["call"].endswith("set_source") and "color" in args:
+            colour = [srgb_to_working(float(c)) for c in args["color"]]
+            raw = dict(raw, args=dict(args, color=colour, color_space="Working"))
+        elif raw["call"].endswith("set_source") and "resource_step" in args:
+            raw = dict(raw, args=dict(args, color_space="sRGB"))
+        steps.append(raw)
+    manifest = dict(golden.manifest, instruction_sequence=dict(sequence, steps=steps))
+    by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
+    report: dict[str, Any] = {
+        "files": 0,
+        "comparisons": 0,
+        "identical": 0,
+        "problems": [],
+        "refused": [],
+    }
+    for texture_set in L8_MATERIAL_SETS:
+        spec_dir = tmp / texture_set / "spec"
+        spec = export_spec(manifest, texture_set, spec_dir)
+        spec["mesh"] = str(_mesh_of(manifest))
+        _add_template_channels(spec)
+        for step in L8_MATERIAL_STEPS:
+            raw = by_step[step]
+            out_dir = tmp / texture_set / f"out{step}"
+            config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                out_dir, [texture_set]
+            )
+            result = write_export(exe, spec, spec_dir, config, tmp / texture_set / f"run{step}")
+            where = f"{texture_set} step {step}"
+            if "unsupported_source" in result.get("message", ""):
+                report["refused"].append((texture_set, result["message"]))
+                break
+            if "error" in result:
+                report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                continue
+            theirs_r1 = _painter_files(golden, "r1", step, texture_set)
+            theirs_r2 = _painter_files(golden, "r2", step, texture_set)
+            for written in result["written"]:
+                rel = written["relativePath"]
+                report["files"] += 1
+                for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
+                    if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
+                        continue
+                    report["comparisons"] += 1
+                    if written["sha256"] == theirs.get(rel):
+                        report["identical"] += 1
+                    else:
+                        report["problems"].append(f"{where}: {rel} differs from {recording}")
+    return report
+
+
+# export-l8-material's OpenEXR 32f steps and the PNG steps they are the raster of: RGB (48) for
+# PNG 8 (40) and PNG 16 (44), L (50) for PNG 8 (42) and PNG 16 (46).
+L8_PROCESSING_STEPS = {48: ((40, "8"), (44, "16")), 50: ((42, "8"), (46, "16"))}
+
+
+def l8_material_processed(exe: Path, tmp: Path) -> dict[str, Any]:
+    """Painter's own OpenEXR 32f file of each export-l8-material map (every set, BaseColor,
+    Specular and Emissive, RGB and L) as the raster of its PNG 8 and PNG 16 files, encoded by
+    `uzp-export-tests process` with the L8 material channel's encode (`SrgbEncodedRead`): each
+    case's source and target from the same recording, r1 and r2. Returns the counts and the
+    differing targets."""
+    needs_store()
+    store = locate()
+    assert store is not None
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    golden = load(store, root / "export-l8-material.json")
+
+    def path(recording: str, output_id: str) -> str:
+        return str(_blob_path(store, golden, golden.output(recording, output_id)["blob"]))
+
+    cases = [
+        {
+            "recording": recording,
+            "source": path(recording, f"{key}/step{step}"),
+            "target": path(recording, f"{key}/step{target}"),
+            "format": "png",
+            "bit_depth": depth,
+            "l8_material": True,
+            "where": f"{recording} {key} step {target}",
+        }
+        for recording in ("r1", "r2")
+        for key in (f"{t}/{m}" for t in L8_MATERIAL_SETS for m in SRGB8_MATERIAL)
+        for step, targets in L8_PROCESSING_STEPS.items()
+        for target, depth in targets
+    ]
+    tmp.mkdir(parents=True, exist_ok=True)
+    listing = tmp / "process-l8.json"
+    listing.write_text(json.dumps(cases), encoding="utf-8")
+    lines = _run([str(exe), "process", str(listing)]).splitlines()
+    assert len(lines) == len(cases)
+    report: dict[str, Any] = {
+        "cases": len(cases),
+        "identical": 0,
+        "layouts": defaultdict(int),
+        "differing": [],
+    }
+    for case, line in zip(cases, lines, strict=True):
+        result = json.loads(line)
+        report["identical"] += int(result["equal"])
+        report["layouts"][str(result["layout"])] += 1
+        if not result["equal"]:
+            report["differing"].append(case["where"])
+    return report
+
+
 # export-ocio-encode-legacy: the authored 8-bit sRGB ramp at 1:1 on BaseColor in the sRGB space
 # (s3), in Raw (s4) and in the sRGB space inside a group masked by grey A (s5), exported at PNG 16,
 # PNG 8 and OpenEXR 32f (sources.h).
 SRGB8_BITMAP_SETS = ("s3", "s4", "s5")
 SRGB8_BITMAP_STEPS = (46, 47, 48)
+
+
+def _legacy_bitmap_golden() -> tuple[Golden, dict[str, Any]]:
+    """export-ocio-encode-legacy and its sequence without the colour-space listings (readbacks: the
+    stack does not depend on them)."""
+    golden = _semantics_golden("export-ocio-encode-legacy")
+    sequence = golden.manifest["instruction_sequence"]
+    built = [s for s in sequence["steps"] if not s["call"].endswith("list_available_color_spaces")]
+    return golden, dict(golden.manifest, instruction_sequence=dict(sequence, steps=built))
 
 
 def srgb8_bitmap_written(exe: Path, tmp: Path) -> dict[str, Any]:
@@ -636,14 +801,8 @@ def srgb8_bitmap_written(exe: Path, tmp: Path) -> dict[str, Any]:
     (decision 032): r1 is its exact target, and a file whose r2 differs from r1 is judged against
     r2 through the exception register (`tools/parity/verdict.py`), its outcome and the entries
     relied on listed in `register`. Returns the counts and the differing files or refusals."""
-    needs_store()
-    root = manifest_root(current_envelope()) / "tier0" / "semantics"
-    golden = load(locate(), root / "export-ocio-encode-legacy.json")
-    sequence = golden.manifest["instruction_sequence"]
-    by_step = {s["step"]: s for s in sequence["steps"]}
-    # The colour-space listings are readbacks: the stack does not depend on them.
-    built = [s for s in sequence["steps"] if not s["call"].endswith("list_available_color_spaces")]
-    manifest = dict(golden.manifest, instruction_sequence=dict(sequence, steps=built))
+    golden, manifest = _legacy_bitmap_golden()
+    by_step = {s["step"]: s for s in golden.manifest["instruction_sequence"]["steps"]}
     entries = load_json(REGISTER_PATH)["entries"]
     report: dict[str, Any] = {
         "files": 0,
@@ -654,8 +813,7 @@ def srgb8_bitmap_written(exe: Path, tmp: Path) -> dict[str, Any]:
     }
     for texture_set in SRGB8_BITMAP_SETS:
         spec_dir = tmp / texture_set / "spec"
-        spec = export_spec(manifest, texture_set, spec_dir)
-        spec["mesh"] = str(_mesh_of(manifest))
+        spec = _set_spec(manifest, texture_set, spec_dir)
         for step in SRGB8_BITMAP_STEPS:
             raw = by_step[step]
             out_dir = tmp / texture_set / f"out{step}"
@@ -722,20 +880,12 @@ OCIO_PROBE_STEPS = {
 }
 
 
-def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
-    """export-ocio-encode rebuilt per texture set on the grid mesh as an OCIO project with Painter's
-    substance config and written by `WriteExport`: every map of steps 46-49, and the probe
-    configurations of steps 50 and 51 (`$colorSpace` in the names), compared byte for byte with
-    Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032: r1 is the exact target
-    of a file whose r2 differs, listed in `unstable`). Uniform colours in the sRGB space (or in
-    none, Painter's default on BaseColor) are given as their working values (`working_colours`).
-    The probes' written names are compared with Painter's listing (`names`). Returns the counts
-    and the differing files or refusals."""
-    needs_store()
-    root = manifest_root(current_envelope()) / "tier0" / "semantics"
-    golden = load(locate(), root / "export-ocio-encode.json")
+def _ocio_encode_golden() -> tuple[Golden, dict[str, Any]]:
+    """export-ocio-encode and its sequence without the colour-space listings (readbacks), every
+    uniform colour in the sRGB space (or in none: Painter's default on BaseColor) given as its
+    working value."""
+    golden = _semantics_golden("export-ocio-encode")
     sequence = golden.manifest["instruction_sequence"]
-    by_step = {s["step"]: s for s in sequence["steps"]}
     steps = []
     for raw in sequence["steps"]:
         args = raw.get("args", {})
@@ -750,7 +900,20 @@ def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
             colour = [srgb_to_working(float(c)) for c in args["color"]]
             raw = dict(raw, args=dict(args, color=colour, color_space="Working"))
         steps.append(raw)
-    manifest = dict(golden.manifest, instruction_sequence=dict(sequence, steps=steps))
+    return golden, dict(golden.manifest, instruction_sequence=dict(sequence, steps=steps))
+
+
+def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """export-ocio-encode rebuilt per texture set on the grid mesh as an OCIO project with Painter's
+    substance config and written by `WriteExport`: every map of steps 46-49, and the probe
+    configurations of steps 50 and 51 (`$colorSpace` in the names), compared byte for byte with
+    Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032: r1 is the exact target
+    of a file whose r2 differs, listed in `unstable`). Uniform colours in the sRGB space (or in
+    none, Painter's default on BaseColor) are given as their working values (`working_colours`).
+    The probes' written names are compared with Painter's listing (`names`). Returns the counts
+    and the differing files or refusals."""
+    golden, manifest = _ocio_encode_golden()
+    by_step = {s["step"]: s for s in golden.manifest["instruction_sequence"]["steps"]}
     inputs = {i["input_id"]: REPO_ROOT / i["path"] for i in golden.manifest["inputs"]}
     report: dict[str, Any] = {
         "files": 0,
@@ -777,10 +940,7 @@ def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
 
     for texture_set in OCIO_ENCODE_SETS:
         spec_dir = tmp / texture_set / "spec"
-        spec = export_spec(manifest, texture_set, spec_dir)
-        spec["mesh"] = str(_mesh_of(manifest))
-        spec["color_management"] = "ocio"
-        spec["config_hash"] = OCIO_CONFIG_SHA256
+        spec = _set_spec(manifest, texture_set, spec_dir, ocio=True)
         for step in OCIO_ENCODE_STEPS:
             raw = by_step[step]
             config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
@@ -839,16 +999,11 @@ SRGB_VARIANT_SETS = ("s0", "s2", "s3", "s4", "s5", "s6", "s7", "s8")
 SRGB_VARIANT_REFUSED = {"s1": "at a rotation of 30.000000 degrees is a release gap"}
 
 
-def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
-    """srgb-bitmap-variants-v2 rebuilt per texture set on the grid mesh and written by
-    `WriteExport` at each step of `SRGB_VARIANT_STEPS`, every map of the step: compared byte for
-    byte with Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032). The
-    `set_color_space` steps Painter refused (recorded as not applied) are left out, as they left
-    Painter's project unchanged. Returns the counts, the refused sets with their messages, the
-    files whose r2 differs from r1 (`unstable`), and the differing files or refusals."""
-    needs_store()
-    root = manifest_root(current_envelope()) / "tier0" / "semantics"
-    golden = load(locate(), root / "srgb-bitmap-variants-v2.json")
+def _variants_golden() -> tuple[Golden, dict[str, Any]]:
+    """srgb-bitmap-variants-v2 and its sequence without the colour-space listings (readbacks) and
+    the `set_color_space` steps Painter refused (recorded as not applied: they left Painter's
+    project unchanged)."""
+    golden = _semantics_golden("srgb-bitmap-variants-v2")
     store = locate()
     assert store is not None
     reference = next(
@@ -860,7 +1015,6 @@ def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
     attempted = record["key"]["effective_defaults"]["set_color_space"]
     refused = {int(step) for step, outcome in attempted.items() if not outcome["applied"]}
     sequence = golden.manifest["instruction_sequence"]
-    by_step = {s["step"]: s for s in sequence["steps"]}
     built = []
     for raw in sequence["steps"]:
         if raw["call"].endswith("list_available_color_spaces") or raw["step"] in refused:
@@ -873,7 +1027,17 @@ def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
             colour = [srgb_to_working(float(c)) for c in args["color"]]
             raw = dict(raw, args=dict(args, color=colour, color_space="Working"))
         built.append(raw)
-    manifest = dict(golden.manifest, instruction_sequence=dict(sequence, steps=built))
+    return golden, dict(golden.manifest, instruction_sequence=dict(sequence, steps=built))
+
+
+def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """srgb-bitmap-variants-v2 rebuilt per texture set on the grid mesh and written by
+    `WriteExport` at each step of `SRGB_VARIANT_STEPS`, every map of the step: compared byte for
+    byte with Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032). Returns the
+    counts, the refused sets with their messages, the files whose r2 differs from r1
+    (`unstable`), and the differing files or refusals."""
+    golden, manifest = _variants_golden()
+    by_step = {s["step"]: s for s in golden.manifest["instruction_sequence"]["steps"]}
     report: dict[str, Any] = {
         "files": 0,
         "comparisons": 0,
@@ -884,9 +1048,7 @@ def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
     }
     for texture_set in (*SRGB_VARIANT_SETS, *SRGB_VARIANT_REFUSED):
         spec_dir = tmp / texture_set / "spec"
-        spec = export_spec(manifest, texture_set, spec_dir)
-        spec["mesh"] = str(_mesh_of(manifest))
-        _add_template_channels(spec)
+        spec = _set_spec(manifest, texture_set, spec_dir, template_channels=True)
         for step in SRGB_VARIANT_STEPS:
             raw = by_step[step]
             config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
@@ -929,16 +1091,19 @@ SRGB_MINIFY_SETS = ("s4", "s5", "s6", "s7")
 SRGB_MINIFY_REFUSED = ("s0", "s1", "s2", "s3")
 
 
+def _minification_golden() -> tuple[Golden, dict[str, Any]]:
+    """srgb-bitmap-minification and its sequence (every step builds the stack)."""
+    golden = _semantics_golden("srgb-bitmap-minification")
+    return golden, golden.manifest
+
+
 def srgb_minification_written(exe: Path, tmp: Path) -> dict[str, Any]:
     """srgb-bitmap-minification rebuilt per texture set on the grid mesh and written by
     `WriteExport` at each step of `SRGB_MINIFY_STEPS`: the sets of `SRGB_MINIFY_SETS` compared byte
     for byte with Painter's files of r1 and r2 (the golden is stable), those of
     `SRGB_MINIFY_REFUSED` expected to be refused. Returns the counts, the refusal messages and the
     differing files or unexpected outcomes."""
-    needs_store()
-    root = manifest_root(current_envelope()) / "tier0" / "semantics"
-    golden = load(locate(), root / "srgb-bitmap-minification.json")
-    manifest = golden.manifest
+    golden, manifest = _minification_golden()
     by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
     report: dict[str, Any] = {
         "files": 0,
@@ -949,9 +1114,7 @@ def srgb_minification_written(exe: Path, tmp: Path) -> dict[str, Any]:
     }
     for texture_set in (*SRGB_MINIFY_SETS, *SRGB_MINIFY_REFUSED):
         spec_dir = tmp / texture_set / "spec"
-        spec = export_spec(manifest, texture_set, spec_dir)
-        spec["mesh"] = str(_mesh_of(manifest))
-        _add_template_channels(spec)
+        spec = _set_spec(manifest, texture_set, spec_dir, template_channels=True)
         for step in SRGB_MINIFY_STEPS:
             raw = by_step[step]
             config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
@@ -978,6 +1141,38 @@ def srgb_minification_written(exe: Path, tmp: Path) -> dict[str, Any]:
                     else:
                         report["problems"].append(f"{where}: {rel} differs from {recording}")
     return report
+
+
+# phase1.15_compositor-colour-fits items 3.1 and 4.1: the texture sets whose files the colour fits
+# made byte-identical to Painter's (decisions 145, 152, 174, 190 and 203), each golden with its
+# sequence and spec options as its comparison above builds them.
+LIFTED_COLOUR_SETS: dict[str, tuple[str, ...]] = {
+    "export-bit-depth": ("s4", "s5", "s7"),
+    "export-ocio-encode-legacy": SRGB8_BITMAP_SETS,
+    "srgb-bitmap-variants-v2": SRGB_VARIANT_SETS,
+    "export-ocio-encode": OCIO_ENCODE_SETS,
+    "srgb-bitmap-minification": SRGB_MINIFY_SETS,
+}
+
+
+def lifted_colour_spec(stem: str, texture_set: str, spec_dir: Path) -> dict[str, Any]:
+    """The spec `WriteExport` evaluates for `texture_set` of `stem` (`LIFTED_COLOUR_SETS`), for the
+    evaluator's `evaluate` case: its outputs are every channel of the stack, except on
+    export-bit-depth, whose comparison writes only the sRGB8 material channels (its Opacity has
+    neither a template base value nor a channel default and is not exported there)."""
+    prepare, options = {
+        "export-bit-depth": (_bit_depth_golden, {"template_channels": True}),
+        "export-ocio-encode-legacy": (_legacy_bitmap_golden, {}),
+        "srgb-bitmap-variants-v2": (_variants_golden, {"template_channels": True}),
+        "export-ocio-encode": (_ocio_encode_golden, {"ocio": True}),
+        "srgb-bitmap-minification": (_minification_golden, {"template_channels": True}),
+    }[stem]
+    _, manifest = prepare()
+    spec = _set_spec(manifest, texture_set, spec_dir, **options)
+    channels = [c["type"] for c in spec["channels"]]
+    exported = SRGB8_CHANNELS if stem == "export-bit-depth" else channels
+    spec["outputs"] = [c for c in channels if c in exported]
+    return spec
 
 
 # ── parity/semantics/export-processing.json ─────────────────────────────────

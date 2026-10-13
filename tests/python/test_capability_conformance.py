@@ -72,10 +72,12 @@ def export_call(
     bit_depth: str = "8",
     module: str = "export",
     components: str = "L",
+    others: str | None = None,
 ) -> str:
-    """An export of the document map `map_name` (its `components`, L or RGB) in `file_format` at
-    `bit_depth`, every parameter the export requires given (`src/export/EXPORT.md`), through the
-    facade's `export` (or `module`, with its own texture set listing)."""
+    """An export of the document map `map_name` (its `components`, L or RGB; the components after
+    the first read the document map `others` when given) in `file_format` at `bit_depth`, every
+    parameter the export requires given (`src/export/EXPORT.md`), through the facade's `export`
+    (or `module`, with its own texture set listing)."""
     config = {
         "exportShaderParams": False,
         "defaultExportPreset": "p",
@@ -90,9 +92,9 @@ def export_call(
                                 "destChannel": c,
                                 "srcChannel": c,
                                 "srcMapType": "documentMap",
-                                "srcMapName": map_name,
+                                "srcMapName": map_name if i == 0 or others is None else others,
                             }
-                            for c in components
+                            for i, c in enumerate(components)
                         ],
                     }
                 ],
@@ -238,8 +240,8 @@ def recipes() -> dict[Any, tuple[str, str]]:
             "",
             export_call(file_format),
         )
-    # The PNG export of Dota 2's L8 Specular (decision 169): Painter writes (14330, 2570, 14330)
-    # for its float32(10/255), which is not fitted; refused before writing.
+    # The PNG export of Dota 2's L8 Specular in a file whose G and B read BaseColor (decision 204):
+    # only the RGB and L files of the one L8 channel are recorded; refused before writing.
     for symbol, module, create in (
         (
             "substance_painter.export.export_project_textures",
@@ -255,9 +257,9 @@ def recipes() -> dict[Any, tuple[str, str]]:
             "uzpainter.project.create(PLANE, uzpainter.project.Settings(template='dota-2'))",
         ),
     ):
-        r[(symbol, "l8-material-channel-png")] = (
+        r[(symbol, "l8-material-channel-png-unrecorded")] = (
             f"{CLOSED}\n{create}",
-            export_call("png", "specular", "16", module, "RGB"),
+            export_call("png", "specular", "16", module, "RGB", "basecolor"),
         )
     r[("substance_painter.resource.update_layer_stack_resource", "mesh-map")] = (
         MESH_MAP,
@@ -282,7 +284,7 @@ PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
 REFUSALS = {"release-gap": uzpainter.NotYetSupported,
             "desktop-only-omitted": uzpainter.UnsupportedInUzPainter}
 # Contexts whose refusal must name what settles it.
-NAMED = {"l8-material-channel-png": "decision 169"}
+NAMED = {"l8-material-channel-png-unrecorded": "decision 204"}
 
 
 def resolve(symbol):

@@ -2,6 +2,7 @@
 
 #include "evaluator/arith.h"
 #include "evaluator/hwmath.h"
+#include "evaluator/sources.h"
 #include "export/exr_writer.h"
 #include "export/png_writer.h"
 #include "uzp_core/types/errors.h"
@@ -17,8 +18,8 @@ namespace {
 /// Recorded by R-090 and not fitted (decision 103); the owners of the remaining fits.
 constexpr std::string_view kSrgb8NotRecorded =
     "recording R-090 P10 records BaseColor, Specular and Emissive only; decision 126";
-constexpr std::string_view kL8MaterialNotFitted =
-    "tier0/semantics/export-template-base-dota-2 records it, not fitted; decision 169";
+constexpr std::string_view kL8MaterialNotRecorded =
+    "tier0/semantics/export-l8-material records RGB and L files of one L8 channel under Legacy; decision 204";
 constexpr std::string_view kDitherNotFitted = "recording R-090 P3, decision 103";
 constexpr std::string_view kResizeNotFitted = "recording R-090 P4, decision 103";
 constexpr std::string_view kPaddingNotFitted = "recording R-090 P5 and P9, decision 103";
@@ -61,6 +62,17 @@ std::optional<core::ChannelType> L8Channel(const core::TextureSet& set, const Pl
 
 bool IsUserChannel(core::ChannelType type) { return core::ToString(type).starts_with("User"); }
 
+/// True when `file` is laid out as export-l8-material records an L8 material channel: an RGB file
+/// whose R, G and B, or an L file whose L, each read that letter of one documentMap source.
+bool RecordedL8Mapping(const PlannedFile& file) {
+    const size_t letters = file.layout == FileLayout::RGB ? 3 : file.layout == FileLayout::L ? 1 : 0;
+    if (letters == 0 || file.channels.size() != letters) return false;
+    return std::all_of(file.channels.begin(), file.channels.end(), [&](const PlannedChannel& c) {
+        return c.src == c.dest && c.source.type == file.channels[0].source.type &&
+               c.source.name == file.channels[0].source.name;
+    });
+}
+
 }  // namespace
 
 void CheckProcessing(const core::Project& project, const PlannedFile& file) {
@@ -101,14 +113,19 @@ void CheckProcessing(const core::Project& project, const PlannedFile& file) {
     }
     if (p.fileFormat != FileFormat::png) return;
     for (const PlannedChannel& channel : file.channels) {
-        // Dota 2's empty L8 Specular holds float32(10/255) (its OpenEXR 32f files) but its RGB PNG
-        // 16 holds (14330, 2570, 14330): the sRGB encode in R and B, the linear write in G.
+        // An L8 BaseColor, Specular or Emissive is written as the sRGB encode of its linear value
+        // in srcChannel R, B and L and as the linear value in G (export-l8-material, decision 204),
+        // recorded for the RGB and L files of one L8 channel under Legacy.
         const std::optional<core::ChannelType> l8 = L8Channel(set, file, channel.source);
         if (!l8 || !SrgbEncodedOnExport(*l8)) continue;
-        Refuse(file,
-               "the PNG encoding of the L8 channel " + std::string(core::ToString(*l8)) +
-                   " (Painter writes neither its linear value nor its sRGB encode in every component)",
-               kL8MaterialNotFitted);
+        const std::string what = "the PNG encoding of the L8 channel " + std::string(core::ToString(*l8));
+        if (evaluator::PainterOcio(project)) Refuse(file, what + " under OCIO is not recorded", kL8MaterialNotRecorded);
+        if (!RecordedL8Mapping(file)) {
+            Refuse(file,
+                   what + " in a file laid out " + std::string(FileLayoutName(file.layout)) +
+                       " other than the channel's own R, G and B, or its L, alone is not recorded",
+                   kL8MaterialNotRecorded);
+        }
     }
 }
 

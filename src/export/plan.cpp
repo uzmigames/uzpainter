@@ -932,6 +932,11 @@ bool SrgbEncodedOnExport(ChannelType type) {
     return type == ChannelType::BaseColor || type == ChannelType::Specular || type == ChannelType::Emissive;
 }
 
+bool SrgbEncodedRead(ChannelType type, core::ChannelFormat format, ChannelLetter src) {
+    if (!SrgbEncodedOnExport(type)) return false;
+    return format == core::ChannelFormat::sRGB8 || (format == core::ChannelFormat::L8 && src != ChannelLetter::G);
+}
+
 render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int64_t revision, const PlannedFile& file,
                                           const SourceInputs& inputs, const evaluator::TemplateLibrary& templates,
                                           evaluator::ITileStore& store, evaluator::TileCache& cache) {
@@ -942,7 +947,7 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
                                                   inputs.geometry};
     FileRaster raster;
     std::map<std::string, DiagnosticMap> evaluated;  // by srcMapType/srcMapName
-    std::set<std::string> srgbEncoded;               // the keys of sources written sRGB-encoded
+    std::map<std::string, core::ChannelFormat> stored;  // documentMap sources: the channel's format
     for (const PlannedChannel& channel : file.channels) {
         const PlannedSource& s = channel.source;
         const std::string key = std::string(SourceTypeName(s.type)) + "/" + s.name;
@@ -961,11 +966,9 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
                 r.geometry = inputs.geometry;
                 render::Result<evaluator::ChannelResult> result = evaluator::EvaluateOn(project, r, templates, store, cache);
                 if (!result) return render::Unexpected(result.error());
-                // An sRGB8 BaseColor, Specular or Emissive is read out linear, its template constant
-                // included, and written to PNG sRGB-encoded (encode.h; decision 126).
-                if (result->format == core::ChannelFormat::sRGB8 && SrgbEncodedOnExport(*s.channel)) {
-                    srgbEncoded.insert(key);
-                }
+                // An sRGB8 or L8 BaseColor, Specular or Emissive is read out linear, its template
+                // constant included, and written to PNG sRGB-encoded (SrgbEncodedRead).
+                stored[key] = result->format;
                 evaluated[key] = evaluator::MapOf(*result);
                 break;
             }
@@ -1014,7 +1017,9 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
             continue;
         }
         const std::string key = std::string(SourceTypeName(s.type)) + "/" + s.name;
-        raster.srgbEncoded[c] = srgbEncoded.contains(key) ? 1 : 0;
+        const auto format = stored.find(key);
+        raster.srgbEncoded[c] =
+            format != stored.end() && SrgbEncodedRead(*s.channel, format->second, channel.src) ? 1 : 0;
         const DiagnosticMap& map = evaluated.at(key);
         if (map.width != raster.width || map.height != raster.height || channel.component >= map.components) {
             return evaluator::EvalFail(evaluator::EvalErrorKind::Internal,

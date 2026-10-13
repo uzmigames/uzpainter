@@ -129,14 +129,19 @@ ProjectTemplate ParseTemplate(const Value& document, std::string_view path) {
     const Value& channels = Need(object, "channels", path);
     const std::string channelsPath = std::string(path) + ".channels";
     if (!channels.IsArray()) Fail(channelsPath, "expected an array");
-    std::set<core::ChannelType> seen;
+    // A channel-defaults type may repeat with distinct formats, each entry recorded on its own; an
+    // entry for any format stands alone.
+    std::map<core::ChannelType, std::set<std::optional<core::ChannelFormat>>> seen;
     size_t index = 0;
     for (const Value& entry : std::get<core::json::Array>(channels.data)) {
         const std::string entryPath = channelsPath + "[" + std::to_string(index++) + "]";
         TemplateChannel channel = ParseChannel(entry, entryPath, result.channelDefaults);
-        if (!seen.insert(channel.type).second) {
-            Fail(entryPath, "channel '" + std::string(core::ToString(channel.type)) + "' repeats");
-        }
+        std::set<std::optional<core::ChannelFormat>>& formats = seen[channel.type];
+        const bool repeated = !result.channelDefaults || !channel.format || formats.contains(std::nullopt)
+                                  ? !formats.empty()
+                                  : formats.contains(channel.format);
+        if (repeated) Fail(entryPath, "channel '" + std::string(core::ToString(channel.type)) + "' repeats");
+        formats.insert(channel.format);
         result.channels.push_back(std::move(channel));
     }
     return result;
@@ -213,13 +218,17 @@ render::Result<const TemplateChannel*> TemplateLibrary::BaseChannel(std::string_
                         "no template '" + std::string(templateId) + "' in the library");
     }
     if (const TemplateChannel* channel = project->Find(type)) return channel;
-    const TemplateChannel* fallback = defaults_.Find(type);
-    if (fallback != nullptr && (!fallback->format || fallback->format == format)) return fallback;
-    if (fallback != nullptr) {
+    std::string recorded;  // the formats of the type's entries, when none applies to `format`
+    for (const TemplateChannel& fallback : defaults_.channels) {
+        if (fallback.type != type) continue;
+        if (!fallback.format || fallback.format == format) return &fallback;
+        recorded += (recorded.empty() ? "" : " and ") + std::string(core::ToString(*fallback.format));
+    }
+    if (!recorded.empty()) {
         return EvalFail(EvalErrorKind::MissingBaseValue,
                         "channel " + std::string(core::ToString(type)) + " is not in template '" +
-                            std::string(templateId) + "', and its channel default is recorded as " +
-                            std::string(core::ToString(*fallback->format)) + " only");
+                            std::string(templateId) + "', and its channel default is recorded as " + recorded +
+                            " only");
     }
     return EvalFail(EvalErrorKind::MissingBaseValue,
                     "channel " + std::string(core::ToString(type)) + " is neither in template '" +

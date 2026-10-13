@@ -1,0 +1,11 @@
+{
+  "id": 204,
+  "slug": "the-png-of-an-l8-material-channel-holds-the-srgb-encode-in-r-b-and-l-and-the-linear-write-in-g",
+  "title": "The PNG of an L8 material channel holds the sRGB encode in R, B and L and the linear write in G",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}
