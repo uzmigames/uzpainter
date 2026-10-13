@@ -14,6 +14,8 @@ four statuses, so nothing in UzPainter is silently a no-op. Task `phase1.22_pyap
 | `compositor-capabilities.json` | The compositor's support of documented Painter symbols (`phase1.14_compositor-core` item 2.8, decision 081): every Phase 1 node kind, source, projection, sampling mode and blend mode in the operation context `compositor` or a narrower `compositor:<case>` (`compositor:minification`, `compositor:mask-stack`, `compositor:height`, ...). |
 | `uzpainter-additions.json` | Every public name of the native `uzpainter` module: the mirrors of Painter symbols (evidence `10-…` §1) and the UzPainter-only modules, operations and errors (`10-…` §3, §5, §6, §7; capture modes of `07-…` §5). |
 | `tier0-trace.json` | The public symbols each compared Tier 0 replay exercises (`tests/python/capability_trace.py`, decision 112): the evidence the `supported` entries cite. The Tier 0 tests keep it current on the owner's machine (`UZP_UPDATE_TIER0_TRACE=1` rewrites it). |
+| `mcp-tools.json` | The MCP tools the build registers (decision 182), one per line: `{name, served_by, opt_in, operations, values}`, the manifest operations each declares and those of each argument value it gates (`x-uzpainter-capability`, by JSON pointer). `tests/supervisor/test_operation_matrix.py` keeps it equal to a live worker's listing and the supervisor's own tools (`UZP_UPDATE_MCP_TOOLS=1` rewrites it). |
+| `operation-matrix.json` | The rows of the requirement-to-typed-operation matrix (`11-…` §2, task `phase2.7_mcp-operation-matrix`, decision 182): `{operation, requirements, tool, arguments?, operations?, fixture, notes?}`, one per required operation. |
 | `capabilities.schema.json` | JSON Schema (draft 2020-12) of `capabilities.json`. |
 | `generate_capabilities.py` | The generator (standard library only). |
 
@@ -77,6 +79,29 @@ refuses is a `release-gap`; an absent one is a `release-gap`; any other implemen
 `UZP_UPDATE_TIER0_TRACE=1` and updates the entries `tests/python/test_capability_conformance.py`
 names.
 
+## Operation matrix
+
+`capabilities.json` also carries `operation_matrix` (decision 182), which `uzpainter://capabilities`
+publishes unchanged: one row per required operation of `REQUIRED_OPERATIONS` in the generator (the
+INT-02 operations, then the operations of the ARC-14 families of `11-…` §7), in that order,
+`{operation, requirements, tool, fixture, status, gaps, notes}`.
+
+The status is derived, never written by hand:
+
+| Status | When |
+|---|---|
+| `available` | The row names a registered typed tool, and every operation the call performs is `supported` or `pending-evidence`: the tool's own, those of the argument values the row names (`arguments`) and the other manifest operations it lists (`operations`, those the native tool checks itself, such as an export file format or a capture mode) |
+| `capability gap` | The row names no tool, or one of those operations is a `release-gap` or has no manifest entry (`gaps` lists them; an unlisted one has status `unlisted`) |
+| `needs Python` | The row's tool is `run_python`, the `--allow-python` opt-in; a gap like the others |
+
+The build fails, naming the row, on: a required operation without a row, a row outside the list or
+repeated, a requirement id that is not in `docs/prd.md` or a row that does not cite the requirement
+that requires it, a tool not in `mcp-tools.json`, an argument value its tool does not gate, an
+`available` row without its Python-disabled conformance fixture (a pytest node id
+`tests/<file>.py::test_<name>` that file defines), and a gap row whose notes name no owner task.
+A task that adds, removes or re-gates a tool rewrites `mcp-tools.json` and updates its row; a task
+that closes a gap gives its row a fixture.
+
 ## Tests
 
 `python -m pytest tests/python/test_capability_conformance.py` checks the manifest against what the
@@ -84,6 +109,11 @@ API does (every lane): the `supported` entries against `tier0-trace.json` in bot
 entry for every public name, desktop-only members raising `UnsupportedInUzPainter`, and every
 release gap the Python API reaches raising `NotYetSupported` with the revision unchanged (the
 compositor contexts are refused by the evaluator's support check, decisions 081 and 082).
+
+`python -m pytest tests/capabilities/test_operation_matrix.py` checks the matrix: one row per
+required operation, every fixture collectable, the build check's failures and the derived
+statuses. `tests/supervisor/test_operation_matrix.py` (needs `zig`) checks `mcp-tools.json` against a
+live worker, the matrix in `uzpainter://capabilities` and the Python-disabled fixtures it adds.
 
 `python -m pytest tests/capabilities` checks determinism (two processes, and the `zig build`
 step when `zig` is on PATH), schema validity, the evidence rules, the release gaps, the

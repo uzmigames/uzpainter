@@ -34,3 +34,9 @@
   - `tests/supervisor/test_typed_tools.py`: every family listed with its capability status; the stack edit with its receipts; Project, Texture sets, Resources, Stack, Export, Mesh and Render (the downscaled capture block); LAY-06 through MCP; LAY-07 through `sync_stack`; `batch` stop-on-error with per-call results; long tools with and without `wait`; `busy` and `wait_idle`; the gap families refused before admission, also on the worker's own pipe; the resources and prompts.
   - `tests/supervisor/test_registry.py` (pure Python): the argument-value gate failing closed, `status`, `capabilities`, `batch` keys, the image block, the resources.
   - These cover 3.6 here: `uzpainter://capabilities` lists every unavailable family and gated value as a gap.
+- phase2.7_mcp-operation-matrix (decision 182; tasks.md §6 there). Its §3 tests are green:
+  - `capabilities.json` carries `operation_matrix`, 106 rows, one per required operation (25 INT-02, 81 ARC-14). Today 62 rows are `available` and 44 are `capability gap`. No row is `needs Python`, and none resolves to `run_python`.
+  - `uzpainter://capabilities` publishes the matrix unchanged.
+  - `tests/capabilities/test_operation_matrix.py` (CPU lane): completeness, fixture collection, the build check's failures and the derived statuses.
+  - `tests/supervisor/test_operation_matrix.py` (Vulkan workers, Python disabled): the registered-tool snapshot against a live worker; the published matrix; new fixtures for inline-config and OpenEXR export, `isolate_layer`, display, shader and camera, and the mask-effect gaps.
+  - These add the "operation still needing Python" half of 3.6 here: such a row is `needs Python`, a gap, in `uzpainter://capabilities`.

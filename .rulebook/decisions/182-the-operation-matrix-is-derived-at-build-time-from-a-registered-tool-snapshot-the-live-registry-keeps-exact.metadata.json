@@ -1,0 +1,14 @@
+{
+  "id": 182,
+  "slug": "the-operation-matrix-is-derived-at-build-time-from-a-registered-tool-snapshot-the-live-registry-keeps-exact",
+  "title": "The operation matrix is derived at build time from a registered-tool snapshot that the live registry keeps exact",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.7_mcp-operation-matrix",
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.8_mcp-server",
+    "phase5.2_parity-report-mcp-conformance"
+  ],
+  "supersededBy": null
+}

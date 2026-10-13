@@ -758,6 +758,25 @@ def test_resources_and_prompts_read_through_the_registry(tmp_path: Path) -> None
     worker.project_uuid = None
     with pytest.raises(ResourceError, match="no project is open"):
         run(resources.read("uzpainter://project/manifest", STDIO))
+
+
+def test_capabilities_resource_publishes_the_operation_matrix(tmp_path: Path) -> None:
+    """phase2.7 2.3 (decision 182): `uzpainter://capabilities` carries the manifest's
+    requirement-to-typed-operation matrix as the build generated it, gap rows included."""
+    matrix = [
+        {
+            "operation": "mesh.reload",
+            "requirements": ["INT-02", "PRJ-08"],
+            "tool": None,
+            "fixture": None,
+            "status": "capability gap",
+            "gaps": [],
+            "notes": "owner phase3.1_example",
+        }
+    ]
+    _, _, registry = make(tmp_path, manifest={**MANIFEST, "operation_matrix": matrix})
+    capabilities = run(Resources(registry).read("uzpainter://capabilities", STDIO))
+    assert capabilities["operation_matrix"] == matrix
     assert {p.name for p in PROMPTS} == {
         "stack_json_template",
         "smart_json_template",
