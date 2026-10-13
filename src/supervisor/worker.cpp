@@ -570,7 +570,7 @@ void Worker::DefineTools() {
             [this](const json::Object& a) { return RunPython(a); });
     }
     if (m_previewHost) {
-        add({"preview_status", "The attached preview: window, frames published, taken and rendered, last error.",
+        add({"preview_status", "The attached preview: window, frames published, taken, rendered and presented, last error.",
              Schema({}, {}), false, false},
             [this](const json::Object& a) { return PreviewStatus(a); });
     }
@@ -1299,6 +1299,8 @@ json::Object Worker::PreviewStatus(const json::Object&) {
             {"frames_published", static_cast<std::int64_t>(status.framesPublished)},
             {"frames_taken", static_cast<std::int64_t>(status.framesTaken)},
             {"frames_rendered", static_cast<std::int64_t>(status.framesRendered)},
+            {"presents", static_cast<std::int64_t>(status.presents)},
+            {"camera_fits", static_cast<std::int64_t>(status.cameraFits)},
             {"revision_shown", status.revisionShown},
             {"last_error", status.lastError}};
 }

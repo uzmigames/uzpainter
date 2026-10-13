@@ -62,6 +62,13 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "a colour bitmap on a one-channel tile outside P20-A (another format, 16-bit, Nearest, "
         "minified) fails with unsupported_source naming item 2.9 (decision 218)",
     } <= set(passed)
+    # A bitmap on the Normal channel: P20-A's import, filter and 16-bit code (decision 226).
+    assert {
+        "an 8-bit colour and grey bitmap on the Normal channel are imported, filtered and written "
+        "as 16-bit codes as P20-A records (decision 226)",
+        "a 16-bit grey bitmap on the Normal channel fails with unsupported_source naming item 2.9 "
+        "(decision 226)",
+    } <= set(passed)
     # 8-bit sRGB magnification and 1:1: one probe of the sRGB8 texture unit (decision 224).
     assert (
         "one sRGB8 probe of the texture unit's sums (magnification and 1:1) equals decision 209's "
@@ -150,8 +157,8 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
     filter, wrap mode, transform, 8/16-bit grey and colour bitmap, nine formats, two tiles), and
     on sRGB bitmaps decoded to float32 texels on an sRGB8 channel (decision 174), 16-bit ones
     minified too (decision 203), 8-bit ones minified on level 0 as sRGB8 textures (decision 219),
-    on an L8 BaseColor, Specular and Emissive (decision 208), and a colour bitmap's grey texture on
-    L8 and L16F (decision 218)."""
+    on an L8 BaseColor, Specular and Emissive (decision 208), a colour bitmap's grey texture on
+    L8 and L16F (decision 218), and an 8-bit colour and grey bitmap on Normal (decision 226)."""
     passed, _ = run_case(evaluator_tests, "projection-gpu-vs-cpu", str(tmp_path), needs_gpu=True)
     assert any(p.startswith("every random projection stack") for p in passed)
     assert any(p.startswith("every random minifying projection stack") for p in passed)
@@ -166,6 +173,10 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
     )
     assert any(
         p.startswith("a colour 8-bit bitmap magnified on an L8 and an L16F channel evaluates to")
+        for p in passed
+    )
+    assert any(
+        p.startswith("an 8-bit colour and grey bitmap magnified on the Normal channel evaluate to")
         for p in passed
     )
     assert (

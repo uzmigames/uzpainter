@@ -31,6 +31,16 @@
 //   (DataSigned) and Normal (NormalXYZLeft), and for field A on BaseColor set to Raw
 //   (`export-probes-channels`); 8-bit bitmaps follow the same rule without a golden yet. A grey
 //   bitmap feeds every channel of a colour channel; alpha planes are not read.
+// - Bitmap on the Normal channel (decision 226: P20-A, the 8-bit checker and the 8-bit grey
+//   half-left image magnified 16 times under NormalMapDetail): Painter samples a 16-bit UNORM
+//   texture and writes the filter's result as a 16-bit code before the channel stores it half
+//   toward zero (evaluate.cpp `NormalTexture`, `DecodedImage::unorm16Target`). A colour image has
+//   its green codes inverted, and an 8-bit blue code below 127 (the flat normal's) raised to 127;
+//   a grey image feeds its value to the three components, neither inverted nor raised. Exact on
+//   all 65 536 texels of the Normal map, r1 and r2. The clamp at 1/2 or 128/255, no clamp, the
+//   decode clamped and normalised per texel, and the float32 or binary16 filter result each miss
+//   texels. A 1:1 sample keeps its code (the recorded imports stay exact). A 16-bit grey image is
+//   not recorded and fails with `evaluator:unsupported_source`.
 // - Colour bitmap read by a one-channel tile (decision 218: P20-A, `phase1-fill-channel-defaults`,
 //   the 8-bit checker magnified 16 times on L8, on L16F Height and as a mask source): Painter
 //   samples an R16F texture. Each texel is the mean ((r + g) + b) / 3 of its float32(c / 255)

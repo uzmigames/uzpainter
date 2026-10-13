@@ -40,6 +40,9 @@ struct DecodedImage {
     /// The float32 values are the decodes `Srgb8Operand` of an 8-bit sRGB bitmap's codes (evaluate.cpp
     /// `SrgbDecoded`): Painter samples it as an sRGB8 texture (decisions 219 and 224).
     bool srgb8 = false;
+    /// The projection writes the filter's result as a 16-bit UNORM code before the tile stores it:
+    /// a bitmap on the Normal channel, a `Unorm16` image (evaluate.cpp `NormalTexture`, decision 226).
+    bool unorm16Target = false;
 
     [[nodiscard]] uint32_t At(uint32_t x, uint32_t y, uint32_t c) const {
         return values[(size_t{y} * width + x) * channels + c];
