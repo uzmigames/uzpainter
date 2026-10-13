@@ -24,6 +24,7 @@ from tests.evaluator.masks_fits import (
     build_document,
     envelope_golden,
     envelope_manifest,
+    exported16,
     serialise,
     spec_from_steps,
 )
@@ -263,15 +264,16 @@ def test_content_effect_levels_equals_the_golden(
     assert_golden(evaluator_tests, tmp_path, srgb8_decode, "effect-order", "s6", backend)
 
 
-def test_mask_stack_probe_is_reported_not_compared(evaluator_tests: Path, tmp_path: Path) -> None:
-    """3.1: the `api-probes/mask-stack` probe converts and evaluates (a 0.9 fill under a Black mask
-    holding a UV-projected 8-bit bitmap fill effect in Screen at 0.75 below a clamped levels effect
-    with gamma 1.2). It is an API probe, not a compositing golden: its masked half exports above
-    both the fill colour and the base, and its values lie off the sRGB8 export lattice of every
-    semantics golden, so the project's BaseColor colour path differs from the evaluator's linear
-    colour (a sources question, not a mask one). Its residual is published (`masks-levels.json`,
-    entry `mask-stack-probe`) and not asserted; the mask semantics are settled by
-    `mask-precision`, `group-masks` and `levels-clamp`."""
+def test_mask_stack_probe_equals_r1(
+    evaluator_tests: Path, srgb8_decode: np.ndarray, tmp_path: Path
+) -> None:
+    """3.1: the `api-probes/mask-stack` probe (a 0.9 fill under a Black mask holding a UV-projected
+    8-bit bitmap fill effect in Screen at 0.75 below a clamped levels effect with gamma 1.2, on the
+    default template's sRGB8 BaseColor) equals r1 on every value. BaseColor exports the sRGB
+    encode of the stored code's decode (decision 126), not the linear write of the User channels:
+    the masked-out half stores the base 0.8 as code 231 and exports 59422. r2 is unstable
+    (tier0-stability.md §4, not admitted); its residual is published (`masks-levels.json`, entry
+    `mask-stack-probe`)."""
     needs_store()
     document = envelope_manifest("api-probes/mask-stack")
     spec = spec_from_steps(document, "uzp_plane", tmp_path, ["BaseColor"])
@@ -279,7 +281,9 @@ def test_mask_stack_probe_is_reported_not_compared(evaluator_tests: Path, tmp_pa
     assert [e["kind"] for e in layer["mask"]["effects"]] == ["levels", "fill"]
     assert layer["mask"]["effects"][1]["mode"] == "Screen"
     result = evaluate(evaluator_tests, spec, tmp_path, "cpu")
-    assert raster(result, "BaseColor").shape == (256, 256, 3)
+    ours = exported16(raster(result, "BaseColor"), "BaseColor", "sRGB8", srgb8_decode)
+    theirs = envelope_golden("api-probes/mask-stack").map("r1", "uzp_plane/basecolor").values
+    assert np.array_equal(ours.reshape(theirs.shape), theirs.astype(np.int64))
 
 
 # ── Published fit ────────────────────────────────────────────────────────────

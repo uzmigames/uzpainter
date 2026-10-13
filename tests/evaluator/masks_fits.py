@@ -38,6 +38,7 @@ if __name__ == "__main__":
 from tests.evaluator.sources_fits import channel_formats, export16, pooled, srgb8_decode
 from tests.evaluator.test_compositor_tile_dag import (
     REPO_ROOT,
+    SRGB_ENCODED_ON_EXPORT,
     TEMPLATES_DIR,
     bitmap_color_space,
     evaluate,
@@ -338,6 +339,19 @@ def unit(fmt: str) -> str:
     return "float32 value" if fmt.endswith("F") else "16-bit code value"
 
 
+def exported16(stored: np.ndarray, channel: str, fmt: str, decode: np.ndarray) -> np.ndarray:
+    """The 16-bit PNG export of the stored raster of `channel`. An sRGB8 BaseColor, Specular or
+    Emissive writes the sRGB encode of its linear read-out, the sRGB8 decode of the stored code
+    (src/export/encode.h, decision 126); every other sRGB8 channel (the User channels of the
+    semantics goldens) and the UNORM formats write their read-out (`export16`)."""
+    if fmt == "sRGB8" and channel in SRGB_ENCODED_ON_EXPORT:
+        from tests.export.tier0 import srgb16  # tests/export/tier0 imports this module at load
+
+        encoded: np.ndarray = srgb16(decode[stored].astype(np.float32)).astype(np.int64)
+        return encoded
+    return export16(stored, fmt, decode)
+
+
 class Runs:
     """Evaluations of the goldens' texture sets (CPU store), cached."""
 
@@ -364,7 +378,9 @@ class Runs:
             for channel in channels:
                 fmt = formats[channel]
                 ours = raster(result, channel)
-                exported = ours if fmt.endswith("F") else export16(ours, fmt, self.decode)
+                exported = (
+                    ours if fmt.endswith("F") else exported16(ours, channel, fmt, self.decode)
+                )
                 map_name = f"{texture_set}/{channel.lower()}"
                 for recording in ("r1", "r2"):
                     theirs = golden.map(recording, map_name).values.reshape(exported.shape)
@@ -490,18 +506,23 @@ def build_document(exe: Path, work: Path) -> dict[str, Any]:
             "A Black mask with a UV-projected 8-bit bitmap fill effect in Screen at 0.75 under a "
             "clamped levels effect with gamma 1.2 (API probe, BaseColor sRGB8)",
             "The mask formulas above; the levels effect of a mask has no blending (the API "
-            "refuses it) and remaps the mask in place. Unstable golden: r1 (same session) is the "
-            "exact target (decision 032); r2's residual is reported.",
+            "refuses it) and remaps the mask in place. The BaseColor export is the sRGB encode "
+            "of the stored code's sRGB8 decode (decision 126). Unstable golden: r1 (same "
+            "session) is the exact target (decision 032); r2's residual is reported.",
             [PYDOC],
             HW_POW,
             runs.residuals(PROBE),
             notes=(
-                "Not a compositing golden: the masked half of the export lies above both the 0.9 "
-                "fill and the template base, and every value lies off the sRGB8 export lattice of "
-                "the semantics goldens, so the colour path of a Working colour on this project's "
-                "BaseColor channel differs from the evaluator's linear colour (a sources "
-                "question). The residual is published, not counted; the mask stack it records "
-                "(fill effect, then levels without blending) converts and evaluates."
+                "Equals r1 on all 196 608 values. Where the mask is 0 the layer stores the "
+                "template base float32(0.8) as sRGB8 code 231, whose decode 0.80078125 exports "
+                "59422, not the 59397 of the empty channel's constant. r2 differs from r1 on "
+                "4 608 values by up to 252 codes (Painter is unstable on this probe after save "
+                "and reopen, parity/reports/phase0/tier0-stability.md §4; not admitted), so the "
+                "entry stays calibrated. The residuals published before came from this fit "
+                "writing BaseColor's linear decode, the rule of the User channels, instead of its "
+                "sRGB encode: 3048 while the template base held the export value 0.9063401 as a "
+                "linear value (itself 3334 off with the encode), 6943 once decision 126 made the "
+                "base linear. The evaluation of the mask stack did not change."
             ),
         ),
         entry(
