@@ -91,6 +91,45 @@ ImageReader MaskImageReader(const std::filesystem::path& dir);
 /// The bitmap source of `node` for `channel` (none: the mono source of a mask-stack fill).
 core::BitmapSource& EditBitmap(core::Edit& edit, core::Id uid, const ChannelArg& channel);
 
+// ── Uniform colours (decision 240) ──────────────────────────────────────────────────────────────
+//
+// Every path that stores a uniform colour (`FillLayerNode.set_source`, `SourceUniformColor.set_color`,
+// the MCP `source_set`, `sync_stack`'s `base`, and the facade through
+// `uzpainter.colormanagement._working_value`) stores the float32 working-space value Painter stores,
+// in the Working space, computed here once, with the same refusals before any change.
+
+/// Whether `channel` of a stack holding `channels` decodes an sRGB uniform colour to the working
+/// space (Painter's colour-managed channel): an sRGB8 channel other than a user channel. A mask's
+/// mono source (no channel), a user channel and any other format take a uniform colour as given,
+/// whatever its space (decision 115).
+bool DecodesColour(const std::map<core::ChannelType, core::Channel>& channels, const ChannelArg& channel);
+
+/// Whether `project`'s colour management is OCIO with Painter's substance config (false: Painter's
+/// Legacy mode, an unset mode included); `NotYetSupported` for any other configuration, which is
+/// not a pinned colour profile (decisions 107, 190 and 202).
+bool OcioColourProfile(const core::Project& project);
+
+/// The float32 working-space value Painter stores for the uniform colour `rgb` given in `space`
+/// (none: no colour space) on a channel that `decodes` it or not, under OCIO with Painter's
+/// substance config (`ocio`) or Legacy:
+/// - no space is sRGB on a decoding channel and Raw elsewhere;
+/// - a channel that does not decode takes `rgb` as given, whatever its space, once the space is
+///   checked against the profile;
+/// - sRGB decodes with `evaluator::PainterLegacySrgbDecode` (Legacy) or reads Painter's measured
+///   value `evaluator::PainterOcioSrgbDecode` (OCIO); Working, Linear (Legacy only) and Raw are
+///   taken as given.
+/// Refusals, each before any change: under OCIO a component the measured table does not record,
+/// an sRGB colour on a channel that does not decode it and any other space are `NotYetSupported`
+/// (phase1.15 item 2.6, decision 202); in Legacy any other space is `ValueError`.
+std::array<double, 3> WorkingColour(const std::array<double, 3>& rgb, const std::optional<std::string>& space,
+                                    bool decodes, bool ocio);
+
+/// The uniform colour source a native setter stores on `channel` (none: the mono source) of the fill
+/// `uid` of `project`: `WorkingColour` on that channel of the node's stack under the project's
+/// colour management (`OcioColourProfile`), in the Working space.
+core::UniformColorSource StoredUniformColour(const core::Project& project, core::Id uid, const ChannelArg& channel,
+                                            const std::array<double, 3>& rgb, const std::optional<std::string>& space);
+
 // ── Texture sets ────────────────────────────────────────────────────────────────────────────────
 
 core::TextureSet& EditSet(core::Edit& edit, core::Id id);

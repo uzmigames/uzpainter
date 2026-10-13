@@ -28,6 +28,8 @@ Compact, task-shaped tools for the operations the pipeline performs, plus typed 
 
 Resources: `uzpainter://capabilities`, `uzpainter://project/manifest`, `uzpainter://project/recipe`, `uzpainter://project/layers`, `uzpainter://project/resources`, `uzpainter://assets/parity`, `uzpainter://jobs/<id>`, `uzpainter://ledger` (recent receipts). Prompts: stack JSON template, smart JSON template, baking preset template, export config template.
 
+`source_set` of a uniform colour follows Painter's `set_source`. Its colour space decides the working value stored (no space is sRGB on a colour-managed channel, Raw elsewhere), through the same native rule as the API and the facade (decision 240). It is never stored as given with only a tag.
+
 Schemas carry numeric bounds, enums and object references; the server validates inputs before admission (not only by description). A property may name the capability-manifest operations each of its values needs (`x-uzpainter-capability`), so a value whose family is a release gap (a paint layer, a triplanar projection) fails `capability_gap` before admission while the tool's other values work (decision 164). The worker serves the typed families (`src/supervisor/typed_tools.cpp`, one transaction per mutating call over the edits the `uzpainter` API runs); `status`, `capabilities`, `batch`, the resources and the prompts are the supervisor's (decision 165). Results are `structuredContent` plus a short text summary. Images are returned as content blocks only for `capture`; everything else references files under the allowlisted roots.
 
 ## 3. Long jobs

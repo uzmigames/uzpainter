@@ -2,10 +2,10 @@
 
 `python/uzpainter_facade/ocio_srgb.py` is the one source of the measured table. This module
 renders it as `src/evaluator/ocio_srgb_table.inc`, the entries of the native table
-(`evaluator::PainterOcioSrgbDecode`, `src/evaluator/sources.h`), so the native module and the
-facade read the same values. Keys are exactly the facade's: the float32 bits of `c / 255` for each
-code `c` and of each other recorded component, a recorded component overriding a code of the same
-bits as in the facade's dict.
+(`evaluator::PainterOcioSrgbDecode`, `src/evaluator/sources.h`), which every path that stores a
+uniform colour reads, the facade's included (`python::WorkingColour`, decision 240). Keys are the
+float32 bits of `c / 255` for each code `c` and of each other recorded component, a recorded
+component overriding a code of the same bits.
 
     python tools/parity/ocio_srgb_table.py           # rewrite the .inc
     python tools/parity/ocio_srgb_table.py --check   # exit 1 when the .inc is stale
@@ -50,7 +50,7 @@ def load_source() -> ModuleType:
 
 
 def entries() -> dict[int, int]:
-    """Component bits to working-value bits, built as the facade builds `_OCIO_SRGB`."""
+    """Component bits to working-value bits: the codes, then the recorded components."""
     source = load_source()
     table: dict[int, int] = {}
     for c, working in enumerate(source.CODES):
