@@ -157,7 +157,8 @@ struct ProjectBindings {
     uint32_t tablesSrv = 0;
 };
 
-/// The float32 RGB mip chain as uint32 words (three per texel, level after level).
+/// The float32 RGB mip chain as uint32 words (three per texel, level after level); an sRGB8
+/// chain's codes, one per word (texture_unit.h `Chain::codes`).
 [[nodiscard]] std::vector<uint32_t> ChainWords(const tu::Chain& chain);
 /// The texture unit's tables for the projection kernel: the LOD table, two uint16 per word (the
 /// lower index in the low half), then the geometry words (texture_unit.h).

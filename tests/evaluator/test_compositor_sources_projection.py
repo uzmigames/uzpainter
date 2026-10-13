@@ -96,7 +96,8 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "the sRGB8 decode of each 8-bit code stores the code itself",
         "a bitmap in Working or Legacy Linear is read as in Raw, in Legacy sRGB as in sRGB",
         "an sRGB bitmap on a channel that is not sRGB8, an 8-bit sRGB bitmap minified by a "
-        "bilinear filter, and an unknown bitmap colour space fail with unsupported_source",
+        "bilinear filter that reads its mip levels, and an unknown bitmap colour space fail with "
+        "unsupported_source",
         "Nearest at a tie takes the right texel across and the upper texel down the rows",
         # phase1.15_compositor-colour-fits item 2.8 (decision 208): an L8 material channel.
         "a grey 8- or 16-bit sRGB bitmap at 1:1 on an L8 BaseColor, Specular or Emissive stores "
@@ -143,13 +144,17 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
     """2.4: the projection kernel equals the CPU reference bit for bit on random stacks (every
     filter, wrap mode, transform, 8/16-bit grey and colour bitmap, nine formats, two tiles), and
     on sRGB bitmaps decoded to float32 texels on an sRGB8 channel (decision 174), 16-bit ones
-    minified too (decision 203), on an L8 BaseColor, Specular and Emissive (decision 208), and a
-    colour bitmap's grey texture on L8 and L16F (decision 218)."""
+    minified too (decision 203), 8-bit ones minified on level 0 as sRGB8 textures (decision 219),
+    on an L8 BaseColor, Specular and Emissive (decision 208), and a colour bitmap's grey texture on
+    L8 and L16F (decision 218)."""
     passed, _ = run_case(evaluator_tests, "projection-gpu-vs-cpu", str(tmp_path), needs_gpu=True)
     assert any(p.startswith("every random projection stack") for p in passed)
     assert any(p.startswith("every random minifying projection stack") for p in passed)
     assert any(p.startswith("every random sRGB projection stack") for p in passed)
     assert any(p.startswith("every random minifying 16-bit sRGB projection stack") for p in passed)
+    assert any(
+        p.startswith("every random level-0 minifying 8-bit sRGB projection stack") for p in passed
+    )
     assert any(
         p.startswith("a grey 8- and 16-bit sRGB bitmap at 1:1 on an L8 BaseColor, Specular and")
         for p in passed

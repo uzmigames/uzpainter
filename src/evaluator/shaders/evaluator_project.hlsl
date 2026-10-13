@@ -15,7 +15,8 @@
 // 8-bit codes per uint, low bits first, or one float32 value per uint (a decoded sRGB bitmap). A
 // minifying bilinear projection (P_CHAIN non-zero) samples the bitmap's float32 mip chain through
 // the texture unit (texture_unit.h, mirrored below) with Painter's float32 arithmetic around it
-// (projection_uv.cpp `Minified`).
+// (projection_uv.cpp `Minified`); with P_TU_SRGB8 non-zero the chain holds an 8-bit sRGB bitmap's
+// level-0 codes, one per uint, summed with the sRGB8 texture's arithmetic (decision 219).
 
 #include "image_common.hlsli"
 #include "evaluator_tables.hlsli"
@@ -48,6 +49,7 @@ cbuffer Root : register(b0) {
 #define P_SIGNED 28
 #define P_CHAIN 29
 #define P_TU_TABLES 30
+#define P_TU_SRGB8 31
 
 // core::FilteringMode and core::UVWrapMode.
 #define FILTER_SHARP 1u
@@ -205,6 +207,7 @@ float SignedValue(float t, bool signedRange) {
 
 static uint g_tuTables;
 static uint g_tuChain;
+static uint g_tuSrgb8;
 
 uint TuLod(uint index) {
     StructuredBuffer<uint> tables = ResourceDescriptorHeap[g_tuTables];
@@ -292,10 +295,12 @@ TuFootprint TuResolve(float2 ddx, float2 ddy, uint size, uint levels, int bias) 
     return fp;
 }
 
-// One probe: up to eight taps (chain index, weight in 1/1024) and its offset.
+// One probe: up to eight taps (chain index, weight in 1/1024) and its offset. `half` is the tap
+// count of the first of a p = 0 pair's two probes when the sRGB8 unit sums them apart (0: one).
 struct TuProbe {
     int offset;
     uint count;
+    uint half;
     uint texel[8];
     uint weight[8];
 };
@@ -337,6 +342,103 @@ float TuTiesUp(uint64_t n, int e) {
     return (float)q * asfloat((uint)(e + shift + 127) << 23);
 }
 
+// The sRGB8 code of channel c of chain texel `index`, its decode and its segment exponent (the
+// binary exponent of the decode of c | 7; texture_unit.h, step 5').
+uint TuSrgb8Code(uint index, uint c) {
+    StructuredBuffer<uint> chain = ResourceDescriptorHeap[g_tuChain];
+    return chain[index * 3u + c];
+}
+int TuSegmentExponent(uint code) { return (int)((kSrgb8Operand[code | 7u] >> 23) & 255u) - 126; }
+
+// x (in units of 2^-26) truncated to a multiple of 2^lsb.
+int64_t TuTruncate26(int64_t x, int lsb) {
+    const int shift = lsb + 26;
+    if (shift <= 0) return x;
+    return (x >> (uint)shift) << (uint)shift;
+}
+
+// x (>= 0, in units of 2^-26) rounded to the nearest binary16, ties away from zero.
+float TuHalfNearestAway(int64_t x) {
+    if (x == 0) return 0.0f;
+    const uint64_t ux = (uint64_t)x;
+    const uint high = (uint)(ux >> 32);
+    const int length = high != 0u ? 33 + (int)firstbithigh(high) : 1 + (int)firstbithigh((uint)ux);
+    const int lsb = max(length - 11, 2);
+    const uint q = (uint)((ux + ((uint64_t)1 << (uint)(lsb - 1))) >> (uint)lsb);
+    return (float)q * asfloat((uint)(lsb - 26 + 127) << 23);
+}
+
+// The sRGB8 texture's sums of one channel (texture_unit.h, steps 5' and 6'; texture_unit.cpp
+// `Srgb8Filter`, operation for operation).
+float TuSrgb8Channel(TuProbe probes[8], uint group[8], uint count, uint c) {
+    uint live = 0u;
+    uint lastTexel = 0u;
+    for (uint k = 0u; k < count; ++k) {
+        for (uint q = 0u; q < probes[k].count; ++q) {
+            if (probes[k].weight[q] != 0u) {
+                live += 1u;
+                lastTexel = probes[k].texel[q];
+            }
+        }
+    }
+    if (live == 1u) return asfloat(kSrgb8Operand[TuSrgb8Code(lastTexel, c)]);
+    uint partProbe[16];
+    uint partBegin[16];
+    uint partEnd[16];
+    uint partGroup[16];
+    uint n = 0u;
+    for (uint k1 = 0u; k1 < count; ++k1) {
+        if (probes[k1].half != 0u) {
+            partProbe[n] = k1; partBegin[n] = 0u; partEnd[n] = probes[k1].half; partGroup[n] = group[k1]; n += 1u;
+            partProbe[n] = k1; partBegin[n] = probes[k1].half; partEnd[n] = probes[k1].count; partGroup[n] = group[k1];
+            n += 1u;
+        } else {
+            partProbe[n] = k1; partBegin[n] = 0u; partEnd[n] = probes[k1].count; partGroup[n] = group[k1]; n += 1u;
+        }
+    }
+    int exponent[16];
+    int64_t value[16];
+    int levelExponent[2] = {-1000, -1000};
+    for (uint k2 = 0u; k2 < n; ++k2) {
+        int e = -1000;
+        for (uint q2 = partBegin[k2]; q2 < partEnd[k2]; ++q2) {
+            e = max(e, TuSegmentExponent(TuSrgb8Code(probes[partProbe[k2]].texel[q2], c)));
+        }
+        exponent[k2] = e;
+        levelExponent[partGroup[k2] / 2u] = max(levelExponent[partGroup[k2] / 2u], e);
+    }
+    for (uint k3 = 0u; k3 < n; ++k3) {
+        value[k3] = 0;
+        if (partBegin[k3] == partEnd[k3]) continue;  // a probe of weight 0 adds nothing
+        const int e3 = exponent[k3];
+        int64_t sum = 0;
+        for (uint q3 = partBegin[k3]; q3 < partEnd[k3]; ++q3) {
+            const uint code = TuSrgb8Code(probes[partProbe[k3]].texel[q3], c);
+            sum += (int64_t)probes[partProbe[k3]].weight[q3] * (int64_t)Operand(asfloat(kSrgb8Operand[code]), e3 + 20);
+        }
+        // S 2^(E - 18) in units of 2^-26 (every segment exponent is at least -8).
+        const int grid = max(TuCoarse(levelExponent[partGroup[k3] / 2u]), -6) - 16;
+        value[k3] = TuTruncate26(sum << (uint)(e3 + 8), grid);
+    }
+    int64_t acc = 0;
+    for (uint k4 = 0u; k4 < n; ++k4) {
+        if (k4 >= 1u) {
+            int g = -1000;
+            for (uint q4 = 0u; q4 < n; ++q4) {
+                if (partGroup[q4] <= partGroup[k4] && value[q4] != 0) g = max(g, exponent[q4]);
+            }
+            if (g > -1000) acc = TuTruncate26(acc, TuCoarse(g) - 16);
+        }
+        acc += value[k4];
+    }
+    int gAll = -1000;
+    for (uint q5 = 0u; q5 < n; ++q5) {
+        if (value[q5] != 0) gAll = max(gAll, exponent[q5]);
+    }
+    if (gAll > -1000) acc = TuTruncate26(acc, TuCoarse(gAll) - 16);
+    return TuHalfNearestAway(acc);
+}
+
 float3 TuSampleAt(TuFootprint fp, uint size, uint levels, float u, float v, bool repeatU, bool repeatV) {
     TuProbe probes[8];
     uint group[8];
@@ -362,6 +464,16 @@ float3 TuSampleAt(TuFootprint fp, uint size, uint levels, float u, float v, bool
                                                     : (((r * TU_FRACTIONS + fp.f) * 2u + s) * 2u + role) * 4u;
             entry = uint4(TuGeometry(index), TuGeometry(index + 1u), TuGeometry(index + 2u), TuGeometry(index + 3u));
         }
+        // The cell of the opposite sign, whose pair at p != 0 splits an sRGB8 pair at p = 0
+        // (texture_unit.h, step 5').
+        uint4 opposite = uint4(0u, 0u, 0u, 0u);
+        if (active && g_tuSrgb8 != 0u && !fp.magnify) {
+            const uint so = fp.sign > 0 ? 1u : 0u;
+            const uint ro = (uint)fp.rho;
+            const uint io = fp.f >= TU_FRACTIONS ? (TU_RHO * TU_FRACTIONS * 4u + ro * 2u + so) * 4u
+                                                 : (((ro * TU_FRACTIONS + fp.f) * 2u + so) * 2u + role) * 4u;
+            opposite = uint4(TuGeometry(io), TuGeometry(io + 1u), TuGeometry(io + 2u), TuGeometry(io + 3u));
+        }
         if (active) {
             precise const double xs = ((double)u * (double)side - 0.5) * 256.0 + 0.5;
             precise const double ys = ((double)v * (double)side - 0.5) * 256.0 + 0.5;
@@ -379,16 +491,24 @@ float3 TuSampleAt(TuFootprint fp, uint size, uint levels, float u, float v, bool
                 if (p == 0) {
                     found[n].offset = 0;
                     found[n].count = 0u;
+                    found[n].half = 0u;
                     if (wl != 0u) TuSplit(found[n], wl, mult, x, y, level, levelOffset, side, repeatU, repeatV);
+                    const uint first = found[n].count;
                     if (wr != 0u) TuSplit(found[n], wr, mult, x, y, level, levelOffset, side, repeatU, repeatV);
+                    const uint pairsOpposite = opposite.x & 0xFFu;
+                    const bool apart = pairsOpposite != TU_UNMEASURED && k < pairsOpposite &&
+                                       ((opposite.y >> (16u * k)) & 0xFFFFu) != 0u;
+                    if (apart && first != 0u && first != found[n].count) found[n].half = first;
                     n += 1u;
                 } else {
                     found[n].offset = -p;
                     found[n].count = 0u;
+                    found[n].half = 0u;
                     TuSplit(found[n], wl, mult, fp.axis == 0 ? x - p : x, fp.axis == 0 ? y : y - p, level,
                             levelOffset, side, repeatU, repeatV);
                     found[n + 1u].offset = p;
                     found[n + 1u].count = 0u;
+                    found[n + 1u].half = 0u;
                     TuSplit(found[n + 1u], wr, mult, fp.axis == 0 ? x + p : x, fp.axis == 0 ? y : y + p, level,
                             levelOffset, side, repeatU, repeatV);
                     n += 2u;
@@ -414,6 +534,10 @@ float3 TuSampleAt(TuFootprint fp, uint size, uint levels, float u, float v, bool
     }
 
     float3 result = float3(0.0f, 0.0f, 0.0f);
+    if (g_tuSrgb8 != 0u) {
+        [loop] for (uint cs = 0u; cs < 3u; ++cs) result[cs] = TuSrgb8Channel(probes, group, count, cs);
+        return result;
+    }
     [loop] for (uint c = 0u; c < 3u; ++c) {
         int exponent[8];
         uint64_t sum[8];
@@ -679,6 +803,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (filter != FILTER_NEAREST && chainSrv != 0u) {
         // Minification through the texture unit (projection_uv.cpp `Minified`).
         g_tuChain = chainSrv;
+        g_tuSrgb8 = Param(P_TU_SRGB8);
         g_tuTables = Param(P_TU_TABLES);
         const double invWidth = ParamDouble(P_INV_WIDTH);
         const double invHeight = ParamDouble(P_INV_HEIGHT);

@@ -1089,11 +1089,12 @@ def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
 # srgb-bitmap-minification (decisions 174 item 6, 198): one export step of each kind (PNG 16,
 # PNG 8, OpenEXR 32f; each was done twice, the repeats identical). s0-s3 the 8-bit srgb8-ramp and
 # s4-s7 field A (16-bit) in sRGB on BaseColor, BilinearHQ then BilinearSharp at scales 2 and 4,
-# rotation 0, Repeat. Field A's sets are compared; the 8-bit ramp's are refused (decision 203:
-# Painter samples an sRGB8 texture, whose filter and mip chain are not the float32 texture's).
+# rotation 0, Repeat. Field A's sets and the 8-bit ramp's at scale 2 (s0, s2: the sRGB8 texture
+# read on level 0 only, decision 219) are compared; the ramp's at scale 4 (s1, s3) read its mip
+# levels, which are not measured, and are refused.
 SRGB_MINIFY_STEPS = (36, 38, 40)
-SRGB_MINIFY_SETS = ("s4", "s5", "s6", "s7")
-SRGB_MINIFY_REFUSED = ("s0", "s1", "s2", "s3")
+SRGB_MINIFY_SETS = ("s0", "s2", "s4", "s5", "s6", "s7")
+SRGB_MINIFY_REFUSED = ("s1", "s3")
 
 
 def _minification_golden() -> tuple[Golden, dict[str, Any]]:

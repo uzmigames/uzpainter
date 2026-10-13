@@ -59,11 +59,13 @@
 //   s4, s5, s7), 8-bit grey at 1:1 (`srgb-bitmap-variants-v2` s0), 16- and 8-bit colour magnified
 //   by BilinearHQ (s2, scale 0.5) and under Nearest at scale 2 (s3), and 16-bit colour minified
 //   by BilinearHQ and BilinearSharp at scales 2 and 4 (`srgb-bitmap-minification` s4-s7): the
-//   texture unit samples the decoded float32 mip chain (`BitmapChain`, decision 203). Bilinear
-//   minification of an 8-bit sRGB bitmap fails with `evaluator:unsupported_source`: Painter
-//   samples an sRGB8 texture, whose mip levels hold sRGB8 codes and whose filter (operands cut
-//   to about 8 bits below the largest texel's exponent, a binary16 result) is not the float32
-//   texture's (decision 203).
+//   texture unit samples the decoded float32 mip chain (`BitmapChain`, decision 203). An 8-bit
+//   sRGB bitmap minified by a bilinear filter is an sRGB8 texture: the texture unit sums its
+//   probes with the sRGB8 arithmetic (texture_unit.h, steps 5' and 6', decision 219), exact for
+//   8-bit colour at scale 2 under BilinearHQ and BilinearSharp (`srgb-bitmap-minification` s0,
+//   s2), where only level 0 is read. A footprint that reads a mip level fails with
+//   `evaluator:unsupported_source` (`ReadsMipLevels`): Painter's sRGB8 mip levels hold sRGB8
+//   codes, but how it filters them is not separated by any recording (decision 219).
 // - sRGB bitmap on an L8 BaseColor, Specular or Emissive (`SrgbL8MaterialChannel`, decision 208:
 //   `export-l8-material` s0 and s1, bitmaps left in Painter's default space): a grey bitmap at 1:1 is read
 //   decoded and stored with the L8 write rule. A 16-bit code decodes as on an sRGB8 channel (the

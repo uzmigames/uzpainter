@@ -1,8 +1,10 @@
 #include "evaluator/projection_uv.h"
 
+#include <algorithm>
 #include <bit>
 #include <cmath>
 #include <numbers>
+#include <stdexcept>
 #include <string>
 
 #include "evaluator/arith.h"
@@ -152,6 +154,25 @@ bool Minifies(const UvProjection& projection, uint32_t setWidth, uint32_t setHei
 }
 
 tu::Chain BitmapChain(const DecodedImage& image) {
+    if (image.srgb8) {
+        // The codes behind the decodes: the decode table rises strictly.
+        const std::array<float, 256>& decode = arith::Srgb8OperandTable();
+        std::vector<uint8_t> codes(size_t{image.width} * image.height * 3);
+        for (uint32_t row = 0; row < image.height; ++row) {
+            const uint32_t y = image.height - 1 - row;  // the GPU's rows go bottom up
+            for (uint32_t x = 0; x < image.width; ++x) {
+                for (uint32_t c = 0; c < 3; ++c) {
+                    const float value = TexelValue(image, x, y, c);
+                    const auto at = std::lower_bound(decode.begin(), decode.end(), value);
+                    if (at == decode.end() || *at != value) {
+                        throw std::logic_error("evaluator: an sRGB8 bitmap's value is not a decode");
+                    }
+                    codes[(size_t{row} * image.width + x) * 3 + c] = static_cast<uint8_t>(at - decode.begin());
+                }
+            }
+        }
+        return tu::BuildSrgb8Chain(image.width, std::move(codes));
+    }
     std::vector<float> level0(size_t{image.width} * image.height * 3);
     for (uint32_t row = 0; row < image.height; ++row) {
         const uint32_t y = image.height - 1 - row;  // the GPU's rows go bottom up
@@ -162,6 +183,25 @@ tu::Chain BitmapChain(const DecodedImage& image) {
         }
     }
     return tu::BuildChain(image.width, std::move(level0));
+}
+
+bool ReadsMipLevels(const UvProjection& projection, uint32_t setWidth, uint32_t setHeight,
+                    const DecodedImage& image) {
+    if (!Minifies(projection, setWidth, setHeight, image)) return false;
+    const std::array<float, 6> m = PainterMatrix(projection);
+    const float texel = static_cast<float>(1.0 / setWidth);
+    std::array<float, 2> ddx{m[0] * texel, m[3] * texel};
+    std::array<float, 2> ddy{m[1] * texel, m[4] * texel};
+    int bias = kSharpBias;
+    if (projection.filter != core::FilteringMode::BilinearSharp) {
+        const float third = static_cast<float>(1.0 / 3.0);
+        ddx = {third * ddx[0], third * ddx[1]};
+        ddy = {third * ddy[0], third * ddy[1]};
+        bias = 0;
+    }
+    const uint32_t levels = static_cast<uint32_t>(std::countr_zero(image.width)) + 1u;
+    const tu::Footprint fp = tu::Resolve(ddx, ddy, image.width, levels, bias);
+    return !fp.magnify && fp.biased > 0;
 }
 
 std::array<float, 6> PainterMatrix(const UvProjection& p) {
