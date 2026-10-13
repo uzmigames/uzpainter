@@ -3170,6 +3170,45 @@ int RunSources(const fs::path& assets) {
               "after a resolution change the same evaluator re-evaluates every tile at the new size (no stale cache hit)",
               Describe(large));
     }
+
+    // The cache keys carry the OCIO bitmap use (decision 190): an evaluator warmed under legacy colour
+    // management refuses, and evaluates, under OCIO exactly as a fresh one does.
+    {
+        auto bitmap = [&](const std::string& space, core::FilteringMode filter, double scale) {
+            Builder builder(kSize, kSize, {{ChannelType::User0, ChannelFormat::sRGB8}});
+            core::Layer layer = builder.Fill("bitmap", SameSource(user0, Bitmap(sha8, space)), Same(user0, BlendingMode::Normal, 1.0));
+            SetUv(layer, filter, core::UVWrapMode::Repeat, {scale, scale}, 0.0, {0.0, 0.0});
+            single(ChannelFormat::sRGB8, layer, builder);
+            return builder;
+        };
+        auto ocio = [](Builder& builder) {
+            builder.project.settings.color_management.mode = "ocio";
+            builder.project.settings.color_management.config_hash = std::string(kPainterOcioConfigSha256);
+        };
+        // Prohibited: an sRGB bitmap at Nearest scale 2 evaluates under legacy; Session O records only 1:1 under OCIO.
+        Builder scaled = bitmap("sRGB", core::FilteringMode::Nearest, 2.0);
+        CpuEvaluator warm(templates, kWideLimits);
+        render::Result<ChannelResult> legacyScaled = evaluate(scaled, ChannelType::User0, warm);
+        ocio(scaled);
+        render::Result<ChannelResult> warmScaled = evaluate(scaled, ChannelType::User0, warm);
+        CpuEvaluator fresh(templates, kWideLimits);
+        render::Result<ChannelResult> freshScaled = evaluate(scaled, ChannelType::User0, fresh);
+        Check(legacyScaled && !freshScaled && !warmScaled && warmScaled.error().reason == freshScaled.error().reason,
+              "after a legacy evaluation an OCIO evaluation of an sRGB bitmap at scale 2 fails as on a fresh evaluator "
+              "(no stale cache hit)",
+              Describe(legacyScaled) + " / " + Describe(warmScaled) + " / " + Describe(freshScaled));
+        // Allowed: a Raw bitmap at 1:1 gives the OCIO codes on a warm evaluator, which differ from the legacy ones.
+        Builder raw = bitmap("Raw", core::FilteringMode::BilinearHQ, 1.0);
+        render::Result<ChannelResult> legacyRaw = evaluate(raw, ChannelType::User0, warm);
+        ocio(raw);
+        render::Result<ChannelResult> warmRaw = evaluate(raw, ChannelType::User0, warm);
+        render::Result<ChannelResult> freshRaw = evaluate(raw, ChannelType::User0, fresh);
+        Check(legacyRaw && warmRaw && freshRaw && Samples(*warmRaw) == Samples(*freshRaw) &&
+                  Samples(*warmRaw) != Samples(*legacyRaw),
+              "after a legacy evaluation an OCIO evaluation of a Raw bitmap at 1:1 stores the OCIO codes of a fresh "
+              "evaluator, not the legacy ones",
+              Describe(legacyRaw) + " / " + Describe(warmRaw) + " / " + Describe(freshRaw));
+    }
     return Finish();
 }
 
