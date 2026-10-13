@@ -99,6 +99,8 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             result.sha256 = bitmap.resource.sha256;
             result.projection = *projection;
             result.signedRange = !mask && ctx.channel == ChannelType::Height;
+            result.greyTexture =
+                mask || ctx.format == core::ChannelFormat::L8 || ctx.format == core::ChannelFormat::L16F;
             if (!mask && ctx.channel == ChannelType::Normal) {
                 // The Normal channel stores an imported normal map with its green codes inverted
                 // in OpenGL and DirectX projects alike (blend-modes.json

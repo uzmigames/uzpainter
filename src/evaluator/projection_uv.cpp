@@ -40,11 +40,12 @@ uint32_t Code(const DecodedImage& image, int64_t x, int64_t y, uint32_t c) {
 }
 
 /// The channel `c` value of bitmap texel (x, y): float32(c / M) of a code, or the stored value
-/// of a float32 image (a decoded sRGB bitmap, sources.h).
+/// of a float32 image (a decoded sRGB bitmap, sources.h) or of an R16F image (decision 218).
 float TexelValue(const DecodedImage& image, int64_t x, int64_t y, uint32_t c) {
     const uint32_t code = Code(image, x, y, c);
     switch (image.encoding) {
-        case render::TexelEncoding::Float32: return std::bit_cast<float>(code);
+        case render::TexelEncoding::Float32:
+        case render::TexelEncoding::Float16: return std::bit_cast<float>(code);
         case render::TexelEncoding::Unorm16: return arith::UnormOperand(code, 16);
         default: return arith::UnormOperand(code, 8);
     }
@@ -332,6 +333,10 @@ ProjectedTexel ProjectTexel(const UvProjection& p, const DecodedImage& image, ui
             texels[k] = RangeValue(TexelValue(image, taps[k][0], taps[k][1], c), signedRange);
         }
         result.value[c] = BilinearFilter(weights, texels);
+        // An R16F texture's filter returns a binary16, to nearest, ties away from zero (decision 218).
+        if (image.encoding == render::TexelEncoding::Float16) {
+            result.value[c] = arith::HalfToFloat(arith::HalfNearestAway(result.value[c]));
+        }
     }
     return result;
 }

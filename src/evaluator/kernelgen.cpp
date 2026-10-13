@@ -274,7 +274,8 @@ std::array<uint32_t, kBlendParamsStride> EncodeProjectParams(const ProjectOp& op
     params[6] = image.width;
     params[7] = image.height;
     params[8] = image.channels;
-    params[9] = image.encoding == render::TexelEncoding::Float32 ? 2u
+    params[9] = image.encoding == render::TexelEncoding::Float16   ? 3u
+                : image.encoding == render::TexelEncoding::Float32 ? 2u
                 : image.encoding == render::TexelEncoding::Unorm16 ? 1u
                                                                     : 0u;
     params[10] = static_cast<uint32_t>(op.projection.filter);
@@ -316,7 +317,9 @@ std::vector<uint32_t> TextureUnitWords() {
 }
 
 std::vector<uint32_t> PackBitmapCodes(const DecodedImage& image) {
-    if (image.encoding == render::TexelEncoding::Float32) return image.values;
+    if (image.encoding == render::TexelEncoding::Float32 || image.encoding == render::TexelEncoding::Float16) {
+        return image.values;
+    }
     const bool sixteen = image.encoding == render::TexelEncoding::Unorm16;
     const uint32_t perWord = sixteen ? 2u : 4u;
     const uint32_t bits = sixteen ? 16u : 8u;

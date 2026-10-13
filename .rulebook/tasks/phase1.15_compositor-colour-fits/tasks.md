@@ -58,6 +58,13 @@
 - [ ] 2.9 (decision 214, split from 2.1) Fit P20-A's exported maps (`phase1-fill-channel-defaults`, PNG 16, both recordings): a colour bitmap on a mono channel (L8, L16F) and as a mask source, a colour bitmap on Normal (RGB16F) and on Height (DataSigned), and a grey bitmap on Normal; then drop the five map exclusions of `test_facade_fill_channel_defaults_equal_painter`
   - Needs no Painter recording.
   - Today the evaluator refuses the grey Normal bitmap (`evaluator:unsupported_source`). It does not refuse a colour bitmap on an L8 channel or as a mask source: it reads the red component there (41 and 23 of 255 on BaseMetalness, where Painter writes 59 and 63). Fit Painter's rule, or refuse it before any change. The component mean, as value and as mask, gives 59.3 and 63.5, which is not yet a fitted rule.
+  - Fitted (decision 218): a colour bitmap read by a one-channel tile is an R16F texture. Each texel is the mean ((r + g) + b) / 3 of its float32(c / 255) components (2 m - 1 on Height), rounded toward zero to a binary16, and the bilinear filter's result is rounded to a binary16, to nearest with ties away from zero. CPU and DX12 (`IMAGE_FLOAT16`).
+    - BaseMetalness, Height and SpecularRoughness are byte for byte, both recordings; their exclusions are removed from `test_facade_fill_channel_defaults_equal_painter`.
+    - Admitted: an 8-bit colour bitmap, magnified or at 1:1 by a bilinear filter, on L8 or L16F or as a mask source. Refused before any change, naming this item: other one-channel formats (L16, L32F), 16-bit colour, Nearest and minification. No colour bitmap is read through its red component any more.
+  - Open:
+    - the grey bitmap on Normal (still refused, Normal map excluded);
+    - a 16-bit colour bitmap on a one-channel tile (refused): `export-bit-depth` s3 records 16-bit field A on Height at 1:1, where Painter follows the component mean, not red; not yet fitted exactly;
+    - BaseColor (8 264 texels one sRGB8 code off), moved to item 2.7: the 8-bit sRGB checker magnified 16 times needs decision 209's single-probe sRGB8 filter. A CPU prototype of that rule made BaseColor exact, both recordings (decision 218).
 
 ## 3. Tests
 - [ ] 3.1 Every fitted output exact against both recordings on CPU and DX12; the refusals of what stays unrecorded still fire before any mutation and name this task

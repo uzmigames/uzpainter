@@ -116,6 +116,10 @@ inline constexpr float kHalfPi = 1.57079632679489661923f;
 /// The coverage plane of an sRGB8 intermediate passes through it before its 8-bit write
 /// (profile.h `EvaluatorProfile::srgb8HalfCoverage`).
 [[nodiscard]] uint16_t HalfNearestEven(float v);
+/// The bits of the binary16 value of `v` rounded to nearest, ties away from zero (magnitudes
+/// from 65520 up give infinity; infinities and NaN keep their class): the result of the
+/// recording GPU's bilinear filter of an R16F texture (projection_uv.h, decision 218).
+[[nodiscard]] uint16_t HalfNearestAway(float v);
 /// The float32 value of a binary16 bit pattern (exact).
 [[nodiscard]] float HalfToFloat(uint16_t bits);
 /// The 32-bit float store: the value itself, with NaN as the quiet NaN 0x7FC00000 (payloads
