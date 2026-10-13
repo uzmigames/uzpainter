@@ -1,16 +1,16 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/semantics/export-padding-tie-512-box16",
+  "golden_id": "tier0/semantics/export-padding-seam-ramp-1024",
   "tier": "0",
   "domain": "tier0/export/processing",
-  "description": "Decision 210's bounding-box reading of the ring sign (phase1.25_pilot-wand item 2.7), exploratory: P-tie-dyadic-box, the P-tie UV islands with the three 10 cm quads moved to x in [-16, -6], [-5, 5] and [6, 16] cm (z in [-5, 5]), so that the mesh's bounding box is centred at the origin with half-extent 16; document resolution 512. The reading predicts the fixed sign (+u, +v) on every ring texel. User0 added as RGB32F (the template capture of both recordings records its stored format; a record where it is not 32F is void); one fill with only User0 active, source the authored float32 UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5 at the document size, default projection (read back), Normal at opacity 1. User0 at OpenEXR 32f with infinite padding and with passthrough (every covered texel must equal the ramp bit for bit, or the probe is void), every export step done twice in the session.",
+  "description": "The seam ring's taps and weights (decision 211, phase1.25_pilot-wand item 2.7), exploratory: the authored seam mesh of export-padding-seam-field-1024 (island A at scale 0.375 on the tile's left border, island B at scale 0.25 turned 90 degrees; B as on export-padding-ramp-r15-p0-v2, A 64 texels further left), with the float UV ramp in place of the field so that every ring value reads as a position; document resolution 1024. User0 added as RGB32F (the template capture of both recordings records its stored format; a record where it is not 32F is void); one fill with only User0 active, source the authored float32 UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5 at the document size, default projection (read back), Normal at opacity 1. User0 at OpenEXR 32f with infinite padding and with passthrough (every covered texel must equal the ramp bit for bit, or the probe is void), every export step done twice in the session.",
   "inputs": [
     {
-      "input_id": "tie-box16",
+      "input_id": "seam",
       "kind": "mesh",
-      "path": "parity/fixtures/tier0-semantics/meshes/tie-box16.obj",
-      "sha256": "3067163b64cf6b56acd6b4244ac47b752706f3b68395368b36d65b33f1b5419d",
+      "path": "parity/fixtures/tier0-semantics/meshes/seam.obj",
+      "sha256": "051e27c67ff1bf85e5f3b92d0db843c65a3bf6ed1cef8374260bed2b8aba6f85",
       "provenance": {
         "origin": "uzmigames_authored",
         "licence": "Apache-2.0",
@@ -18,10 +18,10 @@
       }
     },
     {
-      "input_id": "uv-ramp-512",
+      "input_id": "uv-ramp-n1024",
       "kind": "image",
-      "path": "parity/fixtures/tier0-semantics/bitmaps/uv-ramp-512.exr",
-      "sha256": "44d56e0f653a199d8fa2c23451891b4ee4bcf8d4a64d3369186f77f87fda78f5",
+      "path": "parity/fixtures/tier0-semantics/bitmaps/uv-ramp-n1024.exr",
+      "sha256": "1ba4fce972e120b0062b056e51f64debb23b9de5571b5ff210dbe4b82becfb81",
       "provenance": {
         "origin": "uzmigames_authored",
         "licence": "Apache-2.0",
@@ -37,9 +37,9 @@
         "step": 1,
         "call": "substance_painter.project.create",
         "args": {
-          "mesh": "tie-box16",
+          "mesh": "seam",
           "normal_map_format": "OpenGL",
-          "default_texture_resolution": 512
+          "default_texture_resolution": 1024
         }
       },
       {
@@ -54,7 +54,7 @@
         "step": 3,
         "call": "substance_painter.resource.import_project_resource",
         "args": {
-          "input": "uv-ramp-512",
+          "input": "uv-ramp-n1024",
           "usage": "TEXTURE"
         }
       },
@@ -63,7 +63,7 @@
         "call": "substance_painter.layerstack.insert_fill",
         "args": {
           "position": "top",
-          "texture_set": "uzp_tie"
+          "texture_set": "uzp_seam"
         }
       },
       {
@@ -172,7 +172,7 @@
     },
     {
       "name": "texture_set.resolution",
-      "value": 512,
+      "value": 1024,
       "unit": "px",
       "applied_by": "recorder_api"
     },
@@ -206,5 +206,66 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "eb63dd315eecf735f1c67fb233b4234ee69971a66d487efe0b6da93f31818846",
+      "size_bytes": 10649
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step10",
+      "kind": "exported_map",
+      "sha256": "db180d761efc2ee584c195e6fdaabb16ad7054144497cf647b2f3947132a2e49",
+      "size_bytes": 850357
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step11",
+      "kind": "exported_map",
+      "sha256": "db180d761efc2ee584c195e6fdaabb16ad7054144497cf647b2f3947132a2e49",
+      "size_bytes": 850357
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step12",
+      "kind": "exported_map",
+      "sha256": "efc37dec01c4b030e128600a97cfc4f583878e2e09a29d71564c589a5bda5737",
+      "size_bytes": 824557
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step13",
+      "kind": "exported_map",
+      "sha256": "efc37dec01c4b030e128600a97cfc4f583878e2e09a29d71564c589a5bda5737",
+      "size_bytes": 824557
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step10",
+      "kind": "exported_map",
+      "sha256": "db180d761efc2ee584c195e6fdaabb16ad7054144497cf647b2f3947132a2e49",
+      "size_bytes": 850357
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step11",
+      "kind": "exported_map",
+      "sha256": "db180d761efc2ee584c195e6fdaabb16ad7054144497cf647b2f3947132a2e49",
+      "size_bytes": 850357
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step12",
+      "kind": "exported_map",
+      "sha256": "db180d761efc2ee584c195e6fdaabb16ad7054144497cf647b2f3947132a2e49",
+      "size_bytes": 850357
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step13",
+      "kind": "exported_map",
+      "sha256": "db180d761efc2ee584c195e6fdaabb16ad7054144497cf647b2f3947132a2e49",
+      "size_bytes": 850357
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "e7ba66f8da440f296396951152832b595f05b4d187e5ea98eeff3c8f44cf906c",
+      "size_bytes": 402
+    }
+  ]
 }

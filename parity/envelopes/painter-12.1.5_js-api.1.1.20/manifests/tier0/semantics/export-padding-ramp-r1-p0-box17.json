@@ -206,5 +206,66 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "9bf986ae2483a2edf8bea01d58e7f05f59b7dac41edd3f35ba0231d58e77c8db",
+      "size_bytes": 10668
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step10",
+      "kind": "exported_map",
+      "sha256": "434cddfce88aeca385468903c19c2405a536056a9d3ba03aeb2ef9d3355e7b4f",
+      "size_bytes": 537352
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step11",
+      "kind": "exported_map",
+      "sha256": "434cddfce88aeca385468903c19c2405a536056a9d3ba03aeb2ef9d3355e7b4f",
+      "size_bytes": 537352
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step12",
+      "kind": "exported_map",
+      "sha256": "efc37dec01c4b030e128600a97cfc4f583878e2e09a29d71564c589a5bda5737",
+      "size_bytes": 824557
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step13",
+      "kind": "exported_map",
+      "sha256": "efc37dec01c4b030e128600a97cfc4f583878e2e09a29d71564c589a5bda5737",
+      "size_bytes": 824557
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step10",
+      "kind": "exported_map",
+      "sha256": "434cddfce88aeca385468903c19c2405a536056a9d3ba03aeb2ef9d3355e7b4f",
+      "size_bytes": 537352
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step11",
+      "kind": "exported_map",
+      "sha256": "434cddfce88aeca385468903c19c2405a536056a9d3ba03aeb2ef9d3355e7b4f",
+      "size_bytes": 537352
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step12",
+      "kind": "exported_map",
+      "sha256": "434cddfce88aeca385468903c19c2405a536056a9d3ba03aeb2ef9d3355e7b4f",
+      "size_bytes": 537352
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step13",
+      "kind": "exported_map",
+      "sha256": "434cddfce88aeca385468903c19c2405a536056a9d3ba03aeb2ef9d3355e7b4f",
+      "size_bytes": 537352
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "e7ba66f8da440f296396951152832b595f05b4d187e5ea98eeff3c8f44cf906c",
+      "size_bytes": 402
+    }
+  ]
 }
