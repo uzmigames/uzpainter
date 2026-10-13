@@ -7,8 +7,8 @@
 //
 // Order, so that a refusal or a failure leaves nothing written:
 // 1. every file's processing is checked (CheckProcessing: NotYetSupported for an unrecorded one),
-//    then a combined virtual normal on a UV-islanded set (CheckIslandNormal) and the padding
-//    (CheckPadding);
+//    then a combined virtual normal on a UV-islanded set (CheckIslandNormal, statistics files
+//    included) and the padding (CheckPadding);
 // 2. every file is evaluated (EvaluateFileOn), padded over its texture set's coverage
 //    (ApplyPadding) and encoded (EncodeFile) in memory;
 // 3. only then are the files written, in plan order, sub-folders created as needed.
@@ -22,9 +22,15 @@
 #include <string>
 #include <vector>
 
+#include "export/padding.h"
 #include "export/plan.h"
 
 namespace uzp::exporter {
+
+/// The texel-centre UV coverage of every object of `set`'s material (`inputs.geometry`), or
+/// nullopt without a texturing mesh. `uzpainter.diagnostics` reads it for CheckIslandNormal's
+/// refusal of its in-memory views (padding.h, decision 245).
+[[nodiscard]] std::optional<Coverage> CoverageOf(const core::TextureSet& set, const SourceInputs& inputs);
 
 /// A planned file's bytes, encoded in memory.
 struct EncodedFile {

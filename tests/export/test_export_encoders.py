@@ -790,29 +790,54 @@ def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
     """B18 (decision 245): on the sphere, whose UV islands leave texels uncovered, a combined
     virtual normal reads the Height outside the islands at its island-edge texels, where Painter's
     Height is not reproduced:
-    - with a layer writing the Height, Normal_OpenGL and Normal_DirectX are refused before
-      anything is written under `infinite` and `passthrough`, naming the cause and the owner, and
-      so is the pipeline's five-map export that holds one, as a whole;
-    - with no layer on the Height (the stencils read 0 everywhere) Normal_OpenGL is written under
-      `infinite`: the flat normal (32767, 32767, 65535) on every texel, the empty Normal channel
-      and no mesh map adding nothing; under `passthrough` it is refused, Painter's virtual map
-      outside the islands being unrecorded there (decision 090)."""
-    from tools.parity.feasibility import png
+    - Normal_OpenGL and Normal_DirectX are refused before anything is written under `infinite` and
+      `passthrough`, naming the cause, the evidence and the owner, with a layer writing the Height
+      and with none (no recording shows Painter's empty Height outside the islands), and so is the
+      pipeline's five-map export that holds one, as a whole;
+    - so is every diagnosticMap that isolates, compares or summarises one (`regionStats` a
+      statistics file);
+    - on the grid, whose coverage is complete, the same sources are written."""
 
-    relief = spec(tmp_path / "sphere", SPHERE, "uzp_sphere")
-    for name in ("Normal_OpenGL", "Normal_DirectX"):
-        for padding in ("infinite", "passthrough"):
-            out = tmp_path / f"{name}-{padding}"
-            cfg = config(out, root="uzp_sphere", paddingAlgorithm=padding)
-            cfg["exportPresets"][0]["maps"] = normal_map(name)
-            cfg["exportParameters"] = cfg["exportParameters"][:1]
-            result = export(export_tests, relief, cfg, tmp_path / f"run-{name}-{padding}")
-            assert result.get("error") == "NotYetSupported", result
-            assert f'the virtualMap "{name}" on a texture set whose UV islands' in result["message"]
-            assert "island-edge texels" in result["message"]
-            assert "phase1.25_pilot-wand item 2.7" in result["message"]
-            assert "decision 245" in result["message"]
-            assert files_under(out) == {}
+    def variant(name: str, mesh: Path, set_name: str, height: bool) -> Path:
+        path = spec(tmp_path / name, mesh, set_name, height=height)
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["layers"][0]["uid"] = 501
+        path.write_text(json.dumps(document), encoding="utf-8")
+        return path
+
+    def single(out: Path, root: str, kind: str, source: str, padding: str) -> dict[str, Any]:
+        cfg = config(out, root=root, paddingAlgorithm=padding)
+        letters = "L" if source.startswith("regionStats/") else "RGB"
+        cfg["exportPresets"][0]["maps"] = [
+            {"fileName": "$textureSet_n", "channels": [chan(c, kind, source) for c in letters]}
+        ]
+        cfg["exportParameters"] = cfg["exportParameters"][:1]
+        return cfg
+
+    sources = [
+        ("virtualMap", "Normal_OpenGL"),
+        ("virtualMap", "Normal_DirectX"),
+        ("diagnosticMap", "isolated/Normal_OpenGL/501"),
+        ("diagnosticMap", "contribution/Normal_DirectX/501"),
+        ("diagnosticMap", "regionStats/Normal_OpenGL/501"),
+    ]
+    relief = variant("sphere", SPHERE, "uzp_sphere", height=True)
+    flat = variant("sphere-flat", SPHERE, "uzp_sphere", height=False)
+    for label, project in (("relief", relief), ("flat", flat)):
+        for kind, source in sources:
+            for padding in ("infinite", "passthrough"):
+                case = f"{label}-{source.replace('/', '-')}-{padding}"
+                out = tmp_path / case
+                cfg = single(out, "uzp_sphere", kind, source, padding)
+                result = export(export_tests, project, cfg, tmp_path / f"run-{case}")
+                assert result.get("error") == "NotYetSupported", (case, result)
+                message = result["message"]
+                assert "whose UV islands do not cover the whole tile" in message, message
+                assert f'the {kind} "{source}" reads the combined virtual normal' in message
+                assert "island-edge texels" in message and "recording R-090" in message, message
+                assert "no recording shows it for a Height without layers" in message, message
+                assert "phase1.25_pilot-wand item 2.7" in message and "decision 245" in message
+                assert files_under(out) == {}, case
 
     out = tmp_path / "five"
     cfg = config(out, root="uzp_sphere")
@@ -822,26 +847,14 @@ def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
     assert "island-edge texels" in result["message"]
     assert files_under(out) == {}
 
-    flat = spec(tmp_path / "sphere-flat", SPHERE, "uzp_sphere", height=False)
-    out = tmp_path / "flat"
-    cfg = config(out, root="uzp_sphere")
-    cfg["exportPresets"][0]["maps"] = normal_map()
-    cfg["exportParameters"] = cfg["exportParameters"][:1]
-    result = export(export_tests, flat, cfg, tmp_path / "run-flat")
-    assert "error" not in result, result
-    assert list(files_under(out)) == ["uzp_sphere_n.png"]
-    codes = png.decode((out / "uzp_sphere_n.png").read_bytes()).astype(np.int64)
-    assert np.array_equal(np.unique(codes.reshape(-1, 3), axis=0), [[32767, 32767, 65535]])
-
-    out = tmp_path / "flat-passthrough"
-    cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
-    cfg["exportPresets"][0]["maps"] = normal_map()
-    cfg["exportParameters"] = cfg["exportParameters"][:1]
-    result = export(export_tests, flat, cfg, tmp_path / "run-flat-passthrough")
-    assert result.get("error") == "NotYetSupported", result
-    assert "virtualMap source outside the UV islands is not recorded" in result["message"]
-    assert "phase1.25_pilot-wand item 2.7" in result["message"]
-    assert files_under(out) == {}
+    grid = variant("grid", GRID, "s0", height=False)
+    for kind, source in sources:
+        case = f"grid-{source.replace('/', '-')}"
+        out = tmp_path / case
+        cfg = single(out, "s0", kind, source, "infinite")
+        result = export(export_tests, grid, cfg, tmp_path / f"run-{case}")
+        assert "error" not in result, (case, result)
+        assert len(files_under(out)) == 1, case
 
 
 # ── Tier 0 (owner's machine) ─────────────────────────────────────────────────

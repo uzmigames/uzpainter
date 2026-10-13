@@ -71,6 +71,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
   - They evaluate on the CPU evaluator with the export's inputs and the entry points of its `diagnosticMap` sources, so each view equals the export of its source.
   - Each result names its source (decision 076) and the revision it read. A map is `{width, height, components, values}`, with `values` the float32 little-endian bytes, rows top first.
   - A view reading a channel whose template base is inferred is refused by the export's guard (decision 126; no shipped template has one since decision 169). The three single views raise `NotYetSupported`. `material_views` lists such a view in `refused` and returns the others.
+  - `isolate`, `contribution` and `region_stats` of `Normal_OpenGL` or `Normal_DirectX` on a texture set whose UV islands do not cover the tile raise `NotYetSupported` before evaluating, as the export of their source does (decision 245): the island-edge texels read Painter's Height outside the islands, which is not reproduced.
   - `snapshot_layer_tree()` returns the layer tree of the committed revision (`uzp_core/document/layer_tree.h`). `diff_snapshots(before, after)` returns the nodes and stacks added, removed and modified, each change as a JSON pointer with its values.
 - **Display** (`display.{h,cpp}`, `bind_display.cpp`; task phase2.1_preview-display-presets, decisions 038, 042 and 132). Only the fixed render pipeline exists: every setter accepts the pipeline's values and raises `UnsupportedInUzPainter` naming the setting, the accepted values and decision 038 for anything else, before any change. Each setter is one transaction and returns a `Result`.
   - `display`:
@@ -157,6 +158,7 @@ The result's `returned["sync"]` lists the groups, layers, imported and skipped i
 - the statistics equal those recomputed from the exported map and mask;
 - every view equals the export of its `diagnosticMap` source;
 - decision 126 refuses per source;
+- decision 245 refuses each virtual normal view on the UV-islanded sphere, and returns it on the plane;
 - the snapshot diff reports exactly the seeded changes.
 
 `tests/python/test_pyapi_tier0.py` compares the native-owned Tier 0 readbacks with the private goldens on the owner's machine (decision 106).

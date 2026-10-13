@@ -8,6 +8,7 @@
 #include "evaluator/error.h"
 #include "evaluator/geometry_mask.h"
 #include "evaluator/sources.h"
+#include "export/write.h"
 #include "mesh/reload.h"
 #include "python/errors.h"
 #include "store/container.h"
@@ -130,23 +131,34 @@ evaluator::DiagnosticRequest DiagnosticRun::RequestFor(core::Id node) const {
     return request;
 }
 
-void DiagnosticRun::RequireIdentified(const evaluator::DiagnosticRequest& request,
-                                      const evaluator::DiagnosticSource& source) const {
-    render::Result<void> identified = exporter::RequireIdentifiedBase(
-        *m_snapshot.project, request.textureSet, request.stack, Planned(source), request.templateId, *m_templates);
+void DiagnosticRun::RequireExact(const evaluator::DiagnosticRequest& request,
+                                 const evaluator::DiagnosticSource& source) const {
+    const core::Project& project = *m_snapshot.project;
+    const exporter::PlannedSource planned = Planned(source);
+    render::Result<void> identified = exporter::RequireIdentifiedBase(project, request.textureSet, request.stack,
+                                                                      planned, request.templateId, *m_templates);
     if (!identified) RaiseRender(identified.error());
+    if (!exporter::ReadsCombinedNormal(planned)) return;
+    for (const core::TextureSet& set : project.texture_sets) {
+        if (set.id != request.textureSet) continue;
+        // Without a texturing mesh there are no UV islands.
+        const std::optional<exporter::Coverage> coverage = exporter::CoverageOf(set, m_inputs);
+        if (coverage && !coverage->Complete()) {
+            throw ApiError("NotYetSupported", "diagnostics: " + exporter::IslandNormalRefusal(planned));
+        }
+    }
 }
 
 evaluator::IsolationResult DiagnosticRun::Isolate(core::Id node, const evaluator::DiagnosticMapId& map) {
     const evaluator::DiagnosticRequest request = RequestFor(node);
-    RequireIdentified(request, {evaluator::DiagnosticSource::Kind::Isolated, map, {}, node});
+    RequireExact(request, {evaluator::DiagnosticSource::Kind::Isolated, map, {}, node});
     return Take(evaluator::IsolateOn(*m_snapshot.project, m_snapshot.revision, map, node, request, *m_templates,
                                      m_cpu->store(), m_cpu->cache()));
 }
 
 evaluator::ContributionResult DiagnosticRun::Contribution(core::Id node, const evaluator::DiagnosticMapId& map) {
     const evaluator::DiagnosticRequest request = RequestFor(node);
-    RequireIdentified(request, {evaluator::DiagnosticSource::Kind::Contribution, map, {}, node});
+    RequireExact(request, {evaluator::DiagnosticSource::Kind::Contribution, map, {}, node});
     return Take(evaluator::ContributionOn(*m_snapshot.project, m_snapshot.revision, map, node, request, *m_templates,
                                           m_cpu->store(), m_cpu->cache()));
 }
@@ -172,7 +184,7 @@ DiagnosticMaterialViews DiagnosticRun::MaterialViews(core::Id material) {
 evaluator::RegionStats DiagnosticRun::RegionStats(const evaluator::DiagnosticMapId& map, core::Id material) {
     const evaluator::DiagnosticRequest request = RequestFor(material);
     const evaluator::DiagnosticSource source{evaluator::DiagnosticSource::Kind::RegionStats, map, {}, material};
-    RequireIdentified(request, source);
+    RequireExact(request, source);
     evaluator::DiagnosticOutput output = Take(evaluator::EvaluateDiagnosticOn(
         *m_snapshot.project, m_snapshot.revision, source, request, *m_templates, m_cpu->store(), m_cpu->cache()));
     return std::move(*output.stats);
