@@ -77,7 +77,8 @@ struct DagSource {
     /// The Height channel maps bitmap values to [-1, 1] (sources.h).
     bool signedRange = false;
     /// The Normal channel imports a bitmap with its green codes inverted (max - g;
-    /// blend-modes.json `blend-normal-channel-import`, height_to_normal.h).
+    /// blend-modes.json `blend-normal-channel-import`, height_to_normal.h) and samples it as a
+    /// 16-bit texture (evaluate.cpp `NormalTexture`, decision 226).
     bool invertGreen = false;
     /// An sRGB bitmap (sources.h): its codes are decoded with the sRGB transfer function onto an
     /// sRGB8 channel, or with `l8Material` onto an L8 BaseColor, Specular or Emissive.

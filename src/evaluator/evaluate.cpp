@@ -1,5 +1,6 @@
 #include "evaluator/evaluate.h"
 
+#include <algorithm>
 #include <bit>
 #include <cmath>
 #include <cstring>
@@ -16,20 +17,41 @@ namespace uzp::evaluator {
 
 namespace {
 
-/// A normal-map bitmap as the Normal channel imports it: every green code c becomes max - c
-/// (blend-modes.json `blend-normal-channel-import`). 8- and 16-bit codes only.
-render::Result<std::shared_ptr<const DecodedImage>> GreenInverted(const DecodedImage& image, core::Id node) {
-    if (image.channels < 3 || (image.encoding != render::TexelEncoding::Unorm16 &&
-                               image.encoding != render::TexelEncoding::Unorm8)) {
+/// The flat normal's 8-bit blue code: the lowest blue of an imported 8-bit normal map (decision 226).
+constexpr uint32_t kFlatNormalBlue8 = 127u;
+
+/// A bitmap as the Normal channel samples it: a 16-bit UNORM texture whose filtered result is
+/// written as a 16-bit code before the channel stores it (`DecodedImage::unorm16Target`).
+/// - A colour image is an imported normal map: every green code c becomes max - c (blend-modes.json
+///   `blend-normal-channel-import`), and an 8-bit blue code below 127, the flat normal's code,
+///   becomes 127 (a negative z clamped to 0 before the filter).
+/// - A grey image feeds its code to the three components, green not inverted and blue not raised.
+/// An 8-bit code c becomes 257 c, the same value c / 255 (P20-A, decision 226). 8- and 16-bit
+/// colour images and 8-bit grey ones only (a 16-bit grey one is not recorded).
+render::Result<std::shared_ptr<const DecodedImage>> NormalTexture(const DecodedImage& image, core::Id node) {
+    const bool eight = image.encoding == render::TexelEncoding::Unorm8;
+    if (image.channels == 1 && !eight) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
-                        "a Normal-channel bitmap must be an 8- or 16-bit RGB image", node);
+                        "a grey bitmap on the Normal channel is recorded only as an 8-bit image "
+                        "(phase1-fill-channel-defaults; phase1.15_compositor-colour-fits item 2.9, decision 226)",
+                        node);
     }
-    const uint32_t max = image.encoding == render::TexelEncoding::Unorm16 ? 65535u : 255u;
-    auto inverted = std::make_shared<DecodedImage>(image);
-    for (size_t i = 1; i < inverted->values.size(); i += inverted->channels) {
-        inverted->values[i] = max - inverted->values[i];
+    if ((image.channels != 1 && image.channels < 3) || (!eight && image.encoding != render::TexelEncoding::Unorm16)) {
+        return EvalFail(EvalErrorKind::UnsupportedSource,
+                        "a Normal-channel bitmap must be an 8- or 16-bit RGB image or an 8-bit grey one", node);
     }
-    return std::shared_ptr<const DecodedImage>(std::move(inverted));
+    auto texture = std::make_shared<DecodedImage>(image);
+    texture->encoding = render::TexelEncoding::Unorm16;
+    texture->unorm16Target = true;
+    const uint32_t max = eight ? 255u : 65535u;
+    const uint32_t scale = eight ? 257u : 1u;
+    for (size_t i = 0; i < texture->values.size(); ++i) {
+        uint32_t code = texture->values[i];
+        if (image.channels >= 3 && i % image.channels == 1) code = max - code;
+        if (image.channels >= 3 && i % image.channels == 2 && eight) code = std::max(code, kFlatNormalBlue8);
+        texture->values[i] = code * scale;
+    }
+    return std::shared_ptr<const DecodedImage>(std::move(texture));
 }
 
 /// An sRGB bitmap as the texture Painter samples (sources.h): a float32 image of its linear
@@ -334,14 +356,14 @@ private:
         }
         std::string imageKey = source.sha256;
         if (source.invertGreen) {
-            imageKey += "/green-inverted";
-            std::shared_ptr<const DecodedImage>& inverted = m_env.greenInverted[source.sha256];
-            if (!inverted) {
-                render::Result<std::shared_ptr<const DecodedImage>> made = GreenInverted(*image, node);
+            imageKey += "/normal-texture";
+            std::shared_ptr<const DecodedImage>& texture = m_env.normalTextures[source.sha256];
+            if (!texture) {
+                render::Result<std::shared_ptr<const DecodedImage>> made = NormalTexture(*image, node);
                 if (!made) return render::Unexpected(made.error());
-                inverted = *made;
+                texture = *made;
             }
-            image = inverted;
+            image = texture;
         }
         render::Result<void> sampling = CheckSampling(source.projection, m_dag.grid.width,
                                                       m_dag.grid.height, *image, source.signedRange, node);
