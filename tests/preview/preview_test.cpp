@@ -4,6 +4,9 @@
 // Usage: uzp-preview-tests <case> <work-dir> [args]
 //   display              the pinned display configuration, the unsupported ones and the display table
 //   environment          decoding, the direction mapping and the IBL precomputation (CPU)
+//   lighting-cache <work-dir>
+//                        the persistent environment lighting (decision 253): stored cold, served warm
+//                        without decoding, damaged entries and other MXCSR bits not served (CPU)
 //   latest               the wait-free hand-over buffer, with a stalled reader
 //   viewport-unsupported an unsupported display configuration fails before any GPU work (DX12)
 //   viewport-golden <goldens.json> [--bless]
@@ -23,6 +26,7 @@
 #include "preview/latest.h"
 #include "preview/viewport.h"
 #include "render/engine_thread.h"
+#include "render/disk_cache.h"
 #include "render/kernel_cache.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/manifest/sha256.h"
@@ -47,6 +51,8 @@
 #include <string_view>
 #include <thread>
 #include <vector>
+
+#include <xmmintrin.h>
 
 namespace {
 
@@ -576,6 +582,85 @@ int RunViewportGolden(const fs::path& dir, const fs::path& goldens, bool bless) 
     return Finish();
 }
 
+/// Every float of two lightings has the same bits.
+bool SameLighting(const EnvironmentLighting& a, const EnvironmentLighting& b) {
+    auto bits = [](std::span<const float> x, std::span<const float> y) {
+        return x.size() == y.size() && std::memcmp(x.data(), y.data(), x.size() * sizeof(float)) == 0;
+    };
+    if (!bits(a.sh, b.sh) || !bits(a.brdf, b.brdf) || a.radiance.size() != b.radiance.size()) return false;
+    for (size_t l = 0; l < a.radiance.size(); ++l) {
+        const RadianceLevel& x = a.radiance[l];
+        const RadianceLevel& y = b.radiance[l];
+        if (x.width != y.width || x.height != y.height || std::bit_cast<uint32_t>(x.roughness) != std::bit_cast<uint32_t>(y.roughness) ||
+            !bits(x.rgb, y.rgb)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// `lighting-cache <work-dir>`: the persistent environment lighting (`LightingOf`, decision 253).
+/// Cold, the file is decoded and precomputed bit for bit and stored; warm, the stored lighting is
+/// served without the file being decoded (garbage bytes in its place); a damaged entry and other
+/// MXCSR control bits are not served.
+int RunLightingCache(const fs::path& dir) {
+    const std::string bytes = Bytes(RepoRoot() / "parity/fixtures/render-procedure/sky-patch.exr");
+    const std::string sha256 = uzp::core::Sha256Hex(bytes);
+    const fs::path root = dir / "cache";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    const std::expected<EnvironmentImage, std::string> image = DecodeEnvironment(bytes);
+    if (!image) {
+        Check(false, "sky-patch.exr decodes", image.error());
+        return Finish();
+    }
+    const EnvironmentLighting reference = PrecomputeLighting(*image);
+    constexpr std::string_view kGarbage = "not an environment file";
+
+    uzp::render::DisableCaches();
+    const std::expected<EnvironmentLighting, std::string> off = LightingOf(sha256, bytes);
+    Check(off && SameLighting(*off, reference) && !fs::exists(root),
+          "without the caches the lighting is precomputed and nothing is stored");
+    uzp::render::EnableCaches(root);
+    const fs::path entry = [&] {
+        const std::expected<EnvironmentLighting, std::string> cold = LightingOf(sha256, bytes);
+        Check(cold && SameLighting(*cold, reference), "cold: the lighting is precomputed bit for bit");
+        std::vector<fs::path> files;
+        for (fs::directory_iterator it(root / "lighting", ec), end; !ec && it != end; it.increment(ec)) {
+            files.push_back(it->path());
+        }
+        Check(files.size() == 1, "cold: one entry is stored in the lighting area", std::to_string(files.size()));
+        return files.empty() ? fs::path() : files.front();
+    }();
+    const std::expected<EnvironmentLighting, std::string> warm = LightingOf(sha256, kGarbage);
+    Check(warm && SameLighting(*warm, reference),
+          "warm: the stored lighting is served bit for bit without decoding the environment file",
+          warm ? std::string() : warm.error());
+
+    {
+        std::string stored;
+        {
+            std::ifstream in(entry, std::ios::binary);
+            stored.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        stored.back() = static_cast<char>(~stored.back());
+        std::ofstream(entry, std::ios::binary | std::ios::trunc).write(stored.data(), static_cast<std::streamsize>(stored.size()));
+    }
+    const std::expected<EnvironmentLighting, std::string> damaged = LightingOf(sha256, kGarbage);
+    const std::expected<EnvironmentLighting, std::string> rebuilt = LightingOf(sha256, bytes);
+    const std::expected<EnvironmentLighting, std::string> served = LightingOf(sha256, kGarbage);
+    Check(!damaged && rebuilt && SameLighting(*rebuilt, reference) && served && SameLighting(*served, reference),
+          "a damaged entry is not served (the file is decoded again), then recomputed bit for bit, stored and served");
+
+    const unsigned int saved = _mm_getcsr();
+    _mm_setcsr(saved | 0x8040u);  // flush-to-zero and denormals-are-zero
+    const std::expected<EnvironmentLighting, std::string> flushed = LightingOf(sha256, kGarbage);
+    _mm_setcsr(saved);
+    Check(!flushed, "under other MXCSR control bits the stored lighting is not served");
+    uzp::render::DisableCaches();
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -585,7 +670,7 @@ int main(int argc, char** argv) {
     if (mode == "latest") return RunLatest();
     if (argc < 3) {
         std::fprintf(stderr,
-                     "usage: uzp-preview-tests display | environment | latest | viewport-unsupported <work-dir> | "
+                     "usage: uzp-preview-tests display | environment | latest | lighting-cache <work-dir> | viewport-unsupported <work-dir> | "
                      "viewport-golden <work-dir> <goldens.json> [--bless]\n");
         return 2;
     }
@@ -597,6 +682,8 @@ int main(int argc, char** argv) {
     int code = 2;
     if (mode == "viewport-unsupported") {
         code = RunViewportUnsupported(dir);
+    } else if (mode == "lighting-cache") {
+        code = RunLightingCache(dir);
     } else if (mode == "viewport-golden" && argc >= 4) {
         code = RunViewportGolden(dir, argv[3], argc >= 5 && std::string_view(argv[4]) == "--bless");
     } else {

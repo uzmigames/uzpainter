@@ -12,7 +12,7 @@ This folder holds the process boundary of `docs/architecture/02-runtime-topology
 
 `uzpainter_supervisor` runs inside the embedded interpreter, on the pinned MCP SDK (`thirdparty/python-wheels/`):
 
-- **`main.py`** parses the command line and serves one tool registry over the SDK's low-level `Server`, on stdio or Streamable HTTP (see Transports).
+- **`main.py`** parses the command line and serves one tool registry over the SDK's low-level `Server`, on stdio or Streamable HTTP (see Transports). It imports the SDK on a thread while the worker starts and creates its GPU device, and awaits both before it serves (decision 253); a fatal worker start still exits with status 4.
 - **`registry.py`** lists the tools and checks every call before admission (see Registry). A mutating call may carry `idempotency_key` and `expected_revision` among its arguments, and the supervisor lifts them into the pipe request.
 - **`resources.py`** serves the MCP resources and prompts over the registry (see Resources and prompts).
 - **`roots.py`** canonicalises path arguments and scrubs results under `--roots` (see Roots).

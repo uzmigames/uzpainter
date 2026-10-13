@@ -130,10 +130,15 @@ another project) makes the decision `outcome_unknown`, so the call is never exec
    (`MANIFEST.md` §4) and written back;
 4. loads the readable operation rows into the `DocumentState` (unreadable ones are reported and
    left to `DecideStored`);
-5. runs `CheckIntegrity`: `PRAGMA foreign_key_check`, every retained manifest against its
+5. unless `OpenOptions::report` is false, runs `CheckIntegrity`: `PRAGMA foreign_key_check`, every retained manifest against its
    `manifest_sha256`, every operation row, every locator, the plane rules of §8 (with the bytes of
    the chunks the current manifest binds); with `VerifyLevel::full` also `PRAGMA quick_check`,
    the SHA-256 of every blob and the bytes of every chunk any retained manifest binds.
+
+The session's open (`src/python/session.cpp`: the facade, `run`, the MCP worker) passes
+`report = false`: it never read the report, whose scan of every retained manifest and locator
+took 88-186 ms on a 168-revision project (decision 253); `inspect --verify`, `export` and the
+census still build it.
 
 Corrupt history, blobs and missing dependencies are reported in `Opened::report`, never thrown;
 only a damaged SQLite structure (step 0) and a current manifest that does not verify (step 2) are.

@@ -151,12 +151,12 @@ std::expected<ViewportScene, std::string> SceneOf(const PreviewFrame& frame, Lig
     }
     std::shared_ptr<const EnvironmentLighting>& lighting = cache[frame.environmentHash];
     if (!lighting) {
-        std::expected<EnvironmentImage, std::string> image = DecodeEnvironment(*frame.environmentBytes);
-        if (!image) {
+        std::expected<EnvironmentLighting, std::string> computed = LightingOf(frame.environmentHash, *frame.environmentBytes);
+        if (!computed) {
             cache.erase(frame.environmentHash);
-            return Problem(image.error());
+            return Problem(computed.error());
         }
-        lighting = std::make_shared<const EnvironmentLighting>(PrecomputeLighting(*image));
+        lighting = std::make_shared<const EnvironmentLighting>(std::move(*computed));
     }
     next.mesh = frame.mesh;
     next.materials = MaterialsOf(frame);

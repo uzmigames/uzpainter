@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib
 import json
 import logging
 import os
@@ -202,9 +203,13 @@ async def _serve(
     args: argparse.Namespace,
 ) -> int:
     supervisor = worker_module.Supervisor(config)
+    # The MCP SDK is imported on a thread while the worker starts and creates its GPU device: the
+    # two take about half a second each and neither needs the other (decision 253).
+    sdk = asyncio.ensure_future(asyncio.to_thread(_import_sdk, args.bind is None))
     try:
         await supervisor.start()
     except worker_module.FatalSupervisorError as error:
+        sdk.cancel()
         log.critical("fatal supervisor error: %s", error)
         return EXIT_FATAL
     admission = Admission(supervisor, ledger)
@@ -221,6 +226,7 @@ async def _serve(
         protocol=protocol,
     )
     try:
+        await sdk
         if args.bind is None:
             await _run_stdio(registry, build)
         else:
@@ -237,6 +243,12 @@ async def _serve(
         admission.close()
         await supervisor.close()
     return EXIT_OK
+
+
+def _import_sdk(stdio: bool) -> None:
+    """Imports the SDK modules `_server` and, with `stdio`, `_run_stdio` use."""
+    for name in ("mcp_types", "mcp.server.lowlevel", *(("mcp.server.stdio",) if stdio else ())):
+        importlib.import_module(name)
 
 
 def _http_clients() -> Any:

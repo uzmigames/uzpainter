@@ -151,7 +151,7 @@ ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const
         // the records above the horizon.
         if (record.committed_revision > opened.state.operation_horizon) opened.state.operations.push_back(std::move(record));
     }
-    opened.report = CheckIntegrity(container, manifest, options.verify);
+    if (options.report) opened.report = CheckIntegrity(container, manifest, options.verify);
     opened.store.reset(new ProjectStore(std::move(lock), std::move(container), *uuid, portable, std::move(manifest)));
     return opened;
 }

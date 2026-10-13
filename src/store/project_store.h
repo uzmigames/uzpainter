@@ -53,6 +53,10 @@ struct CreateOptions {
 struct OpenOptions {
     VerifyLevel verify = VerifyLevel::standard;
     VersionPolicy policy = VersionPolicy::Current();
+    /// Build `Opened::report` (`CheckIntegrity` at `verify`). A caller that never reads it (the
+    /// session's open, decision 253) skips its history and locator scan; the current manifest is
+    /// verified either way.
+    bool report = true;
 };
 
 class ProjectStore {
@@ -72,7 +76,7 @@ public:
     /// before anything is read from the file or written to it, `StoreError(version)` for a
     /// `format_version` of another major (the file is not changed), `StoreError(not_a_project)`,
     /// and `CorruptionError` when the current manifest does not verify. Corrupt history, blobs (with `VerifyLevel::full`) and missing dependencies are
-    /// reported in `Opened::report`, not thrown. A bundle directory (`IsBundleDirectory`) is first
+    /// reported in `Opened::report` (empty without `OpenOptions::report`), not thrown. A bundle directory (`IsBundleDirectory`) is first
     /// imported into `BundleImportTarget(path)`, `<dir>.uzp` beside it (`ImportBundle`;
     /// `StoreError(exists)` when that file exists), which is then opened; `ImportBundle` takes
     /// another target.

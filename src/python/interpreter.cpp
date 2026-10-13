@@ -14,7 +14,8 @@ std::string Start() {
     // Isolated: no environment variables, no user site-packages, no current directory on the
     // path, no signal handlers. python313._pth beside the DLL then sets the module search path.
     PyConfig_InitIsolatedConfig(&config);
-    // The install folder is read-only (13-engine-integration.md §5): no __pycache__ in it.
+    // The install folder is read-only (13-engine-integration.md §5): nothing is written into it.
+    // `zig build painter` compiles its bytecode (checked-hash `.pyc`, decision 253).
     config.write_bytecode = 0;
     try {
         // Clears `config` in every case; no program folder is added to sys.path.

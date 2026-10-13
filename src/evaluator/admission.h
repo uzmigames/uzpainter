@@ -23,6 +23,10 @@
 #include "uzp_core/types/ids.h"
 #include "uzp_core/types/project.h"
 
+namespace uzp::render {
+class DiskCache;
+}
+
 namespace uzp::evaluator {
 
 /// The bound: live bytes and live tiles.
@@ -122,6 +126,11 @@ public:
     [[nodiscard]] const AdmissionLimits& limits() const { return limits_; }
     [[nodiscard]] bool Contains(const CacheKey& key) const { return entries_.contains(key); }
 
+    /// The persistent results this cache's evaluations read and store (result_cache.h; the CPU
+    /// evaluator's), or null.
+    void SetPersistent(render::DiskCache* persistent) { persistent_ = persistent; }
+    [[nodiscard]] render::DiskCache* persistent() const { return persistent_; }
+
 private:
     struct Entry {
         CacheKey key;
@@ -138,6 +147,7 @@ private:
     std::unordered_map<CacheKey, Entry, CacheKeyHash> entries_;
     std::unordered_map<TileHandle, CacheKey> keys_;
     std::list<TileHandle> recency_;  ///< Most recently used first.
+    render::DiskCache* persistent_ = nullptr;
 };
 
 }  // namespace uzp::evaluator

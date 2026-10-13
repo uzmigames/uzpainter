@@ -2,8 +2,8 @@
 display transform and environment precomputation, and its regression goldens.
 
 Every case runs `uzp-preview-tests.exe` (`tests/preview/preview_test.cpp`). `display`,
-`environment` and `latest` run anywhere; the viewport cases render on a DX12 device and skip under
-`UZP_NO_GPU=1` (hosted CI, decision 028) or when no adapter is present.
+`environment`, `lighting-cache` and `latest` run anywhere; the viewport cases render on a DX12
+device and skip under `UZP_NO_GPU=1` (hosted CI, decision 028) or when no adapter is present.
 
 The regression goldens (`tests/preview/viewport-goldens.json`) are UzPainter-vs-UzPainter: exact
 for a fixed (viewport kernel, adapter, driver) key, a repeatability check and never a tier result
@@ -48,6 +48,22 @@ def test_environment_precomputation(preview_tests: Path) -> None:
         "every prefiltered level of a uniform environment is that radiance",
         "a mirror (roughness 0) reflects everything: A + B = 1",
         "the precomputation is repeatable bit for bit",
+    } <= passed
+
+
+def test_environment_lighting_persists_bit_for_bit(preview_tests: Path, tmp_path: Path) -> None:
+    """decision 253: the persistent environment lighting (`LightingOf`) is precomputed bit for
+    bit and stored cold, served warm without decoding the file, and never served from a damaged
+    entry or under other MXCSR control bits (CPU)."""
+    passed, _ = run_case(preview_tests, "lighting-cache", str(tmp_path))
+    assert {
+        "without the caches the lighting is precomputed and nothing is stored",
+        "cold: the lighting is precomputed bit for bit",
+        "cold: one entry is stored in the lighting area",
+        "warm: the stored lighting is served bit for bit without decoding the environment file",
+        "a damaged entry is not served (the file is decoded again), then recomputed bit for bit, "
+        "stored and served",
+        "under other MXCSR control bits the stored lighting is not served",
     } <= passed
 
 

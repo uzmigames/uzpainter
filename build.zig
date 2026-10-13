@@ -250,6 +250,7 @@ const render_sources = [_][]const u8{
     "render/capabilities.cpp",
     "render/device.cpp",
     "render/dilation.cpp",
+    "render/disk_cache.cpp",
     "render/engine_thread.cpp",
     "render/image_pass.cpp",
     "render/kernel_cache.cpp",
@@ -362,6 +363,7 @@ const evaluator_sources = [_][]const u8{
     "evaluator/kernelgen.cpp",
     "evaluator/profile.cpp",
     "evaluator/projection_uv.cpp",
+    "evaluator/result_cache.cpp",
     "evaluator/sources.cpp",
     "evaluator/support.cpp",
     "evaluator/templates.cpp",
@@ -708,19 +710,21 @@ pub fn build(b: *std.Build) void {
         .exclude_extensions = &cpython_package_excluded,
     }).step);
     painter_step.dependOn(&b.addInstallBinFile(b.path(cpython_pth_file), "python313._pth").step);
-    painter_step.dependOn(&b.addInstallDirectory(.{
+    const facade_install = b.addInstallDirectory(.{
         .source_dir = b.path(facade_dir),
         .install_dir = .bin,
         .install_subdir = "python",
         .include_extensions = &facade_included,
-    }).step);
-    painter_step.dependOn(&InstallWheels.create(b, b.path(wheels_dir), "Lib/site-packages").step);
+    });
+    painter_step.dependOn(&facade_install.step);
+    const wheels_install = InstallWheels.create(b, b.path(wheels_dir), "Lib/site-packages");
+    painter_step.dependOn(&wheels_install.step);
 
     // ── Capability manifest (docs/architecture/10-python-api.md §3) ───────────────────────────
 
     // The generator reads the Tier 0 manifests and the architecture headings it cites, which a
     // directory argument does not hash, so it runs on every build (it takes well under a second).
-    const python = b.option([]const u8, "python", "Python 3.13 that runs the capability manifest generator (default: python on PATH)") orelse "python";
+    const python = b.option([]const u8, "python", "Python 3.13 that runs the capability manifest generator and compiles the installed bytecode (default: python on PATH)") orelse "python";
     const capabilities_run = b.addSystemCommand(&.{ python, "-I" });
     capabilities_run.setName("generate capabilities.json");
     capabilities_run.addFileArg(b.path("tools/capabilities/generate_capabilities.py"));
@@ -744,6 +748,24 @@ pub fn build(b: *std.Build) void {
     const capabilities_step = b.step("capabilities", "Generate the capability manifest bin/capabilities.json");
     capabilities_step.dependOn(&b.addInstallBinFile(capabilities_json, "capabilities.json").step);
     painter_step.dependOn(capabilities_step);
+
+    // ── Bytecode of the installed Python (decision 253) ───────────────────────────────────────
+
+    // Checked-hash `.pyc` files beside the installed facade and wheels, so no process compiles
+    // them again (the MCP SDK took 0.8 s to compile on every supervisor start). The interpreter
+    // checks each against its source's hash on import and compiles a changed source in memory, as
+    // it does without bytecode (`write_bytecode` stays 0: nothing is written at run time). They
+    // are named for the build's Python (`<module>.cpython-313.pyc` for 3.13, the embedded
+    // interpreter's tag); another version's files are never read by it. The wheels' folder is
+    // unpacked anew by every build, so this runs on every build too (about a second).
+    const bytecode = b.addSystemCommand(&.{ python, "-I", "-m", "compileall", "-q", "-j", "0", "--invalidation-mode", "checked-hash" });
+    bytecode.setName("compile the bytecode of bin/python and bin/Lib/site-packages");
+    bytecode.addArg(b.getInstallPath(.bin, "python"));
+    bytecode.addArg(b.getInstallPath(.bin, "Lib/site-packages"));
+    bytecode.has_side_effects = true;
+    bytecode.step.dependOn(&facade_install.step);
+    bytecode.step.dependOn(&wheels_install.step);
+    painter_step.dependOn(&bytecode.step);
     b.getInstallStep().dependOn(painter_step);
 
     // ── Native tests of the probe decisions (src/selftest/probe_report.h) ─────────────────────

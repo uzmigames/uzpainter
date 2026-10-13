@@ -5,8 +5,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <numbers>
+#include <optional>
+#include <span>
 
+#include "render/disk_cache.h"
 #include "tinyexr.h"
+#include "uzp_core/manifest/sha256.h"
 
 namespace uzp::preview {
 
@@ -196,7 +200,95 @@ std::expected<EnvironmentImage, std::string> DecodeHdr(std::string_view bytes) {
     return Checked(std::move(image));
 }
 
+// ── Persistent lighting (decision 253) ───────────────────────────────────────
+
+/// The cap of the `lighting` area (an entry is about 2 MiB).
+constexpr uint64_t kLightingCacheBytes = 256ull << 20;
+
+render::CacheKey LightingKey(std::string_view sha256) {
+    const std::string text = "uzp-lighting 1; " + render::BuildFingerprint() + "; mxcsr " +
+                             std::to_string(render::FloatControlBits()) + "; environment " + std::string(sha256) +
+                             "; levels " + std::to_string(kRadianceLevels) + " width " + std::to_string(kRadianceWidth) +
+                             " prefilter " + std::to_string(kPrefilterSamples) + " brdf " +
+                             std::to_string(kBrdfTableSize) + " samples " + std::to_string(kBrdfSamples);
+    core::Sha256 hash;
+    hash.Update(text);
+    return hash.Finish();
+}
+
+/// The payload of `PrecomputeLighting`'s result: the SH coefficients, each level's width, height,
+/// roughness and texels, the albedo table; 32-bit little-endian words.
+constexpr uint64_t LightingBytes() {
+    uint64_t floats = 27 + uint64_t{kBrdfTableSize} * kBrdfTableSize * 3;
+    for (uint32_t l = 0; l < kRadianceLevels; ++l) {
+        floats += 3 + uint64_t{kRadianceWidth >> l} * (kRadianceWidth >> (l + 1)) * 3;
+    }
+    return floats * 4;
+}
+
+std::vector<std::byte> SerializeLighting(const EnvironmentLighting& lighting) {
+    std::vector<std::byte> out;
+    out.reserve(static_cast<size_t>(LightingBytes()));
+    auto write = [&](const void* data, size_t bytes) {
+        const auto* first = static_cast<const std::byte*>(data);
+        out.insert(out.end(), first, first + bytes);
+    };
+    write(lighting.sh.data(), sizeof(lighting.sh));
+    for (const RadianceLevel& level : lighting.radiance) {
+        write(&level.width, 4);
+        write(&level.height, 4);
+        write(&level.roughness, 4);
+        write(level.rgb.data(), level.rgb.size() * sizeof(float));
+    }
+    write(lighting.brdf.data(), lighting.brdf.size() * sizeof(float));
+    return out;
+}
+
+/// The lighting of a payload `SerializeLighting` wrote; nullopt when its shape is not the
+/// constants' (the key covers them, so only a damaged entry can differ).
+std::optional<EnvironmentLighting> DeserializeLighting(std::span<const std::byte> payload) {
+    size_t offset = 0;
+    auto read = [&](void* data, size_t bytes) {
+        if (offset + bytes > payload.size()) return false;
+        std::memcpy(data, payload.data() + offset, bytes);
+        offset += bytes;
+        return true;
+    };
+    EnvironmentLighting lighting;
+    if (!read(lighting.sh.data(), sizeof(lighting.sh))) return std::nullopt;
+    for (uint32_t l = 0; l < kRadianceLevels; ++l) {
+        RadianceLevel level;
+        if (!read(&level.width, 4) || !read(&level.height, 4) || !read(&level.roughness, 4) ||
+            level.width != kRadianceWidth >> l || level.height != kRadianceWidth >> (l + 1)) {
+            return std::nullopt;
+        }
+        level.rgb.resize(size_t{level.width} * level.height * 3);
+        if (!read(level.rgb.data(), level.rgb.size() * sizeof(float))) return std::nullopt;
+        lighting.radiance.push_back(std::move(level));
+    }
+    lighting.brdf.resize(size_t{kBrdfTableSize} * kBrdfTableSize * 3);
+    if (!read(lighting.brdf.data(), lighting.brdf.size() * sizeof(float)) || offset != payload.size()) {
+        return std::nullopt;
+    }
+    return lighting;
+}
+
 }  // namespace
+
+std::expected<EnvironmentLighting, std::string> LightingOf(std::string_view sha256, std::string_view bytes) {
+    render::DiskCache* disk = render::CacheArea("lighting", kLightingCacheBytes);
+    const render::CacheKey key = disk != nullptr ? LightingKey(sha256) : render::CacheKey{};
+    if (disk != nullptr) {
+        if (std::optional<std::vector<std::byte>> payload = disk->Get(key, LightingBytes())) {
+            if (std::optional<EnvironmentLighting> stored = DeserializeLighting(*payload)) return std::move(*stored);
+        }
+    }
+    std::expected<EnvironmentImage, std::string> image = DecodeEnvironment(bytes);
+    if (!image) return std::unexpected(image.error());
+    EnvironmentLighting lighting = PrecomputeLighting(*image);
+    if (disk != nullptr) disk->Put(key, SerializeLighting(lighting));
+    return lighting;
+}
 
 std::expected<EnvironmentImage, std::string> DecodeEnvironment(std::string_view bytes) {
     if (bytes.size() >= 4 && static_cast<uint8_t>(bytes[0]) == 0x76 && static_cast<uint8_t>(bytes[1]) == 0x2F &&

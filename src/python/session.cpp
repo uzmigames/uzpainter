@@ -297,7 +297,11 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
 void Session::Open(const std::filesystem::path& path, bool untitled) {
     if (IsOpen()) ThrowProjectError("a project is already open");
     if (!std::filesystem::exists(path)) ThrowProjectError("cannot open " + Utf8(path) + ": no such file");
-    store::ProjectStore::Opened opened = store::ProjectStore::Open(path);
+    // The session never reads the integrity report: building it hashed every retained manifest on
+    // every open (decision 253). `inspect --verify`, `export` and the census still build it.
+    store::OpenOptions options;
+    options.report = false;
+    store::ProjectStore::Opened opened = store::ProjectStore::Open(path, options);
     auto project = std::make_shared<OpenProject>();
     project->store = std::move(opened.store);
     project->document = std::make_unique<core::Document>(std::move(opened.state));

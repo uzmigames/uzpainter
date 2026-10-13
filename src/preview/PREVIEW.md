@@ -34,6 +34,8 @@ The environment is equirectangular, with row 0 at +Y. It uses the direction mapp
   - `A` and `B` of the split sum, with the height-correlated Smith masking (Heitz 2014) and Schlick's Fresnel;
   - `D`, the albedo of Burley's diffuse lobe (2012).
 
+`LightingOf` keeps the result across processes in the `lighting` area of the persistent caches (`src/render/disk_cache.h`, decision 253), keyed by the environment file's SHA-256 (of bytes the caller checked against it), the sampling constants, the build fingerprint and the MXCSR control bits; every float is stored bit for bit, and a hit skips the decode as well. Rotation and exposure apply at shading time, so they are not part of the key. It saves 1.0-1.3 s of every capture and preview start (`uzp-preview-tests lighting-cache`).
+
 ## Pass (item 2.2)
 
 One compute dispatch per frame on the render layer (`src/render/`):

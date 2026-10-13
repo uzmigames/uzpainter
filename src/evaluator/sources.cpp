@@ -166,6 +166,15 @@ std::shared_ptr<const DecodedImage> DecodingResourceProvider::Fetch(std::string_
     return image;
 }
 
+bool DecodingResourceProvider::Available(std::string_view sha256) const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_cache.contains(sha256) || m_available.contains(sha256)) return true;
+    std::optional<std::string> bytes = m_fetch ? m_fetch(sha256) : std::nullopt;
+    if (!bytes || core::Sha256Hex(*bytes) != sha256) return false;
+    m_available.emplace(sha256);
+    return true;
+}
+
 size_t DecodingResourceProvider::Decodes() const {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_decodes;
