@@ -405,6 +405,29 @@ def test_export_mesh_and_render_families(
     assert int.from_bytes(data[16:20], "big") == image["width"]
 
 
+def test_an_export_release_gap_is_a_capability_gap(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """phase2.9 (decision 192): an export setting the native code refuses before writing
+    (`NotYetSupported`: dithering at PNG 8 bits is not fitted) fails `capability_gap {tool, type,
+    reason}` like every typed tool's release gap, not a `RuntimeError`; nothing is written."""
+    session, revision = opened(painter, tmp_path, sessions)
+    out = tmp_path / "out" / "dithered"
+    config = {
+        "exportPath": str(out),
+        "defaultExportPreset": "assets3d-inline-five-map",
+        "exportList": [{"rootPath": "uzp_plane"}],
+        "exportParameters": [{"parameters": {"bitDepth": "8", "dithering": True}}],
+    }
+    refused = session.call("export", {"config": config, "wait": True})
+    assert refused["error"]["code"] == "capability_gap", refused
+    details = refused["error"]["details"]
+    assert details["tool"] == "export" and details["type"] == "NotYetSupported"
+    assert "not fitted" in details["reason"]
+    assert not out.exists() or not any(out.rglob("*.png"))
+    assert revision_of(session) == revision
+
+
 # ── 3.2 LAY-06 ──────────────────────────────────────────────────────────────────────────────────
 
 

@@ -610,6 +610,131 @@ def test_manifest_command_writes_the_generated_manifest(assets: Path, tmp_path: 
     assert load_script_job(out, assets).golden_id == "phase1/tier1/wand-v1"
 
 
+# --- the Belt v5 request (phase2.9 item 2.1; decision 192) -----------------------------------
+
+BELT = "_tmp/claude/cintura-v5"
+BELT_MESH = "_tmp/claude/cintura-v5/lows/23-Cinto-v5-low.obj"
+BELT_STACK = {
+    "title": "stand-in belt",
+    "groups": [
+        {"key": "leather", "name": "Couro", "mask": None},
+        {"key": "brass", "name": "Latao", "mask": "M_metal"},
+    ],
+    "layers": [
+        {"id": "L01", "group": "leather", "name": "Base", "mask": None, "base_tex": "T_belt"},
+        {"id": "L02", "group": "leather", "name": "Grain", "mask": "M_grain", "base": [60, 45, 36]},
+        {"id": "B01", "group": "brass", "name": "Base", "mask": None, "base_tex": "T_belt"},
+    ],
+}
+
+
+def make_belt_assets(root: Path) -> Path:
+    """A stand-in Assets3D at the waist-v5 round's layout: the committed scripts and stack, and the
+    round folder whose arguments file names the mesh, normal and AO; the layer-stack script's route
+    guard imports `locate` from `Pipeline/production/run.py` (Assets3D c6b74c2)."""
+    write(root / "AGENTS.md", "stand-in asset repository\n")
+    windows = str(root).replace("/", "\\")
+    scripts = root / "Pipeline/retopology/waist-v5"
+    write(
+        scripts / "painter_create.py",
+        CREATE.replace("__ARGS__", str(root / BELT / "painter_create_args.json")),
+    )
+    write(
+        scripts / "painter_export.py",
+        EXPORT.replace("__ARGS__", str(root / BELT / "painter_export_args.json")),
+    )
+    write(scripts / "stack-belt.json", json.dumps(BELT_STACK))
+    stack_script = LAYER_STACK.replace('"Pipeline/qa"', '"Pipeline/production"').replace(
+        "from route_check import locate", "from run import locate"
+    )
+    write(root / "Pipeline/painting/painter_layer_stack.py", stack_script)
+    write(root / "Pipeline/production/run.py", ROUTE_CHECK)
+    write(root / BELT_MESH, "mtllib 23-Cinto-v5-low.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n")
+    write(root / BELT / "lows/23-Cinto-v5-low.mtl", "newmtl 23-Cinto\n")
+    write(root / BELT / "bake/23-Cinto_Normal_OpenGL_v5.png", b"normal")
+    write(root / BELT / "bake/23-Cinto_AO_v5.png", b"ao")
+    for name in ("M_metal", "M_grain", "T_belt"):
+        write(root / BELT / "paint/masks-belt" / f"{name}.png", name.encode("ascii"))
+    tmp = windows + r"\_tmp\claude\cintura-v5"
+    arguments = {
+        "mesh": tmp + r"\lows\23-Cinto-v5-low.obj",
+        "normal": tmp + r"\bake\23-Cinto_Normal_OpenGL_v5.png",
+        "ao": tmp + r"\bake\23-Cinto_AO_v5.png",
+        "dst": windows + r"\Creatures\Undead\Skeletal Mage\Models3D\23-Cinto\23-Cinto-v5.spp",
+        "name": "23-Cinto",
+    }
+    write(root / BELT / "painter_create_args.json", json.dumps(arguments))
+    export = {"out": tmp + r"\paint\tex-belt-r10", "prefix": "23-Cinto_v5r10"}
+    write(root / BELT / "painter_export_args.json", json.dumps(export))
+    return root
+
+
+def test_belt_manifest_pins_the_files_the_round_names(tmp_path: Path) -> None:
+    """The mesh, its material library (the OBJ's `mtllib`), the normal and the AO are the files
+    the round's arguments file names; the stack is the committed one, its bitmaps (masks and the
+    base_tex colour bitmap) come from the round's masks folder, and the sync imports `run`."""
+    assets = make_belt_assets(tmp_path / "assets3d")
+    manifest = script_run.belt_manifest(assets)
+    assert validation_errors(manifest, Schema.GOLDEN_PUBLIC) == []
+    assert manifest["golden_id"] == "phase2/tier1/belt-v5"
+    assert manifest["domain"] == "tier1/pilot/belt-v5"
+    paths = {item["input_id"]: item["assets3d_path"] for item in manifest["inputs"]}
+    assert paths["belt-mesh"] == BELT_MESH
+    assert paths["belt-mesh-mtl"] == f"{BELT}/lows/23-Cinto-v5-low.mtl"
+    assert paths["belt-ao"] == f"{BELT}/bake/23-Cinto_AO_v5.png"
+    assert paths["belt-stack"] == "Pipeline/retopology/waist-v5/stack-belt.json"
+    assert paths["production-run-py"] == "Pipeline/production/run.py"
+    sync = manifest["instruction_sequence"]["steps"][1]["args"]
+    assert sync["mask_files"] == ["M_grain.png", "M_metal.png", "T_belt.png"]
+    assert sync["imports"] == ["production-run-py"]
+    kinds = {item["input_id"]: item["kind"] for item in manifest["inputs"]}
+    assert kinds["mask-t_belt"] == "image" and kinds["mask-m_metal"] == "mask"
+    job = script_job_from_manifest(manifest, assets)
+    assert job.sync.imports[0].module == "run"
+
+
+def test_belt_manifest_lists_every_missing_input(tmp_path: Path, capsys: Any) -> None:
+    """Refused, writing nothing, with every missing path listed as JSON (a restore is checked
+    file by file); without the arguments file its mesh, normal and AO cannot be named."""
+    assets = make_belt_assets(tmp_path / "assets3d")
+    (assets / BELT / "paint/masks-belt/T_belt.png").unlink()
+    (assets / BELT / "bake/23-Cinto_AO_v5.png").unlink()
+    with pytest.raises(script_run.MissingInputs) as refused:
+        script_run.belt_manifest(assets)
+    assert refused.value.missing == [
+        f"{BELT}/bake/23-Cinto_AO_v5.png",
+        f"{BELT}/paint/masks-belt/T_belt.png",
+    ]
+    (assets / BELT / "painter_create_args.json").unlink()
+    out = tmp_path / "out" / "belt-v5.json"
+    command = ["manifest", "--pilot", "belt", "--assets-root", str(assets), "--out", str(out)]
+    assert script_run.main(command) == 2
+    assert not out.exists()
+    printed = capsys.readouterr().err
+    listed = json.loads(printed[printed.index("{") :])["missing"]
+    assert listed == [f"{BELT}/paint/masks-belt/T_belt.png", f"{BELT}/painter_create_args.json"]
+
+
+def test_manifest_command_stores_every_pinned_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--store` puts every pinned input in the private store (decision 144) and re-resolves it,
+    so the request outlives Assets3D `_tmp`: the job then loads with the round folder gone."""
+    assets = make_belt_assets(tmp_path / "assets3d")
+    store = OracleStore.init(tmp_path / "store")
+    monkeypatch.setenv(STORE_ENV, str(store.root))
+    out = tmp_path / "out" / "belt-v5.json"
+    command = ["manifest", "--pilot", "belt", "--assets-root", str(assets), "--out", str(out)]
+    assert script_run.main([*command, "--store"]) == 0
+    manifest = load_json(out)
+    for item in manifest["inputs"]:
+        assert store.resolve(item["input_id"], item["sha256"]).path is not None
+    for path in sorted((assets / BELT).rglob("*"), reverse=True):
+        path.unlink() if path.is_file() else path.rmdir()
+    job = load_script_job(out, assets, store)
+    assert job.inputs["mask-t_belt"].file.is_relative_to(store.root)
+
+
 # --- the committed manifest against the real asset repository --------------------------------
 
 

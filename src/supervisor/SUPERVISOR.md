@@ -261,7 +261,7 @@ The typed families of 11 §2 (`typed_tools.{h,cpp}`; task phase2.6, decision 164
 - They run the edits the `uzpainter` API runs (`src/python/edits.{h,cpp}`), so the API and MCP behave the same.
 - Setters address nodes by `uid`. Stack-level calls take `texture_set` and `stack` names, the active stack when omitted.
 - Inserts take at most one of `above`, `below` and `inside`, or the top of the stack. With a `name`, the node of that name and kind in the target list is used instead (`returned.created: false`, `no_op`). Several such nodes fail `ambiguous_name {candidates}` before mutation (LAY-06). `params` sets the matching setter's fields in the same transaction, on a found node too.
-- A release gap the native code meets (`NotYetSupported` and its kin) is `capability_gap`.
+- A release gap the native code meets (`NotYetSupported` and its kin) is `capability_gap`. So is one a worker tool's long job meets, such as an `export` setting UzPainter refuses before writing: `capability_gap {tool, type: "NotYetSupported", reason}` (decision 192).
 
 | Family | Tools |
 |---|---|

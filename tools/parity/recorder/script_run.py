@@ -1,7 +1,8 @@
 r"""Tier 1 goldens from UzmiGames pipeline scripts run byte-unchanged in Painter (decision 099).
 
     python -m tools.parity.recorder record-script <manifest.json> --assets-root <Assets3D>
-    python -m tools.parity.recorder.script_run manifest --assets-root <Assets3D> --out <path>
+    python -m tools.parity.recorder.script_run manifest --assets-root <Assets3D> --out <path> \
+        [--pilot wand|belt] [--store]
 
 The manifest's `instruction_sequence.interface` is `uzmigames_pipeline_scripts`: every step is one
 script run (`uzmigames.pipeline.run_script`), and its inputs live in the UzmiGames asset
@@ -30,8 +31,9 @@ b. **Transport swap.** The sync script's own `execute(code, token=None)` is repl
    recorder's remote control with the same contract (run the code in Painter, return the `result`
    it assigns), so the Painter-side code the script builds is the script's own. Its route guard
    (Assets3D `9a718b9`, decision 144) sends its own probe (`GUARD_CODE`) through the same function
-   before the sync; the modules the script imports from Assets3D (`route_check`) are pinned
-   inputs named by the sync step's `imports` and loaded from their pinned bytes for the run. The
+   before the sync; the modules the script imports from Assets3D (`route_check`; `run` since
+   Assets3D c6b74c2) are pinned inputs named by the sync step's `imports` and loaded from their
+   pinned bytes for the run. The
    project lies in the private work directory, outside a production character's folder, so the
    guard passes without an attempt token; any other verdict is refused.
 
@@ -766,35 +768,25 @@ def assets3d_input(input_id: str, kind: str, path: str, assets_root: Path) -> di
     }
 
 
-def wand_manifest(assets_root: Path) -> dict[str, Any]:
-    """The R9 manifest, hashing the current Assets3D files (`--assets-root`)."""
-    stack = json.loads((assets_root / WAND_STACK).read_bytes().decode("utf-8"))
-    bitmaps = sorted(stack_bitmaps(stack))
-    inputs = [assets3d_input(i, k, p, assets_root) for i, k, p in WAND_INPUTS]
-    masks = [
-        assets3d_input(
-            f"mask-{name.lower()}",
-            "mask" if name.startswith("M_") else "image",
-            f"{WAND_MASKS}/{name}.png",
-            assets_root,
-        )
-        for name in bitmaps
-    ]
-    create = {
-        "script": "painter-create-py",
-        "args_file": "painter-create-args",
-        "mesh": "wand-mesh",
-        "mesh_material_library": "wand-mesh-mtl",
-        "normal": "wand-normal",
-        "ao": "wand-ao",
-    }
+def script_manifest(
+    golden_id: str,
+    description: str,
+    inputs: list[dict[str, Any]],
+    masks: list[dict[str, Any]],
+    create: dict[str, str],
+    stack: str,
+    imports: list[str],
+    assets_root: Path,
+) -> dict[str, Any]:
+    """A pipeline-script manifest (create, sync, export) over hashed inputs; validated against the
+    schema and loaded as a job over `assets_root` before it is returned."""
     manifest: dict[str, Any] = {
         "schema": "uzpainter/parity/golden-public/1",
         "record_class": "public_manifest",
-        "golden_id": "phase1/tier1/wand-v1",
+        "golden_id": golden_id,
         "tier": "1",
-        "domain": "tier1/pilot/wand-v1",
-        "description": WAND_DESCRIPTION,
+        "domain": "tier1/pilot/" + golden_id.rsplit("/", 1)[-1],
+        "description": description,
         "inputs": inputs + masks,
         "instruction_sequence": {
             "author": "UzmiGames",
@@ -807,10 +799,10 @@ def wand_manifest(assets_root: Path) -> dict[str, Any]:
                     "args": {
                         "script": "painter-layer-stack-py",
                         "command": SYNC_COMMAND,
-                        "stack": "wand-stack",
+                        "stack": stack,
                         "masks": [m["input_id"] for m in masks],
-                        "mask_files": [f"{name}.png" for name in bitmaps],
-                        "imports": ["route-check-py"],
+                        "mask_files": [PurePosixPath(m["assets3d_path"]).name for m in masks],
+                        "imports": imports,
                     },
                 },
                 {
@@ -836,20 +828,229 @@ def wand_manifest(assets_root: Path) -> dict[str, Any]:
     }
     problems = validation_errors(manifest, Schema.GOLDEN_PUBLIC)
     if problems:
-        raise RecorderError(f"the wand manifest is invalid: {problems}")
+        raise RecorderError(f"the {golden_id} manifest is invalid: {problems}")
     script_job_from_manifest(manifest, assets_root)
     return manifest
+
+
+def mask_inputs(folder: str, bitmaps: Sequence[str], assets_root: Path) -> list[dict[str, Any]]:
+    """One input per bitmap the stack names: `M_*` a mask, anything else (`T_*`) a colour image."""
+    return [
+        assets3d_input(
+            f"mask-{name.lower()}",
+            "mask" if name.startswith("M_") else "image",
+            f"{folder}/{name}.png",
+            assets_root,
+        )
+        for name in bitmaps
+    ]
+
+
+def wand_manifest(assets_root: Path) -> dict[str, Any]:
+    """The R9 manifest, hashing the current Assets3D files (`--assets-root`)."""
+    stack = json.loads((assets_root / WAND_STACK).read_bytes().decode("utf-8"))
+    bitmaps = sorted(stack_bitmaps(stack))
+    inputs = [assets3d_input(i, k, p, assets_root) for i, k, p in WAND_INPUTS]
+    create = {
+        "script": "painter-create-py",
+        "args_file": "painter-create-args",
+        "mesh": "wand-mesh",
+        "mesh_material_library": "wand-mesh-mtl",
+        "normal": "wand-normal",
+        "ao": "wand-ao",
+    }
+    return script_manifest(
+        "phase1/tier1/wand-v1",
+        WAND_DESCRIPTION,
+        inputs,
+        mask_inputs(WAND_MASKS, bitmaps, assets_root),
+        create,
+        "wand-stack",
+        ["route-check-py"],
+        assets_root,
+    )
+
+
+# --- The Belt v5 request (phase2/tier1/belt-v5; phase2.9, decision 192) -------------------------
+
+# The round folder of `Pipeline/retopology/waist-v5/` (its README: the folder is copied to
+# `_tmp/claude/cintura-v5/`, the path the two Painter-side scripts hard-code) and the committed
+# files the round runs. Assets3D's committed pipeline at c6b74c2: the layer-stack route guard
+# imports `locate` from `Pipeline/production/run.py`.
+BELT = "_tmp/claude/cintura-v5"
+BELT_SCRIPTS = "Pipeline/retopology/waist-v5"
+BELT_INPUTS: tuple[tuple[str, str, str], ...] = (
+    ("painter-create-py", "pipeline_script", f"{BELT_SCRIPTS}/painter_create.py"),
+    ("painter-layer-stack-py", "pipeline_script", "Pipeline/painting/painter_layer_stack.py"),
+    ("production-run-py", "pipeline_script", "Pipeline/production/run.py"),
+    ("painter-export-py", "pipeline_script", f"{BELT_SCRIPTS}/painter_export.py"),
+    ("painter-create-args", "recipe_json", f"{BELT}/painter_create_args.json"),
+    ("painter-export-args", "recipe_json", f"{BELT}/painter_export_args.json"),
+    ("belt-stack", "recipe_json", f"{BELT_SCRIPTS}/stack-belt.json"),
+)
+BELT_MASKS = f"{BELT}/paint/masks-belt"  # round.sh: waist_masks.py belt --out paint/masks-belt
+BELT_STACK = f"{BELT_SCRIPTS}/stack-belt.json"
+
+BELT_DESCRIPTION = (
+    "Tier 1 pilot golden of the UzmiGames belt 23-Cinto v5 of the Skeletal Mage (phase2.9 items "
+    "2.1, 2.2, 3.1; decisions 099, 144 and 192). The waist-v5 round of the UzmiGames pipeline runs "
+    "byte-unchanged in Painter, each script pinned by SHA-256, through Painter's documented remote "
+    "control (never the community MCP bridge): painter_create.py (a new project from the low-poly "
+    "OBJ under OCIO with Painter's substance config, OpenGL normals, 2048 px, no cameras; imports "
+    "the Normal and AO mesh maps; save_as Full), painter_layer_stack.py sync (stack-belt.json: the "
+    "leather and brass groups, 19 fills, the bitmap masks and the base_tex colour bitmap T_belt "
+    "filled in final-UV space) and painter_export.py (BaseColor, Roughness, Metallic, Height and "
+    "Normal_OpenGL as 16-bit PNG, sizeLog2 11, infinite padding, no dithering). The two "
+    "adaptations of the wand golden (decision 099) apply unchanged: the arguments files are "
+    "repointed at staged copies, and the sync command's remote-execution function is the "
+    "recorder's remote control. Its route guard (Assets3D c6b74c2) imports locate from "
+    "Pipeline/production/run.py, pinned here and loaded from its pinned bytes; the project lies in "
+    "the private work directory, outside a production character's folder, so the guard passes "
+    "with no attempt token. The mesh, normal and AO are the files the round's arguments file "
+    "names. Recordings: r1 (same session: create, sync, export), r1-repeat (same session, export "
+    "again) and r2 (after save, close and reopen, export again). Recorded on Painter 12.1.5."
+)
+
+
+class MissingInputs(RecorderError):
+    """Inputs a manifest must pin that are not under the asset repository: `missing` lists their
+    Assets3D paths, so a restore can be checked file by file."""
+
+    def __init__(self, golden_id: str, missing: Sequence[str]) -> None:
+        self.missing = sorted(set(missing))
+        super().__init__(f"{golden_id}: {len(self.missing)} input(s) missing: {self.missing}")
+
+
+def assets3d_relative(value: str, assets_root: Path) -> str | None:
+    """The Assets3D-relative path of an absolute path an arguments file names, or None outside."""
+    written = PureWindowsPath(value)
+    root = PureWindowsPath(str(assets_root))
+    head = [part.lower() for part in written.parts[: len(root.parts)]]
+    if not written.is_absolute() or head != [part.lower() for part in root.parts]:
+        return None
+    return "/".join(written.parts[len(root.parts) :])
+
+
+def material_library(obj: Path) -> str | None:
+    """The file name the OBJ's `mtllib` statement names (next to the OBJ), or None."""
+    for line in obj.read_bytes().decode("utf-8", "replace").splitlines():
+        words = line.split(maxsplit=1)
+        if len(words) == 2 and words[0] == "mtllib":
+            return PureWindowsPath(words[1].strip()).name
+    return None
+
+
+def belt_create_inputs(assets_root: Path, missing: list[str]) -> list[tuple[str, str, str]]:
+    """The mesh, its material library, the normal and the AO the round's arguments file names;
+    every file not there is added to `missing`."""
+    args_path = f"{BELT}/painter_create_args.json"
+    file = assets_root / args_path
+    if not file.is_file():
+        return []  # listed missing with the other fixed inputs
+    arguments = json.loads(file.read_bytes().decode("utf-8"))
+    found: list[tuple[str, str, str]] = []
+    for key, input_id, kind in (
+        ("mesh", "belt-mesh", "mesh"),
+        ("normal", "belt-normal", "image"),
+        ("ao", "belt-ao", "image"),
+    ):
+        relative = assets3d_relative(str(arguments.get(key, "")), assets_root)
+        if relative is None:
+            raise RecorderError(
+                f"{args_path}: `{key}` ({arguments.get(key)!r}) is not a path under the asset "
+                "repository"
+            )
+        found.append((input_id, kind, relative))
+        if not (assets_root / relative).is_file():
+            missing.append(relative)
+        elif key == "mesh":
+            library = material_library(assets_root / relative)
+            if library is None:
+                raise RecorderError(f"{relative} names no material library (`mtllib`)")
+            mtl = str(PurePosixPath(relative).with_name(library))
+            found.append(("belt-mesh-mtl", "mesh", mtl))
+            if not (assets_root / mtl).is_file():
+                missing.append(mtl)
+    return found
+
+
+def belt_manifest(assets_root: Path) -> dict[str, Any]:
+    """The Belt v5 request, hashing the current Assets3D files (`--assets-root`); refused with
+    `MissingInputs` naming every file it needs that is not there."""
+    missing = [path for _, _, path in BELT_INPUTS if not (assets_root / path).is_file()]
+    created = belt_create_inputs(assets_root, missing)
+    bitmaps: list[str] = []
+    if (assets_root / BELT_STACK).is_file():
+        stack = json.loads((assets_root / BELT_STACK).read_bytes().decode("utf-8"))
+        bitmaps = sorted(stack_bitmaps(stack))
+        missing += [
+            f"{BELT_MASKS}/{name}.png"
+            for name in bitmaps
+            if not (assets_root / BELT_MASKS / f"{name}.png").is_file()
+        ]
+    if missing:
+        raise MissingInputs("phase2/tier1/belt-v5", missing)
+    inputs = [assets3d_input(i, k, p, assets_root) for i, k, p in BELT_INPUTS + tuple(created)]
+    create = {
+        "script": "painter-create-py",
+        "args_file": "painter-create-args",
+        "mesh": "belt-mesh",
+        "mesh_material_library": "belt-mesh-mtl",
+        "normal": "belt-normal",
+        "ao": "belt-ao",
+    }
+    return script_manifest(
+        "phase2/tier1/belt-v5",
+        BELT_DESCRIPTION,
+        inputs,
+        mask_inputs(BELT_MASKS, bitmaps, assets_root),
+        create,
+        "belt-stack",
+        ["production-run-py"],
+        assets_root,
+    )
+
+
+PILOTS = {"wand": wand_manifest, "belt": belt_manifest}
+
+
+def store_inputs(manifest: dict[str, Any], assets_root: Path, store: OracleStore) -> int:
+    """Every pinned input into the private store (decision 144), each re-resolved by its hash
+    afterwards; the number stored. Refused when a file no longer holds its pinned bytes."""
+    for item in manifest["inputs"]:
+        file = assets_root / item["assets3d_path"]
+        if sha256_file(file) != item["sha256"]:
+            raise RecorderError(f"input {item['input_id']}: {file} changed since it was hashed")
+        store.add_input(file, item["sha256"], item["assets3d_path"])
+        stored = store.resolve(item["input_id"], item["sha256"])
+        if stored.status is not Status.AVAILABLE:
+            raise RecorderError(f"input {item['input_id']}: not stored ({stored.reason})")
+    return len(manifest["inputs"])
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m tools.parity.recorder.script_run")
     commands = parser.add_subparsers(dest="command", required=True)
-    write = commands.add_parser("manifest", help="write the R9 wand manifest (hashes Assets3D)")
+    write = commands.add_parser("manifest", help="write a pilot's manifest (hashes Assets3D)")
     write.add_argument("--assets-root", type=Path, required=True)
     write.add_argument("--out", type=Path, required=True)
+    write.add_argument("--pilot", choices=sorted(PILOTS), default="wand")
+    write.add_argument(
+        "--store", action="store_true", help="also store every pinned input in the private store"
+    )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    root = args.assets_root.resolve()
     try:
-        manifest = wand_manifest(args.assets_root.resolve())
+        manifest = PILOTS[args.pilot](root)
+        if args.store:
+            store = locate()
+            if store is None:
+                raise RecorderError("--store: there is no private store on this machine")
+            print(f"stored {store_inputs(manifest, root, store)} inputs")
+    except MissingInputs as error:
+        print(f"refused: {error}", file=sys.stderr)
+        print(json.dumps({"missing": error.missing}, indent=2), file=sys.stderr)
+        return 2
     except RecorderError as error:
         print(f"refused: {error}", file=sys.stderr)
         return 2
