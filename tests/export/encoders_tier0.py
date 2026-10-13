@@ -513,6 +513,81 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
     return report
 
 
+# The OpenEXR exports of an empty sRGB8 base on a shipped template (decision 168): golden stem,
+# texture set, export steps, and the map of the template's base.
+TEMPLATE_BASE_FILES = (
+    ("export-template-base-unreal-engine", "uzp_plane", (2, 3, 4, 5), "basecolor"),
+    ("export-template-base-openpbr-anisotropy", "uzp_plane", (2, 3, 4, 5), "basecolor"),
+    ("export-template-base-pbr-specular-glossiness", "uzp_plane", (2, 3, 4, 5), "specular"),
+    ("virtual-maps-template-openpbr-coat-float", "s7", (84, 85), "basecolor"),
+    ("virtual-maps-template-pbr-metallic-roughness-alpha-blend-float", "s7", (84, 85), "basecolor"),
+    ("virtual-maps-template-pbr-specular-glossiness-float", "s7", (84, 85), "specular"),
+)
+
+
+def template_bases_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """The empty texture set of each `TEMPLATE_BASE_FILES` golden, on its mesh and its shipped
+    template (no layer: the channel is its template base), written by `WriteExport` at each export
+    step with only the base's map: compared byte for byte with Painter's files of r1, and of r2
+    wherever r2 equals r1 (decision 032). Returns the counts and the differing files or refusals."""
+    needs_store()
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    templates = {
+        document["painter_template"]: document
+        for document in (
+            json.loads(p.read_text(encoding="utf-8")) for p in TEMPLATES_DIR.glob("*.json")
+        )
+        if document["kind"] == "project" and document["painter_template"] is not None
+    }
+    report: dict[str, Any] = {"files": 0, "comparisons": 0, "identical": 0, "problems": []}
+    for stem, texture_set, steps, base_map in TEMPLATE_BASE_FILES:
+        golden = load(locate(), root / f"{stem}.json")
+        manifest = golden.manifest
+        by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
+        create = by_step[1]["args"]
+        template = templates[create["template"]]
+        mesh = next(i["path"] for i in manifest["inputs"] if i["input_id"] == create["mesh"])
+        spec = {
+            "template": template["id"],
+            "resolution": [create["default_texture_resolution"]] * 2,
+            "channels": [{"type": c["type"], "format": c["format"]} for c in template["channels"]],
+            "resources": [],
+            "layers": [],
+            "outputs": [],
+            "name": texture_set,
+            "mesh": str(REPO_ROOT / mesh),
+            "mesh_maps": {},
+            "height_to_normal_method": "Sharp",
+        }
+        for step in steps:
+            raw = by_step[step]
+            work = tmp / stem / str(step)
+            config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                work / "out", [texture_set]
+            )
+            preset = config["exportPresets"][0]
+            preset["maps"] = [m for m in preset["maps"] if m["fileName"].endswith(f"_{base_map}")]
+            result = write_export(exe, spec, work / "spec", config, work / "run")
+            where = f"{stem} {texture_set} step {step}"
+            if "error" in result:
+                report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                continue
+            theirs_r1 = _painter_files(golden, "r1", step, texture_set)
+            theirs_r2 = _painter_files(golden, "r2", step, texture_set)
+            for written in result["written"]:
+                rel = written["relativePath"]
+                report["files"] += 1
+                for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
+                    if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
+                        continue
+                    report["comparisons"] += 1
+                    if written["sha256"] == theirs.get(rel):
+                        report["identical"] += 1
+                    else:
+                        report["problems"].append(f"{where}: {rel} differs from {recording}")
+    return report
+
+
 # export-ocio-encode-legacy: the authored 8-bit sRGB ramp at 1:1 on BaseColor in the sRGB space
 # (s3), in Raw (s4) and in the sRGB space inside a group masked by grey A (s5), exported at PNG 16,
 # PNG 8 and OpenEXR 32f (sources.h).

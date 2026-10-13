@@ -33,16 +33,16 @@
         0.49803921580314636
       ],
       "base_provenance": {
-        "kind": "inferred",
-        "golden_id": "tier0/semantics/base-values-unreal-engine",
-        "record_sha256": "d8354f913116b0f6518a9f293852e34d0a8da89b898c91ae55b9c1da1268aa20",
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-template-base-unreal-engine",
+        "record_sha256": "3cd058dbd32342c4c581a5b608505e5a891f2d209025fcac57f356a0757909f6",
         "map": "uzp_plane/basecolor",
         "export16": [
           48107,
           48107,
           48107
         ],
-        "note": "linear (decision 126): the 16-bit PNG export of the empty channel is the PNG write of the sRGB export encode of float32(127/255) (src/export/encode.h); no OpenEXR export of an empty channel with this code is recorded: float32(127/255) is the value k/255 whose encode writes it (the class of the flat normal's 127/255); every float32 from 0.4980261 to 0.4980471 writes it too"
+        "note": "linear (decision 126): its OpenEXR 32f export of the empty channel holds float32(127/255) in every texel, r1 and r2 (decision 168); its 16-bit PNG export, code 48107 in tier0/semantics/base-values-unreal-engine, is the PNG write of the sRGB export encode of that value (src/export/encode.h)"
       }
     },
     {

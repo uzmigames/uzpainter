@@ -1,0 +1,140 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness",
+  "tier": "0",
+  "domain": "tier0/stack/base-values",
+  "description": "The linear value of an empty sRGB8 base (phase1.25_pilot-wand item 2.6, decision 126): an empty project on the authored plane created with the shipped template templates/ASM - PBR Metallic Roughness.spt; BaseColor and Specular (Painter skips a map the template lacks) at OpenEXR 32f, and at PNG 16 as the control against the recorded base-values code; infinite padding, no dithering, every export step done twice in the session.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256,
+          "template": "templates/ASM - PBR Metallic Roughness.spt"
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/specular:RGB"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/specular:RGB"
+          ],
+          "file_format": "exr",
+          "bit_depth": "32f",
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/specular:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB",
+            "documentMap/specular:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "project.template",
+      "value": "templates/ASM - PBR Metallic Roughness.spt",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.exr.bit_depth",
+      "value": "32f",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.padding",
+      "value": "infinite",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.dithering",
+      "value": false,
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "export.png.bit_depth",
+      "value": 16,
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

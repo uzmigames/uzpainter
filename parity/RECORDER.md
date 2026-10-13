@@ -327,7 +327,7 @@ $exe = "C:\Program Files\Adobe\Adobe Substance 3D Painter\Adobe Substance 3D Pai
    It records `r1` (create, sync, export), `r1-repeat` (export again in the same session) and `r2` (reopen the saved work project, export again). Admit it to `$man/phase1/tier1/wand-v1.json`.
 4. Admit as in 11.1 step 5.
 
-### 11.4 Later Legacy requests (decisions 107, 111, 113, 126, 129, 145; requests by decisions 156, 157)
+### 11.4 Later Legacy requests (decisions 107, 111, 113, 126, 129, 145; requests by decisions 156, 157, 168)
 
 Recorded in a Legacy session as in 11.1 steps 1, 2 and 5, after anything left of 11.1:
 
@@ -337,6 +337,8 @@ $later = @("srgb-bitmap-variants",
   "export-template-base-pbr-specular-glossiness")
 $later += foreach ($m in "r1", "r2", "r15") { foreach ($p in "p0", "p25", "p75") { "export-padding-ramp-$m-$p" } }
 $later += "export-padding-tie-512", "export-padding-tie-2048"
+# Decision 168: the 21 shipped templates whose sRGB8 base is still inferred, one golden each.
+$later += (Get-ChildItem "$req/tier0/semantics/export-template-base-*.json").BaseName
 foreach ($g in $later) {
   python -m tools.parity.recorder record "$req/tier0/semantics/$g.json"
 }

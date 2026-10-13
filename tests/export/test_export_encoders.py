@@ -483,13 +483,15 @@ def test_srgb8_material_channels_are_written_encoded(export_tests: Path, tmp_pat
     assert files_under(out) == {}
 
     document = json.loads((tmp_path / "spec" / "spec.json").read_text(encoding="utf-8"))
-    document["template"] = "unreal-engine"
-    (tmp_path / "spec" / "unreal.json").write_text(json.dumps(document), encoding="utf-8")
+    document["template"] = "blender"
+    (tmp_path / "spec" / "blender.json").write_text(json.dumps(document), encoding="utf-8")
     out = tmp_path / "inferred"
     cfg = config(out)
     for c in cfg["exportPresets"][0]["maps"][0]["channels"]:
         c["srcMapName"] = "basecolor"
-    result = export(export_tests, tmp_path / "spec" / "unreal.json", cfg, tmp_path / "run-inferred")
+    result = export(
+        export_tests, tmp_path / "spec" / "blender.json", cfg, tmp_path / "run-inferred"
+    )
     # An evaluator refusal (`unsupported_source`, NotYetSupported in the Python API, decision 082)
     # before anything is written.
     assert result.get("error") == "Failure", result
@@ -499,7 +501,7 @@ def test_srgb8_material_channels_are_written_encoded(export_tests: Path, tmp_pat
 
 
 def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path: Path) -> None:
-    """2.6 (decision 126): on a template whose BaseColor base is inferred (Unreal Engine), every
+    """2.6 (decision 126): on a template whose BaseColor base is inferred (Blender), every
     export source that reads BaseColor fails its evaluation (`unsupported_source`) before anything
     is written: the documentMap on sRGB8 and on RGB16, and the diagnosticMap sources isolated,
     contribution, regionStats, materialView and materialLeaks of BaseColor (leaks compare the
@@ -536,8 +538,8 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
         ("diagnosticMap", "materialView/BaseColor/501", "RGB"),
         ("diagnosticMap", "materialLeaks/BaseColor/501", "L"),
     ]
-    cases = [(variant("unreal", "unreal-engine"), *src) for src in sources]
-    cases.append((variant("unreal-rgb16", "unreal-engine", "RGB16"), *sources[0]))
+    cases = [(variant("blender", "blender"), *src) for src in sources]
+    cases.append((variant("blender-rgb16", "blender", "RGB16"), *sources[0]))
     for i, (spec_path, kind, source, layout) in enumerate(cases):
         out = tmp_path / f"inferred{i}"
         result = export(
@@ -545,7 +547,7 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
         )
         assert result.get("error") == "Failure", (source, result)
         assert result["message"].startswith("evaluator:unsupported_source"), (source, result)
-        assert "BaseColor in template 'unreal-engine' is inferred" in result["message"], result
+        assert "BaseColor in template 'blender' is inferred" in result["message"], result
         assert files_under(out) == {}, source
     default = variant("default", None)
     for i, (kind, source, layout) in enumerate(sources[1:]):
@@ -685,6 +687,19 @@ def test_srgb8_material_channels_equal_painter_files(export_tests: Path, tmp_pat
     report = encoders_tier0.srgb8_material_written(export_tests, tmp_path)
     assert report["problems"] == [], report["problems"][:10]
     assert report["files"] == 8 * 4 * 3, report
+    assert report["identical"] == report["comparisons"] == 2 * report["files"], report
+
+
+def test_observed_template_bases_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:
+    """2.6 (decision 168): the empty BaseColor or Specular of the five shipped templates whose
+    linear base an OpenEXR 32f export shows (Unreal Engine, OpenPBR - Anisotropy and Coat, PBR -
+    Metallic Roughness Alpha-blend, PBR - Specular Glossiness), written by WriteExport at OpenEXR
+    32f and PNG 16, are byte-identical to Painter's files (r1 and r2)."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.template_bases_written(export_tests, tmp_path)
+    assert report["problems"] == [], report["problems"][:10]
+    assert report["files"] == 3 * 4 + 3 * 2, report
     assert report["identical"] == report["comparisons"] == 2 * report["files"], report
 
 

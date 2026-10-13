@@ -100,16 +100,16 @@
         0.03921568766236305
       ],
       "base_provenance": {
-        "kind": "inferred",
-        "golden_id": "tier0/semantics/base-values-pbr-specular-glossiness",
-        "record_sha256": "95c799726477ca4d694853ca589b9eba005c91e65c9974500038723d77c55f31",
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-template-base-pbr-specular-glossiness",
+        "record_sha256": "094ff0ecbe625a9dd8a2ed7768f40167757eb6eb5776a79976be0e941b52dbe1",
         "map": "uzp_plane/specular",
         "export16": [
           14330,
           14330,
           14330
         ],
-        "note": "linear (decision 126): the 16-bit PNG export of the empty channel is the PNG write of the sRGB export encode of float32(10/255) (src/export/encode.h); this template's OpenEXR export of the empty channel is not recorded: float32(10/255) is the linear value an empty sRGB8 Specular exports to OpenEXR 32f with the same 16-bit code (tier0/semantics/export-bit-depth s3)"
+        "note": "linear (decision 126): its OpenEXR 32f export of the empty channel holds float32(10/255) in every texel, r1 and r2, as does the empty set s7 of tier0/semantics/virtual-maps-template-pbr-specular-glossiness-float (decision 168); its 16-bit PNG export, code 14330 in tier0/semantics/base-values-pbr-specular-glossiness, is the PNG write of the sRGB export encode of that value (src/export/encode.h)"
       }
     }
   ]
