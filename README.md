@@ -1,12 +1,12 @@
 # UzPainter
 
-[![Status](https://img.shields.io/badge/status-phase%200-yellow.svg)](#project-status)
+[![Status](https://img.shields.io/badge/status-phase%201-yellow.svg)](#project-status)
 [![Render core](https://img.shields.io/badge/render%20core-vendored%20from%20UzEngine-blue.svg)](docs/architecture/13-engine-integration.md)
 [![Analyses](https://img.shields.io/badge/analyses-4%20topics-blue.svg)](docs/analysis/)
 
 > **AI-operated texturing tool with a render core vendored from UzEngine — a replacement for Adobe Substance 3D Painter**
 
-UzPainter is a planned texturing tool operated 100% by AI. Agents drive it through a Python API
+UzPainter is a texturing tool, in development, operated 100% by AI. Agents drive it through a Python API
 and a native MCP server; there is no human editing UI, at most a read-only preview window.
 Headless (CI / batch) is the primary mode. The render code is copied (vendored) from UzEngine;
 UzPainter has no dependency on UzEngine and builds on its own, with DX12 as the primary backend and
@@ -49,7 +49,11 @@ directly, and it runs without a window.
 
 ## Planned Features
 
-Nothing below is implemented yet. These are the owner's requirements plus the MUST/SHOULD list in
+Part of this list exists today: the layer-stack compositor, the `.uzp` project file, export with
+the PBR presets, the recipe dump, the Python API and the MCP server; parity is accepted only where
+its gate passes ([Project Status](#project-status)). Smart materials and generators, native baking,
+the Unreal and UzEngine presets and the release distribution are not implemented yet. These are the
+owner's requirements plus the MUST/SHOULD list in
 [requirements for UzPainter](docs/analysis/assets3d-pipeline/08-requirements-for-uzpainter.md);
 the numbered requirement list is the [PRD](docs/prd.md).
 
@@ -91,10 +95,11 @@ and [requirements NFR-04](docs/analysis/assets3d-pipeline/08-requirements-for-uz
 
 ## Quick Start
 
-Only the Phase 0 build exists: `UzPainter.exe` has a single command, `selftest`. Requirements:
-Windows 10/11 x64, Zig **0.15.2** exactly (`build.zig` refuses any other release) and Python 3.13
-for the repository tooling. Every include and library path is inside this repository; the build
-reads no Windows SDK installation and no UzEngine checkout.
+Requirements: Windows 10/11 x64, Zig **0.15.2** exactly (`build.zig` refuses any other release)
+and Python 3.13 on `PATH`, for the repository tooling and for `zig build painter`, which runs the
+capability manifest generator (`-Dpython=<exe>` names another interpreter). Every include and
+library path is inside this repository; the build reads no Windows SDK installation and no UzEngine
+checkout.
 
 ```bash
 zig build painter                  # zig-out/bin/UzPainter.exe with its run-time files
@@ -107,13 +112,28 @@ stage failed, 2 = usage error. Stages:
 
 - **DX12 hardware slice** (mandatory): `dx12-device`, `shader-compile`, `compute-readback`, `png16`, `embree`
 - **Probes** (never fail the run): `dx12-ray-query`, `vulkan-availability`, `vulkan-ray-query`, `warp`
-- **Embedded CPython** (`cpython-*`): in progress, task `phase0.7_toolchain-cpython`
+- **Embedded CPython** (mandatory, no GPU): `cpython-start`, `cpython-uzpainter`, `cpython-buffer16`, `cpython-exceptions`, `cpython-mcp-sdk`
 
 `--no-gpu` or `UZP_NO_GPU=1` skips the stages that need a GPU. Other build steps:
 `zig build render-core` (`uzrendercore.lib`), `zig build native-tests`, `zig build probe-tests`.
 
-Repository tooling (Python, `tools/`) and its quality gate. There is no hosted CI: every check
-runs locally, in the coordinator's full gate before the owner pushes
+The other commands (`UzPainter.exe` with no argument prints their usage):
+
+```bash
+UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan]  # script host with the substance_painter facade
+UzPainter.exe export <file.uzp> --config <config.json> --app-version <version> --build <id>  # PNG / OpenEXR maps
+UzPainter.exe inspect <file.uzp> [--revision N] [--verify | --recipe]  # also export-bundle, store-census
+UzPainter.exe capabilities                                             # the capability manifest
+UzPainter.exe --mcp [--gpu-backend dx12|vulkan] [--allow-python]       # MCP server on stdio
+UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan]         # read-only preview window
+```
+
+Captures (`capture` in the Python API and the MCP server) render `painter_viewport`, `base_color`,
+`channel:<name>` or `mask:<uid>`; `painter_iray` is refused until the path tracer exists.
+
+Repository tooling (Python, `tools/`) and its quality gate. Apart from a codespell spelling check
+on GitHub there is no hosted CI: every check runs locally, in the coordinator's full gate before the
+owner pushes
 ([decision 200](.rulebook/decisions/200-the-owner-removed-the-hosted-parity-ci-and-the-local-full-gate-replaces-it.md); GPU and
 Painter-oracle checks run on the owner's machine,
 [decision 028](.rulebook/decisions/028-ci-github-runs-hosted-cpu-only-ci-gpu-and-painter-oracle-checks-run-locally-on-the-owner-s-machine.md)):
@@ -133,11 +153,14 @@ git config core.hooksPath .githooks   # once per clone: blocks committing record
 
 | Path | Contents |
 |------|----------|
-| [`src/`](src/) | `UzPainter.exe`: entry point, `selftest/` stages, `python/` embedded interpreter |
+| [`src/`](src/) | `UzPainter.exe`: entry point, `selftest/` stages, `render/` layer, `uzp_core/` document model, `store/` project store, `mesh/` importers, `evaluator/` compositor, `export/`, `python/` embedded interpreter and native API, `supervisor/` MCP supervisor and worker, `preview/` window |
+| [`python/`](python/) | Python packages installed beside the executable: the `substance_painter` facade and the supervisor's MCP code (`uzpainter_supervisor/`) |
+| [`adapters/`](adapters/) | Assets3D pipeline adapter (`assets3d/`) |
+| [`assets/`](assets/) | Shipped project templates, export presets and display environments |
 | [`build.zig`](build.zig) | Own Zig build: render core, native tests, `UzPainter.exe` |
 | [`thirdparty/`](thirdparty/) | Vendored code with licences and provenance: `uzengine-render-core/`, DX12/Vulkan libraries, Embree, zlib, spng, CPython, pybind11, MCP SDK wheels |
 | [`tools/`](tools/) | Python tooling: `parity/` (oracle store, recorder, guard, fits), `vendoring/`, `toolchain/`, `sources/` |
-| [`tests/`](tests/) | Python tests, plus C++ tests in `native/` |
+| [`tests/`](tests/) | Python tests, plus C++ tests in `native/` and the module folders |
 | [`parity/`](parity/) | Parity contract, schemas, exception register, fixtures, published fits (`semantics/`) and run reports (`reports/`) |
 | [`docs/`](docs/) | Build contract: vision, PRD, roadmap, DAG, [`architecture/`](docs/architecture/) 01–14 |
 | [`docs/analysis/`](docs/analysis/) | Source-cited analyses, one theme per numbered file |
@@ -149,17 +172,19 @@ git config core.hooksPath .githooks   # once per clone: blocks committing record
 
 ## Project Status
 
-**Phase 0: Contract and feasibility** ([roadmap](docs/roadmap.md)). Analyses, architecture and the
-owner's decisions are done. Phase 0 code exists: the vendored render core with its own build,
-`UzPainter.exe selftest` and the parity tooling. No texturing feature is implemented yet. The DX12
-hardware slice and the four probes pass on the owner's machine
-([probe report](parity/reports/phase0/toolchain-probes.md)).
+**Phase 1: Foundation and wand smoke** ([roadmap](docs/roadmap.md)), as of 2026-10-13. Phase 0 is
+complete: gate G0 closed on 2026-10-13 ([gate record](parity/reports/phase0/gate-g0.md)). Phase 1
+has 39 of its 43 tasks archived; it closes at gate G1 once the Wand v1 maps equal Painter's. Most
+Phase 2 code (preview window and captures, supervisor and MCP server, recipe dump and diagnostics)
+is written; its tasks wait on the Wand v1 pilot, and two of them also on Vulkan device-loss tests
+(decisions 121, 200). The DX12 hardware slice and the four probes pass
+on the owner's machine ([probe report](parity/reports/phase0/toolchain-probes.md)).
 
 | Work | Status |
 |------|--------|
 | Analyses: Assets3D pipeline, UzEngine renderer, technology options, Substance parity | Done |
 | Product and architecture documents (`docs/`) | Done |
-| Owner decisions 001–030 (`.rulebook/decisions/`) | Recorded |
+| Decisions 001–206 (`.rulebook/decisions/`) | Recorded |
 | Approved-source index; parity contract and schemas | Done |
 | Render core and third-party libraries vendored; own Zig build | Done |
 | Private oracle store, repository guard, Painter oracle recorder | Done |
@@ -167,9 +192,14 @@ hardware slice and the four probes pass on the owner's machine
 | Tier 0 oracles recorded (defaults, templates, API probes, layer semantics); procedural feasibility | Done |
 | Embedded CPython 3.13 and MCP SDK (`phase0.7_toolchain-cpython`) | Done |
 | Tier 0 oracle stability and first formula fits (`phase0.7_tier0-stability-fits`, [report](parity/reports/phase0/tier0-stability.md)) | Done |
-| Iray reference capture procedure (`phase0.6_render-reference-procedure`) | In progress |
-| Gate G0 — contract frozen | Planned |
-| Phases 1–5: foundation, pilot parity, bake/render/presets, coverage, release | Planned |
+| Iray reference capture and noise floor (`phase0.9_render-reference-capture`, [path-tracer entry gate](parity/reports/phase0/gate-p3-pathtracer-entry.md)) | Done |
+| Gate G0 — contract frozen ([gate record](parity/reports/phase0/gate-g0.md)) | Done |
+| Render-core layer, document model, project store, mesh loader, compositor core, export engine | Done |
+| Native Python API, `substance_painter` facade, `run`, Assets3D pipeline adapter (`phase1.19`–`phase1.23`) | Done |
+| Compositor colour fits, Python API parent, Wand v1 pilot (`phase1.15_compositor-colour-fits`, `phase1.24_python-api-facade`, `phase1.25_pilot-wand`) | In progress |
+| Gate G1 — foundation green | Planned |
+| Phase 2: preview window and captures, supervisor and MCP server, recipe dump and diagnostics | In progress |
+| Phase 2: Belt v5 and Tunic v10 pilots, gate G2; Phases 3–5: bake/render/presets, coverage, release | Planned |
 
 Task list: [`.rulebook/tasks/README.md`](.rulebook/tasks/README.md). History: [`CHANGELOG.md`](CHANGELOG.md).
 
