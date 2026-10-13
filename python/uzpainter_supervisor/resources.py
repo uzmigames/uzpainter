@@ -6,8 +6,9 @@ the tools' rules: a project resource is a read of the committed revision (no lea
 scrubbed under `--roots`, and it names its project (`project_uuid`) and `revision`. Reading a
 project resource with no project open fails (MCP error -32002), as does an unknown URI.
 
-- `uzpainter://capabilities`: the capability manifest (`compat_profile`, every entry) and each
-  tool's status with its gaps (`Registry.capability_table`);
+- `uzpainter://capabilities`: the capability manifest (`compat_profile`, every entry), each
+  tool's status with its gaps (`Registry.capability_table`) and the requirement-to-typed-operation
+  matrix the build generated (`operation_matrix`; phase2.7, decision 182);
 - `uzpainter://project/manifest`: the committed revision's project manifest (pipe method
   `worker/manifest`);
 - `uzpainter://project/recipe`, `.../layers`, `.../resources`: its recipe dump (`project_recipe`),
@@ -55,7 +56,8 @@ RESOURCES = (
     Listed(
         "uzpainter://capabilities",
         "capabilities",
-        "The capability manifest (every symbol's status) and each tool's status with its gaps.",
+        "The capability manifest (every symbol's status), each tool's status with its gaps and "
+        "the requirement-to-typed-operation matrix (each required operation's tool and status).",
     ),
     Listed(
         "uzpainter://project/manifest",
@@ -242,6 +244,7 @@ class Resources:
                 "compat_profile": registry.manifest.compat_profile,
                 "tools": await registry.capability_table(),
                 "entries": registry.manifest.document.get("entries", []),
+                "operation_matrix": registry.manifest.document.get("operation_matrix", []),
             }
         if uri == "uzpainter://assets/parity":
             operations = registry.manifest.operations(

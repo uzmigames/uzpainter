@@ -728,6 +728,12 @@ pub fn build(b: *std.Build) void {
     capabilities_run.addFileArg(b.path("tools/capabilities/uzpainter-additions.json"));
     capabilities_run.addArg("--compositor");
     capabilities_run.addFileArg(b.path("tools/capabilities/compositor-capabilities.json"));
+    // The requirement-to-typed-operation matrix (11-mcp-server.md §2, decision 182): the build
+    // fails on a missing row, an unregistered tool or an available row without its fixture.
+    capabilities_run.addArg("--tools");
+    capabilities_run.addFileArg(b.path("tools/capabilities/mcp-tools.json"));
+    capabilities_run.addArg("--matrix");
+    capabilities_run.addFileArg(b.path("tools/capabilities/operation-matrix.json"));
     capabilities_run.addArg("--repo-root");
     capabilities_run.addDirectoryArg(b.path("."));
     capabilities_run.addArg("--output");
