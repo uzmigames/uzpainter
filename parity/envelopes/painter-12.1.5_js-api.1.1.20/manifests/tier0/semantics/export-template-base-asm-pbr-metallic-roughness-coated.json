@@ -1,10 +1,10 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/semantics/export-template-base-maxwell-specular-glossiness",
+  "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-coated",
   "tier": "0",
   "domain": "tier0/stack/base-values",
-  "description": "The linear value of an empty sRGB8 base (phase1.25_pilot-wand item 2.6, decision 126): an empty project on the authored plane created with the shipped template templates/Maxwell - Specular Glossiness.spt; BaseColor and Specular (Painter skips a map the template lacks) at OpenEXR 32f, and at PNG 16 as the control against the recorded base-values code; infinite padding, no dithering, every export step done twice in the session.",
+  "description": "The linear value of an empty sRGB8 base (phase1.25_pilot-wand item 2.6, decision 126): an empty project on the authored plane created with the shipped template templates/ASM - PBR Metallic Roughness Coated.spt; BaseColor and Specular (Painter skips a map the template lacks) at OpenEXR 32f, and at PNG 16 as the control against the recorded base-values code; infinite padding, no dithering, every export step done twice in the session.",
   "inputs": [
     {
       "input_id": "plane",
@@ -28,7 +28,7 @@
           "mesh": "plane",
           "normal_map_format": "OpenGL",
           "default_texture_resolution": 256,
-          "template": "templates/Maxwell - Specular Glossiness.spt"
+          "template": "templates/ASM - PBR Metallic Roughness Coated.spt"
         }
       },
       {
@@ -103,7 +103,7 @@
     },
     {
       "name": "project.template",
-      "value": "templates/Maxwell - Specular Glossiness.spt",
+      "value": "templates/ASM - PBR Metallic Roughness Coated.spt",
       "applied_by": "recorder_api"
     },
     {
@@ -136,5 +136,66 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "2e020a65cdbb577b508fad8b1a5aeb1d6b9af07b441c3b96c8a11a9dbbbd669f",
+      "size_bytes": 9012
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor-step2",
+      "kind": "exported_map",
+      "sha256": "95d3913324423cda9805702e8ff5a106be83a677550c05c553f27df4507003cf",
+      "size_bytes": 52489
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor-step3",
+      "kind": "exported_map",
+      "sha256": "95d3913324423cda9805702e8ff5a106be83a677550c05c553f27df4507003cf",
+      "size_bytes": 52489
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor-step4",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor-step5",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor-step2",
+      "kind": "exported_map",
+      "sha256": "95d3913324423cda9805702e8ff5a106be83a677550c05c553f27df4507003cf",
+      "size_bytes": 52489
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor-step3",
+      "kind": "exported_map",
+      "sha256": "95d3913324423cda9805702e8ff5a106be83a677550c05c553f27df4507003cf",
+      "size_bytes": 52489
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor-step4",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor-step5",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "62145b16600dc682b3954c368d0fd58a1d70cf04ca8312e8a64f2a08bcaac444",
+      "size_bytes": 402
+    }
+  ]
 }

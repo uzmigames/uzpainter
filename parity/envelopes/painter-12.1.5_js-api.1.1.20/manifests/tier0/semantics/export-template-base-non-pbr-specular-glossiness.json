@@ -1,10 +1,10 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/semantics/export-template-base-pbr-metallic-roughness-alpha-test",
+  "golden_id": "tier0/semantics/export-template-base-non-pbr-specular-glossiness",
   "tier": "0",
   "domain": "tier0/stack/base-values",
-  "description": "The linear value of an empty sRGB8 base (phase1.25_pilot-wand item 2.6, decision 126): an empty project on the authored plane created with the shipped template templates/PBR - Metallic Roughness Alpha-test.spt; BaseColor and Specular (Painter skips a map the template lacks) at OpenEXR 32f, and at PNG 16 as the control against the recorded base-values code; infinite padding, no dithering, every export step done twice in the session.",
+  "description": "The linear value of an empty sRGB8 base (phase1.25_pilot-wand item 2.6, decision 126): an empty project on the authored plane created with the shipped template templates/Non-PBR - Specular Glossiness.spt; BaseColor and Specular (Painter skips a map the template lacks) at OpenEXR 32f, and at PNG 16 as the control against the recorded base-values code; infinite padding, no dithering, every export step done twice in the session.",
   "inputs": [
     {
       "input_id": "plane",
@@ -28,7 +28,7 @@
           "mesh": "plane",
           "normal_map_format": "OpenGL",
           "default_texture_resolution": 256,
-          "template": "templates/PBR - Metallic Roughness Alpha-test.spt"
+          "template": "templates/Non-PBR - Specular Glossiness.spt"
         }
       },
       {
@@ -103,7 +103,7 @@
     },
     {
       "name": "project.template",
-      "value": "templates/PBR - Metallic Roughness Alpha-test.spt",
+      "value": "templates/Non-PBR - Specular Glossiness.spt",
       "applied_by": "recorder_api"
     },
     {
@@ -136,5 +136,66 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "9949e55fd8ac267d5093095b29ef1c8acdaa954eb7eefaeae3e17cc815a13dca",
+      "size_bytes": 8123
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step2",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step3",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step4",
+      "kind": "exported_map",
+      "sha256": "2dd3ecd750ba17295738a84680dea5f29ddb5ef0fb56bb73ddd1e73b840124ce",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step5",
+      "kind": "exported_map",
+      "sha256": "2dd3ecd750ba17295738a84680dea5f29ddb5ef0fb56bb73ddd1e73b840124ce",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step2",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step3",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step4",
+      "kind": "exported_map",
+      "sha256": "2dd3ecd750ba17295738a84680dea5f29ddb5ef0fb56bb73ddd1e73b840124ce",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step5",
+      "kind": "exported_map",
+      "sha256": "2dd3ecd750ba17295738a84680dea5f29ddb5ef0fb56bb73ddd1e73b840124ce",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "62145b16600dc682b3954c368d0fd58a1d70cf04ca8312e8a64f2a08bcaac444",
+      "size_bytes": 402
+    }
+  ]
 }

@@ -127,6 +127,13 @@ def uv_ramp_generator(size: int) -> Generate:
     return lambda: rf.uv_ramp(size)
 
 
+def renamed_ramp(size: int) -> str:
+    """The UV ramp's id and file stem in the re-authored padding probes (decision 166): Painter
+    read the suffix of `uv-ramp-1024` and `uv-ramp-2048` as a UDIM tile number (decision 160),
+    so the size follows an `n`."""
+    return f"uv-ramp-n{size}"
+
+
 # Decision 129's padding probes: the P-ramp meshes and the float UV ramps.
 for _mesh in rf.RAMP_MESHES:
     for _phase in rf.RAMP_PHASES:
@@ -139,6 +146,12 @@ for _size in (rf.RAMP_RESOLUTION, *rf.TIE_RESOLUTIONS):
     REQUEST_FIXTURES[f"uv-ramp-{_size}"] = (
         "image",
         f"{FIXTURE_DIR}/bitmaps/uv-ramp-{_size}.exr",
+        uv_ramp_generator(_size),
+    )
+for _size in (rf.RAMP_RESOLUTION, *rf.TIE_RESOLUTIONS[1:]):
+    REQUEST_FIXTURES[renamed_ramp(_size)] = (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/{renamed_ramp(_size)}.exr",
         uv_ramp_generator(_size),
     )
 for _group, _probes in probe_groups().items():
@@ -881,7 +894,12 @@ def srgb_bitmap_variants() -> Golden:
     users = [(c, f) for c, f in SRGB_CHANNELS if c.startswith("User")]
     node = s.fill([c for c, _ in users], position="top", texture_set=sets[4])
     for channel, fmt in users:
-        bitmap(node, channel, grey_of(fmt, "field-a", "grey-a"), "sRGB")
+        # Decision 160: Painter refused the sRGB bitmap space on User1 (RGB8); each user
+        # channel's attempt is recorded (decision 166).
+        source = grey_of(fmt, "field-a", "grey-a")
+        s.add(ps.SET_SOURCE, node_step=node, channel=channel, resource_step=res[source])
+        s.add(ps.SET_COLOR_SPACE, node_step=node, channel=channel, color_space="sRGB")
+        bitmaps.append((node, channel))
     node = s.fill(["BaseColor"], position="top", texture_set=sets[5])
     s.add(ps.SET_SOURCE, node_step=node, channel="BaseColor", color=BASE_SRGB, color_space="sRGB")
     s.add(ps.ADD_MASK, node_step=node, background="Black")
@@ -897,17 +915,19 @@ def srgb_bitmap_variants() -> Golden:
     for container in (PNG16, PNG8, EXR32F):
         export(s, SRGB_MAPS, container, "infinite")
     return Golden(
-        "srgb-bitmap-variants",
+        "srgb-bitmap-variants-v2",
         "tier0/colour/srgb-bitmaps",
         "The sRGB bitmap uses decision 145 leaves refused (phase1.15_compositor-colour-fits item "
-        "2.2, decisions 145 and 156), under Legacy on the authored 3x3 plane grid (nine sets) at "
-        "256 px, Emissive added as sRGB8 and User1 RGB8, User2 L8, User3 RGB16, User4 L16, User5 "
-        "RGB16F, User7 RGB32F. s0: the authored 8-bit grey ramp (column x holds code x) on "
+        "2.2, decisions 145, 156 and 166), under Legacy on the authored 3x3 plane grid (nine sets) "
+        "at 256 px, Emissive added as sRGB8 and User1 RGB8, User2 L8, User3 RGB16, User4 L16, "
+        "User5 RGB16F, User7 RGB32F. s0: the authored 8-bit grey ramp (column x holds code x) on "
         "BaseColor set to sRGB, default projection (1:1). s1-s3: field A (16-bit) on BaseColor "
         "and the 8-bit srgb8-ramp on Emissive, both set to sRGB, UV projection with wrap Repeat: "
         "BilinearHQ at scale (2, 2), rotation 30, offset (0.1, 0.2) (s1); BilinearHQ at scale "
         "(0.5, 0.5) (s2); Nearest at scale (2, 2) (s3). s4: User1, User3, User5 and User7 field A"
-        " and the L channels User2 and User4 grey A (decision 048), each set to sRGB. s5: "
+        " and the L channels User2 and User4 grey A (decision 048), each with set_color_space"
+        "(sRGB) attempted (decision 166: Painter refused it on User1, decision 160; each "
+        "channel's refusal is recorded). s5: "
         "BaseColor uniform (0.2, 0.5, 0.8) sRGB under a black mask whose fill effect's source is "
         "grey A, with set_color_space(sRGB) attempted on that source (decision 156: Painter's "
         "refusal, if it refuses, is recorded). s6-s8: field A on BaseColor set to Working, Legacy"
@@ -981,13 +1001,12 @@ def template_base(template: str) -> Golden:
 USER0_MAP = ["documentMap/user0:RGB"]
 
 
-def padding_probe(mesh: str, resolution: int) -> Sequence:
-    """One fill with only User0 (RGB32F) active, the float UV ramp at `resolution` as its source
-    with the default projection (read back), Normal at opacity 1; User0 at OpenEXR 32f with
-    infinite padding and with passthrough (the covered-texel control)."""
+def padding_probe(mesh: str, resolution: int, ramp: str) -> Sequence:
+    """One fill with only User0 (RGB32F) active, the float UV ramp `ramp` at `resolution` as its
+    source with the default projection (read back), Normal at opacity 1; User0 at OpenEXR 32f
+    with infinite padding and with passthrough (the covered-texel control)."""
     s = start(mesh, resolution=resolution)
     s.channels((("User0", "RGB32F"),))
-    ramp = f"uv-ramp-{resolution}"
     res = s.imports(ramp)
     (texture_set,) = MESH_SETS[mesh]
     node = s.fill(["User0"], position="top", texture_set=texture_set)
@@ -1009,49 +1028,66 @@ PROBE_TAIL = (
     "padding and with passthrough (every covered texel must equal the ramp bit for bit, or the "
     "probe is void), every export step done twice in the session."
 )
+# Decision 166: the re-authored probes' name suffix and the note on their ramp's file name.
+V2 = "-v2"
+RENAMED_RAMP_NOTE = (
+    " Re-authored under a new name (decision 166): the ramp file is named uv-ramp-n<N>.exr, "
+    "because Painter read the four-digit suffix of uv-ramp-1024 and uv-ramp-2048 as a UDIM "
+    "tile and the first records were void (decision 160)."
+)
 
 
-def padding_ramp(mesh: str, phase: str) -> Golden:
+def padding_ramp(mesh: str, phase: str, renamed: bool = False) -> Golden:
     name = f"seam-ramp-{mesh}-{phase}"
+    resolution = rf.RAMP_RESOLUTION
+    ramp = renamed_ramp(resolution) if renamed else f"uv-ramp-{resolution}"
     return Golden(
-        f"export-padding-ramp-{mesh}-{phase}",
+        f"export-padding-ramp-{mesh}-{phase}" + (V2 if renamed else ""),
         EXPORT_DOMAIN,
         "P-ramp of decision 129 (phase1.25_pilot-wand item 2.7: the ring across a UV seam), "
         f"exploratory: the seam mesh of scale ratio {RAMP_RATIOS[mesh]}, {RAMP_SHIFTS[phase]}, "
-        "its OBJ the text decision 129 fixes by SHA-256; document resolution 1024. " + PROBE_TAIL,
+        "its OBJ the text decision 129 fixes by SHA-256; document resolution 1024. "
+        + PROBE_TAIL
+        + (RENAMED_RAMP_NOTE if renamed else ""),
         name,
-        [name, "uv-ramp-1024"],
-        padding_probe(name, rf.RAMP_RESOLUTION),
+        [name, ramp],
+        padding_probe(name, resolution, ramp),
     )
 
 
-def padding_tie(resolution: int) -> Golden:
+def padding_tie(resolution: int, renamed: bool = False) -> Golden:
+    ramp = renamed_ramp(resolution) if renamed else f"uv-ramp-{resolution}"
     return Golden(
-        f"export-padding-tie-{resolution}",
+        f"export-padding-tie-{resolution}" + (V2 if renamed else ""),
         EXPORT_DOMAIN,
         "P-tie of decision 129 (phase1.25_pilot-wand item 2.7: the propagation rule), "
         "exploratory: three axis-aligned UV islands of side 0.125 at (0.1875, 0.1875), "
-        f"(0.6875, 0.1875) and (0.4375, 0.6875); document resolution {resolution}. " + PROBE_TAIL,
+        f"(0.6875, 0.1875) and (0.4375, 0.6875); document resolution {resolution}. "
+        + PROBE_TAIL
+        + (RENAMED_RAMP_NOTE if renamed else ""),
         "tie",
-        ["tie", f"uv-ramp-{resolution}"],
-        padding_probe("tie", resolution),
+        ["tie", ramp],
+        padding_probe("tie", resolution, ramp),
     )
 
 
 def later_goldens() -> list[Golden]:
-    """Requested goldens of later decisions (145, 126, 129, 168), in the order of the runbook."""
+    """Requested goldens of later decisions (145, 126, 129, 168), in the order of the runbook,
+    then the padding probes decision 160 voids under their new names (decision 166)."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
         *(template_base(t) for t in REMAINING_BASE_TEMPLATES),
         *(padding_ramp(m, p) for m in rf.RAMP_MESHES for p in rf.RAMP_PHASES),
         *(padding_tie(r) for r in rf.TIE_RESOLUTIONS),
+        *(padding_ramp(m, p, renamed=True) for m in rf.RAMP_MESHES for p in rf.RAMP_PHASES),
+        padding_tie(rf.TIE_RESOLUTIONS[1], renamed=True),
     ]
 
 
 # Goldens that the Painter sessions of 2026-10-12 recorded and the store admitted (decisions
-# 101 and 160): their manifests live under the envelope's `manifests/`, and their requests are
-# deleted.
+# 101, 160, 167 and 172): their manifests live under the envelope's `manifests/`, and their requests
+# are deleted.
 ADMITTED = frozenset(
     {
         "export-bit-depth",
@@ -1077,6 +1113,16 @@ ADMITTED = frozenset(
             for m in ("r1", "r2", "r15")
             for p in ("p0", "p25", "p75")
         ),
+        # Batch of decision 167 (Painter session of 2026-10-12, 21:27).
+        "srgb-bitmap-variants-v2",
+        *(
+            f"export-padding-ramp-{m}-{p}-v2"
+            for m in ("r1", "r2", "r15")
+            for p in ("p0", "p25", "p75")
+        ),
+        "export-padding-tie-2048-v2",
+        # Batch of decision 172 (Painter session of 2026-10-12, 21:42).
+        *(f"export-template-base-{template_slug(t)}" for t in REMAINING_BASE_TEMPLATES),
     }
 )
 

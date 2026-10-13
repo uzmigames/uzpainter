@@ -28,6 +28,7 @@ from tools.parity.tier0_semantics.recording_requests import (
     request_dir,
     request_root,
     requested_goldens,
+    srgb_bitmap_variants,
 )
 
 
@@ -239,6 +240,39 @@ def test_uv_ramps_are_float32_texel_centres() -> None:
                 struct.unpack("<f", struct.pack("<f", (y + 0.5) / 512))[0],
                 0.5,
             )
-    for size in (1024, 2048):
-        data = (REPO_ROOT / FIXTURE_DIR / "bitmaps" / f"uv-ramp-{size}.exr").read_bytes()
+    for name, size in (
+        ("uv-ramp-1024", 1024),
+        ("uv-ramp-2048", 2048),
+        ("uv-ramp-n1024", 1024),
+        ("uv-ramp-n2048", 2048),
+    ):
+        data = (REPO_ROOT / FIXTURE_DIR / "bitmaps" / f"{name}.exr").read_bytes()
         assert data == rf.uv_ramp(size)
+
+
+def test_no_requested_bitmap_reads_as_a_udim_tile() -> None:
+    """Decision 160: Painter took a file stem ending in a number from 1001 up as a UDIM tile
+    and the bitmap never reached the 0-1 tile, so no requested golden imports one (decision
+    166)."""
+    for golden in requested_goldens():
+        for name in golden.inputs:
+            kind, path, _ = REQUEST_FIXTURES.get(name, ("", "", None))
+            tail = Path(path).stem.rsplit("-", 1)[-1]
+            assert kind != "image" or not (tail.isdigit() and int(tail) >= 1001), (golden, name)
+
+
+def test_srgb_variants_attempt_the_user_channel_spaces() -> None:
+    """Decision 166: s4 sets each user channel's bitmap, then attempts set_color_space(sRGB), so
+    Painter's refusal on a non-sRGB8 channel is recorded instead of refusing the golden."""
+    steps = srgb_bitmap_variants().sequence.steps
+    attempted = [
+        s["args"]["channel"]
+        for s in steps
+        if s["call"] == "substance_painter.source.SourceBitmap.set_color_space"
+    ]
+    assert attempted == ["User1", "User2", "User3", "User4", "User5", "User7", None]
+    assert not any(
+        s["args"].get("color_space") and str(s["args"].get("channel")).startswith("User")
+        for s in steps
+        if s["call"] != "substance_painter.source.SourceBitmap.set_color_space"
+    )
