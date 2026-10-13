@@ -147,6 +147,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Changed
 
+- Living docs brought up to date as of 2026-10-13 (task `phase1_docs-status-refresh`): the README's Project Status, badge, Quick Start commands and layout table; `docs/` status, decision summary (001–209), open owner question and task-index counts; architecture, parity and module docs where later decisions (037, 047, 054, 064, 100, 121, 126, 188, 190, 198, 200, 203, 207, 209) or the code changed a fact. Decisions, analyses and dated reports are left as written.
 - Gate G0 closed (task `phase0.10_gate-g0`, archived 2026-10-13): item 5.3 is green on the gate test, the guard and the store verify of both manifest roots, and every other Phase 0 task is archived.
 - The hosted Parity CI is removed on the owner's order (decision 200): `.github/workflows/parity.yml` is deleted with the tests that read it. The guard, vendoring check, selftest, type-check, lint, tests and the `oracle_unavailable` check run locally in the coordinator's full gate before the owner pushes. Task items that waited only on the hosted lane are checked on their local evidence (phase1.6 4.1, phase1.7 4.1, phase1.8 2.3/2.4/4.1, phase2.2 4.1, phase2.3 4.1).
 - Tests that built from an empty Zig cache (vendoring check, link map, mesh build paths) share one build: 180 s to 86 s locally. The hosted CI Zig cache limit is raised to 6144 MiB so the cache survives between runs.
