@@ -30,6 +30,11 @@
 #include "uzp_core/transaction/transaction.h"
 #include "uzp_core/types/ids.h"
 
+namespace uzp::mesh {
+class ImportError;
+class MaterialMappingError;
+}  // namespace uzp::mesh
+
 namespace uzp::python {
 
 /// A failure the API raises as the `uzpainter.exception` class (or builtin) `cls`.
@@ -63,6 +68,13 @@ private:
 /// Raises the error of a failed transaction result: `error`, when the call stored the typed
 /// exception that failed it, otherwise the class `result.error_type` names.
 [[noreturn]] void RaiseFailed(const core::TransactionResult& result, const std::exception_ptr& error);
+
+/// The API error of a mesh refusal, with its `details`, as the bindings raise it: a
+/// `mesh::ImportError` under its kind's class (`mesh::ErrorClassName`), a
+/// `mesh::MaterialMappingError` as `MaterialMappingError`. The MCP worker replies with the same
+/// classes (`Worker::Execute`).
+ApiError FromImportError(const mesh::ImportError& error);
+ApiError FromMaterialMappingError(const mesh::MaterialMappingError& error);
 
 /// Defines the classes in `exception` (the `uzpainter.exception` module) and registers the
 /// translator of every C++ error type the API lets through.

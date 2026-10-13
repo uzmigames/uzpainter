@@ -96,7 +96,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
     `set_parameters` accepts these at their default values only.
 - **Capture** (`capture.{h,cpp}`, bound in `bind_display.cpp`; task phase2.2_preview-capture, decision 148). `render.capture(path, mode, camera=None, size=None, samples=None, seed=None, preset=None, stack=None)` captures the committed revision and returns the receipt (`capture-receipt.schema.json`), which is also written as `<stem>.receipt.json`. Nothing commits.
   - `painter_viewport` is the preview pass rendered offscreen (needs `size`).
-  - `base_color`, `channel:<name>` and `mask:<uid>` are texture-space files equal to the export.
+  - `base_color`, `channel:<name>` and `mask:<uid>` are texture-space files equal to the export. `<name>` is a `ChannelType` name or the export's documentMap name of one (decision 242).
   - `painter_iray` raises `PathTracerUnavailable`, a `NotYetSupported`, before anything else.
   - See `src/preview/PREVIEW.md`.
 - **Later phases.** `baking` (phase3.5) is importable. Every call raises `NotYetSupported` naming the owner before anything changes.
@@ -178,7 +178,9 @@ Tests: `tests/python/test_pyapi_dispatcher.py` (every lane) and `tests/python/te
 
 - **Arguments.** `--gpu-backend` anywhere before `--` is the process's backend (dx12 by default). It is never passed to the script; what follows `--` is passed as given.
 - **Run.** The host starts the interpreter and runs the script with `RunScript`. Its output stays captured until the dispatcher has drained, so the events and callbacks of operations it started are part of the run. It then prints one line `UZP_JSON:{status, result, stdout, stderr, error?, last_committed_revision, committed, gpu_backend}` and closes a project left open. The process ends without finalizing the interpreter.
-- **Exit status.** 0 when the script ran to its end with a JSON `result`; 1 for a structured failure; 2 for a usage error (message on stderr, no JSON line); 3 when the interpreter did not start (`{"status": "host_error"}`).
+- **Exit status.** 0 when the script ran to its end with a JSON `result`; 1 for a structured failure; 2 for a usage error (message on stderr, no JSON line); 3 when the interpreter did not start, or the host failed around the script, such as output it cannot encode as UTF-8 (`{"status": "host_error"}`). An exception in the host never ends the process without its report.
+- **Interrupt.** Ctrl+C or Ctrl+Break raises `KeyboardInterrupt` in the script: a structured failure (1). The host then closes the project left open, as after any run.
+- **Text.** The arguments are decoded from the wide command line as UTF-8 (`src/main.cpp`), so the script's path and `sys.argv` keep characters outside the ANSI code page.
 - **GPU.** No Phase 1 Python call uses the GPU, so no device is created at start. The one GPU call, a `painter_viewport` capture (phase2.2), creates a device of that backend for each capture and raises `RuntimeError` `gpu_backend_unavailable` without one (`SetCaptureGpu`, `capture.h`).
 
 `UzPainter.exe capabilities` (`capabilities.{h,cpp}`) prints `capabilities.json`, installed beside the executable, as one `UZP_JSON:` line. A missing or unreadable file is exit status 3. `uzpainter.capabilities` reads the same file.

@@ -1,0 +1,12 @@
+{
+  "id": 227,
+  "slug": "the-preview-window-is-double-buffered-with-gdi-composed-off-screen-presented-whole-in-wm-paint-and-never-erased",
+  "title": "The preview window is double buffered with GDI: composed off screen, presented whole in WM_PAINT, never erased",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.1_preview-viewport-window",
+    "phase2.3_realtime-preview"
+  ],
+  "supersededBy": null
+}

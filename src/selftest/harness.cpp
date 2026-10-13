@@ -259,11 +259,11 @@ int Selftest::Run(SelftestContext& context) {
     file.close();
     if (!file) {
         std::fprintf(stderr, "selftest: cannot write the report %s\n",
-                     context.options.reportPath.string().c_str());
+                     Utf8(context.options.reportPath.wstring()).c_str());
         return kExitFailed;
     }
     std::printf("selftest: %s; DX12 hardware slice %s; report %s\n", failed ? "failed" : "passed",
-                slice, context.options.reportPath.string().c_str());
+                slice, Utf8(context.options.reportPath.wstring()).c_str());
     std::fflush(stdout);
     return exitCode;
 }
@@ -329,12 +329,13 @@ int RunSelftestCommand(const std::vector<std::string>& args) {
     std::error_code ec;
     std::filesystem::create_directories(options.outDir, ec);
     if (ec) {
-        std::fprintf(stderr, "selftest: cannot create %s: %s\n", options.outDir.string().c_str(),
-                     ec.message().c_str());
+        std::fprintf(stderr, "selftest: cannot create %s: %s\n",
+                     Utf8(options.outDir.wstring()).c_str(), ec.message().c_str());
         return kExitFailed;
     }
 
-    uz::LogInit((options.outDir / "selftest.log").string().c_str());
+    // UTF-8 (UZP-MOD-010), so the log is written in any folder.
+    uz::LogInit(Utf8((options.outDir / "selftest.log").wstring()).c_str());
     uz::LogSuppressConsole();
     uz::LogSetLevel(uz::LogLevel::Info);
     InstallLogTap();

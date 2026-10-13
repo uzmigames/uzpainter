@@ -209,6 +209,7 @@ async def _serve(
         return EXIT_FATAL
     admission = Admission(supervisor, ledger)
     supervisor.on_job_event = admission.on_job_event
+    supervisor.on_project_switch = admission.on_project_switch
     registry = Registry(
         supervisor,
         admission,

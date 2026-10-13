@@ -106,7 +106,7 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
                 // in OpenGL and DirectX projects alike (blend-modes.json
                 // `blend-normal-channel-import`; height-to-normal.json
                 // `height-normal-channel-import`: a DirectX project's export of the channel
-                // inverts the stored green again).
+                // inverts the stored green again); a grey bitmap is not inverted (decision 226).
                 result.invertGreen = true;
             }
             switch (BitmapColourSpaceOf(bitmap.color_space)) {

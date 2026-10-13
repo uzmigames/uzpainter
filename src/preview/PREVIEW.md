@@ -52,7 +52,16 @@ The same scene, build, adapter and driver give the same bytes. Kernels are IEEE-
 - **The preview thread.** `PreviewHost` owns the preview thread. That thread has:
   - its own `render::Engine`, so preview rendering never queues in front of or behind evaluation on the worker's device;
   - the window, through the vendored `platform_window` and `input`. It is read-only, with an orbit camera only: left drag orbits, the wheel zooms.
-- **Rendering.** At most one render every 200 ms, and none while the window is minimised. The image is drawn with GDI.
+  - The camera is fitted to the mesh on the first frame and again only when the project's mesh reference changes. The worker derives a new mesh object for every evaluation; one of the same mesh keeps the user's orbit. `preview_status` counts the fits (`camera_fits`).
+- **Rendering.** At most one render every 200 ms, and none while the window is minimised.
+- **Presenting (decision 227).** The window is double buffered with GDI. Nothing is ever drawn straight onto the window.
+  - **Composing.** Each frame is composed whole in a memory bitmap the size of the client area: the image stretched to the view (HALFTONE), or the message, then the panel and its text. A frame is composed only when something it shows has changed: a new image or message, a newly taken frame's revision, or another client size.
+  - **Presenting.** WM_PAINT copies the whole frame to the window with one BitBlt. An unchanged window is drawn again only when Windows asks for a repaint.
+  - **No erase.** The vendored window class's black background brush is removed, and WM_ERASEBKGND is answered without erasing. The vendored window procedure is subclassed, not edited.
+  - **Resizing.** WM_SIZE presents a frame of the new size inside the size change, so the compositor never shows the new size holding the old frame. The loop waits for messages instead of sleeping, so a resize sent from another thread is answered at once.
+  - **Rendering a new frame.** While a new frame renders, and during a live resize (the loop then waits inside Windows' modal size loop), the window keeps showing the last complete frame, stretched to the new size.
+  - **No swap chain.** The image is read back for the CPU anyway, so the capture path and its goldens are unchanged.
+  - **Counter.** `preview_status` counts the presents (`presents`).
 - **Panel.** The right-hand panel states that `painter_iray` is unavailable: no capture can exist before P3-PATHTRACER. It also gives the display configuration and the revision shown.
 - **Environment.** A project that names no environment is lit by the installation's default, `bin/assets/environments/studio-small-09.exr` checked against its SHA-256 (`DefaultEnvironment`, decision 212); the capture receipt's `environment.default` is then true. A named environment whose bytes are missing fails with no substitute (RES-03).
 - **Errors.** An unsupported configuration, a missing environment or a project without a mesh is shown as text in place of the image.
@@ -79,7 +88,7 @@ Two ways to run it:
   - **Today.** It renders OCIO projects with Painter's substance config whose sources the evaluator takes under OCIO: uniform colours, an 8-bit colour bitmap in sRGB or Raw on an sRGB8 channel at 1:1 and a 16-bit grey mask source at 1:1 (decision 190). Every other source fails before any device work, as in the export.
 - **`base_color`, `channel:<name>`, `mask:<uid>`** are texture-space captures of one stack, at its set's resolution.
   - The stack is `stack` (Python) or `texture_set`/`stack` (worker), else the active stack; `mask:<uid>` takes its node's.
-  - The export engine compiles and encodes a one-file plan of `documentMap baseColor`, `documentMap <name>` or `diagnosticMap materialMask/<uid>` with padding `passthrough`. It writes a 16-bit PNG at `path` and an OpenEXR 32f at `<stem>.exr`, so each equals the export of its source with the same parameters.
+  - The export engine compiles and encodes a one-file plan of `documentMap baseColor`, `documentMap <name>` or `diagnosticMap materialMask/<uid>` with padding `passthrough`. In `channel:<name>`, `<name>` is a channel type as `evaluate_channel` and `source_set` take it (`SpecularRoughness`) or the export's documentMap name of one (`specularroughness`); the source is the documentMap the export records for that channel (decision 242). Any other name raises `ValueError` ("names no channel"), and a channel the stack lacks raises "has no channel". It writes a 16-bit PNG at `path` and an OpenEXR 32f at `<stem>.exr`, so each equals the export of its source with the same parameters.
   - A given `camera`, `preset`, `samples` or `seed`, or another size, raises `ValueError`.
 - **Receipt.** Every capture writes `<stem>.receipt.json` (`src/python/capture-receipt.schema.json`): `{schema, revision, project_uuid, evaluator_profile, render_state_digest, mode, source, encoding, backend, adapter, driver, samples, seed, camera, size, display_configuration, hashes}`.
   - `render_state_digest` is the SHA-256 of the canonical JSON of the resolved render state. For `painter_viewport` that is the environment, background, camera and pose, size, samples, seed, shader and display configuration; for the other modes, the source, size and encoding.
