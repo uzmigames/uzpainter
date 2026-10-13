@@ -136,5 +136,66 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "094ff0ecbe625a9dd8a2ed7768f40167757eb6eb5776a79976be0e941b52dbe1",
+      "size_bytes": 7827
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step2",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step3",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step4",
+      "kind": "exported_map",
+      "sha256": "2dd3ecd750ba17295738a84680dea5f29ddb5ef0fb56bb73ddd1e73b840124ce",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step5",
+      "kind": "exported_map",
+      "sha256": "2dd3ecd750ba17295738a84680dea5f29ddb5ef0fb56bb73ddd1e73b840124ce",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step2",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step3",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step4",
+      "kind": "exported_map",
+      "sha256": "2dd3ecd750ba17295738a84680dea5f29ddb5ef0fb56bb73ddd1e73b840124ce",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step5",
+      "kind": "exported_map",
+      "sha256": "2dd3ecd750ba17295738a84680dea5f29ddb5ef0fb56bb73ddd1e73b840124ce",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "2a9702fc879152c197970e6bf946df648a7b446942d50b6a4a3c38698b376af7",
+      "size_bytes": 402
+    }
+  ]
 }

@@ -1,16 +1,16 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/semantics/export-padding-ramp-r1-p0",
+  "golden_id": "tier0/semantics/export-padding-ramp-r15-p75",
   "tier": "0",
   "domain": "tier0/export/processing",
-  "description": "P-ramp of decision 129 (phase1.25_pilot-wand item 2.7: the ring across a UV seam), exploratory: the seam mesh of scale ratio 1, phase 0, its OBJ the text decision 129 fixes by SHA-256; document resolution 1024. User0 added as RGB32F (the template capture of both recordings records its stored format; a record where it is not 32F is void); one fill with only User0 active, source the authored float32 UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5 at the document size, default projection (read back), Normal at opacity 1. User0 at OpenEXR 32f with infinite padding and with passthrough (every covered texel must equal the ramp bit for bit, or the probe is void), every export step done twice in the session.",
+  "description": "P-ramp of decision 129 (phase1.25_pilot-wand item 2.7: the ring across a UV seam), exploratory: the seam mesh of scale ratio 1.5, +0.75/1024, its OBJ the text decision 129 fixes by SHA-256; document resolution 1024. User0 added as RGB32F (the template capture of both recordings records its stored format; a record where it is not 32F is void); one fill with only User0 active, source the authored float32 UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5 at the document size, default projection (read back), Normal at opacity 1. User0 at OpenEXR 32f with infinite padding and with passthrough (every covered texel must equal the ramp bit for bit, or the probe is void), every export step done twice in the session.",
   "inputs": [
     {
-      "input_id": "seam-ramp-r1-p0",
+      "input_id": "seam-ramp-r15-p75",
       "kind": "mesh",
-      "path": "parity/fixtures/tier0-semantics/meshes/seam-ramp-r1-p0.obj",
-      "sha256": "be463fa73ab3ddba7e6d536d1b9e366b9b987dd42494a53a7535af830b33c95e",
+      "path": "parity/fixtures/tier0-semantics/meshes/seam-ramp-r15-p75.obj",
+      "sha256": "821c625e8e3cb90401b22116e719742a11aee234222db426d3b6ed24504b7553",
       "provenance": {
         "origin": "uzmigames_authored",
         "licence": "Apache-2.0",
@@ -37,7 +37,7 @@
         "step": 1,
         "call": "substance_painter.project.create",
         "args": {
-          "mesh": "seam-ramp-r1-p0",
+          "mesh": "seam-ramp-r15-p75",
           "normal_map_format": "OpenGL",
           "default_texture_resolution": 1024
         }
@@ -206,5 +206,66 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "ea9e8b72e2f25ccb6d6f626842864ab4197e35ad5ef495e628632a59fafcd238",
+      "size_bytes": 10534
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step10",
+      "kind": "exported_map",
+      "sha256": "2e801f9a5a008e5deb3d7aeec25d2b0e7516cbc36d93734615ee76011065e60b",
+      "size_bytes": 39609
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step11",
+      "kind": "exported_map",
+      "sha256": "2e801f9a5a008e5deb3d7aeec25d2b0e7516cbc36d93734615ee76011065e60b",
+      "size_bytes": 39609
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step12",
+      "kind": "exported_map",
+      "sha256": "2e801f9a5a008e5deb3d7aeec25d2b0e7516cbc36d93734615ee76011065e60b",
+      "size_bytes": 39609
+    },
+    {
+      "record_id": "r1-uzp_seam-user0-step13",
+      "kind": "exported_map",
+      "sha256": "2e801f9a5a008e5deb3d7aeec25d2b0e7516cbc36d93734615ee76011065e60b",
+      "size_bytes": 39609
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step10",
+      "kind": "exported_map",
+      "sha256": "2e801f9a5a008e5deb3d7aeec25d2b0e7516cbc36d93734615ee76011065e60b",
+      "size_bytes": 39609
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step11",
+      "kind": "exported_map",
+      "sha256": "2e801f9a5a008e5deb3d7aeec25d2b0e7516cbc36d93734615ee76011065e60b",
+      "size_bytes": 39609
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step12",
+      "kind": "exported_map",
+      "sha256": "2e801f9a5a008e5deb3d7aeec25d2b0e7516cbc36d93734615ee76011065e60b",
+      "size_bytes": 39609
+    },
+    {
+      "record_id": "r2-uzp_seam-user0-step13",
+      "kind": "exported_map",
+      "sha256": "2e801f9a5a008e5deb3d7aeec25d2b0e7516cbc36d93734615ee76011065e60b",
+      "size_bytes": 39609
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "2a9702fc879152c197970e6bf946df648a7b446942d50b6a4a3c38698b376af7",
+      "size_bytes": 402
+    }
+  ]
 }

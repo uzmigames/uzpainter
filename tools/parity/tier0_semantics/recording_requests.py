@@ -1023,8 +1023,9 @@ def later_goldens() -> list[Golden]:
     ]
 
 
-# Goldens of decision 100 that the Painter session of 2026-10-12 recorded and the store admitted:
-# their manifests live under the envelope's `manifests/`, and their requests are deleted.
+# Goldens that the Painter sessions of 2026-10-12 recorded and the store admitted (decisions
+# 101 and 160): their manifests live under the envelope's `manifests/`, and their requests are
+# deleted.
 ADMITTED = frozenset(
     {
         "export-bit-depth",
@@ -1039,6 +1040,17 @@ ADMITTED = frozenset(
         "export-resize",
         "export-dither",
         "export-ocio-encode-legacy",
+        # Batch of decision 160 (Painter session of 2026-10-12, 21:00).
+        "export-template-base-unreal-engine",
+        "export-template-base-openpbr-anisotropy",
+        "export-template-base-pbr-specular-glossiness",
+        "export-padding-tie-512",
+        "export-padding-tie-2048",
+        *(
+            f"export-padding-ramp-{m}-{p}"
+            for m in ("r1", "r2", "r15")
+            for p in ("p0", "p25", "p75")
+        ),
     }
 )
 
