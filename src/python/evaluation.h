@@ -21,8 +21,10 @@
 //   evaluation it superseded (`DropSupersededEvaluation`, from `Session::NotifyDurableChange`). A
 //   call on an older revision (a job queued before a commit) evaluates privately and leaves the
 //   kept evaluation alone.
-// - A lease is exclusive. A call that finds the evaluation leased (a capture while an export job
-//   runs) evaluates on a private evaluation that is never kept, as every call did before.
+// - A lease is exclusive: it takes the evaluation out of the open project, and its end puts it back
+//   only under the two rules below and while its revision is the current one. A call that finds
+//   the evaluation leased (a capture while an export job runs) evaluates on a private evaluation
+//   that is never kept, as every call did before.
 // - Kept only when clean. A tile is cached when it is allocated, before the operation that fills it
 //   runs, so an evaluation that failed, threw or was cancelled may leave a tile that never received
 //   its values. When the lease ends, the evaluation is dropped if any tile was allocated after the

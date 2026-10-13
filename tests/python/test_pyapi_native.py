@@ -1251,3 +1251,96 @@ result = timed("fresh")[1]
     assert after["uzp_plane_BaseColor.png"] != before["uzp_plane_BaseColor.png"]
     assert after["uzp_plane_Height.png"] == before["uzp_plane_Height.png"]
     assert fresh == after
+
+
+# A virtual normal map's export allocates its read-out tile before it evaluates the Normal
+# channel, where a bitmap minified at 30 degrees is refused (decisions 061, 084): a refusal
+# raised after a tile was allocated.
+REFUSED_AFTER_ALLOCATING = (
+    EXPORT_HELPERS
+    + """
+stack = create(256)
+checker = resource.import_project_resource(IMAGES + "/checker-16.png", resource.Usage.TEXTURE)
+base = ls.insert_fill(top(stack))
+base.active_channels = {CT.BaseColor, CT.Height}
+base.set_source(CT.BaseColor, cm.Color(0.2, 0.3, 0.4))
+base.set_source(CT.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+bump = ls.insert_fill(top(stack))
+bump.active_channels = {CT.Normal}
+bump.set_source(CT.Normal, checker.identifier())
+bump.set_projection_mode(ls.ProjectionMode.UV)
+bump.set_projection_parameters(
+    ls.UVProjectionParams(
+        filtering_mode=ls.FilteringMode.BilinearHQ,
+        uv_wrapping_mode=ls.UVWrapMode.Repeat,
+        uv_transformation=ls.UVTransformationParams(
+            scale_mode=ls.ScaleMode.Factors, scale=[32.0, 32.0], rotation=30.0, offset=[0.0, 0.0]
+        ),
+    )
+)
+
+
+def normal(folder):
+    c = config(folder)
+    channels = [{"destChannel": d, "srcChannel": d, "srcMapType": "virtualMap",
+                 "srcMapName": "Normal_OpenGL"} for d in "RGB"]
+    c["exportPresets"][0]["maps"] = [{"fileName": "$textureSet_Normal", "channels": channels}]
+    return [raises(export.export_project_textures, c),
+            os.path.exists(WORK + "/" + folder + "/generations")]
+"""
+)
+
+
+def test_a_call_that_fails_after_allocating_a_tile_drops_the_kept_evaluation(run: Run) -> None:
+    """B19 (decision 246): a call on a kept revision that fails once it has allocated a tile drops
+    the evaluation, so the tile it allocated and never filled serves no later call. The virtual
+    normal export allocates its read-out tile, then refuses the Normal channel's minified bitmap:
+    repeated on the same revision it refuses the same way and writes nothing (before the fix the
+    repeat read the unfilled tile and published a normal map), and the BaseColor and Height
+    exports keep their bytes."""
+    result = ok(
+        run(
+            REFUSED_AFTER_ALLOCATING
+            + """
+first = timed("first")[1]
+refusals = [normal("refused"), normal("again")]
+after = timed("after")[1]
+result = {"first": first, "refusals": refusals, "after": after}
+"""
+        )
+    )
+    [refused, refused_written], [again, again_written] = result["refusals"]
+    assert refused is not None and "rotation of 30" in refused, refused
+    assert again == refused
+    assert refused_written is False and again_written is False
+    assert result["after"] == result["first"]
+
+
+def test_a_capture_while_an_export_job_holds_the_evaluation_evaluates_privately(run: Run) -> None:
+    """B19 (decision 246): a capture made while an export job holds the revision's evaluation
+    evaluates on a private one and writes the bytes it writes from the kept evaluation once the
+    job ended; the job's files equal an export of the same revision made after it."""
+    result = ok(
+        run(
+            REVISION_STACK.replace("create(256)", "create(1024)")
+            + """
+job = export.start(config("job"))
+while job.status in ("queued", "running") and job.progress < 0.2:  # 0.2: the job holds it
+    time.sleep(0.001)
+before = [job.status, job.progress]
+during = uzpainter.render.capture(WORK + "/during/mask.png", "mask:%d" % detail.uid(), stack=None)
+held = job.status
+out = job.wait()
+after = uzpainter.render.capture(WORK + "/after/mask.png", "mask:%d" % detail.uid(), stack=None)
+again = timed("again")[1]
+result = {"before": before, "held": held, "during": during["hashes"], "after": after["hashes"],
+          "job": {f["relative_path"]: f["sha256"] for f in out["files"]}, "again": again}
+"""
+        )
+    )
+    status, progress = result["before"]
+    assert status == "running" and progress >= 0.2, result["before"]
+    # The job still ran when the capture ended: the capture never had the kept evaluation.
+    assert result["held"] == "running"
+    assert result["during"] == result["after"]
+    assert result["again"] == result["job"]

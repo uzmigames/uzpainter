@@ -123,8 +123,10 @@ EvaluationLease LeaseEvaluation(const std::shared_ptr<OpenProject>& open, const 
         if (!open->evaluation_leased) {
             if (open->evaluation && open->evaluation->snapshot.project == snapshot.project &&
                 open->evaluation->floatControl == FloatControl()) {
+                // Taken out of the open project for the lease: only the lease's end returns it,
+                // and only when the call left it clean, current and affordable.
                 open->evaluation_leased = true;
-                return EvaluationLease(open, open->evaluation, true);
+                return EvaluationLease(open, std::move(open->evaluation), true);
             }
             if (open->document->snapshot().project == snapshot.project) {
                 open->evaluation_leased = true;
