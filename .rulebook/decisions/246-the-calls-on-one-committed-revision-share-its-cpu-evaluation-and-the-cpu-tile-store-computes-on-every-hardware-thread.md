@@ -59,9 +59,18 @@ Same machine, shared with other agents, ReleaseSafe builds of main `170028e` (be
 | `painter_layer_stack.py capture` (painter_viewport, 1700 x 1250) | 65.9 s | 14.8 s |
 | four-map `passthrough` PNG16 export | 57.7 s | 14.0 s |
 
-- **Bytes.** Every file of the 15 calls above has the same SHA-256 before, with A and with A + B (PNG16, PNG8, EXR 32f and `infinite` exports, the `base_color` and `mask:10` captures, the 11 `material_views` files, the `region_stats` JSON, the exports after the edit). The Wand's capture is `f22b9da6…` and its export `f5202163…`, `24171dfa…`, `9cd65935…`, `e893061d…` before and after, the e2e report's hashes.
+| 8192 x 8192, a uniform fill under a 16-bit bitmap mask (the e2e scenario) | Before | A + B |
+|---|---|---|
+| export PNG8 (first on the revision) | 94.5 s | 46.5 s (80.0 s with GPU tests running beside it) |
+| export PNG16, then EXR 32f (same revision) | 101.7 s, 69.0 s | 38.5 s, 18.2 s |
+| capture `base_color` | 109.3 s | 41.7 s |
+| worker memory after the calls | 167 MiB | 3.0 GiB (the kept evaluation) |
+
+At 8192 x 8192 what remains is encoding, on one thread (profiled): building the PNG samples (the sRGB encode of BaseColor included) about 12.5 s per export, deflate 12-20 s, the OpenEXR encode 10 s, `passthrough` padding 2 s; the first export's evaluation is 14.9 s.
+
+- **Bytes.** Every file of the 15 calls above has the same SHA-256 before, with A and with A + B (PNG16, PNG8, EXR 32f and `infinite` exports, the `base_color` and `mask:10` captures, the 11 `material_views` files, the `region_stats` JSON, the exports after the edit), and so has every file of the 8192 x 8192 scenario (12 exported files and the capture). The Wand's capture is `f22b9da6…` and its export `f5202163…`, `24171dfa…`, `9cd65935…`, `e893061d…` before and after, the e2e report's hashes.
 - **Tests (A).** `tests/python/test_pyapi_native.py::test_calls_on_one_revision_reuse_its_evaluation` (same bytes, the warm exports under a third of the cold one, a refusal keeps the evaluation, a capture writes the export's BaseColor) and `::test_a_commit_supersedes_the_kept_evaluation` (after a commit the bytes are a fresh process's); the export, diagnostics, capture (CPU and GPU) and worker diagnostics tests that read these paths.
-- **Tests (B).** The CPU golden comparisons of every store operation, under `UZP_NO_GPU=1`: `tests/evaluator` (sources and projection, blend kernels and pass-through groups, mask effects and levels, height to normal, two-process determinism, evaluation order and cache) and `tests/export` (the written and processed goldens, the sRGB8, variant and minification files, the five-map preset's normal). 131 passed and 118 GPU variants skipped. One failed: `test_export_encoders.py::test_written_files_equal_the_dry_run_in_two_processes`, whose spec puts a colour bitmap on a one-channel channel; it is refused by decision 218 before any store operation runs, and it fails the same way in the full gate on `959b16a`, before this change. The regression tests' stack evaluates about 11 times longer than it encodes in Debug on all threads, so their "a third of the cold export" bound holds with margin.
+- **Tests (B).** `tests/evaluator` GPU-equals-CPU cases on random stacks, mask effects and height to normal (3 passed, on the RTX 4090). The CPU golden comparisons of every store operation, under `UZP_NO_GPU=1`: `tests/evaluator` (sources and projection, blend kernels and pass-through groups, mask effects and levels, height to normal, two-process determinism, evaluation order and cache) and `tests/export` (the written and processed goldens, the sRGB8, variant and minification files, the five-map preset's normal). 131 passed and 118 GPU variants skipped. One failed: `test_export_encoders.py::test_written_files_equal_the_dry_run_in_two_processes`, whose spec puts a colour bitmap on a one-channel channel; it is refused by decision 218 before any store operation runs, and it fails the same way in the full gate on `959b16a`, before this change. The regression tests' stack evaluates about 11 times longer than it encodes in Debug on all threads, so their "a third of the cold export" bound holds with margin.
 
 ## Alternatives Considered
 
@@ -75,3 +84,4 @@ Same machine, shared with other agents, ReleaseSafe builds of main `170028e` (be
 - An export, capture or diagnostic of a revision another call evaluated only encodes or reads what that call left; the first call on a revision still evaluates.
 - The worker keeps one revision's tiles between calls (dropped on commit, on another revision, on close, or when memory is short).
 - The CPU evaluator uses every hardware thread for each tile operation; two concurrent evaluations (an export job and a capture) share the cores.
+- Encoding stays on one thread and is now most of a large export (above). `material_views` (11.6 s at 2048 x 2048) computes its views for the reply and again for each exported view file; its tiles are shared, the view arithmetic is not.
