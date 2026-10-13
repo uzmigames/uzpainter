@@ -1,0 +1,11 @@
+{
+  "id": 224,
+  "slug": "8-bit-srgb-magnification-is-one-probe-of-the-srgb8-texture-unit-and-p20-a-s-basecolor-is-exact",
+  "title": "8-bit sRGB magnification is one probe of the sRGB8 texture unit, and P20-A's BaseColor is exact",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

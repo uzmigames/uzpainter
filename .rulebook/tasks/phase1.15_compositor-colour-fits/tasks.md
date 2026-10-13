@@ -72,8 +72,8 @@
     - Admitted: an 8-bit colour bitmap, magnified or at 1:1 by a bilinear filter, on L8 or L16F or as a mask source. Refused before any change, naming this item: other one-channel formats (L16, L32F), 16-bit colour, Nearest and minification. No colour bitmap is read through its red component any more.
   - Open:
     - the grey bitmap on Normal (still refused, Normal map excluded);
-    - a 16-bit colour bitmap on a one-channel tile (refused): `export-bit-depth` s3 records 16-bit field A on Height at 1:1, where Painter follows the component mean, not red; not yet fitted exactly;
-    - BaseColor (8 264 texels one sRGB8 code off), moved to item 2.7: the 8-bit sRGB checker magnified 16 times needs decision 209's single-probe sRGB8 filter. A CPU prototype of that rule made BaseColor exact, both recordings (decision 218).
+    - a 16-bit colour bitmap on a one-channel tile (refused): `export-bit-depth` s3 records 16-bit field A on Height at 1:1, where Painter follows the component mean, not red; not yet fitted exactly.
+  - BaseColor done (decision 224). 8-bit sRGB magnification and 1:1 are now one probe of the sRGB8 texture unit's sums (`tu::Srgb8Probe`, HLSL `Srgb8Probe` over `TuSrgb8Channel`), with the projection's own taps and weights. That is decision 209's single-probe rule. BaseColor is exact on 65 536 of 65 536 texels, r1 and r2, and its exclusion is removed from `test_facade_fill_channel_defaults_equal_painter`. `srgb-bitmap-variants-v2` s0-s8, `export-ocio-encode`, `export-ocio-encode-legacy` s3/s5, `export-bit-depth` and `export-l8-material` stay exact. Normal is still open (above).
 
 ## 3. Tests
 - [ ] 3.1 Every fitted output exact against both recordings on CPU and DX12; the refusals of what stays unrecorded still fire before any mutation and name this task

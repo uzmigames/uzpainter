@@ -62,6 +62,11 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "a colour bitmap on a one-channel tile outside P20-A (another format, 16-bit, Nearest, "
         "minified) fails with unsupported_source naming item 2.9 (decision 218)",
     } <= set(passed)
+    # 8-bit sRGB magnification and 1:1: one probe of the sRGB8 texture unit (decision 224).
+    assert (
+        "one sRGB8 probe of the texture unit's sums (magnification and 1:1) equals decision 209's "
+        "single-probe rule on two- and four-tap probes over every code pair"
+    ) in passed
     assert {
         "the Fill projection matches the bitmap to the UV tile (a 1:1 copy)",
         "Nearest: a whole-texel offset with Repeat moves the bitmap towards +u and +v, wrapping",

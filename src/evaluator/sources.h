@@ -65,7 +65,11 @@
 //   8-bit colour at scale 2 under BilinearHQ and BilinearSharp (`srgb-bitmap-minification` s0,
 //   s2), where only level 0 is read. A footprint that reads a mip level fails with
 //   `evaluator:unsupported_source` (`ReadsMipLevels`): Painter's sRGB8 mip levels hold sRGB8
-//   codes, but how it filters them is not separated by any recording (decision 219).
+//   codes, but how it filters them is not separated by any recording (decision 219). Magnified
+//   or at 1:1 by a bilinear filter, an 8-bit sRGB bitmap's four taps are one probe of the same
+//   sRGB8 sums (`tu::Srgb8Probe`, decision 209's single-probe rule; decision 224): exact on
+//   P20-A's BaseColor (the 8-bit sRGB checker magnified 16 times, `phase1-fill-channel-defaults`,
+//   r1 and r2), where the float32 filter missed 8 264 texels, and on s2's 8-bit ramp.
 // - sRGB bitmap on an L8 BaseColor, Specular or Emissive (`SrgbL8MaterialChannel`, decision 208:
 //   `export-l8-material` s0 and s1, bitmaps left in Painter's default space): a grey bitmap at 1:1 is read
 //   decoded and stored with the L8 write rule. A 16-bit code decodes as on an sRGB8 channel (the

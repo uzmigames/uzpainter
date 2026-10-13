@@ -281,9 +281,9 @@ int64_t Truncate26(int64_t x, int lsb) {
 }
 
 /// The sRGB8 texture's sums of channel `c` over the probes in the unit's order (texture_unit.h,
-/// steps 5' and 6').
-float Srgb8Filter(const Chain& chain, const std::array<Probe, 8>& probes, const std::array<uint32_t, 8>& group,
-                  uint32_t count, uint32_t c) {
+/// steps 5' and 6'); `codes` holds three codes per texel the probes index (`Chain::codes`).
+float Srgb8Filter(std::span<const uint8_t> codes, const std::array<Probe, 8>& probes,
+                  const std::array<uint32_t, 8>& group, uint32_t count, uint32_t c) {
     uint32_t live = 0;
     uint32_t last = 0;
     for (uint32_t k = 0; k < count; ++k) {
@@ -294,7 +294,7 @@ float Srgb8Filter(const Chain& chain, const std::array<Probe, 8>& probes, const 
             }
         }
     }
-    if (live == 1) return chain.texels[last * 3 + c];
+    if (live == 1) return arith::Srgb8Operand(codes[last * 3 + c]);
     // The summed probes: a split p = 0 pair gives two, in its pair group.
     struct Part {
         uint32_t group;
@@ -319,7 +319,7 @@ float Srgb8Filter(const Chain& chain, const std::array<Probe, 8>& probes, const 
     for (uint32_t k = 0; k < n; ++k) {
         int e = -1000;
         for (uint32_t q = parts[k].begin; q < parts[k].end; ++q) {
-            e = std::max(e, SegmentExponent(chain.codes[parts[k].probe->texel[q] * 3 + c]));
+            e = std::max(e, SegmentExponent(codes[parts[k].probe->texel[q] * 3 + c]));
         }
         exponent[k] = e;
         levelExponent[parts[k].group / 2] = std::max(levelExponent[parts[k].group / 2], e);
@@ -329,7 +329,7 @@ float Srgb8Filter(const Chain& chain, const std::array<Probe, 8>& probes, const 
         if (parts[k].begin == parts[k].end) continue;  // a probe of weight 0 adds nothing
         int64_t sum = 0;
         for (uint32_t q = parts[k].begin; q < parts[k].end; ++q) {
-            const double d = static_cast<double>(chain.texels[parts[k].probe->texel[q] * 3 + c]);
+            const double d = static_cast<double>(arith::Srgb8Operand(codes[parts[k].probe->texel[q] * 3 + c]));
             sum += int64_t{parts[k].probe->weight[q]} * static_cast<int64_t>(std::ldexp(d, 8 - e));
         }
         // S 2^(E - 18) in units of 2^-26 (every segment exponent is at least -8).
@@ -448,7 +448,7 @@ std::array<float, 3> SampleAt(const Chain& chain, const Footprint& fp, float u, 
 
     std::array<float, 3> result{};
     if (!chain.codes.empty()) {
-        for (uint32_t c = 0; c < 3; ++c) result[c] = Srgb8Filter(chain, probes, group, count, c);
+        for (uint32_t c = 0; c < 3; ++c) result[c] = Srgb8Filter(chain.codes, probes, group, count, c);
         return result;
     }
     for (uint32_t c = 0; c < 3; ++c) {
@@ -498,6 +498,21 @@ std::array<float, 3> Sample(const Chain& chain, float u, float v, std::array<flo
                             std::array<float, 2> ddy, int bias, bool repeatU, bool repeatV) {
     const uint32_t levels = static_cast<uint32_t>(chain.offsets.size());
     return SampleAt(chain, Resolve(ddx, ddy, chain.size, levels, bias), u, v, repeatU, repeatV);
+}
+
+float Srgb8Probe(const std::array<uint32_t, 4>& weights, const std::array<uint32_t, 4>& codes) {
+    // The probe holds its taps of non-zero weight only, as step 4 places them (`SplitInto`).
+    std::array<uint8_t, 12> texels{};
+    std::array<Probe, 8> probes{};
+    for (uint32_t k = 0; k < 4; ++k) {
+        if (weights[k] == 0) continue;
+        Probe& probe = probes[0];
+        texels[probe.count * 3] = static_cast<uint8_t>(codes[k]);
+        probe.texel[probe.count] = probe.count;
+        probe.weight[probe.count] = weights[k] * 4u;  // 1/256 to the unit's 1/1024
+        ++probe.count;
+    }
+    return Srgb8Filter(texels, probes, std::array<uint32_t, 8>{}, 1, 0);
 }
 
 std::array<float, 3> SampleLevel0(const Chain& chain, float u, float v, bool repeatU, bool repeatV) {
