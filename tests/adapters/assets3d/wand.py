@@ -70,7 +70,9 @@ def repoint(value: Any, root: Path) -> Any:
 
 
 class Wand:
-    """The wand v1 inputs staged in `work`, and the adapter calls over them."""
+    """The wand v1 inputs staged in `work`, and the adapter calls over them. Any pipeline-script
+    manifest of the same three steps loads the same way (the Belt v5 Tier 1 runner, decision 192).
+    """
 
     def __init__(self, painter: Path, work: Path, manifest: Path = REQUEST) -> None:
         """`manifest`: the R9 request, or the golden admitted from it (the Tier 1 runner)."""
@@ -149,11 +151,22 @@ class Wand:
         )
         return Call(process.returncode, process.stdout, process.stderr)
 
+    @property
+    def stack(self) -> Path:
+        """The staged stack JSON the sync step names (`wand-stack`, `belt-stack`)."""
+        return self.staged[self.job.sync.args["stack"]]
+
     def sync(self, *extra: str) -> Call:
-        stack = self.staged["wand-stack"]
         masks = self.staged[self.job.sync.args["masks"][0]].parent
         return self.call(
-            "sync", "--stack", str(stack), "--masks", str(masks), "--state", str(self.state), *extra
+            "sync",
+            "--stack",
+            str(self.stack),
+            "--masks",
+            str(masks),
+            "--state",
+            str(self.state),
+            *extra,
         )
 
     def export(self) -> Call:

@@ -1,0 +1,14 @@
+{
+  "id": 192,
+  "slug": "belt-v5-s-round-folder-is-gone-its-request-waits-on-the-owner-and-the-python-disabled-mcp-round-is-built-and-proven-on-the-wand",
+  "title": "Belt v5's round folder is gone: its request waits on the owner, and the Python-disabled MCP round is built and proven on the Wand",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.9_pilot-belt",
+    "phase1.25_pilot-wand",
+    "phase2.8_mcp-server",
+    "phase2.6_mcp-typed-tool-families"
+  ],
+  "supersededBy": null
+}

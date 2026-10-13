@@ -104,13 +104,16 @@ def exported(wand: Wand, call: Call) -> CandidateRun:
     return CandidateRun(files)
 
 
-def run(painter: Path, work: Path) -> dict[str, Any]:
-    """Two rebuilds and the comparison report."""
-    resolved = resolve_golden(GOLDEN_ID)
-    manifest = resolved.manifest_path if resolved is not None else REQUEST
+def run(
+    painter: Path, work: Path, golden_id: str = GOLDEN_ID, request: Path = REQUEST
+) -> dict[str, Any]:
+    """Two rebuilds and the comparison report; `golden_id` and its `request` name another pilot
+    of the same three pipeline steps (the Belt v5 runner)."""
+    resolved = resolve_golden(golden_id)
+    manifest = resolved.manifest_path if resolved is not None else request
     wand, first = rebuild(painter, work / "run-1", manifest)
     _, second = rebuild(painter, work / "run-2", manifest)
-    stack = load_json(wand.staged["wand-stack"])
+    stack = load_json(wand.stack)
     masks = wand.staged[wand.job.sync.args["masks"][0]].parent
     assert wand.job.export.arguments is not None
     subject = Subject(

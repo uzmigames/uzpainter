@@ -22,7 +22,8 @@ Checks the content of files, never only their names or signatures:
   SHA-256 digests. So are the preview's settling report
   (`parity/reports/<phase>/preview-settling.json`, `tools/parity/settling/preview.py`) and the
   MCP contract report (`parity/reports/<phase>/mcp-contract.json`,
-  `tools/parity/settling/mcp_contract.py`).
+  `tools/parity/settling/mcp_contract.py`), and a pilot's MCP-only round report
+  (`parity/reports/<phase>/<pilot>-mcp-round.json`, `tools/parity/tier1/mcp_round.py`).
 """
 
 from __future__ import annotations
@@ -370,6 +371,12 @@ def _mcp_contract(path: str, document: Any, data: bytes, ctx: _Context) -> list[
     return report_problems(document)
 
 
+def _mcp_round(path: str, document: Any, data: bytes, ctx: _Context) -> list[str]:
+    from tools.parity.tier1.mcp_round import report_problems
+
+    return report_problems(document)
+
+
 _Rule = Callable[[str, Any, bytes, _Context], list[str]]
 
 # First match wins: (path pattern, schema it assigns, check).
@@ -444,6 +451,11 @@ PATH_RULES: tuple[tuple[re.Pattern[str], str, _Rule], ...] = (
         re.compile(r"^parity/reports/[^/]+/mcp-contract\.json$"),
         "MCP contract report (numbers, identifiers and hashes only)",
         _mcp_contract,
+    ),
+    (
+        re.compile(r"^parity/reports/[^/]+/[a-z0-9][a-z0-9.-]*-mcp-round\.json$"),
+        "pilot MCP-only round report (numbers, identifiers and hashes only)",
+        _mcp_round,
     ),
 )
 

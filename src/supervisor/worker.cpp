@@ -751,6 +751,11 @@ json::Object Worker::Execute(const json::Value& id, const json::Object& request,
         }
         if (!error.details.empty()) details["details"] = error.details;
         return ErrorReply(id, std::move(code), error.what(), std::move(details));
+    } catch (const core::NotYetSupported& error) {
+        // A release gap the native code meets (an export's unfitted setting, refused before anything
+        // is written): `capability_gap`, as the typed tools' (typed_tools.cpp `Translated`).
+        return ErrorReply(id, "capability_gap", tool.name + ": a release gap of this build: " + error.what(),
+                          json::Object{{"tool", tool.name}, {"type", "NotYetSupported"}, {"reason", error.what()}});
     } catch (const std::exception& error) {
         return ErrorReply(id, "call_failed", error.what(), json::Object{{"type", "RuntimeError"}});
     }

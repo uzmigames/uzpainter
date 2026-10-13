@@ -686,6 +686,82 @@ def test_repository_mcp_contract_report_passes() -> None:
     assert run_guard(REPO_ROOT, snapshot, None) == []
 
 
+MCP_ROUND_PATH = "parity/reports/phase2/belt-v5-mcp-round.json"
+
+
+def _mcp_round() -> dict[str, Any]:
+    call = {"typed": True, "receipt_sha256": SHA, "seconds": 1.5}
+    return {
+        "schema": "uzpainter/pilot-mcp-round/1",
+        "golden_id": "phase2/tier1/belt-v5",
+        "manifest_sha256": SHA,
+        "run": {"date": "2026-10-12", "exe_sha256": SHA, "backend": "vulkan", "tools_listed": 80},
+        "python": {"allow_python": False, "run_python_listed": False},
+        "calls": [
+            {
+                **call,
+                "step": 1,
+                "tool": "project_create",
+                "outcome": "committed",
+                "admission": "executed",
+                "committed_revision": 1,
+            },
+            {**call, "step": 2, "tool": "export", "outcome": "returned", "committed_revision": 1},
+        ],
+        "outcome": "completed",
+        "maps": [
+            {
+                "texture_set": "23-Cinto",
+                "map": "23-Cinto_v5_BaseColor",
+                "sha256": SHA,
+                "tier1_sha256": SHA,
+            }
+        ],
+        "equal_to_tier1": "equal",
+    }
+
+
+def _refused(c: dict[str, Any]) -> dict[str, Any]:
+    failed = {**c["calls"][1], "outcome": "error", "error_code": "capability_gap"}
+    refusal = {"tool": "export", "error_code": "capability_gap", "type": "NotYetSupported"}
+    return {
+        **c,
+        "calls": [c["calls"][0], failed],
+        "outcome": "refused",
+        "refusal": refusal,
+        "maps": [],
+        "equal_to_tier1": "not_measured",
+    }
+
+
+@pytest.mark.parametrize(
+    ("change", "allowed"),
+    [
+        (lambda c: c, True),
+        (_refused, True),
+        (lambda c: {**c, "python": {"allow_python": False, "run_python_listed": True}}, False),
+        (
+            lambda c: {**c, "calls": [{**c["calls"][0], "tool": "run_python", "typed": False}]},
+            False,
+        ),
+        (lambda c: {**c, "calls": [{**c["calls"][0], "note": "E:/Assets3D/_tmp/x.png"}]}, False),
+        (lambda c: {**c, "equal_to_tier1": "not_measured"}, False),
+        (lambda c: {**c, "maps": [{**c["maps"][0], "tier1_sha256": "b" * 64}]}, False),
+        (lambda c: {**_refused(c), "equal_to_tier1": "equal"}, False),
+        (lambda c: {k: v for k, v in _refused(c).items() if k != "refusal"}, False),
+        (lambda c: {**c, "calls": [c["calls"][1], c["calls"][0]]}, False),
+    ],
+)
+def test_mcp_round_report_holds_numbers_identifiers_and_hashes_only(
+    repo: Path, change: Any, allowed: bool
+) -> None:
+    """phase2.9_pilot-belt item 2.5 (decision 192): typed calls only, Python disabled, the
+    equality with the Tier 1 run derived from the maps listed, a refusal never a pass."""
+    put(repo, MCP_ROUND_PATH, json.dumps(change(_mcp_round())).encode())
+    expected = {} if allowed else {MCP_ROUND_PATH: {"public-schema"}}
+    assert blocked(repo, None) == expected
+
+
 REBUILD_PATH = "parity/reports/phase2/recipe-rebuild-wand.json"
 
 

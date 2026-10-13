@@ -231,10 +231,13 @@ Each export is verified like a texture export: fence, fresh empty directory, and
 **Admission and regeneration.**
 - Admit with `python -m tools.parity.store record <manifests/…/wand-v1.json> --run <run>`.
 - Regenerate the requested manifest with `python -m tools.parity.recorder.script_run manifest --assets-root <Assets3D> --out <path>`.
+- The Belt v5 request (`phase2/tier1/belt-v5`, phase2.9, decision 192) is written by the same command with `--pilot belt`. It pins the committed waist-v5 scripts and `stack-belt.json`, the round folder's arguments files, the mesh (with the material library its `mtllib` names), normal and AO those name, and the stack's bitmaps in `paint/masks-belt/`. A missing file refuses the command, which prints every missing path as JSON. Add `--store` to put every pinned input in the private store, so the request outlives Assets3D `_tmp` (decision 144). The round folder `_tmp/claude/cintura-v5/` was removed on 2026-10-12 and the owner must restore it before the request exists.
 
 The scripts' own Painter calls are pinned, not checked symbol by symbol. `delete_node`, which the sync code uses, is probed by R10.
 
 **Comparison (phase1.25, decision 124).** `tests/parity/tier1/wand_v1/runner.py` rebuilds the golden's job twice in UzPainter through the Assets3D adapter, with the same pins and the same staged inputs. `tools/parity/tier1/compare.py` then compares both rebuilds with the admitted golden. Run it as `python -m pytest tests/parity/tier1/wand_v1`; set `UZP_TIER1_REPORT=parity/reports/phase1/tier1-wand-v1.json` to write the report.
+
+Belt v5 (phase2.9, decision 192) uses the same runner and comparison: `python -m pytest tests/parity/tier1/belt_v5` with `UZP_TIER1_REPORT=parity/reports/phase2/tier1-belt-v5.json`. The same file runs the Python-disabled MCP round (`UZP_MCP_ROUND_REPORT=parity/reports/phase2/belt-v5-mcp-round.json`). Until the request exists, `tests/parity/tier1/test_mcp_round.py` runs the round on the Wand v1 inputs as a stand-in for the tool only.
 
 The report (`comparison-report.json`) keeps three results apart: oracle stability, UzPainter repeatability and equality to Painter. Structural differences fail and are listed: a refused export, a map on one side only, a differing storage format or shape. A golden that is not admitted, or one whose record or blobs are missing, is `oracle_unavailable`.
 
