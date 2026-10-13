@@ -80,7 +80,7 @@ The facade is implemented in `python/` (`python/FACADE.md`; task phase1.20, deci
 
 Behaviour the scripts rely on, tested directly:
 - **Name addressing (LAY-06):** name-addressed operations are idempotent within an explicit project/set/stack/parent scope; an ambiguous match fails before mutation; repeating the same named operation creates no duplicate node. Tests: ambiguous names, repeated operations, save/reopen.
-- **Stack sync (LAY-07):** `sync` loads the existing stack JSON unedited and rebuilds only the named group; other root groups are hidden, never deleted, unless their names match the explicit keep-visible prefixes (`--keep-visible`; `keep_visible` in the MCP `sync_stack` tool). Tests: unrelated roots and resources survive, and only the addressed group is rebuilt. The native composite `layerstack.sync_stack` builds the same document as the script's `sync` through the facade, node for node (decision 115; `tests/adapters/assets3d`).
+- **Stack sync (LAY-07):** `sync` loads the existing stack JSON unedited and rebuilds only the named group; other root groups are hidden, never deleted, unless their names match the explicit keep-visible prefixes (`--keep-visible`; `keep_visible` in the MCP `sync_stack` tool). Tests: unrelated roots and resources survive, and only the addressed group is rebuilt. The native composite `layerstack.sync_stack` builds the same document as the script's `sync` through the facade, node for node (decision 115; `tests/adapters/assets3d`); under OCIO it refuses a layer's sRGB base colour with `NotYetSupported`, because Painter's measured decode exists only in the facade (decision 207).
 
 ## 7. Native additions (`uzpainter` only)
 

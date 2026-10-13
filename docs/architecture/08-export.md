@@ -49,9 +49,9 @@ Presets, by the Painter name they answer to (resolved through the compatibility 
 
 Implemented in `src/export/preset_aliases.{h,cpp}` and `assets/export-presets/` (`phase1.17_export-presets`, decision 095; `src/export/EXPORT.md` §5):
 
-- `assets3d-inline-five-map` is the pipeline's inline preset. Its export is refused while BaseColor's sRGB encoding is not fitted (R-090).
+- `assets3d-inline-five-map` is the pipeline's inline preset. It writes BaseColor sRGB-encoded (decision 126).
 - `pbr-metallic-roughness` and `blender-principled-bsdf` answer to their Painter names and `resource://starter_assets/` URLs through the alias table. They are refused until recording R-095 confirms their layouts.
-- Full output parity is `phase1.18_export-engine` item 6.2.
+- Full output parity moved from `phase1.18_export-engine` item 6.2 to `phase3.3_unreal-gltf-presets` item 3.5 (decision 103).
 
 ### Unreal Engine (Packed)
 
