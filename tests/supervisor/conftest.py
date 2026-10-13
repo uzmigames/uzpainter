@@ -38,6 +38,7 @@ import subprocess
 import textwrap
 import threading
 import time
+import zlib
 from collections.abc import Iterator
 from pathlib import Path
 from typing import IO, Any
@@ -392,30 +393,41 @@ class Mcp:
             self._stderr.close()
 
 
-def ocio_with_a_refused_bitmap(session: Mcp, tmp_path: Path) -> int:
-    """An untitled OCIO project of the plane at 256 px whose fill takes BaseColor from a 16 px
-    colour bitmap, a sampling Session O does not record (decision 190), so the evaluator refuses
-    it with `NotYetSupported` (practical-e2e B4); the fill's uid."""
+def with_a_refused_bitmap(session: Mcp, tmp_path: Path) -> int:
+    """An untitled Legacy project of the plane at 256 px whose fill takes BaseColor from a 512x256
+    8-bit colour bitmap: bilinear minification of a non-square image, where the texture unit is not
+    measured (decision 084), so the evaluator refuses it with `NotYetSupported` (practical-e2e B4).
+    The support check reads no image in Legacy; under OCIO a bitmap Session O does not record is
+    refused before mutation instead (decision 240). The fill's uid."""
     created = session.call(
         "project_create",
-        {
-            "mesh": str(PLANE),
-            "ocio_config_hash": OCIO_CONFIG,
-            "settings": {"default_texture_resolution": 256},
-            "wait": True,
-        },
+        {"mesh": str(PLANE), "settings": {"default_texture_resolution": 256}, "wait": True},
     )
     assert created["result"]["status"] == "committed", created
-    checker = tmp_path / "checker-16.png"
-    shutil.copy(REPO_ROOT / "parity" / "fixtures" / "api-probes" / "checker-16.png", checker)
-    imported = session.call("resource_import", {"path": str(checker), "usage": "TEXTURE"})
+    width, height = 512, 256
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return len(data).to_bytes(4, "big") + body + zlib.crc32(body).to_bytes(4, "big")
+
+    header = width.to_bytes(4, "big") + height.to_bytes(4, "big") + bytes([8, 2, 0, 0, 0])
+    rows = (b"\x00" + bytes([200, 120, 40]) * width) * height
+    wide = tmp_path / "wide.png"
+    wide.write_bytes(
+        bytes([0x89])
+        + b"PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
+    imported = session.call("resource_import", {"path": str(wide), "usage": "TEXTURE"})
     assert imported["result"]["status"] == "committed", imported
     inserted = session.call(
         "layer_insert", {"kind": "fill", "params": {"active_channels": ["BaseColor"]}}
     )
     fill = inserted["result"]["returned"]["node"]
     assert isinstance(fill, int), inserted
-    bitmap = {"kind": "bitmap", "resource": "checker-16", "color_space": "sRGB"}
+    bitmap = {"kind": "bitmap", "resource": "wide", "color_space": "sRGB"}
     sourced = session.call("source_set", {"uid": fill, "channel": "BaseColor", "source": bitmap})
     assert sourced["result"]["status"] == "committed", sourced
     return fill

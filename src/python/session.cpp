@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <mutex>
 #include <random>
 #include <system_error>
 #include <utility>
@@ -43,6 +44,32 @@ struct ThreadState {
 ThreadState& Thread() {
     thread_local ThreadState state;
     return state;
+}
+
+/// The support check's reader of PNG headers (evaluator/support.h `BitmapShapes`, decision 240):
+/// the bytes `store` holds or has staged for the running transaction. A resource's shape is read
+/// once per process: its bytes are content-addressed, so a shape read is never stale. Bytes the
+/// store cannot give are left to the evaluation.
+evaluator::BitmapShapes ShapesOf(store::ProjectStore& store) {
+    return [&store](std::string_view sha256) -> std::optional<evaluator::BitmapShape> {
+        static std::mutex mutex;
+        static std::map<std::string, evaluator::BitmapShape, std::less<>> shapes;
+        {
+            std::lock_guard lock(mutex);
+            if (const auto it = shapes.find(sha256); it != shapes.end()) return it->second;
+        }
+        std::optional<evaluator::BitmapShape> shape;
+        try {
+            shape = evaluator::BitmapShapeOf(store.ReadResource(sha256));
+        } catch (const store::StoreError&) {
+            return std::nullopt;
+        }
+        if (shape) {
+            std::lock_guard lock(mutex);
+            shapes.emplace(std::string(sha256), *shape);
+        }
+        return shape;
+    };
 }
 
 std::string RandomHex(std::size_t bytes) {
@@ -339,7 +366,10 @@ void Session::Rebuild(const core::json::Value& dump, const std::filesystem::path
             },
             false);
     }
-    evaluator::RequireSupported(core::Project{}, rebuilt);
+    evaluator::RequireSupported(core::Project{}, rebuilt, [&bytes](std::string_view sha256) {
+        const auto it = bytes.find(std::string(sha256));
+        return it == bytes.end() ? std::nullopt : evaluator::BitmapShapeOf(it->second);
+    });
 
     core::DocumentState state;
     state.project_uuid = NewUuid();
@@ -488,9 +518,12 @@ void Session::NotifyDurableChange() const {
 CallResult Session::Mutate(const std::string& tool, core::json::Object arguments,
                            const std::function<void(core::Edit&)>& call) {
     ThreadState& thread = Thread();
-    const auto checked = [&call](core::Edit& edit) {
+    // Inside a native Transaction the bitmaps' images and the set changes are checked once, by the
+    // commit (`CommitTransaction`): its calls may resize a set and rebind its bitmaps in either order.
+    const evaluator::BitmapShapes shapes = thread.transaction ? evaluator::BitmapShapes{} : ShapesOf(*Current()->store);
+    const auto checked = [&call, &shapes](core::Edit& edit) {
         call(edit);
-        evaluator::RequireSupported(edit.base(), edit.project());
+        evaluator::RequireSupported(edit.base(), edit.project(), shapes);
     };
     if (thread.transaction) {
         const core::Project before = thread.edit->project();
@@ -519,10 +552,11 @@ CallResult Session::Mutate(const std::string& tool, core::json::Object arguments
 core::RequestOutcome Session::Submit(core::MutationRequest request, const std::function<void(core::Edit&)>& call) {
     if (Thread().transaction) throw ApiError("RuntimeError", "a typed tool call inside an open Transaction");
     const std::shared_ptr<OpenProject> project = Current();
+    const evaluator::BitmapShapes shapes = ShapesOf(*project->store);
     core::RequestOutcome outcome =
-        project->store->Submit(*project->document, std::move(request), [&call](core::Edit& edit) {
+        project->store->Submit(*project->document, std::move(request), [&call, &shapes](core::Edit& edit) {
             call(edit);
-            evaluator::RequireSupported(edit.base(), edit.project());
+            evaluator::RequireSupported(edit.base(), edit.project(), shapes);
         });
     if (outcome.result) Record(FromResult(*outcome.result));
     return outcome;
@@ -555,10 +589,22 @@ CallResult Session::CommitTransaction() {
     ThreadState& thread = Thread();
     if (!thread.transaction) throw ApiError("RuntimeError", "no Transaction is open on this thread");
     std::unique_ptr<core::Transaction> transaction = std::move(thread.transaction);
+    const std::shared_ptr<OpenProject> project = std::move(thread.project);
     thread.edit = nullptr;
-    thread.project.reset();
+    // The support check of the state that commits, with the bitmaps' images (support.h): a refusal
+    // fails the transaction, which then commits nothing and raises it.
+    std::exception_ptr error;
+    if (!transaction->failed()) {
+        const evaluator::BitmapShapes shapes = ShapesOf(*project->store);
+        try {
+            transaction->Apply(
+                [&shapes](core::Edit& edit) { evaluator::RequireSupported(edit.base(), edit.project(), shapes); });
+        } catch (...) {
+            error = std::current_exception();
+        }
+    }
     const core::RequestOutcome outcome = transaction->Commit();
-    CallResult result = FromResult(Settle(outcome, nullptr));
+    CallResult result = FromResult(Settle(outcome, error));
     Record(result);
     return result;
 }

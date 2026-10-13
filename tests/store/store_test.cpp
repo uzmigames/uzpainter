@@ -186,6 +186,7 @@ Id ImportBound(Session& s, const std::string& key, const std::string& bytes, con
     Id uid = kNoId;
     RequestOutcome result = s.store->Submit(*s.doc, Req(key, s.doc->revision(), name), [&](Edit& e) {
         const std::string sha = s.store->StageResource(bytes, "image/png");
+        CHECK(s.store->ReadResource(sha) == bytes);  // staged bytes read in the transaction (decision 240)
         e.project().resources[sha].push_back(Meta(e.AllocateId(), name, bytes.size()));
         uid = e.Insert(kTop, NodeType::FillLayer, name);
         Layer& layer = *FindLayer(e.project(), uid);
@@ -668,6 +669,7 @@ void NonPortableMissing() {
         CHECK(!s.store->portable());
         const RequestOutcome done = s.store->Submit(*s.doc, Req("link", 0), [&](Edit& e) {
             sha = s.store->StageLocator(hdri);
+            CHECK(s.store->ReadResource(sha) == bytes);  // a staged locator is read too (decision 240)
             e.project().resources[sha] = {Meta(e.AllocateId(), "studio.hdr", bytes.size())};
             uid = e.Insert(kTop, NodeType::FillLayer, "lit");
             Layer& layer = *FindLayer(e.project(), uid);

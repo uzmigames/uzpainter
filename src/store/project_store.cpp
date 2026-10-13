@@ -186,7 +186,12 @@ std::string ProjectStore::ReadResource(std::string_view sha256) {
                 CorruptItem{"blob", std::string(sha256), error.what(), NodesBinding(current_manifest_, sha256)});
         }
     }
-    if (const auto locator = FindLocator(container_, sha256)) {
+    if (const auto staged = pending_.blobs.find(sha256); staged != pending_.blobs.end()) return staged->second.bytes;
+    std::optional<std::filesystem::path> locator = FindLocator(container_, sha256);
+    if (const auto staged = pending_.locators.find(sha256); !locator && staged != pending_.locators.end()) {
+        locator = staged->second;
+    }
+    if (locator) {
         const std::optional<std::string> bytes = ReadFile(*locator);
         if (!bytes) {
             throw StoreError(StoreError::Code::missing_dependency,

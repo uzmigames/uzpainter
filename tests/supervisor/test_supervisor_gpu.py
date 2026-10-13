@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.supervisor.conftest import NO_GPU, Mcp, make_project, ocio_with_a_refused_bitmap
+from tests.supervisor.conftest import NO_GPU, Mcp, make_project, with_a_refused_bitmap
 
 pytestmark = pytest.mark.skipif(
     NO_GPU, reason="UZP_NO_GPU=1: needs a DX12 hardware adapter (decision 028)"
@@ -87,15 +87,15 @@ def test_evaluation_returns_its_payload_by_path_and_hash(
 def test_an_evaluator_release_gap_is_a_capability_gap(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:
-    """practical-e2e B4 (decision 242): the GPU evaluator's `NotYetSupported` (an OCIO bitmap
-    sampling Session O does not record) reaches the client as `capability_gap {tool, type, reason,
-    operations}`, as the export's and the capture's do, not as the render layer's
-    `request_failed`."""
+    """practical-e2e B4 (decision 242): the GPU evaluator's `NotYetSupported` (a bitmap
+    minification the texture unit is not measured on) reaches the client as `capability_gap
+    {tool, type, reason, operations}`, as the export's and the capture's do, not as the render
+    layer's `request_failed`."""
     session = Mcp(painter, tmp_path, *DX12)
     sessions.append(session)
     if session.status()["gpu_status"] != "ready":
         pytest.skip("no DX12 device on this machine")
-    ocio_with_a_refused_bitmap(session, tmp_path)
+    with_a_refused_bitmap(session, tmp_path)
     refused = session.call("evaluate_channel", {"channel": "BaseColor"})
     assert refused["error"]["code"] == "capability_gap", refused
     details = refused["error"]["details"]

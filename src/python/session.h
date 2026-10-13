@@ -13,7 +13,8 @@
 //   commits nothing; another thread's commit in between raises `StaleRevisionError`.
 // - The native `Transaction` (`OpenTransaction`) makes several calls of one thread atomic: each
 //   call is applied to the transaction's working copy, reads on that thread see the working copy,
-//   and the block commits once or not at all.
+//   and the block commits once or not at all. Its calls are checked without the bitmaps' images,
+//   and its final working copy with them, before it commits (`evaluator/support.h`, decision 240).
 // - Thread rules of 02-runtime-topology.md §4: the document lock is held only while a call edits
 //   the working copy (or for the duration of a native `Transaction`); the GIL is released around
 //   every wait for the document lock, a job or the store, so other Python threads run meanwhile.
@@ -179,7 +180,8 @@ public:
     core::RequestOutcome Submit(core::MutationRequest request, const std::function<void(core::Edit&)>& call);
 
     /// The native `Transaction` of this thread: opened (waiting for the document lock), then
-    /// committed or rolled back. `Commit` raises the transaction's error when it fails.
+    /// committed or rolled back. `Commit` runs the support check with the bitmaps' images on the
+    /// final working copy, and raises the transaction's error when it fails.
     void OpenTransaction(const std::string& name);
     CallResult CommitTransaction();
     void RollbackTransaction();

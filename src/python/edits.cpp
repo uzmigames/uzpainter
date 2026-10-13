@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iterator>
 
+#include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "mesh/mesh_import.h"
 #include "python/display.h"
@@ -262,6 +263,74 @@ core::BitmapSource& EditBitmap(core::Edit& edit, core::Id uid, const ChannelArg&
                                (channel ? " on " + std::string(core::ToString(*channel)) : std::string()));
     }
     return std::get<core::BitmapSource>(source->value);
+}
+
+// ── Uniform colours ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+constexpr const char* kOcioGap = "phase1.15_compositor-colour-fits item 2.6, decision 202";
+
+[[noreturn]] void OcioUnrecorded(const std::string& what) {
+    throw core::NotYetSupported("under OCIO, " + what + " is not recorded (" + std::string(kOcioGap) + ")");
+}
+
+}  // namespace
+
+bool DecodesColour(const std::map<core::ChannelType, core::Channel>& channels, const ChannelArg& channel) {
+    if (!channel || core::ToString(*channel).starts_with("User")) return false;
+    const auto it = channels.find(*channel);
+    return it != channels.end() && it->second.format == core::ChannelFormat::sRGB8;
+}
+
+bool OcioColourProfile(const core::Project& project) {
+    const core::ColorManagement& cm = project.settings.color_management;
+    if (cm.mode.empty() || cm.mode == "legacy") return false;
+    if (evaluator::PainterOcio(project)) return true;
+    throw core::NotYetSupported("colour management '" + cm.mode + "' (working space '" + cm.working_space +
+                                "', config hash '" + cm.config_hash +
+                                "') is not a pinned colour profile; only Painter's Legacy mode and OCIO with Painter's "
+                                "substance config (SHA-256 " +
+                                std::string(evaluator::kPainterOcioConfigSha256.substr(0, 8)) +
+                                "...) are supported (decisions 107, 190 and 202)");
+}
+
+std::array<double, 3> WorkingColour(const std::array<double, 3>& rgb, const std::optional<std::string>& space,
+                                    bool decodes, bool ocio) {
+    const std::string name = space.value_or(decodes ? "sRGB" : "Raw");
+    const bool srgb = name == "sRGB";
+    const bool given = name == "Raw" || name == "Working" || (!ocio && name == "Linear");
+    if (ocio) {
+        if (!decodes && srgb) OcioUnrecorded("an sRGB uniform colour on a channel that does not decode it");
+        if (!srgb && !given) OcioUnrecorded("a uniform colour in the colour space '" + name + "'");
+    } else if (!srgb && !given) {
+        throw core::ValueError("'" + name + "' is not a colour space of Painter's Legacy colour management");
+    }
+    std::array<double, 3> working{};
+    for (std::size_t c = 0; c < 3; ++c) {  // every component before any change
+        const float x = static_cast<float>(rgb[c]);
+        if (!decodes || !srgb) {
+            working[c] = x;  // as given (a channel that does not decode: decision 115)
+        } else if (!ocio) {
+            working[c] = evaluator::PainterLegacySrgbDecode(x);
+        } else if (const std::optional<float> value = evaluator::PainterOcioSrgbDecode(x)) {
+            working[c] = *value;
+        } else {
+            throw core::NotYetSupported(
+                "under OCIO, Painter's working value of the sRGB component " + core::json::FormatDouble(rgb[c]) +
+                " is not recorded: the decode is Painter's measured value of the components c / 255 and of the other "
+                "recorded components, and no analytic decode reproduces it (" + std::string(kOcioGap) +
+                "; a Tier 0 readback of the component settles it)");
+        }
+    }
+    return working;
+}
+
+core::UniformColorSource StoredUniformColour(const core::Project& project, core::Id uid, const ChannelArg& channel,
+                                            const std::array<double, 3>& rgb, const std::optional<std::string>& space) {
+    const NodeInfo info = Resolve(project, uid);
+    const bool decodes = DecodesColour(ResolveStack(project, {info.texture_set, info.stack}).channels, channel);
+    return core::UniformColorSource{WorkingColour(rgb, space, decodes, OcioColourProfile(project)), "Working", {}};
 }
 
 // ── Texture sets ────────────────────────────────────────────────────────────────────────────────

@@ -17,6 +17,9 @@ import zlib
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
+from tests.export.encoders_tier0 import srgb_to_working
 from tests.supervisor.conftest import (
     OCIO_CONFIG,
     PLANE,
@@ -24,9 +27,11 @@ from tests.supervisor.conftest import (
     Mcp,
     Pipe,
     make_project,
-    ocio_with_a_refused_bitmap,
     run_script,
+    with_a_refused_bitmap,
 )
+from tools.parity import ocio_srgb_table
+from tools.parity.fit.decode import decode
 
 PROBE_IMAGES = REPO_ROOT / "parity" / "fixtures" / "api-probes"
 BASE = ("--gpu-backend", "vulkan")
@@ -139,15 +144,19 @@ def inserted(reply: dict[str, Any]) -> int:
     return uid
 
 
-def png(width: int, height: int, grey: int) -> bytes:
-    """An 8-bit grey PNG of one value."""
+def png(width: int, height: int, grey: int, channels: int = 1, depth: int = 8) -> bytes:
+    """A PNG of one value: grey (`channels` 1) or RGB (3), of 8 or 16 bits."""
 
     def chunk(kind: bytes, data: bytes) -> bytes:
         body = kind + data
         return len(data).to_bytes(4, "big") + body + zlib.crc32(body).to_bytes(4, "big")
 
-    header = width.to_bytes(4, "big") + height.to_bytes(4, "big") + bytes([8, 0, 0, 0, 0])
-    rows = b"".join(b"\x00" + bytes([grey]) * width for _ in range(height))
+    colour_type = 0 if channels == 1 else 2
+    header = (
+        width.to_bytes(4, "big") + height.to_bytes(4, "big") + bytes([depth, colour_type, 0, 0, 0])
+    )
+    sample = grey.to_bytes(depth // 8, "big") * channels
+    rows = b"".join(b"\x00" + sample * width for _ in range(height))
     signature = bytes([0x89]) + b"PNG\r\n\x1a\n"
     return (
         signature
@@ -755,6 +764,188 @@ def test_project_create_takes_its_colour_management_as_an_argument(
     assert colour["legacy"]["mode"] == "" and colour["legacy"]["config_hash"] == ""
 
 
+# ── Uniform colours and OCIO bitmaps as the native API stores them (decision 240) ──────────────
+
+BASECOLOR_PNG16 = {
+    "exportShaderParams": False,
+    "defaultExportPreset": "base",
+    "exportPresets": [
+        {
+            "name": "base",
+            "maps": [
+                {
+                    "fileName": "base",
+                    "channels": [
+                        {
+                            "destChannel": ch,
+                            "srcChannel": ch,
+                            "srcMapType": "documentMap",
+                            "srcMapName": "basecolor",
+                        }
+                        for ch in "RGB"
+                    ],
+                }
+            ],
+        }
+    ],
+    "exportList": [{"rootPath": "uzp_plane"}],
+    "exportParameters": [
+        {
+            "parameters": {
+                "fileFormat": "png",
+                "bitDepth": "16",
+                "dithering": False,
+                "paddingAlgorithm": "passthrough",
+            }
+        }
+    ],
+}
+
+
+def test_source_set_stores_a_uniform_colour_as_painters_set_source(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """B1 (practical-e2e, decision 240): `source_set` of a uniform sRGB colour stores Painter's
+    working value as the facade's `set_source` does, so the same instruction exports the same
+    BaseColor through MCP and through `run`: sRGB (0.5, 0.35, 0.2) exports (32893, 22895, 13128),
+    not the double-encoded (48360, 41122, 31840). A colour without a space is sRGB on BaseColor.
+    Under OCIO a component Painter's measured decode does not record is refused before any change,
+    as the facade refuses it."""
+    session, _ = opened(painter, tmp_path, sessions)
+    fill = inserted(
+        session.call("layer_insert", {"kind": "fill", "params": {"active_channels": ["BaseColor"]}})
+    )
+    decoded = [srgb_to_working(c) for c in (0.5, 0.35, 0.2)]
+    for space in ({"color_space": "sRGB"}, {}):
+        uniform = {"kind": "uniform_color", "color": [0.5, 0.35, 0.2], **space}
+        reply = session.call("source_set", {"uid": fill, "channel": "BaseColor", "source": uniform})
+        assert reply["result"]["status"] in ("committed", "no_op"), reply
+        source = nodes(session)[fill]["params"]["fill"]["sources"]["BaseColor"]
+        assert (source["rgb"], source["color_space"]) == (decoded, "Working"), space
+    exported = session.call(
+        "export",
+        {"config": {**BASECOLOR_PNG16, "exportPath": str(tmp_path / "mcp")}, "wait": True},
+    )
+    assert "error" not in exported, exported
+    [mcp_file] = [Path(f["path"]) for f in exported["result"]["files"]]
+    [run_file] = run_script(
+        painter,
+        tmp_path,
+        f"""
+        import substance_painter as sp
+        from substance_painter import colormanagement as cm, layerstack as ls, project
+        from substance_painter import textureset as ts
+        project.create({str(PLANE.as_posix())!r},
+                       settings=project.Settings(default_texture_resolution=256))
+        stack = ts.get_active_stack()
+        fill = ls.insert_fill(ls.InsertPosition.from_textureset_stack(stack))
+        fill.active_channels = {{ts.ChannelType.BaseColor}}
+        fill.set_source(ts.ChannelType.BaseColor, cm.Color(0.5, 0.35, 0.2))
+        config = {dict(BASECOLOR_PNG16, exportPath=str(tmp_path / "run"))!r}
+        exported = sp.export.export_project_textures(config)
+        assert exported.status == sp.export.ExportStatus.Success, exported.message
+        result = [path for paths in exported.textures.values() for path in paths]
+        """,
+    )
+    through_mcp, through_run = decode(mcp_file.read_bytes()), decode(Path(run_file).read_bytes())
+    assert np.array_equal(through_mcp.values, through_run.values)
+    assert set(map(tuple, through_mcp.values.reshape(-1, 3).tolist())) == {(32893, 22895, 13128)}
+
+    assert "error" not in session.call("project_close", {"discard": True})
+    created = session.call(
+        "project_create", {"mesh": str(PLANE), "ocio_config_hash": OCIO_CONFIG, "wait": True}
+    )
+    assert created["result"]["status"] == "committed", created
+    fill = inserted(
+        session.call("layer_insert", {"kind": "fill", "params": {"active_channels": ["BaseColor"]}})
+    )
+    revision = revision_of(session)
+    unrecorded = {"kind": "uniform_color", "color": [0.5, 0.35, 0.2], "color_space": "sRGB"}
+    refused = session.call(
+        "source_set", {"uid": fill, "channel": "BaseColor", "source": unrecorded}
+    )
+    assert refused["error"]["code"] == "capability_gap", refused
+    assert "sRGB component 0.35 is not recorded" in refused["error"]["message"]
+    assert revision_of(session) == revision
+    codes = {"kind": "uniform_color", "color": [128 / 255, 89 / 255, 51 / 255]}
+    reply = session.call("source_set", {"uid": fill, "channel": "BaseColor", "source": codes})
+    assert reply["result"]["status"] == "committed", reply
+    source = nodes(session)[fill]["params"]["fill"]["sources"]["BaseColor"]
+    table = ocio_srgb_table.load_source().CODES
+    assert (source["rgb"], source["color_space"]) == ([table[128], table[89], table[51]], "Working")
+
+
+def test_source_set_refuses_an_ocio_bitmap_the_evaluator_refuses(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """B5 (practical-e2e, decision 240): under OCIO, `source_set` of an 8-bit colour bitmap that is
+    not the texture set's size, or of an 8-bit grey mask source, is refused `capability_gap` before
+    any change, as every later export would be; the set's size bitmap commits, and a
+    `set_resolution` that would break its 1:1 sampling is refused too. Every MCP call commits, so
+    the resize binds other sources first and the new size's image after (decision 240)."""
+    session = Mcp(painter, tmp_path, *BASE)
+    sessions.append(session)
+    created = session.call(
+        "project_create",
+        {
+            "mesh": str(PLANE),
+            "settings": {"default_texture_resolution": 256},
+            "ocio_config_hash": OCIO_CONFIG,
+            "wait": True,
+        },
+    )
+    assert created["result"]["status"] == "committed", created
+    images = {
+        "small": png(128, 128, 90, channels=3),
+        "base": png(256, 256, 90, channels=3),
+        "base512": png(512, 512, 90, channels=3),
+        "grey8": png(256, 256, 90),
+        "grey16": png(256, 256, 9000, depth=16),
+    }
+    for name, data in images.items():
+        (tmp_path / f"{name}.png").write_bytes(data)
+        path = str(tmp_path / f"{name}.png")
+        imported = session.call("resource_import", {"path": path, "usage": "TEXTURE"})
+        assert "error" not in imported, imported
+    fill = inserted(
+        session.call("layer_insert", {"kind": "fill", "params": {"active_channels": ["BaseColor"]}})
+    )
+    assert "error" not in session.call("mask_set", {"uid": fill, "present": True})
+    mask = inserted(session.call("effect_insert", {"uid": fill, "stack": "mask", "kind": "fill"}))
+
+    def bitmap(uid: int, channel: str | None, resource: str, space: str) -> dict[str, Any]:
+        source = {"kind": "bitmap", "resource": resource, "color_space": space}
+        arguments: dict[str, Any] = {"uid": uid, "source": source}
+        if channel:
+            arguments["channel"] = channel
+        reply: dict[str, Any] = session.call("source_set", arguments)
+        return reply
+
+    revision = revision_of(session)
+    small = bitmap(fill, "BaseColor", "small", "sRGB")
+    assert small["error"]["code"] == "capability_gap", small
+    assert "a 128x128 8-bit colour bitmap on the channel BaseColor" in small["error"]["message"]
+    grey8 = bitmap(mask, None, "grey8", "Data")
+    assert grey8["error"]["code"] == "capability_gap", grey8
+    assert "a 256x256 8-bit grey bitmap as a mask source" in grey8["error"]["message"]
+    assert revision_of(session) == revision
+    assert bitmap(fill, "BaseColor", "base", "sRGB")["result"]["status"] == "committed"
+    assert bitmap(mask, None, "grey16", "Data")["result"]["status"] == "committed"
+    resized = session.call("set_resolution", {"width": 512, "height": 512})
+    assert resized["error"]["code"] == "capability_gap", resized
+    assert "bind another source first" in resized["error"]["message"]
+    assert revision_of(session) == revision + 2
+    for uid, channel in ((fill, "BaseColor"), (mask, None)):
+        uniform = {"kind": "uniform_color", "color": [0.5, 0.5, 0.5], "color_space": "Working"}
+        arguments: dict[str, Any] = {"uid": uid, "source": uniform}
+        if channel:
+            arguments["channel"] = channel
+        assert session.call("source_set", arguments)["result"]["status"] == "committed"
+    resized = session.call("set_resolution", {"width": 512, "height": 512})
+    assert resized["result"]["status"] == "committed", resized
+    assert bitmap(fill, "BaseColor", "base512", "sRGB")["result"]["status"] == "committed"
+
+
 GAP_FIELDS = {"tool", "type", "reason", "operations"}
 
 
@@ -785,12 +976,12 @@ def test_every_release_gap_is_one_capability_gap(
     """practical-e2e B4 (decision 242): a release gap reaches the client as `capability_gap {tool,
     type, reason, operations}` whichever layer refuses it: the supervisor's gate (a gap family, a
     gated value), the capture's `painter_iray` (`PathTracerUnavailable`, formerly `call_failed`)
-    and the evaluator, whose `NotYetSupported` (an OCIO bitmap sampling Session O does not record)
-    was `call_failed` in `export`, `capture`, `material_views` and `region_stats`. Nothing is
-    written."""
+    and the evaluator, whose `NotYetSupported` (a bitmap minification the texture unit is not
+    measured on) was `call_failed` in `export`, `capture`, `material_views` and `region_stats`.
+    Nothing is written."""
     session = Mcp(painter, tmp_path, *BASE)
     sessions.append(session)
-    fill = ocio_with_a_refused_bitmap(session, tmp_path)
+    fill = with_a_refused_bitmap(session, tmp_path)
     out = tmp_path / "out"
     evaluated: dict[str, dict[str, Any]] = {
         "export": {"config": basecolor_config(out / "basecolor"), "wait": True},
@@ -805,7 +996,7 @@ def test_every_release_gap_is_one_capability_gap(
         assert set(details) == GAP_FIELDS and details["tool"] == name, details
         assert details["type"] == "NotYetSupported" and details["operations"] == [], details
         assert "evaluator:unsupported_source" in details["reason"], details
-        assert "under OCIO" in details["reason"], details
+        assert "minification" in details["reason"], details
     iray = session.call("capture", {"mode": "painter_iray", "path": "caps/iray.png"})["error"]
     assert iray["code"] == "capability_gap" and set(iray["details"]) == GAP_FIELDS, iray
     assert (iray["details"]["tool"], iray["details"]["type"]) == (

@@ -146,6 +146,8 @@ public:
     const AdmissionDecision& decision() const { return decision_; }
     /// Admitted and neither committed nor rolled back.
     bool open() const { return lock_.owns_lock(); }
+    /// A call failed: no further call applies and `Commit` commits nothing.
+    bool failed() const { return failure_.has_value(); }
 
     /// Runs one call on the working copy. If it throws, the transaction is failed: the exception
     /// propagates and a later `Commit` commits nothing. Throws `std::logic_error` when the

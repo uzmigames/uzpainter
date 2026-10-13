@@ -3,11 +3,10 @@
 #include "python/stack_sync.h"
 
 #include <algorithm>
-#include <cmath>
 #include <map>
 #include <set>
 
-#include "evaluator/sources.h"
+#include "python/edits.h"
 #include "python/session.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/sha256.h"
@@ -62,21 +61,8 @@ const Object& AsObject(const Value& value, const std::string& where) {
     return std::get<Object>(value.data);
 }
 
-/// Values are stored as float32, as every setter of the API stores them (bindings.h, `F32`).
-double F32(double value) { return static_cast<double>(static_cast<float>(value)); }
-
 core::Source Uniform(std::array<double, 3> rgb, const std::string& colour_space) {
     return core::Source{core::UniformColorSource{{F32(rgb[0]), F32(rgb[1]), F32(rgb[2])}, colour_space, {}}};
-}
-
-/// The facade's float32 sRGB decode of one component (`python/uzpainter_facade/colour.py`
-/// `srgb_to_linear`): x = f32(v), ((x + 0.055f) / 1.055f) ^ 2.4f, the power of the float32
-/// operands rounded once to float32.
-double SrgbToLinear(double value) {
-    const float x = static_cast<float>(value);
-    if (x <= 0.04045f) return x / 12.92f;
-    const float base = (x + 0.055f) / 1.055f;
-    return static_cast<float>(std::pow(static_cast<double>(base), static_cast<double>(2.4f)));
 }
 
 core::Source Bitmap(const std::string& sha256, const std::string& colour_space) {
@@ -301,39 +287,17 @@ Object SyncStack(core::Edit& edit, store::ProjectStore& store, const Object& sta
                 content.projection.uv.uv_wrapping_mode = core::UVWrapMode::RepeatNone;
                 content.projection.uv.uv_transformation = core::UVTransformation{};
             } else {
-                // The script sets `base` as an sRGB colour; the facade stores the working value
-                // it decodes to on a colour-managed (sRGB8) BaseColor, the value as given on any
-                // other format (decision 115). Under OCIO it reads Painter's measured decode
-                // (evaluator::PainterOcioSrgbDecode, the facade's table, decisions 202 and 212) and
-                // refuses what the facade refuses: an unrecorded component, and an sRGB colour on
-                // a BaseColor that does not decode it.
-                std::array<double, 3> working = *l.base;
-                const auto base_channel = channels.find(core::ChannelType::BaseColor);
-                const bool decodes =
-                    base_channel != channels.end() && base_channel->second.format == core::ChannelFormat::sRGB8;
-                if (evaluator::PainterOcio(edit.project())) {
-                    if (!decodes) {
-                        throw core::NotYetSupported("sync_stack: under OCIO, the sRGB base colour of '" + l.name +
-                                                    "' on a BaseColor that does not decode it is not recorded "
-                                                    "(phase1.15_compositor-colour-fits item 2.6, decision 202)");
-                    }
-                    std::array<double, 3> decoded{};
-                    for (std::size_t c = 0; c < 3; ++c) {
-                        const std::optional<float> value = evaluator::PainterOcioSrgbDecode(static_cast<float>(working[c]));
-                        if (!value) {
-                            throw core::NotYetSupported(
-                                "sync_stack: under OCIO, Painter's working value of the sRGB component " +
-                                core::json::FormatDouble(working[c]) + " of the base colour of '" + l.name +
-                                "' is not recorded: the decode is Painter's measured value of the components c / 255 "
-                                "and of the other recorded components, and no analytic decode reproduces it "
-                                "(phase1.15_compositor-colour-fits item 2.6, decision 202; a Tier 0 readback of the "
-                                "component settles it)");
-                        }
-                        decoded[c] = static_cast<double>(*value);
-                    }
-                    working = decoded;
-                } else if (decodes) {
-                    for (double& c : working) c = SrgbToLinear(c);
+                // The script sets `base` as an sRGB colour: stored as every setter stores it
+                // (`WorkingColour`, decision 240), the working value on a BaseColor that decodes
+                // it, the value as given on any other (decision 115); under OCIO Painter's measured
+                // decode, refusing an unrecorded component and a BaseColor that does not decode it.
+                std::array<double, 3> working{};
+                try {
+                    working = WorkingColour(*l.base, "sRGB", DecodesColour(channels, core::ChannelType::BaseColor),
+                                            OcioColourProfile(edit.project()));
+                } catch (const core::NotYetSupported& error) {
+                    throw core::NotYetSupported("sync_stack: " + std::string(error.what()) + " (the base colour of '" +
+                                                l.name + "')");
                 }
                 content.sources[core::ChannelType::BaseColor] = Uniform(working, "Working");
             }

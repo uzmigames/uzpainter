@@ -141,9 +141,12 @@ public:
     std::string StageLocator(const std::filesystem::path& path);
 
     /// The verified bytes of a resource: from `blob`, or through the locator of a non-portable
-    /// project. Throws `CorruptionError` (with the nodes of the current manifest that bind the
-    /// hash) when stored bytes do not verify, `StoreError(missing_dependency)` for an absent or
-    /// changed locator target and `StoreError(missing_resource)` when the hash is unknown.
+    /// project, or, before they are stored, as staged for the running transaction
+    /// (`StageResource`, `StageLocator`: the support check reads a bitmap imported and bound in one
+    /// transaction, decision 240). Throws `CorruptionError` (with the nodes of the current manifest
+    /// that bind the hash) when stored bytes do not verify, `StoreError(missing_dependency)` for an
+    /// absent or changed locator target and `StoreError(missing_resource)` when the hash is
+    /// unknown.
     std::string ReadResource(std::string_view sha256);
 
     /// Creates a raster plane owned by a paint node of the transaction's working copy, bound to
