@@ -20,6 +20,7 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
+from tests.uzp_core.test_recipe import NATIVE_CASES as RECIPE_CASES
 from tools.parity.recorder.job import canonical_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -129,10 +130,11 @@ def test_native_case(core_tests: Path, case: str) -> None:
 
 
 def test_native_case_list_is_complete(core_tests: Path) -> None:
+    """`uzp-core-tests.exe` runs this file's cases, then the recipe cases of `test_recipe.py`."""
     proc = run(core_tests, "run")
     assert proc.returncode == 0, proc.stdout.decode()
     ran = [line.split()[1] for line in proc.stdout.decode().splitlines() if line.startswith("PASS")]
-    assert tuple(ran) == NATIVE_CASES
+    assert tuple(ran) == NATIVE_CASES + RECIPE_CASES
 
 
 # ── 3.1 Round trip of fixture documents ────────────────────────────────────────────────────
