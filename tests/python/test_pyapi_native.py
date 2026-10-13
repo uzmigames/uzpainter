@@ -404,6 +404,43 @@ def test_a_project_records_its_template(run: Run) -> None:
     assert set(np.unique(exported.values).tolist()) == {178 * 257}
 
 
+def test_a_project_is_created_under_painters_ocio_config_only(run: Run) -> None:
+    """Decision 207: `Settings(ocio_config_hash=...)` creates an OCIO project with Painter's
+    substance config, which save and reopen keep; any other hash fails before anything is created,
+    and a project created without one is Legacy."""
+    result = ok(
+        run("""
+        SUBSTANCE = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+        other = raises(project.create, PLANE, project.Settings(ocio_config_hash="ab" * 32))
+        open_after_other = project.is_open()
+        create()
+        legacy = cm.get_color_management()
+        project.close()
+        project.create(PLANE, project.Settings(default_texture_resolution=256,
+                                               ocio_config_hash=SUBSTANCE))
+        created = cm.get_color_management()
+        project.save_as(WORK + "/ocio.uzp")
+        project.close()
+        project.open(WORK + "/ocio.uzp")
+        reopened = cm.get_color_management()
+        project.close()
+        result = {"other": other, "open_after_other": open_after_other, "legacy": legacy,
+                  "created": created, "reopened": reopened}
+        """)
+    )
+    assert result["other"].startswith("NotYetSupported: an OCIO project with the configuration ab")
+    assert result["open_after_other"] is False
+    assert result["legacy"]["mode"] == "" and result["legacy"]["config_hash"] == ""
+    substance = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+    assert result["created"] == {
+        "config_hash": substance,
+        "io_rules": [],
+        "mode": "ocio",
+        "working_space": "",
+    }
+    assert result["reopened"] == result["created"]
+
+
 # ── 3.3 handles and later-phase calls ───────────────────────────────────────────────────────────
 
 

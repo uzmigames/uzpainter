@@ -275,18 +275,20 @@ def test_the_shim_is_visible_to_adapter_run_scripts_only(
 # ── 3.4 Missing capabilities in Phase 1; the capture shim (phase2.2 item 3.6) ───────────────────
 
 
-def test_capture_on_the_legacy_wand_is_the_unsupported_configuration(created: Wand) -> None:
-    """phase2.2 3.6 (decision 148): `capture` reaches the shim, which calls
-    `uzpainter.render.capture(mode="painter_viewport")`; the wand project is Legacy
-    colour-managed, as every project UzPainter creates today, so the capture refuses the display
-    configuration (decisions 038, 134) before any evaluation or device; nothing is written and the
-    revision is unchanged."""
+def test_capture_on_the_ocio_wand_needs_an_environment(created: Wand) -> None:
+    """phase2.2 3.6 (decisions 148, 207): `capture` reaches the shim, which calls
+    `uzpainter.render.capture(mode="painter_viewport")`. `painter_create.py` sets `OCIO` to
+    Painter's substance config before `create`, so the wand project is in the pinned display
+    configuration (decisions 038, 134) and the capture passes the colour check. A created project
+    names no environment, and the capture has no substitute for it (RES-03), so it is refused
+    before rendering: nothing is written and the revision is unchanged. (The Legacy refusal is
+    `tests/preview/test_preview_capture.py`'s.)"""
     before = revision(created)
     out = created.work / "capture.png"
     call = created.call("capture", "--out", str(out), "--size", "640", "480")
     assert call.status == 1
-    assert "UnsupportedInUzPainter" in call.stderr, call.stderr
-    assert "unsupported_configuration: Legacy" in call.stderr and "decision 038" in call.stderr
+    assert "names no environment (RES-03" in call.stderr, call.stderr
+    assert "unsupported_configuration" not in call.stderr
     assert "CAPTURE_DONE" not in call.stdout and not out.exists()
     assert not out.with_suffix(".exr").exists()
     assert revision(created) == before
@@ -524,20 +526,27 @@ def titled():
 
 (script_root,) = titled()
 script = document(script_root)
-r = nls.sync_stack(__STACK__, __MASKS__)
-(native_root,) = titled()
-result = {"script": script, "native": document(native_root),
-          "rebuilt": native_root.uid() != script_root.uid(), "status": r.status}
+before = uzpainter.project.revision()
+try:
+    r = nls.sync_stack(__STACK__, __MASKS__)
+except uzpainter.NotYetSupported as error:
+    result = {"script": script, "refused": str(error),
+              "unchanged": uzpainter.project.revision() == before
+              and [n.uid() for n in titled()] == [script_root.uid()]}
+else:
+    (native_root,) = titled()
+    result = {"script": script, "native": document(native_root),
+              "rebuilt": native_root.uid() != script_root.uid(), "status": r.status}
 """
 
 
-def test_native_sync_stack_builds_the_document_the_script_builds(created: Wand) -> None:
-    """Decision 115: `uzpainter.layerstack.sync_stack` on the wand's stack JSON builds the same
-    group as `painter_layer_stack.py sync` through the facade: the tree, every node's blending on
-    every channel (Height LinearDodge from Painter's insert defaults), opacity, active channels,
-    every source (uniform colours as given with their space, bitmaps by content and colour
-    space), projections and masks. Only the uids differ (a rebuild) and the names the two give
-    the imported images (bitmaps are compared by content)."""
+def test_native_sync_stack_is_refused_on_the_ocio_wand(created: Wand) -> None:
+    """Decisions 115 and 207: the wand project is OCIO (`painter_create.py` sets `OCIO`), where
+    the facade stores Painter's measured decode of each sRGB base colour (decision 202), which
+    the native module does not hold. `uzpainter.layerstack.sync_stack` on the wand's stack JSON
+    is therefore refused with `NotYetSupported`, and the group `painter_layer_stack.py sync`
+    built stays as it is, with the revision unchanged. The native composite's equality with the
+    script's group on a Legacy project is `tests/python/test_pyapi_native.py`'s sync tests."""
     first = created.sync()
     assert first.status == 0, first.stdout + first.stderr
     stack_json = created.staged["wand-stack"]
@@ -549,8 +558,9 @@ def test_native_sync_stack_builds_the_document_the_script_builds(created: Wand) 
         .replace("__MASKS__", repr(str(masks)))
     )
     result = created.probe("native-sync", body)
-    assert result["status"] == "committed" and result["rebuilt"] is True
-    assert result["native"] == result["script"]
+    assert result["refused"].startswith("sync_stack: under OCIO"), result
+    assert "measured decode" in result["refused"]
+    assert result["unchanged"] is True
     heights = {
         layer["name"]: layer["blending"]["Height"][0]
         for group in result["script"]["children"]

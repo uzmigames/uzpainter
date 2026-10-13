@@ -1,10 +1,10 @@
 # Task index
 
-Every rulebook task under `.rulebook/tasks/`, one table per phase, rows ordered by sub-phase. Task ids are `phase<N>.<M>_<kebab-name>`: `<M>` is the dependency level inside phase `<N>` (1 + the highest level of its same-phase prerequisites); tasks with the same `<N>.<M>` can run in parallel; children come before their parent; the phase gate is the last level (rule: `dag.md`, Task decomposition rule). **DAG node** is the `dag.md` node a task implements; a child shows its parent's node in parentheses. **Depends on** lists direct same-phase prerequisites only; inputs from earlier phases are in each task's `proposal.md`. **Goal** is the first sentence of the proposal's Why section (shortened).
+Every rulebook task with a sub-phase id, open under `.rulebook/tasks/` or archived under `.rulebook/archive/` once done, one table per phase, rows ordered by sub-phase. Task ids are `phase<N>.<M>_<kebab-name>`: `<M>` is the dependency level inside phase `<N>` (1 + the highest level of its same-phase prerequisites); tasks with the same `<N>.<M>` can run in parallel; children come before their parent; the phase gate is the last level (rule: `dag.md`, Task decomposition rule). **DAG node** is the `dag.md` node a task implements; a child shows its parent's node in parentheses. **Depends on** lists direct same-phase prerequisites only; inputs from earlier phases are in each task's `proposal.md`. **Goal** is the first sentence of the proposal's Why section (shortened).
 
 ## Phase 0
 
-28 tasks, levels 1–10.
+29 tasks, levels 1–10.
 
 | Id | DAG node | Parent | Depends on (same phase) | Goal |
 |---|---|---|---|---|
@@ -40,7 +40,7 @@ Every rulebook task under `.rulebook/tasks/`, one table per phase, rows ordered 
 
 ## Phase 1
 
-42 tasks, levels 1–26.
+43 tasks, levels 1–26.
 
 | Id | DAG node | Parent | Depends on (same phase) | Goal |
 |---|---|---|---|---|
@@ -68,6 +68,7 @@ Every rulebook task under `.rulebook/tasks/`, one table per phase, rows ordered 
 | `phase1.9_compositor-quantisation-profile` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.3_document-model`, `phase1.5_compositor-tile-dag`, `phase1.8_compositor-sources-projection` | Exact equality depends on quantising at the same points as Painter and blending sRGB8 channels in the same space; the result is the evaluator profile, stored in every project and golden and versioned so old projects … |
 | `phase1.10_compositor-float32-residual` | (P1-COMPOSITOR) | — | `phase1.9_compositor-quantisation-profile` | One Tier 0 difference remains after `phase1.9_compositor-quantisation-profile`: under the settled profile `painter-12.1-isolated-linear`, 6 of the 16 32-bit float values of `quantisation-thirds` differ from the same-session recording r1 … |
 | `phase1.10_compositor-blend-kernels` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.4_render-core-layer`, `phase1.9_compositor-quantisation-profile` | All 32 documented `BlendingMode` members must behave exactly as in Painter, per channel, with per-channel opacity (LAY-05). |
+| `phase1.11_compositor-blend-gaps` | (P1-COMPOSITOR) | — | `phase1.10_compositor-blend-kernels` | `phase1.10_compositor-blend-kernels` made the 24 separable blend modes exact against the Tier 0 sweeps; the modes that were not exact moved into this follow-up (coordinator's answer to its q1, 2026-10-11) … |
 | `phase1.11_compositor-mask-effects` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.3_document-model`, `phase1.8_compositor-sources-projection`, `phase1.10_compositor-blend-kernels` | The approved paint standard relies on layer masks (background, bitmap fill effect, levels, subtraction), mask opacity and blend, ordered typed effects, group masks and a defined base under complementary masks (LAY-03 … |
 | `phase1.12_compositor-height-normal` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.7_mesh-loader`, `phase1.10_compositor-blend-kernels`, `phase1.11_compositor-mask-effects` | Height is authored in declared units and converted to a normal; the exported normals must combine the mesh normal map, the channel normal and the height-derived normal exactly as Painter does, and relief must be applied … |
 | `phase1.13_compositor-diagnostics` | (P1-COMPOSITOR) | `phase1.14_compositor-core` | `phase1.3_document-model`, `phase1.11_compositor-mask-effects`, `phase1.12_compositor-height-normal` | Agents and paint gates need per-layer isolation, contribution maps, material-isolation views and region statistics that are exports of the general engine, never separate code paths (LAY-09, LAY-14, EXP-04, DIA-01 … |

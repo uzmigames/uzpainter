@@ -84,10 +84,10 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "same code for each of the 65 536 16-bit codes",
         "the sRGB8 decode of each 8-bit code stores the code itself",
         "a bitmap in Working or Legacy Linear is read as in Raw, in Legacy sRGB as in sRGB",
-        "an sRGB bitmap on a channel that is not sRGB8 or minified by a bilinear filter, and an "
-        "unknown bitmap colour space fail with unsupported_source",
+        "an sRGB bitmap on a channel that is not sRGB8, an 8-bit sRGB bitmap minified by a "
+        "bilinear filter, and an unknown bitmap colour space fail with unsupported_source",
         "Nearest at a tie takes the right texel across and the upper texel down the rows",
-        # phase1.15_compositor-colour-fits item 2.7 (decision 208): an L8 material channel.
+        # phase1.15_compositor-colour-fits item 2.8 (decision 208): an L8 material channel.
         "a grey 8- or 16-bit sRGB bitmap at 1:1 on an L8 BaseColor, Specular or Emissive stores "
         "Painter's codes of export-l8-material (the IEC rounding but one code lower at 13 8-bit "
         "and 10 16-bit codes)",
@@ -95,17 +95,23 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "channel or format that is not sRGB8, fails with unsupported_source (not recorded, "
         "decision 208; Painter's refusal on a user channel, decision 174)",
     } <= passed
-    # phase1.15_compositor-colour-fits item 2.2 (decision 174): sRGB bitmaps of every kind,
-    # 1:1, magnified and under Nearest.
+    # phase1.15_compositor-colour-fits items 2.2 and 2.5 (decisions 174, 203): sRGB bitmaps of
+    # every kind, 1:1, magnified and under Nearest; 16-bit ones minified.
     for kind in ("16-bit colour", "8-bit colour", "16-bit grey", "8-bit grey"):
         assert (
             f"a {kind} sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code"
         ) in passed
+        minified = (
+            (("BilinearHQ", "2.000000"), ("BilinearSharp", "4.000000"))
+            if kind.startswith("16-bit")
+            else ()
+        )
         for name, scale in (
             ("BilinearHQ", "1.000000"),
             ("BilinearHQ", "0.500000"),
             ("Nearest", "0.500000"),
             ("Nearest", "2.000000"),
+            *minified,
         ):
             assert (
                 f"a {kind} sRGB bitmap under {name} at scale {scale} stores the sRGB8 code of its "
@@ -125,12 +131,13 @@ def test_order_case_stores_bitmaps_on_srgb8(evaluator_tests: Path) -> None:
 def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> None:
     """2.4: the projection kernel equals the CPU reference bit for bit on random stacks (every
     filter, wrap mode, transform, 8/16-bit grey and colour bitmap, nine formats, two tiles), and
-    on sRGB bitmaps decoded to float32 texels on an sRGB8 channel (decision 174) and on an L8
-    BaseColor, Specular and Emissive (decision 208)."""
+    on sRGB bitmaps decoded to float32 texels on an sRGB8 channel (decision 174), 16-bit ones
+    minified too (decision 203), and on an L8 BaseColor, Specular and Emissive (decision 208)."""
     passed, _ = run_case(evaluator_tests, "projection-gpu-vs-cpu", str(tmp_path), needs_gpu=True)
     assert any(p.startswith("every random projection stack") for p in passed)
     assert any(p.startswith("every random minifying projection stack") for p in passed)
     assert any(p.startswith("every random sRGB projection stack") for p in passed)
+    assert any(p.startswith("every random minifying 16-bit sRGB projection stack") for p in passed)
     assert any(
         p.startswith("a grey 8- and 16-bit sRGB bitmap at 1:1 on an L8 BaseColor, Specular and")
         for p in passed

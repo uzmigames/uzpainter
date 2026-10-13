@@ -58,7 +58,7 @@ Each quirk comes from a Tier 0 api-probe and is compared exactly by `test_pyapi_
 
 ## 4. Colour (10 §4 Colour row; decisions 107 §2-§3 and 202)
 
-- **Profile.** Two profiles are pinned: Painter's Legacy mode (linear working space with sRGB I/O) and OCIO with Painter's substance config, identified by its SHA-256 `15059d4b…` (the file is never read). The facade checks the declared configuration when it opens a project and before every export. Any other configuration raises `NotYetSupported` before anything is evaluated.
+- **Profile.** Two profiles are pinned: Painter's Legacy mode (linear working space with sRGB I/O) and OCIO with Painter's substance config, identified by its SHA-256 `15059d4b…` (the file is hashed at create, never parsed). The facade checks the declared configuration when it opens a project and before every export. Any other configuration raises `NotYetSupported` before anything is evaluated.
 - **Uniform colours.** A colour without a space is sRGB on an sRGB8 channel and Raw elsewhere.
   - Uniform colours are stored as float32 working-space values. The sRGB decode runs in float32: `((f32(v) + 0.055f) / 1.055f) ^ 2.4f`.
   - Only an sRGB8 channel that is not a user channel decodes (`nodes.decodes_colour`). Any other channel takes a uniform colour as given, whatever its space: Painter reads back and exports the value set on a user channel, RGB16 or sRGB8 (decision 115; the three `colour-ramps-*` goldens replay through the facade exactly, `test_pyapi_facade_tier0.py`).
@@ -77,7 +77,7 @@ Each quirk comes from a Tier 0 api-probe and is compared exactly by `test_pyapi_
   - An sRGB uniform colour on a decoding channel reads Painter's measured working value of each float32 component (`uzpainter_facade/ocio_srgb.py`): the 256 codes c / 255 and the 193 other recorded components. No analytic decode reproduces it: its error from the IEC decode is a pseudo-random ±5·10⁻⁷, also on the linear segment. The decode is per component (`export-ocio-encode` s0 and s6 equal the table).
   - Raw, Working and a colour without a space on a channel that does not decode are taken as given. An sRGB colour on such a channel, another OCIO space for a uniform colour and the encode of a working value to sRGB (`Color.sRGB`, `value`, `convert`) are not recorded.
   - A bitmap on BaseColor lists Raw, Working and sRGB, then the strings `Linear`, `sRGB`, `Rec709`, `Rec2020`, `ACES - ACEScg`, `Display P3`, `ACES sRGB` and `False Color`. A mask's mono source lists Raw, Data and DataSigned. A colour image on BaseColor defaults to sRGB and a mask source to Data. Other channels and a fill's reset default source are not recorded.
-  - No creation path yields an OCIO project: `project.create` makes a Legacy project, and an OCIO project is one opened from a bundle that declares OCIO.
+  - **Creation** (decision 207). `project.create` takes the mode from the environment at the call, as Painter documents. `OCIO` naming Painter's substance config (the file is hashed) creates an OCIO project with that hash, also when `PAINTER_ACE_CONFIG` is set. Any other OCIO configuration, and `PAINTER_ACE_CONFIG` alone, raise `NotYetSupported`; a configuration file that cannot be read raises `ProjectError`. Both come before anything is created. With neither variable set (or both empty) the project is Legacy. The variables are read at the call, not at start-up, because the pipeline's `painter_create.py` sets `OCIO` in-process just before `create`.
 
 ## 5. Resource ids (decision 107 §4)
 

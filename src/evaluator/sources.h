@@ -48,9 +48,13 @@
 //   `export-probes-config`, `export-probes-naming`, c / M misses 195 325 of 196 608 values there),
 //   8-bit colour at 1:1 (`export-ocio-encode-legacy` s3), 16-bit grey at 1:1 (`export-bit-depth`
 //   s4, s5, s7), 8-bit grey at 1:1 (`srgb-bitmap-variants-v2` s0), 16- and 8-bit colour magnified
-//   by BilinearHQ (s2, scale 0.5) and under Nearest at scale 2 (s3). Bilinear minification of an
-//   sRGB bitmap is not recorded and fails with `evaluator:unsupported_source` (its mip chain is
-//   unmeasured; s1 minifies at 30 degrees, refused for every bitmap).
+//   by BilinearHQ (s2, scale 0.5) and under Nearest at scale 2 (s3), and 16-bit colour minified
+//   by BilinearHQ and BilinearSharp at scales 2 and 4 (`srgb-bitmap-minification` s4-s7): the
+//   texture unit samples the decoded float32 mip chain (`BitmapChain`, decision 203). Bilinear
+//   minification of an 8-bit sRGB bitmap fails with `evaluator:unsupported_source`: Painter
+//   samples an sRGB8 texture, whose mip levels hold sRGB8 codes and whose filter (operands cut
+//   to about 8 bits below the largest texel's exponent, a binary16 result) is not the float32
+//   texture's (decision 203).
 // - sRGB bitmap on an L8 BaseColor, Specular or Emissive (`SrgbL8MaterialChannel`, decision 208:
 //   `export-l8-material` s0 and s1, bitmaps left in Painter's default space): a grey bitmap at 1:1 is read
 //   decoded and stored with the L8 write rule. A 16-bit code decodes as on an sRGB8 channel (the

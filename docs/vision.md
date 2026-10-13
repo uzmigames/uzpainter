@@ -26,7 +26,7 @@ The owner's answers of 2026-10-10 (`open-questions.md`) make these requirements 
 
 ## Acceptance (decision 001)
 
-`.rulebook/decisions/001-acceptance-criterion-output-parity-with-substance-painter.md`: UzPainter is satisfactory only when, given the same sequence of instructions, it produces the same texture result and the same render result as Adobe Substance 3D Painter 12.1.0. The binding formulation adopted by both architects (`docs/analysis/architecture-discussion/05-resolution.md` D13):
+`.rulebook/decisions/001-acceptance-criterion-output-parity-with-substance-painter.md`: UzPainter is satisfactory only when, given the same sequence of instructions, it produces the same texture result and the same render result as Adobe Substance 3D Painter 12.1.0. Decision 037 (2026-10-11) replaces that version pin: the reference is the Painter build of the current oracle envelope, which follows Creative Cloud's automatic updates. The binding formulation adopted by both architects (`docs/analysis/architecture-discussion/05-resolution.md` D13):
 
 > Default acceptance is equal native decoded texture values and the agreed reference render output. Every divergence is a failure unless an owner-approved, versioned exception explicitly covers that domain and metric. Explained differences are still failures without that exception. Diagnostic metrics do not grant an exception.
 

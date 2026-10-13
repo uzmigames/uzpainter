@@ -52,7 +52,8 @@
 //   every magnifying golden (decision 060).
 // - Nearest samples float32(c / M) of the texel.
 // - A float32 image (a decoded sRGB bitmap, sources.h) gives its stored values in place of
-//   float32(c / M), through the same addressing and filters; it is never minified (`CheckSampling`).
+//   float32(c / M), through the same addressing, filters and mip chain (`BitmapChain`; minified
+//   only when decoded from a 16-bit bitmap, decision 203).
 //
 // The channel stores the sampled value with its own write rule (cpu_store.h `StoreValue`): at
 // 1:1 a bitmap is copied exactly. Wrap modes: `Repeat` takes tap
@@ -118,8 +119,8 @@ struct UvProjection {
 /// filter minifies outside the texture unit's measured domain: a rotation that is not a multiple
 /// of 90 degrees, a bitmap that is not square with a power-of-two side, a non-square set, or
 /// `signedRange` (the Height channel: Painter filters the signed heights, `ProjectTexel`, and its
-/// minification of them is not measured), and for a float32 image (a decoded sRGB bitmap) that
-/// a bilinear filter would minify.
+/// minification of them is not measured), and for a float32 bitmap source that a bilinear filter
+/// would minify (an sRGB bitmap is decoded to float32 after this check, sources.h).
 [[nodiscard]] render::Result<void> CheckSampling(const UvProjection& projection,
                                                  uint32_t setWidth, uint32_t setHeight,
                                                  const DecodedImage& image, bool signedRange,
@@ -144,8 +145,9 @@ inline constexpr int kFilterOperandBits = 28;
 [[nodiscard]] float BilinearFilter(const std::array<uint32_t, 4>& weights,
                                    const std::array<float, 4>& texels);
 
-/// The bitmap's float32 RGB mip chain for the texture unit: level 0 holds float32(c / M), rows
-/// bottom up (the GPU's orientation); a grey bitmap feeds all three channels.
+/// The bitmap's float32 RGB mip chain for the texture unit: level 0 holds float32(c / M), or the
+/// stored value of a float32 image (a decoded 16-bit sRGB bitmap, decision 203), rows bottom up
+/// (the GPU's orientation); a grey bitmap feeds all three channels.
 [[nodiscard]] tu::Chain BitmapChain(const DecodedImage& image);
 
 /// Painter's float32 UV matrix (m00, m01, m02, m10, m11, m12) of a projection (decision 060).

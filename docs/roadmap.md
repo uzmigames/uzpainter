@@ -1,6 +1,6 @@
 # Roadmap
 
-Implements D14 (`docs/analysis/architecture-discussion/05-resolution.md`), updated by the owner's answers of 2026-10-10 (`docs/open-questions.md`; decisions 016–027). Phase names and gates are shared with `dag.md`, whose node ids are the future rulebook task ids. Durations are **Hypotheses** (owner Q14: shown as labelled Hypotheses and revised at each gate); every gate is defined by evidence, not by date.
+Implements D14 (`docs/analysis/architecture-discussion/05-resolution.md`), updated by the owner's answers of 2026-10-10 (`docs/open-questions.md`; decisions 016–027). Phase names and gates are shared with `dag.md`, whose nodes map to the rulebook task ids (`task-index.md`). Durations are **Hypotheses** (owner Q14: shown as labelled Hypotheses and revised at each gate); every gate is defined by evidence, not by date.
 
 ## Pilot order (owner Q7)
 

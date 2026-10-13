@@ -910,6 +910,24 @@ def test_srgb_variants_equal_painter_files(export_tests: Path, tmp_path: Path) -
     assert report["identical"] == report["comparisons"] == 2 * report["files"] - 3, report
 
 
+def test_srgb_minification_equals_painter_files(export_tests: Path, tmp_path: Path) -> None:
+    """phase1.15_compositor-colour-fits item 2.5 (decision 203): srgb-bitmap-minification rebuilt
+    per texture set and written by WriteExport at PNG 16, PNG 8 and OpenEXR 32f is byte-identical
+    to Painter's files, r1 and r2, for field A (16-bit, s4-s7) on BaseColor minified by BilinearHQ
+    and BilinearSharp at scales 2 and 4: each texel decoded to float32 before the texture unit
+    samples its float32 mip chain. The 8-bit sRGB ramp (s0-s3) is refused: Painter samples an
+    sRGB8 texture there, whose filter and mip chain are not the float32 texture's."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.srgb_minification_written(export_tests, tmp_path)
+    assert report["problems"] == [], report["problems"][:10]
+    assert set(report["refused"]) == {"s0", "s1", "s2", "s3"}, report["refused"]
+    for message in report["refused"].values():
+        assert "8-bit sRGB bitmap" in message and "decision 203" in message, message
+    assert report["files"] == 4 * 3, report
+    assert report["identical"] == report["comparisons"] == 2 * report["files"], report
+
+
 def test_published_export_processing_reproduces(
     tier0_reports: tuple[dict[str, Any], dict[str, Any], dict[str, Any]],
 ) -> None:

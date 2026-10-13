@@ -12,7 +12,7 @@ Historical analyses and discussion files are not implementation inputs until an 
 | `architecture/01-overview.md` | Any implementation work. Vocabulary, components, process roles, data flow. |
 | `architecture/14-parity-testing.md` | Any implementation work. Acceptance is measured there; nothing is "done" without its tier passing. |
 | `roadmap.md`, `dag.md` | Planning or creating rulebook tasks. The DAG ids are stable parent work packages; split a large parent into independently reviewable child tasks before creating implementation tasks. |
-| `open-questions.md` | Anything touching an owner decision. Every question is answered (2026-10-10); each row names the rulebook decision that records the answer. |
+| `open-questions.md` | Anything touching an owner decision. Q1–Q14 are answered (2026-10-10); each row names the rulebook decision that records the answer. |
 
 ## Documents
 
@@ -57,4 +57,4 @@ Historical analyses and discussion files are not implementation inputs until an 
 
 ## Status
 
-Documentation only; no source code exists yet. Every owner question is answered (2026-10-10, `open-questions.md`). Rulebook decisions under `.rulebook/decisions/`: 001 output parity, 002 Apache-2.0 and clean room, 003–016 the D1–D14 outcomes, 017–027 the owner's answers of 2026-10-10, 028 hosted CPU-only CI with GPU and Painter-oracle checks run locally on the owner's machine. Decisions 004, 008 and 014 are superseded by 019 (D2), 018 (D6) and 021 (D12), and the CI-runner part of 022 by 028; every other decision is accepted.
+As of 2026-10-13 the code these documents specify is being built: Phase 0 is complete (gate G0 closed on 2026-10-13) and Phase 1 is in progress (root `README.md`, Project Status; `task-index.md`). Owner questions Q1–Q14 are answered (2026-10-10, `open-questions.md`). Rulebook decisions under `.rulebook/decisions/`, numbered up to 206: 001 output parity, 002 Apache-2.0 and clean room, 003–016 the D1–D14 outcomes, 017–027 the owner's answers of 2026-10-10, 028 GPU and Painter-oracle checks run locally on the owner's machine, and from 029 on the decisions taken during the work. Decisions 004, 008, 014 and 036 are superseded by 019 (D2), 018 (D6), 021 (D12) and 037; the CI-runner part of 022 by 028, decision 001's pin to Painter 12.1.0 by 037 (acceptance follows the build of the current oracle envelope), and 028's hosted CPU-only CI by 200 (removed; the CPU lane runs locally); every other decision is accepted.

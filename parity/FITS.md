@@ -6,12 +6,12 @@ Task `phase0.7_tier0-stability-fits` (child of `phase0.8_tier0-goldens`, D3/D5/D
 
 | Command | Does |
 |---|---|
-| `python -m tools.parity.fit run [--fit NAME ...]` | Runs the fits (all, or the named ones: `blend`, `profile`, `srgb`, `normal`, `resample`, `ao`), writes their files under `parity/semantics/`, compares the recordings of every manifest under `parity/manifests/tier0/` and writes the report |
+| `python -m tools.parity.fit run [--fit NAME ...]` | Runs the fits (all, or the named ones: `blend`, `profile`, `srgb`, `normal`, `resample`, `ao`), writes their files under `parity/semantics/`, compares the recordings of every Tier 0 manifest of the current envelope (`tier0/` under its manifest root, decision 037) and writes the report |
 | `python -m tools.parity.fit check [--fit NAME ...]` | Re-runs the fits and checks that every published entry, status and residual is reproduced exactly |
 
 Both exit 1 with `oracle_unavailable` when the store or a blob is missing; nothing is compared then. A full `run` takes several minutes (it decodes every recorded map).
 
-Decoding is at native depth (`parity/CONTRACT.md` §3.1): PNG with the repository's own decoder (`tools/parity/feasibility/png.py`), OpenEXR with the OpenEXR Python binding (BSD-3-Clause, approved source S-EXR). The binding is a tooling dependency of the owner's machine only; it is imported when a float map is decoded, so hosted CI (no store) never needs it.
+Decoding is at native depth (`parity/CONTRACT.md` §3.1): PNG with the repository's own decoder (`tools/parity/feasibility/png.py`), OpenEXR with the OpenEXR Python binding (BSD-3-Clause, approved source S-EXR). The binding is a tooling dependency of the owner's machine only; it is imported when a float map is decoded, so a machine without the store never needs it.
 
 ## 2. Oracle stability (`stability.py`)
 
@@ -35,7 +35,7 @@ Storage units (`common.to_storage`): RGB16/L16 export their 16-bit codes unchang
 | `resampling.json` | `resample.py` | The UV-projection filters, `BilinearHQ` first |
 | `ao-mixed.json` | `ao.py` | The `AO_Mixed` operator |
 
-The second height→normal method, the strength sweep and the `PassThrough` group cases are recorded through Painter's UI by `phase0.7_tier0-semantics-ui-cases` (owner answer, 2026-10-10); here they are `gap` entries or open items.
+The second height→normal method, the strength sweep and the `PassThrough` group cases were recorded through Painter's UI by `phase0.7_tier0-semantics-ui-cases` (owner answer, 2026-10-10; decision 047: Painter 12.1.5 has no strength setting, so a height-amplitude sweep stands in for it). The second method, `Smooth (Sobel)`, is the `exact` entry `height-normal-sobel` (decision 064). `blend-passthrough` stays a `gap` entry here; the Passthrough kernel is fitted as `kernel-passthrough` in `blend-kernels.json` (decision 054).
 
 ## 4. Settlement of 04 §9 (`report.py`)
 
