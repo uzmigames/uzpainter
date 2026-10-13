@@ -1,0 +1,11 @@
+{
+  "id": 189,
+  "slug": "p22-b-is-a-vocabulary-task-the-new-host-requests-exercise-60-pending-symbols-and-the-other-257-move-to-phase1-24",
+  "title": "P22-B is a vocabulary task: the new host requests exercise 60 pending symbols, and the other 257 move to phase1.24",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

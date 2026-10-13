@@ -85,6 +85,7 @@ from tools.parity.recorder.texture import (
     close_quietly,
     export_outputs,
     export_roots,
+    require_colour_management,
     save_and_reopen,
     utc_now,
 )
@@ -128,6 +129,7 @@ PROJECT_STATE: str = CONSTANTS["PROJECT_STATE"]
 PROJECT_SAVE_AS_COPY: str = CONSTANTS["PROJECT_SAVE_AS_COPY"]
 RELOAD_MESH: str = CONSTANTS["RELOAD_MESH"]
 RELOAD_RESOURCES: str = CONSTANTS["RELOAD_RESOURCES"]
+SHELVES_ADD: str = CONSTANTS["SHELVES_ADD"]
 GET_NODE_BY_UID = "substance_painter.layerstack.get_node_by_uid"
 
 # Step arguments naming an input by input_id; the recorder passes the staged file's path.
@@ -138,6 +140,17 @@ WORK_FILE = "work_file"
 SAVE_CALLS = frozenset({PROJECT_SAVE_AS, PROJECT_SAVE_AS_COPY, PROJECT_SAVE})
 # `reload_modified_resources_async`: the staged input to overwrite, and the input it becomes.
 REWRITE_ARGS = ("rewrite_input", "with_input")
+# `project.create` of an API probe (P21-A, P21-B; decision 110): mesh-map files (inputs whose id
+# is the file stem Painter reads, `<texture set>_<suffix>`), and folders the host makes in the
+# recording's private work directory for the default save and export paths.
+MESH_MAPS = "mesh_maps"
+CREATE_FOLDERS = ("default_save_path", "export_path")
+# `Shelves.add` (P21-D): a folder the host makes in the work directory, holding copies of inputs.
+SHELF_FOLDER, SHELF_INPUTS = "folder", "inputs"
+# An export probe step without `exportPath` (P21-B): Painter chooses where the files go.
+DEFAULT_EXPORT_PATH = "default_export_path"
+# The lifecycle procedure with `create` and `open` timed by a second thread (P21-F, decision 109).
+TIMING_FLAG = "timing"
 # `wait: false`: the step's events and states are recorded with the next step's.
 WAIT_FLAG = "wait"
 # Limit for a step's asynchronous calls to answer; one still pending is recorded, not refused.
@@ -186,6 +199,7 @@ class ProbeJob:
     probe_steps: tuple[ProbeStep, ...]
     exports: tuple[ExportStep, ...]
     events: tuple[str, ...]
+    timing: bool = False
 
     @property
     def lifecycle(self) -> bool:
@@ -232,16 +246,27 @@ def checked_inputs(manifest: dict[str, Any], repo_root: Path) -> dict[str, Path]
     return inputs
 
 
+def is_plain_name(value: Any) -> bool:
+    return isinstance(value, str) and value not in ("", ".", "..") and Path(value).name == value
+
+
 def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
     work_file = step.args.get(WORK_FILE)
-    if work_file is not None and (
-        not isinstance(work_file, str)
-        or work_file in ("", ".", "..")
-        or Path(work_file).name != work_file
-    ):
+    if work_file is not None and not is_plain_name(work_file):
         raise RecorderError(f"step {step.step}: `{WORK_FILE}` must be a plain file name")
     if step.call in SAVE_CALLS - {PROJECT_SAVE} and work_file is None:
         raise RecorderError(f"step {step.step}: a save to a new file needs `{WORK_FILE}`")
+    if step.call == ps.CREATE:
+        check_create_args(step, inputs)
+    if step.call == SHELVES_ADD and (
+        not is_plain_name(step.args.get(SHELF_FOLDER))
+        or not isinstance(step.args.get(SHELF_INPUTS), list)
+        or not all(i in inputs for i in step.args[SHELF_INPUTS])
+    ):
+        raise RecorderError(
+            f"step {step.step}: `Shelves.add` takes `{SHELF_FOLDER}` (a plain folder name) and "
+            f"`{SHELF_INPUTS}` (inputs with a path, copied into it)"
+        )
     rewrite = [step.args.get(key) for key in REWRITE_ARGS]
     if step.call == RELOAD_RESOURCES and any(rewrite) and not all(r in inputs for r in rewrite):
         raise RecorderError(
@@ -255,14 +280,29 @@ def check_input_arg(step: Step, inputs: dict[str, Path]) -> None:
         raise RecorderError(f"step {step.step}: `{key}` must name an input with a path")
 
 
+def check_create_args(step: Step, inputs: dict[str, Path]) -> None:
+    """The probe-only `project.create` arguments name inputs and plain folder names."""
+    maps = step.args.get(MESH_MAPS)
+    if maps is not None and (
+        not isinstance(maps, list) or not maps or not all(m in inputs for m in maps)
+    ):
+        raise RecorderError(f"step {step.step}: `{MESH_MAPS}` must list inputs with a path")
+    for name in CREATE_FOLDERS:
+        if name in step.args and not is_plain_name(step.args[name]):
+            raise RecorderError(f"step {step.step}: `{name}` must be a plain folder name")
+
+
 def lifecycle_job(manifest: dict[str, Any], inputs: dict[str, Path], steps: list[Step]) -> ProbeJob:
     if tuple(s.call for s in steps) != LIFECYCLE_STEPS:
         raise RecorderError(f"a lifecycle probe must be exactly the steps {list(LIFECYCLE_STEPS)}")
     events = steps[0].args.get("events")
     if not isinstance(events, list) or not events or not all(isinstance(e, str) for e in events):
         raise RecorderError("step 1: `events` must list the event class names to connect")
+    timing = steps[0].args.get(TIMING_FLAG, False)
+    if not isinstance(timing, bool):
+        raise RecorderError(f"step 1: `{TIMING_FLAG}` must be true or false")
     check_input_arg(steps[1], inputs)
-    return ProbeJob(manifest, inputs, steps[1], (), (), (), tuple(events))
+    return ProbeJob(manifest, inputs, steps[1], (), (), (), tuple(events), timing)
 
 
 def check_connect(step: Step, probe: bool) -> None:
@@ -387,6 +427,16 @@ def readback(
     return output
 
 
+def shelf_folder(step: ProbeStep, staged: dict[str, Path], work_dir: Path) -> Path:
+    """The folder a `Shelves.add` step names, made in the work directory with copies of its
+    inputs (the shelf crawls it)."""
+    folder: Path = work_dir / str(step.args[SHELF_FOLDER])
+    folder.mkdir(parents=True, exist_ok=True)
+    for input_id in step.args[SHELF_INPUTS]:
+        shutil.copyfile(staged[input_id], folder / staged[input_id].name)
+    return folder
+
+
 def run_step(
     session: PainterSession, step: ProbeStep, staged: dict[str, Path], work_dir: Path
 ) -> dict[str, Any]:
@@ -397,6 +447,8 @@ def run_step(
     if WORK_FILE in step.args:
         work_dir.mkdir(parents=True, exist_ok=True)
         resolved[WORK_FILE] = (work_dir / step.args[WORK_FILE]).as_posix()
+    if step.call == SHELVES_ADD:
+        resolved["shelf_path"] = shelf_folder(step, staged, work_dir).as_posix()
     if step.call == RELOAD_RESOURCES and REWRITE_ARGS[0] in step.args:
         target, source = (step.args[name] for name in REWRITE_ARGS)
         shutil.copyfile(staged[source], staged[target])
@@ -475,7 +527,11 @@ def probe_export(
     export_dir = directory / f"probe-export-step{step.step}"
     export_dir.mkdir(parents=True)
     roots = [ts if not st else f"{ts}/{st}" for ts, st in export_roots(template)]
-    outcome = session.call("probe_export", step=step.step, config=export.config(export_dir, roots))
+    config = export.config(export_dir, roots)
+    default_path = step.args.get(DEFAULT_EXPORT_PATH) is True
+    if default_path:
+        del config["exportPath"]
+    outcome = session.call("probe_export", step=step.step, config=config, locations=default_path)
     outputs = [readback(step.output_id, step.call, step.args, outcome)]
     if job.observed and step.wait:
         outputs += observe(session, step)
@@ -483,17 +539,52 @@ def probe_export(
         {"file_name": name, "sha256": sha256_file(export_dir / name)}
         for name in work_files(export_dir)
     ]
+    if default_path:
+        files = located_files(outcome, directory.parent)
     outputs.append(readback(f"s{step.step}/files", EXPORT, {"step": step.step}, {"value": files}))
     return outputs
 
 
-def create_project(session: PainterSession, job: ProbeJob, staged: dict[str, Path]) -> Any:
+def located_files(outcome: dict[str, Any], run_dir: Path) -> list[dict[str, Any]]:
+    """The files an export without `exportPath` reported under the run's private directory,
+    with their SHA-256 (a file Painter wrote elsewhere is listed by its returned location)."""
+    files: list[dict[str, Any]] = []
+    value = outcome.get("value") or {}
+    for located in value.get("locations", {}).values():
+        for where in located:
+            parts = where.get("run_relative") if isinstance(where, dict) else None
+            if parts is None:
+                files.append({"location": where})
+                continue
+            path = run_dir.joinpath(*parts)
+            digest = sha256_file(path) if path.is_file() else None
+            files.append({"file_name": "/".join(parts), "sha256": digest})
+    return files
+
+
+def create_resolved(job: ProbeJob, staged: dict[str, Path], work_dir: Path) -> dict[str, Any]:
+    """The staged mesh, and for an API probe its mesh-map files and default folders."""
+    args = job.create.args
+    resolved: dict[str, Any] = {"mesh": staged[args["mesh"]].as_posix()}
+    if MESH_MAPS in args:
+        resolved[MESH_MAPS] = [staged[m].as_posix() for m in args[MESH_MAPS]]
+    for name in CREATE_FOLDERS:
+        if name in args:
+            folder = work_dir / args[name]
+            folder.mkdir(parents=True, exist_ok=True)
+            resolved[name] = folder.as_posix()
+    return resolved
+
+
+def create_project(
+    session: PainterSession, job: ProbeJob, staged: dict[str, Path], work_dir: Path
+) -> Any:
     return session.call(
         "apply_step",
         step=job.create.step,
         call=job.create.call,
         args=job.create.args,
-        resolved={"mesh": staged[job.create.args["mesh"]].as_posix()},
+        resolved=create_resolved(job, staged, work_dir),
     )
 
 
@@ -501,7 +592,7 @@ def apply_state(
     session: PainterSession, job: ProbeJob, staged: dict[str, Path], work_dir: Path
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Create the project and apply the state steps once; returns defaults and step outcomes."""
-    created = create_project(session, job, staged)
+    created = create_project(session, job, staged, work_dir)
     session.wait_ready()
     defaults: dict[str, Any] = {
         "project.create": session.call("template_capture"),
@@ -509,13 +600,38 @@ def apply_state(
         "inserted": {},
     }
     outcomes: list[dict[str, Any]] = []
+    closed: dict[str, Any] = {}
     for step in job.state_steps:
-        outcome = run_step(session, step, staged, work_dir)
+        outcome = run_step_rebinding(session, step, staged, work_dir, closed)
         if "defaults" in outcome:
             defaults["inserted"][str(step.step)] = outcome["defaults"]
         outcomes += step_outputs(session, job, step, work_dir, outcome)
+        outcomes += rebound(session, step, closed)
     session.wait_ready()
     return defaults, outcomes
+
+
+def run_step_rebinding(
+    session: PainterSession,
+    step: ProbeStep,
+    staged: dict[str, Path],
+    work_dir: Path,
+    closed: dict[str, Any],
+) -> dict[str, Any]:
+    """Run a step; before a `project.close` the inserted nodes' places are kept, so the nodes
+    can be found again once a later `project.open` has loaded the project (P21-G)."""
+    if step.call == PROJECT_CLOSE:
+        closed["locations"] = session.call("probe_locations")
+    return run_step(session, step, staged, work_dir)
+
+
+def rebound(session: PainterSession, step: ProbeStep, closed: dict[str, Any]) -> list[Any]:
+    """After a `project.open` step settled: the inserted nodes found again (`s<n>/rebind`)."""
+    if step.call != PROJECT_OPEN:
+        return []
+    session.wait_ready()
+    found = session.call("probe_rebind", locations=closed.get("locations", {}))
+    return [readback(f"s{step.step}/rebind", GET_NODE_BY_UID, {}, {"value": found})]
 
 
 def identity_outputs(session: PainterSession, uids: dict[str, int]) -> list[dict[str, Any]]:
@@ -559,12 +675,14 @@ def record_probes(
         *identity_outputs(session, uids),
     ]
     work_dir = directory / "work-files"
+    closed: dict[str, Any] = {}
     for step in job.probe_steps:
         if step.call == EXPORT:
             outputs += probe_export(session, job, step, template, directory)
             continue
-        outcome = run_step(session, step, staged, work_dir)
+        outcome = run_step_rebinding(session, step, staged, work_dir, closed)
         outputs += step_outputs(session, job, step, work_dir, outcome)
+        outputs += rebound(session, step, closed)
     blobs: list[Path] = []
     for export in job.exports:
         exported, files = export_outputs(session, export, template, directory)
@@ -612,21 +730,25 @@ def run_directory(job: ProbeJob, identity: PainterIdentity, work: Path, now: Now
 
 
 def finish_quietly(session: PainterSession) -> None:
-    """Re-enable engine computations a probe disabled, disconnect the events, then discard the
-    throwaway project; a failure here must not hide the original error."""
+    """Re-enable engine computations a probe disabled, disconnect the events, discard the
+    throwaway project, then remove the shelves a probe added; a failure here must not hide the
+    original error."""
     with contextlib.suppress(RecorderError):
         session.call("probe_finish")
     close_quietly(session)
+    with contextlib.suppress(RecorderError):
+        session.call("probe_cleanup")
 
 
 def record_api_probe(
     session: PainterSession, job: ProbeJob, work: Path, inbox: Path, now: Now, record_prefix: str
 ) -> Path:
     identity = session.connect()
+    require_colour_management(job, identity)
     directory = run_directory(job, identity, work, now)
     staged = stage_inputs(job.inputs, directory / "inputs")
     try:
-        session.call("probe_reset")
+        session.call("probe_reset", root=directory.as_posix())
         defaults, outcomes = apply_state(session, job, staged, directory / "r1" / "work-files")
         locations = session.call("probe_locations")
         uids = {step: int(where["uid"]) for step, where in locations.items()}
@@ -738,15 +860,29 @@ def lifecycle_recordings(
         return state.ready
 
     project_file.parent.mkdir(parents=True)
+
+    def create() -> Any:
+        if not job.timing:
+            return create_project(session, job, staged, project_file.parent)
+        resolved = create_resolved(job, staged, project_file.parent)
+        return session.call("timed_call", phase="create", args=job.create.args, resolved=resolved)
+
+    def open_() -> Any:
+        if not job.timing:
+            return session.call("open_project", path=path)
+        return session.call("timed_call", phase="open", path=path)
+
     created = [
-        *lifecycle_phase(session, "create", lambda: create_project(session, job, staged), ready),
+        *lifecycle_phase(session, "create", create, ready),
+        *timing_outputs(session, job, "create"),
         *lifecycle_phase(
             session, "save_as", lambda: session.call("save_as", path=path), saved_to_file
         ),
         *lifecycle_phase(session, "close", lambda: session.call("close_project"), closed),
     ]
     reopened = [
-        *lifecycle_phase(session, "open", lambda: session.call("open_project", path=path), ready),
+        *lifecycle_phase(session, "open", open_, ready),
+        *timing_outputs(session, job, "open"),
         *lifecycle_phase(session, "save", lambda: session.call("project_save"), saved_to_file),
         *lifecycle_phase(session, "close", lambda: session.call("close_project"), closed),
     ]
@@ -768,10 +904,20 @@ def lifecycle_recordings(
     ]
 
 
+def timing_outputs(session: PainterSession, job: ProbeJob, phase: str) -> list[dict[str, Any]]:
+    """A timed lifecycle's `<phase>/thread_polls`: the second thread's readiness polls."""
+    if not job.timing:
+        return []
+    polls = session.call("timing_take")
+    args = {"phase": phase}
+    return [readback(f"{phase}/thread_polls", PROJECT_STATE, args, {"value": polls})]
+
+
 def record_lifecycle(
     session: PainterSession, job: ProbeJob, work: Path, inbox: Path, now: Now, record_prefix: str
 ) -> Path:
     identity = session.connect()
+    require_colour_management(job, identity)
     directory = run_directory(job, identity, work, now)
     staged = stage_inputs(job.inputs, directory / "inputs")
     recordings: list[dict[str, Any]] = []

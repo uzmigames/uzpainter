@@ -12,7 +12,8 @@ because its inputs are the request fixtures).
 
 Later decisions add requests the same way (`later_goldens`): decision 145's sRGB bitmap variants
 (decision 156), decision 126's inferred template bases and decision 129's padding probes P-ramp
-and P-tie (decision 157), and the other 21 inferred template bases (decision 168).
+and P-tie (decision 157), the other 21 inferred template bases (decision 168), decision 174's
+sRGB bitmap minification and decision 169's L8 material channels.
 
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
 two that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`), which
@@ -39,6 +40,7 @@ from tools.parity.tier0_semantics.corpus import (
     start,
     template_slug,
 )
+from tools.parity.tier0_semantics.current import resample_minifying
 from tools.parity.tier0_semantics.fixtures import Config, grid
 
 REQUESTS = "requests"
@@ -117,6 +119,18 @@ REQUEST_FIXTURES: dict[str, tuple[str, str, Generate]] = {
     # Decision 145's nine sets s0-s8 (decision 156: the 4x2 grid has eight).
     "grid3x3": ("mesh", f"{FIXTURE_DIR}/meshes/grid3x3.obj", lambda: grid(3, 3)),
 }
+
+
+def held_out_generator(size: int) -> Generate:
+    return lambda: rf.held_out_pattern(size)
+
+
+for _size in rf.HELD_OUT_SIZES:
+    REQUEST_FIXTURES[f"pattern{_size}"] = (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/pattern{_size}.png",
+        held_out_generator(_size),
+    )
 
 
 def ramp_mesh_generator(mesh: str, phase: str) -> Generate:
@@ -1071,9 +1085,146 @@ def padding_tie(resolution: int, renamed: bool = False) -> Golden:
     )
 
 
+# --- Decision 174 item 6: bilinear minification of an sRGB bitmap ------------------------------
+
+SRGB_MINIFY_SOURCES = ("srgb8-ramp", "field-a")
+SRGB_MINIFY_FILTERS = ("BilinearHQ", "BilinearSharp")
+SRGB_MINIFY_SCALES = (2.0, 4.0)
+
+
+def srgb_bitmap_minification() -> Golden:
+    s = start("grid4x2")
+    res = s.imports(*SRGB_MINIFY_SOURCES)
+    sets = iter(MESH_SETS["grid4x2"])
+    for source in SRGB_MINIFY_SOURCES:
+        for filtering in SRGB_MINIFY_FILTERS:
+            for scale in SRGB_MINIFY_SCALES:
+                node = s.fill(["BaseColor"], position="top", texture_set=next(sets))
+                s.add(
+                    ps.SET_SOURCE,
+                    node_step=node,
+                    channel="BaseColor",
+                    resource_step=res[source],
+                    color_space="sRGB",
+                )
+                s.add(
+                    ps.SET_PROJECTION,
+                    node_step=node,
+                    filtering_mode=filtering,
+                    uv_wrapping_mode="Repeat",
+                    scale_mode="Factors",
+                    scale=[scale, scale],
+                    rotation=0.0,
+                    offset=[0.0, 0.0],
+                )
+    for container in (PNG16, PNG8, EXR32F):
+        export(s, ["documentMap/basecolor:RGB"], container, "infinite")
+    return Golden(
+        "srgb-bitmap-minification",
+        "tier0/colour/srgb-bitmaps",
+        "Bilinear minification of an sRGB bitmap (phase1.15_compositor-colour-fits item 2.5, "
+        "decision 174 item 6), under Legacy on the authored 4x2 plane grid at 256 px. One fill "
+        "per set with only BaseColor (sRGB8) active, its source a bitmap set to sRGB, UV "
+        "projection with wrap Repeat, rotation 0, offset (0, 0): the 8-bit srgb8-ramp on s0-s3 "
+        "and field A (16-bit) on s4-s7; per source BilinearHQ at scale (2, 2) and (4, 4), then "
+        "BilinearSharp at (2, 2) and (4, 4). BaseColor at PNG 16, PNG 8 and OpenEXR 32f, "
+        "infinite padding, no dithering, every export step done twice in the session.",
+        "grid4x2",
+        ["grid4x2", *SRGB_MINIFY_SOURCES],
+        s,
+    )
+
+
+# --- Decision 169: the export of an L8 material channel ----------------------------------------
+
+L8_MATERIAL = ("BaseColor", "Specular", "Emissive")
+
+
+def export_l8_material() -> Golden:
+    s = start("grid2x2")
+    s.add(ps.EDIT_CHANNEL, channel="BaseColor", format="L8")
+    s.channels(tuple((channel, "L8") for channel in L8_MATERIAL[1:]))
+    res = s.imports("grey-a", "srgb8-grey-ramp")
+    sets = MESH_SETS["grid2x2"]
+    for texture_set, source in zip(sets, ("grey-a", "srgb8-grey-ramp", [0.37] * 3), strict=False):
+        fill(s, {c: source for c in L8_MATERIAL}, res, position="top", texture_set=texture_set)
+    for container in (PNG8, PNG16, EXR32F):
+        for layout in ("RGB", "L"):
+            export(
+                s, [f"documentMap/{c.lower()}:{layout}" for c in L8_MATERIAL], container, "infinite"
+            )
+    return Golden(
+        "export-l8-material",
+        EXPORT_DOMAIN,
+        "The export of an L8 material channel (decision 169, release gap l8-material-channel-png: "
+        "Painter's PNG 16 of Dota 2's empty L8 Specular holds (14330, 2570, 14330)), under Legacy "
+        "on the authored 2x2 plane grid at 256 px: BaseColor edited to L8, Specular and Emissive "
+        "added as L8. One fill per set with the three channels, Normal at opacity 1: grey A "
+        "(16-bit) on s0, the authored 8-bit grey ramp (column x holds code x) on s1, a uniform "
+        "0.37 on s2; s3 the empty stack (the base). The three maps as RGB and as L at PNG 8, "
+        "PNG 16 and OpenEXR 32f (the linear control), infinite padding, no dithering, every "
+        "export step done twice in the session.",
+        "grid2x2",
+        ["grid2x2", "grey-a", "srgb8-grey-ramp"],
+        s,
+    )
+
+
+# --- Decision 084 item 5: a fresh, never fitted recording of axis-aligned minification ---------
+
+# Per size, per user channel (scale [u, v], rotation in degrees, offset [u, v]): rotations that
+# are multiples of 90 degrees, isotropic and anisotropic footprints (the major axis on u and on
+# v), irregular offsets and a zero-offset case; no scale or offset of the fitted goldens
+# (decision 078's plans, resample-uv-minify, resample-uv-impulse) is reused.
+HELD_OUT_CHANNELS: dict[int, tuple[Any, ...]] = {
+    128: (
+        ([3.37, 3.37], 0.0, [0.0419, 0.7213]),
+        ([7.19, 7.19], 90.0, [0.5821, 0.0263]),
+        ([14.63, 5.29], 0.0, [0.2087, 0.4651]),
+        ([5.29, 14.63], 180.0, [0.6967, 0.3119]),
+        ([29.41, 29.41], 270.0, [0.1153, 0.8429]),
+        ([11.03, 2.71], 0.0, [0.0, 0.0]),
+        ([41.17, 13.39], 90.0, [0.3571, 0.5987]),
+        ([9.53, 9.53], 0.0, [0.0, 0.0]),
+    ),
+    32: (
+        ([9.61, 9.61], 0.0, [0.0263, 0.5821]),
+        ([18.37, 18.37], 270.0, [0.4651, 0.2087]),
+        ([42.13, 11.87], 0.0, [0.8429, 0.1153]),
+        ([11.87, 42.13], 90.0, [0.3119, 0.6967]),
+        ([71.03, 71.03], 180.0, [0.5987, 0.3571]),
+        ([25.73, 8.93], 0.0, [0.0, 0.0]),
+        ([123.7, 35.11], 270.0, [0.7331, 0.4073]),
+        ([33.97, 33.97], 0.0, [0.0, 0.0]),
+    ),
+}
+
+
+def resample_held_out(size: int) -> Golden:
+    plan = HELD_OUT_CHANNELS[size]
+    golden = resample_minifying(f"resample-uv-heldout-{size}px", f"pattern{size}", plan)
+    channels = "; ".join(
+        f"{s[0]:.6g}x{s[1]:.6g}"
+        + (f" at {r:g} degrees" if r else "")
+        + f", offset {o[0]:g}/{o[1]:g}"
+        for s, r, o in plan
+    )
+    golden.description = (
+        "Held-out axis-aligned bilinear minification (decision 084 item 5: a fresh recording, "
+        "never fitted, at new scales, offsets and bitmap sizes, inside the supported domain of "
+        "rotations by multiples of 90 degrees, square power-of-two bitmaps and square sets). "
+        "Per user "
+        f"channel (User0-User{len(plan) - 1}) one fill projecting the authored {size}x{size} "
+        f"pattern at scale {channels}; BilinearHQ with repeat (s0), BilinearSharp with repeat "
+        "(s1), BilinearHQ without repeat (s2), BilinearSharp without repeat (s3). RGB16 channels."
+    )
+    return golden
+
+
 def later_goldens() -> list[Golden]:
     """Requested goldens of later decisions (145, 126, 129, 168), in the order of the runbook,
-    then the padding probes decision 160 voids under their new names (decision 166)."""
+    then the padding probes decision 160 voids under their new names (decision 166), then
+    decision 174's sRGB minification and decision 169's L8 material channels."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
@@ -1082,6 +1233,9 @@ def later_goldens() -> list[Golden]:
         *(padding_tie(r) for r in rf.TIE_RESOLUTIONS),
         *(padding_ramp(m, p, renamed=True) for m in rf.RAMP_MESHES for p in rf.RAMP_PHASES),
         padding_tie(rf.TIE_RESOLUTIONS[1], renamed=True),
+        srgb_bitmap_minification(),
+        export_l8_material(),
+        *(resample_held_out(size) for size in rf.HELD_OUT_SIZES),
     ]
 
 

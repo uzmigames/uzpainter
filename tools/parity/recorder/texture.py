@@ -25,7 +25,7 @@ import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path, PurePath
-from typing import Any
+from typing import Any, Protocol
 
 from tools.parity.recorder import vocabulary as ps
 from tools.parity.recorder.capture import (
@@ -510,7 +510,17 @@ def project_file_name(job: Job) -> str:
     return f"{stem}.spp"
 
 
-def require_colour_management(job: Job, identity: PainterIdentity) -> None:
+class Manifested(Protocol):
+    """A recordable golden: a texture job or an API-probe job."""
+
+    @property
+    def manifest(self) -> dict[str, Any]: ...
+
+    @property
+    def golden_id(self) -> str: ...
+
+
+def require_colour_management(job: Manifested, identity: PainterIdentity) -> None:
     """A manifest that names `OCIO` (applied by environment variable) is recorded only in a
     session started with that configuration: a Legacy session would record another project.
     Conversely, a manifest that names no `OCIO` is recorded only in a Legacy session (no `OCIO`,

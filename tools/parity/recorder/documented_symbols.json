@@ -143,6 +143,10 @@
       "documented_as": "substance_painter.display",
       "page": "substance_painter/display.html"
     },
+    "substance_painter.display.Camera": {
+      "documented_as": "substance_painter.display.Camera",
+      "page": "substance_painter/display.html"
+    },
     "substance_painter.display.Camera.aperture": {
       "documented_as": "substance_painter.display.Camera.aperture",
       "page": "substance_painter/display.html"
@@ -245,6 +249,14 @@
     },
     "substance_painter.event.BusyStatusChanged.busy": {
       "documented_as": "substance_painter.event.BusyStatusChanged",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.CameraPropertiesChanged": {
+      "documented_as": "substance_painter.event.CameraPropertiesChanged",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.CameraPropertiesChanged.camera_id": {
+      "documented_as": "substance_painter.event.CameraPropertiesChanged",
       "page": "substance_painter/event.html"
     },
     "substance_painter.event.DISPATCHER.connect": {
@@ -371,6 +383,30 @@
       "documented_as": "substance_painter.event.ReloadedResourceResult",
       "page": "substance_painter/event.html"
     },
+    "substance_painter.event.ShelfCrawlingEnded": {
+      "documented_as": "substance_painter.event.ShelfCrawlingEnded",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.ShelfCrawlingEnded.shelf_name": {
+      "documented_as": "substance_painter.event.ShelfCrawlingEnded",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.ShelfCrawlingStarted": {
+      "documented_as": "substance_painter.event.ShelfCrawlingStarted",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.ShelfCrawlingStarted.shelf_name": {
+      "documented_as": "substance_painter.event.ShelfCrawlingStarted",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.TextureStateEvent": {
+      "documented_as": "substance_painter.event.TextureStateEvent",
+      "page": "substance_painter/event.html"
+    },
+    "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period": {
+      "documented_as": "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period",
+      "page": "substance_painter/event.html"
+    },
     "substance_painter.event.TextureStateEventAction.ADD": {
       "documented_as": "substance_painter.event.TextureStateEventAction",
       "page": "substance_painter/event.html"
@@ -445,6 +481,10 @@
     },
     "substance_painter.export.export_project_textures": {
       "documented_as": "substance_painter.export.export_project_textures",
+      "page": "substance_painter/export.html"
+    },
+    "substance_painter.export.get_default_export_path": {
+      "documented_as": "substance_painter.export.get_default_export_path",
       "page": "substance_painter/export.html"
     },
     "substance_painter.export.list_predefined_export_presets": {
@@ -639,6 +679,10 @@
       "documented_as": "substance_painter.layerstack.FillLayerNode.get_source",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
+    "substance_painter.layerstack.FillLayerNode.reset_source": {
+      "documented_as": "substance_painter.layerstack.FillLayerNode.reset_source",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
     "substance_painter.layerstack.FillLayerNode.set_projection_mode": {
       "documented_as": "substance_painter.layerstack.FillLayerNode.set_projection_mode",
       "page": "substance_painter/layerstack/layereffect/fill.html"
@@ -649,6 +693,10 @@
     },
     "substance_painter.layerstack.FillLayerNode.set_source": {
       "documented_as": "substance_painter.layerstack.FillLayerNode.set_source",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.layerstack.FillLayerNode.set_symmetry_enabled": {
+      "documented_as": "substance_painter.layerstack.FillLayerNode.set_symmetry_enabled",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
     "substance_painter.layerstack.FillLayerNode.source_mode": {
@@ -733,6 +781,14 @@
     },
     "substance_painter.layerstack.LayerNode.mask_effects": {
       "documented_as": "substance_painter.layerstack.LayerNode.mask_effects",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.LayerNode.remove_mask": {
+      "documented_as": "substance_painter.layerstack.LayerNode.remove_mask",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.LayerNode.set_mask_background": {
+      "documented_as": "substance_painter.layerstack.LayerNode.set_mask_background",
       "page": "substance_painter/layerstack/navigation.html"
     },
     "substance_painter.layerstack.LevelsEffectNode": {
@@ -1015,6 +1071,10 @@
       "documented_as": "substance_painter.layerstack.get_root_layer_nodes",
       "page": "substance_painter/layerstack/navigation.html"
     },
+    "substance_painter.layerstack.insert_anchor_point_effect": {
+      "documented_as": "substance_painter.layerstack.insert_anchor_point_effect",
+      "page": "substance_painter/layerstack/layereffect/anchorpoint.html"
+    },
     "substance_painter.layerstack.insert_color_selection_effect": {
       "documented_as": "substance_painter.layerstack.insert_color_selection_effect",
       "page": "substance_painter/layerstack/layereffect/colorselection.html"
@@ -1042,6 +1102,10 @@
     "substance_painter.layerstack.insert_levels_effect": {
       "documented_as": "substance_painter.layerstack.insert_levels_effect",
       "page": "substance_painter/layerstack/layereffect/levels.html"
+    },
+    "substance_painter.layerstack.insert_paint": {
+      "documented_as": "substance_painter.layerstack.insert_paint",
+      "page": "substance_painter/layerstack/layereffect/paint.html"
     },
     "substance_painter.layerstack.insert_smart_material": {
       "documented_as": "substance_painter.layerstack.insert_smart_material",
@@ -1347,6 +1411,10 @@
       "documented_as": "substance_painter.resource.ProjectFilter",
       "page": "substance_painter/resource.html"
     },
+    "substance_painter.resource.Resource": {
+      "documented_as": "substance_painter.resource.Resource",
+      "page": "substance_painter/resource.html"
+    },
     "substance_painter.resource.Resource.gui_name": {
       "documented_as": "substance_painter.resource.Resource.gui_name",
       "page": "substance_painter/resource.html"
@@ -1395,12 +1463,52 @@
       "documented_as": "substance_painter.resource.SessionFilter",
       "page": "substance_painter/resource.html"
     },
+    "substance_painter.resource.Shelf": {
+      "documented_as": "substance_painter.resource.Shelf",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Shelf.is_crawling": {
+      "documented_as": "substance_painter.resource.Shelf.is_crawling",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Shelf.name": {
+      "documented_as": "substance_painter.resource.Shelf.name",
+      "page": "substance_painter/resource.html"
+    },
     "substance_painter.resource.Shelf.path": {
       "documented_as": "substance_painter.resource.Shelf.path",
       "page": "substance_painter/resource.html"
     },
+    "substance_painter.resource.Shelf.refresh": {
+      "documented_as": "substance_painter.resource.Shelf.refresh",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Shelves": {
+      "documented_as": "substance_painter.resource.Shelves",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Shelves.add": {
+      "documented_as": "substance_painter.resource.Shelves.add",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Shelves.all": {
+      "documented_as": "substance_painter.resource.Shelves.all",
+      "page": "substance_painter/resource.html"
+    },
     "substance_painter.resource.Shelves.application_shelf": {
       "documented_as": "substance_painter.resource.Shelves.application_shelf",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Shelves.exists": {
+      "documented_as": "substance_painter.resource.Shelves.exists",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Shelves.remove": {
+      "documented_as": "substance_painter.resource.Shelves.remove",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Shelves.user_shelf": {
+      "documented_as": "substance_painter.resource.Shelves.user_shelf",
       "page": "substance_painter/resource.html"
     },
     "substance_painter.resource.Usage.COLOR_LUT": {
@@ -1463,6 +1571,10 @@
       "documented_as": "substance_painter.source.SourceBitmap.list_available_color_spaces",
       "page": "substance_painter/source/bitmap.html"
     },
+    "substance_painter.source.SourceBitmap.reset_color_space": {
+      "documented_as": "substance_painter.source.SourceBitmap.reset_color_space",
+      "page": "substance_painter/source/bitmap.html"
+    },
     "substance_painter.source.SourceBitmap.resource_id": {
       "documented_as": "substance_painter.source.SourceBitmap.resource_id",
       "page": "substance_painter/source/bitmap.html"
@@ -1513,6 +1625,10 @@
     },
     "substance_painter.source.SourceUniformColor.get_color": {
       "documented_as": "substance_painter.source.SourceUniformColor.get_color",
+      "page": "substance_painter/source/uniformcolor.html"
+    },
+    "substance_painter.source.SourceUniformColor.set_color": {
+      "documented_as": "substance_painter.source.SourceUniformColor.set_color",
       "page": "substance_painter/source/uniformcolor.html"
     },
     "substance_painter.textureset": {
