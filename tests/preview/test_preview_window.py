@@ -3,9 +3,12 @@
 (src/preview/preview.h, src/preview/cli.h).
 
 The worker runs on DX12 with its own engine; the preview thread has a second device. The cases
-open a real window, so they need the owner's desktop session and skip under `UZP_NO_GPU=1`
-(hosted CI, decision 028). The test process is the worker's supervisor (tests/supervisor/
-conftest.py `Pipe`); the stall hook is the Debug build's `test_fault preview_stall` (decision 120).
+open a real window, so they need a desktop session and skip under `UZP_NO_GPU=1` (hosted CI,
+decision 028). The window opens on a private desktop nobody sees (`tests/desktop.py`, decision
+252), so a run never puts it on the owner's screen; only the anti-flicker case, which reads the
+screen, opens it there, and only when the owner asks for it with `UZP_SCREEN_TESTS=1`. The test
+process is the worker's supervisor (tests/supervisor/conftest.py `Pipe`); the stall hook is the
+Debug build's `test_fault preview_stall` (decision 120).
 """
 
 from __future__ import annotations
@@ -14,8 +17,8 @@ import ctypes
 import ctypes.wintypes
 import hashlib
 import json
+import os
 import shutil
-import subprocess
 import threading
 import time
 from collections.abc import Callable
@@ -26,12 +29,14 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 
+from tests.desktop import PrivateDesktop, WindowRecorder, visible_windows
 from tests.preview.conftest import NO_GPU, ocio_bundle
 from tests.supervisor.conftest import JSON_PREFIX, Pipe, make_project
 
 pytestmark = pytest.mark.skipif(
     NO_GPU, reason="UZP_NO_GPU=1: needs a DX12 adapter and a desktop session (decision 028)"
 )
+ON_SCREEN = os.environ.get("UZP_SCREEN_TESTS") == "1" and os.environ.get("UZP_HEADLESS") != "1"
 
 WORKER = ("--gpu-backend", "dx12", "--allow-python", "--test-faults")
 TITLE = "UzPainter preview"
@@ -71,25 +76,13 @@ result = None
 """
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
-_ENUM = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
 
 
-def windows_of(pid: int) -> list[int]:
-    """The visible top-level preview windows of process `pid`."""
-    found: list[int] = []
-
-    def visit(hwnd: int, _: int) -> bool:
-        owner = ctypes.wintypes.DWORD()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
-        if owner.value == pid:
-            buffer = ctypes.create_unicode_buffer(256)
-            user32.GetWindowTextW(hwnd, buffer, 256)
-            if buffer.value.startswith(TITLE):
-                found.append(hwnd)
-        return True
-
-    user32.EnumWindows(_ENUM(visit), 0)
-    return found
+def windows_of(pid: int, desktop: PrivateDesktop | None) -> list[int]:
+    """The visible top-level preview windows of process `pid` on `desktop`, or on the owner's
+    desktop when it is None."""
+    found = visible_windows(pid, None if desktop is None else desktop.handle)
+    return [hwnd for hwnd, title in found if title.startswith(TITLE)]
 
 
 def wait_for(condition: Callable[[], Any], timeout: float = 120.0) -> Any:
@@ -170,7 +163,7 @@ def baseline(painter: Path, tmp_path: Path, project: Path, pipes: list[Pipe]) ->
 
 @pytest.mark.preview_settling("preview_stall")
 def test_stalled_preview_never_delays_evaluation_or_export(
-    painter: Path, tmp_path: Path, pipes: list[Pipe]
+    painter: Path, tmp_path: Path, pipes: list[Pipe], desktop: PrivateDesktop
 ) -> None:
     """2.4, 3.2: with the preview thread stalled by the test hook while it holds its frame,
     evaluation and export complete with the same bytes as without a preview; frames keep being
@@ -178,7 +171,7 @@ def test_stalled_preview_never_delays_evaluation_or_export(
     baseline_project, project = projects(painter, tmp_path)
     expected = baseline(painter, tmp_path, baseline_project, pipes)
 
-    pipe = Pipe(painter, tmp_path, *WORKER, "--preview")
+    pipe = Pipe(painter, tmp_path, *WORKER, "--preview", desktop=desktop)
     pipes.append(pipe)
     tools = pipe.request({"method": "tools/list"})["result"]["tools"]
     assert "preview_status" in {tool["name"] for tool in tools}
@@ -214,7 +207,7 @@ def test_stalled_preview_never_delays_evaluation_or_export(
 
 @pytest.mark.preview_settling("preview_window_lifecycle")
 def test_window_lifecycle_during_evaluation_changes_nothing(
-    painter: Path, tmp_path: Path, pipes: list[Pipe]
+    painter: Path, tmp_path: Path, pipes: list[Pipe], desktop: PrivateDesktop
 ) -> None:
     """2.5, 3.3: the window opened, minimised, resized, restored and closed between and during
     evaluations: results and revision order are those of a worker without a preview, and the
@@ -222,9 +215,9 @@ def test_window_lifecycle_during_evaluation_changes_nothing(
     baseline_project, project = projects(painter, tmp_path)
     expected = baseline(painter, tmp_path, baseline_project, pipes)
 
-    pipe = Pipe(painter, tmp_path, *WORKER, "--preview")
+    pipe = Pipe(painter, tmp_path, *WORKER, "--preview", desktop=desktop)
     pipes.append(pipe)
-    (hwnd,) = wait_for(lambda: windows_of(pipe.process.pid))
+    (hwnd,) = wait_for(lambda: windows_of(pipe.process.pid, desktop))
     run = Run(pipe, project, tmp_path / "export-window")
     user32.ShowWindow(hwnd, SW_MINIMIZE)
     first = run.evaluate("BaseColor")
@@ -236,7 +229,7 @@ def test_window_lifecycle_during_evaluation_changes_nothing(
     user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
     exported = run.export()
     wait_for(lambda: not status(pipe)["window_open"])
-    assert not windows_of(pipe.process.pid)
+    assert not windows_of(pipe.process.pid, desktop)
     assert run.evaluate("BaseColor") == second
     assert (first, second, exported, run.revisions) == (
         expected["first"],
@@ -371,6 +364,11 @@ class Sampler(threading.Thread):
             self.error = error
 
 
+@pytest.mark.skipif(
+    not ON_SCREEN,
+    reason="reads the owner's screen, so it opens the window there: the owner runs it by hand with "
+    "UZP_SCREEN_TESTS=1 and without UZP_HEADLESS=1 (decision 252)",
+)
 def test_window_presents_only_complete_frames(
     painter: Path, tmp_path: Path, pipes: list[Pipe]
 ) -> None:
@@ -384,7 +382,7 @@ def test_window_presents_only_complete_frames(
     pipes.append(pipe)
     if pipe.handshake["gpu_status"] != "ready":
         pytest.skip("no DX12 device on this machine")
-    (hwnd,) = wait_for(lambda: windows_of(pipe.process.pid))
+    (hwnd,) = wait_for(lambda: windows_of(pipe.process.pid, None))
     run = Run(pipe, bundle, tmp_path / "export")
     run.evaluate("BaseColor")
     wait_for(lambda: status(pipe)["frames_rendered"] >= 1)
@@ -439,12 +437,12 @@ def test_window_presents_only_complete_frames(
 
 
 def test_a_new_evaluation_of_the_same_mesh_keeps_the_camera(
-    painter: Path, tmp_path: Path, pipes: list[Pipe]
+    painter: Path, tmp_path: Path, pipes: list[Pipe], desktop: PrivateDesktop
 ) -> None:
     """The worker derives a new mesh object for every evaluation. The preview fits its camera on
     the first frame and again only for another mesh, so an edit does not undo the user's orbit."""
     bundle = ocio_bundle(painter, tmp_path / "fixture")
-    pipe = Pipe(painter, tmp_path, *WORKER, "--preview")
+    pipe = Pipe(painter, tmp_path, *WORKER, "--preview", desktop=desktop)
     pipes.append(pipe)
     if pipe.handshake["gpu_status"] != "ready":
         pytest.skip("no DX12 device on this machine")
@@ -459,24 +457,30 @@ def test_a_new_evaluation_of_the_same_mesh_keeps_the_camera(
     assert len(run.revisions) == 2 and status(pipe)["camera_fits"] == 1
 
 
-def test_standalone_preview_opens_and_closes(painter: Path, tmp_path: Path) -> None:
+def test_standalone_preview_opens_and_closes(
+    painter: Path, tmp_path: Path, desktop: PrivateDesktop
+) -> None:
     """2.5: `UzPainter.exe --preview <file.uzp>` evaluates the project, shows the read-only window
-    with the unsupported-configuration message for a Legacy project, and reports on close."""
+    with the unsupported-configuration message for a Legacy project, and reports on close.
+    Decision 252: headless is only the default, and a preview asked for explicitly still opens
+    its window; the recorder that proves no window in tests/supervisor/test_headless.py sees it."""
     project = make_project(painter, tmp_path)
-    process = subprocess.Popen(
-        [str(painter), "--preview", str(project), "--gpu-backend", "dx12"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+    recorder = WindowRecorder(desktop.handle).start()
+    env = {k: v for k, v in os.environ.items() if k != "UZP_HEADLESS"}
+    process = desktop.spawn(
+        [str(painter), "--preview", str(project), "--gpu-backend", "dx12"], capture=True, env=env
     )
     try:
-        (hwnd,) = wait_for(lambda: windows_of(process.pid))
+        (hwnd,) = wait_for(lambda: windows_of(process.pid, desktop))
         time.sleep(1.0)
         user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
         out, err = process.communicate(timeout=120)
     finally:
-        if process.poll() is None:
-            process.kill()
+        process.kill()
+        shown = recorder.stop()
     assert process.returncode == 0, err.decode(errors="replace")
+    shown_titles = {item.title for item in shown if item.hwnd == hwnd and item.pid == process.pid}
+    assert shown_titles == {"UzPainter preview - plane.uzp"}, shown
     lines = [line for line in out.decode().splitlines() if line.startswith(JSON_PREFIX)]
     report = json.loads(lines[-1][len(JSON_PREFIX) :])
     assert report["status"] == "closed" and report["frames_rendered"] == 0
