@@ -134,6 +134,18 @@ for _size in rf.HELD_OUT_SIZES:
     )
 
 
+def srgb8_random_generator(size: int) -> Generate:
+    return lambda: rf.srgb8_random(size)
+
+
+for _size in rf.SRGB8_RANDOM_SIZES:
+    REQUEST_FIXTURES[f"srgb8-random-{_size}"] = (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/srgb8-random-{_size}.png",
+        srgb8_random_generator(_size),
+    )
+
+
 def ramp_mesh_generator(mesh: str, phase: str) -> Generate:
     return lambda: rf.ramp_seam(mesh, phase)
 
@@ -1155,11 +1167,14 @@ SRGB_MINIFY_FILTERS = ("BilinearHQ", "BilinearSharp")
 SRGB_MINIFY_SCALES = (2.0, 4.0)
 
 
-def srgb_bitmap_minification() -> Golden:
+def srgb_minification_sequence(sources: tuple[str, ...]) -> Sequence:
+    """Per source, per filter, per scale one fill on the next set of the 4x2 grid, BaseColor
+    only, the source set to sRGB and UV-projected with Repeat at rotation 0; BaseColor exported
+    at PNG 16, PNG 8 and OpenEXR 32f with infinite padding."""
     s = start("grid4x2")
-    res = s.imports(*SRGB_MINIFY_SOURCES)
+    res = s.imports(*sources)
     sets = iter(MESH_SETS["grid4x2"])
-    for source in SRGB_MINIFY_SOURCES:
+    for source in sources:
         for filtering in SRGB_MINIFY_FILTERS:
             for scale in SRGB_MINIFY_SCALES:
                 node = s.fill(["BaseColor"], position="top", texture_set=next(sets))
@@ -1182,6 +1197,10 @@ def srgb_bitmap_minification() -> Golden:
                 )
     for container in (PNG16, PNG8, EXR32F):
         export(s, ["documentMap/basecolor:RGB"], container, "infinite")
+    return s
+
+
+def srgb_bitmap_minification() -> Golden:
     return Golden(
         "srgb-bitmap-minification",
         "tier0/colour/srgb-bitmaps",
@@ -1194,7 +1213,32 @@ def srgb_bitmap_minification() -> Golden:
         "infinite padding, no dithering, every export step done twice in the session.",
         "grid4x2",
         ["grid4x2", *SRGB_MINIFY_SOURCES],
-        s,
+        srgb_minification_sequence(SRGB_MINIFY_SOURCES),
+    )
+
+
+# --- Decisions 219 and 225: Painter's sRGB8 mip filter on random content ------------------------
+
+SRGB_MIP_SOURCES = tuple(f"srgb8-random-{size}" for size in rf.SRGB8_RANDOM_SIZES)
+
+
+def srgb_bitmap_minification_random() -> Golden:
+    return Golden(
+        "srgb-bitmap-minification-random",
+        "tier0/colour/srgb-bitmaps",
+        "Painter's sRGB8 mip filter (phase1.15_compositor-colour-fits item 2.7, decisions 219 and "
+        "225): srgb-bitmap-minification's layout on random content, whose mip chain differs "
+        "between the candidate filters, where the ramp's does not. Under Legacy on the authored "
+        "4x2 plane grid at 256 px. One fill per set with only BaseColor (sRGB8) active, its "
+        "source a bitmap set to sRGB, UV projection with wrap Repeat, rotation 0, offset (0, 0): "
+        "the 8-bit random 256 px bitmap on s0-s3 and the 8-bit random 512 px bitmap on s4-s7; "
+        "per source BilinearHQ at scale (2, 2) and (4, 4), then BilinearSharp at (2, 2) and "
+        "(4, 4), so that 4 and 8 bitmap texels fall on a set texel. BaseColor at PNG 16, PNG 8 "
+        "and OpenEXR 32f, infinite padding, no dithering, every export step done twice in the "
+        "session.",
+        "grid4x2",
+        ["grid4x2", *SRGB_MIP_SOURCES],
+        srgb_minification_sequence(SRGB_MIP_SOURCES),
     )
 
 
@@ -1288,7 +1332,7 @@ def later_goldens() -> list[Golden]:
     """Requested goldens of later decisions (145, 126, 129, 168), in the order of the runbook,
     then the padding probes decision 160 voids under their new names (decision 166), then
     decision 174's sRGB minification and decision 169's L8 material channels, then decision
-    216's ring-sign and seam probes."""
+    216's ring-sign and seam probes, then decision 225's sRGB minification on random content."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
@@ -1301,6 +1345,7 @@ def later_goldens() -> list[Golden]:
         export_l8_material(),
         *(resample_held_out(size) for size in rf.HELD_OUT_SIZES),
         *padding_sign_probes(),
+        srgb_bitmap_minification_random(),
     ]
 
 
