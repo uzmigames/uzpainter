@@ -158,6 +158,7 @@ def baseline(painter: Path, tmp_path: Path, project: Path, pipes: list[Pipe]) ->
     return {"first": first, "second": second, "export": run.export(), "revisions": run.revisions}
 
 
+@pytest.mark.preview_settling("preview_stall")
 def test_stalled_preview_never_delays_evaluation_or_export(
     painter: Path, tmp_path: Path, pipes: list[Pipe]
 ) -> None:
@@ -201,6 +202,7 @@ def test_stalled_preview_never_delays_evaluation_or_export(
     print(f"evaluation + export with the preview stalled: {elapsed:.2f} s")
 
 
+@pytest.mark.preview_settling("preview_window_lifecycle")
 def test_window_lifecycle_during_evaluation_changes_nothing(
     painter: Path, tmp_path: Path, pipes: list[Pipe]
 ) -> None:

@@ -18,7 +18,7 @@
 - [ ] 3.2 LAY-06 tests through MCP: ambiguous name fails before mutation listing candidate ids; repeating a named operation creates no duplicate; ids survive save/reopen
 - [ ] 3.3 LAY-07 tests through `sync_stack`: only the named group rebuilt; other root groups hidden, not deleted, unless `keep_visible` matches; unrelated resources survive
 - [ ] 3.4 `batch` stop-on-error with per-call results; long tools with and without `wait=true`; `busy` and `wait_idle` timeout
-- [ ] 3.5 Capability-gap tests: each unavailable family fails before mutation and appears as a gap in `uzpainter://capabilities`
+- [ ] 3.5 Capability-gap tests: each unavailable family fails before mutation and appears as a gap in `uzpainter://capabilities`; the resource publishes the shipped manifest unchanged, `uzpainter.render.capture` `mode:painter_iray` among its release gaps (closes phase2.3_realtime-preview item 3.3, decision 162)
 - [ ] 3.6 Resource and prompt listing tests
 
 ## 4. Acceptance

@@ -140,6 +140,7 @@ result = {"no_project": no_project, "inside": inside, "same": project.revision()
 """
 
 
+@pytest.mark.preview_settling("painter_iray_unavailable")
 def test_painter_iray_fails_before_any_work(painter: Path, tmp_path: Path) -> None:
     """2.6, 3.5: `painter_iray` raises `PathTracerUnavailable` (a `NotYetSupported`) first: with
     no project open and with arguments that would each fail, nothing is checked, rendered or
@@ -210,6 +211,7 @@ result = {"uid": uid, "caps": caps, "files": files, "refused": refused,
 """
 
 
+@pytest.mark.preview_settling("diagnostic_captures_headless")
 def test_diagnostic_captures_equal_channel_exports(painter: Path, tmp_path: Path) -> None:
     """2.5, 3.4: `base_color`, `channel:roughness` and `mask:<uid>` equal the exports of their
     sources (documentMap baseColor and roughness, diagnosticMap materialMask/<uid>) with the same
@@ -418,10 +420,6 @@ refused = {
     "samples": raises(capture, WORK + "/x.png", "painter_viewport", size=(8, 8), samples=4),
     "stack": raises(capture, WORK + "/x.png", "painter_viewport", size=(8, 8),
                     stack=ts.get_active_stack()),
-    "ortho": raises(capture, WORK + "/x.png", "painter_viewport", size=(8, 8), camera={
-        "position": [0.0, 0.0, 60.0], "rotation": [0.0, 0.0, 0.0],
-        "projection_type": "Orthographic", "field_of_view": 40.0, "focal_length": 50.0,
-        "focus_distance": 60.0, "aperture": 0.0, "orthographic_height": 20.0}),
     "preset": raises(capture, WORK + "/x.png", "painter_viewport", size=(8, 8), preset="bogus"),
 }
 from uzpainter.render import display as rd
@@ -437,6 +435,7 @@ result = {"shot": shot, "rotated": rotated, "refused": refused, "rev": rev,
 
 
 @GPU
+@pytest.mark.preview_settling("viewport_capture_headless")
 def test_headless_viewport_capture(painter: Path, tmp_path: Path, pipes: list[Pipe]) -> None:
     """2.1-2.3, 3.1: a worker with no window renders `painter_viewport` offscreen: the process
     owns no window before or after, the PNG holds the display codes of the OpenEXR's binary16
@@ -475,7 +474,6 @@ def test_headless_viewport_capture(painter: Path, tmp_path: Path, pipes: list[Pi
         refused["samples"].startswith("ValueError: ") and "samples must be 1" in refused["samples"]
     )
     assert refused["stack"].startswith("ValueError: ")
-    assert refused["ortho"].startswith("NotYetSupported: ") and "orthographic" in refused["ortho"]
     assert refused["preset"].startswith("UnsupportedInUzPainter: ")
     assert result["same"] and result["stray"] == []
     rotated = result["rotated"]
@@ -532,3 +530,74 @@ def test_viewport_capture_after_a_mutation_shows_it(
     assert after["camera"]["source"] == "default_camera"
     assert after["hashes"]["png"] != before["hashes"]["png"]
     assert pipe.call("project_inspect")["result"]["revision"] == revision + 1
+
+
+# ── Orthographic cameras (phase2.3_realtime-preview; decision 163) ─────────────────────────────
+
+ORTHOGRAPHIC = """
+project.open(BUNDLE)
+def cam(position, rotation, projection="Orthographic", fov=40.0, focal=50.0):
+    return {"position": position, "rotation": rotation, "projection_type": projection,
+            "field_of_view": fov, "focal_length": focal, "focus_distance": 50.0, "aperture": 0.0,
+            "orthographic_height": 40.0}
+top = cam([0.0, 50.0, 0.0], [-90.0, 0.0, 0.0])
+def shot(name, size, camera):
+    return capture(WORK + "/ortho/" + name + ".png", "painter_viewport", size=size, camera=camera)
+result = {
+    "square": shot("square", (64, 64), top),
+    "landscape": shot("landscape", (96, 64), top),
+    "portrait": shot("portrait", (64, 96), top),
+    "lens": shot("lens", (64, 64), cam([0.0, 50.0, 0.0], [-90.0, 0.0, 0.0], fov=90.0, focal=20.0)),
+    "farther": shot("farther", (64, 64), cam([0.0, 500.0, 0.0], [-90.0, 0.0, 0.0])),
+    "behind": shot("behind", (64, 64), cam([0.0, -50.0, 0.0], [-90.0, 0.0, 0.0])),
+    "crossing": shot("crossing", (64, 64), cam([0.0, 0.0, 0.0], [-45.0, 0.0, 0.0])),
+    "perspective": shot("perspective", (64, 64),
+                        cam([0.0, 50.0, 0.0], [-90.0, 0.0, 0.0], projection="Perspective")),
+}
+"""
+
+
+def covered(
+    codes: np.ndarray[Any, Any], background: np.ndarray[Any, Any], solid: bool = True
+) -> tuple[int, ...]:
+    """The first and last row and column whose pixels differ from the background colour; with
+    `solid`, every pixel inside those bounds differs (the plane is a rectangle on screen)."""
+    hit = (codes != background).any(axis=2)
+    rows = np.flatnonzero(hit.any(axis=1))
+    columns = np.flatnonzero(hit.any(axis=0))
+    if solid:
+        assert hit[rows[0] : rows[-1] + 1, columns[0] : columns[-1] + 1].all()
+    return (int(rows[0]), int(rows[-1]), int(columns[0]), int(columns[-1]))
+
+
+@GPU
+def test_orthographic_capture_casts_parallel_rays(painter: Path, tmp_path: Path) -> None:
+    """Decision 163: an orthographic camera renders the 20 x 20 plane, seen from above, with
+    `orthographic_height` 40 as the view's full vertical extent and the width that times the
+    aspect, so the plane covers exactly the pixels whose centres lie on it (half the height at
+    every aspect). The lens fields do not apply, the distance does not change the image, only hits
+    in front of the plane through the camera count (a camera under the plane sees nothing, a tilted
+    camera on it sees the half in front), and a perspective camera at the same place frames the
+    plane by its vertical field of view."""
+    bundle = ocio_bundle(painter, tmp_path / "fixture", mesh=PLANE)
+    shots = ok(run(painter, tmp_path, f"BUNDLE = {str(bundle)!r}\n" + ORTHOGRAPHIC))
+    sizes = {"landscape": (96, 64), "portrait": (64, 96)}
+    codes = {name: check_viewport(r, sizes.get(name, (64, 64))) for name, r in shots.items()}
+    background = codes["square"][0, 0]
+    assert shots["square"]["camera"]["source"] == "argument"
+    assert shots["square"]["camera"]["record"]["projection_type"] == "Orthographic"
+
+    assert covered(codes["square"], background) == (16, 47, 16, 47)
+    assert covered(codes["landscape"], background) == (16, 47, 32, 63)
+    assert covered(codes["portrait"], background) == (24, 71, 8, 55)
+    assert shots["lens"]["hashes"]["png"] == shots["square"]["hashes"]["png"]
+    assert shots["lens"]["render_state_digest"] != shots["square"]["render_state_digest"]
+    assert covered(codes["farther"], background) == (16, 47, 16, 47)
+    assert (codes["behind"] == background).all()
+    # Eye plane through the plane's centre, tilted 45 degrees: the half with z < 0 is in front
+    # and shows above the image centre, sin(45) * 10 = 7.07 high.
+    assert covered(codes["crossing"], background) == (21, 31, 16, 47)
+    # tan(20 degrees) * 50 = 18.2 at the plane: the plane's 10 is 17.6 pixels of the 32. The
+    # perspective rays are not watertight: a ray along the plane's shared diagonal can miss both
+    # triangles (Moller-Trumbore in binary32), so only the bounds are compared.
+    assert covered(codes["perspective"], background, solid=False) == (14, 49, 14, 49)

@@ -1,0 +1,86 @@
+{
+  "cases": [
+    {
+      "backend": "dx12",
+      "date": "2026-10-12",
+      "exe_sha256": "c4831f56dbaddd3b8269c7eaf53034413b51d0f229fb72c321b0927e9f618a73",
+      "id": "viewport_capture_headless",
+      "result": "pass",
+      "seconds": 37.548
+    },
+    {
+      "backend": "vulkan",
+      "decision": 121,
+      "id": "viewport_capture_headless",
+      "result": "pending"
+    },
+    {
+      "backend": "cpu",
+      "date": "2026-10-12",
+      "exe_sha256": "c4831f56dbaddd3b8269c7eaf53034413b51d0f229fb72c321b0927e9f618a73",
+      "id": "diagnostic_captures_headless",
+      "result": "pass",
+      "seconds": 11.321
+    },
+    {
+      "backend": "cpu",
+      "date": "2026-10-12",
+      "exe_sha256": "c4831f56dbaddd3b8269c7eaf53034413b51d0f229fb72c321b0927e9f618a73",
+      "id": "painter_iray_unavailable",
+      "result": "pass",
+      "seconds": 1.578
+    },
+    {
+      "backend": "dx12",
+      "date": "2026-10-12",
+      "exe_sha256": "c4831f56dbaddd3b8269c7eaf53034413b51d0f229fb72c321b0927e9f618a73",
+      "id": "preview_stall",
+      "result": "pass",
+      "seconds": 6.595
+    },
+    {
+      "backend": "vulkan",
+      "decision": 121,
+      "id": "preview_stall",
+      "result": "pending"
+    },
+    {
+      "backend": "dx12",
+      "date": "2026-10-12",
+      "exe_sha256": "c4831f56dbaddd3b8269c7eaf53034413b51d0f229fb72c321b0927e9f618a73",
+      "id": "preview_window_lifecycle",
+      "result": "pass",
+      "seconds": 10.095
+    },
+    {
+      "backend": "vulkan",
+      "decision": 121,
+      "id": "preview_window_lifecycle",
+      "result": "pending"
+    },
+    {
+      "backend": "dx12",
+      "id": "wand_integration",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "decision": 121,
+      "id": "wand_integration",
+      "result": "pending"
+    },
+    {
+      "backend": "dx12",
+      "id": "wand_export_preview",
+      "result": "not_run"
+    },
+    {
+      "backend": "vulkan",
+      "decision": 121,
+      "id": "wand_export_preview",
+      "result": "pending"
+    }
+  ],
+  "schema": "uzpainter/preview-settling/1",
+  "task": "phase2.3_realtime-preview"
+}

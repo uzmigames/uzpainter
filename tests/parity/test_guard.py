@@ -30,6 +30,8 @@ from tools.parity.guard.guard import (
     worktree_snapshot,
 )
 from tools.parity.schemas import REPO_ROOT, SCHEMA_DIR, Schema, load_json, validation_errors
+from tools.parity.settling.preview import merge as preview_settling_merge
+from tools.parity.settling.preview import report_problems as preview_settling_problems
 from tools.parity.settling.report import merge as settling_merge
 from tools.parity.settling.report import report_problems as settling_problems
 from tools.parity.store.store import STORE_ENV, OracleStore, sha256_file
@@ -530,6 +532,85 @@ def test_repository_supervisor_settling_report_passes() -> None:
     assert (REPO_ROOT / SETTLING_PATH).is_file()
     snapshot = worktree_snapshot(REPO_ROOT, [SETTLING_PATH])
     assert snapshot.checked == (SETTLING_PATH,)
+    assert run_guard(REPO_ROOT, snapshot, None) == []
+
+
+PREVIEW_SETTLING_PATH = "parity/reports/phase2/preview-settling.json"
+
+
+def _preview_settling() -> dict[str, Any]:
+    case = {  # the first case listed, so that `cases[0]` is this passing entry
+        "id": "viewport_capture_headless",
+        "backend": "dx12",
+        "result": "pass",
+        "seconds": 95.0,
+        "metrics": {"baseline_export_s": 21.5, "stalled_export_s": 22.0},
+        "date": "2026-10-12",
+        "exe_sha256": SHA,
+    }
+    return preview_settling_merge(None, [case])
+
+
+@pytest.mark.parametrize(
+    ("change", "allowed"),
+    [
+        (lambda c: c, True),
+        (lambda c: {**c, "schema": "uzpainter/preview-settling/2"}, False),
+        (lambda c: {**c, "overhead": []}, False),
+        (lambda c: {**c, "cases": [{**c["cases"][0], "note": "free text"}]}, False),
+        (lambda c: {**c, "cases": [{**c["cases"][0], "id": "made_up_case"}]}, False),
+        (lambda c: {**c, "cases": [{**c["cases"][0], "exe_sha256": "C:/build/x.exe"}]}, False),
+        (lambda c: {**c, "cases": [c["cases"][0], c["cases"][0]]}, False),
+        (lambda c: {**c, "cases": [{**c["cases"][0], "backend": "cpu"}]}, False),
+        (lambda c: {**c, "cases": [{**c["cases"][0], "metrics": {"E:/x": 1.0}}]}, False),
+        (
+            lambda c: {
+                **c,
+                "cases": [{k: v for k, v in c["cases"][0].items() if k != "exe_sha256"}],
+            },
+            False,
+        ),
+    ],
+)
+def test_preview_settling_report_holds_numbers_identifiers_and_hashes_only(
+    repo: Path, change: Any, allowed: bool
+) -> None:
+    """phase2.3_realtime-preview item 2.2 (decision 162)."""
+    put(repo, PREVIEW_SETTLING_PATH, json.dumps(change(_preview_settling())).encode())
+    expected = {} if allowed else {PREVIEW_SETTLING_PATH: {"public-schema"}}
+    assert blocked(repo, None) == expected
+
+
+def test_preview_settling_merge_lists_what_has_not_run() -> None:
+    """A GPU case missing on Vulkan is pending under decision 121, a device-free case runs on
+    `cpu` only, and anything else missing is `not_run`, never a pass."""
+    first = _preview_settling()
+    iray = {
+        "id": "painter_iray_unavailable",
+        "backend": "cpu",
+        "result": "pass",
+        "date": "2026-10-12",
+        "exe_sha256": SHA,
+    }
+    merged = preview_settling_merge(first, [iray])
+    by_key = {(case["id"], case["backend"]): case for case in merged["cases"]}
+    assert by_key[("viewport_capture_headless", "dx12")]["result"] == "pass"
+    assert by_key[("painter_iray_unavailable", "cpu")]["result"] == "pass"
+    assert by_key[("viewport_capture_headless", "vulkan")] == {
+        "id": "viewport_capture_headless",
+        "backend": "vulkan",
+        "result": "pending",
+        "decision": 121,
+    }
+    assert by_key[("wand_integration", "dx12")]["result"] == "not_run"
+    assert ("painter_iray_unavailable", "dx12") not in by_key
+    assert preview_settling_problems(merged) == []
+
+
+def test_repository_preview_settling_report_passes() -> None:
+    assert (REPO_ROOT / PREVIEW_SETTLING_PATH).is_file()
+    snapshot = worktree_snapshot(REPO_ROOT, [PREVIEW_SETTLING_PATH])
+    assert snapshot.checked == (PREVIEW_SETTLING_PATH,)
     assert run_guard(REPO_ROOT, snapshot, None) == []
 
 

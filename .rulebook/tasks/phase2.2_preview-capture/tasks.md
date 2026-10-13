@@ -50,7 +50,7 @@
   - `painter_viewport` renders only the pinned OCIO configuration, and every project UzPainter creates is Legacy. Its tests therefore use an OCIO bundle without fill sources (`tests/preview/conftest.py` `ocio_bundle`): a Legacy export-bundle whose manifest declares OCIO with Painter's config hash.
   - The diagnostic modes run on Legacy projects only, because the export refuses OCIO.
   - Rendering painted OCIO projects waits on phase1.15_compositor-colour-fits (OCIO creation, fill sources under OCIO) and phase1.18_export-engine (OCIO export).
-  - An orthographic camera is a release gap owned by phase2.3_realtime-preview.
+  - An orthographic camera was a release gap owned by phase2.3_realtime-preview; it renders since decision 163.
   - `field_of_view` is used as the vertical angle: a UzPainter convention, not a measured Painter fact (square captures are unaffected).
   - Open for the owner: the render standard's screen-space Base-color viewport pass is not one of these modes, and no task owns it yet.
 - Tests (2026-10-12, owner machine, RTX 4090, driver 32.0.16.1714), each run once, re-running only failures:

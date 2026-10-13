@@ -3,22 +3,31 @@
 `zig build preview-tests` into a temporary prefix, and `UzPainter.exe` with its worker pipes
 (`painter` and `pipes` of tests/supervisor/conftest.py: the Debug build, whose worker carries the
 test-only preview stall hook). `ocio_bundle` makes the OCIO project the capture tests of
-phase2.2_preview-capture render (decision 148)."""
+phase2.2_preview-capture render (decision 148).
+
+Settling evidence (task phase2.3_realtime-preview, decision 162): a test that settles a case of the
+preview gate carries `@pytest.mark.preview_settling(<case>, ...)`. With
+`UZP_PREVIEW_SETTLING_REPORT=<path>` the run merges each tagged test's result, run time and the
+timings it gave `preview_settling.metric` into that report (`tools/parity/settling/preview.py`).
+Every GPU case here runs on DX12 workers (`--gpu-backend dx12`)."""
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import os
 import shutil
 import subprocess
 import textwrap
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from tests.supervisor.conftest import painter, pipes  # noqa: F401  (fixtures)
+from tools.parity.settling import preview as settling_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXIT_SKIP = 77
@@ -103,8 +112,9 @@ def run_report(exe: Path, script: Path, *args: str) -> dict[str, Any]:
     return report
 
 
-def ocio_bundle(exe: Path, folder: Path) -> Path:
-    """An OCIO project bundle of the sphere fixture with the shipped environment and no layer.
+def ocio_bundle(exe: Path, folder: Path, mesh: Path = SPHERE) -> Path:
+    """An OCIO project bundle of `mesh` (the sphere fixture) with the shipped environment and no
+    layer.
 
     No creation path yields an OCIO project yet (phase1.15) and the evaluator refuses fill sources
     under OCIO, so the bundle is a Legacy project's `export-bundle` whose manifest declares OCIO
@@ -118,7 +128,7 @@ def ocio_bundle(exe: Path, folder: Path) -> Path:
         textwrap.dedent(
             f"""
             from uzpainter import display, project, resource
-            project.create({SPHERE.as_posix()!r}, project.Settings(default_texture_resolution=256))
+            project.create({mesh.as_posix()!r}, project.Settings(default_texture_resolution=256))
             env = resource.import_project_resource({ENVIRONMENT.as_posix()!r},
                                                    resource.Usage.ENVIRONMENT, "studio")
             display.set_environment_resource(env.identifier())
@@ -146,3 +156,83 @@ def ocio_bundle(exe: Path, folder: Path) -> Path:
     index["manifest_sha256"] = hashlib.sha256(patched).hexdigest()
     (bundle / "bundle.json").write_text(json.dumps(index), encoding="utf-8")
     return bundle
+
+
+# --- settling evidence (decision 162) --------------------------------------------------------
+
+_calls: dict[str, tuple[tuple[str, ...], str, float, str | None]] = {}
+_metrics: dict[str, dict[str, float]] = {}
+_exe_hashes: dict[Path, str] = {}
+
+
+class PreviewSettling:
+    """A tagged test's handle on the report: the timings it measured itself."""
+
+    def __init__(self, nodeid: str) -> None:
+        self._nodeid = nodeid
+
+    def metric(self, name: str, value: float) -> None:
+        _metrics.setdefault(self._nodeid, {})[name] = round(value, 3)
+
+
+@pytest.fixture
+def preview_settling(request: pytest.FixtureRequest) -> PreviewSettling:
+    return PreviewSettling(request.node.nodeid)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "preview_settling(*cases): the test settles these preview gate cases (decision 162)",
+    )
+
+
+def _exe_sha256(item: pytest.Item) -> str | None:
+    exe = getattr(item, "funcargs", {}).get("painter")
+    if not isinstance(exe, Path) or not exe.is_file():
+        return None
+    if exe not in _exe_hashes:
+        _exe_hashes[exe] = hashlib.sha256(exe.read_bytes()).hexdigest()
+    return _exe_hashes[exe]
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo[None]
+) -> Generator[None, pytest.TestReport, pytest.TestReport]:
+    report = yield
+    marker = item.get_closest_marker("preview_settling")
+    if marker is not None and report.when == "call":
+        cases = tuple(marker.args)
+        _calls[item.nodeid] = (cases, report.outcome, report.duration, _exe_sha256(item))
+    return report
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    target = os.environ.get("UZP_PREVIEW_SETTLING_REPORT")
+    if not target or not _calls:
+        return
+    # A case settled by several tests passes only if every one of them passed.
+    entries: dict[tuple[str, str], dict[str, Any]] = {}
+    for nodeid, (cases, outcome, seconds, exe_sha256) in _calls.items():
+        if outcome == "skipped" or exe_sha256 is None:
+            continue
+        for case in cases:
+            backend = settling_report.backend_of(case, "dx12")
+            entry = entries.setdefault(
+                (case, backend),
+                {
+                    "id": case,
+                    "backend": backend,
+                    "result": "pass",
+                    "seconds": 0.0,
+                    "date": datetime.date.today().isoformat(),
+                    "exe_sha256": exe_sha256,
+                },
+            )
+            if outcome != "passed":
+                entry["result"] = "fail"
+            entry["seconds"] = round(entry["seconds"] + seconds, 3)
+            if nodeid in _metrics:
+                entry.setdefault("metrics", {}).update(_metrics[nodeid])
+    settling_report.write(Path(target), entries.values())

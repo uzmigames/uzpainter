@@ -302,6 +302,9 @@ Result<void> ValidateViewport(const ViewportScene& scene, const CameraPose& came
         return Invalid(backend, "the camera needs a finite eye, an orthonormal basis, a field of view in (0, 180) "
                                 "and a positive near distance");
     }
+    if (camera.orthographic && !(camera.orthographicHeight > 0.0 && std::isfinite(camera.orthographicHeight))) {
+        return Invalid(backend, "an orthographic camera needs a positive, finite orthographic height");
+    }
     const mesh::TexturingMesh& mesh = *scene.mesh;
     for (const mesh::Object& object : mesh.objects) {
         for (const mesh::Triangle& triangle : object.triangles) {
@@ -338,7 +341,8 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
         return Unexpected(valid.error());
     }
     const mesh::TexturingMesh& mesh = *scene.mesh;
-    const double tanHalf = std::tan(view.fovDegrees * kDegree / 2.0);
+    // The half height of the image plane: at distance 1 (perspective) or in scene units (orthographic).
+    const double tanHalf = view.orthographic ? view.orthographicHeight / 2.0 : std::tan(view.fovDegrees * kDegree / 2.0);
     const double aspect = static_cast<double>(width) / height;
     const uint32_t tilesX = (width + kTile - 1) / kTile;
     const uint32_t tilesY = (height + kTile - 1) / kTile;
@@ -378,10 +382,12 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
                 const double z = Dot(rel, view.forward);
                 if (z <= nearPlane) {
                     ++behind;
-                    continue;
+                    if (!view.orthographic) continue;
                 }
-                const double sx = Dot(rel, view.right) / (z * tanHalf * aspect);
-                const double sy = Dot(rel, view.up) / (z * tanHalf);
+                // Orthographic: affine, so a corner behind the eye still bounds the triangle.
+                const double depth = view.orthographic ? 1.0 : z;
+                const double sx = Dot(rel, view.right) / (depth * tanHalf * aspect);
+                const double sy = Dot(rel, view.up) / (depth * tanHalf);
                 minX = std::min(minX, (sx + 1.0) / 2.0 * width);
                 maxX = std::max(maxX, (sx + 1.0) / 2.0 * width);
                 minY = std::min(minY, (1.0 - sy) / 2.0 * height);
@@ -389,7 +395,7 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
             }
             if (behind == 3) {
                 bounds.push_back({1, 0, 0, 0});
-            } else if (behind > 0) {
+            } else if (behind > 0 && !view.orthographic) {
                 bounds.push_back({0, 0, tilesX - 1, tilesY - 1});
             } else if (maxX < -1.0 || maxY < -1.0 || minX > width + 1.0 || minY > height + 1.0) {
                 bounds.push_back({1, 0, 0, 0});
@@ -481,6 +487,7 @@ Result<ViewportImage> RenderViewport(render::EngineContext& context, const Viewp
     frame.push_back(kRadianceLevels);
     frame.push_back(kBrdfTableSize);
     frame.push_back(tilesX);
+    frame.push_back(view.orthographic ? 1u : 0u);
 
     Result<render::ComputeKernel> kernel = context.Kernel(ViewportKernel());
     if (!kernel) return Unexpected(kernel.error());
