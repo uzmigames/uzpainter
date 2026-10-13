@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import random
 import sys
 import types
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -40,11 +42,21 @@ REQUEST_DIR = (
 )
 MANIFEST_DIR = REQUEST_DIR.parents[2] / "manifests" / "tier0" / "api-probes"
 STEMS = [
+    "phase1-camera-coupling",
+    "phase1-close-without-saving",
+    "phase1-create-default-paths",
+    "phase1-create-mesh-maps",
     "phase1-create-settings",
+    "phase1-default-camera-bevelled-cube",
+    "phase1-default-camera-plane",
+    "phase1-default-camera-sphere",
     "phase1-delete-node",
+    "phase1-display-ocio",
     "phase1-engine-computations",
     "phase1-execute-when-not-busy",
+    "phase1-export-preset-search",
     "phase1-fill-channel-defaults",
+    "phase1-layer-stack-events",
     "phase1-mesh-map-update",
     "phase1-reload-mesh",
     "phase1-reload-resources",
@@ -52,8 +64,18 @@ STEMS = [
     "phase1-restored-values",
     "phase1-save-as-existing",
     "phase1-save-modes",
+    "phase1-shelves",
+    *(f"phase1-srgb-uniform-decode-ocio-part{part}" for part in range(1, 5)),
     *(f"phase1-srgb-uniform-decode-part{part}" for part in range(1, 5)),
+    "phase1-texture-throttling",
 ]
+# The lifecycle procedure timed by a second thread (P21-F, decision 109).
+LIFECYCLE_STEMS = ["phase1-create-open-timing"]
+# Probes recorded in an OCIO session (R-132-D, decision 132; P20-B's OCIO twin, decision 190).
+OCIO_STEMS = frozenset(
+    {"phase1-display-ocio", *(f"phase1-srgb-uniform-decode-ocio-part{n}" for n in range(1, 5))}
+)
+OCIO_CONFIG = "C:/Painter/resources/ocio/substance/config.ocio"
 
 
 def probe_path(stem: str) -> Path:
@@ -67,10 +89,41 @@ PROBES = [probe_path(stem) for stem in STEMS]
 # project (decision 107).
 EVERY_DEFAULT_CHANNEL = ["basecolor", "basemetalness", "height", "normal", "specularroughness"]
 EXPORTED_MAPS = {"phase1-fill-channel-defaults": EVERY_DEFAULT_CHANNEL}
+# The host-behaviour probes (decisions 095, 109, 110, 132) export nothing as a capture.
+HOST_PROBES = frozenset(
+    {
+        "phase1-camera-coupling",
+        "phase1-close-without-saving",
+        "phase1-create-default-paths",
+        "phase1-create-mesh-maps",
+        "phase1-default-camera-bevelled-cube",
+        "phase1-default-camera-plane",
+        "phase1-default-camera-sphere",
+        "phase1-display-ocio",
+        "phase1-export-preset-search",
+        "phase1-layer-stack-events",
+        "phase1-shelves",
+        "phase1-texture-throttling",
+    }
+)
 
 
 def exported_maps(stem: str) -> list[str]:
-    return EXPORTED_MAPS.get(stem, ["basecolor"])
+    return [] if stem in HOST_PROBES else EXPORTED_MAPS.get(stem, ["basecolor"])
+
+
+@pytest.fixture
+def colour_session(monkeypatch: pytest.MonkeyPatch) -> Callable[[str], None]:
+    """Start the fake session under OCIO for an OCIO probe, else under Legacy."""
+
+    def start(stem: str) -> None:
+        if stem in OCIO_STEMS:
+            monkeypatch.setenv("OCIO", OCIO_CONFIG)
+        else:
+            monkeypatch.delenv("OCIO", raising=False)
+        monkeypatch.delenv("PAINTER_ACE_CONFIG", raising=False)
+
+    return start
 
 
 PROBE_FAKE = "uzp_recorder_fake_probe_painter"
@@ -116,6 +169,8 @@ def record(
     probe_fake: types.ModuleType, fake: types.ModuleType, stem: str, tmp_path: Path
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     session = session_on(probe_fake, fake)
+    if stem not in OCIO_STEMS:
+        assert "OCIO" not in os.environ or not os.environ["OCIO"]
     job = load_probe_job(probe_path(stem))
     run = record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
     data = json.loads((run / "record.json").read_text(encoding="utf-8"))
@@ -135,7 +190,11 @@ def event_names(output: dict[str, Any]) -> list[str]:
 def test_every_probe_manifest_is_an_observed_probe_job_requested_or_admitted() -> None:
     requested = [p.stem for p in REQUEST_DIR.glob("*.json")]
     admitted = [p.stem for p in MANIFEST_DIR.glob("phase1-*.json")]
-    assert sorted(requested + admitted) == STEMS
+    assert sorted(requested + admitted) == sorted(STEMS + LIFECYCLE_STEMS)
+    for stem in LIFECYCLE_STEMS:
+        job = load_probe_job(probe_path(stem))
+        assert job.lifecycle and job.timing
+        assert manifest_symbol_problems(job.manifest) == []
     for path in PROBES:
         manifest = load_json(path)
         job = load_probe_job(path)  # validates against golden-public.json first
@@ -180,8 +239,13 @@ def test_a_rewrite_names_two_inputs() -> None:
 
 @pytest.mark.parametrize("path", PROBES, ids=lambda p: p.stem)
 def test_every_request_records_r1_and_r2(
-    probe_fake: types.ModuleType, fake: types.ModuleType, path: Path, tmp_path: Path
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    path: Path,
+    tmp_path: Path,
+    colour_session: Callable[[str], None],
 ) -> None:
+    colour_session(path.stem)
     session = session_on(probe_fake, fake)
     job = load_probe_job(path)
     run = record_probe_golden(session, job, tmp_path / "work", tmp_path / "inbox")
@@ -353,13 +417,19 @@ def test_execute_when_not_busy_runs_after_the_busy_period(
         assert recording["s10/events"]["value"][-1]["busy"] is False
 
 
-def test_dense_srgb_decode_reads_back_every_code_and_the_seeded_floats() -> None:
-    """P20-B (decision 107): each set_source probe is followed by its get_source readback; the
-    four parts set 80 colours each, in order (decision 180: one request did not fit a window)."""
+@pytest.mark.parametrize(
+    "family", ["phase1-srgb-uniform-decode", "phase1-srgb-uniform-decode-ocio"]
+)
+def test_dense_srgb_decode_reads_back_every_code_and_the_seeded_floats(family: str) -> None:
+    """P20-B (decision 107) and its OCIO twin (decision 190): each set_source probe is followed by
+    its get_source readback; the four parts set 80 colours each, in order (decision 180: one
+    request did not fit a window); only the twin names OCIO."""
     sets: list[dict[str, Any]] = []
     for part in range(1, 5):
-        path = probe_path(f"phase1-srgb-uniform-decode-part{part}")
-        steps = load_json(path)["instruction_sequence"]["steps"]
+        manifest = load_json(probe_path(f"{family}-part{part}"))
+        ocio = [s for s in manifest["applied_settings"] if s["name"] == "OCIO"]
+        assert bool(ocio) == family.endswith("-ocio")
+        steps = manifest["instruction_sequence"]["steps"]
         part_sets = [s for s in steps if s["call"].endswith("FillLayerNode.set_source")]
         gets = [s for s in steps if s["call"].endswith("FillLayerNode.get_source")]
         assert len(part_sets) == len(gets) == 80
@@ -408,3 +478,213 @@ def test_fill_channel_defaults_reads_every_channel_and_exports_it(
             k.split("/")[-1] for k, o in recording.items() if o["kind"] == "exported_map"
         )
         assert exported == EVERY_DEFAULT_CHANNEL
+
+
+# --- host behaviour probes (decisions 095, 109, 110, 132) -----------------------------------
+
+
+def outputs_by_id(run: Path) -> list[dict[str, Any]]:
+    data = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    assert record_problems(data) == []
+    return [{o["output_id"]: o for o in r["outputs"]} for r in data["recordings"]]
+
+
+def recorded(
+    probe_fake: types.ModuleType, fake: types.ModuleType, stem: str, tmp_path: Path
+) -> tuple[Any, list[dict[str, Any]], Path]:
+    world = probe_fake.ProbeWorld()
+    world.version, world.version_info = SOFTWARE["version"], (12, 1, 5)
+    session = ProbeSession(
+        fake.LocalTransport(world),
+        sleep=lambda s: None,
+        allowed_builds=lambda: frozenset({SOFTWARE["build_id"]}),
+    )
+    run = record_probe_golden(session, load_probe_job(probe_path(stem)), tmp_path / "w", tmp_path)
+    return world, outputs_by_id(run), run
+
+
+def test_create_binds_the_named_mesh_maps(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    """P21-A: the staged files keep the `<texture set>_<name>` stems Painter reads."""
+    _, recordings, _ = recorded(probe_fake, fake, "phase1-create-mesh-maps", tmp_path)
+    for recording in recordings:
+        bound = {
+            o["args"]["usage"]: o["value"]
+            for o in recording.values()
+            if o.get("call", "").endswith("get_mesh_map_resource")
+        }
+        assert len(bound) == 10
+        assert bound["AO"]["resource"]["name"] == "uzp_plane_ambient_occlusion"
+        assert {u for u, v in bound.items() if v is None} == {"BentNormals", "Height", "Opacity"}
+
+
+def test_default_paths_record_where_the_export_went(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    """P21-B: the folders are made in the run's work directory; an export without `exportPath`
+    reports its files relative to the run, hashed."""
+    _, (first, second), _ = recorded(probe_fake, fake, "phase1-create-default-paths", tmp_path)
+    for recording in (first, second):
+        assert recording["s3/get_default_export_path"]["value"] == {
+            "path": probe_fake.DEFAULT_EXPORT_PATH
+        }
+        located = recording["s6/export_project_textures"]["value"]["locations"]
+        assert located == {
+            "uzp_plane/": [
+                {"run_relative": ["r1", "work-files", "default-export", "uzp_plane_basecolor.png"]}
+            ]
+        }
+        files = recording["s6/files"]["value"]
+        assert [f["file_name"] for f in files] == [
+            "r1/work-files/default-export/uzp_plane_basecolor.png"
+        ]
+        assert files[0]["sha256"]
+    assert first["s7/save"]["raised"]["type"] == "ProjectError"  # the fake's untitled project
+    assert "raised" not in second["s7/save"]
+
+
+def test_throttling_period_is_read_as_milliseconds(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    _, recordings, _ = recorded(probe_fake, fake, "phase1-texture-throttling", tmp_path)
+    for recording in recordings:
+        value = recording["s3/cache_key_invalidation_throttling_period"]["value"]
+        assert value == {"timedelta_ms": 1000.0}
+
+
+def test_shelves_follow_the_crawl_and_are_removed_after_closing(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    """P21-D: the added shelf's crawl events and states, the shelves listed, and the shelf
+    removed once the project is closed."""
+    world, (first, second), _ = recorded(probe_fake, fake, "phase1-shelves", tmp_path)
+    crawl = first["s3/events"]["value"]
+    assert [(e["event"], e["shelf_name_argument"]) for e in crawl] == [
+        ("ShelfCrawlingStarted", "uzp_probe_shelf"),
+        ("ShelfCrawlingEnded", "uzp_probe_shelf"),
+    ]
+    states = first["s3/states"]["value"]
+    assert states[-1]["shelves_crawling"] == {"uzp_probe_shelf": False}  # the fake's crawl ends
+    for recording in (first, second):
+        shelves = {s["shelf"]: s["path"] for s in recording["s4/all"]["value"]}
+        assert shelves["uzp_probe_shelf"] == {"run_relative": ["r1", "work-files", "probe-shelf"]}
+        assert recording["s5/application_shelf"]["value"]["shelf"] == "starter_assets"
+        assert recording["s6/user_shelf"]["value"]["shelf"] == "your_assets"
+        assert recording["s7/exists"]["value"] is True
+        assert event_names(recording["s9/events"]) == ["ShelfCrawlingStarted", "ShelfCrawlingEnded"]
+    copied = tmp_path / "w"
+    assert sorted(p.name for p in copied.rglob("probe-shelf/*")) == ["checker.png"]
+    assert world.shelves == {}
+
+
+def test_layer_stack_edits_are_each_observed(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    """P21-E: every listed edit runs as a probe step in both recordings with its events."""
+    _, recordings, _ = recorded(probe_fake, fake, "phase1-layer-stack-events", tmp_path)
+    job = load_probe_job(probe_path("phase1-layer-stack-events"))
+    edits = [s for s in job.probe_steps if s.probe]
+    assert len(edits) == 21
+    for recording in recordings:
+        for step in edits:
+            assert "raised" not in recording[step.output_id], step
+            assert f"s{step.step}/events" in recording
+
+
+def test_timed_lifecycle_polls_from_a_second_thread(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    """P21-F: create and open carry the phase marker and the second thread's polls."""
+    _, recordings, _ = recorded(probe_fake, fake, "phase1-create-open-timing", tmp_path)
+    assert len(recordings) == 4
+    for index, recording in enumerate(recordings):
+        phase = "create" if index % 2 == 0 else "open"
+        polls = recording[f"{phase}/thread_polls"]["value"]
+        assert polls["poll_count"] >= 1 and polls["polls"]
+        marked = [e for e in recording[f"{phase}/events"]["value"] if "during_step" in e]
+        assert marked and all(e["during_step"] == phase for e in marked)
+
+
+def test_close_without_saving_reopens_the_saved_name(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    """P21-G: the rename is lost by the close; the fill is found again after the open."""
+    _, recordings, _ = recorded(probe_fake, fake, "phase1-close-without-saving", tmp_path)
+    for recording in recordings:
+        assert recording["s7/get_name"]["value"] == "uzp fill B"
+        assert recording["s10/rebind"]["value"]["found_by"] == {"3": "location"}
+        assert recording["s11/get_name"]["value"] == "uzp fill A"
+        assert recording["s12/needs_saving"]["value"] is False
+
+
+@pytest.mark.parametrize("mesh", ["plane", "sphere", "bevelled-cube"])
+def test_default_camera_reads_every_property(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path, mesh: str
+) -> None:
+    _, recordings, _ = recorded(probe_fake, fake, f"phase1-default-camera-{mesh}", tmp_path)
+    for recording in recordings:
+        camera = recording["s3/get_default_camera"]["value"]
+        assert sorted(camera) == sorted(
+            [
+                "aperture",
+                "field_of_view",
+                "focal_length",
+                "focus_distance",
+                "orthographic_height",
+                "position",
+                "projection_type",
+                "rotation",
+            ]
+        )
+        assert set(recording["s4/get_scene_bounding_box"]["value"]) == {
+            "center",
+            "dimensions",
+            "radius",
+        }
+
+
+def test_camera_sweep_reads_back_after_every_set(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    _, recordings, _ = recorded(probe_fake, fake, "phase1-camera-coupling", tmp_path)
+    job = load_probe_job(probe_path("phase1-camera-coupling"))
+    sets = [s for s in job.probe_steps if "value" in s.args]
+    for recording in recordings:
+        for step in sets:
+            prop = step.call.rsplit(".", 1)[1]
+            readback = recording[f"s{step.step + 1}/get_default_camera"]["value"]
+            if prop != "projection_type":
+                assert readback[prop] == step.args["value"]  # the fake neither clamps nor couples
+
+
+def test_ocio_probes_need_an_ocio_session(
+    probe_fake: types.ModuleType,
+    fake: types.ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R-132-D names OCIO: a Legacy session refuses it; an OCIO one records the display."""
+    monkeypatch.delenv("OCIO", raising=False)
+    with pytest.raises(RecorderError, match="start Painter with OCIO"):
+        recorded(probe_fake, fake, "phase1-display-ocio", tmp_path / "legacy")
+    monkeypatch.setenv("OCIO", OCIO_CONFIG)
+    _, recordings, run = recorded(probe_fake, fake, "phase1-display-ocio", tmp_path / "ocio")
+    record = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    assert record["key"]["project_settings"]["colour_management"]["mode"] == "ocio"
+    for recording in recordings:
+        environment = recording["s11/get_environment_resource"]["value"]
+        assert environment["resource"]["name"] == "sky-patch"
+        assert recording["s15/get_color_lut_resource"]["value"] is None
+
+
+def test_export_preset_search_records_identifiers(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    """R-095 P7: each found preset's identifier, GUI name and usages."""
+    _, recordings, _ = recorded(probe_fake, fake, "phase1-export-preset-search", tmp_path)
+    for recording in recordings:
+        for step in ("s3", "s4"):
+            (found,) = recording[f"{step}/search"]["value"]
+            assert found["identifier"]["resource"]["name"] == "Fake Engine Preset"
+            assert found["gui_name"] == "Fake Engine Preset"

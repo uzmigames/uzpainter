@@ -16,15 +16,19 @@ resolved freshly through `layerstack.get_node_by_uid` for every call.
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import enum
 import json
 import os
+import threading
 import time
 from collections.abc import Callable
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import substance_painter.application
 import substance_painter.colormanagement
+import substance_painter.display
 import substance_painter.event
 import substance_painter.export
 import substance_painter.layerstack
@@ -38,9 +42,13 @@ if TYPE_CHECKING:
     from tools.parity.recorder.painter_side import (
         BLENDING_MODES,
         OPERATIONS,
+        TONE_MAPPINGS,
         channel_type,
         color_of,
+        create_project,
         member,
+        scene_bounding_box,
+        set_camera,
         source_value,
     )
 
@@ -66,6 +74,21 @@ ENGINE: dict[str, bool] = {"disabled_by_probe": False}
 # dispatcher holds them weakly).
 EVENT_LOG: list[dict[str, Any]] = []
 CALLBACKS: dict[str, Any] = {}
+
+# The run's private directory (paths under it are recorded relative to it); the shelves a probe
+# added (removed again once the project is closed, as `Shelves.remove` requires); the pending keys
+# of a shelf crawl (shelf name) and of a project being opened (P21-D, P21-G; decision 110).
+ROOT: dict[str, Any] = {"dir": None}
+SHELVES_ADDED: list[str] = []
+SHELF_CRAWLS: dict[str, str] = {}
+OPENING: dict[str, bool] = {}
+CLOSED: dict[str, Any] = {"path": None}
+
+# Lifecycle timing (P21-F, decision 109): readiness polled by a second thread from the start of a
+# `create` or `open` until `ProjectEditionEntered` is dispatched.
+TIMING: dict[str, Any] = {"polls": [], "count": 0, "running": False, "entered_ms": None}
+TIMING_PERIOD_S = 0.001
+TIMING_LIMIT_S = 600.0
 
 # Layer stack edition (substance_painter.layerstack).
 INSERT_FILL = "substance_painter.layerstack.insert_fill"
@@ -144,6 +167,38 @@ PROJECT_OPEN = "substance_painter.project.open"
 PROJECT_STATE = "substance_painter.project.is_in_edition_state"
 LIFECYCLE_CALLS = (EVENT_CONNECT, PROJECT_SAVE_AS, PROJECT_SAVE, PROJECT_CLOSE, PROJECT_OPEN)
 
+# Host behaviour probes (decisions 109, 110, 132; R-095 P7): layer-stack edits, shelves, display
+# and camera, default paths and resource search.
+INSERT_PAINT = "substance_painter.layerstack.insert_paint"
+INSERT_ANCHOR_POINT = "substance_painter.layerstack.insert_anchor_point_effect"
+REMOVE_MASK = "substance_painter.layerstack.LayerNode.remove_mask"
+SET_MASK_BACKGROUND = "substance_painter.layerstack.LayerNode.set_mask_background"
+RESET_SOURCE = "substance_painter.layerstack.FillLayerNode.reset_source"
+SET_UNIFORM_COLOR = "substance_painter.source.SourceUniformColor.set_color"
+RESET_BITMAP_COLOR_SPACE = "substance_painter.source.SourceBitmap.reset_color_space"
+SET_SYMMETRY = "substance_painter.layerstack.FillLayerNode.set_symmetry_enabled"
+SHELVES_ADD = "substance_painter.resource.Shelves.add"
+SHELF_REFRESH = "substance_painter.resource.Shelf.refresh"
+SET_DISPLAY_ENVIRONMENT = "substance_painter.display.set_environment_resource"
+SET_DISPLAY_COLOR_LUT = "substance_painter.display.set_color_lut_resource"
+SET_DISPLAY_TONE_MAPPING = "substance_painter.display.set_tone_mapping"
+CAMERA_PROPERTY = "substance_painter.display.Camera."
+DEFAULT_CAMERA = "substance_painter.display.Camera.get_default_camera"
+GET_DISPLAY_ENVIRONMENT = "substance_painter.display.get_environment_resource"
+GET_DISPLAY_COLOR_LUT = "substance_painter.display.get_color_lut_resource"
+GET_DISPLAY_TONE_MAPPING = "substance_painter.display.get_tone_mapping"
+SCENE_BOUNDING_BOX = "substance_painter.project.get_scene_bounding_box"
+DEFAULT_EXPORT_PATH = "substance_painter.export.get_default_export_path"
+THROTTLING_PERIOD = (
+    "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period"
+)
+SHELVES_ALL = "substance_painter.resource.Shelves.all"
+APPLICATION_SHELF = "substance_painter.resource.Shelves.application_shelf"
+USER_SHELF = "substance_painter.resource.Shelves.user_shelf"
+SHELVES_EXISTS = "substance_painter.resource.Shelves.exists"
+SHELF_IS_CRAWLING = "substance_painter.resource.Shelf.is_crawling"
+RESOURCE_SEARCH = "substance_painter.resource.search"
+
 # Calls the host replays as state steps (applied once) or, with `probe: true`, as probe steps.
 EDIT_CALLS = (
     "substance_painter.layerstack.insert_fill",
@@ -178,6 +233,21 @@ EDIT_CALLS = (
     "substance_painter.resource.reload_modified_resources_async",
     "substance_painter.application.enable_engine_computations",
     "substance_painter.application.disable_engine_computations",
+    "substance_painter.layerstack.insert_paint",
+    "substance_painter.layerstack.insert_anchor_point_effect",
+    "substance_painter.layerstack.LayerNode.remove_mask",
+    "substance_painter.layerstack.LayerNode.set_mask_background",
+    "substance_painter.layerstack.FillLayerNode.reset_source",
+    "substance_painter.source.SourceUniformColor.set_color",
+    "substance_painter.source.SourceBitmap.reset_color_space",
+    "substance_painter.layerstack.FillLayerNode.set_symmetry_enabled",
+    "substance_painter.resource.Shelves.add",
+    "substance_painter.resource.Shelf.refresh",
+    "substance_painter.display.set_environment_resource",
+    "substance_painter.display.set_color_lut_resource",
+    "substance_painter.display.set_tone_mapping",
+    "substance_painter.project.close",
+    "substance_painter.project.open",
 )
 
 # Readback calls. `active_channels` and `affected_channel` read when no value is given.
@@ -214,12 +284,42 @@ GETTER_CALLS = (
     "substance_painter.project.is_busy",
     "substance_painter.application.engine_computations_status",
     "substance_painter.resource.is_reload_modified_resources_running",
+    "substance_painter.display.Camera.get_default_camera",
+    "substance_painter.display.Camera.projection_type",
+    "substance_painter.display.Camera.position",
+    "substance_painter.display.Camera.rotation",
+    "substance_painter.display.Camera.field_of_view",
+    "substance_painter.display.Camera.focal_length",
+    "substance_painter.display.Camera.focus_distance",
+    "substance_painter.display.Camera.aperture",
+    "substance_painter.display.Camera.orthographic_height",
+    "substance_painter.display.get_environment_resource",
+    "substance_painter.display.get_color_lut_resource",
+    "substance_painter.display.get_tone_mapping",
+    "substance_painter.project.get_scene_bounding_box",
+    "substance_painter.export.get_default_export_path",
+    "substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period",
+    "substance_painter.resource.Shelves.all",
+    "substance_painter.resource.Shelves.application_shelf",
+    "substance_painter.resource.Shelves.user_shelf",
+    "substance_painter.resource.Shelves.exists",
+    "substance_painter.resource.Shelf.is_crawling",
+    "substance_painter.resource.search",
 )
 
-# Arguments that, when present, make `active_channels` / `affected_channel` an assignment.
+# Arguments that, when present, make `active_channels`, `affected_channel` or a camera property
+# an assignment.
 VALUE_ARGS = {
     "substance_painter.layerstack.FillLayerNode.active_channels": "channels",
     "substance_painter.layerstack.LevelsEffectNode.affected_channel": "channel",
+    "substance_painter.display.Camera.projection_type": "value",
+    "substance_painter.display.Camera.position": "value",
+    "substance_painter.display.Camera.rotation": "value",
+    "substance_painter.display.Camera.field_of_view": "value",
+    "substance_painter.display.Camera.focal_length": "value",
+    "substance_painter.display.Camera.focus_distance": "value",
+    "substance_painter.display.Camera.aperture": "value",
+    "substance_painter.display.Camera.orthographic_height": "value",
 }
 
 # Steps that create a node.
@@ -229,6 +329,8 @@ INSERT_CALLS = (
     "substance_painter.layerstack.insert_levels_effect",
     "substance_painter.layerstack.insert_compare_mask_effect",
     "substance_painter.layerstack.insert_color_selection_effect",
+    "substance_painter.layerstack.insert_paint",
+    "substance_painter.layerstack.insert_anchor_point_effect",
 )
 
 # Documented enum members by name (see painter_side.py for why each member is spelled out).
@@ -289,6 +391,7 @@ BITMAP_COLOR_SPACES = {
 # resource.Usage members the probes import with.
 RESOURCE_USAGES = {
     "TEXTURE": lambda: substance_painter.resource.Usage.TEXTURE,
+    "ENVIRONMENT": lambda: substance_painter.resource.Usage.ENVIRONMENT,
 }
 
 # textureset.MeshMapUsage members.
@@ -297,6 +400,12 @@ MESH_MAP_USAGES = {
     "Curvature": lambda: substance_painter.textureset.MeshMapUsage.Curvature,
     "Normal": lambda: substance_painter.textureset.MeshMapUsage.Normal,
     "Height": lambda: substance_painter.textureset.MeshMapUsage.Height,
+    "BentNormals": lambda: substance_painter.textureset.MeshMapUsage.BentNormals,
+    "ID": lambda: substance_painter.textureset.MeshMapUsage.ID,
+    "Opacity": lambda: substance_painter.textureset.MeshMapUsage.Opacity,
+    "Position": lambda: substance_painter.textureset.MeshMapUsage.Position,
+    "Thickness": lambda: substance_painter.textureset.MeshMapUsage.Thickness,
+    "WorldSpaceNormal": lambda: substance_painter.textureset.MeshMapUsage.WorldSpaceNormal,
 }
 
 # Project lifecycle events of substance_painter.event the lifecycle probe listens to.
@@ -318,6 +427,9 @@ EVENT_CLASSES = {
     "ExportTexturesAboutToStart": lambda: substance_painter.event.ExportTexturesAboutToStart,
     "ExportTexturesEnded": lambda: substance_painter.event.ExportTexturesEnded,
     "LayerStacksModelDataChanged": lambda: substance_painter.event.LayerStacksModelDataChanged,
+    "ShelfCrawlingStarted": lambda: substance_painter.event.ShelfCrawlingStarted,
+    "ShelfCrawlingEnded": lambda: substance_painter.event.ShelfCrawlingEnded,
+    "CameraPropertiesChanged": lambda: substance_painter.event.CameraPropertiesChanged,
 }
 
 # project.ProjectSaveMode members.
@@ -380,6 +492,16 @@ def describe(value: Any) -> Any:
         return source_value(value)
     if isinstance(value, substance_painter.layerstack.Node):
         return {"node_type": value.get_type().name, "name": value.get_name()}
+    if isinstance(value, substance_painter.resource.Shelf):
+        return {"shelf": value.name(), "path": attempt(lambda: run_path(value.path()))}
+    if isinstance(value, substance_painter.resource.Resource):
+        return {
+            "identifier": describe(value.identifier()),
+            "gui_name": attempt(value.gui_name),
+            "usages": attempt(value.usages),
+        }
+    if isinstance(value, datetime.timedelta):
+        return {"timedelta_ms": value / datetime.timedelta(milliseconds=1)}
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         fields = dataclasses.asdict(value)
         return {"class": class_name(value), **{k: describe(v) for k, v in sorted(fields.items())}}
@@ -577,6 +699,106 @@ def project_file(value: Any) -> Any:
     return {"is_none": True} if value is None else {"file_name": os.path.basename(value)}
 
 
+def run_path(value: Any) -> Any:
+    """A path Painter returned: its parts relative to the run's private directory when it lies
+    under it (the default save and export folders a probe set), else as Painter gave it."""
+    if value is None:
+        return None
+    path = os.path.normpath(str(value))
+    root = ROOT["dir"]
+    if root is not None:
+        base = os.path.normpath(str(root))
+        if os.path.normcase(os.path.commonpath([path, base])) == os.path.normcase(base):
+            return {"run_relative": os.path.relpath(path, base).split(os.sep)}
+    return {"path": str(value)}
+
+
+def camera_property(name: str) -> Any:
+    """One documented property of the default camera (decision 132, R-132-A and B)."""
+    camera = substance_painter.display.Camera.get_default_camera()
+    if name == "projection_type":
+        return camera.projection_type
+    if name == "position":
+        return list(camera.position)
+    if name == "rotation":
+        return list(camera.rotation)
+    if name == "field_of_view":
+        return camera.field_of_view
+    if name == "focal_length":
+        return camera.focal_length
+    if name == "focus_distance":
+        return camera.focus_distance
+    if name == "aperture":
+        return camera.aperture
+    if name == "orthographic_height":
+        return camera.orthographic_height
+    raise ValueError(f"unsupported camera property {name!r}")
+
+
+CAMERA_FIELDS = (
+    "projection_type",
+    "position",
+    "rotation",
+    "field_of_view",
+    "focal_length",
+    "focus_distance",
+    "aperture",
+    "orthographic_height",
+)
+
+
+def camera_record() -> dict[str, Any]:
+    """Every documented property of the default camera, each read or the error it raised."""
+    return {name: attempt(partial(camera_property, name)) for name in CAMERA_FIELDS}
+
+
+def shelf_named(name: str) -> Any:
+    """The shelf of that name among `Shelves.all()` (a shelf is identified by its name)."""
+    for shelf in substance_painter.resource.Shelves.all():
+        if shelf.name() == name:
+            return shelf
+    raise ValueError(f"no shelf named {name!r}")
+
+
+def shelf_crawling(name: str) -> bool:
+    return bool(shelf_named(name).is_crawling())
+
+
+def watch_shelf(step: int, name: str) -> None:
+    """A crawl of the shelf stays pending while `Shelf.is_crawling()` is true."""
+    key = f"s{step}/shelf/{name}"
+    SHELF_CRAWLS[key] = name
+    CALLBACK_STATE[key] = True
+
+
+def add_shelf(step: int, args: dict[str, Any], resolved: dict[str, Any]) -> Any:
+    name = str(args["name"])
+    shelf = substance_painter.resource.Shelves.add(name, resolved["shelf_path"])
+    SHELVES_ADDED.append(name)
+    watch_shelf(step, name)
+    return shelf
+
+
+def close_project_probe() -> Any:
+    """`project.close`, keeping the file it had for a later `project.open` step (P21-G)."""
+    CLOSED["path"] = substance_painter.project.file_path()
+    return substance_painter.project.close()
+
+
+def open_project_probe(step: int, resolved: dict[str, Any]) -> Any:
+    """`project.open` of a work file, or of the file the last `project.close` step closed;
+    pending until the project is in edition and not busy (the host then finds the inserted nodes
+    again)."""
+    path = resolved.get("work_file", CLOSED["path"])
+    if path is None:
+        raise ValueError("no work file and no closed project file to open")
+    returned = substance_painter.project.open(path)
+    key = f"s{step}/open"
+    OPENING[key] = True
+    CALLBACK_STATE[key] = True
+    return returned
+
+
 def texture_files(textures: Any) -> dict[str, list[str]]:
     """Exported textures by `texture set/stack`, as file names (no private directory)."""
     return {
@@ -772,6 +994,32 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
         return engine_disabled(args)
     if call == DELETE_NODE:
         return delete_node(int(args["node_step"]))
+    if call == INSERT_PAINT:
+        return layerstack.insert_paint(insert_position(args))
+    if call == INSERT_ANCHOR_POINT:
+        return layerstack.insert_anchor_point_effect(insert_position(args), str(args["name"]))
+    if call == SHELVES_ADD:
+        return add_shelf(step, args, resolved)
+    if call == SHELF_REFRESH:
+        name = str(args["name"])
+        returned = shelf_named(name).refresh()
+        watch_shelf(step, name)
+        return returned
+    if call == SET_DISPLAY_ENVIRONMENT:
+        environment = PROBE_RESOURCES[int(args["resource_step"])]
+        return substance_painter.display.set_environment_resource(environment)
+    if call == SET_DISPLAY_COLOR_LUT:
+        lut = PROBE_RESOURCES[int(args["resource_step"])] if "resource_step" in args else None
+        return substance_painter.display.set_color_lut_resource(lut)
+    if call == SET_DISPLAY_TONE_MAPPING:
+        function = member(TONE_MAPPINGS, "ToneMappingFunction", args["function"])
+        return substance_painter.display.set_tone_mapping(function)
+    if call.startswith(CAMERA_PROPERTY):
+        return set_camera(call[len(CAMERA_PROPERTY) :], args["value"])
+    if call == PROJECT_CLOSE:
+        return close_project_probe()
+    if call == PROJECT_OPEN:
+        return open_project_probe(step, resolved)
     node = fresh(args["node_step"])
     if call == SET_NAME:
         return node.set_name(str(args["name"]))
@@ -801,6 +1049,20 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
         return node.get_source(channel_arg(args)).set_color_space(space)
     if call == ADD_MASK:
         return node.add_mask(member(MASK_BACKGROUNDS, "MaskBackground", args["background"]))
+    if call == REMOVE_MASK:
+        return node.remove_mask()
+    if call == SET_MASK_BACKGROUND:
+        background = member(MASK_BACKGROUNDS, "MaskBackground", args["background"])
+        return node.set_mask_background(background)
+    if call == RESET_SOURCE:
+        return node.reset_source(channel_arg(args))
+    if call == SET_UNIFORM_COLOR:
+        color = color_of(args["color"], args.get("color_space"))
+        return node.get_source(channel_arg(args)).set_color(color)
+    if call == RESET_BITMAP_COLOR_SPACE:
+        return node.get_source(channel_arg(args)).reset_color_space()
+    if call == SET_SYMMETRY:
+        return node.set_symmetry_enabled(bool(args["enabled"]))
     if call == ENABLE_MASK:
         return node.enable_mask(bool(args["enabled"]))
     if call == AFFECTED_CHANNEL:
@@ -843,6 +1105,40 @@ def read(call: str, args: dict[str, Any]) -> Any:
         return substance_painter.resource.is_reload_modified_resources_running()
     if call == GET_NODE_BY_UID:
         return resolve(node_uid(int(args["node_step"])))
+    if call == DEFAULT_CAMERA:
+        return camera_record()
+    if call.startswith(CAMERA_PROPERTY):
+        return camera_property(call[len(CAMERA_PROPERTY) :])
+    if call == GET_DISPLAY_ENVIRONMENT:
+        return substance_painter.display.get_environment_resource()
+    if call == GET_DISPLAY_COLOR_LUT:
+        return substance_painter.display.get_color_lut_resource()
+    if call == GET_DISPLAY_TONE_MAPPING:
+        return substance_painter.display.get_tone_mapping()
+    if call == SCENE_BOUNDING_BOX:
+        return scene_bounding_box({})
+    if call == DEFAULT_EXPORT_PATH:
+        return run_path(substance_painter.export.get_default_export_path())
+    if call == THROTTLING_PERIOD:
+        return substance_painter.event.TextureStateEvent.cache_key_invalidation_throttling_period()
+    if call == SHELVES_ALL:
+        return sorted(
+            (describe(shelf) for shelf in substance_painter.resource.Shelves.all()),
+            key=lambda entry: str(entry["shelf"]),
+        )
+    if call == APPLICATION_SHELF:
+        return substance_painter.resource.Shelves.application_shelf()
+    if call == USER_SHELF:
+        return substance_painter.resource.Shelves.user_shelf()
+    if call == SHELVES_EXISTS:
+        return substance_painter.resource.Shelves.exists(str(args["name"]))
+    if call == SHELF_IS_CRAWLING:
+        return shelf_named(str(args["name"])).is_crawling()
+    if call == RESOURCE_SEARCH:
+        found = substance_painter.resource.search(str(args["query"]))
+        return sorted(
+            (describe(item) for item in found), key=lambda entry: json.dumps(entry, sort_keys=True)
+        )
     node = fresh(args["node_step"])
     if call == GET_UID:
         return node.uid()
@@ -985,6 +1281,10 @@ def probe_reset(args: dict[str, Any]) -> dict[str, Any]:
     CALLBACK_STATE.clear()
     RESOURCE_RELOADS.clear()
     HELD_CALLBACKS.clear()
+    SHELF_CRAWLS.clear()
+    OPENING.clear()
+    CLOSED["path"] = None
+    ROOT["dir"] = args.get("root")
     return {"reset": True}
 
 
@@ -1024,6 +1324,12 @@ def event_callback(name: str) -> Callable[[Any], None]:
         if name == "ExportTexturesEnded":
             entry["status_argument"] = describe(event.status)
             entry["message_argument"] = event.message
+        if name in ("ShelfCrawlingStarted", "ShelfCrawlingEnded"):
+            entry["shelf_name_argument"] = event.shelf_name
+        if name == "CameraPropertiesChanged":
+            entry["camera_id_argument"] = event.camera_id
+        if name == "ProjectEditionEntered" and TIMING["running"]:
+            TIMING["entered_ms"] = timing_ms()
         EVENT_LOG.append(entry)
 
     return callback
@@ -1063,23 +1369,37 @@ def project_save(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def pending_names() -> list[str]:
-    """Asynchronous calls not answered yet (a started resource reload: while one runs)."""
+    """Asynchronous calls not answered yet (a started resource reload: while one runs; a shelf
+    crawl: while the shelf crawls; an opened project: until it is in edition and not busy)."""
     running = None
     for key in sorted(RESOURCE_RELOADS):
         if CALLBACK_STATE.get(key):
             if running is None:
                 running = substance_painter.resource.is_reload_modified_resources_running()
             CALLBACK_STATE[key] = running
+    for key, name in sorted(SHELF_CRAWLS.items()):
+        if CALLBACK_STATE.get(key):
+            CALLBACK_STATE[key] = shelf_named(name).is_crawling()
+    for key in sorted(OPENING):
+        if CALLBACK_STATE.get(key):
+            project = substance_painter.project
+            CALLBACK_STATE[key] = not (project.is_in_edition_state() and not project.is_busy())
     return sorted(key for key, waiting in CALLBACK_STATE.items() if waiting)
 
 
 def probe_state(args: dict[str, Any]) -> dict[str, Any]:
-    """Readiness, engine computations and pending asynchronous calls, polled by the host."""
-    return {
+    """Readiness, engine computations and pending asynchronous calls, polled by the host; with
+    the crawl state of every shelf a probe added, once one was added."""
+    state = {
         **project_state(),
         "engine_computations": attempt(substance_painter.application.engine_computations_status),
         "pending": pending_names(),
     }
+    if SHELVES_ADDED:
+        state["shelves_crawling"] = {
+            name: attempt(partial(shelf_crawling, name)) for name in SHELVES_ADDED
+        }
+    return state
 
 
 def probe_export(args: dict[str, Any]) -> dict[str, Any]:
@@ -1087,13 +1407,18 @@ def probe_export(args: dict[str, Any]) -> dict[str, Any]:
     CURRENT["step"] = int(args["step"])
     try:
         result = substance_painter.export.export_project_textures(args["config"])
-        return {
-            "value": {
-                "status": describe(result.status),
-                "message": result.message,
-                "textures": texture_files(result.textures),
-            }
+        value: dict[str, Any] = {
+            "status": describe(result.status),
+            "message": result.message,
+            "textures": texture_files(result.textures),
         }
+        if args.get("locations"):
+            # A configuration without `exportPath` (P21-B): where each file went.
+            value["locations"] = {
+                f"{key[0]}/{key[1]}": [run_path(name) for name in files]
+                for key, files in sorted(result.textures.items())
+            }
+        return {"value": value}
     except Exception as error:
         return {"value": None, "raised": raised(error)}
     finally:
@@ -1111,6 +1436,71 @@ def probe_finish(args: dict[str, Any]) -> dict[str, Any]:
     return {"engine_reenabled": reenabled}
 
 
+def probe_cleanup(args: dict[str, Any]) -> dict[str, Any]:
+    """After the project is closed: remove the shelves a probe added (`Shelves.remove` needs no
+    open project; an added shelf only lives for the session anyway)."""
+    removed: dict[str, Any] = {}
+    for name in list(SHELVES_ADDED):
+        removed[name] = attempt(partial(substance_painter.resource.Shelves.remove, name))
+    SHELVES_ADDED.clear()
+    SHELF_CRAWLS.clear()
+    return {"removed": removed}
+
+
+def timing_ms() -> float:
+    return round((time.perf_counter() - float(TIMING["started"])) * 1000.0, 3)
+
+
+def poll_readiness() -> None:
+    """The second thread of P21-F: `is_busy()` and `is_in_edition_state()` about every
+    millisecond, keeping each change of state with its time, until `ProjectEditionEntered` was
+    dispatched or the limit passed."""
+    project = substance_painter.project
+    last = None
+    while TIMING["running"] and TIMING["entered_ms"] is None:
+        state = {
+            "busy": attempt(project.is_busy),
+            "in_edition": attempt(project.is_in_edition_state),
+        }
+        TIMING["count"] = int(TIMING["count"]) + 1
+        if state != last:
+            TIMING["polls"].append({"ms": timing_ms(), **state})
+            last = state
+        if timing_ms() > TIMING_LIMIT_S * 1000.0:
+            break
+        time.sleep(TIMING_PERIOD_S)
+    TIMING["running"] = False
+
+
+def timed_call(args: dict[str, Any]) -> dict[str, Any]:
+    """`create` or `open` of the lifecycle procedure with the step marker set to the phase (events
+    dispatched inside the call carry `during_step`), while a second thread polls readiness."""
+    TIMING["polls"], TIMING["count"], TIMING["entered_ms"] = [], 0, None
+    TIMING["running"], TIMING["started"] = True, time.perf_counter()
+    poller = threading.Thread(target=poll_readiness, daemon=True)
+    threading.Thread.start(poller)
+    CURRENT["step"] = args["phase"]
+    try:
+        if args["phase"] == "create":
+            created = create_project(args["args"], args["resolved"])
+        else:
+            substance_painter.project.open(args["path"])
+            created = {}
+    finally:
+        CURRENT["step"] = None
+    return {**created, "returned_ms": timing_ms()}
+
+
+def timing_take(args: dict[str, Any]) -> dict[str, Any]:
+    """The second thread's polls of the last timed call (state changes only), then it stops."""
+    TIMING["running"] = False
+    return {
+        "polls": list(TIMING["polls"]),
+        "poll_count": TIMING["count"],
+        "edition_entered_ms": TIMING["entered_ms"],
+    }
+
+
 PROBE_OPERATIONS = {
     "probe_step": probe_step,
     "probe_locations": probe_locations,
@@ -1124,6 +1514,9 @@ PROBE_OPERATIONS = {
     "probe_state": probe_state,
     "probe_export": probe_export,
     "probe_finish": probe_finish,
+    "probe_cleanup": probe_cleanup,
+    "timed_call": timed_call,
+    "timing_take": timing_take,
 }
 
 for operation_name, operation in PROBE_OPERATIONS.items():

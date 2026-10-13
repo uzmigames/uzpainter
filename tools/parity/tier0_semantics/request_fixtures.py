@@ -218,6 +218,26 @@ def srgb8_grey_ramp() -> bytes:
     return png16(256, 256, 1, lambda x, y: (x,), bits=8)
 
 
+# --- Held-out minification of decision 084 -----------------------------------------------------
+
+# Square power-of-two bitmap sizes no fitted minification golden used (decisions 078, 084 used
+# the 64 px pattern and impulse).
+HELD_OUT_SIZES = (128, 32)
+
+
+def held_out_pattern(size: int) -> bytes:
+    """RGB `size` x `size` deterministic pseudo-random codes (32-bit LCG, a seed per size), like
+    `fixtures.pattern64` but never used by a fit."""
+    state = [20261013 + size]
+
+    def nxt() -> int:
+        state[0] = (state[0] * 1664525 + 1013904223) % (1 << 32)
+        return state[0] >> 16
+
+    values = [(nxt(), nxt(), nxt()) for _ in range(size * size)]
+    return png16(size, size, 3, lambda x, y: values[y * size + x])
+
+
 # --- Padding probes of decision 129 (P-ramp, P-tie) -----------------------------------------
 
 # P-ramp meshes: seam.obj's vertices, normal and faces, two UV islands sharing the 3D edge

@@ -6,12 +6,15 @@ bitmap sources, levels, mesh maps and project events. The behaviour is simple an
 the tests (it states what the fake does, not what Painter does): the multichannel/mask rules raise
 `EditionContextException` or `ValueError`, assigning `active_channels` clears the fill's sources,
 and every node gets a new uid when a project is reopened. Asynchronous work (`reload_mesh`,
-`execute_when_not_busy`, `reload_modified_resources_async`) is queued and runs one task per
-`project.is_busy()` poll; the project is busy while a mesh reload is queued.
+`execute_when_not_busy`, `reload_modified_resources_async`, a shelf crawl) is queued and runs one
+task per `project.is_busy()` poll; the project is busy while a mesh reload is queued. Mesh maps
+given to `project.create` bind by the file stem `<texture set>_<name>`, with the mesh-map names of
+the documented export configuration (an authored rule of the fake).
 """
 
 from __future__ import annotations
 
+import datetime
 import enum
 import json
 import types
@@ -44,6 +47,9 @@ class NodeType(enum.Enum):
     LevelsEffect = 4
     CompareMaskEffect = 5
     ColorSelectionEffect = 6
+    PaintLayer = 7
+    PaintEffect = 8
+    AnchorPointEffect = 9
 
 
 class NodeStack(enum.Enum):
@@ -100,6 +106,28 @@ class MeshMapUsage(enum.Enum):
     Curvature = 1
     Height = 2
     Normal = 3
+    BentNormals = 4
+    ID = 5
+    Opacity = 6
+    Position = 7
+    Thickness = 8
+    WorldSpaceNormal = 9
+
+
+# The fake's binding of `project.create(mesh_map_file_paths=...)`: file stem suffix -> usage.
+MESH_MAP_SUFFIXES = {
+    "ambient_occlusion": MeshMapUsage.AO,
+    "id": MeshMapUsage.ID,
+    "curvature": MeshMapUsage.Curvature,
+    "normal_base": MeshMapUsage.Normal,
+    "world_space_normals": MeshMapUsage.WorldSpaceNormal,
+    "position": MeshMapUsage.Position,
+    "thickness": MeshMapUsage.Thickness,
+}
+# Paths the fake reports for the shelves it ships and for the application's default export path.
+APPLICATION_SHELF_PATH = "C:/fake-painter/resources/shelf"
+USER_SHELF_PATH = "C:/fake-documents/Adobe/Adobe Substance 3D Painter"
+DEFAULT_EXPORT_PATH = "C:/fake-documents/Adobe/Adobe Substance 3D Painter/export"
 
 
 class ReloadMeshStatus(enum.Enum):
@@ -165,7 +193,7 @@ class LevelsParamsMono:
     clamp: bool = False
 
 
-LAYER_KINDS = (NodeType.FillLayer, NodeType.GroupLayer)
+LAYER_KINDS = (NodeType.FillLayer, NodeType.GroupLayer, NodeType.PaintLayer)
 CONTAINERS = ("Substack", "Content", "Mask")
 
 
@@ -192,6 +220,7 @@ class Item:
     projection_parameters: UVProjectionParams = field(default_factory=UVProjectionParams)
     levels: LevelsParamsMono = field(default_factory=LevelsParamsMono)
     affected_channel: Any = None
+    symmetry: bool = False
 
     @property
     def is_layer(self) -> bool:
@@ -217,6 +246,8 @@ class ProbeWorld(FakeWorld):  # type: ignore[misc]
         self.dispatching = 0  # no queued task runs from inside a callback or another task
         self.engine = True
         self.reloading = False
+        self.shelves: dict[str, str] = {}  # shelves a script added: name -> folder
+        self.crawling: set[str] = set()
         extend_modules(self)
 
     # Tree ----------------------------------------------------------------------------------
@@ -366,6 +397,9 @@ class SourceBitmap:
             raise ValueError(f"color space {space} is not supported in the current context")
         self.space = space
 
+    def reset_color_space(self) -> None:
+        self.space = GenericColorSpace.sRGB
+
 
 def extend_modules(world: ProbeWorld) -> None:
     """Replace the fake layerstack and add the modules and members the probes use."""
@@ -461,6 +495,13 @@ def extend_modules(world: ProbeWorld) -> None:
         def enable_mask(self, enabled: bool) -> None:
             self.require_mask().mask_enabled = enabled
 
+        def remove_mask(self) -> None:
+            item = self.require_mask()
+            item.mask, item.mask_enabled, item.children["Mask"] = None, True, []
+
+        def set_mask_background(self, background: MaskBackground) -> None:
+            self.require_mask().mask = background
+
     class GroupLayerNode(LayerNode):
         def sub_layers(self) -> list[Any]:
             return [handle(i) for i in self.data.children["Substack"]]
@@ -507,6 +548,12 @@ def extend_modules(world: ProbeWorld) -> None:
             default = SourceUniformColor(Color(1.0, 1.0, 1.0, GenericColorSpace.Working))
             return self.data.sources.get(key, default)
 
+        def reset_source(self, channel: Any = None) -> None:
+            self.data.sources.pop(self.source_key(channel), None)
+
+        def set_symmetry_enabled(self, enabled: bool) -> None:
+            self.data.symmetry = enabled
+
         def get_projection_mode(self) -> ProjectionMode:
             return self.data.projection
 
@@ -547,6 +594,15 @@ def extend_modules(world: ProbeWorld) -> None:
     class ColorSelectionEffectNode(Node):
         pass
 
+    class PaintLayerNode(LayerNode):
+        pass
+
+    class PaintEffectNode(Node):
+        pass
+
+    class AnchorPointEffectNode(Node):
+        pass
+
     classes = {
         NodeType.FillLayer: FillLayerNode,
         NodeType.FillEffect: FillEffectNode,
@@ -554,6 +610,9 @@ def extend_modules(world: ProbeWorld) -> None:
         NodeType.LevelsEffect: LevelsEffectNode,
         NodeType.CompareMaskEffect: CompareMaskEffectNode,
         NodeType.ColorSelectionEffect: ColorSelectionEffectNode,
+        NodeType.PaintLayer: PaintLayerNode,
+        NodeType.PaintEffect: PaintEffectNode,
+        NodeType.AnchorPointEffect: AnchorPointEffectNode,
     }
 
     def handle(item: Item) -> Any:
@@ -638,6 +697,14 @@ def extend_modules(world: ProbeWorld) -> None:
         effect = NodeType.ColorSelectionEffect if mask_only(position) else None
         return place(position, None, effect)
 
+    def insert_paint(position: InsertPosition) -> Any:
+        return place(position, NodeType.PaintLayer, NodeType.PaintEffect)
+
+    def insert_anchor_point_effect(position: InsertPosition, name: str) -> Any:
+        node = place(position, None, NodeType.AnchorPointEffect)
+        node.set_name(name)
+        return node
+
     def get_root_layer_nodes(stack: Any) -> list[Any]:
         return [handle(item) for item in world.roots]
 
@@ -680,6 +747,8 @@ def extend_modules(world: ProbeWorld) -> None:
         insert_levels_effect=insert_levels_effect,
         insert_compare_mask_effect=insert_compare_mask_effect,
         insert_color_selection_effect=insert_color_selection_effect,
+        insert_paint=insert_paint,
+        insert_anchor_point_effect=insert_anchor_point_effect,
         get_root_layer_nodes=get_root_layer_nodes,
         get_node_by_uid=get_node_by_uid,
         delete_node=delete_node,
@@ -740,6 +809,16 @@ def extend_modules(world: ProbeWorld) -> None:
         "ExportTexturesEnded", "status", "message", "textures"
     )
     events["LayerStacksModelDataChanged"] = event_class("LayerStacksModelDataChanged")
+    events["ShelfCrawlingStarted"] = event_class("ShelfCrawlingStarted", "shelf_name")
+    events["ShelfCrawlingEnded"] = event_class("ShelfCrawlingEnded", "shelf_name")
+    events["CameraPropertiesChanged"] = event_class("CameraPropertiesChanged", "camera_id")
+
+    class TextureStateEvent:
+        @staticmethod
+        def cache_key_invalidation_throttling_period() -> datetime.timedelta:
+            return datetime.timedelta(seconds=1)
+
+    events["TextureStateEvent"] = TextureStateEvent
 
     class Dispatcher:
         def connect(self, event_cls: type, callback: Any) -> None:
@@ -759,6 +838,12 @@ def extend_modules(world: ProbeWorld) -> None:
     def create_with_events(mesh_file_path: str, settings: Any, **others: Any) -> None:
         create(mesh_file_path=mesh_file_path, settings=settings, **others)
         world.roots, world.items, world.mesh_maps = [], {}, {}
+        prefix = f"{world.texture_set}_"
+        for path in others.get("mesh_map_file_paths") or []:
+            stem = Path(path).stem
+            usage = MESH_MAP_SUFFIXES.get(stem[len(prefix) :]) if stem.startswith(prefix) else None
+            if usage is not None:
+                world.mesh_maps[usage] = resource.ResourceID(stem)
         world.edition_entered = False
         world.saved = False
         world.emit(events["ProjectCreated"]())
@@ -810,6 +895,7 @@ def extend_modules(world: ProbeWorld) -> None:
     project.needs_saving = needs_saving
     project.name = name
     extend_async(world, events)
+    extend_host(world, events)
 
     root = modules["substance_painter"]
     root.layerstack = modules["substance_painter.layerstack"]
@@ -943,6 +1029,120 @@ def extend_async(world: ProbeWorld, events: dict[str, type]) -> None:
     application.disable_engine_computations = disable_engine_computations
     application.engine_computations_status = lambda: world.engine
     export.export_project_textures = export_project_textures
+
+
+def extend_host(world: ProbeWorld, events: dict[str, type]) -> None:
+    """Shelves, resource search, the default export path and the display LUT reset (the host
+    behaviour probes of decisions 110 and 132, and R-095 P7)."""
+    modules = world.modules
+    resource = modules["substance_painter.resource"]
+    display = modules["substance_painter.display"]
+    export = modules["substance_painter.export"]
+    project = modules["substance_painter.project"]
+
+    class Shelf:
+        def __init__(self, name: str) -> None:
+            self.shelf_name = name
+
+        def name(self) -> str:
+            return self.shelf_name
+
+        def path(self) -> str:
+            paths = {"starter_assets": APPLICATION_SHELF_PATH, "your_assets": USER_SHELF_PATH}
+            if self.shelf_name in world.shelves:
+                return world.shelves[self.shelf_name]
+            if self.shelf_name not in paths:
+                raise ValueError("the shelf doesn't exist anymore")
+            return paths[self.shelf_name]
+
+        def is_crawling(self) -> bool:
+            return self.shelf_name in world.crawling
+
+        def refresh(self) -> None:
+            crawl(self.shelf_name)
+
+    def crawl(name: str) -> None:
+        """A crawl starts at once and ends on the next queued-task poll (the fake's rule)."""
+        world.crawling.add(name)
+        world.emit(events["ShelfCrawlingStarted"](name))
+
+        def finish() -> None:
+            world.crawling.discard(name)
+            world.emit(events["ShelfCrawlingEnded"](name))
+
+        world.deferred.append(finish)
+
+    class Shelves:
+        @staticmethod
+        def all() -> list[Shelf]:
+            return [Shelf(n) for n in ("starter_assets", "your_assets", *world.shelves)]
+
+        @staticmethod
+        def application_shelf() -> Shelf:
+            return Shelf("starter_assets")
+
+        @staticmethod
+        def user_shelf() -> Shelf:
+            return Shelf("your_assets")
+
+        @staticmethod
+        def exists(name: str) -> bool:
+            return name in ("starter_assets", "your_assets", *world.shelves)
+
+        @staticmethod
+        def add(name: str, path: str) -> Shelf:
+            if Shelves.exists(name) or not all(
+                c.islower() or c.isdigit() or c in "_-" for c in name
+            ):
+                raise ValueError(f"invalid shelf name {name!r}")
+            world.shelves[name] = path
+            crawl(name)
+            return Shelf(name)
+
+        @staticmethod
+        def remove(name: str) -> None:
+            if world.project_open:
+                raise ProjectError("a project is opened")
+            if name not in world.shelves:
+                raise ValueError("the shelf doesn't exist or was not created with the Python API")
+            del world.shelves[name]
+
+    @dataclass
+    class Resource:
+        rid: Any
+        usage: Any
+
+        def identifier(self) -> Any:
+            return self.rid
+
+        def gui_name(self) -> str:
+            return str(self.rid.name)
+
+        def usages(self) -> list[Any]:
+            return [self.usage]
+
+    def search(query: str) -> list[Resource]:
+        """The fake's export presets for a query naming `u:export`; nothing otherwise."""
+        if "u:export" not in query.split():
+            return []
+        return [
+            Resource(resource.ResourceID.from_url(url), resource.Usage.TEXTURE)
+            for url in world.resource_presets
+        ]
+
+    resource.Shelf, resource.Shelves, resource.Resource = Shelf, Shelves, Resource
+    resource.search = search
+    lut_before = display.set_color_lut_resource
+
+    def set_color_lut_resource(rid: Any) -> None:
+        if rid is None:
+            world.color_lut = None
+        else:
+            lut_before(rid)
+
+    display.set_color_lut_resource = set_color_lut_resource
+    export.get_default_export_path = lambda: DEFAULT_EXPORT_PATH
+    project.ProjectError = ProjectError
 
 
 def module(name: str, **members: Any) -> types.ModuleType:

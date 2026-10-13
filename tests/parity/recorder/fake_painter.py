@@ -292,6 +292,9 @@ class SourceUniformColor:
     def get_color(self) -> Color:
         return Color(*self.color.working, GenericColorSpace.Working)
 
+    def set_color(self, color: Color) -> None:
+        self.color = color
+
 
 @dataclass
 class Property:
@@ -459,6 +462,7 @@ class FakeWorld:
         }
         self.export_hook = export_hook
         self.channels = dict(CHANNEL_FORMATS)
+        self.export_path: str | None = None  # Settings.export_path of the open project
         self.default_channels = dict(CHANNEL_FORMATS)  # a project created without a template
         self.shelf_path: Path | None = None  # application shelf (templates are its .spt files)
         self.template_channels: dict[str, dict[ChannelType, ChannelFormat]] = {}
@@ -588,7 +592,10 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         return world.edition_polls > 1  # loading is asynchronous: ready on the second poll
 
     def create(
-        mesh_file_path: str, template_file_path: str | None = None, settings: Any = None
+        mesh_file_path: str,
+        mesh_map_file_paths: list[str] | None = None,
+        template_file_path: str | None = None,
+        settings: Any = None,
     ) -> None:
         if world.project_open:
             raise ProjectError("there is already an opened project")
@@ -612,6 +619,10 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             [min(p[i] for p in points) for i in range(3)],
             [max(p[i] for p in points) for i in range(3)],
         )
+        for mesh_map in mesh_map_file_paths or []:
+            if not Path(mesh_map).is_file():
+                raise ValueError("mesh map file does not exist")
+        world.export_path = settings.kwargs.get("export_path")
         size = settings.kwargs.get("default_texture_resolution") or 1024
         world.resolution = (size, size)
         world.other_resolutions = {name: (size, size) for name in world.other_texture_sets}
@@ -873,7 +884,10 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
     def export_project_textures(config: dict[str, Any]) -> TextureExportResult:
         world.require_open()
         check_config(config)
-        out_dir = Path(config["exportPath"])
+        # Without `exportPath` the fake writes to the project's export path, if one was set.
+        if "exportPath" not in config and world.export_path is None:
+            raise ValueError("Invalid export configuration: no export path")
+        out_dir = Path(str(config.get("exportPath") or world.export_path))
         written: dict[tuple[str, str], list[str]] = {}
         for entry in config["exportList"]:
             texture_set = entry["rootPath"]

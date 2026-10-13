@@ -40,6 +40,7 @@ from tools.parity.tier0_semantics.corpus import (
     start,
     template_slug,
 )
+from tools.parity.tier0_semantics.current import resample_minifying
 from tools.parity.tier0_semantics.fixtures import Config, grid
 
 REQUESTS = "requests"
@@ -118,6 +119,18 @@ REQUEST_FIXTURES: dict[str, tuple[str, str, Generate]] = {
     # Decision 145's nine sets s0-s8 (decision 156: the 4x2 grid has eight).
     "grid3x3": ("mesh", f"{FIXTURE_DIR}/meshes/grid3x3.obj", lambda: grid(3, 3)),
 }
+
+
+def held_out_generator(size: int) -> Generate:
+    return lambda: rf.held_out_pattern(size)
+
+
+for _size in rf.HELD_OUT_SIZES:
+    REQUEST_FIXTURES[f"pattern{_size}"] = (
+        "image",
+        f"{FIXTURE_DIR}/bitmaps/pattern{_size}.png",
+        held_out_generator(_size),
+    )
 
 
 def ramp_mesh_generator(mesh: str, phase: str) -> Generate:
@@ -1157,6 +1170,57 @@ def export_l8_material() -> Golden:
     )
 
 
+# --- Decision 084 item 5: a fresh, never fitted recording of axis-aligned minification ---------
+
+# Per size, per user channel (scale [u, v], rotation in degrees, offset [u, v]): rotations that
+# are multiples of 90 degrees, isotropic and anisotropic footprints (the major axis on u and on
+# v), irregular offsets and a zero-offset case; no scale or offset of the fitted goldens
+# (decision 078's plans, resample-uv-minify, resample-uv-impulse) is reused.
+HELD_OUT_CHANNELS: dict[int, tuple[Any, ...]] = {
+    128: (
+        ([3.37, 3.37], 0.0, [0.0419, 0.7213]),
+        ([7.19, 7.19], 90.0, [0.5821, 0.0263]),
+        ([14.63, 5.29], 0.0, [0.2087, 0.4651]),
+        ([5.29, 14.63], 180.0, [0.6967, 0.3119]),
+        ([29.41, 29.41], 270.0, [0.1153, 0.8429]),
+        ([11.03, 2.71], 0.0, [0.0, 0.0]),
+        ([41.17, 13.39], 90.0, [0.3571, 0.5987]),
+        ([9.53, 9.53], 0.0, [0.0, 0.0]),
+    ),
+    32: (
+        ([9.61, 9.61], 0.0, [0.0263, 0.5821]),
+        ([18.37, 18.37], 270.0, [0.4651, 0.2087]),
+        ([42.13, 11.87], 0.0, [0.8429, 0.1153]),
+        ([11.87, 42.13], 90.0, [0.3119, 0.6967]),
+        ([71.03, 71.03], 180.0, [0.5987, 0.3571]),
+        ([25.73, 8.93], 0.0, [0.0, 0.0]),
+        ([123.7, 35.11], 270.0, [0.7331, 0.4073]),
+        ([33.97, 33.97], 0.0, [0.0, 0.0]),
+    ),
+}
+
+
+def resample_held_out(size: int) -> Golden:
+    plan = HELD_OUT_CHANNELS[size]
+    golden = resample_minifying(f"resample-uv-heldout-{size}px", f"pattern{size}", plan)
+    channels = "; ".join(
+        f"{s[0]:.6g}x{s[1]:.6g}"
+        + (f" at {r:g} degrees" if r else "")
+        + f", offset {o[0]:g}/{o[1]:g}"
+        for s, r, o in plan
+    )
+    golden.description = (
+        "Held-out axis-aligned bilinear minification (decision 084 item 5: a fresh recording, "
+        "never fitted, at new scales, offsets and bitmap sizes, inside the supported domain of "
+        "rotations by multiples of 90 degrees, square power-of-two bitmaps and square sets). "
+        "Per user "
+        f"channel (User0-User{len(plan) - 1}) one fill projecting the authored {size}x{size} "
+        f"pattern at scale {channels}; BilinearHQ with repeat (s0), BilinearSharp with repeat "
+        "(s1), BilinearHQ without repeat (s2), BilinearSharp without repeat (s3). RGB16 channels."
+    )
+    return golden
+
+
 def later_goldens() -> list[Golden]:
     """Requested goldens of later decisions (145, 126, 129, 168), in the order of the runbook,
     then the padding probes decision 160 voids under their new names (decision 166), then
@@ -1171,6 +1235,7 @@ def later_goldens() -> list[Golden]:
         padding_tie(rf.TIE_RESOLUTIONS[1], renamed=True),
         srgb_bitmap_minification(),
         export_l8_material(),
+        *(resample_held_out(size) for size in rf.HELD_OUT_SIZES),
     ]
 
 

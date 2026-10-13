@@ -563,6 +563,10 @@ def target_stacks(args: dict[str, Any]) -> list[Any]:
     return [ts.get_stack() for ts in substance_painter.textureset.all_texture_sets()]
 
 
+# `project.Settings` folders an API probe gives `project.create` (P21-B, decision 110).
+SETTINGS_FOLDERS = ("default_save_path", "export_path")
+
+
 def create_project(args: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
     if substance_painter.project.is_open():
         raise RuntimeError("a project is already open; the recorder only creates its own")
@@ -586,9 +590,17 @@ def create_project(args: dict[str, Any], resolved: dict[str, Any]) -> dict[str, 
         default_texture_resolution=args.get("default_texture_resolution"),
         import_cameras=args.get("import_cameras"),
         mesh_unit_scale=args.get("mesh_unit_scale"),
+        # API probes only (P21-B, decision 110): folders the host made in the private work area.
+        **{name: resolved[name] for name in SETTINGS_FOLDERS if name in resolved},
     )
     template = shipped_template_path(args["template"]) if "template" in args else None
-    project.create(mesh_file_path=resolved["mesh"], template_file_path=template, settings=settings)
+    others: dict[str, Any] = {}
+    if "mesh_maps" in resolved:
+        # API probes only (P21-A, decision 110): the staged mesh-map files.
+        others["mesh_map_file_paths"] = list(resolved["mesh_maps"])
+    project.create(
+        mesh_file_path=resolved["mesh"], template_file_path=template, settings=settings, **others
+    )
     return {"colour_management": colour_management()}
 
 

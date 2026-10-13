@@ -201,6 +201,16 @@ Other rules:
 - Painter is never blocked in a loop: handlers connect through `event.DISPATCHER` and the host polls. At the end, `probe_finish` re-enables engine computations a probe disabled and disconnects the events.
 - No documented getter reads the project's normal map format back.
 
+**Host behaviour probes (decisions 095, 109, 110, 132).** Observed probes may also use:
+
+- `project.create` arguments `mesh_maps` (input ids, passed as `mesh_map_file_paths`; an input's staged file keeps its id as stem, e.g. `uzp_plane_ambient_occlusion`) and `default_save_path` / `export_path` (plain folder names the host makes in the recording's work directory, passed in `project.Settings`).
+- Edits: `insert_paint`, `insert_anchor_point_effect` (`name`), `LayerNode.remove_mask`, `set_mask_background`, `FillLayerNode.reset_source`, `set_symmetry_enabled`, `SourceUniformColor.set_color`, `SourceBitmap.reset_color_space`, `display.set_environment_resource` (`resource_step`, an import with usage `ENVIRONMENT`), `set_color_lut_resource` (`resource_step`, or none for `None`), `set_tone_mapping` (`function`), `display.Camera.<property>` with `value`, `resource.Shelves.add` (`name`, `folder`, `inputs`: the host makes the folder in the work directory with copies of the inputs), `Shelf.refresh` (`name`), and `project.close` / `project.open` (no argument: the file the close left; before a close the host keeps the inserted nodes' places, and after the open settled it finds them again, `s<n>/rebind`).
+- Getters: `display.Camera.get_default_camera` (all eight properties), each `display.Camera.<property>`, `get_environment_resource`, `get_color_lut_resource`, `get_tone_mapping`, `project.get_scene_bounding_box`, `export.get_default_export_path`, `TextureStateEvent.cache_key_invalidation_throttling_period` (milliseconds), `Shelves.all`, `application_shelf`, `user_shelf`, `exists` (`name`), `Shelf.is_crawling` (`name`), `resource.search` (`query`; each result's identifier, GUI name and usages).
+- `export_project_textures` with `probe: true` and `default_export_path: true`: the configuration has no `exportPath`; the result says where each file went (relative to the run's private directory, else as Painter gave it) and `s<n>/files` hashes those under the run.
+- A shelf crawl is pending while `Shelf.is_crawling()` is true, and once a probe added a shelf every state poll carries `shelves_crawling`; an open is pending until the project is in edition and not busy. The events `ShelfCrawlingStarted` / `Ended` (with `shelf_name_argument`) and `CameraPropertiesChanged` can be connected. Shelves a probe added are removed after the project is closed (`Shelves.remove` needs no open project).
+- A lifecycle probe whose step 1 has `timing: true` runs `create` and `open` with the step marker set to the phase (events dispatched inside the call carry `during_step`) while a second Python thread polls `is_busy()` and `is_in_edition_state()` about every millisecond until `ProjectEditionEntered`; `<phase>/thread_polls` records each change of state with its time and the poll count.
+- A probe manifest that names `OCIO` is recorded only in a session started with that configuration, and one that names none only under Legacy, as for texture goldens.
+
 ## 9a. Pipeline-script goldens (Tier 1, decision 099)
 
 Code: `tools/parity/recorder/script_run.py` (host) and `painter_scripts.py` (inside Painter, loaded like `painter_probes.py`); tests: `tests/parity/recorder/test_script_run.py`.
@@ -327,35 +337,40 @@ $exe = "C:\Program Files\Adobe\Adobe Substance 3D Painter\Adobe Substance 3D Pai
    It records `r1` (create, sync, export), `r1-repeat` (export again in the same session) and `r2` (reopen the saved work project, export again). Admit it to `$man/phase1/tier1/wand-v1.json`.
 4. Admit as in 11.1 step 5.
 
-### 11.4 Later Legacy requests (decisions 107, 111, 113, 126, 129, 145; requests by decisions 156, 157, 168)
+### 11.4 Later requests (decisions 095, 107, 109, 110, 132, 169, 174; requests by decisions 156, 157, 168, 180)
 
-Recorded in a Legacy session as in 11.1 steps 1, 2 and 5, after anything left of 11.1:
+Legacy session as in 11.1 steps 1, 2 and 5. The throttling probe (P21-C) goes first, in the fresh session, before any script can set the period:
 
 ```powershell
-$later = @("srgb-bitmap-variants-v2")
-$later += foreach ($m in "r1", "r2", "r15") { foreach ($p in "p0", "p25", "p75") { "export-padding-ramp-$m-$p-v2" } }
-$later += "export-padding-tie-2048-v2"
-# Decision 168: the 21 shipped templates whose sRGB8 base is still inferred, one golden each.
-$later += (Get-ChildItem "$req/tier0/semantics/export-template-base-*.json").BaseName
-# Decision 174 item 6 (sRGB bitmap minification) and decision 169 (L8 material channels).
-$later += "srgb-bitmap-minification", "export-l8-material"
-foreach ($g in $later) {
+python -m tools.parity.recorder.probes record "$req/tier0/api-probes/phase1-texture-throttling.json"
+# Decision 174 item 6 (sRGB bitmap minification), decision 169 (L8 material channels) and
+# decision 084 item 5 (held-out axis-aligned minification, never to be used by a fit).
+foreach ($g in "srgb-bitmap-minification", "export-l8-material", "resample-uv-heldout-128px",
+  "resample-uv-heldout-32px") {
   python -m tools.parity.recorder record "$req/tier0/semantics/$g.json"
 }
-```
-
-Then the queued API probes (decision 157), as in 11.1 step 4:
-
-```powershell
-# P20-B in four parts of 80 colours (decision 180: the single 645-step request did not fit a window).
-$parts = foreach ($n in 1..4) { "phase1-srgb-uniform-decode-part$n" }
-foreach ($g in @($parts) + "phase1-mesh-map-update", "phase1-restored-values",
-  "phase1-save-as-existing", "phase1-fill-channel-defaults") {
+# P20-B in four parts of 80 colours (decision 180: the single 645-step request did not fit a
+# window; each part takes about 9 minutes), P20-A, then the host behaviour probes.
+$probes = @(foreach ($n in 1..4) { "phase1-srgb-uniform-decode-part$n" })
+$probes += "phase1-fill-channel-defaults", "phase1-create-mesh-maps", "phase1-create-default-paths",
+  "phase1-shelves", "phase1-layer-stack-events", "phase1-close-without-saving",
+  "phase1-create-open-timing", "phase1-default-camera-plane", "phase1-default-camera-sphere",
+  "phase1-default-camera-bevelled-cube", "phase1-camera-coupling", "phase1-export-preset-search"
+foreach ($g in $probes) {
   python -m tools.parity.recorder.probes record "$req/tier0/api-probes/$g.json"
 }
 ```
 
-Decision 160 admitted the template bases, `export-padding-tie-512` and the void first P-ramp and P-tie 2048 records; the `-v2` names re-author the void ones with the ramp files `uv-ramp-n1024.exr` and `uv-ramp-n2048.exr` (decision 166); decision 167 admitted all eleven, and decision 172 admitted the 21 `export-template-base-*` requests of decision 168. Decision 180 recorded Session O (11.2, R9 included), `export-presets-legacy` (no crash) and the queued probes above except `phase1-srgb-uniform-decode`, and `phase1-engine-computations` (no hang). P20-B's 645 steps take about 35 minutes, so it needs a window of its own. `srgb-bitmap-variants-v2` s4 and s5 attempt `set_color_space(sRGB)` (decisions 156 and 167): a refusal there is recorded (`set_color_space.<step>` in the effective defaults), not a refused golden. A P-ramp or P-tie record whose `passthrough` User0 differs from the ramp on a covered texel, or whose template capture shows User0 other than RGB32F, is void (decision 129); report it.
+Then an OCIO session (Session O, as in 11.2 step 1) for R-132-D and P20-B's OCIO twin (decision 190), four parts of about 9 minutes each:
+
+```powershell
+$ocio = @("phase1-display-ocio") + @(foreach ($n in 1..4) { "phase1-srgb-uniform-decode-ocio-part$n" })
+foreach ($g in $ocio) {
+  python -m tools.parity.recorder.probes record "$req/tier0/api-probes/$g.json"
+}
+```
+
+Decision 160 admitted the template bases, `export-padding-tie-512` and the void first P-ramp and P-tie 2048 records; the `-v2` names re-author the void ones with the ramp files `uv-ramp-n1024.exr` and `uv-ramp-n2048.exr` (decision 166); decision 167 admitted all eleven, and decision 172 admitted the 21 `export-template-base-*` requests of decision 168. Decision 180 recorded Session O (11.2, R9 included), `export-presets-legacy` (no crash), `phase1-mesh-map-update`, `phase1-restored-values`, `phase1-save-as-existing` and `phase1-engine-computations` (no hang); `phase1-srgb-uniform-decode` (645 steps, about 35 minutes) was stopped at the time cap, and its four parts replace it. With `export-presets-legacy` and `-ocio` admitted, R-095 is recorded except P7, which `phase1-export-preset-search` records. `srgb-bitmap-variants-v2` s4 and s5 attempt `set_color_space(sRGB)` (decisions 156 and 167): a refusal there is recorded (`set_color_space.<step>` in the effective defaults), not a refused golden. A P-ramp or P-tie record whose `passthrough` User0 differs from the ramp on a covered texel, or whose template capture shows User0 other than RGB32F, is void (decision 129); report it.
 
 ### 11.3 After the sessions
 

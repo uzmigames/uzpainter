@@ -1,0 +1,15 @@
+{
+  "id": 188,
+  "slug": "every-queued-painter-recording-has-a-validated-request-and-the-probe-recorder-observes-host-behaviour",
+  "title": "Every queued Painter recording has a validated request, and the probe recorder observes host behaviour",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits",
+    "phase1.25_pilot-wand",
+    "phase1.24_python-api-facade",
+    "phase2.1_preview-display-presets",
+    "phase3.3_unreal-gltf-presets"
+  ],
+  "supersededBy": null
+}
