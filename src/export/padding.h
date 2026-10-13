@@ -27,6 +27,10 @@
 //   2. Every other texel copies its seed found by a jump flood over the covered and ring texels
 //      (decision 197): steps k = max(width, height)/2 down to 1, eight offsets in a fixed order,
 //      the strictly nearest seed kept.
+//   The padding acts on the values the file stores, after the encode: OpenEXR floats, and PNG
+//   codes as UNORM operands (a padded code is written back with the UNORM write rule). A PNG 16
+//   sRGB channel under OCIO stores Painter's recorded codes (encode.h `OcioSrgbPng16Code`), which
+//   a mean of linear values would leave; decision 223 measured the Wand on its PNG 16 codes.
 //   This is Painter's rule on straight edges away from seams only. Painter's ring across UV seams,
 //   at seam corners and at poles is not identified (decision 220), so outside the islands the
 //   values differ from Painter's; EXC-007 excepts exactly those texels, and the exact rule stays
@@ -54,9 +58,10 @@ struct Coverage {
 /// has no padding and always passes.
 void CheckPadding(const PlannedFile& file, const Coverage& coverage);
 
-/// Applies `file`'s padding to `raster` (the file's evaluated values) over `coverage`, after
-/// CheckPadding (which it repeats): `infinite` on incomplete coverage fills the uncovered texels
-/// (above); every other admitted case keeps the evaluated values.
-void ApplyPadding(const PlannedFile& file, FileRaster& raster, const Coverage& coverage);
+/// Applies `file`'s padding over `coverage` to `stored`, the values the file stores (above),
+/// `channels` per texel, rows top first, after CheckPadding (which it repeats): `infinite` on
+/// incomplete coverage fills the uncovered texels; every other admitted case keeps the values.
+/// Returns whether any texel was filled.
+bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored);
 
 }  // namespace uzp::exporter

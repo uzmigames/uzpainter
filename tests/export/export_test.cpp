@@ -759,12 +759,13 @@ int RunProcess(const fs::path& casesPath) {
         for (uint32_t i = 0; l8Material && i < channels; ++i) {
             srgbEncoded[i] = exporter::SrgbEncodedRead(ChannelType::Specular, ChannelFormat::L8, kLetters[channels][i]);
         }
-        exporter::FileRaster raster{width,        height,       channels,
-                                    std::move(values), std::nullopt, std::nullopt,
-                                    std::move(srgbEncoded)};
+        const exporter::FileRaster raster{width,        height,       channels,
+                                          std::move(values), std::nullopt, std::nullopt,
+                                          std::move(srgbEncoded)};
         // `mesh` (and `material`): the case is padded `infinite` over that mesh's texel-centre
         // coverage first (padding.h); `coverage_out` receives the coverage, one byte per texel.
         std::int64_t coveredTexels = -1;
+        std::optional<exporter::Coverage> padding;
         if (c.contains("mesh")) {
             const mesh::TexturingMesh mesh = mesh::ImportMeshFile(Str(c.at("mesh"), "mesh"), {}).mesh;
             const auto mask = evaluator::RasterizeGeometryMask(
@@ -777,9 +778,9 @@ int RunProcess(const fs::path& casesPath) {
                     .write(reinterpret_cast<const char*>(coverage.covered.data()),
                            static_cast<std::streamsize>(coverage.covered.size()));
             }
-            exporter::ApplyPadding(file, raster, coverage);
+            padding = std::move(coverage);
         }
-        const exporter::EncodedImage encoded = exporter::EncodeFile(file, raster);
+        const exporter::EncodedImage encoded = exporter::EncodeFile(file, raster, padding ? &*padding : nullptr);
         if (c.contains("out")) {
             std::ofstream(Str(c.at("out"), "out"), std::ios::binary)
                 .write(encoded.bytes.data(), static_cast<std::streamsize>(encoded.bytes.size()));

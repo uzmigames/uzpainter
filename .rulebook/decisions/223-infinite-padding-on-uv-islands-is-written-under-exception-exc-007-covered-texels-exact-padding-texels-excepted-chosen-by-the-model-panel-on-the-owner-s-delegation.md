@@ -100,6 +100,7 @@ The dossier (measurements above plus nine claims) went to `cx/gpt-6-astra`, `kim
    - Ring texels take the straight-edge 8-neighbour mean of decisions 176 and 206, with x wrap.
    - The gutter is decision 197's jump flood from the covered and ring texels.
    - Covered texels are never touched.
+   - It acts on the values the file stores: OpenEXR floats, and PNG codes as UNORM operands, with each filled code written back by the write rule. The reason is OCIO: a PNG 16 sRGB channel under OCIO stores only Painter's recorded codes (decision 190), and a mean of linear values has no recorded code. The first Wand export proved it, refusing BaseColor with "an unrecorded OCIO sRGB value". Decision 223's Wand measurements were made on the same PNG 16 codes.
    - It needs only the coverage mask, so no 3D mesh reaches the export path. The full prototype stays in private scratch for the exact hunt.
 5. **Defect detection.**
    - One code on one covered texel fails, whatever the register holds.
@@ -111,6 +112,27 @@ The dossier (measurements above plus nine claims) went to `cx/gpt-6-astra`, `kim
    - EXC-007 is recorded `approved_by: owner` on the strength of his delegation above.
    - He may withdraw it, or replace its terms, at any time. A new version of the entry does that.
 
+## Result: the Wand's Tier 1 run (DX12, 2026-10-13)
+
+The run used `tests/parity/tier1/wand_v1`, with UzPainter built ReleaseFast. In a Debug build the export took 465 s to its first 2048 map, which is past the adapter's 600 s limit per call. Report: `parity/reports/phase1/tier1-wand-v1.json`.
+
+**Verdict: `fail`.** EXC-007 is relied on, and the two rebuilds are byte-identical. The oracle is stable.
+
+| Map | Covered texels: values differing (max) | Padding texels: values differing / max / mean (PNG 16 codes) | Under EXC-007 |
+|---|---|---|---|
+| BaseColor | 0 | 9,523,887 / 29,580 / 2,138 | pass |
+| Roughness | 0 | 621,903 / 21,074 / 499 | pass |
+| Metallic | 0 | 329,614 / 42,148 / 396 | pass |
+| Height | 0 | 709,980 / 73 / 1.04 | pass |
+| Normal | 2,499 (537 codes) | 11,040,082 / 32,238 / 4,302 | **fail** |
+
+**The Normal failure is a covered-texel divergence, not padding.**
+- All 1,071 differing covered texels lie on the island edge: each has an uncovered 8-neighbour. No texel farther inside differs.
+- The Normal is the `Normal_OpenGL` virtual map, computed from Height. At the island edge, Painter's normal reads Height values outside the island, so it depends on Painter's Height padding there. The exception cannot cover it, and it must not: covered texels stay exact.
+- This makes the exact rule (item 2.7) a covered-texel requirement for a virtual normal near island edges, not only a padding one.
+- The Wand's 3.1 stays open on that.
+- Next, in the exact hunt: test whether Painter derives the edge normals from its padded Height, and which ring that needs.
+
 ## Alternatives Considered
 
 - **Option 1** (keep hunting, the Wand blocked): rejected 0 of 3. Eight passes have not found the seam-corner, pole and sign rules.
@@ -120,7 +142,7 @@ The dossier (measurements above plus nine claims) went to `cx/gpt-6-astra`, `kim
 
 ## Consequences
 
-- The Wand can be exported and compared. Its Tier 1 verdict can pass only with every covered texel exact.
+- The Wand can be exported and compared. Its Tier 1 verdict can pass only with every covered texel exact; today 4 of 5 maps do, and the Normal fails on its island-edge texels (Result).
 - The comparison report gains per-map padding residuals.
 - The exception schema gains the basis `owner_scope_split` and the bound scope `covered`.
 - The verdict tool takes a coverage mask.

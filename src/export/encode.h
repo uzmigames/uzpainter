@@ -45,6 +45,7 @@
 #include <optional>
 #include <string>
 
+#include "export/padding.h"
 #include "export/plan.h"
 #include "uzp_core/types/project.h"
 
@@ -74,9 +75,11 @@ struct EncodedImage {
     FileLayout layout = FileLayout::L;
 };
 
-/// The bytes of `file` from its padded raster (CheckProcessing must have passed): the PNG or
-/// OpenEXR file, or the statistics JSON of a statistics file. Throws std::invalid_argument when
-/// the raster does not match the file's size and layout.
-[[nodiscard]] EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster);
+/// The bytes of `file` from its evaluated raster (CheckProcessing must have passed): the PNG or
+/// OpenEXR file, or the statistics JSON of a statistics file. With `coverage`, the stored values
+/// are padded over it (padding.h `ApplyPadding`) before they are written. Throws
+/// std::invalid_argument when the raster or the coverage does not match the file's size and layout.
+[[nodiscard]] EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster,
+                                      const Coverage* coverage = nullptr);
 
 }  // namespace uzp::exporter

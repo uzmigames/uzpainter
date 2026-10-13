@@ -62,10 +62,10 @@ Edge StraightEdge(const std::vector<Neighbour>& neighbours) {
     return Edge::none;
 }
 
-// The ring value of one texel into `out` (`raster.channels` floats), from its covered neighbours.
-void RingValue(const FileRaster& raster, const std::vector<Neighbour>& neighbours, float* out) {
-    const uint32_t channels = raster.channels;
-    const auto at = [&](size_t texel) { return raster.values.data() + texel * channels; };
+// The ring value of one texel into `out` (`channels` floats), from its covered neighbours.
+void RingValue(const std::vector<float>& values, uint32_t channels, const std::vector<Neighbour>& neighbours,
+               float* out) {
+    const auto at = [&](size_t texel) { return values.data() + texel * channels; };
     const float* first = at(neighbours[0].texel);
     if (std::all_of(neighbours.begin(), neighbours.end(),
                     [&](const Neighbour& n) { return std::equal(first, first + channels, at(n.texel)); })) {
@@ -90,19 +90,17 @@ void RingValue(const FileRaster& raster, const std::vector<Neighbour>& neighbour
 }
 
 // `infinite` padding over incomplete coverage (padding.h): the ring, then the jump flood.
-void InfinitePadding(FileRaster& raster, const Coverage& coverage) {
-    const int width = static_cast<int>(raster.width);
-    const int height = static_cast<int>(raster.height);
-    const uint32_t channels = raster.channels;
-    if (channels == 0 || channels > 4 || raster.values.size() != size_t{raster.width} * raster.height * channels) {
-        throw std::invalid_argument("export: infinite padding takes a raster of 1 to 4 channels");
+void InfinitePadding(const Coverage& coverage, uint32_t channels, std::vector<float>& values) {
+    const int width = static_cast<int>(coverage.width);
+    const int height = static_cast<int>(coverage.height);
+    if (channels == 0 || channels > 4 || values.size() != size_t{coverage.width} * coverage.height * channels) {
+        throw std::invalid_argument("export: infinite padding takes 1 to 4 values per texel");
     }
     const std::vector<uint8_t>& covered = coverage.covered;
-    if (std::none_of(covered.begin(), covered.end(), [](uint8_t c) { return c != 0; })) return;  // no source
-    const auto index = [&](int y, int x) { return static_cast<size_t>(y) * raster.width + static_cast<size_t>(x); };
+    const auto index = [&](int y, int x) { return static_cast<size_t>(y) * coverage.width + static_cast<size_t>(x); };
     const auto copy = [&](size_t from, size_t to) {
-        std::copy_n(raster.values.begin() + static_cast<std::ptrdiff_t>(from * channels), channels,
-                    raster.values.begin() + static_cast<std::ptrdiff_t>(to * channels));
+        std::copy_n(values.begin() + static_cast<std::ptrdiff_t>(from * channels), channels,
+                    values.begin() + static_cast<std::ptrdiff_t>(to * channels));
     };
     // 1. The ring, from the covered texels only.
     std::vector<uint8_t> seed(covered);
@@ -120,17 +118,17 @@ void InfinitePadding(FileRaster& raster, const Coverage& coverage) {
             }
             if (neighbours.empty()) continue;
             ring.resize(ring.size() + channels);
-            RingValue(raster, neighbours, ring.data() + ring.size() - channels);
+            RingValue(values, channels, neighbours, ring.data() + ring.size() - channels);
             ringTexels.push_back(index(y, x));
         }
     }
     for (size_t i = 0; i < ringTexels.size(); ++i) {
         std::copy_n(ring.begin() + static_cast<std::ptrdiff_t>(i * channels), channels,
-                    raster.values.begin() + static_cast<std::ptrdiff_t>(ringTexels[i] * channels));
+                    values.begin() + static_cast<std::ptrdiff_t>(ringTexels[i] * channels));
         seed[ringTexels[i]] = 1;
     }
     // 2. The jump flood over the covered and ring texels; each step reads the previous step's seeds.
-    const size_t texels = size_t{raster.width} * raster.height;
+    const size_t texels = size_t{coverage.width} * coverage.height;
     std::vector<int32_t> seedY(texels, -1);
     std::vector<int32_t> seedX(texels, -1);
     for (int y = 0; y < height; ++y) {
@@ -212,16 +210,17 @@ void CheckPadding(const PlannedFile& file, const Coverage& coverage) {
     }
 }
 
-void ApplyPadding(const PlannedFile& file, FileRaster& raster, const Coverage& coverage) {
+bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored) {
     CheckPadding(file, coverage);
-    if (raster.width != coverage.width || raster.height != coverage.height) {
-        throw std::invalid_argument("export: the raster of " + file.relativePath + " does not have its size");
+    // Every other admitted case keeps the values: complete coverage, or `passthrough`.
+    if (file.layout == FileLayout::Statistics || file.parameters->paddingAlgorithm != Padding::infinite ||
+        coverage.Complete() || std::none_of(coverage.covered.begin(), coverage.covered.end(), [](uint8_t c) {
+            return c != 0;
+        })) {
+        return false;
     }
-    // Every other admitted case keeps the evaluated values: complete coverage, or `passthrough`.
-    if (file.layout != FileLayout::Statistics && file.parameters->paddingAlgorithm == Padding::infinite &&
-        !coverage.Complete()) {
-        InfinitePadding(raster, coverage);
-    }
+    InfinitePadding(coverage, channels, stored);
+    return true;
 }
 
 }  // namespace uzp::exporter
