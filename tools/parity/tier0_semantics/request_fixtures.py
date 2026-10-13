@@ -252,10 +252,17 @@ RAMP_MESHES: dict[str, tuple[UVBox, UVBox]] = {
 }
 # Fractional-phase controls: every UV shifted by `shift` / 1024 in u and v.
 RAMP_PHASES = {"p0": 0.0, "p25": 0.25, "p75": 0.75}
+# The meshes' world bounding box is x 0..20 cm by z 0..10 cm. Decision 210's P-ramp-17 scales
+# r1-p0's positions so that the largest extent is 34 cm (centre (17, 0, 8.5), half-extent 17);
+# its UVs are unchanged.
+RAMP_EXTENT = 20.0
+RAMP_BOX17_EXTENT = 34.0
 
 
-def ramp_seam(mesh: str, phase: str) -> bytes:
-    """One P-ramp mesh, the text decision 129 fixes by SHA-256 (`vt` as %.9f, LF)."""
+def ramp_seam(mesh: str, phase: str, extent: float = RAMP_EXTENT) -> bytes:
+    """One P-ramp mesh, the text decision 129 fixes by SHA-256 (`vt` as %.9f, LF); `extent`
+    scales the world positions so that the box's largest extent is `extent` cm."""
+    scale = extent / RAMP_EXTENT
     shift = RAMP_PHASES[phase] / RAMP_RESOLUTION
     a, b = RAMP_MESHES[mesh]
     au0, au1, av0, av1 = (c + shift for c in a)
@@ -263,7 +270,7 @@ def ramp_seam(mesh: str, phase: str) -> bytes:
     uvs = [(au0, av1), (au1, av1), (au1, av0), (au0, av0)]
     uvs += [(bu1, bv0), (bu1, bv1), (bu0, bv1), (bu0, bv0)]
     lines = ["# UzPainter R-090 P-ramp probe mesh (specification), Apache-2.0", "o uzp_seam"]
-    lines += [f"v {fmt(x, 0.0, z)}" for z in (0.0, 10.0) for x in (0.0, 10.0, 20.0)]
+    lines += [f"v {fmt(x * scale, 0.0, z * scale)}" for z in (0.0, 10.0) for x in (0.0, 10.0, 20.0)]
     lines += ["vn 0.0 1.0 0.0", *(f"vt {u:.9f} {v:.9f}" for u, v in uvs), "usemtl uzp_seam"]
     lines += ["f 4/1/1 5/2/1 2/3/1", "f 4/1/1 2/3/1 1/4/1", "f 5/5/1 6/6/1 3/7/1"]
     lines += ["f 5/5/1 3/7/1 2/8/1"]
@@ -275,14 +282,19 @@ def ramp_seam(mesh: str, phase: str) -> bytes:
 TIE_SIDE = 0.125
 TIE_CORNERS = ((0.1875, 0.1875), (0.6875, 0.1875), (0.4375, 0.6875))
 TIE_RESOLUTIONS = (512, 2048)
+# World x of the quads' centres (z spans -5..5 cm). Decision 210's P-tie-dyadic-box moves them so
+# that the mesh's bounding box is centred at the origin with half-extent 16 cm (x -16..16).
+TIE_CENTRES = (0.0, 12.0, 24.0)
+TIE_BOX16_CENTRES = (-11.0, 0.0, 11.0)
 
 
-def tie() -> bytes:
-    """The P-tie mesh (decision 129): its text and SHA-256 are fixed by this generator."""
+def tie(centres: tuple[float, ...] = TIE_CENTRES) -> bytes:
+    """The P-tie mesh (decision 129): its text and SHA-256 are fixed by this generator. Other
+    `centres` move the quads in x and keep the UVs (decision 210)."""
     data: list[str] = ["vn 0.0 1.0 0.0\n"]
     faces: list[str] = []
     for index, (u0, v0) in enumerate(TIE_CORNERS):
-        cx = index * 12.0
+        cx = centres[index]
         quad = [(cx - 5.0, 0.0, 5.0), (cx + 5.0, 0.0, 5.0), (cx + 5.0, 0.0, -5.0)]
         quad.append((cx - 5.0, 0.0, -5.0))
         u1, v1 = u0 + TIE_SIDE, v0 + TIE_SIDE
@@ -290,10 +302,15 @@ def tie() -> bytes:
         lines, quad_faces = quad_obj_lines(quad, corners, index * 4)
         data += lines
         faces += quad_faces
+    moved = (
+        ""
+        if centres == TIE_CENTRES
+        else f" Quads centred at x = {', '.join(f'{c:g}' for c in centres)} cm (decision 210)."
+    )
     return obj(
         "uzp_tie",
         "Three axis-aligned UV islands of side 0.125 at (0.1875, 0.1875), (0.6875, 0.1875) and "
-        "(0.4375, 0.6875) (decision 129 P-tie).",
+        "(0.4375, 0.6875) (decision 129 P-tie)." + moved,
         [("uzp_tie", faces)],
         "".join(data),
     )

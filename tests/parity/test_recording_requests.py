@@ -197,6 +197,21 @@ def test_tie_mesh_has_three_axis_aligned_islands() -> None:
         assert max(u for u, _ in quad) - corner[0] == rf.TIE_SIDE
 
 
+def test_ring_sign_probe_meshes_move_only_the_bounding_box() -> None:
+    """Decision 210 section 5: tie-box16 keeps tie's UVs and faces in a box centred at the
+    origin with half-extent 16; seam-ramp-r1-p0-box17 keeps r1-p0's in a box of largest extent
+    34 (decision 216)."""
+    for moved, base, low, high in (
+        ("tie-box16", "tie", (-16.0, 0.0, -5.0), (16.0, 0.0, 5.0)),
+        ("seam-ramp-r1-p0-box17", "seam-ramp-r1-p0", (0.0, 0.0, 0.0), (34.0, 0.0, 17.0)),
+    ):
+        vertices, uvs, faces = obj_uvs(moved)
+        _, base_uvs, base_faces = obj_uvs(base)
+        assert (uvs, faces) == (base_uvs, base_faces)
+        assert tuple(min(c) for c in zip(*vertices, strict=True)) == low
+        assert tuple(max(c) for c in zip(*vertices, strict=True)) == high
+
+
 def exr_rgb(path: Path) -> tuple[int, int, list[tuple[float, float, float]]]:
     """Decode the authored ZIP float EXR (channels B, G, R) without OpenEXR."""
     data = path.read_bytes()
