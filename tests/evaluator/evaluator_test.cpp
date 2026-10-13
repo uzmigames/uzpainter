@@ -77,6 +77,10 @@
 //   uv-coverage <assets> <work-dir> <mesh> <size>
 //                                        imports <mesh>, rasterises its UV tile and writes the
 //                                        texel-centre coverage (island-edge goldens)
+//   persistent <assets> <work-dir>       the persistent evaluation results (decision 253): stored
+//                                        read-outs and virtual normals served to a fresh evaluator
+//                                        bit for bit, misses on edits, MXCSR bits and damaged
+//                                        entries, missing bitmaps, eviction, concurrent writers
 //
 // Output: `PASS <check>` / `FAIL <check>: <detail>` lines and `INFO` lines. Exit code 0 when
 // every check passed, 1 when one failed, 2 on a usage error, 3 on an unreadable input, 77 when the
@@ -99,11 +103,13 @@
 #include "evaluator/kernelgen.h"
 #include "evaluator/profile.h"
 #include "evaluator/projection_uv.h"
+#include "evaluator/result_cache.h"
 #include "evaluator/sources.h"
 #include "evaluator/support.h"
 #include "evaluator/templates.h"
 #include "evaluator/texture_unit.h"
 #include "render/capabilities.h"
+#include "render/disk_cache.h"
 #include "render/engine_thread.h"
 #include "render/image_pass.h"
 #include "render/texture_readback.h"
@@ -122,6 +128,7 @@
 #include "zlib.h"
 
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <chrono>
 #include <cmath>
@@ -138,7 +145,10 @@
 #include <random>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
+
+#include <xmmintrin.h>
 
 namespace {
 
@@ -7884,6 +7894,367 @@ int RunTextureUnit(const fs::path& dir) {
     return Finish();
 }
 
+// ── Persistent results (decision 253) ────────────────────────────────────────
+
+/// The entry files of a cache area (the 64-character names).
+std::vector<fs::path> EntryFiles(const fs::path& area) {
+    std::vector<fs::path> files;
+    std::error_code ec;
+    for (fs::directory_iterator it(area, ec), end; !ec && it != end; it.increment(ec)) {
+        if (it->path().filename().string().size() == 64) files.push_back(it->path());
+    }
+    std::sort(files.begin(), files.end());
+    return files;
+}
+
+/// Rewrites byte `offset` of `path` (counted from its end when negative) as its complement.
+void FlipByte(const fs::path& path, std::ptrdiff_t offset) {
+    std::string bytes;
+    {
+        std::ifstream in(path, std::ios::binary);
+        bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    if (bytes.empty()) return;
+    const size_t at = offset < 0 ? bytes.size() - static_cast<size_t>(-offset) : static_cast<size_t>(offset);
+    bytes[at] = static_cast<char>(~bytes[at]);
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+}
+
+render::CacheKey KeyOf(uint8_t seed) {
+    render::CacheKey key{};
+    for (size_t i = 0; i < key.size(); ++i) key[i] = static_cast<uint8_t>(seed * 31u + i);
+    return key;
+}
+
+std::vector<std::byte> PayloadOf(uint8_t seed, size_t size) {
+    std::vector<std::byte> payload(size);
+    for (size_t i = 0; i < size; ++i) payload[i] = static_cast<std::byte>((seed + i * 7) & 0xFF);
+    return payload;
+}
+
+/// `persistent <assets> <work-dir>`: the persistent evaluation results (result_cache.h) and the
+/// disk cache under them (render/disk_cache.h; decision 253). A fresh evaluator (a new process's
+/// empty tile cache) serves a stored read-out or virtual normal bit for bit and computes nothing;
+/// an edit, other MXCSR control bits and every inconsistent entry miss; a missing bitmap fails as
+/// without the cache; a geometry mask's hash covers the mesh's buffers; LRU eviction under the
+/// cap, oversized entries and concurrent writers of one key.
+int RunPersistent(const fs::path& assets, const fs::path& dir) {
+    std::shared_ptr<const TemplateLibrary> templates = LoadTemplates(assets);
+    const fs::path root = dir / "cache";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    render::DisableCaches();
+    Check(PersistentResults() == nullptr, "with the caches off there is no persistent area");
+    render::EnableCaches(root);
+    render::DiskCache* disk = PersistentResults();
+    Check(disk != nullptr && disk->Directory() == root / "eval" && disk->MaxBytes() == kResultCacheBytes &&
+              !render::BuildFingerprint().empty(),
+          "with the caches on, the eval area lies under the root, capped at 4 GiB, keyed with the build fingerprint",
+          render::BuildFingerprint());
+    if (disk == nullptr) return Finish();
+    Info("fingerprint: " + render::BuildFingerprint());
+
+    // Two tiles (2048 x 1024): bitmaps (an RGB one on BaseColor, a grey one on User0) and uniform
+    // fills on an sRGB8 BaseColor and an L16 User0.
+    const std::vector<ChannelType> channels{ChannelType::BaseColor, ChannelType::User0};
+    const std::string sha(64, 'd');
+    const std::string greySha(64, 'b');
+    auto provider = std::make_shared<MapResourceProvider>();
+    provider->Add(sha, PatternImage(2048, 1024, 3, render::TexelEncoding::Unorm16, 5));
+    provider->Add(greySha, PatternImage(2048, 1024, 1, render::TexelEncoding::Unorm16, 7));
+    Builder builder(2048, 1024, {{ChannelType::BaseColor, ChannelFormat::sRGB8}, {ChannelType::User0, ChannelFormat::L16}});
+    builder.AddResource(sha, 4096);
+    builder.AddResource(greySha, 4096);
+    std::vector<core::Layer> layers;
+    layers.push_back(builder.Fill("bitmap", {{ChannelType::BaseColor, Bitmap(sha)}, {ChannelType::User0, Bitmap(greySha)}},
+                                  Same(channels, BlendingMode::Normal, 1.0)));
+    const BlendingMode modes[] = {BlendingMode::Multiply, BlendingMode::Screen, BlendingMode::Overlay, BlendingMode::Normal};
+    for (int i = 0; i < 4; ++i) {
+        const double v = 0.15 + 0.2 * i;
+        layers.push_back(builder.Fill("fill" + std::to_string(i), SameSource(channels, Uniform(v, 1.0 - v, 0.4)),
+                                      Same(channels, modes[i], 0.35 + 0.1 * i)));
+    }
+    const core::Id editedUid = layers[2].uid;
+    builder.SetRoot(layers);
+    if (!builder.Validate("persistent")) return Finish();
+
+    auto evaluate = [&](const core::Project& project, ChannelType channel,
+                        std::shared_ptr<const IResourceProvider> resources) {
+        CpuEvaluator cpu(templates, kWideLimits);
+        EvaluateRequest request;
+        request.textureSet = builder.SetId();
+        request.stack = builder.StackId();
+        request.channel = channel;
+        request.resources = std::move(resources);
+        return cpu.Evaluate(project, request);
+    };
+    auto same = [](const render::Result<ChannelResult>& a, const render::Result<ChannelResult>& b) {
+        if (!a || !b || a->tiles.size() != b->tiles.size()) return false;
+        for (size_t i = 0; i < a->tiles.size(); ++i) {
+            const TileResult& x = a->tiles[i];
+            const TileResult& y = b->tiles[i];
+            if (x.x0 != y.x0 || x.y0 != y.y0 || x.width != y.width || x.height != y.height || x.constant != y.constant ||
+                x.texels != y.texels) {
+                return false;
+            }
+        }
+        return a->channel == b->channel && a->format == b->format && a->width == b->width && a->height == b->height;
+    };
+    auto stats = [](const render::Result<ChannelResult>& r) {
+        return r ? "persistent " + std::to_string(r->stats.persistentHits) + " blends " + std::to_string(r->stats.blends) +
+                       " uploads " + std::to_string(r->stats.uploads)
+                 : Describe(r);
+    };
+    const fs::path area = root / "eval";
+
+    render::DisableCaches();
+    const render::Result<ChannelResult> plainUser0 = evaluate(builder.project, ChannelType::User0, provider);
+    const render::Result<ChannelResult> plainColour = evaluate(builder.project, ChannelType::BaseColor, provider);
+    render::EnableCaches(root);
+    Check(plainUser0 && plainColour && EntryFiles(area).empty(), "without the caches nothing is stored",
+          Describe(plainUser0));
+    if (!plainUser0 || !plainColour) return Finish();
+
+    const render::Result<ChannelResult> coldUser0 = evaluate(builder.project, ChannelType::User0, provider);
+    const fs::path user0Entry = EntryFiles(area).empty() ? fs::path() : EntryFiles(area).front();
+    const render::Result<ChannelResult> coldColour = evaluate(builder.project, ChannelType::BaseColor, provider);
+    Check(coldUser0 && coldUser0->stats.persistentHits == 0 && coldUser0->stats.blends > 0 && coldColour &&
+              EntryFiles(area).size() == 2 && disk->GetStats().writes == 2,
+          "a cold evaluation computes each channel and stores its read-out", stats(coldUser0));
+    Check(same(coldUser0, plainUser0) && same(coldColour, plainColour),
+          "a cold evaluation equals the evaluation without the caches bit for bit");
+
+    const render::Result<ChannelResult> warmUser0 = evaluate(builder.project, ChannelType::User0, provider);
+    const render::Result<ChannelResult> warmColour = evaluate(builder.project, ChannelType::BaseColor, provider);
+    Check(warmUser0 && warmUser0->stats.persistentHits == 2 && warmUser0->stats.blends == 0 &&
+              warmUser0->stats.uploads == 0 && warmColour && warmColour->stats.persistentHits == 2 &&
+              warmColour->stats.blends == 0,
+          "a fresh evaluator serves both channels from the stored read-outs and computes nothing", stats(warmUser0));
+    Check(same(warmUser0, plainUser0) && same(warmColour, plainColour),
+          "the stored read-outs equal the evaluation without the caches, every tile and texel bit for bit");
+
+    // An edit: another key, computed and stored; its result is the uncached evaluation's.
+    {
+        Builder edited = builder;
+        core::Layer* layer = core::FindLayer(edited.project, editedUid);
+        layer->blending[ChannelType::User0].opacity = 0.9;
+        render::DisableCaches();
+        const render::Result<ChannelResult> plain = evaluate(edited.project, ChannelType::User0, provider);
+        render::EnableCaches(root);
+        const render::Result<ChannelResult> computed = evaluate(edited.project, ChannelType::User0, provider);
+        const render::Result<ChannelResult> served = evaluate(edited.project, ChannelType::User0, provider);
+        Check(computed && computed->stats.persistentHits == 0 && served && served->stats.persistentHits == 2 &&
+                  same(computed, plain) && same(served, plain) && !same(served, plainUser0) && EntryFiles(area).size() == 3,
+              "an edited stack misses, is computed and stored under its own key, and is then served as computed",
+              stats(computed) + " / " + stats(served));
+    }
+
+    // The caller's MXCSR control bits are part of the key.
+    {
+        const unsigned int saved = _mm_getcsr();
+        _mm_setcsr(saved | 0x8040u);  // flush-to-zero and denormals-are-zero
+        const render::Result<ChannelResult> flushed = evaluate(builder.project, ChannelType::User0, provider);
+        _mm_setcsr(saved);
+        Check(flushed && flushed->stats.persistentHits == 0 && EntryFiles(area).size() == 4,
+              "under other MXCSR control bits the stored read-out is not served: a new key is computed and stored",
+              stats(flushed));
+    }
+
+    // An evaluator whose tile cache holds the read-out reads it there: the disk is neither read
+    // nor written again.
+    {
+        Builder edited = builder;
+        core::FindLayer(edited.project, editedUid)->blending[ChannelType::User0].opacity = 0.6;
+        CpuEvaluator cpu(templates, kWideLimits);
+        EvaluateRequest request;
+        request.textureSet = builder.SetId();
+        request.stack = builder.StackId();
+        request.channel = ChannelType::User0;
+        request.resources = provider;
+        const render::Result<ChannelResult> first = cpu.Evaluate(edited.project, request);
+        const render::DiskCache::Stats before = disk->GetStats();
+        const render::Result<ChannelResult> again = cpu.Evaluate(edited.project, request);
+        const render::DiskCache::Stats after = disk->GetStats();
+        Check(first && first->stats.persistentHits == 0 && again && again->stats.persistentHits == 0 &&
+                  again->stats.blends == 0 && same(first, again) && after.hits == before.hits &&
+                  after.misses == before.misses && after.writes == before.writes,
+              "an evaluator whose tile cache holds the read-out reads it there, without reading or writing the disk",
+              stats(again));
+    }
+
+    // A missing bitmap: the stored read-out is not served, the evaluation fails as without the cache.
+    {
+        auto empty = std::make_shared<MapResourceProvider>();
+        const render::Result<ChannelResult> lost = evaluate(builder.project, ChannelType::User0, empty);
+        render::DisableCaches();
+        const render::Result<ChannelResult> plainLost = evaluate(builder.project, ChannelType::User0, empty);
+        render::EnableCaches(root);
+        Check(!lost && !plainLost && EvalErrorKindOf(lost.error()) == EvalErrorKind::MissingResource &&
+                  lost.error().reason == plainLost.error().reason,
+              "with a bitmap missing, the stored read-out is not served and the evaluation fails with "
+              "missing_resource exactly as without the cache",
+              Describe(lost));
+    }
+
+    // Inconsistent entries: each is a miss, removed, recomputed and stored again, then served.
+    auto damaged = [&](const std::string& what, const std::function<void()>& damage) {
+        damage();
+        const uint64_t corruptBefore = disk->GetStats().corrupt;
+        const render::Result<ChannelResult> recomputed = evaluate(builder.project, ChannelType::User0, provider);
+        const render::Result<ChannelResult> served = evaluate(builder.project, ChannelType::User0, provider);
+        Check(recomputed && recomputed->stats.persistentHits == 0 && disk->GetStats().corrupt > corruptBefore &&
+                  same(recomputed, plainUser0) && served && served->stats.persistentHits == 2 && same(served, plainUser0),
+              what + ": a miss, recomputed bit for bit and stored again, then served",
+              stats(recomputed) + " / " + stats(served));
+    };
+    damaged("a flipped payload byte (the checksum)", [&] { FlipByte(user0Entry, -1); });
+    damaged("a flipped key byte", [&] { FlipByte(user0Entry, 8); });
+    damaged("another format version", [&] { FlipByte(user0Entry, 4); });
+    damaged("a truncated entry", [&] {
+        std::error_code resizeError;
+        fs::resize_file(user0Entry, fs::file_size(user0Entry, resizeError) - 1, resizeError);
+    });
+    damaged("an empty entry", [&] { std::ofstream(user0Entry, std::ios::binary | std::ios::trunc); });
+
+    // The combined virtual normal of a 256 x 256 set with Height and Normal channels.
+    {
+        const std::string heightSha(64, 'e');
+        auto heights = std::make_shared<MapResourceProvider>();
+        heights->Add(heightSha, PatternImage(256, 256, 1, render::TexelEncoding::Unorm16, 9));
+        Builder b(256, 256, {{ChannelType::Height, ChannelFormat::L16F}, {ChannelType::Normal, ChannelFormat::RGB16F},
+                             {ChannelType::BaseColor, ChannelFormat::sRGB8}});
+        b.AddResource(heightSha, 4096);
+        core::Layer height = b.Fill("height", {{ChannelType::Height, Bitmap(heightSha)}},
+                                    {{ChannelType::Height, Blend(BlendingMode::Normal, 0.75)}});
+        core::Layer normal = b.Fill("normal", {{ChannelType::Normal, Uniform(0.6, 0.45, 0.9)}},
+                                    {{ChannelType::Normal, Blend(BlendingMode::Normal, 0.5)}});
+        b.SetRoot({height, normal});
+        if (b.Validate("persistent virtual normal")) {
+            auto normalOf = [&](std::shared_ptr<const IResourceProvider> resources) {
+                CpuEvaluator cpu(templates, kWideLimits);
+                VirtualNormalRequest request;
+                request.textureSet = b.SetId();
+                request.stack = b.StackId();
+                request.kind = NormalSourceKind::Combined;
+                request.convention = core::NormalMapFormat::OpenGL;
+                request.resources = std::move(resources);
+                return cpu.EvaluateNormal(b.project, 3, request);
+            };
+            render::DisableCaches();
+            const render::Result<VirtualNormalResult> plain = normalOf(heights);
+            render::EnableCaches(root);
+            const render::Result<VirtualNormalResult> cold = normalOf(heights);
+            const render::Result<VirtualNormalResult> warm = normalOf(heights);
+            auto equal = [&](const render::Result<VirtualNormalResult>& r) {
+                return r && plain && r->texels.size() == plain->texels.size() &&
+                       std::memcmp(r->texels.data(), plain->texels.data(), r->texels.size() * sizeof(float)) == 0 &&
+                       r->tag == plain->tag && r->width == plain->width && r->height == plain->height;
+            };
+            Check(cold && cold->stats.persistentHits == 0 && warm && warm->stats.persistentHits == 1 &&
+                      warm->stats.blends == 0 && equal(cold) && equal(warm),
+                  "a combined virtual normal is stored cold and served to a fresh evaluator bit for bit, tag included",
+                  cold && warm ? "cold " + std::to_string(cold->stats.persistentHits) + " warm " +
+                                     std::to_string(warm->stats.persistentHits) + " blends " +
+                                     std::to_string(warm->stats.blends)
+                               : "an evaluation failed");
+            auto none = std::make_shared<MapResourceProvider>();
+            const render::Result<VirtualNormalResult> lost = normalOf(none);
+            Check(!lost && EvalErrorKindOf(lost.error()) == EvalErrorKind::MissingResource,
+                  "with the Height bitmap missing, the stored virtual normal is not served: missing_resource");
+        }
+    }
+
+    // A geometry mask's hash covers the mesh's import report (its stored external files, import
+    // settings, objects and geometry hashes) but its source's name.
+    {
+        Builder b(256, 256, {{ChannelType::User0, ChannelFormat::L16}});
+        core::Layer layer = b.Fill("masked", {{ChannelType::User0, Uniform(0.3, 0.3, 0.3)}},
+                                   {{ChannelType::User0, Blend(BlendingMode::Normal, 1.0)}});
+        layer.geometry_mask.type = core::GeometryMaskType::Mesh;
+        layer.geometry_mask.inclusion_list = true;
+        layer.geometry_mask.items = {"left"};
+        b.SetRoot({layer});
+        auto file = [](const std::string& sha256) {
+            return core::json::Value(
+                core::json::Object{{"uri", "mesh.bin"}, {"sha256", sha256}, {"size", std::int64_t{8}}});
+        };
+        core::json::Object report{{"hashes", core::json::Object{{"positions", "p1"}, {"uvs", "u1"}}},
+                                  {"objects", core::json::Array{core::json::Object{{"name", "left"}}}},
+                                  {"units", core::json::Object{{"requested_mesh_unit_scale", nullptr}}},
+                                  {"source", core::json::Object{{"name", "mesh.gltf"}}}};
+        report[std::string(core::kMeshExternalFiles)] = core::json::Array{file(std::string(64, '1'))};
+        b.project.mesh = core::MeshReference{std::string(64, 'f'), report, {}, ""};
+        auto hashOf = [&](const Builder& at) {
+            render::Result<ChannelDag> dag =
+                BuildDag(at.project, b.SetId(), b.StackId(), ChannelType::User0, *templates, kDefaultTemplateId);
+            return dag ? Hex(dag->readoutHash) : std::string();
+        };
+        const std::string base = hashOf(b);
+        Builder otherBuffer = b;
+        otherBuffer.project.mesh->import_report[std::string(core::kMeshExternalFiles)] =
+            core::json::Array{file(std::string(64, '2'))};
+        Builder otherGeometry = b;
+        otherGeometry.project.mesh->import_report["hashes"] = core::json::Object{{"positions", "p1"}, {"uvs", "u2"}};
+        Builder otherObjects = b;
+        otherObjects.project.mesh->import_report["objects"] =
+            core::json::Array{core::json::Object{{"name", "left"}}, core::json::Object{{"name", "right"}}};
+        Builder otherSettings = b;
+        otherSettings.project.mesh->import_report["units"] = core::json::Object{{"requested_mesh_unit_scale", 2.0}};
+        Builder otherSource = b;
+        otherSource.project.mesh->import_report["source"] = core::json::Object{{"name", "renamed.gltf"}};
+        Check(!base.empty() && hashOf(otherBuffer) != base && hashOf(otherGeometry) != base &&
+                  hashOf(otherObjects) != base && hashOf(otherSettings) != base && hashOf(otherSource) == base,
+              "a geometry-masked read-out's hash changes with the mesh's stored external files, geometry hashes, "
+              "objects and import settings, not with its file name");
+    }
+
+    // The disk cache itself.
+    {
+        constexpr size_t kPayload = 1000;
+        render::DiskCache cache(root / "small", 3 * (56 + kPayload) - 1);
+        const auto pause = [] { std::this_thread::sleep_for(std::chrono::milliseconds(40)); };
+        cache.Put(KeyOf(1), PayloadOf(1, kPayload));
+        pause();
+        cache.Put(KeyOf(2), PayloadOf(2, kPayload));
+        pause();
+        const bool touched = cache.Get(KeyOf(1), kPayload) == PayloadOf(1, kPayload);
+        pause();
+        cache.Put(KeyOf(3), PayloadOf(3, kPayload));
+        Check(touched && fs::exists(cache.EntryPath(KeyOf(1))) && !fs::exists(cache.EntryPath(KeyOf(2))) &&
+                  fs::exists(cache.EntryPath(KeyOf(3))) && cache.GetStats().evictions == 1,
+              "over its cap the area removes the least recently used entry (a hit counts as a use)");
+        Check(!cache.Get(KeyOf(3), kPayload - 1) && !fs::exists(cache.EntryPath(KeyOf(3))),
+              "an entry of another size than the caller's is inconsistent: a miss, removed");
+        Check(!cache.Put(KeyOf(4), PayloadOf(4, 4 * kPayload)) && !fs::exists(cache.EntryPath(KeyOf(4))),
+              "an entry larger than the cap is not written");
+
+        render::DiskCache shared(root / "concurrent", 1ull << 30);
+        const std::vector<std::byte> payload = PayloadOf(5, 64 * 1024);
+        std::atomic<int> wrong{0};
+        std::atomic<int> hits{0};
+        std::vector<std::thread> threads;
+        for (int t = 0; t < 8; ++t) {
+            threads.emplace_back([&] {
+                for (int i = 0; i < 25; ++i) {
+                    shared.Put(KeyOf(5), payload);
+                    const std::optional<std::vector<std::byte>> got = shared.Get(KeyOf(5), payload.size());
+                    if (got && *got != payload) ++wrong;
+                    if (got) ++hits;
+                }
+            });
+        }
+        for (std::thread& thread : threads) thread.join();
+        Check(wrong == 0 && hits > 0 && shared.GetStats().corrupt == 0,
+              "eight threads writing and reading one key only ever read the whole entry",
+              "wrong " + std::to_string(wrong.load()) + " hits " + std::to_string(hits.load()) + " corrupt " +
+                  std::to_string(shared.GetStats().corrupt));
+    }
+
+    render::DisableCaches();
+    return Finish();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -7894,7 +8265,7 @@ int main(int argc, char** argv) {
                      "not-yet-supported <assets-dir> | "
                      "evaluate <assets-dir> <spec.json> <out-dir> cpu|gpu | gpu-vs-cpu|kernel-sweep|"
                      "projection-gpu-vs-cpu|srgb8-hardware|fp-hardware|pow-hardware|trig-hardware|bilinear-hardware|texture-unit|masks-gpu-vs-cpu|"
-                     "height-normal-gpu-vs-cpu|diagnostics|diagnostics-gpu-vs-cpu|tables <assets-dir> <work-dir> | "
+                     "height-normal-gpu-vs-cpu|diagnostics|diagnostics-gpu-vs-cpu|persistent|tables <assets-dir> <work-dir> | "
                      "uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");
         return 2;
     }
@@ -7949,6 +8320,7 @@ int main(int argc, char** argv) {
         else if (mode == "height-normal-gpu-vs-cpu") code = RunHeightNormalGpuVsCpu(assets, dir);
         else if (mode == "diagnostics") code = RunDiagnostics(assets, dir);
         else if (mode == "diagnostics-gpu-vs-cpu") code = RunDiagnosticsGpuVsCpu(assets, dir);
+        else if (mode == "persistent") code = RunPersistent(assets, dir);
         else if (mode == "uv-coverage") {
             if (argc < 6) {
                 std::fprintf(stderr, "usage: uzp-evaluator-tests uv-coverage <assets-dir> <work-dir> <mesh> <size>\n");

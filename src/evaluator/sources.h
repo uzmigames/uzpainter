@@ -113,6 +113,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 
@@ -198,6 +199,9 @@ public:
     explicit DecodingResourceProvider(FetchBytes fetch) : m_fetch(std::move(fetch)) {}
 
     std::shared_ptr<const DecodedImage> Fetch(std::string_view sha256) const override;
+    /// The bytes are stored and hash to `sha256`, checked once, without decoding them: bytes
+    /// that hash to the key of a stored result decoded when it was computed.
+    bool Available(std::string_view sha256) const override;
 
     /// Decodes performed so far (cache misses that produced an image).
     [[nodiscard]] size_t Decodes() const;
@@ -206,6 +210,7 @@ private:
     FetchBytes m_fetch;
     mutable std::mutex m_mutex;
     mutable std::map<std::string, std::shared_ptr<const DecodedImage>, std::less<>> m_cache;
+    mutable std::set<std::string, std::less<>> m_available;
     mutable size_t m_decodes = 0;
 };
 

@@ -7,13 +7,16 @@
 // roles `--mcp` and `--worker` (src/supervisor/), the preview window `--preview` (src/preview/cli.h);
 // the other commands are added by their phases. Every verb reads its arguments in UTF-8, decoded
 // from the wide command line. `--help` prints the usage on stdout (exit status 0); a usage error
-// prints it on stderr (exit status 2).
+// prints it on stderr (exit status 2). The persistent caches (src/render/disk_cache.h, decision 253)
+// are on for every verb unless `--no-cache` (anywhere before a `--`) or `UZP_NO_CACHE` turns them
+// off; `cache` reports and clears them.
 
 #include "export/cli.h"
 #include "preview/cli.h"
 #include "python/capabilities.h"
 #include "python/recipe.h"
 #include "python/run.h"
+#include "render/disk_cache.h"
 #include "selftest/harness.h"
 #include "store/cli.h"
 #include "supervisor/supervisor.h"
@@ -44,6 +47,7 @@ constexpr const char* kUsage =
     "       UzPainter.exe export --recover <exportPath> [--fixed-names <dir>]...\n"
     "       UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [-- args...]\n"
     "       UzPainter.exe capabilities\n"
+    "       UzPainter.exe cache info | clear\n"
     "       UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan]\n"
     "       UzPainter.exe --mcp [--mcp-http <host>:<port> [--token <token>] [--allow-remote]]\n"
     "                           [--roots <kind>=<dir>;...] [--gpu-backend dx12|vulkan] [--allow-python]\n"
@@ -52,7 +56,9 @@ constexpr const char* kUsage =
     "       UzPainter.exe --worker --pipe \\\\.\\pipe\\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12|vulkan\n"
     "                              [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>]\n"
     "                              [--crash-dir <dir>] [--connect-timeout-ms <ms>] [--test-faults] [--preview]\n"
-    "       UzPainter.exe --help\n";
+    "       UzPainter.exe --help\n"
+    "Any verb also takes --no-cache (before a --): no persistent cache is read or written, here or in\n"
+    "the processes it starts; UZP_NO_CACHE=1 does the same.\n";
 
 /// The arguments after the program name in UTF-8, as every verb reads them. `main`'s `argv` holds
 /// them in the ANSI code page, which loses every character outside it. None when the command line
@@ -78,15 +84,32 @@ std::optional<std::vector<std::string>> Utf8Arguments() {
     return args;
 }
 
+/// Removes every `--no-cache` before a `--` from `args`; true when there was one.
+bool TakeNoCache(std::vector<std::string>& args) {
+    bool found = false;
+    for (auto it = args.begin(); it != args.end() && *it != "--";) {
+        if (*it == "--no-cache") {
+            found = true;
+            it = args.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return found;
+}
+
 }  // namespace
 
 int main() {
-    const std::optional<std::vector<std::string>> arguments = Utf8Arguments();
+    std::optional<std::vector<std::string>> arguments = Utf8Arguments();
     if (!arguments) {
         std::fprintf(stderr, "UzPainter.exe: the command line is not valid UTF-16\n");
         return uzp::selftest::kExitUsage;
     }
-    const std::vector<std::string>& args = *arguments;
+    std::vector<std::string>& args = *arguments;
+    // The variable carries `--no-cache` to the processes this one starts (the MCP worker).
+    if (TakeNoCache(args)) _wputenv(L"UZP_NO_CACHE=1");
+    if (!uzp::render::CachesDisabledByEnvironment()) uzp::render::EnableCaches(uzp::render::DefaultCacheRoot());
     if (args.size() == 1 && args.front() == "--help") {
         std::fputs(kUsage, stdout);
         return 0;
@@ -128,6 +151,9 @@ int main() {
     }
     if (!args.empty() && uzp::python::IsCapabilitiesCommand(args.front())) {
         return uzp::python::RunCapabilitiesCommand(args, stdout, stderr);
+    }
+    if (!args.empty() && uzp::render::IsCacheCommand(args.front())) {
+        return uzp::render::RunCacheCommand(args, stdout, stderr);
     }
     std::fputs(kUsage, stderr);
     return uzp::selftest::kExitUsage;

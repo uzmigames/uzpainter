@@ -19,6 +19,9 @@ public:
     virtual ~IResourceProvider() = default;
     /// The decoded samples of the resource whose bytes hash to `sha256`, or null when unknown.
     [[nodiscard]] virtual std::shared_ptr<const DecodedImage> Fetch(std::string_view sha256) const = 0;
+    /// The resource can be fetched: a persistent result computed from it is served only then
+    /// (result_cache.h). Fetches it unless a provider knows cheaper.
+    [[nodiscard]] virtual bool Available(std::string_view sha256) const { return Fetch(sha256) != nullptr; }
 };
 
 /// A provider over images registered by hash.

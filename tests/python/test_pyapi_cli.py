@@ -23,7 +23,7 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
-from tests.python.conftest import JSON_PREFIX, PLANE, REPO_ROOT
+from tests.python.conftest import JSON_PREFIX, PLANE, PROBE_IMAGES, REPO_ROOT
 from tools.capabilities.generate_capabilities import generate
 
 SCHEMA = REPO_ROOT / "tools" / "capabilities" / "capabilities.schema.json"
@@ -39,6 +39,7 @@ VERB_USAGES = [
         "python/capabilities.cpp",
         "preview/cli.cpp",
         "supervisor/worker.cpp",
+        "render/disk_cache.cpp",
     )
 ]
 SUPERVISOR_MAIN = REPO_ROOT / "python" / "uzpainter_supervisor" / "main.py"
@@ -293,7 +294,7 @@ def test_help_prints_every_verb_and_option(painter: Path) -> None:
     )
     assert shown.returncode == 0, shown.stderr
     usage = shown.stdout
-    for verb in ("selftest", "inspect", "export-bundle", "store-census", "export", "run"):
+    for verb in ("selftest", "inspect", "export-bundle", "store-census", "export", "run", "cache"):
         assert f"UzPainter.exe {verb} " in usage, verb
     for verb in ("capabilities", "--preview", "--mcp", "--worker", "--help"):
         assert f"UzPainter.exe {verb}" in usage, verb
@@ -423,3 +424,208 @@ def test_inspect_prints_the_recipe_dump_of_a_project_open_elsewhere(
     assert result["recipe"][1] == result["dump"]
     assert result["report"] == {"available": True, "digest": result["dump"]["digest"]}
     assert result["after"] == result["dump"]["revision"] + 1
+
+
+# ── Persistent caches (decision 253) ────────────────────────────────────────────────────────────
+
+# A saved project with a bitmap and two uniform fills on BaseColor and Height.
+CACHE_PROJECT = """
+import sys
+from uzpainter import colormanagement as cm, layerstack as ls, project, resource
+from uzpainter import textureset as ts
+work, plane, images = sys.argv[1], sys.argv[2], sys.argv[3]
+CT = ts.ChannelType
+project.create(plane, project.Settings(default_texture_resolution=512))
+top = lambda: ls.InsertPosition.from_textureset_stack(ts.get_active_stack())
+checker = resource.import_project_resource(images + "/checker-16.png", resource.Usage.TEXTURE)
+base = ls.insert_fill(top())
+base.active_channels = {CT.BaseColor, CT.Height}
+base.set_source(CT.BaseColor, checker.identifier())
+base.set_source(CT.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+for value in (0.3, 0.7):
+    fill = ls.insert_fill(top())
+    fill.active_channels = {CT.BaseColor, CT.Height}
+    fill.set_source(CT.BaseColor, cm.Color(value, 1 - value, 0.4))
+    fill.set_source(CT.Height, cm.Color(value, value, value, "Raw"))
+    fill.set_opacity(0.5, CT.BaseColor)
+    fill.set_opacity(0.5, CT.Height)
+project.save_as(work + "/cached.uzp")
+result = project.revision()
+"""
+# An export of the saved project's BaseColor and Height into the folder its second argument
+# names: the files' hashes.
+CACHE_EXPORT = """
+import sys
+from uzpainter import export, project
+work, folder = sys.argv[1], sys.argv[2]
+project.open(work + "/cached.uzp")
+def channels(name, layout):
+    return [{"destChannel": c, "srcChannel": c, "srcMapType": "documentMap", "srcMapName": name}
+            for c in (["R", "G", "B"] if layout == "RGB" else ["L"])]
+maps = [{"fileName": "$textureSet_" + n, "channels": channels(n, layout)}
+        for n, layout in (("baseColor", "RGB"), ("height", "L"))]
+out = export.export_project_textures({
+    "exportShaderParams": False, "exportPath": work + "/" + folder, "defaultExportPreset": "p",
+    "exportPresets": [{"name": "p", "maps": maps}], "exportList": [{"rootPath": "uzp_plane"}],
+    "exportParameters": [{"parameters": {"fileFormat": "png", "bitDepth": "16", "dithering": False,
+                                         "paddingAlgorithm": "passthrough"}}]})
+result = {f["relative_path"]: f["sha256"] for f in out["files"]}
+"""
+
+
+def cache_cli(exe: Path, env: dict[str, str], *args: str) -> tuple[int, list[Any], str, str]:
+    """Exit status, the `UZP_JSON:` documents, the other standard output and the standard error
+    of `UzPainter.exe <args>` under `env`."""
+    process = subprocess.run(
+        [str(exe), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=600,
+        check=False,
+        env=env,
+    )
+    lines = process.stdout.splitlines()
+    documents = [
+        json.loads(line[len(JSON_PREFIX) :]) for line in lines if line.startswith(JSON_PREFIX)
+    ]
+    other = "\n".join(line for line in lines if not line.startswith(JSON_PREFIX))
+    return process.returncode, documents, other, process.stderr
+
+
+def cache_env(root: Path) -> dict[str, str]:
+    """The test's environment with the caches on under `root` (tests/conftest.py turns them off
+    for every other test)."""
+    env = {key: value for key, value in os.environ.items() if key != "UZP_NO_CACHE"}
+    env["UZP_CACHE_DIR"] = str(root)
+    return env
+
+
+def entries(area: Path) -> dict[str, tuple[int, bytes]]:
+    """Each entry of a cache area by name: its last-write time and its bytes."""
+    if not area.is_dir():
+        return {}
+    return {
+        path.name: (path.stat().st_mtime_ns, path.read_bytes())
+        for path in sorted(area.iterdir())
+        if len(path.name) == 64
+    }
+
+
+def test_cache_command_reports_and_clears(painter: Path, tmp_path: Path) -> None:
+    """decision 253: `UzPainter.exe cache info` prints the root and each area's entries and bytes,
+    and whether this process has the caches on: not under `--no-cache` or `UZP_NO_CACHE=1`.
+    `cache clear` removes every entry and temporary file of the areas and nothing else; another
+    subcommand is a usage error. `--help` names the verb and `--no-cache`."""
+    root = tmp_path / "cache"
+    env = cache_env(root)
+    status, _, printed, err = cache_cli(painter, env, "cache", "info")
+    assert status == 0, err
+    empty = {"entries": 0, "bytes": 0}
+    assert json.loads(printed) == {
+        "root": str(root),
+        "enabled": True,
+        "areas": {"eval": empty, "lighting": empty},
+    }
+    for args, extra in (
+        (("--no-cache", "cache", "info"), {}),
+        (("cache", "info"), {"UZP_NO_CACHE": "1"}),
+    ):
+        status, _, printed, err = cache_cli(painter, {**env, **extra}, *args)
+        assert status == 0, err
+        assert json.loads(printed)["enabled"] is False, args
+    (root / "eval").mkdir(parents=True)
+    (root / "eval" / ("a" * 64)).write_bytes(b"x" * 100)
+    (root / "eval" / ("b" * 64 + ".tmp-1-2-3")).write_bytes(b"y" * 10)
+    (root / "eval" / "keep.txt").write_bytes(b"not an entry")
+    (root / "lighting").mkdir()
+    (root / "lighting" / ("c" * 64)).write_bytes(b"z" * 7)
+    status, _, printed, err = cache_cli(painter, env, "cache", "info")
+    assert status == 0, err
+    assert json.loads(printed)["areas"] == {
+        "eval": {"entries": 2, "bytes": 110},
+        "lighting": {"entries": 1, "bytes": 7},
+    }
+    status, _, printed, err = cache_cli(painter, env, "cache", "clear")
+    assert status == 0, err
+    assert json.loads(printed) == {
+        "root": str(root),
+        "areas": {
+            "eval": {"removed": 2, "bytes": 110, "skipped": 0},
+            "lighting": {"removed": 1, "bytes": 7, "skipped": 0},
+        },
+    }
+    assert sorted(p.name for p in (root / "eval").iterdir()) == ["keep.txt"]
+    assert list((root / "lighting").iterdir()) == []
+    status, _, _, err = cache_cli(painter, env, "cache", "drop")
+    assert status == 2 and err == "usage: UzPainter.exe cache info | clear\n"
+    usage = subprocess.run(
+        [str(painter), "--help"], capture_output=True, text=True, timeout=60, check=False
+    ).stdout
+    assert "UzPainter.exe cache info | clear" in usage and "--no-cache" in usage
+
+
+def test_persistent_results_serve_a_later_process_byte_for_byte(
+    painter: Path, tmp_path: Path
+) -> None:
+    """decision 253: the export of a saved project stores the read-outs it evaluated; a later
+    process exporting the same revision is served them (the entries are marked used, none is
+    added) and writes the same bytes, as does a process under `--no-cache`, which neither reads
+    nor writes the cache. Damaged entries are recomputed and written again bit for bit; an
+    export after `cache clear` stores them anew."""
+    root = tmp_path / "cache"
+    env = cache_env(root)
+    area = root / "eval"
+    make = script(tmp_path, CACHE_PROJECT)
+    export = tmp_path / "export.py"
+    export.write_text(CACHE_EXPORT, encoding="utf-8")
+
+    def run_export(folder: str, *flags: str) -> dict[str, str]:
+        status, documents, _, err = cache_cli(
+            painter, env, *flags, "run", str(export), str(tmp_path), folder
+        )
+        assert status == 0, err
+        [report] = documents
+        assert report["status"] == "ok", report
+        files: dict[str, str] = report["result"]
+        return files
+
+    status, documents, _, err = cache_cli(
+        painter, env, "--no-cache", "run", make, str(tmp_path), str(PLANE), str(PROBE_IMAGES)
+    )
+    assert status == 0 and documents[0]["status"] == "ok", (err, documents)
+    assert entries(area) == {}
+
+    cold = run_export("cold")
+    stored = entries(area)
+    assert sorted(cold) == ["uzp_plane_baseColor.png", "uzp_plane_height.png"]
+    assert len(stored) == 2  # one read-out per channel
+
+    warm = run_export("warm")
+    served = entries(area)
+    assert warm == cold
+    assert served.keys() == stored.keys()
+    assert all(served[name][1] == stored[name][1] for name in stored)
+    assert all(served[name][0] > stored[name][0] for name in stored), "every entry was served"
+
+    uncached = run_export("uncached", "--no-cache")
+    assert uncached == cold
+    assert entries(area) == served, "--no-cache neither reads nor writes the cache"
+
+    for name in stored:
+        damaged = bytearray(stored[name][1])
+        damaged[-1] ^= 0xFF
+        (area / name).write_bytes(bytes(damaged))
+    recomputed = run_export("recomputed")
+    assert recomputed == cold
+    assert {name: data for name, (_, data) in entries(area).items()} == {
+        name: data for name, (_, data) in stored.items()
+    }
+
+    status, _, printed, err = cache_cli(painter, env, "cache", "clear")
+    assert status == 0, err
+    assert json.loads(printed)["areas"]["eval"]["removed"] == 2
+    assert entries(area) == {}
+    assert run_export("after-clear") == cold
+    assert entries(area).keys() == stored.keys()
