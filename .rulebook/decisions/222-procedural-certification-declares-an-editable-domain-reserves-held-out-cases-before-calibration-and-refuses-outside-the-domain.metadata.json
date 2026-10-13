@@ -1,0 +1,17 @@
+{
+  "id": 222,
+  "slug": "222-procedural-certification-declares-an-editable-domain-reserves-held-out-cases-before-calibration-and-refuses-outside-the-domain",
+  "title": "Procedural certification declares an editable domain, reserves held-out cases before calibration and refuses outside the domain",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase3.1_proc-backend-seam",
+    "phase3.2_proc-generator-families",
+    "phase3.2_proc-grunge-families",
+    "phase3.2_proc-filter-families",
+    "phase3.2_proc-material-families",
+    "phase3.2_proc-snapshot-backend",
+    "phase3.3_procedural-families"
+  ],
+  "supersededBy": null
+}

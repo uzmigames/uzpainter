@@ -32,6 +32,7 @@
 - Recordings: none. The MCP layer is UzPainter's own control plane, and it reproduces no Painter behaviour.
 - 1.1: left open on purpose. phase2.4_supervisor-worker is merged on main but not accepted: its 4.1 waits on the Vulkan device cases (decision 121), the hosted CPU lane and G1. This task builds on its code on main.
 - 1.1 (decision 200, 2026-10-13): the hosted CPU lane is removed and no longer a condition of phase2.4, which waits on the Vulkan device cases (decision 121) and G1.
+- 1.1 (decision 221, 2026-10-13): the Vulkan device cases are no longer a condition of phase2.4_supervisor-worker; they are acceptance obligations of `phase3.1_vulkan-compute-parity` (items 3.4 and 4.1), which removes the acceptance cycle phase3.1 → phase2.10 → phase2.8 → phase2.4 → phase3.1. phase2.4 is held only by G1 (phase1.25_pilot-wand) through its children.
 - Decisions:
   - 158: the registry's order of checks; a key without its precondition refused at the MCP boundary (supersedes decision 138 item 4, third row, for MCP); roots; capability gating; the result contract.
   - 159: the HTTP guard and transport, the owner-bound lease, ledger logs and the executor.

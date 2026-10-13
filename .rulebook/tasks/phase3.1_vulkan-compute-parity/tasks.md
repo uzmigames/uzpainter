@@ -1,5 +1,5 @@
 ## 1. Prerequisites
-- [ ] 1.1 Prerequisites accepted: phase1.4_render-core-layer, phase2.10_pilot-tunic-recovery
+- [ ] 1.1 Prerequisites accepted: phase1.4_render-core-layer, phase2.10_pilot-tunic-recovery (the pilot comparisons, items 3.6 and 4.1's pilot maps); the device qualification (items 2.1, 2.2, 2.6, 2.8, 3.1, 3.4, 3.8) needs only phase1.4_render-core-layer and the supervisor code on main, and may start before Tunic (decision 221)
 
 ## 2. Implementation
 - [ ] 2.1 Implement the Vulkan device/queue wrapper behind `src/render/backend.h` on the vendored Vulkan backend (Vulkan 1.2 instance), selected only by `--gpu-backend vulkan`
@@ -8,7 +8,7 @@
 - [ ] 2.4 Implement `TextureReadback` on Vulkan: per-request ownership, aligned row pitch, fence-linked map, drain on shutdown and on failure
 - [ ] 2.5 Port the UV raster pass, dilation (jump-flood), resampling and mip generation to Vulkan with the same HLSL sources
 - [ ] 2.6 Implement the Vulkan capability query: format/usage support, descriptor capacities, VRAM budget from `VK_EXT_memory_budget` or conservatively from heap sizes; derive the tile admission budget from it
-- [ ] 2.7 Run the export engine and the `painter_viewport` forward pass and capture on Vulkan; record `backend`, adapter and driver in every export and capture receipt
+- [ ] 2.7 Run the export engine and the `painter_viewport` forward pass and capture on Vulkan; record `backend`, adapter and driver in every export and capture receipt; settle the Vulkan entries of `parity/reports/phase2/preview-settling.json` (`viewport_capture_headless`, `preview_stall`, `preview_window_lifecycle`, `wand_integration`, `wand_export_preview`; phase2.3_realtime-preview, decision 221)
 - [ ] 2.8 Add the Vulkan hardware slice to `selftest` (device, compute kernel from SPIR-V, readback, PNG16 write) reported separately from the availability probe
 - [ ] 2.9 Write the cross-backend comparison mode of the comparison tool: same project and revision rendered on DX12 and Vulkan, decoded maps compared at native depth with the `14-parity-testing.md` §4 diagnostics
 - [ ] 2.10 Add Vulkan backend entries to `capabilities.json` with their tier evidence
@@ -17,16 +17,24 @@
 - [ ] 3.1 Readback drain tests on Vulkan (`tests/render/`): in-flight requests drained on shutdown, failed request releases its staging memory, pitch alignment for every supported format
 - [ ] 3.2 Unit tests on synthetic meshes (plane, sphere, bevelled cube) for UV raster, dilation, resampling and mips on Vulkan, byte-equal to the DX12 results
 - [ ] 3.3 Compositor kernel tests on both backends with identical outputs for every implemented node kind, blend mode and channel format
-- [ ] 3.4 Device-loss and stall injection on Vulkan: `device_removed` or `timeout` reported, job fails, no partial result published; includes the worker's Vulkan device-loss hook (`src/supervisor/fault_hooks.h`, Debug-only) and the phase2.1 item 3.3 Vulkan variant through the supervisor: worker exits, relaunched on Vulkan at the last committed revision (decision 121)
+- [ ] 3.4 Device-loss and stall injection on Vulkan: `device_removed` or `timeout` reported, job fails, no partial result published; includes the worker's Vulkan device-loss hook (`src/supervisor/fault_hooks.h`, Debug-only) and the phase2.1 item 3.3 Vulkan variant through the supervisor: worker exits, relaunched on Vulkan at the last committed revision (decision 121); settles the Vulkan `gpu_stall` and `device_lost` cases of `parity/reports/phase2/supervisor-settling.json` (phase2.4 item 3.4) and re-runs the `02-…` §7 settling suite with a Vulkan device (`UZP_SUPERVISOR_BACKEND=vulkan`: recovery, commit-then-die retry, lost-ledger replay, no duplicate commit) (decision 221)
 - [ ] 3.5 Tier 0 subset (compositor and export goldens implemented through `phase1.14_compositor-core` and `phase1.18_export-engine`) on Vulkan: equal to the private goldens and byte-equal to DX12
 - [ ] 3.6 Tier 1 for Wand v1, Belt v5 and Tunic v10 on Vulkan: every exported map byte-equal to DX12 and to the private goldens
 - [ ] 3.7 `painter_viewport` regression goldens recorded on Vulkan and repeatable across two runs
 - [ ] 3.8 `selftest` Vulkan hardware slice green on the owner's machine
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance: `selftest` hardware slice green on Vulkan; Tier 0 subset and the three pilot Tier 1 maps byte-equal on Vulkan and DX12; any divergence covered by an owner-approved exception
+- [ ] 4.1 Acceptance: Vulkan qualification — `selftest` hardware slice green on Vulkan, device-loss and stall injection (3.4) pass, and every Vulkan entry of `parity/reports/phase2/supervisor-settling.json` and `preview-settling.json` deferred here (decisions 121, 221) passes with none left `pending`; pilot comparison — Tier 0 subset and the three pilot Tier 1 maps byte-equal on Vulkan and DX12; any divergence covered by an owner-approved exception
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Notes (obligations moved here)
+- Decision 121 (2026-10-12): the Vulkan device-loss hook and the Vulkan device-fault test of `phase2.1_supervisor-ipc-worker` (items 2.11, 3.3) are this task's items 2.2 and 3.4.
+- Decision 221 (2026-10-13): sequencing split of the Vulkan obligations of Phase 2, nothing waived. Before it, phase2.1 and phase2.4 waited on these cases while this task waits on Tunic (phase2.10), which waits on MCP (phase2.8), which waits on phase2.4: an acceptance cycle. Supervisor and G2 acceptance is now DX12 plus the GPU-free cases on Vulkan; this task's 4.1 owns:
+  - `phase2.1_supervisor-ipc-worker` 3.3: Vulkan device loss through the supervisor (item 3.4 here);
+  - `phase2.4_supervisor-worker` 3.4 and 4.1: Vulkan `device_lost` and `gpu_stall` in `supervisor-settling.json`, and the §7 suite re-run with a Vulkan device (item 3.4 here);
+  - `phase2.3_realtime-preview` 4.1: the five Vulkan entries of `preview-settling.json` (item 2.7 here).
+  They stay `pending` in those reports until settled here, and reach G3 through `phase3.3_vulkan-backend-ray-tracing` and G5 through P5-REPORT (DX12 and Vulkan). `python -m tools.planning.acceptance_graph` checks that the open tasks' acceptance graph has no cycle.

@@ -21,7 +21,7 @@ Child of `phase2.4_supervisor-worker` (P2-SUPERVISOR in `docs/dag.md`), implemen
 
 ## Acceptance
 - Frame and handshake tests pass; every handshake mismatch (protocol, backend, Python policy) is a fatal supervisor error.
-- Worker kill, native abort or SEH fault, DX12 device removal, Vulkan device loss and a GPU stall each leave the supervisor (and the MCP session it serves) alive, write the expected diagnostics, relaunch the worker on the last committed revision with the same backend and Python policy, and record the recovery time.
+- Worker kill, native abort or SEH fault, DX12 device removal, Vulkan device loss and a GPU stall each leave the supervisor (and the MCP session it serves) alive, write the expected diagnostics, relaunch the worker on the last committed revision with the same backend and Python policy, and record the recovery time. The Vulkan device-loss case needs a Vulkan device and is settled by `phase3.1_vulkan-compute-parity` items 3.4 and 4.1 (decisions 121, 221); this task's acceptance covers the DX12 cases and the GPU-free cases on both backends.
 - Without `--allow-python`, `run_python` is rejected at the IPC boundary with `python_disabled`.
 - With an unavailable backend, GPU operations return `gpu_backend_unavailable` before mutating while GPU-free operations still run.
 
