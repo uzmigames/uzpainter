@@ -644,6 +644,19 @@ def test_unavailable_families_fail_before_mutation(
     document = json.loads(text["text"])
     gaps = {row["tool"] for row in document["tools"] if row["status"] == "release-gap"}
     assert gaps == set(GAP_CALLS)
+    # The resource publishes the shipped manifest unchanged, painter_iray among its release gaps
+    # (phase2.3_realtime-preview item 3.3, decision 162).
+    shipped = json.loads((painter.parent / "capabilities.json").read_text(encoding="utf-8"))
+    assert document["entries"] == shipped["entries"]
+    assert document["compat_profile"] == shipped["compat_profile"]
+    iray = [
+        entry
+        for entry in document["entries"]
+        if (entry["symbol"], entry["context"]) == ("uzpainter.render.capture", "mode:painter_iray")
+    ]
+    assert [entry["status"] for entry in iray] == ["release-gap"]
+    refused = session.call("capture", {"mode": "painter_iray", "path": "iray.png"})
+    assert refused["error"]["details"]["type"] == "PathTracerUnavailable", refused
     summary = session.call("capabilities")["result"]
     assert set(summary["gaps"]) == set(GAP_CALLS) and summary["entries"]["release-gap"] > 0
 
