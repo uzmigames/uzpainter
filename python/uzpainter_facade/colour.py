@@ -22,11 +22,14 @@ colour, sRGB8 or not: Painter reads back and exports the value set whatever its 
 colour-manage. The facade stores every uniform colour as its
 working-space value (`Color(working, "Working")`): the native evaluator takes a stored value as
 linear, so it receives the value Painter composites, and Painter's readback (`.working`) is that
-value. The sRGB decode runs in float32 as Painter's readbacks show it (decision 214): x = f32(v),
-x * (1 / 12.92f) up to 0.04045f, else ((x + 0.055f) * (1 / 1.055f)) ^ 2.4f, each reciprocal the
-float32 quotient of 1 by the float32 constant and the power of the float32 operands rounded once
-to float32 (P20-B, `phase1-srgb-uniform-decode-part1..4`: all 448 recorded components, both
-recordings).
+value. The working value is computed by the native rule every setter uses
+(`uzpainter.colormanagement._working_value`, `python::WorkingColour`; decision 240), so the facade,
+the native API, the MCP `source_set` and `sync_stack` store the same value for the same colour,
+with the same refusals. In Legacy the sRGB decode is Painter's float32 formula (decision 214):
+x = f32(v), x * (1 / 12.92f) up to 0.04045f, else ((x + 0.055f) * (1 / 1.055f)) ^ 2.4f, each
+reciprocal the float32 quotient of 1 by the float32 constant and the power of the float32 operands
+rounded once to float32 (P20-B, `phase1-srgb-uniform-decode-part1..4`: all 448 recorded
+components, both recordings).
 
 Bitmap sources. A bitmap takes Painter's default space for its channel when bound
 (`default_bitmap_space`, from the recorded `get_source` readbacks) and lists Painter's available
@@ -38,9 +41,10 @@ raises `NotYetSupported` naming the recording that settles it.
 Under OCIO (decision 202) only what Session O records is admitted; everything else raises
 `NotYetSupported` before any change:
 - an sRGB uniform colour (explicit, or without a space on a decoding channel) reads Painter's
-  measured working value of each float32 component (`ocio_srgb`: the 256 codes c / 255 and every
-  other recorded component); no analytic decode reproduces it. Raw, Working and a colour without a
-  space on a channel that does not decode are taken as given, as recorded;
+  measured working value of each float32 component (`ocio_srgb`, the 256 codes c / 255 and every
+  other recorded component, generated into the native `evaluator::PainterOcioSrgbDecode`, decision
+  212); no analytic decode reproduces it. Raw, Working and a colour without a space on a channel
+  that does not decode are taken as given, as recorded;
 - a bitmap on BaseColor lists the eleven spaces Painter offers there (`OCIO_COLOUR_SPACES` after
   the generic three) and a mask's mono source the three data spaces; a colour bitmap on BaseColor
   defaults to sRGB and a mask source to Data (`export-ocio-encode` captures and readbacks).
@@ -55,8 +59,6 @@ import struct
 from typing import Any
 
 import uzpainter
-
-from uzpainter_facade import ocio_srgb
 
 MODULE = "substance_painter.colormanagement"
 
@@ -185,25 +187,11 @@ def f32(value: float) -> float:
     return float(struct.unpack("f", struct.pack("f", value))[0])
 
 
-_F_0_04045 = f32(0.04045)
 _F_12_92 = f32(12.92)
 _F_0_055 = f32(0.055)
 _F_1_055 = f32(1.055)
-_F_2_4 = f32(2.4)
 _F_0_0031308 = f32(0.0031308)
 _F_INV_2_4 = f32(1.0 / 2.4)
-# The float32 quotients 1.0f / 12.92f and 1.0f / 1.055f: Painter's decode multiplies by them.
-_F_INV_12_92 = f32(1.0 / _F_12_92)
-_F_INV_1_055 = f32(1.0 / _F_1_055)
-
-
-def srgb_to_linear(value: float) -> float:
-    """Painter's Legacy float32 sRGB decode of one component (P20-B, decision 214)."""
-    x = f32(value)
-    if x <= _F_0_04045:
-        return f32(x * _F_INV_12_92)
-    base = f32(f32(x + _F_0_055) * _F_INV_1_055)
-    return f32(base**_F_2_4)
 
 
 def linear_to_srgb(value: float) -> float:
@@ -212,31 +200,6 @@ def linear_to_srgb(value: float) -> float:
     if x <= _F_0_0031308:
         return f32(x * _F_12_92)
     return f32(f32(_F_1_055 * f32(max(x, 0.0) ** _F_INV_2_4)) - _F_0_055)
-
-
-def _bits(value: float) -> int:
-    return int(struct.unpack("<I", struct.pack("<f", value))[0])
-
-
-# Painter's OCIO working value of an sRGB component, by the float32 bits of the component.
-_OCIO_SRGB: dict[int, float] = {
-    **{_bits(f32(c / 255)): working for c, working in enumerate(ocio_srgb.CODES)},
-    **{_bits(f32(x)): working for x, working in ocio_srgb.RECORDED},
-}
-
-
-def ocio_srgb_to_linear(value: float) -> float:
-    """Painter's OCIO decode of one sRGB component (`ocio_srgb`); `NotYetSupported` for a
-    component it does not record."""
-    working = _OCIO_SRGB.get(_bits(f32(value)))
-    if working is None:
-        raise uzpainter.NotYetSupported(
-            f"under OCIO, Painter's working value of the sRGB component {value!r} is not recorded: "
-            "the decode is Painter's measured value of the components c / 255 and of the other "
-            f"recorded components, and no analytic decode reproduces it ({OCIO_GAP}; a Tier 0 "
-            "readback of the component settles it)"
-        )
-    return working
 
 
 def _ocio_unrecorded(what: str) -> Exception:
@@ -269,23 +232,23 @@ def color_space_name(space: Any) -> str:
     return space_name(space)
 
 
+def _working(
+    rgb: tuple[float, float, float], space: str | None, decodes: bool
+) -> tuple[float, float, float]:
+    """The float32 working value of `rgb` in `space` (None: no space) on a channel that `decodes`
+    an sRGB colour or not, under the open project's profile: the native rule every setter uses
+    (`python::WorkingColour`, decision 240). An sRGB component decodes by Painter's float32 formula
+    in Legacy (decision 214) and reads Painter's measured value under OCIO, where a component it
+    does not record raises `NotYetSupported`; a space outside the profile raises `ValueError`
+    (Legacy) or `NotYetSupported` (OCIO); every refusal comes before any change."""
+    ocio = active_profile() == OCIO_PROFILE
+    r, g, b = uzpainter.colormanagement._working_value(*rgb, space, decodes, ocio)
+    return (r, g, b)
+
+
 def to_working(rgb: tuple[float, float, float], space: str) -> tuple[float, float, float]:
     """`rgb` encoded in `space`, as float32 working-space values (the open project's profile)."""
-    if active_profile() == OCIO_PROFILE:
-        if space in _SRGB:
-            r, g, b = (ocio_srgb_to_linear(c) for c in rgb)  # every component before any change
-        elif space in _RAW or space == "Working":
-            r, g, b = (f32(c) for c in rgb)
-        else:
-            raise _ocio_unrecorded(f"a uniform colour in the colour space '{space}'")
-        return (r, g, b)
-    if space in _SRGB:
-        r, g, b = (srgb_to_linear(c) for c in rgb)
-    elif space in _LINEAR or space in _RAW:
-        r, g, b = (f32(c) for c in rgb)
-    else:
-        raise ValueError(f"'{space}' is not a colour space of Painter's Legacy colour management")
-    return (r, g, b)
+    return _working(rgb, space, True)
 
 
 def from_working(rgb: tuple[float, float, float], space: str) -> tuple[float, float, float]:
@@ -373,17 +336,8 @@ def working_value(color: Any, colour_managed: bool) -> tuple[float, float, float
     the value as given, whatever its space."""
     if not isinstance(color, Color):
         raise TypeError("the colour must be a colormanagement.Color")
-    if color.color_space is None:
-        space = "sRGB" if colour_managed else "Raw"
-    else:
-        space = color_space_name(color.color_space)
-    if not colour_managed and space in _SRGB and active_profile() == OCIO_PROFILE:
-        raise _ocio_unrecorded("an sRGB uniform colour on a channel that does not decode it")
-    working = to_working(color.value_raw, space)  # a space outside the profile raises here
-    if not colour_managed:
-        r, g, b = (f32(c) for c in color.value_raw)  # taken as given (decision 115)
-        return (r, g, b)
-    return working
+    space = None if color.color_space is None else color_space_name(color.color_space)
+    return _working(color.value_raw, space, colour_managed)
 
 
 def stored_color(color: Any, colour_managed: bool) -> Any:

@@ -1,0 +1,13 @@
+{
+  "id": 246,
+  "slug": "the-calls-on-one-committed-revision-share-its-cpu-evaluation-and-the-cpu-tile-store-computes-on-every-hardware-thread",
+  "title": "The calls on one committed revision share its CPU evaluation, and the CPU tile store computes on every hardware thread",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.2_preview-capture",
+    "phase2.1_recipe-diagnostic-views",
+    "phase2.4_supervisor-worker"
+  ],
+  "supersededBy": null
+}

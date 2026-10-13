@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-010. Original: UzEngine runtime/engine/logging/log.cpp at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 /// UzEngine Logging System Implementation
 ///
 /// Initializes spdlog with colored stdout + rotating file sinks.
@@ -16,6 +18,12 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+// UZP-MOD-010: log paths are UTF-8 and the file sink opens their UTF-16 form, which spdlog takes
+// only with wide file names.
+#if defined(_WIN32) && !defined(SPDLOG_WCHAR_FILENAMES)
+#error "the log file is opened through its UTF-16 path: build with SPDLOG_WCHAR_FILENAMES"
+#endif
 
 /// Built-in log category definitions (global scope, matching declarations in header)
 ///
@@ -49,7 +57,7 @@ static bool g_initialized = false;
 static spdlog::level::level_enum g_runtimeLevel = spdlog::level::err;
 static std::string g_logFilePath;
 
-/// Builds the default log file path in the user's local app data directory.
+/// Builds the default log file path (UTF-8) in the user's local app data directory.
 ///
 /// On Windows: %LOCALAPPDATA%/UzEngine/logs/uzengine_YYYY-MM-DD_HH-MM-SS.log
 /// On Linux/macOS: ~/.local/share/uzengine/logs/uzengine_YYYY-MM-DD_HH-MM-SS.log
@@ -60,8 +68,8 @@ static std::string BuildDefaultLogPath() {
     // Resolve the base directory for log storage
     std::filesystem::path baseDir;
 #ifdef _WIN32
-    const char* localAppData = std::getenv("LOCALAPPDATA");
-    if (localAppData && localAppData[0] != '\0') {
+    const wchar_t* localAppData = _wgetenv(L"LOCALAPPDATA");
+    if (localAppData && localAppData[0] != L'\0') {
         baseDir = std::filesystem::path(localAppData) / "UzEngine" / "logs";
     }
 #else
@@ -96,7 +104,8 @@ static std::string BuildDefaultLogPath() {
     std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d_%H-%M-%S", &localTime);
 
     std::filesystem::path logFile = baseDir / ("uzengine_" + std::string(timestamp) + ".log");
-    return logFile.string();
+    const std::u8string utf8 = logFile.u8string();
+    return std::string(utf8.begin(), utf8.end());
 }
 
 /// Initializes logging with console and optional file output.
@@ -128,10 +137,12 @@ void LogInit(const char* logFilePath) {
     consoleSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] %v");
     g_sinks.push_back(consoleSink);
 
-    // File sink: rotating (10MB max, 3 files kept)
+    // File sink: rotating (10MB max, 3 files kept). The path is UTF-8; the sink opens its
+    // native form (UTF-16 on Windows, UZP-MOD-010).
     if (!resolvedPath.empty()) {
+        const std::u8string utf8(resolvedPath.begin(), resolvedPath.end());
         auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-            resolvedPath, 10 * 1024 * 1024, 3);
+            std::filesystem::path(utf8).native(), 10 * 1024 * 1024, 3);
         fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v");
         g_sinks.push_back(fileSink);
     }

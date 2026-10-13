@@ -12,6 +12,7 @@
 #include "evaluator/cpu_store.h"
 #include "evaluator/error.h"
 #include "evaluator/projection_uv.h"
+#include "evaluator/sources.h"
 
 namespace uzp::evaluator {
 
@@ -161,16 +162,12 @@ std::shared_ptr<const DecodedImage> OcioRawDecoded(const DecodedImage& image) {
 
 /// Fails unless `image` sampled by `projection` on a `width` x `height` set is the bitmap use
 /// `role` names, at 1:1: the image is the set's size and the projection is the identity (the only
-/// sampling Session O records under OCIO; decision 190).
+/// sampling Session O records under OCIO; decision 190). The support check refuses the same uses
+/// before mutation from the PNG header (sources.h `OcioBitmapRecorded`, support.h).
 render::Result<void> CheckOcioBitmap(DagSource::Ocio role, const UvProjection& projection, uint32_t width,
                                      uint32_t height, const DecodedImage& image, core::Id node) {
-    const bool sixteenGrey = image.encoding == render::TexelEncoding::Unorm16 && image.channels == 1;
-    const bool eightColour = image.encoding == render::TexelEncoding::Unorm8 && image.channels == 3;
-    const bool kind = role == DagSource::Ocio::Grey16Mask ? sixteenGrey : eightColour;
-    const bool oneToOne = image.width == width && image.height == height && projection.scale[0] == 1.0 &&
-                          projection.scale[1] == 1.0 && projection.cosR == 1.0 && projection.sinR == 0.0 &&
-                          projection.offset[0] == 0.0 && projection.offset[1] == 0.0;
-    if (kind && oneToOne) return {};
+    const BitmapShape shape{image.width, image.height, image.channels, image.encoding};
+    if (OcioBitmapRecorded(role == DagSource::Ocio::Grey16Mask, projection, width, height, shape)) return {};
     return EvalFail(EvalErrorKind::UnsupportedSource,
                     std::string("under OCIO, only ") +
                         (role == DagSource::Ocio::Grey16Mask ? "a 16-bit grey mask source"

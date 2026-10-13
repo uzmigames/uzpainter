@@ -306,58 +306,34 @@ const core::TextureSet& SetNamed(const core::Project& project, const std::string
 
 // ── Errors ──────────────────────────────────────────────────────────────────────────────────────
 
-bool GapClass(const std::string& cls) {
-    return cls == "NotYetSupported" || cls == "UnsupportedProcedural" || cls == "ReleaseGap" ||
-           cls == "PathTracerUnavailable";
-}
-
-CallError Gap(const std::string& tool, const std::string& reason, const std::string& type) {
-    return CallError{"capability_gap", tool + ": a release gap of this build: " + reason,
-                     json::Object{{"tool", tool}, {"type", type}, {"reason", reason}}};
-}
-
-/// Runs a typed tool's work and gives its errors their MCP codes: an ambiguous name is
-/// `ambiguous_name {candidates}` (LAY-06), a release gap met by the native code (`NotYetSupported`
-/// and its kin) `capability_gap` (nothing is committed either way).
-json::Object Translated(const std::string& tool, const std::function<json::Object()>& run) {
+/// Runs a typed tool's work and gives an ambiguous name its MCP code, `ambiguous_name
+/// {candidates}` (LAY-06), before anything is committed. A release gap is `capability_gap` at the
+/// worker's boundary (`Worker::Execute`), as every worker tool's.
+json::Object Translated(const std::function<json::Object()>& run) {
     try {
         return run();
     } catch (const core::AmbiguousNameError& error) {
         throw CallError{"ambiguous_name", error.what(), json::Object{{"candidates", UidList(error.candidates())}}};
-    } catch (const core::NotYetSupported& error) {
-        throw Gap(tool, error.what(), "NotYetSupported");
-    } catch (const python::ApiError& error) {
-        if (GapClass(error.cls())) throw Gap(tool, error.what(), error.cls());
-        throw;
-    } catch (const CallError& error) {
-        // A transaction the support check failed (`evaluator::RequireSupported`, decision 082).
-        const json::Value* type = Field(error.details, "type");
-        if (error.code == "call_failed" && type && type->IsString() && GapClass(std::get<std::string>(type->data))) {
-            throw Gap(tool, error.message, std::get<std::string>(type->data));
-        }
-        throw;
     }
 }
 
 ToolDefinition Define(Tool tool, Handler handler) {
-    const std::string name = tool.name;
     return {std::move(tool),
-            [name, handler = std::move(handler)](const json::Object& arguments) {
-                return Translated(name, [&] { return handler(arguments); });
+            [handler = std::move(handler)](const json::Object& arguments) {
+                return Translated([&] { return handler(arguments); });
             },
             nullptr, std::nullopt};
 }
 
 ToolDefinition DefineJob(Tool tool, std::optional<std::string> commit_point, JobHandler job) {
-    const std::string name = tool.name;
-    JobHandler wrapped = [name, job = std::move(job)](const json::Object& arguments) -> python::JobBody {
+    JobHandler wrapped = [job = std::move(job)](const json::Object& arguments) -> python::JobBody {
         python::JobBody body;
-        Translated(name, [&] {
+        Translated([&] {
             body = job(arguments);
             return json::Object{};
         });
-        return [name, body = std::move(body)](python::JobContext& context) {
-            return Translated(name, [&] { return body(context); });
+        return [body = std::move(body)](python::JobContext& context) {
+            return Translated([&] { return body(context); });
         };
     };
     return {std::move(tool), nullptr, std::move(wrapped), std::move(commit_point)};
@@ -370,9 +346,7 @@ ToolDefinition GapTool(Tool tool, std::string reason) {
     const json::Array operations = tool.capability;
     return {std::move(tool),
             [name, reason, operations](const json::Object&) -> json::Object {
-                CallError gap = Gap(name, reason, "NotYetSupported");
-                gap.details["operations"] = operations;
-                throw gap;
+                throw GapError(name, reason, "NotYetSupported", operations);
             },
             nullptr, std::nullopt};
 }
@@ -1215,7 +1189,9 @@ void StackFamily(const ToolContext& context, std::vector<ToolDefinition>& tools)
             });
         }));
 
-    json::Object color = ArrayProperty(json::Object{{"type", "number"}}, "r, g, b, stored as given (float32).");
+    json::Object color = ArrayProperty(json::Object{{"type", "number"}},
+                                       "r, g, b in `color_space`, stored as Painter stores them: their float32 working "
+                                       "value (decision 240).");
     color["minItems"] = 3;
     color["maxItems"] = 3;
     json::Object source = Schema(
@@ -1224,8 +1200,13 @@ void StackFamily(const ToolContext& context, std::vector<ToolDefinition>& tools)
                                      {"bitmap", "substance_painter.layerstack.FillLayerNode.set_source"},
                                      {"reference", "substance_painter.layerstack.AnchorPointEffectNode"}})},
          {"color", color},
-         {"color_space", StringProperty("The colour space of a uniform colour (sRGB, Working, Raw, ...) or of a bitmap "
-                                        "(sRGB, Raw, Data, ...); empty or omitted: none.")},
+         {"color_space",
+          StringProperty("The colour space of a uniform colour or of a bitmap. A uniform colour in sRGB is decoded to "
+                         "the working space on a channel Painter colour-manages (sRGB8, not a user channel) and taken "
+                         "as given elsewhere; Working, Raw (and Linear in Legacy) are taken as given; omitted, it is "
+                         "sRGB on such a channel and Raw elsewhere, as Painter's set_source. Under OCIO only the "
+                         "components Painter's measured decode records are accepted. A bitmap: sRGB, Raw, Data, ...; "
+                         "empty or omitted: none.")},
          {"resource", ResourceProperty("A bitmap's project resource: its URL or its name.")},
          {"anchor", UidProperty("A reference source's anchor point effect.")}},
         {"kind"});
@@ -1258,16 +1239,19 @@ void StackFamily(const ToolContext& context, std::vector<ToolDefinition>& tools)
                 }
                 const json::Object& spec = ObjectOf(*given, "source");
                 const std::string kind = Text(*Given(spec, "kind"), "source.kind");
-                const std::string space = StringField(spec, "color_space").value_or("");
+                const std::optional<std::string> given_space = StringField(spec, "color_space");
+                const std::string space = given_space.value_or("");
                 core::Source value;
                 if (kind == "uniform_color") {
                     const json::Value* rgb = Given(spec, "color");
                     if (!rgb) Invalid("source.color is required for a uniform colour");
                     const json::Array& c = ArrayOf(*rgb, "source.color");
                     if (c.size() != 3) Invalid("source.color must be [r, g, b]");
-                    value.value = core::UniformColorSource{
-                        python::F32(std::array<double, 3>{Number(c[0], "color"), Number(c[1], "color"), Number(c[2], "color")}),
-                        space, {}};
+                    // The native set_source's rule (decision 240): an empty colour space is none.
+                    value.value = python::StoredUniformColour(
+                        edit.project(), uid, channel,
+                        std::array<double, 3>{Number(c[0], "color"), Number(c[1], "color"), Number(c[2], "color")},
+                        space.empty() ? std::nullopt : given_space);
                 } else if (kind == "bitmap") {
                     const json::Value* resource = Given(spec, "resource");
                     if (!resource) Invalid("source.resource is required for a bitmap");

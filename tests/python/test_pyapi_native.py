@@ -13,9 +13,13 @@ from typing import Any
 
 import numpy as np
 
-from tests.python.conftest import PROBE_IMAGES, REPO_ROOT, Run
+from tests.export.encoders_tier0 import srgb_to_working
+from tests.python.conftest import PROBE_IMAGES, REPO_ROOT, Run, png_file
 from tools.parity import ocio_srgb_table
 from tools.parity.fit.decode import decode
+
+# Painter's substance config (decisions 134, 207): the one OCIO configuration a project is made in.
+OCIO_CONFIG = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
 
 
 def with_values(script: str) -> str:
@@ -213,9 +217,11 @@ def test_every_setter_reads_back_through_fresh_handles_and_after_reopen(run: Run
         "ChannelType.Height",
         "ChannelType.SpecularRoughness",
     ]
-    assert before["base"] == [[f32(0.8), f32(0.2), f32(0.1)], "sRGB"]
-    assert before["rough"] == [[f32(0.35)] * 3, "Raw"]
-    assert before["height"] == [[0.25] * 3, None]
+    # A uniform colour is stored as Painter stores it, its working value (decision 240): sRGB
+    # decoded on the sRGB8 BaseColor, Raw and a colour without a space on Height as given.
+    assert before["base"] == [[srgb_to_working(c) for c in (0.8, 0.2, 0.1)], "Working"]
+    assert before["rough"] == [[f32(0.35)] * 3, "Working"]
+    assert before["height"] == [[0.25] * 3, "Working"]
     assert before["blend"] == [
         "BlendingMode.LinearDodge",
         "BlendingMode.Normal",
@@ -965,7 +971,189 @@ def test_sync_stack_under_ocio_reads_painters_measured_decode(run: Run, tmp_path
     assert result["refused"].startswith(
         "NotYetSupported: sync_stack: under OCIO, Painter's working value of the sRGB component 0.1"
     )
+    assert result["refused"].endswith("(the base colour of 'base')")
     assert result["unchanged"] is True
+
+
+def test_sync_stack_decodes_base_as_every_setter_does(run: Run, tmp_path: Path) -> None:
+    """B1, F5 (practical-e2e, decision 240): `sync_stack` stores `base` through the one decode
+    every setter uses, so it equals `set_source` of the same sRGB colour and Painter's float32
+    decode (decision 214). 70, 98 and 133 / 255 are codes where dividing by 1.055f instead of
+    multiplying by its float32 reciprocal (sync_stack's own decode before) misses Painter."""
+    (tmp_path / "masks").mkdir()
+    stack_json = {
+        "title": "T",
+        "groups": [{"key": "g", "name": "G", "mask": None}],
+        "layers": [{"id": "L1", "group": "g", "name": "base", "base": [70, 98, 133]}],
+    }
+    (tmp_path / "stack.json").write_text(json.dumps(stack_json), encoding="utf-8")
+    result = ok(
+        run("""
+        stack = create()
+        r = ls.sync_stack(WORK + "/stack.json", WORK + "/masks")
+        root = ls.get_node_by_uid(r.returned["sync"]["root_uid"])
+        synced = ls.get_node_by_name("base", parent=ls.get_node_by_name("G", parent=root))
+        fill = ls.insert_fill(top(stack))
+        fill.set_source(CT.BaseColor, cm.Color(70 / 255, 98 / 255, 133 / 255, "sRGB"))
+        result = [list(n.get_source(CT.BaseColor).get_color().value_raw) for n in (synced, fill)]
+        """)
+    )
+    expected = [srgb_to_working(c / 255) for c in (70, 98, 133)]
+    assert result == [expected, expected]
+
+
+# ── B5: OCIO bitmaps refused before mutation (decision 240) ─────────────────────────────────────
+
+
+OCIO_BITMAPS = f"""
+SUBSTANCE = {OCIO_CONFIG!r}
+project.create(PLANE, project.Settings(default_texture_resolution=256, ocio_config_hash=SUBSTANCE))
+stack = ts.get_active_stack()
+images = {{name: resource.import_project_resource(WORK + "/" + name + ".png",
+                                                  resource.Usage.TEXTURE).identifier()
+          for name in ("rgb8_256", "rgb8_128", "grey8_256", "grey16_256")}}
+fill = ls.insert_fill(top(stack))
+fill.active_channels = {{CT.BaseColor}}
+fill.add_mask(ls.MaskBackground.Black)
+mask = ls.insert_fill(ls.InsertPosition.inside_node(fill, ls.NodeStack.Mask))
+other = ls.insert_fill(top(stack))
+other.active_channels = {{CT.BaseColor}}
+out = {{}}
+
+def refused(name, call, *args):
+    revision = project.revision()
+    out[name] = [raises(call, *args), project.revision() == revision]
+
+refused("small", fill.set_source, CT.BaseColor, images["rgb8_128"], "sRGB")
+refused("grey_mask", mask.set_source, None, images["grey8_256"], "Data")
+out["one_to_one"] = fill.set_source(CT.BaseColor, images["rgb8_256"], "sRGB").get_color_space()
+out["grey16_mask"] = mask.set_source(None, images["grey16_256"], "Data").get_color_space()
+fill.set_projection_mode(ls.ProjectionMode.UV)
+refused("scaled", fill.set_projection_parameters, ls.UVProjectionParams(
+    uv_transformation=ls.UVTransformationParams(scale=[2.0, 2.0])))
+refused("resized", stack.material().set_resolution, ts.Resolution(512, 512))
+
+# Imported and bound in one transaction: the support check reads the staged bytes.
+def staged():
+    with uzpainter.Transaction("import and bind"):
+        image = resource.import_project_resource(WORK + "/rgb8_64.png", resource.Usage.TEXTURE)
+        other.set_source(CT.BaseColor, image.identifier(), "sRGB")
+refused("staged", staged)
+out["staged_resources"] = sorted(r.name for r in resource.list_project_resources())
+
+# Legacy keeps these refusals at evaluation (sources.h).
+project.close()
+create()
+legacy = ls.insert_fill(top(ts.get_active_stack()))
+small = resource.import_project_resource(WORK + "/rgb8_128.png", resource.Usage.TEXTURE)
+out["legacy_small"] = legacy.set_source(CT.BaseColor, small.identifier(), "sRGB").get_color_space()
+result = out
+"""
+
+
+def test_ocio_bitmaps_the_evaluator_refuses_are_refused_before_mutation(
+    run: Run, tmp_path: Path
+) -> None:
+    """B5 (practical-e2e, decision 240): under OCIO a bitmap use Session O does not record (an
+    8-bit colour bitmap not at 1:1, an 8-bit grey mask source) is refused by the support check
+    before anything is committed, from the PNG header, as the evaluation refuses it: on bind, on a
+    projection change, on a resize of the texture set, and for bytes imported in the same
+    transaction. Legacy keeps the evaluation's refusal."""
+    for name, size, channels, depth in (
+        ("rgb8_256", 256, 3, 8),
+        ("rgb8_128", 128, 3, 8),
+        ("rgb8_64", 64, 3, 8),
+        ("grey8_256", 256, 1, 8),
+        ("grey16_256", 256, 1, 16),
+    ):
+        png_file(tmp_path / f"{name}.png", size, channels, depth)
+    result = ok(run(OCIO_BITMAPS))
+    for name in ("small", "grey_mask", "scaled", "resized", "staged"):
+        message, unchanged = result[name]
+        assert message.startswith("NotYetSupported: node="), (name, message)
+        assert unchanged is True, name
+    assert (
+        "under OCIO, a 128x128 8-bit colour bitmap on the channel BaseColor of a 256x256"
+        in (result["small"][0])
+    )
+    assert "a 256x256 8-bit grey bitmap as a mask source" in result["grey_mask"][0]
+    assert (
+        "a 256x256 8-bit colour bitmap on the channel BaseColor of a 512x512"
+        in (result["resized"][0])
+    )
+    assert "a 64x64 8-bit colour bitmap" in result["staged"][0]
+    assert "rgb8_64" not in result["staged_resources"]
+    assert result["one_to_one"] == "sRGB" and result["grey16_mask"] == "Data"
+    assert result["legacy_small"] == "sRGB"
+
+
+OCIO_RESIZE = f"""
+SUBSTANCE = {OCIO_CONFIG!r}
+project.create(PLANE, project.Settings(default_texture_resolution=256, ocio_config_hash=SUBSTANCE))
+stack = ts.get_active_stack()
+material = stack.material()
+images = {{size: resource.import_project_resource(WORK + "/rgb8_" + str(size) + ".png",
+                                                  resource.Usage.TEXTURE).identifier()
+          for size in (256, 512)}}
+fill = ls.insert_fill(top(stack))
+fill.active_channels = {{CT.BaseColor}}
+fill.set_source(CT.BaseColor, images[256], "sRGB")
+out = {{}}
+
+def state():
+    return [material.get_resolution().width,
+            fill.get_source(CT.BaseColor).resource_id().url() == images[512].url()]
+
+with uzpainter.Transaction("resize, then rebind") as t:
+    material.set_resolution(ts.Resolution(512, 512))
+    fill.set_source(CT.BaseColor, images[512], "sRGB")
+out["resize_then_rebind"] = [t.result.status, state()]
+with uzpainter.Transaction("rebind, then resize") as t:
+    fill.set_source(CT.BaseColor, images[256], "sRGB")
+    material.set_resolution(ts.Resolution(256, 256))
+out["rebind_then_resize"] = [t.result.status, state()]
+
+# A transaction whose final state the evaluation refuses commits nothing.
+def resize_only():
+    with uzpainter.Transaction("resize only"):
+        material.set_resolution(ts.Resolution(512, 512))
+revision = project.revision()
+out["resize_only"] = [raises(resize_only), project.revision() == revision, state()]
+
+# Outside a transaction every call commits, so its state is checked: another source first.
+routed = [raises(material.set_resolution, ts.Resolution(512, 512))]
+fill.set_source(CT.BaseColor, cm.Color(0.5, 0.5, 0.5, "Working"))
+routed.append(uzpainter.last_result().status)
+routed.append(material.set_resolution(ts.Resolution(512, 512)).status)
+fill.set_source(CT.BaseColor, images[512], "sRGB")
+routed.append(uzpainter.last_result().status)
+out["routed"] = routed + [state()]
+result = out
+"""
+
+
+def test_an_ocio_resize_and_rebind_commit_in_one_transaction_in_either_order(
+    run: Run, tmp_path: Path
+) -> None:
+    """Decision 240 review: under OCIO a texture set holding a 1:1 bitmap is resized and rebound
+    to an image of the new size in one `uzpainter.Transaction`, in either order. The intermediate
+    state of each order is a use Session O does not record; only the state that commits is
+    checked. A transaction that commits such a state is refused at its end; outside one, every
+    call commits and is checked, so another source is bound before the resize."""
+    for size in (256, 512):
+        png_file(tmp_path / f"rgb8_{size}.png", size, 3, 8)
+    result = ok(run(OCIO_RESIZE))
+    assert result["resize_then_rebind"] == ["committed", [512, True]]
+    assert result["rebind_then_resize"] == ["committed", [256, False]]
+    message, unchanged, state = result["resize_only"]
+    assert message.startswith("NotYetSupported: node="), message
+    assert "a 256x256 8-bit colour bitmap on the channel BaseColor of a 512x512" in message
+    assert unchanged is True and state == [256, False]
+    refused, *statuses, routed = result["routed"]
+    assert refused.startswith("NotYetSupported: node="), refused
+    assert "bind another source first" in refused
+    assert statuses == ["committed", "committed", "committed"]
+    assert routed == [512, True]
 
 
 # ── 3.7 in-place resource replacement (LAY-08) ──────────────────────────────────────────────────
@@ -1139,3 +1327,208 @@ def test_export_plan_dry_run_and_job_errors(run: Run) -> None:
     assert result["job"][0] == "failed" and result["job"][1].startswith("ValueError")
     assert result["busy"][0].startswith("BusyError")
     assert result["closed"] is None
+
+
+# ── B19: the calls on one committed revision share its CPU evaluation (decision 246) ───────────
+
+# The export helpers: the plane's BaseColor (RGB) and Height (L) as 16-bit PNGs, passthrough; and
+# an export timed, with the SHA-256 of every file it wrote.
+EXPORT_HELPERS = """
+def config(folder, **parameters):
+    def doc(name, source, letters):
+        return {"fileName": "$textureSet_" + name, "channels": [
+            {"destChannel": c, "srcChannel": c, "srcMapType": "documentMap", "srcMapName": source}
+            for c in letters]}
+    values = {"fileFormat": "png", "bitDepth": "16", "dithering": False,
+              "paddingAlgorithm": "passthrough"}
+    maps = [doc("BaseColor", "basecolor", "RGB"), doc("Height", "height", "L")]
+    return {"exportShaderParams": False, "exportPath": WORK + "/" + folder,
+            "defaultExportPreset": "p", "exportPresets": [{"name": "p", "maps": maps}],
+            "exportList": [{"rootPath": "uzp_plane"}],
+            "exportParameters": [{"parameters": dict(values, **parameters)}]}
+
+
+def timed(folder, **parameters):
+    start = time.perf_counter()
+    out = export.export_project_textures(config(folder, **parameters))
+    return [time.perf_counter() - start, {f["relative_path"]: f["sha256"] for f in out["files"]}]
+"""
+
+# Eight bitmap fills magnified under bitmap masks and Levels effects, over a uniform base: so much
+# more evaluation than encoding that a call which evaluates the stack again stands out against one
+# that only encodes, on one thread or on many.
+REVISION_STACK = (
+    EXPORT_HELPERS
+    + """
+stack = create(256)
+checker = resource.import_project_resource(IMAGES + "/checker-16.png", resource.Usage.TEXTURE)
+left = resource.import_project_resource(IMAGES + "/mask-left-half.png", resource.Usage.TEXTURE)
+base = ls.insert_fill(top(stack))
+base.active_channels = {CT.BaseColor, CT.Height}
+base.set_source(CT.BaseColor, cm.Color(0.2, 0.3, 0.4))
+base.set_source(CT.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+for _ in range(8):
+    detail = ls.insert_fill(top(stack))
+    detail.active_channels = {CT.BaseColor}
+    detail.set_source(CT.BaseColor, checker.identifier())
+    detail.add_mask(ls.MaskBackground.Black)
+    mask = ls.insert_fill(ls.InsertPosition.inside_node(detail, ls.NodeStack.Mask))
+    mask.set_source(None, left.identifier())
+    ls.insert_levels_effect(ls.InsertPosition.inside_node(detail, ls.NodeStack.Content))
+"""
+)
+
+
+def test_calls_on_one_revision_reuse_its_evaluation(run: Run) -> None:
+    """B19 (decision 246): an export of a revision an earlier export evaluated encodes from the
+    kept tiles: the same bytes in a fraction of the time. A refusal raised before evaluating
+    writes nothing and keeps the evaluation; a texture-space capture of the revision reads it and
+    writes the export's BaseColor bytes."""
+    result = ok(
+        run(
+            REVISION_STACK
+            + """
+cold = timed("cold")
+warm = [timed("warm1"), timed("warm2")]
+refused = raises(export.export_project_textures, config("refused", bitDepth="8", dithering=True))
+after = timed("after-refusal")
+capture = uzpainter.render.capture(WORK + "/capture/base.png", "base_color")
+result = {"cold": cold, "warm": warm, "after": after, "refused": refused,
+          "refused_written": os.path.exists(WORK + "/refused/generations"),
+          "capture": capture["hashes"]["png"]}
+"""
+        )
+    )
+    cold_seconds, cold_files = result["cold"]
+    assert sorted(cold_files) == ["uzp_plane_BaseColor.png", "uzp_plane_Height.png"]
+    assert all(files == cold_files for _, files in [*result["warm"], result["after"]])
+    # The cold export evaluated the stack; the others only encoded it again.
+    warm_seconds = [seconds for seconds, _ in result["warm"]] + [result["after"][0]]
+    assert max(warm_seconds) * 3 < cold_seconds, (cold_seconds, warm_seconds)
+    assert result["refused"].startswith("NotYetSupported"), result["refused"]
+    assert result["refused_written"] is False
+    assert result["capture"] == cold_files["uzp_plane_BaseColor.png"]
+
+
+def test_a_commit_supersedes_the_kept_evaluation(run: Run) -> None:
+    """B19 (decision 246): after a commit, an export evaluates the new revision. Its bytes are
+    the bytes a fresh process writes for that revision, never the bytes of the revision kept
+    before it."""
+    edited = ok(
+        run(
+            REVISION_STACK
+            + """
+before = timed("before")
+base.set_source(CT.BaseColor, cm.Color(0.6, 0.3, 0.1))
+after = timed("after")
+project.save_as(WORK + "/edited.uzp")
+result = {"before": before[1], "after": after[1]}
+"""
+        )
+    )
+    fresh = ok(
+        run(
+            EXPORT_HELPERS
+            + """
+project.open(WORK + "/edited.uzp")
+result = timed("fresh")[1]
+"""
+        )
+    )
+    before, after = edited["before"], edited["after"]
+    assert after["uzp_plane_BaseColor.png"] != before["uzp_plane_BaseColor.png"]
+    assert after["uzp_plane_Height.png"] == before["uzp_plane_Height.png"]
+    assert fresh == after
+
+
+# A virtual normal map's export allocates its read-out tile before it evaluates the Normal
+# channel, where a bitmap minified at 30 degrees is refused (decisions 061, 084): a refusal
+# raised after a tile was allocated.
+REFUSED_AFTER_ALLOCATING = (
+    EXPORT_HELPERS
+    + """
+stack = create(256)
+checker = resource.import_project_resource(IMAGES + "/checker-16.png", resource.Usage.TEXTURE)
+base = ls.insert_fill(top(stack))
+base.active_channels = {CT.BaseColor, CT.Height}
+base.set_source(CT.BaseColor, cm.Color(0.2, 0.3, 0.4))
+base.set_source(CT.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+bump = ls.insert_fill(top(stack))
+bump.active_channels = {CT.Normal}
+bump.set_source(CT.Normal, checker.identifier())
+bump.set_projection_mode(ls.ProjectionMode.UV)
+bump.set_projection_parameters(
+    ls.UVProjectionParams(
+        filtering_mode=ls.FilteringMode.BilinearHQ,
+        uv_wrapping_mode=ls.UVWrapMode.Repeat,
+        uv_transformation=ls.UVTransformationParams(
+            scale_mode=ls.ScaleMode.Factors, scale=[32.0, 32.0], rotation=30.0, offset=[0.0, 0.0]
+        ),
+    )
+)
+
+
+def normal(folder):
+    c = config(folder)
+    channels = [{"destChannel": d, "srcChannel": d, "srcMapType": "virtualMap",
+                 "srcMapName": "Normal_OpenGL"} for d in "RGB"]
+    c["exportPresets"][0]["maps"] = [{"fileName": "$textureSet_Normal", "channels": channels}]
+    return [raises(export.export_project_textures, c),
+            os.path.exists(WORK + "/" + folder + "/generations")]
+"""
+)
+
+
+def test_a_call_that_fails_after_allocating_a_tile_drops_the_kept_evaluation(run: Run) -> None:
+    """B19 (decision 246): a call on a kept revision that fails once it has allocated a tile drops
+    the evaluation, so the tile it allocated and never filled serves no later call. The virtual
+    normal export allocates its read-out tile, then refuses the Normal channel's minified bitmap:
+    repeated on the same revision it refuses the same way and writes nothing (before the fix the
+    repeat read the unfilled tile and published a normal map), and the BaseColor and Height
+    exports keep their bytes."""
+    result = ok(
+        run(
+            REFUSED_AFTER_ALLOCATING
+            + """
+first = timed("first")[1]
+refusals = [normal("refused"), normal("again")]
+after = timed("after")[1]
+result = {"first": first, "refusals": refusals, "after": after}
+"""
+        )
+    )
+    [refused, refused_written], [again, again_written] = result["refusals"]
+    assert refused is not None and "rotation of 30" in refused, refused
+    assert again == refused
+    assert refused_written is False and again_written is False
+    assert result["after"] == result["first"]
+
+
+def test_a_capture_while_an_export_job_holds_the_evaluation_evaluates_privately(run: Run) -> None:
+    """B19 (decision 246): a capture made while an export job holds the revision's evaluation
+    evaluates on a private one and writes the bytes it writes from the kept evaluation once the
+    job ended; the job's files equal an export of the same revision made after it."""
+    result = ok(
+        run(
+            REVISION_STACK.replace("create(256)", "create(1024)")
+            + """
+job = export.start(config("job"))
+while job.status in ("queued", "running") and job.progress < 0.2:  # 0.2: the job holds it
+    time.sleep(0.001)
+before = [job.status, job.progress]
+during = uzpainter.render.capture(WORK + "/during/mask.png", "mask:%d" % detail.uid(), stack=None)
+held = job.status
+out = job.wait()
+after = uzpainter.render.capture(WORK + "/after/mask.png", "mask:%d" % detail.uid(), stack=None)
+again = timed("again")[1]
+result = {"before": before, "held": held, "during": during["hashes"], "after": after["hashes"],
+          "job": {f["relative_path"]: f["sha256"] for f in out["files"]}, "again": again}
+"""
+        )
+    )
+    status, progress = result["before"]
+    assert status == "running" and progress >= 0.2, result["before"]
+    # The job still ran when the capture ended: the capture never had the kept evaluation.
+    assert result["held"] == "running"
+    assert result["during"] == result["after"]
+    assert result["again"] == result["job"]

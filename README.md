@@ -83,6 +83,9 @@ The following commands use your own script, project and export configuration. Re
 paths and export identity values with yours.
 
 ```powershell
+# List every command and option.
+.\zig-out\bin\UzPainter.exe --help
+
 # Host a script with the embedded API and compatibility facade.
 .\zig-out\bin\UzPainter.exe run .\paint.py --gpu-backend dx12
 

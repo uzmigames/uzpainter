@@ -152,23 +152,27 @@ def ramp_codes() -> np.ndarray:
 
 
 def ramp_png(path: Path) -> str:
-    """A 256x256 RGB16 bitmap holding `ramp_codes` in its three components (the fill source of
-    `spec`); returns its SHA-256."""
+    """A 256x256 grey 16-bit bitmap holding `ramp_codes` (the fill source of `spec`); returns its
+    SHA-256. A grey bitmap feeds every channel of a colour channel, and the one-channel channels
+    read it without the colour-on-mono texture, which is recorded only for 8-bit images
+    (decision 218)."""
     from tools.parity.feasibility import png
 
-    samples = np.repeat(ramp_codes()[:, :, None], 3, axis=-1)
-    data = png.encode(samples.astype(np.int64), 16)
+    data = png.encode(ramp_codes().astype(np.int64), 16)
     path.write_bytes(data)
     return hashlib.sha256(data).hexdigest()
 
 
-def spec(tmp: Path, mesh: Path | None = GRID, name: str = "s0") -> Path:
+def spec(tmp: Path, mesh: Path | None = GRID, name: str = "s0", height: bool = True) -> Path:
     """A texture set `name` (the mesh material it covers) of the grid mesh: User0 sRGB8, BaseColor
-    sRGB8, Height L16F and SpecularRoughness L16 filled from a ramp bitmap, and an empty Normal
-    RGB16F."""
+    sRGB8, Height L16F (empty when not `height`) and SpecularRoughness L16 filled from a ramp
+    bitmap, and an empty Normal RGB16F."""
     tmp.mkdir(parents=True, exist_ok=True)
     sha = ramp_png(tmp / "ramp.png")
     bitmap = {"bitmap": sha, "color_space": "Raw"}
+    sources = {"User0": bitmap, "BaseColor": bitmap, "Height": bitmap, "SpecularRoughness": bitmap}
+    if not height:
+        del sources["Height"]
     document: dict[str, Any] = {
         "name": name,
         "resolution": [256, 256],
@@ -180,17 +184,7 @@ def spec(tmp: Path, mesh: Path | None = GRID, name: str = "s0") -> Path:
             {"type": "Normal", "format": "RGB16F"},
         ],
         "resources": [{"sha256": sha, "png": "ramp.png"}],
-        "layers": [
-            {
-                "kind": "fill",
-                "sources": {
-                    "User0": bitmap,
-                    "BaseColor": bitmap,
-                    "Height": bitmap,
-                    "SpecularRoughness": bitmap,
-                },
-            }
-        ],
+        "layers": [{"kind": "fill", "sources": sources}],
     }
     if mesh is not None:
         document["mesh"] = str(mesh)
@@ -200,6 +194,11 @@ def spec(tmp: Path, mesh: Path | None = GRID, name: str = "s0") -> Path:
 
 def chan(dest: str, kind: str, name: str) -> dict[str, str]:
     return {"destChannel": dest, "srcChannel": dest, "srcMapType": kind, "srcMapName": name}
+
+
+def normal_map(name: str = "Normal_OpenGL") -> list[dict[str, Any]]:
+    """One RGB file `$textureSet_n` of the virtual normal `name`."""
+    return [{"fileName": "$textureSet_n", "channels": [chan(c, "virtualMap", name) for c in "RGB"]}]
 
 
 def config(
@@ -752,8 +751,6 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
     - `infinite` padding is written (exception EXC-007): the covered texels hold their evaluated
       values, and the OpenEXR 32f Height equals the padding of padding.h written independently
       (`reference_padding`) over the coverage of `tools.parity.coverage`, value for value;
-    - a virtualMap source with `infinite` is written; with `passthrough` it is refused (not
-      recorded outside the islands);
     - `passthrough` writes every texel's evaluated value (the L16 roughness holds the ramp's codes
       inside and outside the islands);
     - without a texturing mesh the export fails before writing."""
@@ -784,36 +781,105 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
     expected = reference_padding(evaluated.astype(np.float32), covered)
     assert np.array_equal(height.astype(np.float32).view(np.uint32), expected.view(np.uint32))
 
-    normal = [
-        {
-            "fileName": "$textureSet_n",
-            "channels": [chan(c, "virtualMap", "Normal_OpenGL") for c in "RGB"],
-        }
-    ]
-    out = tmp_path / "virtual-infinite"
-    cfg = config(out, root="uzp_sphere")
-    cfg["exportPresets"][0]["maps"] = normal
-    cfg["exportParameters"] = cfg["exportParameters"][:1]
-    result = export(export_tests, sphere, cfg, tmp_path / "run-virtual-infinite")
-    assert "error" not in result, result
-    assert list(files_under(out)) == ["uzp_sphere_n.png"]
-
-    out = tmp_path / "virtual"
-    cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
-    cfg["exportPresets"][0]["maps"] = normal
-    cfg["exportParameters"] = cfg["exportParameters"][:1]
-    result = export(export_tests, sphere, cfg, tmp_path / "run-virtual")
-    assert result.get("error") == "NotYetSupported", result
-    assert "virtualMap source outside the UV islands" in result["message"]
-    assert files_under(out) == {}
-
     out = tmp_path / "no-mesh"
     result = export(export_tests, spec(tmp_path / "bare", None), config(out), tmp_path / "run-bare")
     assert result.get("error") == "Failure" and "no texturing mesh" in result["message"], result
     assert files_under(out) == {}
 
 
+def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
+    """B18 (decision 245): on the sphere, whose UV islands leave texels uncovered, a combined
+    virtual normal reads the Height outside the islands at its island-edge texels, where Painter's
+    Height is not reproduced:
+    - Normal_OpenGL and Normal_DirectX are refused before anything is written under `infinite` and
+      `passthrough`, naming the cause, the evidence and the owner, with a layer writing the Height
+      and with none (no recording shows Painter's empty Height outside the islands), and so is the
+      pipeline's five-map export that holds one, as a whole;
+    - so is every diagnosticMap that isolates, compares or summarises one (`regionStats` a
+      statistics file);
+    - on the grid, whose coverage is complete, the same sources are written."""
+
+    def variant(name: str, mesh: Path, set_name: str, height: bool) -> Path:
+        path = spec(tmp_path / name, mesh, set_name, height=height)
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["layers"][0]["uid"] = 501
+        path.write_text(json.dumps(document), encoding="utf-8")
+        return path
+
+    def single(out: Path, root: str, kind: str, source: str, padding: str) -> dict[str, Any]:
+        cfg = config(out, root=root, paddingAlgorithm=padding)
+        letters = "L" if source.startswith("regionStats/") else "RGB"
+        cfg["exportPresets"][0]["maps"] = [
+            {"fileName": "$textureSet_n", "channels": [chan(c, kind, source) for c in letters]}
+        ]
+        cfg["exportParameters"] = cfg["exportParameters"][:1]
+        return cfg
+
+    sources = [
+        ("virtualMap", "Normal_OpenGL"),
+        ("virtualMap", "Normal_DirectX"),
+        ("diagnosticMap", "isolated/Normal_OpenGL/501"),
+        ("diagnosticMap", "contribution/Normal_DirectX/501"),
+        ("diagnosticMap", "regionStats/Normal_OpenGL/501"),
+    ]
+    relief = variant("sphere", SPHERE, "uzp_sphere", height=True)
+    flat = variant("sphere-flat", SPHERE, "uzp_sphere", height=False)
+    for label, project in (("relief", relief), ("flat", flat)):
+        for kind, source in sources:
+            for padding in ("infinite", "passthrough"):
+                case = f"{label}-{source.replace('/', '-')}-{padding}"
+                out = tmp_path / case
+                cfg = single(out, "uzp_sphere", kind, source, padding)
+                result = export(export_tests, project, cfg, tmp_path / f"run-{case}")
+                assert result.get("error") == "NotYetSupported", (case, result)
+                message = result["message"]
+                assert "whose UV islands do not cover the whole tile" in message, message
+                assert f'the {kind} "{source}" reads the combined virtual normal' in message
+                assert "island-edge texels" in message and "recording R-090" in message, message
+                assert "no recording shows it for a Height without layers" in message, message
+                assert "phase1.25_pilot-wand item 2.7" in message and "decision 245" in message
+                assert files_under(out) == {}, case
+
+    out = tmp_path / "five"
+    cfg = config(out, root="uzp_sphere")
+    cfg["exportPresets"][0]["maps"] += normal_map()
+    result = export(export_tests, relief, cfg, tmp_path / "run-five")
+    assert result.get("error") == "NotYetSupported", result
+    assert "island-edge texels" in result["message"]
+    assert files_under(out) == {}
+
+    grid = variant("grid", GRID, "s0", height=False)
+    for kind, source in sources:
+        case = f"grid-{source.replace('/', '-')}"
+        out = tmp_path / case
+        cfg = single(out, "s0", kind, source, "infinite")
+        result = export(export_tests, grid, cfg, tmp_path / f"run-{case}")
+        assert "error" not in result, (case, result)
+        assert len(files_under(out)) == 1, case
+
+
 # ── Tier 0 (owner's machine) ─────────────────────────────────────────────────
+
+
+def test_island_edge_normals_differ_from_painter(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 245, the evidence of the refusal above: on the recorded height-normal sphere and
+    bevelled cube, UzPainter's evaluated Normal_OpenGL equals Painter's on every interior texel and
+    differs on island-edge texels, where Painter's r1 and r2 agree; and Painter's Normal_OpenGL
+    covered texels are the same under every padding of export-padding (passthrough, infinite,
+    color, transparent and diffusion at every dilation), so no padding rule can make them exact."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.island_edge_normals(export_tests, tmp_path)
+    print(json.dumps(report, indent=1))
+    goldens = report["goldens"]
+    assert set(goldens) == set(encoders_tier0.ISLAND_NORMAL_GOLDENS)
+    for counts in goldens.values():
+        assert counts["interior_differing"] == 0, counts
+        assert 0 < counts["edge_differing"] <= counts["edge"], counts
+        assert counts["edge_r1_r2_differing"] == 0, counts
+    paddings = report["every_padding"]
+    assert len(paddings) == 46, sorted(paddings)
+    assert set(paddings.values()) == {0}, paddings
 
 
 @pytest.fixture(scope="module")
@@ -987,6 +1053,75 @@ def test_ocio_encode_equals_painter_files(export_tests: Path, tmp_path: Path) ->
         "s5 probe 51: s5_basecolor_sRGB.png",
     ], report["unstable"]
     assert report["identical"] == report["comparisons"] == 2 * report["files"] - 5, report
+
+
+def test_painter_ocio_png16_differs_from_legacy_on_74_values() -> None:
+    """B17 of the practical end-to-end run (decision 190): Painter's own PNG 16 of an sRGB8
+    BaseColor differs between its OCIO and Legacy twins (export-ocio-encode against
+    export-ocio-encode-legacy) by one code, on exactly `OCIO_PNG16_DIFFERING_CODES` of the 256
+    sRGB8 codes (s3) and on the empty BaseColor (s7), in both recordings; their PNG 8 and OpenEXR
+    32f files are byte-identical. A Legacy and an OCIO export of one stack differing there is
+    parity, not a bug."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.painter_ocio_against_legacy()
+    assert report["problems"] == [], report["problems"]
+    assert report["different"] == [], report["different"]
+    assert len(report["same"]) == 2 * len(encoders_tier0.OCIO_TWIN_SETS) * 2, report["same"]
+    for recording in ("r1", "r2"):
+        ocio = report["tables"][("ocio", recording)]
+        legacy = report["tables"][("legacy", recording)]
+        assert sorted(ocio) == sorted(legacy) == list(range(256)), recording
+        differing = [c for c in range(256) if ocio[c] != legacy[c]]
+        assert differing == list(encoders_tier0.OCIO_PNG16_DIFFERING_CODES), (recording, differing)
+        assert {c: ocio[c] - legacy[c] for c in differing if ocio[c] - legacy[c] != -1} == {6: 1}
+        for mode, code in encoders_tier0.OCIO_EMPTY_BASECOLOR_PNG16.items():
+            assert report["empty"][(mode, recording)] == [code], (mode, recording)
+
+
+def test_ocio_png16_differs_from_legacy_where_painter_does(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """B17 of the practical end-to-end run (decision 190): a stack that stores the same values
+    under Legacy and OCIO, exported from a Legacy and from an OCIO project, gives the same PNG 8
+    and OpenEXR 32f files, and PNG 16 files that differ by one code exactly where Painter's do
+    (`OCIO_PNG16_DIFFERING_CODES` and the empty BaseColor, pinned on Painter's files by
+    `test_painter_ocio_png16_differs_from_legacy_on_74_values`): export-ocio-encode's s3 (every
+    sRGB8 code of the authored ramp on BaseColor at 1:1) and s7 (the empty BaseColor), rebuilt
+    from the repository's manifest. A value outside the recorded ones, the luma of the ramp, is
+    written under Legacy and refused under OCIO before anything is written."""
+    from tests.export import encoders_tier0
+    from tools.parity.fit.decode import decode
+
+    report = encoders_tier0.ocio_twin_written(export_tests, tmp_path)
+    files = report["files"]
+    expected = ["s3 luma", *(f"{s} step {n}" for s in ("s3", "s7") for n in (46, 47, 48))]
+    assert sorted(files) == expected, dict(report["refused"])
+    for where in ("s3 step 47", "s3 step 48", "s7 step 47", "s7 step 48"):
+        assert files[where]["legacy"].read_bytes() == files[where]["ocio"].read_bytes(), where
+
+    def values(where: str, mode: str) -> np.ndarray:
+        result: np.ndarray = decode(files[where][mode].read_bytes()).values.reshape(-1)
+        return result.astype(np.int64)
+
+    codes = values("s3 step 47", "legacy")
+    legacy, ocio = values("s3 step 46", "legacy"), values("s3 step 46", "ocio")
+    assert sorted(set(codes.tolist())) == list(range(256))
+    for png16 in (legacy, ocio):  # each a function of the stored code
+        assert len(set(zip(codes.tolist(), png16.tolist(), strict=True))) == 256
+    assert sorted(set(codes[legacy != ocio].tolist())) == list(
+        encoders_tier0.OCIO_PNG16_DIFFERING_CODES
+    )
+    assert set((ocio - legacy).tolist()) == {-1, 0, 1}
+    for mode, code in encoders_tier0.OCIO_EMPTY_BASECOLOR_PNG16.items():
+        assert sorted(set(values("s7 step 46", mode).tolist())) == [code], mode
+
+    assert set(files["s3 luma"]) == {"legacy"}, dict(report["refused"])
+    error, message, written = report["refused"]["s3 luma"]["ocio"]
+    assert error == "Failure" and message.startswith("evaluator:unsupported_source"), message
+    assert "under OCIO, the PNG encode of the linear value" in message, message
+    assert "decision 190" in message, message
+    assert written == []
 
 
 def test_srgb_variants_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:

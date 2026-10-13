@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -51,6 +52,15 @@ std::optional<float> PainterOcioSrgbDecode(float component) {
     return std::bit_cast<float>((*it)[1]);
 }
 
+float PainterLegacySrgbDecode(float component) {
+    constexpr float kInv1292 = 1.0f / 12.92f;  // the float32 quotients Painter multiplies by
+    constexpr float kInv1055 = 1.0f / 1.055f;
+    const float x = component;
+    if (x <= 0.04045f) return x * kInv1292;
+    const float base = (x + 0.055f) * kInv1055;
+    return static_cast<float>(std::pow(static_cast<double>(base), static_cast<double>(2.4f)));
+}
+
 render::Result<void> CheckColourManagement(const core::Project& project, core::Id node) {
     const std::string& mode = project.settings.color_management.mode;
     if (mode.empty() || mode == "legacy" || PainterOcio(project)) return {};
@@ -61,11 +71,45 @@ render::Result<void> CheckColourManagement(const core::Project& project, core::I
                     node);
 }
 
+namespace {
+
+struct PngContext {
+    spng_ctx* ctx = spng_ctx_new(0);
+    ~PngContext() { spng_ctx_free(ctx); }
+};
+
+/// The shape `DecodeBitmap` gives an image of header `ihdr` (sources.h `BitmapShape`).
+BitmapShape ShapeOf(const spng_ihdr& ihdr) {
+    const bool grey =
+        ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE || ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE_ALPHA;
+    return BitmapShape{ihdr.width, ihdr.height, grey ? 1u : 3u,
+                       ihdr.bit_depth == 16 ? render::TexelEncoding::Unorm16 : render::TexelEncoding::Unorm8};
+}
+
+}  // namespace
+
+std::optional<BitmapShape> BitmapShapeOf(std::string_view bytes) {
+    PngContext context;
+    spng_ihdr ihdr{};
+    if (context.ctx == nullptr || spng_set_png_buffer(context.ctx, bytes.data(), bytes.size()) != 0 ||
+        spng_get_ihdr(context.ctx, &ihdr) != 0) {
+        return std::nullopt;
+    }
+    return ShapeOf(ihdr);
+}
+
+bool OcioBitmapRecorded(bool mask, const UvProjection& projection, uint32_t width, uint32_t height,
+                        const BitmapShape& shape) {
+    const bool kind = mask ? shape.encoding == render::TexelEncoding::Unorm16 && shape.channels == 1
+                           : shape.encoding == render::TexelEncoding::Unorm8 && shape.channels == 3;
+    const bool oneToOne = shape.width == width && shape.height == height && projection.scale[0] == 1.0 &&
+                          projection.scale[1] == 1.0 && projection.cosR == 1.0 && projection.sinR == 0.0 &&
+                          projection.offset[0] == 0.0 && projection.offset[1] == 0.0;
+    return kind && oneToOne;
+}
+
 render::Result<DecodedImage> DecodeBitmap(std::string_view bytes) {
-    struct Context {
-        spng_ctx* ctx = spng_ctx_new(0);
-        ~Context() { spng_ctx_free(ctx); }
-    } context;
+    PngContext context;
     auto fail = [](const char* what, int code) {
         return EvalFail(EvalErrorKind::UnsupportedSource,
                         std::string("bitmap PNG ") + what + ": " + spng_strerror(code));
@@ -84,13 +128,12 @@ render::Result<DecodedImage> DecodeBitmap(std::string_view bytes) {
     // SPNG_FMT_RGBA16 is host-endian; rows come out top first.
     if (int e = spng_decode_image(context.ctx, rgba.data(), size, format, 0)) return fail("decode", e);
 
+    const BitmapShape shape = ShapeOf(ihdr);
     DecodedImage image;
-    image.width = ihdr.width;
-    image.height = ihdr.height;
-    const bool grey = ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE ||
-                      ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE_ALPHA;
-    image.channels = grey ? 1 : 3;
-    image.encoding = sixteen ? render::TexelEncoding::Unorm16 : render::TexelEncoding::Unorm8;
+    image.width = shape.width;
+    image.height = shape.height;
+    image.channels = shape.channels;
+    image.encoding = shape.encoding;
     const size_t texels = size_t{image.width} * image.height;
     image.values.resize(texels * image.channels);
     for (size_t t = 0; t < texels; ++t) {
@@ -121,6 +164,15 @@ std::shared_ptr<const DecodedImage> DecodingResourceProvider::Fetch(std::string_
     m_cache.emplace(std::string(sha256), image);
     ++m_decodes;
     return image;
+}
+
+bool DecodingResourceProvider::Available(std::string_view sha256) const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_cache.contains(sha256) || m_available.contains(sha256)) return true;
+    std::optional<std::string> bytes = m_fetch ? m_fetch(sha256) : std::nullopt;
+    if (!bytes || core::Sha256Hex(*bytes) != sha256) return false;
+    m_available.emplace(sha256);
+    return true;
 }
 
 size_t DecodingResourceProvider::Decodes() const {

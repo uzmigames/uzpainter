@@ -232,6 +232,9 @@ struct SourceInputs {
     /// Called before file `file` (of `files`) is evaluated (`EncodeExport` step 2); false stops the
     /// export there with an `export:` failure and nothing written (a job's file checkpoint).
     std::function<bool(size_t file, size_t files)> beforeFile;
+    /// The material views already computed for one material of the exported revision, which its
+    /// diagnosticMap sources read (`evaluator::DiagnosticRequest::materialViews`); may be null.
+    std::shared_ptr<const evaluator::MaterialViews> materialViews;
 };
 
 /// A planned file's content before processing: its channels in destination order, float32

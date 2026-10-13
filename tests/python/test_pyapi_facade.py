@@ -9,12 +9,15 @@ Painter's private goldens are `test_pyapi_facade_tier0.py` (owner's machine).
 from __future__ import annotations
 
 import json
+import struct
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from tests.python.conftest import REPO_ROOT, Run
+from tests.export.encoders_tier0 import srgb_to_working
+from tests.python.conftest import REPO_ROOT, Run, png_file
+from tools.parity import ocio_srgb_table
 
 INVENTORY = REPO_ROOT / "tools" / "capabilities" / "painter-api-inventory.json"
 
@@ -23,6 +26,11 @@ def ok(report: dict[str, Any]) -> Any:
     """The `result` of a script that ran to its end."""
     assert report["status"] == "ok", report.get("error", {}).get("traceback", report)
     return report["result"]
+
+
+def f32(value: float) -> float:
+    """`value` rounded to float32, as a uniform colour is stored."""
+    return float(struct.unpack("f", struct.pack("f", value))[0])
 
 
 # ── 3.2 Provenance ──────────────────────────────────────────────────────────────────────────────
@@ -406,6 +414,115 @@ def test_colour_rules_implicit_space_conversions_and_the_pinned_profile(facade: 
     assert result["ocio_raw_rough"] == [0.3700000047683716] * 3
 
 
+# ── One stored value for every path (decision 240) ───────────────────────────────────────────────
+
+UNIFORM_PATHS = """
+SUBSTANCE = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+LEGACY = [
+    ("implicit_base", "BaseColor", (0.5, 0.35, 0.2), None),
+    ("srgb_base", "BaseColor", (0.5, 0.35, 0.2), "sRGB"),
+    ("working_base", "BaseColor", (0.5, 0.35, 0.2), "Working"),
+    ("raw_base", "BaseColor", (0.5, 0.35, 0.2), "Raw"),
+    ("linear_base", "BaseColor", (0.5, 0.35, 0.2), "Linear"),
+    ("other_space", "BaseColor", (0.5, 0.35, 0.2), "Rec709"),
+    ("user_srgb", "User0", (0.5, 0.35, 0.2), "sRGB"),
+    ("rough_implicit", "SpecularRoughness", (0.5, 0.5, 0.5), None),
+    ("mask_srgb", None, (0.5, 0.5, 0.5), "sRGB"),
+]
+OCIO = [
+    ("codes", "BaseColor", (128 / 255, 89 / 255, 51 / 255), "sRGB"),
+    ("implicit_codes", "BaseColor", (128 / 255, 89 / 255, 51 / 255), None),
+    ("unrecorded", "BaseColor", (0.5, 0.35, 0.2), "sRGB"),
+    ("linear", "BaseColor", (0.5, 0.35, 0.2), "Linear"),
+    ("user_srgb", "User0", (0.5, 0.35, 0.2), "sRGB"),
+    ("rough_srgb", "SpecularRoughness", (0.5, 0.5, 0.5), "sRGB"),
+    ("rough_raw", "SpecularRoughness", (0.37, 0.37, 0.37), "Raw"),
+    ("mask_srgb", None, (0.5, 0.5, 0.5), "sRGB"),
+]
+
+def stored(cases):
+    stack = ts.get_active_stack()
+    stack.add_channel(CT.User0, ts.ChannelFormat.sRGB8)
+    holder = ls.insert_fill(top(stack))
+    holder.add_mask(ls.MaskBackground.Black)
+    out = {}
+    for name, channel, rgb, space in cases:
+        out[name] = []
+        for path in ("facade", "native"):
+            if channel is None:
+                node = ls.insert_fill(ls.InsertPosition.inside_node(holder, ls.NodeStack.Mask))
+            else:
+                node = ls.insert_fill(top(stack))
+            native = uzpainter.layerstack.get_node_by_uid(node.uid())
+            nct = uzpainter.textureset.ChannelType
+            nchannel = None if channel is None else getattr(nct, channel)
+            revision = uzpainter.project.revision()
+            if path == "facade":
+                member = getattr(cm.GenericColorSpace, space, space) if space else None
+                raised = raises(node.set_source, None if channel is None else getattr(CT, channel),
+                                cm.Color(*rgb, member))
+            else:
+                raised = raises(native.set_source, nchannel,
+                                uzpainter.colormanagement.Color(*rgb, space))
+            if raised:
+                out[name].append([raised, uzpainter.project.revision() == revision])
+            else:
+                read = native.get_source(nchannel).get_color()
+                out[name].append([list(read.value_raw), read.color_space])
+    return out
+
+create()
+legacy = stored(LEGACY)
+project.close()
+uzpainter.project.create(PLANE, uzpainter.project.Settings(default_texture_resolution=256,
+                                                           ocio_config_hash=SUBSTANCE))
+result = {"legacy": legacy, "ocio": stored(OCIO)}
+"""
+
+
+def test_every_path_stores_a_uniform_colour_as_painter(facade: Run) -> None:
+    """B1 (practical-e2e, decision 240): the facade's `set_source` and the native one store the same
+    working value for the same colour, or refuse it with the same error before any change, in
+    Legacy and under OCIO, on a decoding channel (BaseColor), a user sRGB8 channel, a data channel
+    and a mask's mono source: one rule computes both (`python::WorkingColour`)."""
+    result = ok(facade(UNIFORM_PATHS))
+    for profile in ("legacy", "ocio"):
+        for name, (through_facade, through_native) in result[profile].items():
+            assert through_facade == through_native, (profile, name)
+    legacy = {name: value[0] for name, value in result["legacy"].items()}
+    decoded = [srgb_to_working(c) for c in (0.5, 0.35, 0.2)]
+    given = [f32(c) for c in (0.5, 0.35, 0.2)]
+    assert legacy["implicit_base"] == legacy["srgb_base"] == [decoded, "Working"]
+    for name in ("working_base", "raw_base", "linear_base", "user_srgb"):
+        assert legacy[name] == [given, "Working"], name
+    assert legacy["rough_implicit"] == legacy["mask_srgb"] == [[0.5] * 3, "Working"]
+    assert legacy["other_space"] == [
+        "ValueError: 'Rec709' is not a colour space of Painter's Legacy colour management",
+        True,
+    ]
+    ocio = {name: value[0] for name, value in result["ocio"].items()}
+    codes = ocio_srgb_table.load_source().CODES
+    assert (
+        ocio["codes"] == ocio["implicit_codes"] == [[codes[128], codes[89], codes[51]], "Working"]
+    )
+    assert ocio["rough_raw"] == [[f32(0.37)] * 3, "Working"]
+    assert ocio["unrecorded"][0].startswith(
+        "NotYetSupported: under OCIO, Painter's working value of the sRGB component 0.35 is not "
+        "recorded"
+    )
+    assert ocio["linear"][0] == (
+        "NotYetSupported: under OCIO, a uniform colour in the colour space 'Linear' is not "
+        "recorded (phase1.15_compositor-colour-fits item 2.6, decision 202)"
+    )
+    for name in ("user_srgb", "rough_srgb", "mask_srgb"):
+        assert ocio[name][0] == (
+            "NotYetSupported: under OCIO, an sRGB uniform colour on a channel that does not decode "
+            "it is not recorded (phase1.15_compositor-colour-fits item 2.6, decision 202)"
+        ), name
+    for name in ("unrecorded", "linear", "user_srgb", "rough_srgb", "mask_srgb"):
+        assert ocio[name][1] is True, name
+
+
 # ── Colour management at create (decision 207) ──────────────────────────────────────────────────
 
 # Painter's substance config where Painter 12.1 installs it (the Wand's `painter_create.py` names
@@ -452,8 +569,9 @@ fill = ls.insert_fill(top(stack))
 fill.active_channels = {CT.BaseColor}
 fill.set_source(CT.BaseColor, cm.Color(75 / 255, 70 / 255, 65 / 255, cm.GenericColorSpace.sRGB))
 out["ocio_base"] = list(fill.get_source(CT.BaseColor).get_color().working)
-# A colour bitmap on BaseColor binds in its default space, sRGB, in one call (the Wand's T_base).
-image = resource.import_project_resource(IMAGES + "/checker-16.png", resource.Usage.TEXTURE)
+# A colour bitmap on BaseColor binds in its default space, sRGB, in one call (the Wand's T_base:
+# an 8-bit colour image of the set's size, a use Session O records, decision 240).
+image = resource.import_project_resource(WORK + "/T_base.png", resource.Usage.TEXTURE)
 bitmap = ls.insert_fill(top(stack))
 bitmap.active_channels = {CT.BaseColor}
 out["ocio_bitmap"] = bitmap.set_source(CT.BaseColor, image.identifier()).get_color_space().name
@@ -467,7 +585,9 @@ result = out
 """
 
 
-def test_create_takes_colour_management_from_the_environment_at_the_call(facade: Run) -> None:
+def test_create_takes_colour_management_from_the_environment_at_the_call(
+    facade: Run, tmp_path: Path
+) -> None:
     """Painter's documented `create` rule (decision 207): `OCIO` naming Painter's substance config
     gives an OCIO project with its hash (over `PAINTER_ACE_CONFIG` too), read at the call as the
     Wand sets it; any other OCIO configuration or ACE raises `NotYetSupported`, a file that cannot
@@ -475,6 +595,7 @@ def test_create_takes_colour_management_from_the_environment_at_the_call(facade:
     project a colour bitmap binds on BaseColor in its default space, sRGB."""
     if not PAINTER_OCIO_CONFIG.is_file():
         pytest.skip(f"Painter's substance config is not installed at {PAINTER_OCIO_CONFIG}")
+    png_file(tmp_path / "T_base.png", 256, 3, 8)
     config = PAINTER_OCIO_CONFIG.as_posix()
     result = ok(facade(CREATE_COLOUR.replace("__CONFIG__", repr(config))))
     ocio = {"config_hash": PAINTER_OCIO_SHA256, "io_rules": [], "mode": "ocio", "working_space": ""}

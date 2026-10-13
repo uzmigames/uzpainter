@@ -6,9 +6,11 @@
 // the start time of that process (`pid=<n>` and `started=<FILETIME ticks>` lines). Opening a
 // project takes the lock: the owner keeps the sidecar open for writing, sharing reads only, for as
 // long as it holds the lock, so the OS refuses a second owner and the delete of a held sidecar. The
-// OS closes that handle when the owner dies; a sidecar no process holds open is stale whatever it
-// records and is overwritten. The recorded owner is diagnostics (the `locked` error names its pid).
-// Releasing the lock (`close`, the destructor) closes the handle and removes the sidecar.
+// handle is opened delete-on-close: releasing the lock (`close`, the destructor) closes it and the
+// OS removes the sidecar, and the OS does the same when the owner ends any other way (a crash, a
+// kill, a console Ctrl+Break). A sidecar no process holds open (left by a machine that stopped) is
+// stale whatever it records and is overwritten. The recorded owner is diagnostics (the `locked`
+// error names its pid); a reader must share deletion to open a held sidecar (`ReadLockOwner`).
 
 #include <cstdint>
 #include <filesystem>

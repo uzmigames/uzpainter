@@ -6,11 +6,8 @@
 #include <utility>
 
 #include "evaluator/error.h"
-#include "evaluator/geometry_mask.h"
-#include "evaluator/sources.h"
-#include "mesh/reload.h"
+#include "export/write.h"
 #include "python/errors.h"
-#include "store/container.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/json.h"
 #include "uzp_core/types/errors.h"
@@ -83,40 +80,25 @@ std::string ExportConfig(const std::string& exportPath, const std::string& rootP
     return json::WriteCanonical(config);
 }
 
-}  // namespace
-
-DiagnosticRun::DiagnosticRun() {
+/// The open project, outside an open native `Transaction`.
+std::shared_ptr<OpenProject> CommittedProject() {
     if (Session::Get().TransactionOpen()) {
         throw ApiError("RuntimeError", "a diagnostic reads a committed revision: commit the open Transaction first");
     }
-    m_open = Session::Get().Current();
-    m_snapshot = m_open->document->snapshot();
-    const core::Project& project = *m_snapshot.project;
-    m_templates = std::make_shared<const evaluator::TemplateLibrary>(
-        evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory()));
-    store::ProjectStore* store = m_open->store.get();
-    m_inputs.templateId = project.settings.template_id;
-    m_inputs.resources = std::make_shared<evaluator::DecodingResourceProvider>(
-        [store](std::string_view sha256) -> std::optional<std::string> {
-            try {
-                return store->ReadResource(sha256);
-            } catch (const store::StoreError& error) {
-                if (error.code() == store::StoreError::Code::missing_resource) return std::nullopt;
-                throw;
-            }
-        });
-    if (project.mesh) {
-        mesh::ImportResult mesh =
-            mesh::RederiveMesh(project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
-        m_inputs.geometry = std::make_shared<evaluator::MeshGeometryMasks>(
-            std::make_shared<const mesh::TexturingMesh>(std::move(mesh.mesh)));
-    }
-    m_cpu = std::make_unique<evaluator::CpuEvaluator>(m_templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
+    return Session::Get().Current();
 }
 
+}  // namespace
+
+DiagnosticRun::DiagnosticRun()
+    : m_open(CommittedProject()), m_snapshot(m_open->document->snapshot()),
+      m_evaluation(LeaseEvaluation(m_open, m_snapshot)) {}
+
 evaluator::DiagnosticRequest DiagnosticRun::RequestFor(core::Id node) const {
-    evaluator::DiagnosticRequest request{core::kNoId, core::kNoId, m_inputs.templateId, m_inputs.resources,
-                                         m_inputs.geometry};
+    const exporter::SourceInputs& inputs = m_evaluation->inputs;
+    // The diagnostics of a run compute their views; only its export reads them (`Export`).
+    evaluator::DiagnosticRequest request{core::kNoId, core::kNoId, inputs.templateId, inputs.resources,
+                                         inputs.geometry, nullptr};
     core::ForEachNode(*m_snapshot.project, [&](const core::NodeVisit& visit) {
         if ((visit.layer ? visit.layer->uid : visit.effect->uid) == node) {
             request.textureSet = visit.texture_set;
@@ -130,51 +112,75 @@ evaluator::DiagnosticRequest DiagnosticRun::RequestFor(core::Id node) const {
     return request;
 }
 
-void DiagnosticRun::RequireIdentified(const evaluator::DiagnosticRequest& request,
-                                      const evaluator::DiagnosticSource& source) const {
+void DiagnosticRun::RequireExact(const evaluator::DiagnosticRequest& request,
+                                 const evaluator::DiagnosticSource& source) const {
+    const core::Project& project = *m_snapshot.project;
+    const exporter::PlannedSource planned = Planned(source);
     render::Result<void> identified = exporter::RequireIdentifiedBase(
-        *m_snapshot.project, request.textureSet, request.stack, Planned(source), request.templateId, *m_templates);
+        project, request.textureSet, request.stack, planned, request.templateId, *m_evaluation->templates);
     if (!identified) RaiseRender(identified.error());
+    if (!exporter::ReadsCombinedNormal(planned)) return;
+    for (const core::TextureSet& set : project.texture_sets) {
+        if (set.id != request.textureSet) continue;
+        // Without a texturing mesh there are no UV islands.
+        const std::optional<exporter::Coverage> coverage = exporter::CoverageOf(set, m_evaluation->inputs);
+        if (coverage && !coverage->Complete()) {
+            throw ApiError("NotYetSupported", "diagnostics: " + exporter::IslandNormalRefusal(planned));
+        }
+    }
 }
 
 evaluator::IsolationResult DiagnosticRun::Isolate(core::Id node, const evaluator::DiagnosticMapId& map) {
     const evaluator::DiagnosticRequest request = RequestFor(node);
-    RequireIdentified(request, {evaluator::DiagnosticSource::Kind::Isolated, map, {}, node});
-    return Take(evaluator::IsolateOn(*m_snapshot.project, m_snapshot.revision, map, node, request, *m_templates,
-                                     m_cpu->store(), m_cpu->cache()));
+    RequireExact(request, {evaluator::DiagnosticSource::Kind::Isolated, map, {}, node});
+    evaluator::IsolationResult result =
+        Take(evaluator::IsolateOn(*m_snapshot.project, m_snapshot.revision, map, node, request,
+                                  *m_evaluation->templates, m_evaluation->cpu.store(), m_evaluation->cpu.cache()));
+    m_evaluation.Keep();
+    return result;
 }
 
 evaluator::ContributionResult DiagnosticRun::Contribution(core::Id node, const evaluator::DiagnosticMapId& map) {
     const evaluator::DiagnosticRequest request = RequestFor(node);
-    RequireIdentified(request, {evaluator::DiagnosticSource::Kind::Contribution, map, {}, node});
-    return Take(evaluator::ContributionOn(*m_snapshot.project, m_snapshot.revision, map, node, request, *m_templates,
-                                          m_cpu->store(), m_cpu->cache()));
+    RequireExact(request, {evaluator::DiagnosticSource::Kind::Contribution, map, {}, node});
+    evaluator::ContributionResult result =
+        Take(evaluator::ContributionOn(*m_snapshot.project, m_snapshot.revision, map, node, request,
+                                       *m_evaluation->templates, m_evaluation->cpu.store(), m_evaluation->cpu.cache()));
+    m_evaluation.Keep();
+    return result;
 }
 
 DiagnosticMaterialViews DiagnosticRun::MaterialViews(core::Id material) {
     const evaluator::DiagnosticRequest request = RequestFor(material);
     DiagnosticMaterialViews out;
-    out.views = Take(evaluator::MaterialViewsOn(*m_snapshot.project, m_snapshot.revision, material, request,
-                                                *m_templates, m_cpu->store(), m_cpu->cache()));
-    std::erase_if(out.views.views, [&](const evaluator::MaterialView& view) {
+    evaluator::MaterialViews views =
+        Take(evaluator::MaterialViewsOn(*m_snapshot.project, m_snapshot.revision, material, request,
+                                        *m_evaluation->templates, m_evaluation->cpu.store(), m_evaluation->cpu.cache()));
+    m_evaluation.Keep();
+    std::erase_if(views.views, [&](const evaluator::MaterialView& view) {
         // A view refused for its values is refused for its leaks too: both read the channel.
         render::Result<void> identified = exporter::RequireIdentifiedBase(
             *m_snapshot.project, request.textureSet, request.stack,
             Planned({evaluator::DiagnosticSource::Kind::MaterialView, {}, view.view, material}), request.templateId,
-            *m_templates);
+            *m_evaluation->templates);
         if (identified) return false;
         out.refused[std::string(evaluator::MaterialViewName(view.view))] = identified.error().reason;
         return true;
     });
+    out.views = std::make_shared<const evaluator::MaterialViews>(std::move(views));
+    m_views = out.views;
     return out;
 }
 
 evaluator::RegionStats DiagnosticRun::RegionStats(const evaluator::DiagnosticMapId& map, core::Id material) {
     const evaluator::DiagnosticRequest request = RequestFor(material);
     const evaluator::DiagnosticSource source{evaluator::DiagnosticSource::Kind::RegionStats, map, {}, material};
-    RequireIdentified(request, source);
-    evaluator::DiagnosticOutput output = Take(evaluator::EvaluateDiagnosticOn(
-        *m_snapshot.project, m_snapshot.revision, source, request, *m_templates, m_cpu->store(), m_cpu->cache()));
+    RequireExact(request, source);
+    evaluator::DiagnosticOutput output =
+        Take(evaluator::EvaluateDiagnosticOn(*m_snapshot.project, m_snapshot.revision, source, request,
+                                             *m_evaluation->templates, m_evaluation->cpu.store(),
+                                             m_evaluation->cpu.cache()));
+    m_evaluation.Keep();
     return std::move(*output.stats);
 }
 
@@ -206,8 +212,13 @@ exporter::Publication DiagnosticRun::Export(core::Id node, const std::vector<eva
         exporter::PublishRequest publish;
         publish.identity = exporter::BuildIdentity{kAppVersion, std::string("uzpainter-") + UZP_BUILD_MODE};
         publish.projectPath = context.projectPath;
-        return Take(exporter::PublishExport(project, m_snapshot.revision, plan, m_inputs, *m_templates, m_cpu->store(),
-                                            m_cpu->cache(), publish));
+        exporter::SourceInputs inputs = m_evaluation->inputs;
+        inputs.materialViews = m_views;  // computed once, for the reply and for its files
+        exporter::Publication published =
+            Take(exporter::PublishExport(project, m_snapshot.revision, plan, inputs, *m_evaluation->templates,
+                                         m_evaluation->cpu.store(), m_evaluation->cpu.cache(), publish));
+        m_evaluation.Keep();
+        return published;
     } catch (const core::ValueError& error) {
         throw ApiError("ValueError", error.what());
     } catch (const core::NotYetSupported& error) {

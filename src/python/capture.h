@@ -19,7 +19,9 @@
 //   `<stem>.exr` (RGB binary16 of the linear colour; alpha is always 1 and is not written).
 // - `base_color`, `channel:<name>`, `mask:<uid>`: texture-space captures of one stack, equal to
 //   the export by construction. The export engine compiles and encodes a one-file plan of the
-//   source (`documentMap baseColor`, `documentMap <name>` with the export's map names,
+//   source (`documentMap baseColor`; for `channel:<name>`, the documentMap the export records for
+//   the channel `<name>` names, a ChannelType name as `evaluate_channel` takes it,
+//   `SpecularRoughness`, or that documentMap name itself, `specularroughness`, decision 242;
 //   `diagnosticMap materialMask/<uid>`) at the texture set's resolution with padding
 //   `passthrough`, as a 16-bit PNG (`path`) and a 32-bit float OpenEXR (`<stem>.exr`).
 //

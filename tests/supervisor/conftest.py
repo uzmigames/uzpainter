@@ -38,6 +38,7 @@ import subprocess
 import textwrap
 import threading
 import time
+import zlib
 from collections.abc import Iterator
 from pathlib import Path
 from typing import IO, Any
@@ -50,6 +51,8 @@ from tools.parity.settling import report as settling_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLANE = REPO_ROOT / "parity" / "fixtures" / "meshes" / "plane.obj"
+# Painter's substance config (decisions 134, 207): the one OCIO configuration a project is made in.
+OCIO_CONFIG = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
 JSON_PREFIX = "UZP_JSON:"
 NO_GPU = os.environ.get("UZP_NO_GPU") == "1"
 BACKEND = os.environ.get("UZP_SUPERVISOR_BACKEND", "vulkan")
@@ -396,6 +399,46 @@ class Mcp:
             if self.process.poll() is None:
                 self.process.kill()
             self._stderr.close()
+
+
+def with_a_refused_bitmap(session: Mcp, tmp_path: Path) -> int:
+    """An untitled Legacy project of the plane at 256 px whose fill takes BaseColor from a 512x256
+    8-bit colour bitmap: bilinear minification of a non-square image, where the texture unit is not
+    measured (decision 084), so the evaluator refuses it with `NotYetSupported` (practical-e2e B4).
+    The support check reads no image in Legacy; under OCIO a bitmap Session O does not record is
+    refused before mutation instead (decision 240). The fill's uid."""
+    created = session.call(
+        "project_create",
+        {"mesh": str(PLANE), "settings": {"default_texture_resolution": 256}, "wait": True},
+    )
+    assert created["result"]["status"] == "committed", created
+    width, height = 512, 256
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return len(data).to_bytes(4, "big") + body + zlib.crc32(body).to_bytes(4, "big")
+
+    header = width.to_bytes(4, "big") + height.to_bytes(4, "big") + bytes([8, 2, 0, 0, 0])
+    rows = (b"\x00" + bytes([200, 120, 40]) * width) * height
+    wide = tmp_path / "wide.png"
+    wide.write_bytes(
+        bytes([0x89])
+        + b"PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
+    imported = session.call("resource_import", {"path": str(wide), "usage": "TEXTURE"})
+    assert imported["result"]["status"] == "committed", imported
+    inserted = session.call(
+        "layer_insert", {"kind": "fill", "params": {"active_channels": ["BaseColor"]}}
+    )
+    fill = inserted["result"]["returned"]["node"]
+    assert isinstance(fill, int), inserted
+    bitmap = {"kind": "bitmap", "resource": "wide", "color_space": "sRGB"}
+    sourced = session.call("source_set", {"uid": fill, "channel": "BaseColor", "source": bitmap})
+    assert sourced["result"]["status"] == "committed", sourced
+    return fill
 
 
 @pytest.fixture

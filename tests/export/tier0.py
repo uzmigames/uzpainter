@@ -115,6 +115,8 @@ def compare_dry_runs(
         for raw in manifest["instruction_sequence"]["steps"]:
             if not raw["call"].endswith("export_project_textures"):
                 continue
+            if raw["args"].get("probe") is True:
+                continue  # the probe recorder's export probe: a readback, no exported-map record
             export = export_step(Step(raw["step"], raw["call"], raw["args"]))
             cases.append((skeleton, export.config(Path("C:/export"), roots)))
             recorded = [painter_files(golden, r, raw["step"]) for r in sorted(golden.recordings)]

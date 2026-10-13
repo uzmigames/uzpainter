@@ -8,7 +8,7 @@
 #endif
 #include <windows.h>
 
-#include <fstream>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -35,11 +35,12 @@ std::optional<std::uint64_t> StartTime(HANDLE process) {
 
 /// Opens the sidecar for writing, sharing reads only, and records `owner` in it; nothing while
 /// another handle holds it. The handle is kept for the lock's lifetime: no other process can then
-/// open it for writing or delete it, and the OS closes it when the owner dies, so a sidecar nobody
-/// holds is stale whatever it contains and is overwritten.
+/// open it for writing or delete it. It is opened delete-on-close, so the sidecar goes with the
+/// handle however the owner ends (a release, a crash, a kill, a console Ctrl+Break); a sidecar
+/// nobody holds (left by a machine that stopped) is stale whatever it contains and is overwritten.
 HANDLE CreateLockFile(const std::filesystem::path& lock, const LockOwner& owner) {
     const HANDLE file = CreateFileW(lock.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
-                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+                                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         const DWORD error = GetLastError();
         if (error == ERROR_SHARING_VIOLATION) return nullptr;
@@ -51,8 +52,7 @@ HANDLE CreateLockFile(const std::filesystem::path& lock, const LockOwner& owner)
     const bool ok = WriteFile(file, text.data(), static_cast<DWORD>(text.size()), &written, nullptr) &&
                     written == text.size() && FlushFileBuffers(file);
     if (!ok) {
-        CloseHandle(file);
-        DeleteFileW(lock.c_str());
+        CloseHandle(file);  // deletes the sidecar
         throw StoreError(StoreError::Code::io, "cannot write the lock " + Utf8(lock));
     }
     return file;
@@ -71,11 +71,20 @@ LockOwner CurrentOwner() {
 }
 
 std::optional<LockOwner> ReadLockOwner(const std::filesystem::path& lock) {
-    std::ifstream file(lock, std::ios::binary);
-    if (!file) return std::nullopt;
+    // A held sidecar is open delete-on-close: only a reader that shares deletion may open it.
+    const HANDLE file = CreateFileW(lock.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return std::nullopt;
+    std::string bytes(256, '\0');  // two short lines
+    DWORD read = 0;
+    const bool ok = ReadFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr);
+    CloseHandle(file);
+    if (!ok) return std::nullopt;
+    bytes.resize(read);
+    std::istringstream text(bytes);
     std::optional<std::uint64_t> pid, started;
     std::string line;
-    while (std::getline(file, line)) {
+    while (std::getline(text, line)) {
         const std::size_t eq = line.find('=');
         if (eq == std::string::npos) return std::nullopt;
         const std::string key = line.substr(0, eq), value = line.substr(eq + 1);
@@ -132,11 +141,8 @@ ProjectLock::~ProjectLock() { Release(); }
 
 void ProjectLock::Release() noexcept {
     if (path_.empty()) return;
-    // Once the handle closes another worker may take the lock first; its handle then refuses the
-    // delete, so only an unheld sidecar is removed.
-    CloseHandle(handle_);
+    CloseHandle(handle_);  // deletes the sidecar (delete-on-close)
     handle_ = nullptr;
-    DeleteFileW(path_.c_str());
     path_.clear();
 }
 

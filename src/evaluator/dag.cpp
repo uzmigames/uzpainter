@@ -8,6 +8,7 @@
 #include "evaluator/error.h"
 #include "evaluator/sources.h"
 #include "uzp_core/document/nodes.h"
+#include "uzp_core/manifest/json.h"
 
 namespace uzp::evaluator {
 
@@ -47,6 +48,24 @@ Digest ContentStartHash(const Context& ctx, std::string_view what) {
     writer.U32(static_cast<uint32_t>(ctx.format));
     writer.U32(ctx.grid.width).U32(ctx.grid.height);
     return writer.Finish();
+}
+
+/// What the texturing mesh of `project` is derived from (`mesh::RederiveMesh`): the mesh file and
+/// its import report but the report's `source` (the file's name and size beside its hash, the
+/// resource). The report holds what else the derivation reads and gives: the stored files beside
+/// the mesh (a glTF's external buffers, `kMeshExternalFiles`, by hash), the import settings
+/// (`units`, `merged_materials`), the objects and materials a geometry mask selects by name and the
+/// geometry hashes the derivation is checked against. So two meshes that share a file but not its
+/// buffers or settings never share a geometry mask (decision 253).
+void MeshIdentity(HashWriter& writer, const core::Project& project) {
+    if (!project.mesh) {
+        writer.Str(std::string());
+        return;
+    }
+    writer.Str(project.mesh->resource);
+    for (const auto& [name, value] : project.mesh->import_report) {
+        if (name != "source") writer.Str(name).Str(core::json::WriteCanonical(value));
+    }
 }
 
 /// The seed of a mask's hashes: the profile and the set resolution. A mask does not depend on the
@@ -364,7 +383,8 @@ render::Result<std::optional<DagMask>> MaskOf(const Context& ctx, const Layer& l
         g.query.width = ctx.grid.width;
         g.query.height = ctx.grid.height;
         HashWriter writer;
-        writer.Str("geometry").Str(ctx.project.mesh ? ctx.project.mesh->resource : std::string());
+        writer.Str("geometry");
+        MeshIdentity(writer, ctx.project);
         writer.Str(g.query.material).U32(g.query.inclusionList ? 1u : 0u);
         writer.U32(static_cast<uint32_t>(g.query.items.size()));
         for (const std::string& item : g.query.items) writer.Str(item);

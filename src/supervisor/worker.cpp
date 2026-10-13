@@ -30,12 +30,14 @@
 #include <pybind11/embed.h>
 
 #include "crash_handler.h"
+#include "evaluator/error.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/geometry_mask.h"
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "export/plan.h"
 #include "export/preset_aliases.h"
+#include "mesh/import_error.h"
 #include "mesh/reload.h"
 #include "preview/cli.h"
 #include "preview/preview.h"
@@ -183,8 +185,10 @@ void InstallCrashReporting(const std::filesystem::path& crash_dir) {
     if (!crash_dir.empty()) {
         std::error_code ignored;
         std::filesystem::create_directories(crash_dir, ignored);
-        // The handler keeps its own copy of the ANSI path.
-        uz::CrashHandler_SetCrashDir(crash_dir.string().c_str());
+        // The handler keeps its own UTF-16 copy of the UTF-8 path (UZP-MOD-010), so any folder
+        // works; `string()` would throw for one outside the ANSI code page.
+        const std::u8string utf8 = crash_dir.u8string();
+        uz::CrashHandler_SetCrashDir(std::string(utf8.begin(), utf8.end()).c_str());
     }
     uz::InstallCrashHandler();
     std::signal(SIGABRT, AbortToCrashReport);
@@ -239,6 +243,33 @@ private:
 /// opened or saved as (resolved when that call ran), or the temporary store of an untitled one.
 std::string DurableStore(const python::OpenProject& open) {
     return python::Utf8(open.untitled_dir.empty() ? open.project_source : std::filesystem::absolute(open.store->path()));
+}
+
+/// The reply to the API error `error` that `tool` met: a release gap is `capability_gap {tool, type,
+/// reason, operations}` (decision 242); a `ProjectError`, a mesh refusal's subclass included,
+/// `project_error`; `StaleRevisionError` `stale_revision {expected, current}`; `BusyError` `busy
+/// {job_id}`; any other class `call_failed`. `type` is the class, `details` the error's own.
+json::Object ApiErrorReply(const json::Value& id, const std::string& tool, const python::ApiError& error) {
+    if (IsGapClass(error.cls())) {
+        // A release gap the API's code meets: the evaluator's (a source it does not sample yet),
+        // a capture mode's (painter_iray), a typed edit's, a mesh format's.
+        const CallError gap = GapError(tool, error.what(), error.cls());
+        return ErrorReply(id, gap.code, gap.message, gap.details);
+    }
+    json::Object details{{"type", error.cls()}};
+    std::string code = "call_failed";
+    if (error.cls() == "StaleRevisionError") {
+        code = "stale_revision";
+        details["expected"] = error.expected;
+        details["current"] = error.current;
+    } else if (error.cls() == "BusyError") {
+        code = "busy";
+        details["job_id"] = error.job_id;
+    } else if (IsProjectErrorClass(error.cls())) {
+        code = "project_error";
+    }
+    if (!error.details.empty()) details["details"] = error.details;
+    return ErrorReply(id, std::move(code), error.what(), std::move(details));
 }
 
 /// `{"event": "revision", "revision", "project", "project_uuid", "untitled"}`: the open project's
@@ -401,10 +432,13 @@ void Worker::DefineTools() {
          Schema({}, {}), false, false},
         [this](const json::Object& a) { return ExportPresetsList(a); });
     add({"project_close",
-         "Closes the open project. Every commit is durable in a saved project's file; closing an untitled project "
-         "deletes it, so that needs discard: true.",
+         "Closes the open project. Without discard every commit is kept: a saved project's file holds the last "
+         "committed revision, saved or not. discard: true drops what was not saved, as Painter's close does: a saved "
+         "project returns to its last save (one revert, saved; the dropped revisions stay in its history), an "
+         "untitled project is deleted (closing an untitled project needs it).",
          Schema({{"discard", json::Object{{"type", "boolean"},
-                                          {"description", "Allow closing an untitled project, which deletes it."}}}},
+                                          {"description", "Drop what was not saved: return a saved project to its last "
+                                                          "save, or delete an untitled project."}}}},
                 {}),
          false, false, true,
          Operation("substance_painter.project.close")},
@@ -513,7 +547,9 @@ void Worker::DefineTools() {
          "pass offscreen on the GPU; base_color, channel:<name> and mask:<uid> are texture-space captures equal to the "
          "export; painter_iray is unavailable until the path tracer (PathTracerUnavailable). Writes the PNG, an "
          "OpenEXR and the receipt beside it, inside the output root; returns the receipt.",
-         Schema({{"mode", StringProperty("painter_viewport, base_color, channel:<name>, mask:<uid> or painter_iray.")},
+         Schema({{"mode", StringProperty("painter_viewport, base_color, channel:<name>, mask:<uid> or painter_iray; "
+                                         "<name> is a channel type as evaluate_channel takes it (SpecularRoughness) "
+                                         "or the export's documentMap name (specularroughness).")},
                  {"path", PathProperty("The .png to write, relative to the output root.", "export")},
                  {"camera", json::Object{{"type", "object"}, {"description", "painter_viewport: a camera record (Painter's convention)."}}},
                  {"size", json::Object{{"type", "array"},
@@ -736,27 +772,27 @@ json::Object Worker::Execute(const json::Value& id, const json::Object& request,
         }
         return reply;
     } catch (const CallError& error) {
+        // A transaction the support check failed (`evaluator::RequireSupported`, decision 082)
+        // fails `call_failed` with its error class: a release gap among them is `capability_gap`.
+        const json::Value* type = Field(error.details, "type");
+        if (error.code == "call_failed" && type && type->IsString() && IsGapClass(std::get<std::string>(type->data))) {
+            const CallError gap = GapError(tool.name, error.message, std::get<std::string>(type->data));
+            return ErrorReply(id, gap.code, gap.message, gap.details);
+        }
         return ErrorReply(id, error.code, error.message, error.details);
     } catch (const python::ApiError& error) {
-        json::Object details{{"type", error.cls()}};
-        std::string code = "call_failed";
-        if (error.cls() == "StaleRevisionError") {
-            code = "stale_revision";
-            details["expected"] = error.expected;
-            details["current"] = error.current;
-        } else if (error.cls() == "BusyError") {
-            code = "busy";
-            details["job_id"] = error.job_id;
-        } else if (error.cls() == "ProjectError") {
-            code = "project_error";
-        }
-        if (!error.details.empty()) details["details"] = error.details;
-        return ErrorReply(id, std::move(code), error.what(), std::move(details));
+        return ApiErrorReply(id, tool.name, error);
+    } catch (const mesh::ImportError& error) {
+        // A mesh refusal (`project_create`, `mesh_reload`) under the class the bindings raise:
+        // `ReleaseGap` and `NotYetSupported` are release gaps, the others `ProjectError`s.
+        return ApiErrorReply(id, tool.name, python::FromImportError(error));
+    } catch (const mesh::MaterialMappingError& error) {
+        return ApiErrorReply(id, tool.name, python::FromMaterialMappingError(error));
     } catch (const core::NotYetSupported& error) {
         // A release gap the native code meets (an export's unfitted setting, refused before anything
-        // is written): `capability_gap`, as the typed tools' (typed_tools.cpp `Translated`).
-        return ErrorReply(id, "capability_gap", tool.name + ": a release gap of this build: " + error.what(),
-                          json::Object{{"tool", tool.name}, {"type", "NotYetSupported"}, {"reason", error.what()}});
+        // is written; a typed edit's): `capability_gap`.
+        const CallError gap = GapError(tool.name, error.what(), "NotYetSupported");
+        return ErrorReply(id, gap.code, gap.message, gap.details);
     } catch (const std::exception& error) {
         return ErrorReply(id, "call_failed", error.what(), json::Object{{"type", "RuntimeError"}});
     }
@@ -870,6 +906,11 @@ json::Object Worker::Reopen(const json::Value& id, const json::Object& request) 
 }
 
 void Worker::FailRender(const render::Error& error) {
+    if (const std::optional<evaluator::EvalErrorKind> kind = evaluator::EvalErrorKindOf(error)) {
+        // An evaluator failure carries its API class (decision 082), as the export's, the capture's
+        // and the diagnostics' do: a release gap is `capability_gap` (Execute).
+        throw python::ApiError(std::string(evaluator::ErrorClassName(*kind)), error.reason);
+    }
     // A removed device or a stalled GPU leaves the engine unusable: the call fails and the worker
     // exits after the reply (02 §5).
     if (error.code == render::ErrorCode::DeviceRemoved || error.code == render::ErrorCode::Timeout) {
@@ -890,6 +931,24 @@ python::JobBody Worker::ProjectOpen(const json::Object& arguments) {
         session.Open(python::PathFromUtf8(path));
         return json::Object{{"path", DurableStore(*session.Current())}, {"revision", session.Revision()}};
     };
+}
+
+/// Refuses an invalid export configuration before its job starts (decision 242): the
+/// `core::ValueError` of the configuration parser and the plan compiler (export/plan.h: a
+/// parameter undefined after the preset map and every matching rule, an unknown map, ...) is a
+/// malformed call, `invalid_arguments`. Only the plan resolves a map's parameters across the
+/// preset and the rules, so the supervisor's schema cannot decide it. A release gap the plan meets
+/// is `capability_gap` (Execute); what fails later is the job's own error.
+void CheckConfiguration(const std::string& text) {
+    python::Session& session = python::Session::Get();
+    const std::shared_ptr<const core::Project> project = session.ReadProject();
+    const std::optional<std::filesystem::path> path = session.FilePath();
+    const exporter::PlanContext context{path ? exporter::Utf8String(*path) : std::string()};
+    try {
+        exporter::CheckExportable(exporter::CompilePlan(*project, text, context));
+    } catch (const core::ValueError& error) {
+        throw CallError{"invalid_arguments", error.what(), json::Object{{"type", "ValueError"}}};
+    }
 }
 
 python::JobBody Worker::Export(const json::Object& arguments) {
@@ -977,6 +1036,7 @@ python::JobBody Worker::Export(const json::Object& arguments) {
         document["exportParameters"] = std::move(rules);
     }
     std::string text = json::WriteCanonical(document);
+    CheckConfiguration(text);
     const json::Value* dry_run = Field(arguments, "dry_run");
     if (dry_run && dry_run->IsBool() && std::get<bool>(dry_run->data)) {
         if (!fixed_names.empty()) throw CallError{"invalid_arguments", "a dry run writes nothing: fixed_names do not apply", {}};
@@ -1036,6 +1096,7 @@ json::Object Worker::ProjectClose(const json::Object& arguments) {
                         "discard: true",
                         json::Object{{"untitled", true}}};
     }
+    if (discarding && session.IsOpen()) session.DiscardUnsaved();
     session.Close();
     return {};
 }
@@ -1417,7 +1478,7 @@ json::Object Worker::MaterialViews(const json::Object& arguments) {
     using Kind = evaluator::DiagnosticSource::Kind;
     std::vector<evaluator::DiagnosticSource> sources{{Kind::MaterialMask, {}, {}, material}};
     json::Object views;
-    for (const evaluator::MaterialView& view : result.views.views) {
+    for (const evaluator::MaterialView& view : result.views->views) {
         sources.push_back({Kind::MaterialView, {}, view.view, material});
         sources.push_back({Kind::MaterialLeaks, {}, view.view, material});
         views[std::string(evaluator::MaterialViewName(view.view))] =
@@ -1425,7 +1486,7 @@ json::Object Worker::MaterialViews(const json::Object& arguments) {
                          {"modal_id", view.modalId ? json::Value(Triple(*view.modalId)) : json::Value(nullptr)}};
     }
     json::Array missing;
-    for (const evaluator::MaterialViewKind view : result.views.missing) {
+    for (const evaluator::MaterialViewKind view : result.views->missing) {
         missing.emplace_back(std::string(evaluator::MaterialViewName(view)));
     }
     json::Object refused;
@@ -1433,7 +1494,7 @@ json::Object Worker::MaterialViews(const json::Object& arguments) {
     const exporter::Publication published = run.Export(material, sources, folder);
     return {{"revision", run.snapshot().revision},
             {"material", static_cast<std::int64_t>(material)},
-            {"inside", static_cast<std::int64_t>(result.views.inside)},
+            {"inside", static_cast<std::int64_t>(result.views->inside)},
             {"views", std::move(views)},
             {"missing", std::move(missing)},
             {"refused", std::move(refused)},

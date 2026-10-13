@@ -55,6 +55,74 @@ Gap OcioBitmapGap(const core::Project& project, const core::Stack* stack, const 
                 "phase1.15_compositor-colour-fits");
 }
 
+/// The fill content of the node of `visit` (a fill layer or a fill effect), or nullptr.
+const core::FillContent* FillOf(const core::NodeVisit& visit) {
+    if (visit.layer != nullptr) return visit.layer->fill ? &*visit.layer->fill : nullptr;
+    return visit.effect->fill ? &*visit.effect->fill : nullptr;
+}
+
+core::Id UidOf(const core::NodeVisit& visit) { return visit.layer != nullptr ? visit.layer->uid : visit.effect->uid; }
+
+/// Under OCIO with Painter's substance config, a bitmap of the fill of `visit`'s node whose image
+/// is not a use Session O records (sources.h `OcioBitmapRecorded`): the image's kind and its 1:1
+/// sampling on the node's texture set in `project`, read from its PNG header as the evaluation
+/// checks them (evaluate.cpp `CheckOcioBitmap`). Bitmaps whose bytes `shapes` does not have, and
+/// channels the stack lacks, are left to the evaluation.
+Gap OcioImageGap(const core::Project& project, const core::NodeVisit& visit, const BitmapShapes& shapes) {
+    const core::FillContent* fill = FillOf(visit);
+    if (!shapes || fill == nullptr || !PainterOcio(project)) return std::nullopt;
+    const core::Id node = UidOf(visit);
+    const core::Stack* stack = core::FindStack(project, visit.texture_set, visit.stack);
+    const auto set = std::find_if(project.texture_sets.begin(), project.texture_sets.end(),
+                                  [&](const core::TextureSet& s) { return s.id == visit.texture_set; });
+    if (stack == nullptr || set == project.texture_sets.end()) return std::nullopt;
+    const render::Result<UvProjection> projection = UvProjectionOf(fill->projection, node);
+    if (!projection) return std::nullopt;  // FillGap refuses these projections
+    const auto width = static_cast<uint32_t>(set->resolution.width);
+    const auto height = static_cast<uint32_t>(set->resolution.height);
+    const auto check = [&](const core::Source& source, std::optional<ChannelType> channel) -> Gap {
+        if (source.kind() != SourceKind::bitmap) return std::nullopt;
+        if (channel && !stack->channels.contains(*channel)) return std::nullopt;
+        const std::optional<BitmapShape> shape = shapes(std::get<core::BitmapSource>(source.value).resource.sha256);
+        if (!shape || OcioBitmapRecorded(!channel, *projection, width, height, *shape)) return std::nullopt;
+        return Make(node,
+                    "under OCIO, a " + std::to_string(shape->width) + "x" + std::to_string(shape->height) + " " +
+                        (shape->encoding == render::TexelEncoding::Unorm16 ? "16" : "8") + "-bit " +
+                        (shape->channels == 1 ? "grey" : "colour") + " bitmap " +
+                        (channel ? "on the channel " + std::string(core::ToString(*channel))
+                                 : std::string("as a mask source")) +
+                        " of a " + std::to_string(width) + "x" + std::to_string(height) +
+                        " texture set (Session O records " +
+                        (channel ? "an 8-bit colour bitmap on an sRGB8 channel" : "a 16-bit grey mask source") +
+                        " sampled 1:1 only)",
+                    "phase1.15_compositor-colour-fits, decision 190");
+    };
+    for (const auto& [channel, source] : fill->sources) {
+        if (Gap gap = check(source, channel)) return gap;
+    }
+    if (fill->mono_source) return check(*fill->mono_source, std::nullopt);
+    return std::nullopt;
+}
+
+/// Every OCIO bitmap gap of the fill of `visit`'s node on its stack in `project`: its colour spaces
+/// and channels (`OcioBitmapGap`), then its images (`OcioImageGap`).
+Gap OcioGap(const core::Project& project, const core::NodeVisit& visit, const BitmapShapes& shapes) {
+    const core::FillContent* fill = FillOf(visit);
+    if (fill == nullptr || !PainterOcio(project)) return std::nullopt;
+    const core::Stack* stack = core::FindStack(project, visit.texture_set, visit.stack);
+    const auto bitmap = [&](const core::Source& source, std::optional<ChannelType> channel) -> Gap {
+        if (source.kind() != SourceKind::bitmap) return std::nullopt;
+        return OcioBitmapGap(project, stack, std::get<core::BitmapSource>(source.value), channel, UidOf(visit));
+    };
+    for (const auto& [channel, source] : fill->sources) {
+        if (Gap gap = bitmap(source, channel)) return gap;
+    }
+    if (fill->mono_source) {
+        if (Gap gap = bitmap(*fill->mono_source, std::nullopt)) return gap;
+    }
+    return OcioImageGap(project, visit, shapes);
+}
+
 /// The colour space of a bitmap source in `stack` for `channel` (sources.h): an sRGB bitmap
 /// exists on sRGB8 channels and on an L8 BaseColor, Specular or Emissive (decision 208; the image's
 /// kind and its 1:1 sampling are checked at evaluation). Painter refuses the space on a user
@@ -226,7 +294,7 @@ std::string SupportGap::Describe() const {
     return "node=" + std::to_string(node) + ": " + feature + " is a release gap (" + owner + ")";
 }
 
-std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid) {
+std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid, const BitmapShapes& shapes) {
     Gap found;
     bool seen = false;
     core::ForEachNode(project, [&](const core::NodeVisit& visit) {
@@ -239,11 +307,13 @@ std::optional<SupportGap> NodeGap(const core::Project& project, core::Id uid) {
             found = EffectGap(project, core::FindStack(project, visit.texture_set, visit.stack), *visit.effect,
                               visit.owner_stack);
         }
+        if (seen && !found) found = OcioImageGap(project, visit, shapes);
     });
     return found;
 }
 
-std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::Project& after) {
+std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::Project& after,
+                                      const BitmapShapes& shapes) {
     if (!LegacyColour(after) && after.settings.color_management.mode != before.settings.color_management.mode) {
         return Make(core::kNoId, "colour management mode '" + after.settings.color_management.mode + "'",
                     "phase1.15_compositor-colour-fits");
@@ -253,13 +323,39 @@ std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::P
     touched.insert(touched.end(), changes.modified.begin(), changes.modified.end());
     std::sort(touched.begin(), touched.end());
     for (const core::Id uid : touched) {
-        if (Gap gap = NodeGap(after, uid)) return gap;
+        if (Gap gap = NodeGap(after, uid, shapes)) return gap;
     }
-    return std::nullopt;
+    if (!shapes || !PainterOcio(after)) return std::nullopt;
+    // Under OCIO a set's resolution and channels decide whether its bitmaps are a recorded use: a
+    // change of them refuses a use it makes unrecorded in a node it does not touch.
+    const auto changed = [&before](const core::TextureSet& set) {
+        for (const core::TextureSet& old : before.texture_sets) {
+            if (old.id != set.id) continue;
+            if (old.resolution != set.resolution || old.stacks.size() != set.stacks.size()) return true;
+            for (std::size_t s = 0; s < set.stacks.size(); ++s) {
+                if (old.stacks[s].channels != set.stacks[s].channels) return true;
+            }
+            return false;
+        }
+        return false;  // a created set: its nodes are created too
+    };
+    Gap found;
+    core::ForEachNode(after, [&](const core::NodeVisit& visit) {
+        if (found || std::binary_search(touched.begin(), touched.end(), UidOf(visit))) return;
+        const auto set = std::find_if(after.texture_sets.begin(), after.texture_sets.end(),
+                                      [&](const core::TextureSet& s) { return s.id == visit.texture_set; });
+        if (set == after.texture_sets.end() || !changed(*set)) return;
+        // The node is untouched, so `visit`'s fill is also its fill in `before`.
+        if (Gap gap = OcioGap(after, visit, shapes); gap && !OcioGap(before, visit, shapes)) {
+            gap->feature += " once its texture set changes (bind another source first, or in the same Transaction)";
+            found = gap;
+        }
+    });
+    return found;
 }
 
-void RequireSupported(const core::Project& before, const core::Project& after) {
-    if (const Gap gap = FirstNewGap(before, after)) throw core::NotYetSupported(gap->Describe());
+void RequireSupported(const core::Project& before, const core::Project& after, const BitmapShapes& shapes) {
+    if (const Gap gap = FirstNewGap(before, after, shapes)) throw core::NotYetSupported(gap->Describe());
 }
 
 }  // namespace uzp::evaluator

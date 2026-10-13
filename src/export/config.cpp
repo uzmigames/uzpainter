@@ -471,6 +471,11 @@ std::optional<core::ChannelType> DocumentMapMember(std::string_view name) {
     return std::nullopt;
 }
 
+std::string DocumentMapName(core::ChannelType member) {
+    // `baseColor`, the documentation's own example, for BaseColor; the only spelling otherwise.
+    return RecordedSpellings(member).back();
+}
+
 std::optional<core::ChannelType> RecordedAliasTarget(core::ChannelType member) {
     using enum core::ChannelType;
     switch (member) {

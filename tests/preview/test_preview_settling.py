@@ -207,9 +207,11 @@ class Session:
         assert sha256(receipt["files"]["png"]) == receipt["hashes"]["png"]
         return receipt
 
-    def refusal(self, mode: str, path: str, **extra: Any) -> tuple[str, str]:
+    def refusal(
+        self, mode: str, path: str, code: str = "call_failed", **extra: Any
+    ) -> tuple[str, str]:
         reply = self.pipe.call("capture", {"mode": mode, "path": path, **extra})
-        assert reply["error"]["code"] == "call_failed", reply
+        assert reply["error"]["code"] == code, reply
         return reply["error"]["details"]["type"], reply["error"]["message"]
 
     def gem(self) -> int:
@@ -286,7 +288,7 @@ def test_wand_v1_with_the_preview_attached(
             "the wand is no longer Legacy: render it here (phase1.15_compositor-colour-fits)"
         )
         assert not (session.root / "out" / "caps" / "vp.png").exists()
-        kind, message = session.refusal("painter_iray", "../../outside.png")
+        kind, message = session.refusal("painter_iray", "../../outside.png", "capability_gap")
         assert kind == "PathTracerUnavailable" and "P3-PATHTRACER" in message, message
         wait_for(lambda: status(pipe)["frames_taken"] >= 1)
         shown = status(pipe)

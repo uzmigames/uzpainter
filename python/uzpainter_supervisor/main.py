@@ -9,6 +9,9 @@ Both transports serve one tool registry (registry.py; task phase2.5, decisions 1
   checks; a non-loopback bind needs `--allow-remote`. HTTP clients take the mutation lease
   explicitly with `lease_acquire {owner}`.
 
+A console Ctrl+C or Ctrl+Break stops either transport through one shutdown: the worker ends (the OS
+removes its project's lock sidecar with it), then the ledger closes, checkpointing its WAL.
+
 `--roots` confines the structured tools' path arguments (roots.py). The registry checks every call
 before admission (admission.py); a long tool (the worker lists it as `long`) takes `wait` too and
 runs as a job (phase2.3): its progress reaches a client that waits as `notifications/progress` on
@@ -22,13 +25,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib
 import json
 import logging
 import os
 import secrets
+import signal
 import sqlite3
 import sys
 import tempfile
+import threading
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +68,8 @@ HEADLESS_REFUSAL = (
 
 JOB_META_KEY = "uzpainter/job"
 MAX_HTTP_CLIENTS = 10_000  # the SDK's session limit
+# The console stops the stdio transport handles; the HTTP transport takes the same through uvicorn.
+CONSOLE_STOP_SIGNALS = (signal.SIGINT, signal.SIGBREAK)
 
 log = logging.getLogger("uzpainter.supervisor")
 
@@ -171,10 +180,20 @@ def main(argv: list[str], exe: str, build: str, protocol: str, hooks_compiled: b
         except ManifestError as error:
             log.critical("fatal supervisor error: %s", error)
             return EXIT_FATAL
-        return asyncio.run(_serve(config, build, protocol, ledger, manifest, args))
+        return _run(_serve(config, build, protocol, ledger, manifest, args))
     finally:
         logging.getLogger().removeHandler(handler)
         ledger.close()
+
+
+def _run(main: Coroutine[Any, Any, int]) -> int:
+    """Runs `main` on a new event loop and returns its status as soon as it ends. Unlike
+    `asyncio.run`, it neither cancels nor awaits the tasks still pending: after a console stop the
+    stdio transport's stdin reader cannot finish (`_until_console_stop`), and the process ends
+    right after without finalizing the interpreter (supervisor.cpp, main.cpp)."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop.run_until_complete(main)
 
 
 def _thumbnail() -> Thumbnail | None:
@@ -196,13 +215,18 @@ async def _serve(
     args: argparse.Namespace,
 ) -> int:
     supervisor = worker_module.Supervisor(config)
+    # The MCP SDK is imported on a thread while the worker starts and creates its GPU device: the
+    # two take about half a second each and neither needs the other (decision 253).
+    sdk = asyncio.ensure_future(asyncio.to_thread(_import_sdk, args.bind is None))
     try:
         await supervisor.start()
     except worker_module.FatalSupervisorError as error:
+        sdk.cancel()
         log.critical("fatal supervisor error: %s", error)
         return EXIT_FATAL
     admission = Admission(supervisor, ledger)
     supervisor.on_job_event = admission.on_job_event
+    supervisor.on_project_switch = admission.on_project_switch
     registry = Registry(
         supervisor,
         admission,
@@ -214,6 +238,7 @@ async def _serve(
         protocol=protocol,
     )
     try:
+        await sdk
         if args.bind is None:
             await _run_stdio(registry, build)
         else:
@@ -230,6 +255,12 @@ async def _serve(
         admission.close()
         await supervisor.close()
     return EXIT_OK
+
+
+def _import_sdk(stdio: bool) -> None:
+    """Imports the SDK modules `_server` and, with `stdio`, `_run_stdio` use."""
+    for name in ("mcp_types", "mcp.server.lowlevel", *(("mcp.server.stdio",) if stdio else ())):
+        importlib.import_module(name)
 
 
 def _http_clients() -> Any:
@@ -258,8 +289,42 @@ async def _run_stdio(registry: Registry, build: str) -> None:
 
     client = Client("stdio")
     server = _server(registry, build, lambda ctx: client)
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+
+    async def serve() -> None:
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(read_stream, write_stream, server.create_initialization_options())
+
+    await _until_console_stop(serve())
+
+
+async def _until_console_stop(serving: Coroutine[Any, Any, None]) -> None:
+    """Serves until the session ends or the console sends Ctrl+C or Ctrl+Break, the stop the HTTP
+    transport takes through uvicorn. Either way the caller's shutdown follows: the worker ends (the
+    OS removes its project's lock sidecar with it) and the ledger closes, which checkpoints its
+    WAL. After a stop the stdio task stays blocked on stdin, whose reader thread cannot be
+    cancelled; `_run` returns without waiting for it and the process ends (supervisor.cpp)."""
+    if threading.current_thread() is not threading.main_thread():
+        await serving
+        return
+    loop = asyncio.get_running_loop()
+    stopped = asyncio.Event()
+
+    def stop(signum: int, frame: Any) -> None:
+        loop.call_soon_threadsafe(stopped.set)
+
+    previous = {sig: signal.signal(sig, stop) for sig in CONSOLE_STOP_SIGNALS}
+    task = asyncio.ensure_future(serving)
+    waiter = asyncio.ensure_future(stopped.wait())
+    try:
+        await asyncio.wait({task, waiter}, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        waiter.cancel()
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+    if task.done():
+        task.result()
+    else:
+        log.info("console stop: ending the worker and closing the ledger")
 
 
 def _server(registry: Registry, build: str, client_for: Any) -> Any:

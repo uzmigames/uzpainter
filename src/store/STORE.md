@@ -21,7 +21,7 @@ the bundle import and the size census (§10, §11) implement 09 §3 and §6.
 | `blobs.h` | Content-addressed blobs, `blob_meta` names, non-portable locators, `HashFile` |
 | `commit.h` | `CommitMutation`, `WriteResources`, `WriteRevision`, stored operation rows, `DecideStored`, `CommitExtension` |
 | `versioning.h` | `FormatVersion`, `VersionPolicy`, `CheckReadable`, `MigrateManifest` |
-| `integrity.h` | `CheckIntegrity`, `IntegrityReport`, `CorruptionError`, `NodesBinding` (affected nodes), `ReadManifestText` |
+| `integrity.h` | `CheckIntegrity`, `IntegrityReport`, `CorruptionError`, `NodesBinding` (affected nodes), `ReadManifestText`, `QuickCheck` |
 | `planes.h` | Raster planes: plane rows, immutable versions, chunk codec, `chunk_root`, manifest bindings, staging, the commit extension and the read path (§8) |
 | `plane_integrity.h` | `CheckPlaneIntegrity`: the plane rules, run by `CheckIntegrity` (§8) |
 | `project_store.h` | `ProjectStore`: `Create`, `Open`, `Close`, `Attach`, `Submit`, `StageResource`, `StageLocator`, `ReadResource`, `CreatePlane`, `WritePlane`, `ReadPlane`, `ReadPlaneChunk`, `Save`, `NeedsSaving`, `Compact`, `SaveAs`, `SaveAsCopy`, `Revert` |
@@ -112,7 +112,12 @@ another project) makes the decision `outcome_unknown`, so the call is never exec
 `Open(path, options)`:
 
 0. takes the lock sidecar (§9) and removes the temporary files a killed `compact` left
-   (`<file>.compact`, `<file>.vacuum`);
+   (`<file>.compact`, `<file>.vacuum`), then runs SQLite's structural check (`QuickCheck`:
+   `PRAGMA quick_check`, every b-tree page, cell and overflow pointer and the free list, each page
+   read once) and refuses a damaged file with `CorruptionError` (kind `sqlite`, key
+   `quick_check`, the first problems found) before anything is read from it or written to it: a
+   commit into a damaged b-tree could spread the damage to pages that were sound (B9 of
+   `parity/reports/phase2/practical-e2e.md`);
 1. reads `meta.format_version` and refuses another major with `StoreError(version)` before
    anything can write to the file (a newer major: "format_version 2.0.0 is newer than this reader
    supports (1.0.0)");
@@ -125,12 +130,18 @@ another project) makes the decision `outcome_unknown`, so the call is never exec
    (`MANIFEST.md` §4) and written back;
 4. loads the readable operation rows into the `DocumentState` (unreadable ones are reported and
    left to `DecideStored`);
-5. runs `CheckIntegrity`: `PRAGMA foreign_key_check`, every retained manifest against its
+5. unless `OpenOptions::report` is false, runs `CheckIntegrity`: `PRAGMA foreign_key_check`, every retained manifest against its
    `manifest_sha256`, every operation row, every locator, the plane rules of §8 (with the bytes of
    the chunks the current manifest binds); with `VerifyLevel::full` also `PRAGMA quick_check`,
    the SHA-256 of every blob and the bytes of every chunk any retained manifest binds.
 
-Corrupt history, blobs and missing dependencies are reported in `Opened::report`, never thrown.
+The session's open (`src/python/session.cpp`: the facade, `run`, the MCP worker) passes
+`report = false`: it never read the report, whose scan of every retained manifest and locator
+took 88-186 ms on a 168-revision project (decision 253); `inspect --verify`, `export` and the
+census still build it.
+
+Corrupt history, blobs and missing dependencies are reported in `Opened::report`, never thrown;
+only a damaged SQLite structure (step 0) and a current manifest that does not verify (step 2) are.
 `ReadResource` always verifies: a blob that does not decompress or does not hash to its key
 raises `CorruptionError` naming the hash and the nodes of the current manifest that bind it (the
 id of the nearest object with an `id`/`uid` and the JSON path, e.g.
@@ -165,6 +176,7 @@ the system temp directory:
 | `disk_full` | explicit `disk_full` error, document and file at the previous revision (integrity check ok), the retry commits |
 | `corrupt_blob` | altered content and a damaged frame: reported by `VerifyLevel::full` and by `ReadResource` with the binding node |
 | `corrupt_manifest` | an older manifest is reported, the current one refuses to open, both through `manifest_sha256` |
+| `corrupt_structure` | a file with 64 KiB overwritten with 0xAB in its middle (B9 of `parity/reports/phase2/practical-e2e.md`; `quick_check` fails): `Open` refuses it at both verify levels with `CorruptionError` (`sqlite`, `quick_check`) naming the damaged pages; the file's bytes are unchanged and no lock sidecar is left |
 | `commit_then_die` | a child killed after the durable commit: the retry returns the stored outcome with no second revision, also once the current revision is newer; a changed request with the key is `idempotency_conflict` |
 | `unknown_key_rules` | missing precondition → `outcome_unknown`; ≠ current → `stale_revision`; = current → executes; below the stored horizon → `outcome_unknown`; an unreadable row → `outcome_unknown`, reported on reopen |
 | `deduplication` | two imports of identical bytes: one blob, two `blob_meta` names, original bytes returned |
@@ -195,7 +207,7 @@ uzp-store-save-tests`, `tests/store/save_test.cpp`, the same hooked store source
 | `save_as_and_copy` | `save_as_copy` keeps path, lock and dirty state, the copy opens portable; `save_as` saves, relocates the project and its lock, leaves the original unchanged; existing and locked targets refused |
 | `interrupted_rewrite` | I/O failure during `VACUUM INTO` and of the rename for `compact`, `save_as`, `save_as_copy`: error names the operation and the step, original bytes unchanged, no target or temporary file, the store keeps working; a child killed during `VACUUM INTO` / before the rename of `compact` and during `VACUUM INTO` of `save_as`: the original reopens at its previous state, temporaries removed, the rewrite then completes |
 | `portability` | after `close`, `compact` and `save_as` no `-wal`/`-shm`/`-journal`; the header says rollback journal; a copied `.uzp` opens from another folder |
-| `lock_sidecar` | the sidecar holds this pid; a second open in the same process and an open while a child worker holds it are refused naming the pid; `close` removes it; a lock left by a killed worker, one with a reused pid (other start time) and an unreadable one are replaced; a closed store refuses calls |
+| `lock_sidecar` | the sidecar holds this pid; a second open in the same process and an open while a child worker holds it are refused naming the pid; `close` removes it; a worker killed while holding it leaves no sidecar (the OS deletes it with the handle, B14); a stale sidecar (a dead owner, a reused pid with another start time, this live pid, an unreadable one) is replaced; a held one is not stolen; a closed store refuses calls |
 
 `python -m pytest tests/store/test_store_inspect.py` builds `uzp-store-inspect-tests.exe` (`zig
 build uzp-store-inspect-tests`, `tests/store/inspect_test.cpp`) and runs:
@@ -356,10 +368,13 @@ retained set or an unknown checkpoint fails the call with `not_retained` and wri
 with `.lock` appended), holding `pid=<pid>` and `started=<process creation time>`. The owner keeps
 the sidecar open for writing, sharing reads only, while it holds the lock, so the OS decides
 ownership: another open is refused with `locked` (naming the recorded pid when it can be read) and
-a held sidecar cannot be deleted. The OS closes the handle when the owner dies; a sidecar no process
-holds open is stale whatever it records and is overwritten. `Close` (and the store's destructor)
-closes the connection, which leaves no `-wal`/`-shm`/`-journal` companion (`journal_mode = DELETE`,
-re-applied before closing), then closes the sidecar and removes it; later calls on a closed store
+a held sidecar cannot be deleted. The handle is opened delete-on-close, so the OS removes the
+sidecar whenever the owner lets go of it: a release, and also a crash, a kill or a console
+Ctrl+Break of the owning process (B14 of `parity/reports/phase2/practical-e2e.md`). A sidecar no
+process holds open (left by a machine that stopped) is stale whatever it records and is
+overwritten; a reader of a held sidecar must share deletion (`ReadLockOwner`). `Close` (and the
+store's destructor) closes the connection, which leaves no `-wal`/`-shm`/`-journal` companion
+(`journal_mode = DELETE`, re-applied before closing), then closes the sidecar, which removes it; later calls on a closed store
 fail with `io`. `save_as` moves the lock with the project. `inspect` reads through `Container` and takes no lock (§10).
 
 ## 10. Inspection and the export bundle

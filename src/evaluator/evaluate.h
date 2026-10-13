@@ -36,6 +36,7 @@ struct EvaluationStats {
     uint64_t uploads = 0;        ///< Bitmap tiles projected (bitmap content computed).
     uint64_t evictions = 0;      ///< Tiles evicted during the evaluation.
     uint64_t flushes = 0;        ///< Store flushes forced by the budget.
+    uint64_t persistentHits = 0; ///< Tiles served from the persistent results (result_cache.h).
 };
 
 /// One tile of a channel result: the base constant (an empty stack) or the texels of the tile

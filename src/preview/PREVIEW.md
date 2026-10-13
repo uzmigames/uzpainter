@@ -34,6 +34,8 @@ The environment is equirectangular, with row 0 at +Y. It uses the direction mapp
   - `A` and `B` of the split sum, with the height-correlated Smith masking (Heitz 2014) and Schlick's Fresnel;
   - `D`, the albedo of Burley's diffuse lobe (2012).
 
+`LightingOf` keeps the result across processes in the `lighting` area of the persistent caches (`src/render/disk_cache.h`, decision 253), keyed by the environment file's SHA-256 (of bytes the caller checked against it), the sampling constants, the build fingerprint and the MXCSR control bits; every float is stored bit for bit, and a hit skips the decode as well. Rotation and exposure apply at shading time, so they are not part of the key. It saves 1.0-1.3 s of every capture and preview start (`uzp-preview-tests lighting-cache`).
+
 ## Pass (item 2.2)
 
 One compute dispatch per frame on the render layer (`src/render/`):
@@ -96,7 +98,7 @@ The preview tests open their windows on a private desktop that nobody sees (`tes
   - **Today.** It renders OCIO projects with Painter's substance config whose sources the evaluator takes under OCIO: uniform colours, an 8-bit colour bitmap in sRGB or Raw on an sRGB8 channel at 1:1 and a 16-bit grey mask source at 1:1 (decision 190). Every other source fails before any device work, as in the export.
 - **`base_color`, `channel:<name>`, `mask:<uid>`** are texture-space captures of one stack, at its set's resolution.
   - The stack is `stack` (Python) or `texture_set`/`stack` (worker), else the active stack; `mask:<uid>` takes its node's.
-  - The export engine compiles and encodes a one-file plan of `documentMap baseColor`, `documentMap <name>` or `diagnosticMap materialMask/<uid>` with padding `passthrough`. It writes a 16-bit PNG at `path` and an OpenEXR 32f at `<stem>.exr`, so each equals the export of its source with the same parameters.
+  - The export engine compiles and encodes a one-file plan of `documentMap baseColor`, `documentMap <name>` or `diagnosticMap materialMask/<uid>` with padding `passthrough`. In `channel:<name>`, `<name>` is a channel type as `evaluate_channel` and `source_set` take it (`SpecularRoughness`) or the export's documentMap name of one (`specularroughness`); the source is the documentMap the export records for that channel (decision 242). Any other name raises `ValueError` ("names no channel"), and a channel the stack lacks raises "has no channel". It writes a 16-bit PNG at `path` and an OpenEXR 32f at `<stem>.exr`, so each equals the export of its source with the same parameters.
   - A given `camera`, `preset`, `samples` or `seed`, or another size, raises `ValueError`.
 - **Receipt.** Every capture writes `<stem>.receipt.json` (`src/python/capture-receipt.schema.json`): `{schema, revision, project_uuid, evaluator_profile, render_state_digest, mode, source, encoding, backend, adapter, driver, samples, seed, camera, size, display_configuration, hashes}`.
   - `render_state_digest` is the SHA-256 of the canonical JSON of the resolved render state. For `painter_viewport` that is the environment, background, camera and pose, size, samples, seed, shader and display configuration; for the other modes, the source, size and encoding.

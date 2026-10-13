@@ -105,6 +105,13 @@ ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const
     ProjectLock lock = ProjectLock::Acquire(path);
     RemoveTemporaryFiles(path);  // left by a worker killed during compact
     Container container = Container::Open(path);
+    // A damaged b-tree is refused before anything reads the project or writes to the file: a
+    // commit into it can spread the damage to pages that were sound.
+    if (const std::vector<std::string> damage = QuickCheck(container, 8); !damage.empty()) {
+        std::string detail = Utf8(path) + " does not verify, so it is not opened and nothing is written to it: ";
+        for (std::size_t i = 0; i < damage.size(); ++i) detail += (i == 0 ? "" : "; ") + damage[i];
+        throw CorruptionError(CorruptItem{"sqlite", "quick_check", detail, {}});
+    }
     if (!container.HasTable("meta")) {
         throw StoreError(StoreError::Code::not_a_project, Utf8(path) + " has no meta table: not a .uzp project");
     }
@@ -144,7 +151,7 @@ ProjectStore::Opened ProjectStore::Open(const std::filesystem::path& path, const
         // the records above the horizon.
         if (record.committed_revision > opened.state.operation_horizon) opened.state.operations.push_back(std::move(record));
     }
-    opened.report = CheckIntegrity(container, manifest, options.verify);
+    if (options.report) opened.report = CheckIntegrity(container, manifest, options.verify);
     opened.store.reset(new ProjectStore(std::move(lock), std::move(container), *uuid, portable, std::move(manifest)));
     return opened;
 }
@@ -179,7 +186,12 @@ std::string ProjectStore::ReadResource(std::string_view sha256) {
                 CorruptItem{"blob", std::string(sha256), error.what(), NodesBinding(current_manifest_, sha256)});
         }
     }
-    if (const auto locator = FindLocator(container_, sha256)) {
+    if (const auto staged = pending_.blobs.find(sha256); staged != pending_.blobs.end()) return staged->second.bytes;
+    std::optional<std::filesystem::path> locator = FindLocator(container_, sha256);
+    if (const auto staged = pending_.locators.find(sha256); !locator && staged != pending_.locators.end()) {
+        locator = staged->second;
+    }
+    if (locator) {
         const std::optional<std::string> bytes = ReadFile(*locator);
         if (!bytes) {
             throw StoreError(StoreError::Code::missing_dependency,

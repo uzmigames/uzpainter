@@ -1,7 +1,8 @@
 """Tests of phase0.3_vendor-modifications: UzPainter's own static-library build of the vendored
-render core (`build.zig`) and the local modifications UZP-MOD-001…006, UZP-MOD-008 and
-UZP-MOD-009 (`thirdparty/uzengine-render-core/MODIFICATIONS.md`; UZP-MOD-009 is covered by
-`tests/render/test_core_readback.py`).
+render core (`build.zig`) and the local modifications UZP-MOD-001…006 and UZP-MOD-008…010
+(`thirdparty/uzengine-render-core/MODIFICATIONS.md`; UZP-MOD-009 is covered by
+`tests/render/test_core_readback.py`, UZP-MOD-010 by `tests/supervisor/test_worker_pipe.py` and
+`tests/toolchain/test_selftest.py`).
 
 The native cases run `uzp-vendor-tests.exe` (`tests/native/vendor_modifications_test.cpp`),
 built once per module from a fresh cache so the build log lists every compile and link
@@ -418,7 +419,7 @@ def test_notices_log_and_manifest_agree() -> None:
     that exists, and its manifest entry carries the logged ids and its current hash."""
     log = load_log(REPO_ROOT)
     # UZP-MOD-007 (Vulkan acceleration structures) is planned for phase3.3 and not applied yet.
-    assert [m.id for m in log] == [f"UZP-MOD-00{n}" for n in (1, 2, 3, 4, 5, 6, 8, 9)]
+    assert [m.id for m in log] == [f"UZP-MOD-{n:03d}" for n in (1, 2, 3, 4, 5, 6, 8, 9, 10)]
     manifest = load(VENDORED / "MANIFEST.json")
     assert problems(REPO_ROOT, manifest, log) == []
     modified = {e.vendored_path for e in manifest.files if e.status == "modified"}
@@ -441,5 +442,5 @@ def test_log_citations_hold_at_the_selected_commit(
     if not git.has_commit(UZENGINE_REPO, SELECTED_COMMIT):
         pytest.skip(f"UzEngine commit {SELECTED_COMMIT} not available at {UZENGINE_REPO}")
     export_root = tmp_path_factory.mktemp("uzengine-export")
-    git.export(UZENGINE_REPO, SELECTED_COMMIT, ("runtime/engine",), export_root)
+    git.export(UZENGINE_REPO, SELECTED_COMMIT, ("runtime/engine", "runtime/platform"), export_root)
     assert failing_citations(export_root / "runtime", UPSTREAM_CITATIONS) == []

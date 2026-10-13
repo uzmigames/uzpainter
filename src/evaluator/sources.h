@@ -12,13 +12,16 @@
 // records evaluates: uniform colours (sRGB, unset and Raw), an 8-bit colour bitmap in sRGB or Raw
 // on an sRGB8 channel at 1:1, and a 16-bit grey bitmap in a linear space as a mask source at 1:1;
 // every other bitmap use, and any other OCIO configuration, fails with
-// `evaluator:unsupported_source`.
+// `evaluator:unsupported_source`, and the support check refuses such a bitmap use before mutation
+// from the PNG header (`OcioBitmapRecorded`, support.h; decision 240).
 //
 // - Uniform colour: each component (the mean of the three on a grey channel) is taken as a linear
 //   value and stored with the channel's write rule (dag.h `UniformOperand`): RGB16 codes are
 //   round(v 65535), sRGB8 codes the recording GPU's float-to-sRGB8 conversion (arith.h
 //   `Srgb8Store`). The colour spaces sRGB, Working and Raw give the same codes (all three
-//   observed on the Tier 0 ramps).
+//   observed on the Tier 0 ramps). Every API and MCP setter stores Painter's working value of the
+//   colour given, tagged Working (`python::WorkingColour`, decision 240), so the tag is a record
+//   only.
 // - Bitmap: bound by the SHA-256 of its bytes (LAY-13: two nodes binding different bytes under
 //   one alias each read their own), decoded once per resource (`DecodeBitmap`, 8- or 16-bit PNG),
 //   sampled by the node's projection (projection_uv.h) and stored with the channel's write rule.
@@ -99,6 +102,7 @@
 //   (support.h before any mutation). On any other channel that is neither sRGB8 nor the L8
 //   material channels above, sRGB is not recorded and fails the same way, as does any other tag.
 
+#include "evaluator/projection_uv.h"
 #include "evaluator/resources.h"
 #include "evaluator/tile_store.h"
 #include "render/backend.h"
@@ -109,6 +113,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 
@@ -138,16 +143,45 @@ inline constexpr std::string_view kPainterOcioConfigSha256 =
 
 /// Painter's working value of an sRGB uniform colour component under OCIO with its substance
 /// config: the measured float32 readback by the float32 bits of the component (decision 202), the
-/// facade's table (`python/uzpainter_facade/ocio_srgb.py`) as generated into
-/// `ocio_srgb_table.inc` by `tools/parity/ocio_srgb_table.py`: the 256 codes c / 255 and the 193
-/// other recorded components. Empty for a component it does not record: no analytic decode
-/// reproduces it.
+/// table of `python/uzpainter_facade/ocio_srgb.py` as generated into `ocio_srgb_table.inc` by
+/// `tools/parity/ocio_srgb_table.py`: the 256 codes c / 255 and the 193 other recorded components.
+/// Empty for a component it does not record: no analytic decode reproduces it.
 [[nodiscard]] std::optional<float> PainterOcioSrgbDecode(float component);
+
+/// Painter's working value of an sRGB uniform colour component under legacy colour management
+/// (decision 214), in float32 with x = float32(component): x * (1.0f / 12.92f) up to 0.04045f,
+/// else ((x + 0.055f) * (1.0f / 1.055f)) ^ 2.4f, each reciprocal the float32 quotient of 1 by the
+/// float32 constant and the power of the float32 operands rounded once to float32 (P20-B,
+/// `phase1-srgb-uniform-decode-part1..4`: all 448 recorded components, both recordings).
+/// `python::WorkingColour` (python/edits.h) is its one caller: every path that stores a uniform
+/// colour, the facade's included, decodes through it (decision 240).
+[[nodiscard]] float PainterLegacySrgbDecode(float component);
 
 /// Fails with `evaluator:unsupported_source` unless `project` uses legacy colour management or
 /// OCIO with Painter's substance config (`PainterOcio`).
 [[nodiscard]] render::Result<void> CheckColourManagement(const core::Project& project,
                                                          core::Id node);
+
+/// The shape `DecodeBitmap` gives a PNG, read from its header alone: its size, one channel for a
+/// grey file (with or without alpha) and three otherwise, 16-bit codes for a 16-bit file and 8-bit
+/// codes otherwise.
+struct BitmapShape {
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t channels = 0;
+    render::TexelEncoding encoding = render::TexelEncoding::Unorm8;
+};
+
+/// The shape of the PNG `bytes` (`BitmapShape`), or nullopt when its header does not decode.
+[[nodiscard]] std::optional<BitmapShape> BitmapShapeOf(std::string_view bytes);
+
+/// Whether a bitmap of `shape` sampled by `projection` on a `width` x `height` texture set is a use
+/// Session O records under OCIO with Painter's substance config (above; decision 190): a 16-bit
+/// grey image as a mask source (`mask`), an 8-bit colour image on an sRGB8 channel otherwise, each
+/// at 1:1 (the image is the set's size and the projection is the identity). The evaluation
+/// (evaluate.cpp `CheckOcioBitmap`) and the support check before mutation (support.h) share it.
+[[nodiscard]] bool OcioBitmapRecorded(bool mask, const UvProjection& projection, uint32_t width,
+                                      uint32_t height, const BitmapShape& shape);
 
 /// The samples of a PNG: 16-bit files as 16-bit codes, files of 8 bits or fewer as 8-bit codes;
 /// grey (with or without alpha) as one channel, RGB, RGBA and palette images as three; rows top
@@ -165,6 +199,9 @@ public:
     explicit DecodingResourceProvider(FetchBytes fetch) : m_fetch(std::move(fetch)) {}
 
     std::shared_ptr<const DecodedImage> Fetch(std::string_view sha256) const override;
+    /// The bytes are stored and hash to `sha256`, checked once, without decoding them: bytes
+    /// that hash to the key of a stored result decoded when it was computed.
+    bool Available(std::string_view sha256) const override;
 
     /// Decodes performed so far (cache misses that produced an image).
     [[nodiscard]] size_t Decodes() const;
@@ -173,6 +210,7 @@ private:
     FetchBytes m_fetch;
     mutable std::mutex m_mutex;
     mutable std::map<std::string, std::shared_ptr<const DecodedImage>, std::less<>> m_cache;
+    mutable std::set<std::string, std::less<>> m_available;
     mutable size_t m_decodes = 0;
 };
 

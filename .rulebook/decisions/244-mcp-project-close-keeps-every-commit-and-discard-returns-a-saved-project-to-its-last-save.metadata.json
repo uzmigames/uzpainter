@@ -1,0 +1,13 @@
+{
+  "id": 244,
+  "slug": "mcp-project-close-keeps-every-commit-and-discard-returns-a-saved-project-to-its-last-save",
+  "title": "MCP project_close keeps every commit, and discard: true returns a saved project to its last save",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.8_mcp-server",
+    "phase1.21_pyapi-dispatcher-lifecycle"
+  ],
+  "supersededBy": null
+}

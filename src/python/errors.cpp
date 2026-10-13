@@ -144,12 +144,14 @@ void RaiseApiError(const ApiError& error) {
     } else if (cls == "UnsupportedInUzPainter") {
         Raise(type(error.symbol, error.reason, error.alternative));
     } else if (cls == "MeshParseError" || cls == "UnsupportedFormat" || cls == "DuplicateMaterialNames" ||
-               cls == "UVOutsideTile" || cls == "ReleaseGap") {
+               cls == "UVOutsideTile" || cls == "ReleaseGap" || cls == mesh::kMaterialMappingErrorClass) {
         Raise(type(error.what(), FromJson(error.details)));
     } else {
         Raise(type(error.what()));
     }
 }
+
+}  // namespace
 
 ApiError FromImportError(const mesh::ImportError& error) {
     std::string cls(mesh::ErrorClassName(error.kind()));
@@ -158,7 +160,11 @@ ApiError FromImportError(const mesh::ImportError& error) {
     return api;
 }
 
-}  // namespace
+ApiError FromMaterialMappingError(const mesh::MaterialMappingError& error) {
+    ApiError api(std::string(mesh::kMaterialMappingErrorClass), error.what());
+    api.details = error.details();
+    return api;
+}
 
 void ThrowProjectError(const std::string& message) { throw ApiError("ProjectError", message); }
 void ThrowNotYetSupported(const std::string& message) { throw ApiError("NotYetSupported", message); }
@@ -208,7 +214,7 @@ void RegisterExceptions(py::module_& exception) {
         } catch (const mesh::ImportError& error) {
             RaiseApiError(FromImportError(error));
         } catch (const mesh::MaterialMappingError& error) {
-            Raise(Class(std::string(mesh::kMaterialMappingErrorClass))(error.what(), FromJson(error.details())));
+            RaiseApiError(FromMaterialMappingError(error));
         } catch (const store::StoreError& error) {
             const std::string message = "project store: " + std::string(store::CodeName(error.code())) + ": " + error.what();
             Raise(Class(error.code() == store::StoreError::Code::missing_resource ? "ResourceNotFoundError" : "ProjectError")(

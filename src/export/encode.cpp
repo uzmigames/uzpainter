@@ -21,8 +21,10 @@ constexpr std::string_view kSrgb8NotRecorded =
 constexpr std::string_view kL8MaterialNotRecorded =
     "tier0/semantics/export-l8-material records RGB and L files of one L8 channel under Legacy; decision 204";
 constexpr std::string_view kDitherNotFitted = "recording R-090 P3, decision 103";
-constexpr std::string_view kResizeNotFitted = "recording R-090 P4, decision 103";
-constexpr std::string_view kPaddingNotFitted = "recording R-090 P5 and P9, decision 103";
+constexpr std::string_view kResizeNotFitted =
+    "recording R-090 P4, decision 103; owner phase3.2_unreal-ue56-packed-preset";
+constexpr std::string_view kPaddingNotFitted =
+    "recording R-090 P5 and P9, decision 103; owner phase3.2_unreal-ue56-packed-preset";
 
 [[noreturn]] void Refuse(const PlannedFile& file, const std::string& what, std::string_view owner) {
     throw core::NotYetSupported("export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
@@ -94,7 +96,9 @@ void CheckProcessing(const core::Project& project, const PlannedFile& file) {
     if (file.width != width || file.height != height) {
         Refuse(file,
                "resizing " + std::to_string(width) + "x" + std::to_string(height) + " to " + std::to_string(file.width) +
-                   "x" + std::to_string(file.height) + " (sizeLog2) is recorded but only partly fitted",
+                   "x" + std::to_string(file.height) +
+                   " (sizeLog2) is recorded but only partly fitted, and no resize is implemented (sRGB8 channels, "
+                   "virtual normals after a downscale and BilinearHQ normal-channel magnification are not reproduced)",
                kResizeNotFitted);
     }
     if (p.paddingAlgorithm != Padding::infinite && p.paddingAlgorithm != Padding::passthrough) {

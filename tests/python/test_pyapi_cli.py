@@ -1,5 +1,6 @@
 """`UzPainter.exe run` and `UzPainter.exe capabilities` (task phase1.22_pyapi-cli-capabilities items
-3.1-3.4; decisions 111 and 112).
+3.1-3.4; decisions 111 and 112), and the command line fixes of the practical end-to-end run
+(parity/reports/phase2/practical-e2e.md B2, B3, B14 and B16).
 
 `UzPainter.exe` comes from a fresh `zig build painter` install, so the shipped `capabilities.json`,
 the embedded interpreter and `python/` are beside it. CPU only: no Phase 1 Python call uses the
@@ -9,19 +10,39 @@ GPU, so `run` creates no device (decision 111).
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
+import signal
 import subprocess
 import textwrap
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 from jsonschema import Draft202012Validator
 
-from tests.python.conftest import JSON_PREFIX, PLANE, REPO_ROOT
+from tests.python.conftest import JSON_PREFIX, PLANE, PROBE_IMAGES, REPO_ROOT
 from tools.capabilities.generate_capabilities import generate
 
 SCHEMA = REPO_ROOT / "tools" / "capabilities" / "capabilities.schema.json"
+NON_ASCII = "ação ☃ 日本"  # outside every ANSI code page
+# The verbs whose own usage text names their options; `--help` names every one of them.
+VERB_USAGES = [
+    REPO_ROOT / "src" / name
+    for name in (
+        "selftest/harness.cpp",
+        "store/cli.cpp",
+        "export/cli.cpp",
+        "python/run.cpp",
+        "python/capabilities.cpp",
+        "preview/cli.cpp",
+        "supervisor/worker.cpp",
+        "render/disk_cache.cpp",
+    )
+]
+SUPERVISOR_MAIN = REPO_ROOT / "python" / "uzpainter_supervisor" / "main.py"
 
 
 @pytest.fixture(scope="module")
@@ -138,6 +159,158 @@ def test_run_usage_errors(painter: Path, args: list[str]) -> None:
     assert "usage: UzPainter.exe run" in err
 
 
+def test_run_passes_non_ascii_arguments(painter: Path, tmp_path: Path) -> None:
+    """practical-e2e B3: an argument outside the ANSI code page reaches `sys.argv` as given. It
+    used to abort the process (`UnicodeDecodeError`, exit status 0xC0000409, no report)."""
+    path = script(tmp_path, "import sys\nresult = sys.argv[1:]\n")
+    status, documents, stderr = cli(painter, "run", path, "ação ☃", NON_ASCII)
+    assert status == 0, stderr
+    (report,) = documents
+    assert report["status"] == "ok"
+    assert report["result"] == ["ação ☃", NON_ASCII]
+
+
+def test_run_reports_a_host_failure_instead_of_crashing(painter: Path, tmp_path: Path) -> None:
+    """practical-e2e B3: a failure of the host around the script, here output it cannot encode
+    as UTF-8 (a lone surrogate), is the documented host failure: exit status 3 and one
+    `host_error` report, never an uncaught exception that ends the process without one."""
+    path = script(tmp_path, 'print("\\udc80")\nresult = 1\n')
+    status, documents, _ = cli(painter, "run", path)
+    assert status == 3
+    (report,) = documents
+    assert report["status"] == "host_error"
+    assert report["error"]["type"] == "HostError" and report["error"]["message"]
+    assert report["gpu_backend"] == "dx12"
+
+
+def test_cli_verbs_take_non_ascii_paths(painter: Path, tmp_path: Path) -> None:
+    """practical-e2e B2: `run`, `inspect`, `export-bundle` and `export` open paths outside the ANSI
+    code page. The arguments used to arrive mangled (`ação ☃ 日本` became `a��o ? ??`), so the
+    script and the project were not found."""
+    folder = tmp_path / NON_ASCII
+    folder.mkdir()
+    source = folder / "script ☃.py"
+    body = f"""
+        import sys
+        from uzpainter import project
+        settings = project.Settings(default_texture_resolution=256)
+        project.create({str(PLANE.as_posix())!r}, settings)
+        project.save_as(sys.argv[1])
+        result = project.file_path()
+        """
+    source.write_text(textwrap.dedent(body), encoding="utf-8")
+    saved = folder / "projeto ☃.uzp"
+    status, documents, stderr = cli(painter, "run", str(source), str(saved))
+    assert status == 0, stderr
+    (report,) = documents
+    assert report["status"] == "ok", report
+    reported = Path(report["result"])
+    assert (reported.parent.name, reported.name) == (NON_ASCII, saved.name) and saved.is_file()
+
+    def verb(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [str(painter), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=600,
+            check=False,
+        )
+
+    inspected = verb("inspect", str(saved))
+    assert inspected.returncode == 0, inspected.stderr
+    assert Path(json.loads(inspected.stdout)["file"]) == saved
+    bundle = folder / "pacote ☃"
+    bundled = verb("export-bundle", str(saved), str(bundle))
+    assert bundled.returncode == 0, bundled.stderr
+    assert json.loads(bundled.stdout)["target"] == str(bundle)
+    assert bundle.is_dir() and any(bundle.iterdir())
+    delivery = folder / "saída ☃"
+    delivery.mkdir()
+    recovered = verb("export", "--recover", str(delivery), "--fixed-names", str(folder))
+    assert recovered.returncode == 0, recovered.stderr
+    [fixed] = json.loads(recovered.stdout)["fixed_names"]
+    assert Path(fixed["directory"]) == folder
+
+
+def test_run_ctrl_break_interrupts_the_script(painter: Path, tmp_path: Path) -> None:
+    """practical-e2e B14: Ctrl+Break during a script raises KeyboardInterrupt in it, a structured
+    failure (exit status 1 and its report, not 0xC000013A). The host then closes the project the
+    script left open, as after any run: its lock is gone."""
+    ready = tmp_path / "ready"
+    saved = tmp_path / "open.uzp"
+    path = script(
+        tmp_path,
+        f"""
+        import pathlib, time
+        from uzpainter import project
+        project.create({str(PLANE.as_posix())!r}, project.Settings(default_texture_resolution=256))
+        project.save_as({str(saved.as_posix())!r})
+        pathlib.Path({str(ready.as_posix())!r}).write_text("ready")
+        while True:
+            time.sleep(0.05)
+        """,
+    )
+    process = subprocess.Popen(
+        [str(painter), "run", path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+    )
+    try:
+        deadline = time.monotonic() + 300
+        while not ready.exists():
+            assert process.poll() is None and time.monotonic() < deadline
+            time.sleep(0.05)
+        assert Path(f"{saved}.lock").exists()
+        os.kill(process.pid, signal.CTRL_BREAK_EVENT)
+        out, err = process.communicate(timeout=120)
+    finally:
+        if process.poll() is None:
+            process.kill()
+    assert process.returncode == 1, (hex(process.returncode & 0xFFFFFFFF), err)
+    lines = out.decode("utf-8").splitlines()
+    (report,) = [json.loads(line[len(JSON_PREFIX) :]) for line in lines]
+    assert report["status"] == "failed"
+    assert report["error"]["type"] == "KeyboardInterrupt"
+    assert not Path(f"{saved}.lock").exists()
+
+
+def usage_flags(path: Path) -> set[str]:
+    """The options a verb's own usage text names (the string literal from `usage: UzPainter.exe`
+    to the end of its statement)."""
+    text = path.read_text(encoding="utf-8")
+    start = text.index('"usage: UzPainter.exe')
+    return set(re.findall(r"--[a-z][a-z0-9-]*", text[start : text.index(";", start)]))
+
+
+def test_help_prints_every_verb_and_option(painter: Path) -> None:
+    """practical-e2e B16: `--help` prints the usage on stdout with exit status 0. It names every
+    verb, every option a verb's own usage names and every option the supervisor parses
+    (`--preview`, `--mcp-http`, `--token`, `--roots` and `--ledger` were missing). An unknown
+    command stays a usage error: the usage on stderr, exit status 2."""
+    shown = subprocess.run(
+        [str(painter), "--help"], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert shown.returncode == 0, shown.stderr
+    usage = shown.stdout
+    for verb in ("selftest", "inspect", "export-bundle", "store-census", "export", "run", "cache"):
+        assert f"UzPainter.exe {verb} " in usage, verb
+    for verb in ("capabilities", "--preview", "--mcp", "--worker", "--help"):
+        assert f"UzPainter.exe {verb}" in usage, verb
+    supervisor = set(
+        re.findall(r'add_argument\("(--[a-z-]+)"', SUPERVISOR_MAIN.read_text(encoding="utf-8"))
+    )
+    assert {"--preview", "--mcp-http", "--token", "--roots", "--ledger"} <= supervisor
+    options = supervisor.union(*(usage_flags(path) for path in VERB_USAGES))
+    assert sorted(option for option in options if option not in usage) == []
+    unknown = subprocess.run(
+        [str(painter), "--no-such-verb"], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert unknown.returncode == 2
+    assert unknown.stdout == "" and unknown.stderr == usage
+
+
 def test_run_with_an_unavailable_backend(painter: Path, tmp_path: Path) -> None:
     """3.3 (decision 111): under `--gpu-backend vulkan`, which this build cannot serve, the host
     still runs the script and project create, save and reopen succeed. The first Python call that
@@ -251,3 +424,208 @@ def test_inspect_prints_the_recipe_dump_of_a_project_open_elsewhere(
     assert result["recipe"][1] == result["dump"]
     assert result["report"] == {"available": True, "digest": result["dump"]["digest"]}
     assert result["after"] == result["dump"]["revision"] + 1
+
+
+# ── Persistent caches (decision 253) ────────────────────────────────────────────────────────────
+
+# A saved project with a bitmap and two uniform fills on BaseColor and Height.
+CACHE_PROJECT = """
+import sys
+from uzpainter import colormanagement as cm, layerstack as ls, project, resource
+from uzpainter import textureset as ts
+work, plane, images = sys.argv[1], sys.argv[2], sys.argv[3]
+CT = ts.ChannelType
+project.create(plane, project.Settings(default_texture_resolution=512))
+top = lambda: ls.InsertPosition.from_textureset_stack(ts.get_active_stack())
+checker = resource.import_project_resource(images + "/checker-16.png", resource.Usage.TEXTURE)
+base = ls.insert_fill(top())
+base.active_channels = {CT.BaseColor, CT.Height}
+base.set_source(CT.BaseColor, checker.identifier())
+base.set_source(CT.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+for value in (0.3, 0.7):
+    fill = ls.insert_fill(top())
+    fill.active_channels = {CT.BaseColor, CT.Height}
+    fill.set_source(CT.BaseColor, cm.Color(value, 1 - value, 0.4))
+    fill.set_source(CT.Height, cm.Color(value, value, value, "Raw"))
+    fill.set_opacity(0.5, CT.BaseColor)
+    fill.set_opacity(0.5, CT.Height)
+project.save_as(work + "/cached.uzp")
+result = project.revision()
+"""
+# An export of the saved project's BaseColor and Height into the folder its second argument
+# names: the files' hashes.
+CACHE_EXPORT = """
+import sys
+from uzpainter import export, project
+work, folder = sys.argv[1], sys.argv[2]
+project.open(work + "/cached.uzp")
+def channels(name, layout):
+    return [{"destChannel": c, "srcChannel": c, "srcMapType": "documentMap", "srcMapName": name}
+            for c in (["R", "G", "B"] if layout == "RGB" else ["L"])]
+maps = [{"fileName": "$textureSet_" + n, "channels": channels(n, layout)}
+        for n, layout in (("baseColor", "RGB"), ("height", "L"))]
+out = export.export_project_textures({
+    "exportShaderParams": False, "exportPath": work + "/" + folder, "defaultExportPreset": "p",
+    "exportPresets": [{"name": "p", "maps": maps}], "exportList": [{"rootPath": "uzp_plane"}],
+    "exportParameters": [{"parameters": {"fileFormat": "png", "bitDepth": "16", "dithering": False,
+                                         "paddingAlgorithm": "passthrough"}}]})
+result = {f["relative_path"]: f["sha256"] for f in out["files"]}
+"""
+
+
+def cache_cli(exe: Path, env: dict[str, str], *args: str) -> tuple[int, list[Any], str, str]:
+    """Exit status, the `UZP_JSON:` documents, the other standard output and the standard error
+    of `UzPainter.exe <args>` under `env`."""
+    process = subprocess.run(
+        [str(exe), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=600,
+        check=False,
+        env=env,
+    )
+    lines = process.stdout.splitlines()
+    documents = [
+        json.loads(line[len(JSON_PREFIX) :]) for line in lines if line.startswith(JSON_PREFIX)
+    ]
+    other = "\n".join(line for line in lines if not line.startswith(JSON_PREFIX))
+    return process.returncode, documents, other, process.stderr
+
+
+def cache_env(root: Path) -> dict[str, str]:
+    """The test's environment with the caches on under `root` (tests/conftest.py turns them off
+    for every other test)."""
+    env = {key: value for key, value in os.environ.items() if key != "UZP_NO_CACHE"}
+    env["UZP_CACHE_DIR"] = str(root)
+    return env
+
+
+def entries(area: Path) -> dict[str, tuple[int, bytes]]:
+    """Each entry of a cache area by name: its last-write time and its bytes."""
+    if not area.is_dir():
+        return {}
+    return {
+        path.name: (path.stat().st_mtime_ns, path.read_bytes())
+        for path in sorted(area.iterdir())
+        if len(path.name) == 64
+    }
+
+
+def test_cache_command_reports_and_clears(painter: Path, tmp_path: Path) -> None:
+    """decision 253: `UzPainter.exe cache info` prints the root and each area's entries and bytes,
+    and whether this process has the caches on: not under `--no-cache` or `UZP_NO_CACHE=1`.
+    `cache clear` removes every entry and temporary file of the areas and nothing else; another
+    subcommand is a usage error. `--help` names the verb and `--no-cache`."""
+    root = tmp_path / "cache"
+    env = cache_env(root)
+    status, _, printed, err = cache_cli(painter, env, "cache", "info")
+    assert status == 0, err
+    empty = {"entries": 0, "bytes": 0}
+    assert json.loads(printed) == {
+        "root": str(root),
+        "enabled": True,
+        "areas": {"eval": empty, "lighting": empty},
+    }
+    for args, extra in (
+        (("--no-cache", "cache", "info"), {}),
+        (("cache", "info"), {"UZP_NO_CACHE": "1"}),
+    ):
+        status, _, printed, err = cache_cli(painter, {**env, **extra}, *args)
+        assert status == 0, err
+        assert json.loads(printed)["enabled"] is False, args
+    (root / "eval").mkdir(parents=True)
+    (root / "eval" / ("a" * 64)).write_bytes(b"x" * 100)
+    (root / "eval" / ("b" * 64 + ".tmp-1-2-3")).write_bytes(b"y" * 10)
+    (root / "eval" / "keep.txt").write_bytes(b"not an entry")
+    (root / "lighting").mkdir()
+    (root / "lighting" / ("c" * 64)).write_bytes(b"z" * 7)
+    status, _, printed, err = cache_cli(painter, env, "cache", "info")
+    assert status == 0, err
+    assert json.loads(printed)["areas"] == {
+        "eval": {"entries": 2, "bytes": 110},
+        "lighting": {"entries": 1, "bytes": 7},
+    }
+    status, _, printed, err = cache_cli(painter, env, "cache", "clear")
+    assert status == 0, err
+    assert json.loads(printed) == {
+        "root": str(root),
+        "areas": {
+            "eval": {"removed": 2, "bytes": 110, "skipped": 0},
+            "lighting": {"removed": 1, "bytes": 7, "skipped": 0},
+        },
+    }
+    assert sorted(p.name for p in (root / "eval").iterdir()) == ["keep.txt"]
+    assert list((root / "lighting").iterdir()) == []
+    status, _, _, err = cache_cli(painter, env, "cache", "drop")
+    assert status == 2 and err == "usage: UzPainter.exe cache info | clear\n"
+    usage = subprocess.run(
+        [str(painter), "--help"], capture_output=True, text=True, timeout=60, check=False
+    ).stdout
+    assert "UzPainter.exe cache info | clear" in usage and "--no-cache" in usage
+
+
+def test_persistent_results_serve_a_later_process_byte_for_byte(
+    painter: Path, tmp_path: Path
+) -> None:
+    """decision 253: the export of a saved project stores the read-outs it evaluated; a later
+    process exporting the same revision is served them (the entries are marked used, none is
+    added) and writes the same bytes, as does a process under `--no-cache`, which neither reads
+    nor writes the cache. Damaged entries are recomputed and written again bit for bit; an
+    export after `cache clear` stores them anew."""
+    root = tmp_path / "cache"
+    env = cache_env(root)
+    area = root / "eval"
+    make = script(tmp_path, CACHE_PROJECT)
+    export = tmp_path / "export.py"
+    export.write_text(CACHE_EXPORT, encoding="utf-8")
+
+    def run_export(folder: str, *flags: str) -> dict[str, str]:
+        status, documents, _, err = cache_cli(
+            painter, env, *flags, "run", str(export), str(tmp_path), folder
+        )
+        assert status == 0, err
+        [report] = documents
+        assert report["status"] == "ok", report
+        files: dict[str, str] = report["result"]
+        return files
+
+    status, documents, _, err = cache_cli(
+        painter, env, "--no-cache", "run", make, str(tmp_path), str(PLANE), str(PROBE_IMAGES)
+    )
+    assert status == 0 and documents[0]["status"] == "ok", (err, documents)
+    assert entries(area) == {}
+
+    cold = run_export("cold")
+    stored = entries(area)
+    assert sorted(cold) == ["uzp_plane_baseColor.png", "uzp_plane_height.png"]
+    assert len(stored) == 2  # one read-out per channel
+
+    warm = run_export("warm")
+    served = entries(area)
+    assert warm == cold
+    assert served.keys() == stored.keys()
+    assert all(served[name][1] == stored[name][1] for name in stored)
+    assert all(served[name][0] > stored[name][0] for name in stored), "every entry was served"
+
+    uncached = run_export("uncached", "--no-cache")
+    assert uncached == cold
+    assert entries(area) == served, "--no-cache neither reads nor writes the cache"
+
+    for name in stored:
+        damaged = bytearray(stored[name][1])
+        damaged[-1] ^= 0xFF
+        (area / name).write_bytes(bytes(damaged))
+    recomputed = run_export("recomputed")
+    assert recomputed == cold
+    assert {name: data for name, (_, data) in entries(area).items()} == {
+        name: data for name, (_, data) in stored.items()
+    }
+
+    status, _, printed, err = cache_cli(painter, env, "cache", "clear")
+    assert status == 0, err
+    assert json.loads(printed)["areas"]["eval"]["removed"] == 2
+    assert entries(area) == {}
+    assert run_export("after-clear") == cold
+    assert entries(area).keys() == stored.keys()

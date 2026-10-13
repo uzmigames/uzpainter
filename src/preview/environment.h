@@ -85,6 +85,14 @@ struct EnvironmentLighting {
 /// shading time).
 [[nodiscard]] EnvironmentLighting PrecomputeLighting(const EnvironmentImage& image);
 
+/// The lighting of the environment file `bytes`, whose SHA-256 is `sha256` (bytes the caller has
+/// checked against it): from the persistent caches (render/disk_cache.h, area `lighting`;
+/// decision 253) when they hold it, else decoded and precomputed (`PrecomputeLighting`), then
+/// stored. The key covers `sha256`, the sampling constants above, the build fingerprint and the
+/// MXCSR control bits; the payload is every float of the result, bit for bit. A decode failure is
+/// the error.
+[[nodiscard]] std::expected<EnvironmentLighting, std::string> LightingOf(std::string_view sha256, std::string_view bytes);
+
 /// The SH irradiance at the unit normal `n` (the CPU reference of the shader's evaluation).
 [[nodiscard]] std::array<float, 3> Irradiance(const EnvironmentLighting& lighting, const std::array<double, 3>& n);
 

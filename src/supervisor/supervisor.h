@@ -14,9 +14,10 @@
 // never creates a GPU device, never opens a project and never runs user Python: none of that code
 // is reached from here.
 //
-// Exit status: 0 the MCP client closed the session; 2 a usage error; 3 a host failure (the
-// interpreter did not start); 4 a fatal supervisor error (a handshake mismatch, or a worker that
-// cannot be started).
+// Exit status: 0 the MCP client closed the session, or a console Ctrl+C or Ctrl+Break stopped the
+// supervisor (either transport: the worker ends, then the ledger closes); 2 a usage error; 3 a host
+// failure (the interpreter did not start); 4 a fatal supervisor error (a handshake mismatch, or a
+// worker that cannot be started).
 
 #include <cstdio>
 #include <string>

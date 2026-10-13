@@ -1,5 +1,6 @@
 #include "store/integrity.h"
 
+#include <algorithm>
 #include <set>
 #include <utility>
 
@@ -215,6 +216,22 @@ IntegrityReport CheckIntegrity(Container& container, const Value& current_manife
         }
     }
     return report;
+}
+
+std::vector<std::string> QuickCheck(Container& container, int limit) {
+    Statement q(container, "PRAGMA quick_check(" + std::to_string(limit) + ")");
+    std::vector<std::string> problems;
+    while (q.Step()) {
+        // A row may hold several lines under a "*** in database main ***" heading.
+        const std::string text = q.Text(0);
+        for (std::size_t start = 0; start < text.size();) {
+            const std::size_t end = std::min(text.find('\n', start), text.size());
+            const std::string line = text.substr(start, end - start);
+            if (!line.empty() && line != "ok" && !line.starts_with("*** ")) problems.push_back(line);
+            start = end + 1;
+        }
+    }
+    return problems;
 }
 
 }  // namespace uzp::store

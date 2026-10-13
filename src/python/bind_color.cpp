@@ -2,12 +2,14 @@
 // state (bindings.h).
 //
 // The native `Color` keeps exactly what the caller gave: `value_raw` and the colour space
-// (`GenericColorSpace` member name or any string; None when not given). A uniform source stores and
-// reads back both unchanged. Conversions between spaces (`Color.convert`, `.sRGB`, `.working`) and
-// the deduction of a missing space from the channel are the facade's colour rules
-// (phase1.20_pyapi-facade), so the native class does not offer them.
+// (`GenericColorSpace` member name or any string; None when not given). A uniform source stores
+// Painter's working value of it, in the Working space (`python::StoredUniformColour`, decision
+// 240), so `get_color` reads back what Painter reads back. The facade's conversions between spaces
+// (`Color.convert`, `.sRGB`, `.working`) are its own (phase1.20_pyapi-facade); its decode into the
+// working space is the native one, through the private `_working_value`.
 
 #include "python/bindings.h"
+#include "python/edits.h"
 #include "python/errors.h"
 
 namespace uzp::python {
@@ -68,6 +70,18 @@ void BindColor(py::module_& m) {
             return FromJson(o);
         },
         "The project's colour-management state: mode, working space, configuration hash and I/O rules.");
+
+    // Private: the facade's decode (python/uzpainter_facade/colour.py `working_value`), so the facade
+    // and every native setter compute a stored uniform colour once (`python::WorkingColour`).
+    m.def(
+        "_working_value",
+        [](double r, double g, double b, const std::optional<std::string>& color_space, bool decodes, bool ocio) {
+            const std::array<double, 3> working = WorkingColour({r, g, b}, color_space, decodes, ocio);
+            return py::make_tuple(working[0], working[1], working[2]);
+        },
+        py::arg("r"), py::arg("g"), py::arg("b"), py::arg("color_space"), py::arg("decodes"), py::arg("ocio"),
+        "The float32 working value Painter stores for (r, g, b) in `color_space` (None: unset) on a channel that "
+        "`decodes` an sRGB colour or not, under OCIO with Painter's substance config (`ocio`) or Legacy (decision 240).");
 }
 
 }  // namespace uzp::python

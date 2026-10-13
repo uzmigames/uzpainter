@@ -5,6 +5,7 @@
 #include "evaluator/dag.h"
 #include "evaluator/error.h"
 #include "evaluator/gpu_store.h"
+#include "evaluator/result_cache.h"
 
 namespace uzp::evaluator {
 
@@ -36,8 +37,22 @@ render::Result<ChannelResult> EvaluateOn(const core::Project& project, const Eva
     render::Result<ChannelDag> dag = BuildDag(project, request.textureSet, request.stack,
                                               request.channel, templates, request.templateId);
     if (!dag) return render::Unexpected(dag.error());
+    // A read-out this tile cache holds (a later call of the process on the same stack) is read
+    // there: it was stored when it was computed.
+    render::DiskCache* persistent = cache.persistent();
+    if (persistent != nullptr && cache.Contains(CacheKey{dag->root.owner, CacheKind::Readout, dag->readoutHash, 0, 0})) {
+        persistent = nullptr;
+    }
+    if (persistent != nullptr) {
+        if (std::optional<ChannelResult> stored =
+                LoadReadout(*persistent, *dag, request.resources.get(), request.geometry.get())) {
+            return std::move(*stored);
+        }
+    }
     EvalEnvironment env{store, cache, request.resources.get(), request.geometry.get()};
-    return EvaluateChannel(*dag, env);
+    render::Result<ChannelResult> result = EvaluateChannel(*dag, env);
+    if (persistent != nullptr && result) StoreReadout(*persistent, *dag, *result);
+    return result;
 }
 
 // ── Evaluator (GPU, engine thread) ───────────────────────────────────────────
@@ -192,7 +207,9 @@ void Evaluator::Shutdown() {
 // ── CpuEvaluator ─────────────────────────────────────────────────────────────
 
 CpuEvaluator::CpuEvaluator(std::shared_ptr<const TemplateLibrary> templates, AdmissionLimits limits)
-    : m_templates(std::move(templates)), m_limits(limits), m_cache(limits) {}
+    : m_templates(std::move(templates)), m_limits(limits), m_cache(limits) {
+    m_cache.SetPersistent(PersistentResults());
+}
 
 render::Result<void> CpuEvaluator::AdmitTextureSet(const core::Project& project, core::Id set) const {
     return Admit(project, set, m_limits);
