@@ -157,6 +157,26 @@ float3 BrdfTable(ByteAddressBuffer lighting, uint size, float nv, float roughnes
     return top + (bottom - top) * ty;
 }
 
+// ── Shading normal ───────────────────────────────────────────────────────────────────────────
+
+// The shading normal s, faded toward the interpolated normal n as the view's mirror reflection
+// about s sinks toward the geometric tangent plane (decision 256). The shading and geometric
+// normals define different hemispheres, a mismatch to handle with care (Physically Based Rendering,
+// 4th ed., 9.1.5): the mirror reflection about s can fall below the geometric surface, where the
+// pass reflected the dark lower environment, and the former hard switch to n wherever s faced away
+// drew a thin dark contour. With e = dot(reflect(-view, s), ng), ng facing the viewer: e >= FADE_BAND
+// keeps s, e <= 0 or s facing away gives n, and in between n and s blend by smoothstep(0, FADE_BAND, e).
+#define FADE_BAND 0.2f
+float3 FadeShadingNormal(float3 s, float3 n, float3 ng, float3 view) {
+    const float sv = dot(s, view);
+    const float e = dot(s * (2.0f * sv) - view, ng);
+    if (sv > 0.0f && e >= FADE_BAND) return s;
+    const float3 interpolated = normalize(n);
+    if (sv <= 0.0f || e <= 0.0f) return interpolated;
+    const float3 blend = lerp(interpolated, s, smoothstep(0.0f, FADE_BAND, e));
+    return dot(blend, blend) > 0.0f ? normalize(blend) : interpolated;
+}
+
 // ── Pass ─────────────────────────────────────────────────────────────────────────────────────
 
 uint DisplayCodeOf(ByteAddressBuffer table, float value) {
@@ -311,7 +331,7 @@ void main(uint3 id : SV_DispatchThreadID) {
         const float3 bitangent = handedness * cross(n, tangent);
         float3 shading = tn.x * tangent + tn.y * bitangent + tn.z * n;
         shading = dot(shading, shading) > 0.0f ? normalize(shading) : normalize(n);
-        if (dot(shading, view) <= 0.0f) shading = normalize(n);
+        shading = FadeShadingNormal(shading, n, ng, view);
 
         const float nv = max(dot(shading, view), 1e-4f);
         const float3 reflected = shading * (2.0f * nv) - view;

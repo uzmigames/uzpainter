@@ -96,6 +96,19 @@ def test_unsupported_configuration_fails_before_rendering(
     } <= passed
 
 
+def test_normal_tilted_past_the_horizon_shades_continuously(
+    preview_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 256: where a normal map tilts the shading normal past the viewer's horizon, fading
+    it toward the interpolated normal keeps the shade continuous (the Wand gem's thin dark lines
+    were the jump of the former rule, a hard switch wherever the perturbed one faced away)."""
+    passed, _ = run_case(preview_tests, "viewport-normal-fade", str(tmp_path), gpu=True)
+    assert {
+        "the plane covers the centre row with finite colours",
+        "the shade is continuous where the perturbed normal turns past the horizon",
+    } <= passed
+
+
 def test_viewport_regression_goldens(preview_tests: Path, tmp_path: Path) -> None:
     """2.2, 2.6, 3.1: the sphere, plane and bevelled-cube fixtures render byte-identically twice,
     their display codes are the CPU table's, and they equal the stored golden of this build's

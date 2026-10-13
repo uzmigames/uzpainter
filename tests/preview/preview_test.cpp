@@ -9,6 +9,7 @@
 //                        without decoding, damaged entries and other MXCSR bits not served (CPU)
 //   latest               the wait-free hand-over buffer, with a stalled reader
 //   viewport-unsupported an unsupported display configuration fails before any GPU work (DX12)
+//   viewport-normal-fade a normal map tilted past the viewer's horizon shades continuously (DX12)
 //   viewport-golden <goldens.json> [--bless]
 //                        the sphere, plane and bevelled-cube fixtures rendered twice: byte-identical,
 //                        display codes equal to the CPU table, and equal to the stored golden of this
@@ -35,6 +36,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <bit>
 #include <chrono>
@@ -466,6 +468,71 @@ std::vector<Fixture> Fixtures() {
     return fixtures;
 }
 
+// The tilted plane under a uniform environment with a normal map whose tilt along the bitangent
+// sweeps from -80 to +80 degrees across u: on one side the perturbed normal turns past the
+// viewer's horizon. Fading the shading normal toward the interpolated one as its mirror reflection
+// sinks toward the tangent plane (decision 256) keeps the shade a continuous function of the tilt
+// there: the centre row's mean linear value varies with the tilt and no two neighbouring pixels
+// differ by more than 0.02. The rule it replaces (a hard switch to the interpolated normal wherever
+// the perturbed one faces away) jumped by 0.224 at the horizon: the thin dark lines along the Wand
+// gem's lower edge.
+int RunViewportNormalFade(const fs::path& dir) {
+    Engine engine(TestOptions(dir));
+    if (NoAdapter(engine)) return kExitSkip;
+    ViewportScene scene;
+    scene.mesh = LoadMesh("parity/fixtures/iray-references/plane.obj");
+    MaterialInputs material;
+    MaterialMap normal{256, 1, 3, {}};
+    for (uint32_t x = 0; x < normal.width; ++x) {
+        const double a = (-80.0 + 160.0 * (x + 0.5) / normal.width) * std::numbers::pi / 180.0;
+        normal.values.insert(normal.values.end(),
+                             {0.5f, static_cast<float>(0.5 + 0.5 * std::sin(a)), static_cast<float>(0.5 + 0.5 * std::cos(a))});
+    }
+    material.normal = std::move(normal);
+    material.baseColorValue = {0.5f, 0.5f, 0.5f};
+    material.roughnessValue = 0.2f;
+    scene.materials = {material};
+    scene.lighting = std::make_shared<const EnvironmentLighting>(PrecomputeLighting(UniformEnvironment(1, 1, 1)));
+    const OrbitCamera camera = FitCamera(*scene.mesh);
+    constexpr uint32_t kSize = 256;
+    Result<ViewportImage> image =
+        engine
+            .Submit(std::make_shared<const int>(0),
+                    [&](EngineContext& context, const int&) { return RenderViewport(context, scene, camera, kSize, kSize); })
+            .get();
+    if (!image) {
+        Check(false, "the plane renders", image.error().Describe());
+        return Finish();
+    }
+    const uint16_t background = FloatToHalf(0.1f);
+    std::vector<double> row;
+    for (uint32_t x = 0; x < kSize; ++x) {
+        const size_t i = (size_t{kSize / 2} * kSize + x) * 4;
+        if (image->linear[i] == background) continue;
+        row.push_back((HalfToFloat(image->linear[i]) + HalfToFloat(image->linear[i + 1]) + HalfToFloat(image->linear[i + 2])) / 3.0);
+    }
+    // The map wraps at u = 0 and 1 (the plane's ends): those columns are left out.
+    constexpr size_t kTrim = 8;
+    bool finite = true;
+    double low = 1e30;
+    double high = -1e30;
+    double step = 0.0;
+    for (size_t k = kTrim; k + kTrim < row.size(); ++k) {
+        finite = finite && std::isfinite(row[k]);
+        low = std::min(low, row[k]);
+        high = std::max(high, row[k]);
+        if (k > kTrim) step = std::max(step, std::abs(row[k] - row[k - 1]));
+    }
+    Info("centre row: " + std::to_string(row.size()) + " hits, range [" + std::to_string(low) + ", " +
+         std::to_string(high) + "], largest step " + std::to_string(step));
+    Check(row.size() > kSize / 2 && finite, "the plane covers the centre row with finite colours",
+          std::to_string(row.size()) + " hits");
+    Check(high - low > 0.01 && step <= 0.02,
+          "the shade is continuous where the perturbed normal turns past the horizon",
+          "largest step " + std::to_string(step) + " of range " + std::to_string(high - low));
+    return Finish();
+}
+
 int RunViewportGolden(const fs::path& dir, const fs::path& goldens, bool bless) {
     Engine engine(TestOptions(dir));
     if (NoAdapter(engine)) return kExitSkip;
@@ -677,7 +744,7 @@ int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: uzp-preview-tests display | environment | latest | lighting-cache <work-dir> | viewport-unsupported <work-dir> | "
-                     "viewport-golden <work-dir> <goldens.json> [--bless]\n");
+                     "viewport-normal-fade <work-dir> | viewport-golden <work-dir> <goldens.json> [--bless]\n");
         return 2;
     }
     const fs::path dir = argv[2];
@@ -690,6 +757,8 @@ int main(int argc, char** argv) {
         code = RunViewportUnsupported(dir);
     } else if (mode == "lighting-cache") {
         code = RunLightingCache(dir);
+    } else if (mode == "viewport-normal-fade") {
+        code = RunViewportNormalFade(dir);
     } else if (mode == "viewport-golden" && argc >= 4) {
         code = RunViewportGolden(dir, argv[3], argc >= 5 && std::string_view(argv[4]) == "--bless");
     } else {

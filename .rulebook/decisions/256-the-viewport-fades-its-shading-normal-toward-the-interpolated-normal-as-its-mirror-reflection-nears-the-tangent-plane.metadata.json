@@ -1,0 +1,13 @@
+{
+  "id": 256,
+  "slug": "the-viewport-fades-its-shading-normal-toward-the-interpolated-normal-as-its-mirror-reflection-nears-the-tangent-plane",
+  "title": "The viewport fades its shading normal toward the interpolated normal as its mirror reflection nears the tangent plane",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.1_preview-viewport-window",
+    "phase2.3_realtime-preview",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

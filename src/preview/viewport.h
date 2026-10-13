@@ -18,7 +18,10 @@
 //   sampled bilinearly in UV with wrapping (texel (c, r) centred at u = (c + 1/2) / W,
 //   v = 1 - (r + 1/2) / H); a channel without a map uses its constant. Normals in the MikkTSpace
 //   frame: n = normalize(t.x T + t.y B + t.z N), B = sign cross(N, T) of the interpolated corner
-//   frame; where n faces away from the viewer the interpolated normal is kept.
+//   frame, faded toward the interpolated normal N as the view's mirror reflection about n sinks
+//   toward the geometric tangent plane (decision 256): with e = dot(reflect(-view, n), Ng),
+//   e >= 0.2 keeps n, e <= 0 or n facing away gives N, and in between the two blend by
+//   smoothstep(0, 0.2, e).
 // - Lighting: split-sum GGX specular (F0 = mix(0.04, base colour, metalness), IOR 1.5) and
 //   Burley diffuse on the SH irradiance, scaled by (1 - the dielectric specular albedo); the
 //   environment radiance is multiplied by 2^exposure and the intensity scale of
