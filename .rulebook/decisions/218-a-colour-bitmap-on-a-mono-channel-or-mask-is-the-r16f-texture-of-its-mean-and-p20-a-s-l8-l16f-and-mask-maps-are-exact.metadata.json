@@ -1,0 +1,11 @@
+{
+  "id": 218,
+  "slug": "a-colour-bitmap-on-a-mono-channel-or-mask-is-the-r16f-texture-of-its-mean-and-p20-a-s-l8-l16f-and-mask-maps-are-exact",
+  "title": "A colour bitmap on a mono channel or as a mask source is the R16F texture of its mean, and P20-A's L8, L16F and mask maps are exact",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

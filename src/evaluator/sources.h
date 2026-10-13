@@ -27,8 +27,17 @@
 //   channels (Tier 0 `blend-inputs`, every 16-bit code; Painter reports them Data), on Height
 //   (DataSigned) and Normal (NormalXYZLeft), and for field A on BaseColor set to Raw
 //   (`export-probes-channels`); 8-bit bitmaps follow the same rule without a golden yet. A grey
-//   bitmap feeds every channel of a colour channel; a grey channel reads the first channel of a
-//   colour bitmap; alpha planes are not read.
+//   bitmap feeds every channel of a colour channel; alpha planes are not read.
+// - Colour bitmap read by a one-channel tile (decision 218: P20-A, `phase1-fill-channel-defaults`,
+//   the 8-bit checker magnified 16 times on L8, on L16F Height and as a mask source): Painter
+//   samples an R16F texture. Each texel is the mean ((r + g) + b) / 3 of its float32(c / 255)
+//   components (2 m - 1 on Height), rounded toward zero to a binary16, and the bilinear filter's
+//   result is rounded to a binary16, to nearest with ties away from zero (evaluate.cpp
+//   `GreyTexture`): exact on BaseMetalness, SpecularRoughness, Height and the mask, r1 and r2. The
+//   red component, BT.709 and Rec. 601 weights, an 8-bit grey and a float32 mean each miss codes.
+//   An 8-bit colour bitmap magnified or at 1:1 by a bilinear filter on L8, L16F or in a mask
+//   evaluates; on any other one-channel format, at 16 bits, under Nearest or minified it fails with
+//   `evaluator:unsupported_source` (not recorded).
 // - sRGB bitmap (Painter's default for a colour bitmap on BaseColor; the tags `sRGB` and
 //   `LegacyColorSpace.sRGB`, which give the same codes: `srgb-bitmap-variants-v2` s8): each texel
 //   is decoded to a float32 linear value before the projection samples it, then stored on the

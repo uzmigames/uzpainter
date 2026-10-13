@@ -45,12 +45,23 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
     """2.1-2.4, 3.5: fill sources on every channel format, the UV transform, filters and wrap
     modes, LAY-13 bindings, explicit failures and the resolution in the cache keys."""
     passed, _ = run_case(evaluator_tests, "sources")
-    for bits, kind in (("16", "colour"), ("8", "colour"), ("16", "grey")):
+    for bits, kind, formats in (
+        ("16", "colour", "three-channel format"),
+        ("8", "colour", "three-channel format"),
+        ("16", "grey", "channel format"),
+    ):
         for name in ("BilinearHQ", "BilinearSharp", "Nearest"):
             assert (
                 f"a 1:1 {bits}-bit {kind} bitmap under {name} stores each code as a linear value "
-                "with the write rule of every channel format"
+                f"with the write rule of every {formats}"
             ) in passed
+    # A colour bitmap on a one-channel tile: P20-A's grey texture, else refused (decision 218).
+    assert {
+        "a colour bitmap on an L8 or L16F channel is read as the binary16 of its texels' mean "
+        "(decision 218)",
+        "a colour bitmap on a one-channel tile outside P20-A (another format, 16-bit, Nearest, "
+        "minified) fails with unsupported_source naming item 2.9 (decision 218)",
+    } <= set(passed)
     assert {
         "the Fill projection matches the bitmap to the UV tile (a 1:1 copy)",
         "Nearest: a whole-texel offset with Repeat moves the bitmap towards +u and +v, wrapping",
@@ -132,7 +143,8 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
     """2.4: the projection kernel equals the CPU reference bit for bit on random stacks (every
     filter, wrap mode, transform, 8/16-bit grey and colour bitmap, nine formats, two tiles), and
     on sRGB bitmaps decoded to float32 texels on an sRGB8 channel (decision 174), 16-bit ones
-    minified too (decision 203), and on an L8 BaseColor, Specular and Emissive (decision 208)."""
+    minified too (decision 203), on an L8 BaseColor, Specular and Emissive (decision 208), and a
+    colour bitmap's grey texture on L8 and L16F (decision 218)."""
     passed, _ = run_case(evaluator_tests, "projection-gpu-vs-cpu", str(tmp_path), needs_gpu=True)
     assert any(p.startswith("every random projection stack") for p in passed)
     assert any(p.startswith("every random minifying projection stack") for p in passed)
@@ -140,6 +152,10 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
     assert any(p.startswith("every random minifying 16-bit sRGB projection stack") for p in passed)
     assert any(
         p.startswith("a grey 8- and 16-bit sRGB bitmap at 1:1 on an L8 BaseColor, Specular and")
+        for p in passed
+    )
+    assert any(
+        p.startswith("a colour 8-bit bitmap magnified on an L8 and an L16F channel evaluates to")
         for p in passed
     )
     assert (

@@ -28,7 +28,9 @@ using TileHandle = uint64_t;
 inline constexpr TileHandle kNoTile = 0;
 
 /// A decoded bitmap (a source resource): `values` holds width x height x channels samples, rows
-/// top to bottom, UNORM codes or the bits of the float32 value of each sample.
+/// top to bottom, UNORM codes or the bits of the float32 value of each sample. A `Float16`
+/// image is an R16F texture (a colour bitmap read by a one-channel tile, decision 218): each
+/// sample holds the float32 bits of a binary16 value, and its bilinear filter returns a binary16.
 struct DecodedImage {
     uint32_t width = 0;
     uint32_t height = 0;

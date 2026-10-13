@@ -2410,7 +2410,8 @@ int RunGpuVsCpu(const fs::path& assets, const fs::path& dir) {
             const std::optional<render::TexelEncoding> encoding = BitmapEncodingFor(format);
             if (encoding) {
                 const std::string sha = std::string(62, 'd') + std::to_string(variant) + std::to_string(static_cast<int>(format) % 10);
-                provider->Add(sha, PatternImage(256, 256, 3, *encoding, 100 + variant));
+                // A one-channel format reads a grey bitmap (a colour one there is decision 218's, refused at 16 bits).
+                provider->Add(sha, PatternImage(256, 256, TileFormatOf(format).channels, *encoding, 100 + variant));
                 builder.AddResource(sha, 100);
                 layers.push_back(builder.Fill("bitmap", SameSource(channels, Bitmap(sha)),
                                               Same(channels, modes[rng() % modes.size()], 0.25 + 0.75 * unit())));
@@ -2710,12 +2711,14 @@ int RunSources(const fs::path& assets) {
         builder.SetRoot({prototype});
     };
 
-    // 1:1 copies on every channel format, from 16- and 8-bit bitmaps, with every filter.
+    // 1:1 copies on every channel format, from 16- and 8-bit bitmaps, with every filter (a colour bitmap on the three-channel
+    // formats: on a one-channel one it is decision 218's grey texture, below).
     for (const auto& [sha, img, bits] : {std::tuple{sha16, image16, 16u}, std::tuple{sha8, image8, 8u}, std::tuple{shaGrey, grey, 16u}}) {
         for (const core::FilteringMode filter : {core::FilteringMode::BilinearHQ, core::FilteringMode::BilinearSharp, core::FilteringMode::Nearest}) {
             bool all = true;
             std::string detail;
             for (const ChannelFormat format : kAllFormats) {
+                if (img->channels == 3 && TileFormatOf(format).channels == 1) continue;
                 Builder builder(kSize, kSize, {{ChannelType::User0, format}});
                 core::Layer layer = builder.Fill("bitmap", SameSource(user0, Bitmap(sha)), Same(user0, BlendingMode::Normal, 1.0));
                 SetUv(layer, filter, core::UVWrapMode::Repeat, {1.0, 1.0}, 0.0, {0.0, 0.0});
@@ -2736,7 +2739,8 @@ int RunSources(const fs::path& assets) {
                 }
             }
             Check(all, "a 1:1 " + std::to_string(bits) + "-bit " + (img->channels == 1 ? "grey" : "colour") + " bitmap under " +
-                           std::string(core::ToString(filter)) + " stores each code as a linear value with the write rule of every channel format",
+                           std::string(core::ToString(filter)) + " stores each code as a linear value with the write rule of every " +
+                           (img->channels == 1 ? "channel format" : "three-channel format"),
                   detail);
         }
     }
@@ -2946,6 +2950,70 @@ int RunSources(const fs::path& assets) {
                          "that is not sRGB8, fails with unsupported_source (not recorded, decision 208; Painter's refusal on a "
                          "user channel, decision 174)",
               l8RefusedDetail);
+
+        // A colour bitmap read by a one-channel tile (decision 218, P20-A): the R16F texture of its texels' mean, rounded
+        // toward zero to a binary16, not its red component. A uniform (204, 51, 26) image magnified 16 times stores on L8
+        // the code of 0.3671875 (94; red would give 204) and on Height 2 m - 1 rounded toward zero, -0.26513671875.
+        const std::string shaCell = std::string(63, 'a') + "c";
+        const std::string shaCell16 = std::string(63, 'a') + "d";
+        auto cell = [&](render::TexelEncoding encoding, uint32_t scale) {
+            auto image = std::make_shared<DecodedImage>();
+            image->width = 16;
+            image->height = 16;
+            image->channels = 3;
+            image->encoding = encoding;
+            for (uint32_t t = 0; t < 16 * 16; ++t) {
+                for (const uint32_t code : {204u, 51u, 26u}) image->values.push_back(code * scale);
+            }
+            return image;
+        };
+        provider->Add(shaCell, cell(render::TexelEncoding::Unorm8, 1));
+        provider->Add(shaCell16, cell(render::TexelEncoding::Unorm16, 257));
+        auto mono = [&](ChannelType channel, ChannelFormat format, const std::string& sha, core::FilteringMode filter,
+                        double scale) {
+            Builder builder(kRamp, kRamp, {{channel, format}});
+            const std::vector<ChannelType> channels{channel};
+            core::Layer layer = builder.Fill("bitmap", SameSource(channels, Bitmap(sha)), Same(channels, BlendingMode::Normal, 1.0));
+            SetUv(layer, filter, core::UVWrapMode::Repeat, {scale, scale}, 0.0, {0.0, 0.0});
+            builder.AddResource(sha, 100);
+            builder.SetRoot({layer});
+            CpuEvaluator cpu(templates, kWideLimits);
+            return evaluate(builder, channel, cpu);
+        };
+        render::Result<ChannelResult> metal =
+            mono(ChannelType::BaseMetalness, ChannelFormat::L8, shaCell, core::FilteringMode::BilinearHQ, 1.0);
+        render::Result<ChannelResult> height =
+            mono(ChannelType::Height, ChannelFormat::L16F, shaCell, core::FilteringMode::BilinearHQ, 1.0);
+        bool greyExact = metal && height;
+        if (greyExact) {
+            const std::vector<uint32_t> codes = Samples(*metal);
+            const std::vector<uint32_t> heights = Samples(*height);
+            greyExact = std::all_of(codes.begin(), codes.end(), [](uint32_t c) { return c == 94u; }) &&
+                        std::all_of(heights.begin(), heights.end(),
+                                    [](uint32_t h) { return arith::HalfToFloat(static_cast<uint16_t>(h)) == -0.26513671875f; });
+        }
+        Check(greyExact, "a colour bitmap on an L8 or L16F channel is read as the binary16 of its texels' mean (decision 218)",
+              greyExact ? "" : Describe(metal) + " " + Describe(height));
+        bool greyRefused = true;
+        std::string greyRefusedDetail;
+        for (const auto& [name, result] :
+             {std::pair{"an L16 user channel", mono(ChannelType::User0, ChannelFormat::L16, shaCell,
+                                                    core::FilteringMode::BilinearHQ, 1.0)},
+              std::pair{"a 16-bit colour bitmap on L8", mono(ChannelType::BaseMetalness, ChannelFormat::L8, shaCell16,
+                                                             core::FilteringMode::BilinearHQ, 1.0)},
+              std::pair{"Nearest on L8", mono(ChannelType::BaseMetalness, ChannelFormat::L8, shaCell,
+                                              core::FilteringMode::Nearest, 1.0)},
+              std::pair{"minified on L8", mono(ChannelType::BaseMetalness, ChannelFormat::L8, shaRampColour,
+                                               core::FilteringMode::BilinearHQ, 2.0)}}) {
+            if (result || KindName(result.error()) != "unsupported_source" ||
+                result.error().reason.find("item 2.9, decision 218") == std::string::npos) {
+                greyRefused = false;
+                greyRefusedDetail += std::string(name) + ": " + Describe(result) + " ";
+            }
+        }
+        Check(greyRefused, "a colour bitmap on a one-channel tile outside P20-A (another format, 16-bit, Nearest, minified) "
+                           "fails with unsupported_source naming item 2.9 (decision 218)",
+              greyRefusedDetail);
     }
     {
         // Nearest at scale 2 puts every texel on a tie: across, the right texel (2 i + 1 - W / 2); down the rows, the
@@ -3335,7 +3403,9 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
             std::vector<core::Layer> layers;
             for (int i = 0; i < 3; ++i) {
                 const bool sixteen = (rng() & 1) != 0;
-                const uint32_t imageChannels = (rng() & 3) == 0 ? 1 : 3;
+                // A one-channel format reads grey bitmaps here; a colour one there is decision 218's (below).
+                const bool colour = (rng() & 3) != 0 && TileFormatOf(format).channels == 3;
+                const uint32_t imageChannels = colour ? 3 : 1;
                 const uint32_t side = (rng() & 1) != 0 ? 64 : 256;
                 char buffer[65];
                 std::snprintf(buffer, sizeof(buffer), "%064d", ++serial);
@@ -3635,6 +3705,56 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
                        "an sRGB8 BaseColor, evaluates to the same bytes on the GPU and on the CPU (" +
                            std::to_string(l8Samples) + " samples)",
               l8Detail);
+    }
+
+    // A colour 8-bit bitmap on an L8 and an L16F (Height) channel, magnified (decision 218): its R16F grey texture and the
+    // binary16 result of its filter are projected and stored as on the CPU, upright and rotated.
+    {
+        bool greyEqual = true;
+        std::string greyDetail;
+        size_t greySamples = 0;
+        const std::string sha = std::string(63, 'e') + "8";
+        auto provider = std::make_shared<MapResourceProvider>();
+        provider->Add(sha, PatternImage(16, 16, 3, render::TexelEncoding::Unorm8, 29));
+        for (const auto& [channel, format] : {std::pair{ChannelType::BaseMetalness, ChannelFormat::L8},
+                                              std::pair{ChannelType::Height, ChannelFormat::L16F}}) {
+            for (const double rotation : {0.0, 30.0}) {
+                Builder builder(256, 256, {{channel, format}});
+                builder.AddResource(sha, 100);
+                const std::vector<ChannelType> channels{channel};
+                core::Layer layer =
+                    builder.Fill("grey", SameSource(channels, Bitmap(sha)), Same(channels, BlendingMode::Normal, 1.0));
+                SetUv(layer, core::FilteringMode::BilinearHQ, core::UVWrapMode::Repeat, {1.0, 1.0}, rotation, {0.1, 0.0});
+                builder.SetRoot({layer});
+                EvaluateRequest request;
+                request.textureSet = builder.SetId();
+                request.stack = builder.StackId();
+                request.channel = channel;
+                request.resources = provider;
+                CpuEvaluator cpu(templates, kWideLimits);
+                render::Result<ChannelResult> cpuResult = cpu.Evaluate(builder.project, request);
+                auto project = std::make_shared<const core::Project>(builder.project);
+                std::future<render::Result<ChannelResult>> future = gpu.Evaluate(core::Snapshot{1, project}, request);
+                render::Result<ChannelResult> gpuResult = Get(future);
+                const std::string label = std::string(core::ToString(format)) + " at " + std::to_string(rotation);
+                if (!cpuResult || !gpuResult) {
+                    greyEqual = false;
+                    greyDetail += label + ": " + Describe(cpuResult) + " / " + Describe(gpuResult) + " ";
+                    continue;
+                }
+                std::string first;
+                const std::vector<uint32_t> expected = Samples(*cpuResult);
+                const size_t mismatches = Mismatches(expected, Samples(*gpuResult), first, cpuResult->tileFormat.encoding);
+                greySamples += expected.size();
+                if (mismatches != 0) {
+                    greyEqual = false;
+                    greyDetail += label + ": " + std::to_string(mismatches) + " mismatches; " + first + " ";
+                }
+            }
+        }
+        Check(greyEqual, "a colour 8-bit bitmap magnified on an L8 and an L16F channel evaluates to the same bytes on the GPU "
+                         "and on the CPU (" + std::to_string(greySamples) + " samples)",
+              greyDetail);
     }
 
     // The grid size reaches the GPU cache keys too.
@@ -4992,8 +5112,10 @@ int RunMasksGpuVsCpu(const fs::path& assets, const fs::path& dir) {
                                  MaskFillEffect(builder, Uniform(unit(), unit(), unit()), modes[rng() % modes.size()], unit()),
                                  levels(std::nullopt)});
             };
+            // A one-channel format reads the grey bitmap: a colour one there is decision 218's, refused at 16 bits.
+            const std::string& content = TileFormatOf(format).channels == 3 ? colour : grey;
             std::vector<core::Layer> layers;
-            core::Layer bottom = builder.Fill("bottom", SameSource(channels, Bitmap(colour)), Same(channels, BlendingMode::Normal, 1));
+            core::Layer bottom = builder.Fill("bottom", SameSource(channels, Bitmap(content)), Same(channels, BlendingMode::Normal, 1));
             bottom.content_effects = {levels(ChannelType::User0),
                                       ContentFillEffect(builder, channels, Uniform(unit(), unit(), unit()),
                                                         modes[rng() % modes.size()], unit())};
@@ -5002,14 +5124,14 @@ int RunMasksGpuVsCpu(const fs::path& assets, const fs::path& dir) {
                                               Same(channels, modes[rng() % modes.size()], 0.5 + 0.5 * unit()));
             masked.mask = mask();
             masked.content_effects = {levels(ChannelType::User0),
-                                      ContentFillEffect(builder, channels, Bitmap(colour), modes[rng() % modes.size()], unit())};
+                                      ContentFillEffect(builder, channels, Bitmap(content), modes[rng() % modes.size()], unit())};
             layers.push_back(masked);
-            core::Layer child = builder.Fill("child", SameSource(channels, Bitmap(colour)), Same(channels, modes[rng() % modes.size()], unit()));
+            core::Layer child = builder.Fill("child", SameSource(channels, Bitmap(content)), Same(channels, modes[rng() % modes.size()], unit()));
             child.mask = mask();
             core::Layer group = builder.Group("group", {child}, Same(channels, BlendingMode::Normal, 0.4 + 0.6 * unit()));
             if (variant == 1) group.mask = mask();
             layers.push_back(group);
-            core::Layer passChild = builder.Fill("pass child", SameSource(channels, Bitmap(colour)),
+            core::Layer passChild = builder.Fill("pass child", SameSource(channels, Bitmap(content)),
                                                  Same(channels, modes[rng() % modes.size()], unit()));
             passChild.mask = mask();
             core::Layer pass = builder.Group("pass", {passChild}, Same(channels, BlendingMode::PassThrough, 0.4 + 0.6 * unit()));
@@ -6291,6 +6413,7 @@ struct ContributionRig {
     static constexpr uint32_t kHeight = 128;
     std::string patternSha = std::string(63, 'c') + "1";
     std::string maskSha = std::string(63, 'c') + "2";
+    std::string greySha = std::string(63, 'c') + "3";
     std::shared_ptr<MapResourceProvider> provider = std::make_shared<MapResourceProvider>();
     Builder builder;
     explicit ContributionRig(uint32_t width = 128)
@@ -6319,16 +6442,23 @@ struct ContributionRig {
     void Build() {
         provider->Add(patternSha, PatternImage(width, kHeight, 3, render::TexelEncoding::Unorm16, 31));
         provider->Add(maskSha, PatternImage(width, kHeight, 1, render::TexelEncoding::Unorm16, 32));
+        provider->Add(greySha, PatternImage(width, kHeight, 1, render::TexelEncoding::Unorm16, 33));
         builder.AddResource(patternSha, 100);
         builder.AddResource(maskSha, 100);
+        builder.AddResource(greySha, 100);
+        // The one-channel channels read a grey pattern: a 16-bit colour bitmap there is refused (decision 218).
+        std::map<ChannelType, core::Source> pattern = SameSource(channels, Bitmap(patternSha));
+        for (const ChannelType mono : {ChannelType::SpecularRoughness, ChannelType::BaseMetalness, ChannelType::Height}) {
+            pattern[mono] = Bitmap(greySha);
+        }
         core::Layer base = builder.Fill("base", SameSource(channels, Uniform(0.3, 0.5, 0.7)), Same(channels, BlendingMode::Normal, 1.0));
-        core::Layer bmp = builder.Fill("bmp", SameSource(channels, Bitmap(patternSha)), Same(channels, BlendingMode::Normal, 0.6));
+        core::Layer bmp = builder.Fill("bmp", pattern, Same(channels, BlendingMode::Normal, 0.6));
         bmp.fill->projection.mode = core::ProjectionMode::Fill;
         core::Effect levels = LevelsEffect(builder, LevelsComponentOf(0.1, 0.9, 1.0, 0.0, 1.0, true), ChannelType::SpecularRoughness);
         core::Effect tint = ContentFillEffect(builder, channels, Uniform(0.9, 0.2, 0.4), BlendingMode::Multiply, 0.5);
         bmp.content_effects = {tint, levels};  // top first
         core::Layer c1 = builder.Fill("c1", SameSource(channels, Uniform(0.6, 0.6, 0.2)), Same(channels, BlendingMode::Screen, 0.7));
-        core::Layer c2 = builder.Fill("c2", SameSource(channels, Bitmap(patternSha)), Same(channels, BlendingMode::Overlay, 0.5));
+        core::Layer c2 = builder.Fill("c2", pattern, Same(channels, BlendingMode::Overlay, 0.5));
         c2.fill->projection.mode = core::ProjectionMode::Fill;
         core::Layer group = builder.Group("g", {c1, c2}, Same(channels, BlendingMode::Multiply, 0.8));
         core::Effect maskFill = MaskFillEffect(builder, Bitmap(maskSha), BlendingMode::Normal, 1.0);
