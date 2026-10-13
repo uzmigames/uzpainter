@@ -14,7 +14,7 @@
 - [x] 3.5 Reproducibility probe (decision 033): one trivial Iray scene captured repeatedly, with pixel equality, per-setting observability and the measured variance published (decision 062)
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance gate (P0-FEAS-RENDER, entry gate of P3-PATHTRACER, decision 033): procedure qualified; references admitted; noise floor measured; fixture values proposed to the owner for ratification; reproducibility probe published; gate record written
+- [x] 4.1 Acceptance gate (P0-FEAS-RENDER, entry gate of P3-PATHTRACER, decision 033): procedure qualified; references admitted; noise floor measured; fixture values proposed to the owner for ratification; reproducibility probe published; gate record written
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
@@ -26,3 +26,4 @@
 - Evidence 2026-10-11 (Painter `12.1.5+js-api.1.1.20`, Assets3D Painter lock held by this task and released): gate record `parity/reports/phase0/gate-p3-pathtracer-entry.md`; capture request and reproducibility probe in `parity/reports/phase0/iray-noise-floor.md` §9 (decision 062); decision 052 amended.
 - Item 3.2 closed 2026-10-11 (decision 068): the template-default material of an OCIO project read back in one Painter session (`phase0/template-default-material/ocio-sphere`, r1 = r2, private record `f6ac6f70...`; `iray-references.md` §5.1), then `python -m tools.parity.render_fits qualification` measured the sphere's (c) (`iray-noise-floor.md` §3).
 - Open (decisions 063, 068): item 4.1 waits only for the owner's signature of `parity/reports/phase0/gate-p3-pathtracer-entry.md` (evidence complete, clause by clause). The task is archived after the signature.
+- Closed 2026-10-13: the owner ordered "termina e arquiva phase0.9_render-reference-capture" in the coordinator session. That order is his signature of `parity/reports/phase0/gate-p3-pathtracer-entry.md` (item 4.1). The fixture content stays proposed. P3-PATHTRACER still also needs P1-CORE, P2-TUNIC and P3-VULKAN.

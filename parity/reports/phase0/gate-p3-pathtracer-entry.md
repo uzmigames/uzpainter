@@ -2,9 +2,9 @@
 
 Task `phase0.9_render-reference-capture` (`docs/dag.md` P0-FEAS-RENDER, D6; decision 033: the sole entry gate of P3-PATHTRACER, not a G0 join). Evaluated on 2026-10-11 on the owner's machine (Windows 11, NVIDIA GeForce RTX 4090, Painter `12.1.5+js-api.1.1.20`, Python 3.13) on the tree of commit `cf48a54` with this task's working-tree changes. Numbers and hashes only: every recorded Painter output stays in the private store. SHA-256 values are of the file bytes in that tree.
 
-**Result: evidence complete; owner signature pending (decisions 063, 068).** Every acceptance clause of P0-FEAS-RENDER is evidenced below, checked clause by clause. The signature is the gate act: it records the owner's outcome and is not implied by this evidence. P3-PATHTRACER does not start before it; it also needs P1-CORE, P2-TUNIC and P3-VULKAN.
+**Result: evidence complete; signed by the owner on 2026-10-13 (decisions 063, 068).** Every acceptance clause of P0-FEAS-RENDER is evidenced below, checked clause by clause. The signature is the gate act: it records the owner's outcome and is not implied by this evidence. P3-PATHTRACER does not start before it; it also needs P1-CORE, P2-TUNIC and P3-VULKAN.
 
-Owner signature: pending.
+Owner signature: signed 2026-10-13. The owner, André, ordered in the coordinator session, in his own words, "termina e arquiva phase0.9_render-reference-capture" (finish and archive the task) while viewing its task file. That order is the gate act of item 4.1. The fixture content stays a proposal: the order neither ratified nor amended it.
 
 ## 1. Prerequisites and children
 
@@ -45,7 +45,7 @@ Owner signature: pending.
 
 ## 5. Owner actions
 
-- Sign this record (the gate act; task item 4.1). The task is archived after the signature.
+- ~~Sign this record (the gate act; task item 4.1).~~ Done 2026-10-13; the task is archived.
 - Optionally ratify or amend the proposed fixture content (`iray-references.md` §2).
 
 ## 6. Evidence
