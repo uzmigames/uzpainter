@@ -1,0 +1,11 @@
+{
+  "id": 213,
+  "slug": "the-srgb8-anisotropic-unit-truncates-each-probe-and-the-accumulator-on-a-coarse-grid-but-a-probe-pair-at-offset-0-is-not-identified-so-8-bit-srgb-minification-stays-refused",
+  "title": "The sRGB8 anisotropic unit truncates each probe and the accumulator on a coarse grid, but a probe pair at offset 0 is not identified, so 8-bit sRGB minification stays refused",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

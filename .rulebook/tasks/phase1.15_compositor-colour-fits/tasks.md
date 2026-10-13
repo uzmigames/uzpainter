@@ -49,6 +49,9 @@
   - Open after decision 209:
     - the anisotropic unit's cross-probe arithmetic: 515 of 96 000 validation samples differ by one binary16 step, and no variant tried below 74 of 8 000;
     - how Painter builds its sRGB8 mip levels.
+  - Decision 213 (2-hour cap reached; no replica code committed):
+    - Each probe's sum is truncated to 2^(max(Coarse(E), -6) - 16), and the running sum to 2^(Coarse(g) - 16) before every probe after the first. With these rules 52 of 96 000 samples differ (seed 0) and 53 of 96 000 (seed 1), down from 515.
+    - Still open: a p = 0 probe pair sometimes truncates its two halves separately, and neither the sign nor the weight decides when; the sRGB8 mip build is not measured.
   - Refused until then with `evaluator:unsupported_source` ("bilinear minification of an 8-bit sRGB bitmap is a release gap ... (decision 203)").
 - [x] 2.8 (decisions 174 and 204) An sRGB grey bitmap on an L8 BaseColor, Specular or Emissive, which Painter reads decoded (`export-l8-material` s0 and s1, admitted by decision 198), while decision 174's message said Painter refuses the space there: fit the decode exactly, lift the refusal only for the recorded cases, correct the message, and write s0 and s1 end to end byte-identical
   - Done (decision 208). A 16-bit code uses decision 174's float32 shader decode. An 8-bit code uses the same decode of float32(c / 255), rounded toward zero to a binary16 (decision 190's rounding), not the sRGB8 texel. Both are stored with the L8 write rule, and the result is exact on all 256 codes of each set, every channel, r1 and r2. For comparison, the IEC rounding misses 13 and 10 codes, the sRGB8 texel 30, and the decode without the binary16 3.
