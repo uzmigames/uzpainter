@@ -13,6 +13,55 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Added
 
+- MCP server contract suite (task `phase2.8_mcp-server`, decision 186; still open on items 1.1–1.4): the Phase 2 contract cases run on stdio and HTTP, the children's tests are tagged with their cases, and the results go into `parity/reports/phase2/mcp-contract.json` with its own guard rule.
+- Painter batch D (decision 180): Session O (OCIO), the wand R9 (`phase1/tier1/wand-v1`, maps identical across r1, r1-repeat and r2), `export-presets-legacy` and four API probes are recorded and admitted. `phase1-srgb-uniform-decode` was stopped at the time cap and its request stays. The stability report counts 192 goldens, 133 stable.
+- sRGB bitmaps exact for every use Painter allows (task `phase1.15_compositor-colour-fits`, item 2.2 done, decision 174):
+  - Each sRGB texel is decoded to float32 before the projection samples it.
+  - 381 of 381 comparisons on `srgb-bitmap-variants-v2` are byte-identical at PNG 16, PNG 8 and OpenEXR 32f.
+  - The facade refuses sRGB on non-sRGB8 user channels and mask sources, as Painter does.
+  - Minification of an sRGB bitmap stays refused and moves to item 2.5.
+- MCP operation matrix (task `phase2.7_mcp-operation-matrix`, decision 182; still open on item 1.1): 106 requirement-to-operation rows are derived at build time from a registered-tool snapshot and published in `capabilities.json` and `uzpainter://capabilities`. The build fails on a missing row, an unregistered tool, or an available row without its Python-disabled fixture.
+- All template bases exact (task `phase1.25_pilot-wand`, item 2.6 done, decision 169): every shipped template base is observed and exported exactly. The PNG of an L8 material channel is refused.
+- Capabilities resource check (task `phase2.6_mcp-typed-tool-families`, item 3.5; closes `phase2.3_realtime-preview` item 3.3): `uzpainter://capabilities` publishes the shipped manifest, with `painter_iray` as a release gap.
+- Padding probes measured (task `phase1.25_pilot-wand`, item 2.7, decision 176): the P-ramp and P-tie probes identify the border ring and the ratio-1 seam, but not the general seam or how padding propagates. `infinite` padding on islands stays refused. No code change.
+- MCP typed tool families (task `phase2.6_mcp-typed-tool-families`, decisions 164, 165; still open on item 1.1):
+  - Project, texture set, resource, stack, recipe, baking and mesh tools run as native single-transaction handlers; gap families are registered and refused.
+  - Capability gates are checked per argument value and fail closed.
+  - The supervisor serves status, capabilities, batch, eight resources and four prompts, and a capture's image block downscaled to a long edge of 512.
+- Painter batches B and C and the v2 padding probes (decisions 166, 167, 172):
+  - The ten void padding probes are re-authored as `-v2` on `uv-ramp-n<N>` fixtures. The renamed ramps export correctly, which confirms the UDIM-suffix cause.
+  - Batch B admits 11 Legacy goldens. `srgb-bitmap-variants-v2` records that Painter refuses sRGB on every user channel and mask source.
+  - Batch C admits the 21 remaining template bases, all stable.
+- Realtime preview (task `phase2.3_realtime-preview`, decisions 162, 163; still open): `painter_viewport` casts parallel rays for an orthographic camera, with `orthographic_height` as the full vertical extent. The wand runs with the preview attached, and the results go into `parity/reports/phase2/preview-settling.json`.
+- Five template bases exact (task `phase1.25_pilot-wand`, item 2.6, decision 168): five shipped template bases are observed in OpenEXR 32f and exported exactly. The other 21 stay inferred and refused, with one recording request each.
+- Painter batch A (decision 160): 14 Legacy goldens admitted, among them three inferred template bases and P-tie 512. P-tie 2048 and the nine P-ramp probes are void: a four-digit file-name suffix was read as a UDIM tile. `srgb-bitmap-variants` is refused at step 33 and its request stays.
+- MCP transport and registry (task `phase2.5_mcp-transport-registry`, decisions 158, 159; still open on item 1.1):
+  - One registry serves stdio and Streamable HTTP. Before admission it checks capability gaps, JSON Schema, a key without its precondition, dangling references and roots.
+  - `--roots` confines paths; refusals never echo the path.
+  - HTTP mode guards Origin, Host and bearer token, and binds the lease to a named owner that survives a reconnect.
+  - Every reply carries the same result fields: revision, job id, changed and created objects, warnings.
+- Preview capture (task `phase2.2_preview-capture`, decision 148; still open): `uzpainter.render.capture` renders `painter_viewport` offscreen from the committed revision and writes `base_color`, channel and mask views as texture-space files through the export engine, with a capture receipt. `painter_iray` raises `PathTracerUnavailable`. The Assets3D `save_viewport` shim routes to it.
+- Queued Painter recording requests (decisions 156, 157): `srgb-bitmap-variants` on a 3×3 grid, inferred template bases, padding probes, and API probes P20-B, P22-A, P22-C and P23-A.
+- Masked sRGB ramp exact (task `phase1.15_compositor-colour-fits`, item 2.4, decision 152): `export-ocio-encode-legacy` s5 is written byte for byte as Painter's r1, with no evaluator change. Painter's r2 differs on 15 947 values per file and is judged through the new exception EXC-006, flagged for the owner's review.
+- Supervisor-worker settling (task `phase2.4_supervisor-worker`, decisions 150, 151; still open): the settling harness adds the missing cases (worker killed inside a save's commit and compaction, client reconnect on the same ledger, transaction failures, Python and GPU unavailable through MCP) and a per-call overhead benchmark. A Debug `UzPainter.exe` compiles the store fault hooks. Results go into `parity/reports/phase2/supervisor-settling.json`.
+- 8-bit sRGB and 16-bit grey bitmaps (task `phase1.15_compositor-colour-fits`, item 2.2, decision 145): at 1:1 on sRGB8 channels they match Painter's files byte for byte, r1 and r2 (`export-ocio-encode-legacy` s3/s4 and all 8 `export-bit-depth` sets).
+- Recipe and diagnostics parent harness (task `phase2.2_recipe-and-diagnostics`, decision 142; still open): the adapter-built wand is dumped, rebuilt from the dump in a new project, and both are exported; the rebuilt wand has the original's digest. The `recipe-rebuild` report has a schema and a guard rule.
+- Supervisor jobs (task `phase2.3_supervisor-jobs`, decisions 140, 141; still open): long tools run as native jobs on the worker with progress, cancellation at tile and file checkpoints, and receipts at their commit point. Interrupted jobs are resolved from the operation rows, and terminal states survive restarts.
+- Preview viewport window (task `phase2.1_preview-viewport-window`, decision 134; still open on item 1.1): a compute-pass ray caster with image-based lighting, GGX specular and Burley diffuse. The display transform is the pinned OCIO view as a calibrated binary16 table; OpenColorIO is not linked. `UzPainter.exe --preview` and the worker's `--preview` host it on its own thread and device.
+- Preview display presets (task `phase2.1_preview-display-presets`, decision 132; still open): presets for the render standard's `common` (v2) and `ref_match` (v3) blocks, environments stored by SHA-256, and Painter's camera. A project has no camera until one is set; lens coupling stays refused. Values outside the pipeline raise `UnsupportedInUzPainter`.
+- Recipe diagnostic views (task `phase2.1_recipe-diagnostic-views`, decision 136; still open): `uzpainter.diagnostics` views read the committed revision through the export's entry points and refuse inferred bases per source. Layer-tree snapshot and diff, and the matching worker MCP tools.
+- Export plan compiler and export engine closed (tasks `phase1.15_export-plan-compiler`, `phase1.18_export-engine`, decision 131): both archived. `AO_Mixed` stays refused; its fit moves to `phase3.2_unreal-ue56-packed-preset` item 2.10.
+- Supervisor admission ledger (task `phase2.2_supervisor-admission-ledger`, decisions 138, 139; still open): a per-project mutation lease, a durable SQLite ledger, worker-side idempotency over the operation rows, reconciliation once per project epoch, `busy` and `wait_idle`, and receipts.
+- Compositor diagnostics and core closed (tasks `phase1.13_compositor-diagnostics`, `phase1.14_compositor-core`, decision 130): the final union run gives 3639 comparisons exact, 1850 of 1850 against r1, with 1899 rasters repeatable. The recording-blocked colour fits (P20-A/B, sRGB bitmap variants, OCIO, R5 s5) move to the new task `phase1.15_compositor-colour-fits`.
+- Infinite padding on islands (task `phase1.25_pilot-wand`, item 2.7, decision 129): stays refused. The ring is not identified; a jump flood from the recorded ring is only an exploratory candidate, and the probes that would settle it are specified.
+- Recipe dump (task `phase2.1_recipe-dump-manifest-blocks`, decisions 122, 123; still open): a recipe dump with an output-only digest and a separate rebuild block, `inspect --recipe` and `rebuild_from_recipe`. glTF external buffers are stored with the mesh. An identical mesh reloaded from another path is a metadata-only revision.
+- sRGB8 material-channel encode (task `phase1.25_pilot-wand`, items 2.6, 2.7, decisions 126, 127): PNG 8/16 of an sRGB8 BaseColor, Specular or Emissive is the GPU sRGB encode of a linear read-out (258/258 values, 134/134 PNG files). Exports that depend on an inferred template base are refused, and infinite padding on islands stays refused.
+- Supervisor and worker roles (task `phase2.1_supervisor-ipc-worker`, decisions 120, 121; still open): the `uzp-ipc/1` pipe with its handshake, Python and GPU gates, fault detection with minidumps, and relaunch on the last committed revision. Fault hooks exist in Debug builds only. The Vulkan device-loss hook moves to `phase3.1_vulkan-compute-parity`.
+- Wand Tier 1 host (task `phase1.25_pilot-wand`, decision 124; still open): the Wand v1 Tier 1 runner and comparison step. Structural differences are reported as failures, FLIP is a diagnostic through the pinned flip-evaluator 1.7, and comparison reports have a guard rule.
+- Python API fixes (task `phase1.24_python-api-facade`, decisions 115, 116; still open): native inserts use Painter's defaults, `sync_stack` builds what `painter_layer_stack.py` builds, user channels take a uniform colour as given, projects record their template, and exports name their own sources.
+- Assets3D pipeline adapter (task `phase1.23_pyapi-pipeline-adapter`, decision 113): `painter_layer_stack.py` runs byte-unchanged with only its transport rebound to `UzPainter.exe run`. The session is carried between calls, a missing capability is refused before any mutation, and fixed-name exports are verified.
+- `UzPainter.exe run` and capability statuses (task `phase1.22_pyapi-cli-capabilities`, decisions 111, 112): `run` hosts a script in one process with one `UZP_JSON` report line and exit codes 0–3, plus a `capabilities` verb. A capability is `supported` only with traced evidence from a compared Tier 0 replay; implemented symbols without it are `pending-evidence`.
+- Dispatcher and lifecycle (task `phase1.21_pyapi-dispatcher-lifecycle`, decisions 109, 110): the facade reproduces Painter's asynchronous host: a native dispatcher thread, the 27 event classes, create/open/close/save events in recorded order, busy state, `execute_when_not_busy`, and `reload_mesh` with its status callback. Host behaviour Painter has not been recorded doing is a named gap with the recording that settles it.
 - Iray capture procedure (task `phase0.6_render-reference-procedure`): qualified for the fixed render pipeline only (decision 038, the Assets3D render standard v2, `ref_match` v3 and the `base_color` diagnostic). Out-of-process UI Automation operator for Painter's panels (`tools/parity/recorder/painter_ui.py`, decision 039). Pixels come from Save Render as 16-bit display-referred PNG. Readiness is read from Iray's information section. The seed is `uncontrolled`; height is applied as bump; 12.1.5's default shader is open-pbr. Procedure and per-row answers are in `parity/reports/phase0/iray-capture-procedure.md`.
 - Future render tasks re-scoped to the fixed pipeline (decision 042):
   - Display and render facade symbols stay; values outside the pipeline raise `UnsupportedInUzPainter`.
@@ -99,10 +148,22 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Changed
 
+- Tests that built from an empty Zig cache (vendoring check, link map, mesh build paths) share one build: 180 s to 86 s locally. The hosted CI Zig cache limit is raised to 6144 MiB so the cache survives between runs.
+- Wand R9 re-pinned to Assets3D `9a718b9` (decision 144): its route guard runs unadapted, and its 25 pinned inputs resolve from the private store when Assets3D's `_tmp` no longer has them.
+- Every phase1.24 exclusion has an owner (task `phase1.24_python-api-facade`, decision 117): P20-A/B go to `phase1.14` item 2.9, the reload-resources r2 residual to `phase5.2_parity-report-tiers` item 2.10, and the Dota 2 labels wait for the owner (question q1).
 - UzPainter docs follow Assets3D's 2026-10-11 reorganization (`Docs/Pipeline/...` → `Pipeline/...`, `Docs/Lessons`). Changed sources are re-pinned as new revisions in `docs/approved-sources.md` (decision 040).
 
 ### Fixed
 
+- `parity/semantics/export-processing.json` was stale after batches A–D admitted 51 goldens with export steps. Regenerated: 195 goldens, all new residuals zero, no existing entry changed.
+- MCP `layer_insert` and `effect_insert` gate each kind on the native insert they run, so compare mask and colour selection are release gaps (decision 182).
+- The preview viewport had cracks along shared triangle edges. Coverage now uses watertight edge functions; depth and barycentrics stay Möller–Trumbore, so no other pixel changes (decision 178).
+- Three hosted CPU lane failures: the sRGB8 encode test skips without OpenEXR, the recorder's module check counts only the run's imports, and the native case list includes the recipe cases.
+- The recorder builds pinned modules through public `importlib` APIs (decision 144 follow-up).
+- Embedded shader files were not part of their object's build cache key, so a shader saved during a build could stay stale. Each embedding source now compiles with a content digest of its targets, and a guard fails the build when one is missing (decision 147).
+- A supervised request that failed on a removed device reported `resource_creation_failed`, so the worker was not relaunched. It now reports `device_removed`, and later calls wait for the relaunch (task `phase2.1_supervisor-ipc-worker`).
+- The Assets3D adapter carries the project as the absolute path `open` or `save_as` resolved, and a bundle directory as the `.uzp` it was imported into (task `phase1.24_python-api-facade`, decision 118).
+- The CPython start check accepts the app's own `python` folder on `sys.path`. `export-processing.json` publishes the r2 residuals of the phase1.18 processing entries.
 - Store inspect tests hung on a poisoned `.zig-cache` object: a header was saved during a running build, which gave a struct layout mismatch across translation units. Fixed by purging the poisoned entries, with no code change (decision 041). Parallel builders now use separate worktrees.
 
 ### Added (earlier)
