@@ -1,0 +1,12 @@
+{
+  "id": 160,
+  "slug": "painter-batch-a-admits-14-goldens-the-1024-and-2048-padding-probes-are-void-and-srgb-bitmap-variants-is-refused",
+  "title": "Painter batch A admits 14 goldens; the 1024 and 2048 padding probes are void and srgb-bitmap-variants is refused",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}
