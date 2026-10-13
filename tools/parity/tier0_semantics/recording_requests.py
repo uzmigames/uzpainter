@@ -13,7 +13,8 @@ because its inputs are the request fixtures).
 Later decisions add requests the same way (`later_goldens`): decision 145's sRGB bitmap variants
 (decision 156), decision 126's inferred template bases and decision 129's padding probes P-ramp
 and P-tie (decision 157), the other 21 inferred template bases (decision 168), decision 174's
-sRGB bitmap minification and decision 169's L8 material channels.
+sRGB bitmap minification and decision 169's L8 material channels, decision 210's ring-sign probes
+and a position-encoded seam probe (decision 216).
 
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
 two that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`), which
@@ -168,6 +169,18 @@ for _size in (rf.RAMP_RESOLUTION, *rf.TIE_RESOLUTIONS[1:]):
         f"{FIXTURE_DIR}/bitmaps/{renamed_ramp(_size)}.exr",
         uv_ramp_generator(_size),
     )
+# Decision 210's ring-sign probes (decision 216): tie with its mesh box centred at the origin
+# (half-extent 16) and r1-p0 scaled to a box of largest extent 34.
+REQUEST_FIXTURES["tie-box16"] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/tie-box16.obj",
+    lambda: rf.tie(rf.TIE_BOX16_CENTRES),
+)
+REQUEST_FIXTURES["seam-ramp-r1-p0-box17"] = (
+    "mesh",
+    f"{FIXTURE_DIR}/meshes/seam-ramp-r1-p0-box17.obj",
+    lambda: rf.ramp_seam("r1", "p0", rf.RAMP_BOX17_EXTENT),
+)
 for _group, _probes in probe_groups().items():
     for _probe in _probes:
         REQUEST_FIXTURES[f"probe-{_group}-{_probe}"] = (
@@ -187,6 +200,8 @@ MESH_SETS = {
     "plane": ["uzp_plane"],
     "tie": ["uzp_tie"],
     **{f"seam-ramp-{m}-{p}": ["uzp_seam"] for m in rf.RAMP_MESHES for p in rf.RAMP_PHASES},
+    "tie-box16": ["uzp_tie"],
+    "seam-ramp-r1-p0-box17": ["uzp_seam"],
 }
 
 
@@ -1085,6 +1100,54 @@ def padding_tie(resolution: int, renamed: bool = False) -> Golden:
     )
 
 
+def padding_sign_probes() -> list[Golden]:
+    """Decision 210 section 5's two ring-sign probes and the position-encoded seam probe
+    decision 211 section 5 points to (decision 216), each a P-ramp/P-tie sequence."""
+    tie_ramp = "uv-ramp-512"
+    ramp = renamed_ramp(rf.RAMP_RESOLUTION)
+    box = (
+        "Decision 210's bounding-box reading of the ring sign (phase1.25_pilot-wand item 2.7), "
+        "exploratory: "
+    )
+    return [
+        Golden(
+            "export-padding-tie-512-box16",
+            EXPORT_DOMAIN,
+            box + "P-tie-dyadic-box, the P-tie UV islands with the three 10 cm quads moved to x in "
+            "[-16, -6], [-5, 5] and [6, 16] cm (z in [-5, 5]), so that the mesh's bounding box is "
+            "centred at the origin with half-extent 16; document resolution 512. The reading "
+            "predicts the fixed sign (+u, +v) on every ring texel. " + PROBE_TAIL,
+            "tie-box16",
+            ["tie-box16", tie_ramp],
+            padding_probe("tie-box16", 512, tie_ramp),
+        ),
+        Golden(
+            "export-padding-ramp-r1-p0-box17",
+            EXPORT_DOMAIN,
+            box + "P-ramp-17, the P-ramp seam mesh of scale ratio 1 at phase 0 with its world "
+            "positions scaled by 1.7, so that the bounding box is x 0..34 by z 0..17 cm "
+            "(half-extent 17), UVs unchanged; document resolution 1024. The reading predicts a "
+            "mixed sign on the ring, which is fixed on export-padding-ramp-r1-p0-v2. " + PROBE_TAIL,
+            "seam-ramp-r1-p0-box17",
+            ["seam-ramp-r1-p0-box17", ramp],
+            padding_probe("seam-ramp-r1-p0-box17", rf.RAMP_RESOLUTION, ramp),
+        ),
+        Golden(
+            "export-padding-seam-ramp-1024",
+            EXPORT_DOMAIN,
+            "The seam ring's taps and weights (decision 211, phase1.25_pilot-wand item 2.7), "
+            "exploratory: the authored seam mesh of export-padding-seam-field-1024 (island A at "
+            "scale 0.375 on the tile's left border, island B at scale 0.25 turned 90 degrees; B "
+            "as on export-padding-ramp-r15-p0-v2, A 64 texels further left), with the float UV "
+            "ramp in place of the field so that every ring value reads as a position; document "
+            "resolution 1024. " + PROBE_TAIL,
+            "seam",
+            ["seam", ramp],
+            padding_probe("seam", rf.RAMP_RESOLUTION, ramp),
+        ),
+    ]
+
+
 # --- Decision 174 item 6: bilinear minification of an sRGB bitmap ------------------------------
 
 SRGB_MINIFY_SOURCES = ("srgb8-ramp", "field-a")
@@ -1224,7 +1287,8 @@ def resample_held_out(size: int) -> Golden:
 def later_goldens() -> list[Golden]:
     """Requested goldens of later decisions (145, 126, 129, 168), in the order of the runbook,
     then the padding probes decision 160 voids under their new names (decision 166), then
-    decision 174's sRGB minification and decision 169's L8 material channels."""
+    decision 174's sRGB minification and decision 169's L8 material channels, then decision
+    216's ring-sign and seam probes."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
@@ -1236,6 +1300,7 @@ def later_goldens() -> list[Golden]:
         srgb_bitmap_minification(),
         export_l8_material(),
         *(resample_held_out(size) for size in rf.HELD_OUT_SIZES),
+        *padding_sign_probes(),
     ]
 
 
