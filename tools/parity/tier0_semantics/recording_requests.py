@@ -1060,7 +1060,7 @@ def later_goldens() -> list[Golden]:
 
 
 # Goldens that the Painter sessions of 2026-10-12 recorded and the store admitted (decisions
-# 101 and 160): their manifests live under the envelope's `manifests/`, and their requests are
+# 101, 160 and 167): their manifests live under the envelope's `manifests/`, and their requests are
 # deleted.
 ADMITTED = frozenset(
     {
@@ -1087,6 +1087,14 @@ ADMITTED = frozenset(
             for m in ("r1", "r2", "r15")
             for p in ("p0", "p25", "p75")
         ),
+        # Batch of decision 167 (Painter session of 2026-10-12, 21:27).
+        "srgb-bitmap-variants-v2",
+        *(
+            f"export-padding-ramp-{m}-{p}-v2"
+            for m in ("r1", "r2", "r15")
+            for p in ("p0", "p25", "p75")
+        ),
+        "export-padding-tie-2048-v2",
     }
 )
 

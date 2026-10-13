@@ -1,0 +1,12 @@
+{
+  "id": 167,
+  "slug": "painter-batch-b-admits-11-goldens-the-renamed-ramps-fix-the-void-padding-probes-and-non-srgb8-bitmaps-refuse-srgb",
+  "title": "Painter batch B admits 11 goldens: the renamed ramps fix the void padding probes, and bitmaps on non-sRGB8 channels refuse sRGB",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

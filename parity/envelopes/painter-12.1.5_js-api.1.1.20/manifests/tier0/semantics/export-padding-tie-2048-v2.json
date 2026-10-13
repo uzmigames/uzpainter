@@ -1,16 +1,16 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/semantics/export-padding-ramp-r1-p0-v2",
+  "golden_id": "tier0/semantics/export-padding-tie-2048-v2",
   "tier": "0",
   "domain": "tier0/export/processing",
-  "description": "P-ramp of decision 129 (phase1.25_pilot-wand item 2.7: the ring across a UV seam), exploratory: the seam mesh of scale ratio 1, phase 0, its OBJ the text decision 129 fixes by SHA-256; document resolution 1024. User0 added as RGB32F (the template capture of both recordings records its stored format; a record where it is not 32F is void); one fill with only User0 active, source the authored float32 UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5 at the document size, default projection (read back), Normal at opacity 1. User0 at OpenEXR 32f with infinite padding and with passthrough (every covered texel must equal the ramp bit for bit, or the probe is void), every export step done twice in the session. Re-authored under a new name (decision 166): the ramp file is named uv-ramp-n<N>.exr, because Painter read the four-digit suffix of uv-ramp-1024 and uv-ramp-2048 as a UDIM tile and the first records were void (decision 160).",
+  "description": "P-tie of decision 129 (phase1.25_pilot-wand item 2.7: the propagation rule), exploratory: three axis-aligned UV islands of side 0.125 at (0.1875, 0.1875), (0.6875, 0.1875) and (0.4375, 0.6875); document resolution 2048. User0 added as RGB32F (the template capture of both recordings records its stored format; a record where it is not 32F is void); one fill with only User0 active, source the authored float32 UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5 at the document size, default projection (read back), Normal at opacity 1. User0 at OpenEXR 32f with infinite padding and with passthrough (every covered texel must equal the ramp bit for bit, or the probe is void), every export step done twice in the session. Re-authored under a new name (decision 166): the ramp file is named uv-ramp-n<N>.exr, because Painter read the four-digit suffix of uv-ramp-1024 and uv-ramp-2048 as a UDIM tile and the first records were void (decision 160).",
   "inputs": [
     {
-      "input_id": "seam-ramp-r1-p0",
+      "input_id": "tie",
       "kind": "mesh",
-      "path": "parity/fixtures/tier0-semantics/meshes/seam-ramp-r1-p0.obj",
-      "sha256": "be463fa73ab3ddba7e6d536d1b9e366b9b987dd42494a53a7535af830b33c95e",
+      "path": "parity/fixtures/tier0-semantics/meshes/tie.obj",
+      "sha256": "a8e2302f22b00b1e1962c2f20efcda340c01120c3ab2d001a5def9bf8a5e8d70",
       "provenance": {
         "origin": "uzmigames_authored",
         "licence": "Apache-2.0",
@@ -18,10 +18,10 @@
       }
     },
     {
-      "input_id": "uv-ramp-n1024",
+      "input_id": "uv-ramp-n2048",
       "kind": "image",
-      "path": "parity/fixtures/tier0-semantics/bitmaps/uv-ramp-n1024.exr",
-      "sha256": "1ba4fce972e120b0062b056e51f64debb23b9de5571b5ff210dbe4b82becfb81",
+      "path": "parity/fixtures/tier0-semantics/bitmaps/uv-ramp-n2048.exr",
+      "sha256": "ace95d26fa8fbe53f53521e10ae3c3e5731e1a078e6341944c40baffdef1bfb8",
       "provenance": {
         "origin": "uzmigames_authored",
         "licence": "Apache-2.0",
@@ -37,9 +37,9 @@
         "step": 1,
         "call": "substance_painter.project.create",
         "args": {
-          "mesh": "seam-ramp-r1-p0",
+          "mesh": "tie",
           "normal_map_format": "OpenGL",
-          "default_texture_resolution": 1024
+          "default_texture_resolution": 2048
         }
       },
       {
@@ -54,7 +54,7 @@
         "step": 3,
         "call": "substance_painter.resource.import_project_resource",
         "args": {
-          "input": "uv-ramp-n1024",
+          "input": "uv-ramp-n2048",
           "usage": "TEXTURE"
         }
       },
@@ -63,7 +63,7 @@
         "call": "substance_painter.layerstack.insert_fill",
         "args": {
           "position": "top",
-          "texture_set": "uzp_seam"
+          "texture_set": "uzp_tie"
         }
       },
       {
@@ -172,7 +172,7 @@
     },
     {
       "name": "texture_set.resolution",
-      "value": 1024,
+      "value": 2048,
       "unit": "px",
       "applied_by": "recorder_api"
     },
@@ -206,5 +206,66 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "8c7931f1c563ceb11e9bca940595b04a768e1e895e2b232e9bbfa83840a5b619",
+      "size_bytes": 10637
+    },
+    {
+      "record_id": "r1-uzp_tie-user0-step10",
+      "kind": "exported_map",
+      "sha256": "f4787720e3c15d308f463b0cd60615827ed8b98376e916098000d0d9140d0281",
+      "size_bytes": 1424323
+    },
+    {
+      "record_id": "r1-uzp_tie-user0-step11",
+      "kind": "exported_map",
+      "sha256": "f4787720e3c15d308f463b0cd60615827ed8b98376e916098000d0d9140d0281",
+      "size_bytes": 1424323
+    },
+    {
+      "record_id": "r1-uzp_tie-user0-step12",
+      "kind": "exported_map",
+      "sha256": "49ca93a3781cede74fec3c386f0b5af4d5c187d10d995a098db2313ed1ee7abc",
+      "size_bytes": 2943281
+    },
+    {
+      "record_id": "r1-uzp_tie-user0-step13",
+      "kind": "exported_map",
+      "sha256": "49ca93a3781cede74fec3c386f0b5af4d5c187d10d995a098db2313ed1ee7abc",
+      "size_bytes": 2943281
+    },
+    {
+      "record_id": "r2-uzp_tie-user0-step10",
+      "kind": "exported_map",
+      "sha256": "f4787720e3c15d308f463b0cd60615827ed8b98376e916098000d0d9140d0281",
+      "size_bytes": 1424323
+    },
+    {
+      "record_id": "r2-uzp_tie-user0-step11",
+      "kind": "exported_map",
+      "sha256": "f4787720e3c15d308f463b0cd60615827ed8b98376e916098000d0d9140d0281",
+      "size_bytes": 1424323
+    },
+    {
+      "record_id": "r2-uzp_tie-user0-step12",
+      "kind": "exported_map",
+      "sha256": "f4787720e3c15d308f463b0cd60615827ed8b98376e916098000d0d9140d0281",
+      "size_bytes": 1424323
+    },
+    {
+      "record_id": "r2-uzp_tie-user0-step13",
+      "kind": "exported_map",
+      "sha256": "f4787720e3c15d308f463b0cd60615827ed8b98376e916098000d0d9140d0281",
+      "size_bytes": 1424323
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "62145b16600dc682b3954c368d0fd58a1d70cf04ca8312e8a64f2a08bcaac444",
+      "size_bytes": 402
+    }
+  ]
 }

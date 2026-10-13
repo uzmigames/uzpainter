@@ -28,6 +28,7 @@ from tools.parity.tier0_semantics.recording_requests import (
     request_dir,
     request_root,
     requested_goldens,
+    srgb_bitmap_variants,
 )
 
 
@@ -263,8 +264,7 @@ def test_no_requested_bitmap_reads_as_a_udim_tile() -> None:
 def test_srgb_variants_attempt_the_user_channel_spaces() -> None:
     """Decision 166: s4 sets each user channel's bitmap, then attempts set_color_space(sRGB), so
     Painter's refusal on a non-sRGB8 channel is recorded instead of refusing the golden."""
-    path = request_dir(REPO_ROOT) / "srgb-bitmap-variants-v2.json"
-    steps = load_json(path)["instruction_sequence"]["steps"]
+    steps = srgb_bitmap_variants().sequence.steps
     attempted = [
         s["args"]["channel"]
         for s in steps
