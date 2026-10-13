@@ -12,11 +12,12 @@ The owner made Vulkan the second Windows GPU backend (Q9, decision 022; PRD §17
 - Capability manifest (`capabilities.json`, `docs/architecture/10-python-api.md` §3) entries for the Vulkan backend with their tier evidence.
 
 ## Dependencies
-- Prerequisites: `phase1.4_render-core-layer` (backend-neutral interfaces, DX12 qualification), `phase2.10_pilot-tunic-recovery` (pilot Tier 1 goldens and the qualified compositor/export/preview paths).
+- Prerequisites: `phase1.4_render-core-layer` (backend-neutral interfaces, DX12 qualification), `phase2.10_pilot-tunic-recovery` (pilot Tier 1 goldens and the qualified compositor/export/preview paths). Only the pilot comparisons need Tunic; the device qualification may start before it (decision 221).
+- Owns the Vulkan settling cases deferred from Phase 2 (decisions 121, 221): `phase2.1_supervisor-ipc-worker` 3.3, `phase2.4_supervisor-worker` 3.4/4.1, `phase2.3_realtime-preview` 4.1.
 - Parent: `phase3.3_vulkan-backend-ray-tracing`. Unblocks `phase3.2_vulkan-ray-tracing`.
 
 ## Acceptance
-`selftest` hardware slice green on Vulkan; the Tier 0 subset and the three pilot Tier 1 maps byte-equal on Vulkan and DX12; readback drain tests and compositor kernels identical on both backends (`13-…` §7); any divergence passes only as an owner-approved exception in `parity/exceptions.json` (`docs/dag.md` P3-VULKAN).
+Qualification: `selftest` hardware slice green on Vulkan; device-loss and stall injection through the supervisor, and every Vulkan settling case Phase 2 deferred here (`parity/reports/phase2/supervisor-settling.json`, `preview-settling.json`; decisions 121, 221), pass with none left `pending`. Pilot comparison: the Tier 0 subset and the three pilot Tier 1 maps byte-equal on Vulkan and DX12; readback drain tests and compositor kernels identical on both backends (`13-…` §7); any divergence passes only as an owner-approved exception in `parity/exceptions.json` (`docs/dag.md` P3-VULKAN).
 
 ## Impact
 - Affected specs: vulkan
