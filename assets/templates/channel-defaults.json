@@ -37,7 +37,23 @@
         "golden_id": "tier0/semantics/export-bit-depth",
         "record_sha256": "a646339578936fe65ddc1ad20a0dd4bc386855852d1328829d0c089380f8b9ef",
         "map": "s3/emissive",
-        "note": "Emissive added as sRGB8 and left empty exports 1.0 to OpenEXR 32f and 65535 to PNG 16 (sets s3 and s7, r1 and r2; decision 126); this default applies to sRGB8 only: other formats are not recorded and fail with missing_base_value"
+        "note": "Emissive added as sRGB8 and left empty exports 1.0 to OpenEXR 32f and 65535 to PNG 16 (sets s3 and s7, r1 and r2; decision 126); this default applies to sRGB8 only (L8: the next entry; other formats are not recorded and fail with missing_base_value)"
+      }
+    },
+    {
+      "type": "Emissive",
+      "format": "L8",
+      "base": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-l8-material",
+        "record_sha256": "eddbad97c8be3151fd62580026858fbb811a9625f60dc97366ffa7add6c8db1d",
+        "map": "s3/emissive",
+        "note": "Emissive added as L8 and left empty exports 1.0 to OpenEXR 32f and 255 and 65535 to PNG 8 and 16, RGB and L (set s3, r1 and r2; decision 204); this default applies to L8 only"
       }
     },
     {
@@ -67,7 +83,23 @@
         "golden_id": "tier0/semantics/export-bit-depth",
         "record_sha256": "a646339578936fe65ddc1ad20a0dd4bc386855852d1328829d0c089380f8b9ef",
         "map": "s3/specular",
-        "note": "Specular added as sRGB8 and left empty exports float32(10/255) to OpenEXR 32f, linear, and its sRGB export encode to PNG 8 and 16 (sets s3 and s7, r1 and r2; decision 126); this default applies to sRGB8 only: other formats are not recorded and fail with missing_base_value"
+        "note": "Specular added as sRGB8 and left empty exports float32(10/255) to OpenEXR 32f, linear, and its sRGB export encode to PNG 8 and 16 (sets s3 and s7, r1 and r2; decision 126); this default applies to sRGB8 only (L8: the next entry; other formats are not recorded and fail with missing_base_value)"
+      }
+    },
+    {
+      "type": "Specular",
+      "format": "L8",
+      "base": [
+        0.03921568766236305,
+        0.03921568766236305,
+        0.03921568766236305
+      ],
+      "base_provenance": {
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-l8-material",
+        "record_sha256": "eddbad97c8be3151fd62580026858fbb811a9625f60dc97366ffa7add6c8db1d",
+        "map": "s3/specular",
+        "note": "Specular added as L8 and left empty exports float32(10/255) to OpenEXR 32f, linear, and (56, 10, 56) and (14330, 2570, 14330) to RGB PNG 8 and 16, the sRGB export encode in R and B and the linear write in G (set s3, r1 and r2; decision 204); this default applies to L8 only"
       }
     },
     {

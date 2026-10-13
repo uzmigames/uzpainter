@@ -649,6 +649,135 @@ def template_bases_written(exe: Path, tmp: Path) -> dict[str, Any]:
     return report
 
 
+# export-l8-material (decision 204): BaseColor edited to L8, Specular and Emissive added as L8,
+# filled per set (s3 empty), the three maps as RGB and as L at PNG 8 (steps 40-43), PNG 16 (44-47)
+# and OpenEXR 32f (48-51), each export twice.
+L8_MATERIAL_SETS = ("s0", "s1", "s2", "s3")
+L8_MATERIAL_STEPS = tuple(range(40, 52))
+
+
+def l8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """export-l8-material's sets rebuilt on the grid mesh (the BaseColor edit an L8 channel of the
+    stack, every uniform colour in the sRGB space as the facade stores it, each grey bitmap in the
+    sRGB space: Painter's files of s0 and s1 hold the bitmaps' codes decoded close to sRGB) and
+    written by `WriteExport` at every export step: compared byte for byte with Painter's files of
+    r1, and of r2 wherever r2 equals r1 (decision 032). Returns the counts, the differing files or
+    evaluation failures (`problems`) and per set the first refusal of its evaluation (`refused`:
+    set, message)."""
+    needs_store()
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    golden = load(locate(), root / "export-l8-material.json")
+    sequence = golden.manifest["instruction_sequence"]
+    steps = []
+    for raw in sequence["steps"]:
+        args = raw.get("args", {})
+        if raw["call"].endswith("Stack.edit_channel"):
+            raw = dict(raw, call="substance_painter.textureset.Stack.add_channel")
+        elif raw["call"].endswith("set_source") and "color" in args:
+            colour = [srgb_to_working(float(c)) for c in args["color"]]
+            raw = dict(raw, args=dict(args, color=colour, color_space="Working"))
+        elif raw["call"].endswith("set_source") and "resource_step" in args:
+            raw = dict(raw, args=dict(args, color_space="sRGB"))
+        steps.append(raw)
+    manifest = dict(golden.manifest, instruction_sequence=dict(sequence, steps=steps))
+    by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
+    report: dict[str, Any] = {
+        "files": 0,
+        "comparisons": 0,
+        "identical": 0,
+        "problems": [],
+        "refused": [],
+    }
+    for texture_set in L8_MATERIAL_SETS:
+        spec_dir = tmp / texture_set / "spec"
+        spec = export_spec(manifest, texture_set, spec_dir)
+        spec["mesh"] = str(_mesh_of(manifest))
+        _add_template_channels(spec)
+        for step in L8_MATERIAL_STEPS:
+            raw = by_step[step]
+            out_dir = tmp / texture_set / f"out{step}"
+            config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                out_dir, [texture_set]
+            )
+            result = write_export(exe, spec, spec_dir, config, tmp / texture_set / f"run{step}")
+            where = f"{texture_set} step {step}"
+            if "unsupported_source" in result.get("message", ""):
+                report["refused"].append((texture_set, result["message"]))
+                break
+            if "error" in result:
+                report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                continue
+            theirs_r1 = _painter_files(golden, "r1", step, texture_set)
+            theirs_r2 = _painter_files(golden, "r2", step, texture_set)
+            for written in result["written"]:
+                rel = written["relativePath"]
+                report["files"] += 1
+                for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
+                    if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
+                        continue
+                    report["comparisons"] += 1
+                    if written["sha256"] == theirs.get(rel):
+                        report["identical"] += 1
+                    else:
+                        report["problems"].append(f"{where}: {rel} differs from {recording}")
+    return report
+
+
+# export-l8-material's OpenEXR 32f steps and the PNG steps they are the raster of: RGB (48) for
+# PNG 8 (40) and PNG 16 (44), L (50) for PNG 8 (42) and PNG 16 (46).
+L8_PROCESSING_STEPS = {48: ((40, "8"), (44, "16")), 50: ((42, "8"), (46, "16"))}
+
+
+def l8_material_processed(exe: Path, tmp: Path) -> dict[str, Any]:
+    """Painter's own OpenEXR 32f file of each export-l8-material map (every set, BaseColor,
+    Specular and Emissive, RGB and L) as the raster of its PNG 8 and PNG 16 files, encoded by
+    `uzp-export-tests process` with the L8 material channel's encode (`SrgbEncodedRead`): each
+    case's source and target from the same recording, r1 and r2. Returns the counts and the
+    differing targets."""
+    needs_store()
+    store = locate()
+    assert store is not None
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    golden = load(store, root / "export-l8-material.json")
+
+    def path(recording: str, output_id: str) -> str:
+        return str(_blob_path(store, golden, golden.output(recording, output_id)["blob"]))
+
+    cases = [
+        {
+            "recording": recording,
+            "source": path(recording, f"{key}/step{step}"),
+            "target": path(recording, f"{key}/step{target}"),
+            "format": "png",
+            "bit_depth": depth,
+            "l8_material": True,
+            "where": f"{recording} {key} step {target}",
+        }
+        for recording in ("r1", "r2")
+        for key in (f"{t}/{m}" for t in L8_MATERIAL_SETS for m in SRGB8_MATERIAL)
+        for step, targets in L8_PROCESSING_STEPS.items()
+        for target, depth in targets
+    ]
+    tmp.mkdir(parents=True, exist_ok=True)
+    listing = tmp / "process-l8.json"
+    listing.write_text(json.dumps(cases), encoding="utf-8")
+    lines = _run([str(exe), "process", str(listing)]).splitlines()
+    assert len(lines) == len(cases)
+    report: dict[str, Any] = {
+        "cases": len(cases),
+        "identical": 0,
+        "layouts": defaultdict(int),
+        "differing": [],
+    }
+    for case, line in zip(cases, lines, strict=True):
+        result = json.loads(line)
+        report["identical"] += int(result["equal"])
+        report["layouts"][str(result["layout"])] += 1
+        if not result["equal"]:
+            report["differing"].append(case["where"])
+    return report
+
+
 # export-ocio-encode-legacy: the authored 8-bit sRGB ramp at 1:1 on BaseColor in the sRGB space
 # (s3), in Raw (s4) and in the sRGB space inside a group masked by grey A (s5), exported at PNG 16,
 # PNG 8 and OpenEXR 32f (sources.h).

@@ -25,7 +25,8 @@
 //       UNORM operands), "target": Painter's file of the same map with another processing,
 //       "format": png|exr, "bit_depth": 8|16|16f|32f, "dithering"?, "height"? (the channel is
 //       Height), "srgb8_material"? (an sRGB8 BaseColor, Specular or Emissive: every channel
-//       sRGB-encoded in a PNG), "append_opaque_alpha"? (an alpha of 1 appended)}: the source's values as the
+//       sRGB-encoded in a PNG), "l8_material"? (an L8 one, each channel read through its own letter:
+//       `SrgbEncodedRead`), "append_opaque_alpha"? (an alpha of 1 appended)}: the source's values as the
 //       raster of an L, L+A, RGB or RGB+A file, encoded by EncodeFile; prints one JSON line per case
 //       {"target", "equal", "layout", "size", "target_size"}.
 //   uzp-export-tests roundtrip <out dir>
@@ -752,9 +753,14 @@ int RunProcess(const fs::path& casesPath) {
         parameters.dithering = c.contains("dithering") && std::get<bool>(c.at("dithering").data);
         file.parameters = parameters;
         const bool srgb8Material = c.contains("srgb8_material") && std::get<bool>(c.at("srgb8_material").data);
+        const bool l8Material = c.contains("l8_material") && std::get<bool>(c.at("l8_material").data);
+        std::vector<uint8_t> srgbEncoded(channels, srgb8Material ? 1 : 0);
+        for (uint32_t i = 0; l8Material && i < channels; ++i) {
+            srgbEncoded[i] = exporter::SrgbEncodedRead(ChannelType::Specular, ChannelFormat::L8, kLetters[channels][i]);
+        }
         const exporter::FileRaster raster{width,        height,       channels,
                                           std::move(values), std::nullopt, std::nullopt,
-                                          std::vector<uint8_t>(channels, srgb8Material ? 1 : 0)};
+                                          std::move(srgbEncoded)};
         const exporter::EncodedImage encoded = exporter::EncodeFile(file, raster);
         const std::string target = ReadText(file.relativePath);
         std::cout << json::WriteCanonical(json::Object{{"target", file.relativePath},

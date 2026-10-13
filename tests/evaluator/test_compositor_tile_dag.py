@@ -217,8 +217,11 @@ def test_template_file_structure(path: Path) -> None:
     assert document["id"] == path.stem
     assert document["kind"] in {"project", "channel-defaults"}
     assert document["provenance"]["author"] == "UzmiGames"
-    types = [c["type"] for c in document["channels"]]
+    # A channel default may repeat its type with distinct formats (decision 204).
+    types = [(c["type"], c.get("format")) for c in document["channels"]]
     assert len(types) == len(set(types)), "a channel type repeats"
+    for kind, fmt in types:
+        assert fmt is not None or [t for t, _ in types].count(kind) == 1, "a channel type repeats"
     for channel in document["channels"]:
         if document["kind"] == "project":
             assert channel["format"] in FORMATS
@@ -273,11 +276,6 @@ def backends() -> list[str]:
 SRGB_ENCODED_ON_EXPORT = frozenset({"BaseColor", "Specular", "Emissive"})
 
 
-def l8_png_refused(channel: str, fmt: str) -> bool:
-    """The export refuses a PNG of an L8 BaseColor, Specular or Emissive (decision 169)."""
-    return fmt == "L8" and channel in SRGB_ENCODED_ON_EXPORT
-
-
 def write16(v: float) -> int:
     """The evaluator's 16-bit UNORM write rule: truncate to 20 fractional bits, nearest, ties
     down."""
@@ -315,20 +313,23 @@ def raster(result: dict[str, Any], channel: str) -> np.ndarray:
 
 def export16_of_constant(constant: list[float], channel: str, fmt: str) -> list[int]:
     """What a 16-bit PNG export of an empty channel's constant holds, per component: the write
-    rule of the export depth, whatever the channel format. The PNG of an L8 BaseColor, Specular or
-    Emissive is refused (decision 169: Dota 2's L8 Specular base writes (14330, 2570, 14330)).
-    The signed Height channel exports (h + 1) / 2 (its base 0 exports 32767). An sRGB8 BaseColor,
-    Specular or Emissive holds its linear constant and exports its sRGB encode (src/export/encode.h,
-    decision 126)."""
+    rule of the export depth, whatever the channel format. The signed Height channel exports
+    (h + 1) / 2 (its base 0 exports 32767). An sRGB8 BaseColor, Specular or Emissive holds its
+    linear constant and exports its sRGB encode (src/export/encode.h, decision 126); stored as L8,
+    its G component exports the linear write (decision 204: Dota 2's L8 Specular base writes
+    (14330, 2570, 14330))."""
     if channel == "Height":
         return [
             write16(float(np.float32(np.float32(v) + np.float32(1.0)) * np.float32(0.5)))
             for v in constant
         ]
-    if fmt == "sRGB8" and channel in SRGB_ENCODED_ON_EXPORT:
+    if fmt in ("sRGB8", "L8") and channel in SRGB_ENCODED_ON_EXPORT:
         from tests.export.tier0 import srgb16  # tests/export imports this module at load
 
-        return [int(c) for c in srgb16(np.asarray(constant, np.float32))]
+        encoded = [int(c) for c in srgb16(np.asarray(constant, np.float32))]
+        if fmt == "L8":
+            return [write16(v) if i == 1 else encoded[i] for i, v in enumerate(constant)]
+        return encoded
     return [write16(v) for v in constant]
 
 
@@ -391,11 +392,6 @@ def test_base_values_equal_the_empty_project_exports(
         for recording in ("r1", "r2"):
             decoded = golden.map(recording, map_name)
             observed = decoded.values
-            if decoded.integer and l8_png_refused(channel, formats[channel]):
-                # Dota 2's L8 Specular: Painter's PNG 16 holds (14330, 2570, 14330) for the base
-                # float32(10/255) its OpenEXR shows; the export refuses that PNG (decision 169),
-                # and tests/export compares the OpenEXR files.
-                continue
             if decoded.integer:
                 ours = np.asarray(
                     export16_of_constant(entry["constant"], channel, formats[channel]), np.int64

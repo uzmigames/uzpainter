@@ -20,6 +20,7 @@ their evidence:
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import shutil
 import subprocess
@@ -521,6 +522,91 @@ def test_srgb8_material_channels_are_written_encoded(export_tests: Path, tmp_pat
     assert files_under(out) == {}
 
 
+def test_l8_material_channels_are_written_encoded(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 204: an empty L8 BaseColor (float32(0.8)) and Specular (float32(10/255), its
+    channel default) are written to PNG with the sRGB encode of the linear value in R, B and L and
+    the linear write in G, as Painter's export-l8-material files hold them (s3, r1 and r2). Under
+    OCIO, or in any other file than the RGB or L file of the one channel each letter reading its
+    own, the PNG is refused before writing; their OpenEXR files hold the linear value."""
+    document = {
+        "name": "s0",
+        "resolution": [256, 256],
+        "mesh": str(GRID),
+        "channels": [{"type": "BaseColor", "format": "L8"}, {"type": "Specular", "format": "L8"}],
+        "resources": [],
+        "layers": [],
+    }
+    (tmp_path / "spec").mkdir()
+    spec_path = tmp_path / "spec" / "l8.json"
+    spec_path.write_text(json.dumps(document), encoding="utf-8")
+
+    def preset(out: Path, maps: dict[str, list[dict[str, str]]], **params: Any) -> dict[str, Any]:
+        cfg = config(out, **params)
+        cfg["exportPresets"][0]["maps"] = [
+            {"fileName": f"$textureSet_{name}", "channels": channels}
+            for name, channels in maps.items()
+        ]
+        cfg["exportParameters"] = cfg["exportParameters"][:1]
+        return cfg
+
+    from tools.parity.fit.decode import decode
+
+    written = {
+        "base": [chan(c, "documentMap", "basecolor") for c in "RGB"],
+        "spec": [chan(c, "documentMap", "specular") for c in "RGB"],
+        "specL": [chan("L", "documentMap", "specular")],
+    }
+    expected = {
+        ("16", "base"): [59397, 52428, 59397],
+        ("16", "spec"): [14330, 2570, 14330],
+        ("16", "specL"): [14330],
+        ("8", "base"): [231, 204, 231],
+        ("8", "spec"): [56, 10, 56],
+        ("8", "specL"): [56],
+    }
+    for depth in ("8", "16"):
+        out = tmp_path / f"png{depth}"
+        cfg = preset(out, written, bitDepth=depth)
+        result = export(export_tests, spec_path, cfg, tmp_path / f"run{depth}")
+        assert "error" not in result, result
+        for name in written:
+            values = decode((out / f"s0_{name}.png").read_bytes()).values
+            unique = np.unique(values.reshape(-1, values.shape[-1]), axis=0).tolist()
+            assert unique == [expected[(depth, name)]], (depth, name, unique)
+
+    out = tmp_path / "exr"
+    cfg = preset(out, {"spec": written["spec"]}, fileFormat="exr", bitDepth="32f")
+    result = export(export_tests, spec_path, cfg, tmp_path / "run-exr")
+    assert "error" not in result, result
+    if importlib.util.find_spec("OpenEXR") is not None:
+        values = decode((out / "s0_spec.exr").read_bytes()).values.astype(np.float32)
+        assert np.all(values == np.float32(10 / 255)), np.unique(values)
+
+    swapped = [
+        {**chan("R", "documentMap", "specular"), "srcChannel": "G"},
+        chan("G", "documentMap", "specular"),
+        chan("B", "documentMap", "specular"),
+    ]
+    mixed = [chan("R", "documentMap", "specular"), *written["base"][1:]]
+    refusals = [
+        ("swapped", spec_path, {"spec": swapped}, "other than the channel's own"),
+        ("mixed", spec_path, {"spec": mixed}, "other than the channel's own"),
+    ]
+    from tests.export.encoders_tier0 import OCIO_CONFIG_SHA256
+
+    ocio = dict(document, color_management="ocio", config_hash=OCIO_CONFIG_SHA256)
+    ocio_path = tmp_path / "spec" / "ocio.json"
+    ocio_path.write_text(json.dumps(ocio), encoding="utf-8")
+    refusals.append(("ocio", ocio_path, {"spec": written["spec"]}, "under OCIO is not recorded"))
+    for label, path, maps, phrase in refusals:
+        out = tmp_path / label
+        result = export(export_tests, path, preset(out, maps), tmp_path / f"run-{label}")
+        assert result.get("error") == "NotYetSupported", (label, result)
+        assert "the PNG encoding of the L8 channel Specular" in result["message"], result
+        assert phrase in result["message"] and "decision 204" in result["message"], result
+        assert files_under(out) == {}, label
+
+
 def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path: Path) -> None:
     """2.6 (decision 126): on a template whose BaseColor base is inferred (Blender, in a copy of
     the templates: since decision 169 no shipped template has an inferred base), every
@@ -528,8 +614,8 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
     is written: the documentMap on sRGB8 and on RGB16, and the diagnosticMap sources isolated,
     contribution, regionStats, materialView and materialLeaks of BaseColor (leaks compare the
     channel's full and solo read-outs). On the default template, whose base is observed, the same
-    diagnostic sources are written. Specular and Emissive added in a format other than sRGB8 fail
-    with `missing_base_value`: their channel default is recorded on sRGB8 only."""
+    diagnostic sources are written. Specular and Emissive added in a format other than sRGB8 and L8
+    fail with `missing_base_value`: their channel defaults are recorded on those formats only."""
 
     def variant(name: str, template: str | None, basecolor: str = "sRGB8") -> Path:
         document = json.loads(spec(tmp_path / "spec").read_text(encoding="utf-8"))
@@ -585,8 +671,9 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
         assert "error" not in result, (source, result)
         assert files_under(out), source
 
-    # Specular and Emissive added in a format other than sRGB8: their channel default is recorded
-    # on sRGB8 only, so the evaluation fails (`missing_base_value`) before anything is written.
+    # Specular and Emissive added in a format other than sRGB8 and L8: their channel defaults are
+    # recorded on those formats only, so the evaluation fails (`missing_base_value`) before
+    # anything is written.
     for channel, fmt in (("Specular", "RGB16"), ("Emissive", "RGB16"), ("Specular", "L16")):
         document = json.loads((tmp_path / "spec" / "default.json").read_text(encoding="utf-8"))
         document["channels"].append({"type": channel, "format": fmt})
@@ -598,7 +685,7 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
         result = export(export_tests, path, cfg, tmp_path / f"a-{channel}-{fmt}")
         assert result.get("error") == "Failure", (channel, fmt, result)
         assert result["message"].startswith("evaluator:missing_base_value"), (channel, result)
-        assert "recorded as sRGB8 only" in result["message"], (channel, result)
+        assert "recorded as sRGB8 and L8 only" in result["message"], (channel, result)
         assert files_under(out) == {}, (channel, fmt)
 
 
@@ -718,23 +805,45 @@ def test_srgb8_material_channels_equal_painter_files(export_tests: Path, tmp_pat
 
 
 def test_observed_template_bases_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:
-    """2.6 (decisions 168, 169, 172): the empty BaseColor or Specular of every shipped template,
-    written by WriteExport at OpenEXR 32f and PNG 16 (the 24 `export-template-base-*` goldens, 25
-    maps) and at OpenEXR 32f (the empty set s7 of three float virtual-map twins), is byte-identical
-    to Painter's files (r1 and r2). Dota 2's L8 Specular is exact in OpenEXR; its PNG 16, which
-    Painter writes (14330, 2570, 14330), is refused before writing (decision 169)."""
+    """2.6 (decisions 168, 169, 172, 204): the empty BaseColor or Specular of every shipped
+    template, written by WriteExport at OpenEXR 32f and PNG 16 (the 24 `export-template-base-*`
+    goldens, 25 maps) and at OpenEXR 32f (the empty set s7 of three float virtual-map twins), is
+    byte-identical to Painter's files (r1 and r2). Dota 2's L8 Specular included: its PNG 16
+    holds (14330, 2570, 14330), the sRGB encode of float32(10/255) in R and B and its linear
+    write in G (decision 204)."""
     from tests.export import encoders_tier0
 
     report = encoders_tier0.template_bases_written(export_tests, tmp_path)
     assert report["problems"] == [], report["problems"][:10]
-    assert report["files"] == 25 * 4 - 2 + 3 * 2, report
+    assert report["refused"] == [], report["refused"]
+    assert report["files"] == 25 * 4 + 3 * 2, report
     assert report["identical"] == report["comparisons"] == 2 * report["files"], report
-    assert [where for where, _ in report["refused"]] == [
-        f"export-template-base-dota-2 uzp_plane step {step} specular" for step in (4, 5)
-    ], report["refused"]
+
+
+def test_l8_material_channels_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 204: export-l8-material's L8 BaseColor, Specular and Emissive as RGB and as L.
+
+    - Painter's OpenEXR 32f file of every map (all four sets, 183 distinct codes), as the raster of
+      its PNG 8 and PNG 16 files, encodes to those files byte for byte (r1 and r2): the sRGB encode
+      of the linear value in R, B and L, its linear write in G.
+    - Rebuilt per texture set and written by WriteExport at every export step (PNG 8, PNG 16 and
+      OpenEXR 32f), the uniform colour (s2) and the empty stack's bases (s3) are byte-identical to
+      Painter's files (r1 and r2). The grey bitmaps of s0 and s1, which Painter decodes close to
+      sRGB on an L8 channel, are refused at evaluation (decision 174)."""
+    from tests.export import encoders_tier0
+
+    processed = encoders_tier0.l8_material_processed(export_tests, tmp_path / "process")
+    assert processed["differing"] == [], processed["differing"][:10]
+    assert processed["identical"] == processed["cases"] == 2 * 4 * 3 * 4, processed
+    assert processed["layouts"] == {"RGB": 48, "L": 48}, processed
+
+    report = encoders_tier0.l8_material_written(export_tests, tmp_path / "written")
+    assert report["problems"] == [], report["problems"][:10]
+    assert [texture_set for texture_set, _ in report["refused"]] == ["s0", "s1"], report["refused"]
     for _, message in report["refused"]:
-        assert "the PNG encoding of the L8 channel Specular" in message, message
-        assert "decision 169" in message, message
+        assert "an sRGB bitmap on a channel that is not sRGB8" in message, message
+    assert report["files"] == 2 * 12 * 3, report
+    assert report["identical"] == report["comparisons"] == 2 * report["files"], report
 
 
 def test_srgb8_bitmap_equals_painter_files(export_tests: Path, tmp_path: Path) -> None:
