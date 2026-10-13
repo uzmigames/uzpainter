@@ -440,35 +440,45 @@ def windows_sdk_roots() -> list[Path]:
     return roots
 
 
+def verbose_build(
+    repo_root: Path, zig: str, work: Path, steps: Sequence[str] = BUILD_STEPS
+) -> tuple[int, str]:
+    """`zig build <steps> --verbose-cc --verbose-link` with the local cache `work/cache`, which
+    must start empty so that every compile and link is printed, and the prefix `work/out`; returns
+    the exit code and the log. The caller owns `work` (it stays after the build)."""
+    proc = subprocess.run(
+        [
+            zig,
+            "build",
+            *steps,
+            "--cache-dir",
+            str(work / "cache"),
+            "--prefix",
+            str(work / "out"),
+            "--verbose-cc",
+            "--verbose-link",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=3600,
+        check=False,
+    )
+    return proc.returncode, proc.stdout + proc.stderr
+
+
 def run_build(repo_root: Path, zig: str) -> tuple[int, str, Path]:
     """`zig build render-core native-tests painter render-tests --verbose-cc --verbose-link` from a
     fresh local cache inside the repository (so every compile and link is printed); returns the exit
     code, the log and the build's working directory."""
     work = repo_root / ".zig-cache" / f"vendor-check-{uuid.uuid4().hex[:12]}"
     try:
-        proc = subprocess.run(
-            [
-                zig,
-                "build",
-                *BUILD_STEPS,
-                "--cache-dir",
-                str(work / "cache"),
-                "--prefix",
-                str(work / "out"),
-                "--verbose-cc",
-                "--verbose-link",
-            ],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=3600,
-            check=False,
-        )
+        code, log = verbose_build(repo_root, zig, work)
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    return proc.returncode, proc.stdout + proc.stderr, repo_root
+    return code, log, repo_root
 
 
 def build_violations(

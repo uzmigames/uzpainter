@@ -1,24 +1,29 @@
 """Link map of `UzPainter.exe` (phase0.6_toolchain-hardware-slice, item 2.8): the render core
 and libc++ are linked statically.
 
-Unit tests on synthetic log and map text; the integration test builds `zig build painter` from
-a fresh cache, relinks with `/MAP` and inspects the map (skipped when zig is not on PATH).
+Unit tests on synthetic log and map text; the integration test takes the session's fresh verbose
+build (`tests/conftest.py`, which builds `painter` from an empty cache), relinks `UzPainter.exe`
+with `/MAP` and inspects the map (skipped when zig is not on PATH).
 """
 
 from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from tools.toolchain.link_map import (
     archive_members,
-    build_and_map,
     find_link_command,
     inspect,
+    map_build,
     relink_args,
 )
+
+if TYPE_CHECKING:
+    from tests.conftest import FreshBuild
 
 MAP_SAMPLE = """\
   Address         Publics by Value              Rva+Base               Lib:Object
@@ -80,13 +85,15 @@ def test_inspection_failures() -> None:
     ]
 
 
-def test_link_map_of_the_build(tmp_path: Path) -> None:
+def test_link_map_of_the_build(fresh_verbose_build: FreshBuild, tmp_path: Path) -> None:
     """2.8: the linker's own map of a fresh `zig build painter` shows the render core and libc++
     linked statically, and the executable imports no C++ runtime DLL."""
     zig = shutil.which("zig")
     if zig is None:
         pytest.skip("zig is not on PATH")
-    report = build_and_map(tmp_path / "linkmap", zig)
+    report = map_build(
+        fresh_verbose_build.log, fresh_verbose_build.prefix, tmp_path / "linkmap", zig
+    )
     assert report.problems == []
     assert "uzrendercore.lib" in report.command_inputs
     assert {"c++.lib", "c++abi.lib"} <= set(report.command_inputs)

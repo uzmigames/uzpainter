@@ -147,13 +147,20 @@ def build_and_map(work: Path, zig: str) -> LinkMapReport:
         raise RuntimeError(
             f"zig build painter failed ({build.returncode}); see {work / 'build.log'}"
         )
+    return map_build(log, work / "prefix", work, zig)
+
+
+def map_build(log: str, prefix: Path, work: Path, zig: str) -> LinkMapReport:
+    """Relink `UzPainter.exe` with `/MAP` from the `--verbose-link` log of a build that linked it
+    (its link inputs still on disk) into `work/relink/`, and inspect the map and the import table
+    of `prefix/bin/UzPainter.exe`."""
     args = find_link_command(log)
     inputs = [t for t in args if not t.startswith("-")]
     absent = [t for t in inputs if not Path(t).exists()]
     if absent:
         raise RuntimeError(f"link inputs not found (path with spaces?): {absent[:3]}")
     relink = work / "relink"
-    relink.mkdir()
+    relink.mkdir(parents=True)
     map_path = work / "UzPainter.map"
     linked = subprocess.run(
         [zig, "lld-link", *relink_args(args, relink, map_path)],
@@ -165,7 +172,7 @@ def build_and_map(work: Path, zig: str) -> LinkMapReport:
     if linked.returncode != 0 or not map_path.is_file():
         raise RuntimeError(f"zig lld-link with /MAP failed: {linked.stderr.strip()[:2000]}")
     map_text = map_path.read_text(encoding="utf-8", errors="replace")
-    imports = read_imports(work / "prefix" / "bin" / EXE_NAME)
+    imports = read_imports(prefix / "bin" / EXE_NAME)
     exe_imports = [*imports.load_time, *imports.delay_load]
     return LinkMapReport(
         map_path=str(map_path),
