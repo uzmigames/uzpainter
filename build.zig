@@ -692,9 +692,11 @@ pub fn build(b: *std.Build) void {
     // `UzPainter.exe` imports `python313.dll` (the embedded interpreter, `src/python/`).
     app_mod.addObjectFile(b.path(python_import_library));
 
+    // The manifest's only setting: no console window when started without a console (decision 252).
     const app_exe = b.addExecutable(.{
         .name = "UzPainter",
         .root_module = app_mod,
+        .win32_manifest = b.path("src/UzPainter.manifest"),
     });
 
     const painter_step = b.step("painter", "Build UzPainter.exe with its run-time files");

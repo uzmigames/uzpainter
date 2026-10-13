@@ -59,6 +59,13 @@ EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_FATAL = 4
 
+# Headless (decision 252, src/preview/cli.h): `UZP_HEADLESS=1`, which `--headless` sets for the
+# supervisor and so for its workers, refuses `--preview`, the only window a supervisor can open.
+HEADLESS_ENV = "UZP_HEADLESS"
+HEADLESS_REFUSAL = (
+    "--preview opens a window, which headless refuses (UZP_HEADLESS=1 or --headless, decision 252)"
+)
+
 JOB_META_KEY = "uzpainter/job"
 MAX_HTTP_CLIENTS = 10_000  # the SDK's session limit
 # The console stops the stdio transport handles; the HTTP transport takes the same through uvicorn.
@@ -86,11 +93,14 @@ def parse_args(argv: list[str], hooks_compiled: bool) -> argparse.Namespace:
     parser.add_argument("--ledger", type=Path)
     parser.add_argument("--test-faults", action="store_true")
     parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--headless", action="store_true")
     parser.add_argument("--mcp-http")
     parser.add_argument("--token")
     parser.add_argument("--allow-remote", action="store_true")
     parser.add_argument("--roots")
     args = parser.parse_args(argv)
+    if args.preview and (args.headless or os.environ.get(HEADLESS_ENV) == "1"):
+        raise _UsageError(HEADLESS_REFUSAL)
     if args.gpu_deadline_ms is not None and not 1 <= args.gpu_deadline_ms <= 86_400_000:
         raise _UsageError("--gpu-deadline-ms must be between 1 and 86400000")
     if args.test_faults and not hooks_compiled:
@@ -142,6 +152,8 @@ def main(argv: list[str], exe: str, build: str, protocol: str, hooks_compiled: b
     except _UsageError as error:
         print(f"UzPainter.exe --mcp: {error}", file=sys.stderr)
         return EXIT_USAGE
+    if args.headless:
+        os.environ[HEADLESS_ENV] = "1"  # the workers inherit it
     base = Path(tempfile.gettempdir()) / f"uzpainter-{os.getpid()}"
     config = worker_module.WorkerConfig(
         exe=exe,

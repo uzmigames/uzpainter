@@ -39,6 +39,7 @@
 #include "export/preset_aliases.h"
 #include "mesh/import_error.h"
 #include "mesh/reload.h"
+#include "preview/cli.h"
 #include "preview/preview.h"
 #include "python/capture.h"
 #include "python/diagnostics.h"
@@ -179,8 +180,8 @@ std::optional<Options> Parse(const std::vector<std::string>& args, std::string& 
 void AbortToCrashReport(int) { RaiseException(kAbortExceptionCode, EXCEPTION_NONCONTINUABLE, 0, nullptr); }
 
 void InstallCrashReporting(const std::filesystem::path& crash_dir) {
-    // No Windows error dialogs: a fault ends the worker, and the supervisor relaunches it.
-    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    // main() has already turned the Windows error dialogs off (decision 252): a fault ends the
+    // worker, and the supervisor relaunches it.
     if (!crash_dir.empty()) {
         std::error_code ignored;
         std::filesystem::create_directories(crash_dir, ignored);
@@ -1690,6 +1691,10 @@ int RunWorkerCommand(const std::vector<std::string>& args, std::FILE* err) {
     const Options& options = *parsed;
     if (options.test_faults && !FaultHooksCompiled()) {
         std::fprintf(err, "UzPainter.exe --worker: --test-faults needs a Debug build (the fault hooks are not compiled in)\n");
+        return kWorkerExitUsage;
+    }
+    if (options.preview && preview::Headless()) {
+        std::fprintf(err, "UzPainter.exe --worker: %s\n", preview::kHeadlessRefusal);
         return kWorkerExitUsage;
     }
     InstallCrashReporting(options.crash_dir);

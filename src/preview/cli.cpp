@@ -11,6 +11,7 @@
 #include "store/container.h"
 #include "uzp_core/manifest/json.h"
 
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <optional>
@@ -22,6 +23,13 @@ namespace {
 constexpr const char* kUsage = "usage: UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan]\n";
 
 }  // namespace
+
+bool Headless() {
+    const char* value = std::getenv(kHeadlessEnv);
+    return value != nullptr && std::string_view(value) == "1";
+}
+
+void SetHeadless() { _putenv_s(kHeadlessEnv, "1"); }
 
 bool IsPreviewCommand(std::string_view first) { return first == "--preview"; }
 
@@ -103,12 +111,18 @@ int RunPreviewCommand(const std::vector<std::string>& args, std::FILE* out, std:
                 return kPreviewUsage;
             }
             backend = *parsed;
+        } else if (args[i] == kHeadlessOption) {
+            SetHeadless();
         } else if (!file && !args[i].starts_with("--")) {
             file = args[i];
         } else {
             std::fprintf(err, "UzPainter.exe --preview: unexpected argument '%s'\n%s", args[i].c_str(), kUsage);
             return kPreviewUsage;
         }
+    }
+    if (Headless()) {
+        std::fprintf(err, "UzPainter.exe --preview: %s\n", kHeadlessRefusal);
+        return kPreviewUsage;
     }
     if (!file) {
         std::fprintf(err, "UzPainter.exe --preview: no project file\n%s", kUsage);

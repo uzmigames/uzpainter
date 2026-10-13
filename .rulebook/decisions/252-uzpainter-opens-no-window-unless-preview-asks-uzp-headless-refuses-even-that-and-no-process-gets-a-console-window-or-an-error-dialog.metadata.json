@@ -1,0 +1,12 @@
+{
+  "id": 252,
+  "slug": "uzpainter-opens-no-window-unless-preview-asks-uzp-headless-refuses-even-that-and-no-process-gets-a-console-window-or-an-error-dialog",
+  "title": "UzPainter opens no window unless --preview asks; UZP_HEADLESS=1 refuses even that, and no process gets a console window or an error dialog",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.1_preview-viewport-window",
+    "phase2.1_supervisor-ipc-worker"
+  ],
+  "supersededBy": null
+}

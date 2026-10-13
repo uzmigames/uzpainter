@@ -9,7 +9,8 @@
 // from the wide command line. `--help` prints the usage on stdout (exit status 0); a usage error
 // prints it on stderr (exit status 2). The persistent caches (src/render/disk_cache.h, decision 253)
 // are on for every verb unless `--no-cache` (anywhere before a `--`) or `UZP_NO_CACHE` turns them
-// off; `cache` reports and clears them.
+// off; `cache` reports and clears them. A leading `--headless` (decision 252) sets `UZP_HEADLESS=1`
+// for the process and its children before the command runs.
 
 #include "export/cli.h"
 #include "preview/cli.h"
@@ -34,8 +35,22 @@
 #endif
 #include <windows.h>
 #include <shellapi.h>
+#include <werapi.h>
 
 namespace {
+
+/// No Windows dialog in any role (decision 252): a critical error, a fault or a file that cannot
+/// be opened fails instead of waiting for a click (the launcher's other error-mode bits are kept,
+/// and children inherit the mode), Windows Error Reporting shows no UI, and `abort()` without a
+/// SIGABRT handler exits with status 3 instead of reaching it. `assert` already writes to stderr
+/// in a console program. The worker then installs its crash handler and its SIGABRT handler
+/// (src/supervisor/worker.cpp), which write the minidump. A DLL that fails to load before main()
+/// is the launcher's error mode to silence (adapters/assets3d/client.py does).
+void SuppressErrorDialogs() {
+    SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    WerSetFlags(WER_FAULT_REPORTING_NO_UI);
+    _set_abort_behavior(0, _CALL_REPORTFAULT);
+}
 
 constexpr const char* kUsage =
     "usage: UzPainter.exe selftest [--out-dir <dir>] [--report <file>] [--no-gpu]\n"
@@ -48,14 +63,15 @@ constexpr const char* kUsage =
     "       UzPainter.exe run <script.py> [args...] [--gpu-backend dx12|vulkan] [-- args...]\n"
     "       UzPainter.exe capabilities\n"
     "       UzPainter.exe cache info | clear\n"
-    "       UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan]\n"
+    "       UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan] [--headless]\n"
     "       UzPainter.exe --mcp [--mcp-http <host>:<port> [--token <token>] [--allow-remote]]\n"
     "                           [--roots <kind>=<dir>;...] [--gpu-backend dx12|vulkan] [--allow-python]\n"
     "                           [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>]\n"
-    "                           [--ledger <file>] [--test-faults] [--preview]\n"
+    "                           [--ledger <file>] [--test-faults] [--preview] [--headless]\n"
     "       UzPainter.exe --worker --pipe \\\\.\\pipe\\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12|vulkan\n"
     "                              [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>]\n"
     "                              [--crash-dir <dir>] [--connect-timeout-ms <ms>] [--test-faults] [--preview]\n"
+    "       UzPainter.exe --headless <command> ...  (no window: sets UZP_HEADLESS=1, which refuses --preview)\n"
     "       UzPainter.exe --help\n"
     "Any verb also takes --no-cache (before a --): no persistent cache is read or written, here or in\n"
     "the processes it starts; UZP_NO_CACHE=1 does the same.\n";
@@ -101,6 +117,7 @@ bool TakeNoCache(std::vector<std::string>& args) {
 }  // namespace
 
 int main() {
+    SuppressErrorDialogs();
     std::optional<std::vector<std::string>> arguments = Utf8Arguments();
     if (!arguments) {
         std::fprintf(stderr, "UzPainter.exe: the command line is not valid UTF-16\n");
@@ -110,6 +127,10 @@ int main() {
     // The variable carries `--no-cache` to the processes this one starts (the MCP worker).
     if (TakeNoCache(args)) _wputenv(L"UZP_NO_CACHE=1");
     if (!uzp::render::CachesDisabledByEnvironment()) uzp::render::EnableCaches(uzp::render::DefaultCacheRoot());
+    if (!args.empty() && args.front() == uzp::preview::kHeadlessOption) {
+        uzp::preview::SetHeadless();
+        args.erase(args.begin());
+    }
     if (args.size() == 1 && args.front() == "--help") {
         std::fputs(kUsage, stdout);
         return 0;

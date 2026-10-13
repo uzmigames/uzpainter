@@ -6,8 +6,9 @@
 replaces `"$MCP" "$LS" <its arguments>` (`MIGRATIONS.md` M1, M2). The script's bytes are read once
 and compiled with their real path under a module name other than `__main__`; only its two
 transport globals are rebound, `CLIENT` to this adapter's client (`client.py`) and `MCP_PYTHON` to
-the running interpreter, and its own `main()` then runs with its own arguments. Everything else,
-its own `execute()` and reply handling included, is the script's.
+the running interpreter's windowless `pythonw.exe` (`client.windowless_python`), and its own
+`main()` then runs with its own arguments. Everything else, its own `execute()` and reply handling
+included, is the script's.
 
 - `--pin FILE=SHA256` (repeatable) refuses the call before anything runs when FILE's bytes do not
   hash to SHA256: the wand fixture pins the layer-stack script and the files it `run`s.
@@ -25,7 +26,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -93,13 +93,7 @@ def check_pins(pins: dict[Path, str], script: Path, data: bytes) -> None:
 
 def capability_statuses() -> dict[tuple[str, str], str]:
     """`(symbol, context) -> status` of the shipped manifest (`UzPainter.exe capabilities`)."""
-    process = subprocess.run(
-        [str(client.painter_exe()), "capabilities"],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
+    process = client.run_painter([str(client.painter_exe()), "capabilities"])
     manifest = client.report_line(process.stdout)
     if process.returncode != 0 or manifest is None:
         raise client.HostError(f"UzPainter.exe capabilities exited {process.returncode}")
@@ -141,7 +135,7 @@ def run(argv: list[str]) -> int:
         if name not in namespace:
             raise Refused("AdapterError", f"{script} defines no transport global `{name}`")
     namespace["CLIENT"] = client.RUNNER.with_name("client.py")
-    namespace["MCP_PYTHON"] = Path(sys.executable)
+    namespace["MCP_PYTHON"] = client.windowless_python()
     if "ROOT" in namespace:
         os.environ.setdefault(ROOT_ENV, str(namespace["ROOT"]))
     saved = sys.argv

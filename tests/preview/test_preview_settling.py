@@ -22,8 +22,9 @@ project. A worker without a preview gives the baseline; workers with the preview
   `uzpainter://capabilities` publishes, phase2.6_mcp-typed-tool-families item 2.9) and is
   refused by the worker's `capture` before any work.
 
-Local run on the owner's machine (decision 028): it needs a DX12 adapter and a desktop session,
-and the UzmiGames asset repository at `E:\\UzmiGames\\Assets3D` (or `UZP_TEST_ASSETS3D`).
+Local run on the owner's machine (decision 028): it needs a DX12 adapter and a desktop session
+(the windows open on a private desktop nobody sees, decision 252), and the UzmiGames asset
+repository at `E:\\UzmiGames\\Assets3D` (or `UZP_TEST_ASSETS3D`).
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ import numpy as np
 import pytest
 
 from tests.adapters.assets3d.wand import ASSETS3D, Wand
+from tests.desktop import PrivateDesktop
 from tests.preview.conftest import JSON_PREFIX, NO_GPU, OCIO_CONFIG, ocio_bundle
 from tests.preview.conftest import PreviewSettling as Settling
 from tests.preview.test_preview_window import SW_MINIMIZE, status, user32, wait_for, windows_of
@@ -139,14 +141,21 @@ def wand_project(painter: Path, tmp_path_factory: pytest.TempPathFactory) -> Pat
 
 
 class Session:
-    """One worker on its own copy of the wand."""
+    """One worker on its own copy of the wand; on `desktop`, nobody sees its window."""
 
-    def __init__(self, painter: Path, root: Path, project: Path, *extra: str) -> None:
+    def __init__(
+        self,
+        painter: Path,
+        root: Path,
+        project: Path,
+        *extra: str,
+        desktop: PrivateDesktop | None = None,
+    ) -> None:
         root.mkdir(parents=True)
         copy = root / project.name
         shutil.copyfile(project, copy)
         self.root = root
-        self.pipe = Pipe(painter, root, *WORKER, *extra)
+        self.pipe = Pipe(painter, root, *WORKER, *extra, desktop=desktop)
         if self.pipe.handshake["gpu_status"] != "ready":
             self.pipe.close()
             pytest.skip("no DX12 device on this machine")
@@ -242,6 +251,7 @@ def test_wand_v1_with_the_preview_attached(
     wand_project: Path,
     baseline: dict[str, Any],
     preview_settling: Settling,
+    desktop: PrivateDesktop,
 ) -> None:
     """2.1: a worker with the preview window open evaluates every wand channel and exports the
     wand's maps with the bytes of a worker without a preview; its `base_color` and
@@ -249,11 +259,11 @@ def test_wand_v1_with_the_preview_attached(
     `mask:<uid>` is written. It refuses `painter_viewport` on the Legacy wand (the window shows the
     same refusal) and `painter_iray` before any work, then renders the OCIO fixture in the window
     and in a `painter_viewport` capture."""
-    session = Session(painter, tmp_path / "preview", wand_project, "--preview")
+    session = Session(painter, tmp_path / "preview", wand_project, "--preview", desktop=desktop)
     try:
         pipe = session.pipe
         wait_for(lambda: status(pipe)["window_open"])
-        assert len(windows_of(pipe.process.pid)) == 1
+        assert len(windows_of(pipe.process.pid, desktop)) == 1
         evaluated = session.evaluate()
         files, seconds = session.export()
         assert (evaluated, hashes(files), session.revision) == (
@@ -311,16 +321,17 @@ def test_wand_v1_export_with_the_preview_minimised_and_stalled(
     wand_project: Path,
     baseline: dict[str, Any],
     preview_settling: Settling,
+    desktop: PrivateDesktop,
 ) -> None:
     """3.2: with the window minimised and then the preview thread stalled by the test hook while
     it holds its frame, the wand's evaluation and export run to the end with the baseline's bytes
     while no frame is taken (nothing waits on the preview thread); frames are taken again after the
     resume. An export with the window open is the integration test's; the export times go to the
     settling report."""
-    session = Session(painter, tmp_path / "preview", wand_project, "--preview")
+    session = Session(painter, tmp_path / "preview", wand_project, "--preview", desktop=desktop)
     try:
         pipe = session.pipe
-        (hwnd,) = wait_for(lambda: windows_of(pipe.process.pid))
+        (hwnd,) = wait_for(lambda: windows_of(pipe.process.pid, desktop))
         user32.ShowWindow(hwnd, SW_MINIMIZE)
         assert session.evaluate() == baseline["evaluated"]
         wait_for(lambda: status(pipe)["frames_taken"] >= 1)

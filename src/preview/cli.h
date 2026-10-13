@@ -10,7 +10,12 @@
 // Output: when the window closes, one line `UZP_JSON:{"status": "closed", "frames_rendered",
 // "revision_shown", "last_error"}` on `out`. Exit status: 0 the window was shown and closed; 1 the
 // project could not be opened or the window could not be created (message on `err`); 2 a usage
-// error.
+// error, which includes a preview asked for while headless.
+//
+// Headless (decision 252): no role opens a window unless `--preview` asks for one. `UZP_HEADLESS=1`
+// in the environment, which a `--headless` option sets for the process and its children, refuses
+// every window as a usage error before any project or device is opened: `--preview <file>`,
+// `--mcp --preview` (python/uzpainter_supervisor/main.py) and `--worker --preview`.
 
 #include <cstdio>
 #include <memory>
@@ -33,6 +38,18 @@ namespace uzp::preview {
 inline constexpr int kPreviewOk = 0;
 inline constexpr int kPreviewFailed = 1;
 inline constexpr int kPreviewUsage = 2;
+
+inline constexpr const char* kHeadlessOption = "--headless";
+inline constexpr const char* kHeadlessEnv = "UZP_HEADLESS";
+/// The refusal of a window while headless, after `<command>: `.
+inline constexpr const char* kHeadlessRefusal =
+    "the preview opens a window, which headless refuses (UZP_HEADLESS=1 or --headless, decision 252)";
+
+/// True when `UZP_HEADLESS` is `1`.
+bool Headless();
+
+/// Sets `UZP_HEADLESS=1` in this process's environment, which its children inherit.
+void SetHeadless();
 
 /// True for `--preview`.
 bool IsPreviewCommand(std::string_view first);

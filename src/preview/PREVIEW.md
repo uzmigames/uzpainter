@@ -74,6 +74,14 @@ Two ways to run it:
 - **Standalone.** `UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan]` opens the project as `run` does, holding its lock. It evaluates the preview's channels of every texture set once and shows the window. On close it prints `UZP_JSON:{"status": "closed", "frames_rendered", "revision_shown", "last_error"}`.
 - **Attached.** `UzPainter.exe --worker … --preview`, or `--mcp … --preview`, which passes the flag to its workers. The worker publishes after every `evaluate_channel`, and lists the GPU-free `preview_status` tool.
 
+**Headless (decision 252).** The window is the only one UzPainter can open, and only an explicit `--preview` opens it. `UZP_HEADLESS=1` refuses it. A leading `--headless` (`UzPainter.exe --headless <command> …`), or `--headless` among the options of `--preview` or `--mcp`, sets that variable for the process and its children. While headless, all three entry points refuse the preview as a usage error (exit 2), and the message names the switch:
+
+- `--preview <file>` refuses before it opens the project or creates a device (`cli.cpp`, `Headless()`);
+- `--mcp --preview` refuses before any worker starts (`python/uzpainter_supervisor/main.py`);
+- `--worker --preview` refuses before the worker creates its pipe (`src/supervisor/worker.cpp`).
+
+The preview tests open their windows on a private desktop that nobody sees (`tests/desktop.py`). The anti-flicker test reads the screen, so it runs only when the owner asks for it with `UZP_SCREEN_TESTS=1`.
+
 ## Captures (phase2.2_preview-capture, decision 148)
 
 `uzpainter.render.capture(path, mode, camera, size, samples, seed, preset, stack)` and the worker's `capture` tool live in `src/python/capture.{h,cpp}`. Every capture reads the committed revision once and evaluates it synchronously; inside an open Transaction it refuses. Its receipt names the revision it shows. The modes:

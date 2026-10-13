@@ -40,7 +40,7 @@ Any Python 3.13 runs it; the script needs only the standard library. Environment
 ### M2. The layer-stack script's transport globals
 
 - **Painter:** the pipeline runs `"$MCP" "$LS" <command>`. The script's `CLIENT` and `MCP_PYTHON` are hard-coded paths in Assets3D.
-- **UzPainter:** `adapters/assets3d/layer_stack.py` reads the script's bytes once and compiles them with their real path, under the module name `uzp_assets3d_painter_layer_stack` (not `__main__`). It rebinds only `CLIENT` (to `client.py`) and `MCP_PYTHON` (to the running interpreter), then calls the script's own `main()` with its own arguments. This is what the script's `if __name__ == "__main__": main()` does. Its own `execute()`, reply parsing and errors run unchanged.
+- **UzPainter:** `adapters/assets3d/layer_stack.py` reads the script's bytes once and compiles them with their real path, under the module name `uzp_assets3d_painter_layer_stack` (not `__main__`). It rebinds only `CLIENT` (to `client.py`) and `MCP_PYTHON` (to the running interpreter's `pythonw.exe`, which Windows never gives a console window, decision 252), then calls the script's own `main()` with its own arguments. This is what the script's `if __name__ == "__main__": main()` does. Its own `execute()`, reply parsing and errors run unchanged.
   - The recorder's alternative, replacing `execute()` itself (decision 099 4b), was rejected: it would skip the script's own reply handling.
   - `UZP_ASSETS3D_ROOT` defaults to the script's `ROOT` (the folder holding `AGENTS.md`).
 

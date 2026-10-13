@@ -4,7 +4,7 @@ This folder holds the process boundary of `docs/architecture/02-runtime-topology
 
 | Role | Command | Code |
 |---|---|---|
-| Supervisor | `UzPainter.exe --mcp [--mcp-http <host>:<port> [--token <token>] [--allow-remote]] [--roots <kind>=<dir>;...] [--gpu-backend dx12\|vulkan] [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>] [--ledger <file>] [--test-faults] [--preview]` | `supervisor.{h,cpp}` starts the embedded interpreter and calls `uzpainter_supervisor.main.main` |
+| Supervisor | `UzPainter.exe --mcp [--mcp-http <host>:<port> [--token <token>] [--allow-remote]] [--roots <kind>=<dir>;...] [--gpu-backend dx12\|vulkan] [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>] [--ledger <file>] [--test-faults] [--preview] [--headless]` | `supervisor.{h,cpp}` starts the embedded interpreter and calls `uzpainter_supervisor.main.main` |
 | Worker | `UzPainter.exe --worker --pipe \\.\pipe\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12\|vulkan [--allow-python] [--gpu-deadline-ms <ms>] [--output-root <dir>] [--crash-dir <dir>] [--connect-timeout-ms <ms>] [--test-faults] [--preview]` | `worker.{h,cpp}`, `pipe.{h,cpp}`, `ipc.{h,cpp}`, `fault_hooks.{h,cpp}` |
 | Single process | `UzPainter.exe run`, the CLI verbs | hosts the worker's state (the `Session`, the interpreter) directly, `src/python/run.h` |
 
@@ -20,12 +20,15 @@ This folder holds the process boundary of `docs/architecture/02-runtime-topology
 - **`admission.py`** admits every call, and **`ledger.py`** is the durable ledger (see Admission).
 - **`worker.py`** owns the worker lifecycle:
   - It launches generation `n` with the same backend, Python policy and deadline every time.
+  - The worker runs in a process group of its own. When the supervisor has no console (a host started it detached or windowless), the worker also gets `CREATE_NO_WINDOW`, so Windows does not give it a new console with a window (`creation_flags`, decision 252). When the supervisor has a console, the worker inherits it, which opens no window and keeps the worker's log there: a `CREATE_NO_WINDOW` child cannot write to its parent's console.
   - It connects with asyncio's overlapped named-pipe client and checks the handshake.
   - It holds new calls while a relaunch is under way.
   - It records each recovery in `supervisor_status`.
 - **`ipc.py`** holds the frame codec, the handshake check and the worker's exit codes. It uses the standard library only, so `tests/supervisor/test_ipc_codec.py` imports it directly.
 
 The supervisor never creates a GPU device, never opens a project and never runs user Python.
+
+**Headless (decision 252).** No supervisor or worker opens a window unless `--preview` asks for one. Under `UZP_HEADLESS=1`, or with `--headless`, `--preview` is a usage error (exit 2) before any worker starts. `--headless` sets `UZP_HEADLESS=1` in the supervisor's environment, so every worker inherits it, and a worker refuses `--preview` under it too (`src/preview/PREVIEW.md`). Every role turns the Windows error dialogs off in `main()`. A crash, a missing file or a failing load then never waits for a click.
 
 ## Transports
 
@@ -222,8 +225,9 @@ The worker starts in this order:
 
 1. It installs the crash reporting:
    - the vendored crash handler (`thirdparty/uzengine-render-core/platform/windows/crash_handler.h`), with its directory set by `--crash-dir`;
-   - a SIGABRT handler that turns `abort()` into the exception `0x40000015`, so the handler writes a minidump for it;
-   - no Windows error dialogs.
+   - a SIGABRT handler that turns `abort()` into the exception `0x40000015`, so the handler writes a minidump for it.
+
+   `main()` has already turned the Windows error dialogs off for every role (decision 252): the error mode, Windows Error Reporting's UI, and the CRT's `abort()` report. Under headless, a worker started with `--preview` exits with a usage error before this step.
 2. It opens a handle on its supervisor's process.
 3. It creates the pipe (`pipe.h`): the first and only instance of its name, remote clients refused, a DACL for the current user only, overlapped I/O.
 4. It starts the engine thread for the requested backend. Without a device it still starts, with `gpu_status: unavailable`.

@@ -20,12 +20,13 @@ import os
 import shutil
 import subprocess
 import textwrap
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from tests.desktop import PrivateDesktop
 from tests.supervisor.conftest import painter, pipes  # noqa: F401  (fixtures)
 from tools.parity.settling import preview as settling_report
 
@@ -178,6 +179,15 @@ class PreviewSettling:
 @pytest.fixture
 def preview_settling(request: pytest.FixtureRequest) -> PreviewSettling:
     return PreviewSettling(request.node.nodeid)
+
+
+@pytest.fixture
+def desktop() -> Iterator[PrivateDesktop]:
+    """A desktop nobody sees, where a test's preview windows open (decision 252); what still runs
+    on it when the test ends is ended."""
+    made = PrivateDesktop()
+    yield made
+    made.close()
 
 
 def pytest_configure(config: pytest.Config) -> None:
