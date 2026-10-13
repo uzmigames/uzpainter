@@ -14,48 +14,26 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
-import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from tools.vendoring.vendor_check import build_path_violations, windows_sdk_roots, zig_toolchain
 
+if TYPE_CHECKING:
+    from tests.conftest import FreshBuild
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_mesh_build_references_no_uzengine_artifact() -> None:
+def test_mesh_build_references_no_uzengine_artifact(fresh_verbose_build: FreshBuild) -> None:
     zig = shutil.which("zig")
     if zig is None:
         pytest.skip("zig is not on PATH; the mesh build cannot be inspected")
-    # A fresh cache, so that every compile and link is run and printed.
-    work = REPO_ROOT / ".zig-cache" / f"mesh-build-paths-{uuid.uuid4().hex[:12]}"
-    try:
-        proc = subprocess.run(
-            [
-                zig,
-                "build",
-                "mesh-tests",
-                "--cache-dir",
-                str(work / "cache"),
-                "--prefix",
-                str(work / "out"),
-                "--verbose-cc",
-                "--verbose-link",
-            ],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=3600,
-            check=False,
-        )
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
-    log = proc.stdout + proc.stderr
-    assert proc.returncode == 0, log[-4000:]
+    # The session's build from an empty cache (`tests/conftest.py`): every compile and link of
+    # `mesh-tests` is run and printed.
+    log = fresh_verbose_build.log
     for source in ("mesh_import.cpp", "tangents.cpp", "reload.cpp", "normal_bake.cpp"):
         assert source in log, f"{source} was not compiled in the inspected build"
     env_repo = os.environ.get("UZENGINE_REPO")
