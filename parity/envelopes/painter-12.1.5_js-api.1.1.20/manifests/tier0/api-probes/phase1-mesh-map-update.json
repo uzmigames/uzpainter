@@ -199,5 +199,30 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "4dc94157bb11e546d808b2df77a94b5a3b5c45db4837277f4944c1e357e36271",
+      "size_bytes": 14796
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "62145b16600dc682b3954c368d0fd58a1d70cf04ca8312e8a64f2a08bcaac444",
+      "size_bytes": 402
+    }
+  ]
 }

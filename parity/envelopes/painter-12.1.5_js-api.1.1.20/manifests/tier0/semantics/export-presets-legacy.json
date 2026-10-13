@@ -515,5 +515,294 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "db235dd2cfedc0d90a7864e3297d97ac0f8a2ff2105038c4489f18b8a0d533d3",
+      "size_bytes": 108729
+    },
+    {
+      "record_id": "r1-probe-s36-bevelled-cube_uzp_bevelled_cube_basecolor.png",
+      "kind": "exported_map",
+      "sha256": "66ac9d640d230037a88039cb576ae71485fa4cab407c347c63c0c763eaaafb0e",
+      "size_bytes": 18241
+    },
+    {
+      "record_id": "r1-probe-s36-bevelled-cube_uzp_bevelled_cube_emissive.png",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r1-probe-s36-bevelled-cube_uzp_bevelled_cube_height.png",
+      "kind": "exported_map",
+      "sha256": "30568f972b14dd1841307ed4c70053271c4f0b79277e64776116e80ba0d09b16",
+      "size_bytes": 19004
+    },
+    {
+      "record_id": "r1-probe-s36-bevelled-cube_uzp_bevelled_cube_metallic.png",
+      "kind": "exported_map",
+      "sha256": "9adba39e1ea4f0295ed206f520dee0c406a16e6f653017d6e70be684a3525189",
+      "size_bytes": 3406
+    },
+    {
+      "record_id": "r1-probe-s36-bevelled-cube_uzp_bevelled_cube_normal.png",
+      "kind": "exported_map",
+      "sha256": "3c57f163989fd047bf56463f12a5eb0fe09e348311628cfedc1b4e8926a8a301",
+      "size_bytes": 307683
+    },
+    {
+      "record_id": "r1-probe-s36-bevelled-cube_uzp_bevelled_cube_roughness.png",
+      "kind": "exported_map",
+      "sha256": "bf9190826312a59c67ff214485b8e781840c2de19b1c1c94b2ba95ba2e366bcc",
+      "size_bytes": 2898
+    },
+    {
+      "record_id": "r1-probe-s38-uzp_bevelled_cube_alpha.png",
+      "kind": "exported_map",
+      "sha256": "8c824ddefedd2e2fbd4e168b445c885b5d694f4ba56ec657102a0e59dcf661ed",
+      "size_bytes": 4345
+    },
+    {
+      "record_id": "r1-probe-s38-uzp_bevelled_cube_basecolor.png",
+      "kind": "exported_map",
+      "sha256": "726dadbbd1ceb75a537fd88564cd7d0ce6bd7b6156c224e01c0ccb01f372a348",
+      "size_bytes": 16055
+    },
+    {
+      "record_id": "r1-probe-s38-uzp_bevelled_cube_displacement.png",
+      "kind": "exported_map",
+      "sha256": "aaea75637588dddf7ec86d6e5472398df5c326bb63a9600eed7a11a39ae3c496",
+      "size_bytes": 33934
+    },
+    {
+      "record_id": "r1-probe-s38-uzp_bevelled_cube_emission.png",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r1-probe-s38-uzp_bevelled_cube_metallic.png",
+      "kind": "exported_map",
+      "sha256": "bdea83018ef9857cbda2f0bb70a80c38a6e0559e3e61504090d8517d3aac836d",
+      "size_bytes": 5567
+    },
+    {
+      "record_id": "r1-probe-s38-uzp_bevelled_cube_normal.png",
+      "kind": "exported_map",
+      "sha256": "18651397cc8debcdb0182bc56ce61545add60cb6b1ffa99046000b4ebec6dd65",
+      "size_bytes": 307634
+    },
+    {
+      "record_id": "r1-probe-s38-uzp_bevelled_cube_roughness.png",
+      "kind": "exported_map",
+      "sha256": "8c824ddefedd2e2fbd4e168b445c885b5d694f4ba56ec657102a0e59dcf661ed",
+      "size_bytes": 4345
+    },
+    {
+      "record_id": "r1-probe-s39-uzp_staff_basecolor.png",
+      "kind": "exported_map",
+      "sha256": "726dadbbd1ceb75a537fd88564cd7d0ce6bd7b6156c224e01c0ccb01f372a348",
+      "size_bytes": 16055
+    },
+    {
+      "record_id": "r1-probe-s39-uzp_staff_height.png",
+      "kind": "exported_map",
+      "sha256": "30568f972b14dd1841307ed4c70053271c4f0b79277e64776116e80ba0d09b16",
+      "size_bytes": 19004
+    },
+    {
+      "record_id": "r1-probe-s39-uzp_staff_metallic.png",
+      "kind": "exported_map",
+      "sha256": "9adba39e1ea4f0295ed206f520dee0c406a16e6f653017d6e70be684a3525189",
+      "size_bytes": 3406
+    },
+    {
+      "record_id": "r1-probe-s39-uzp_staff_normal.png",
+      "kind": "exported_map",
+      "sha256": "18651397cc8debcdb0182bc56ce61545add60cb6b1ffa99046000b4ebec6dd65",
+      "size_bytes": 307634
+    },
+    {
+      "record_id": "r1-probe-s39-uzp_staff_roughness.png",
+      "kind": "exported_map",
+      "sha256": "bf9190826312a59c67ff214485b8e781840c2de19b1c1c94b2ba95ba2e366bcc",
+      "size_bytes": 2898
+    },
+    {
+      "record_id": "r1-probe-s40-uzp_staff_basecolor.png",
+      "kind": "exported_map",
+      "sha256": "b603bfc1aaa2f90908186526f44e2860a8f69f27357dc7b649d46005aacadba2",
+      "size_bytes": 12246
+    },
+    {
+      "record_id": "r1-probe-s40-uzp_staff_height.png",
+      "kind": "exported_map",
+      "sha256": "a11ce25a5973b113fe5fc9e8d77f5d8d9093d3fbb035ac358b7589e9b4881039",
+      "size_bytes": 8766
+    },
+    {
+      "record_id": "r1-probe-s40-uzp_staff_metallic.png",
+      "kind": "exported_map",
+      "sha256": "b592b3264a8f926679785da6a6bf121417fb9bd959e7a0fe8d382d9caa5253ec",
+      "size_bytes": 2047
+    },
+    {
+      "record_id": "r1-probe-s40-uzp_staff_normal.png",
+      "kind": "exported_map",
+      "sha256": "13bce34fb07bd5dddb0eca752973d8243664f726bbec9dea43f9678b14802c33",
+      "size_bytes": 80297
+    },
+    {
+      "record_id": "r1-probe-s40-uzp_staff_roughness.png",
+      "kind": "exported_map",
+      "sha256": "2c7815b8d7e79e5273cd57a314c910c900826c1f3df65fe2fa937ca30c5cf6a6",
+      "size_bytes": 1893
+    },
+    {
+      "record_id": "r2-probe-s36-bevelled-cube_uzp_bevelled_cube_basecolor.png",
+      "kind": "exported_map",
+      "sha256": "66ac9d640d230037a88039cb576ae71485fa4cab407c347c63c0c763eaaafb0e",
+      "size_bytes": 18241
+    },
+    {
+      "record_id": "r2-probe-s36-bevelled-cube_uzp_bevelled_cube_emissive.png",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r2-probe-s36-bevelled-cube_uzp_bevelled_cube_height.png",
+      "kind": "exported_map",
+      "sha256": "30568f972b14dd1841307ed4c70053271c4f0b79277e64776116e80ba0d09b16",
+      "size_bytes": 19004
+    },
+    {
+      "record_id": "r2-probe-s36-bevelled-cube_uzp_bevelled_cube_metallic.png",
+      "kind": "exported_map",
+      "sha256": "9adba39e1ea4f0295ed206f520dee0c406a16e6f653017d6e70be684a3525189",
+      "size_bytes": 3406
+    },
+    {
+      "record_id": "r2-probe-s36-bevelled-cube_uzp_bevelled_cube_normal.png",
+      "kind": "exported_map",
+      "sha256": "3c57f163989fd047bf56463f12a5eb0fe09e348311628cfedc1b4e8926a8a301",
+      "size_bytes": 307683
+    },
+    {
+      "record_id": "r2-probe-s36-bevelled-cube_uzp_bevelled_cube_roughness.png",
+      "kind": "exported_map",
+      "sha256": "bf9190826312a59c67ff214485b8e781840c2de19b1c1c94b2ba95ba2e366bcc",
+      "size_bytes": 2898
+    },
+    {
+      "record_id": "r2-probe-s38-uzp_bevelled_cube_alpha.png",
+      "kind": "exported_map",
+      "sha256": "8c824ddefedd2e2fbd4e168b445c885b5d694f4ba56ec657102a0e59dcf661ed",
+      "size_bytes": 4345
+    },
+    {
+      "record_id": "r2-probe-s38-uzp_bevelled_cube_basecolor.png",
+      "kind": "exported_map",
+      "sha256": "726dadbbd1ceb75a537fd88564cd7d0ce6bd7b6156c224e01c0ccb01f372a348",
+      "size_bytes": 16055
+    },
+    {
+      "record_id": "r2-probe-s38-uzp_bevelled_cube_displacement.png",
+      "kind": "exported_map",
+      "sha256": "aaea75637588dddf7ec86d6e5472398df5c326bb63a9600eed7a11a39ae3c496",
+      "size_bytes": 33934
+    },
+    {
+      "record_id": "r2-probe-s38-uzp_bevelled_cube_emission.png",
+      "kind": "exported_map",
+      "sha256": "af21f170dbaaac8060ee3f32aef093cf1783ad9dc278022e8e3cbf05d13d7344",
+      "size_bytes": 482
+    },
+    {
+      "record_id": "r2-probe-s38-uzp_bevelled_cube_metallic.png",
+      "kind": "exported_map",
+      "sha256": "bdea83018ef9857cbda2f0bb70a80c38a6e0559e3e61504090d8517d3aac836d",
+      "size_bytes": 5567
+    },
+    {
+      "record_id": "r2-probe-s38-uzp_bevelled_cube_normal.png",
+      "kind": "exported_map",
+      "sha256": "18651397cc8debcdb0182bc56ce61545add60cb6b1ffa99046000b4ebec6dd65",
+      "size_bytes": 307634
+    },
+    {
+      "record_id": "r2-probe-s38-uzp_bevelled_cube_roughness.png",
+      "kind": "exported_map",
+      "sha256": "8c824ddefedd2e2fbd4e168b445c885b5d694f4ba56ec657102a0e59dcf661ed",
+      "size_bytes": 4345
+    },
+    {
+      "record_id": "r2-probe-s39-uzp_staff_basecolor.png",
+      "kind": "exported_map",
+      "sha256": "726dadbbd1ceb75a537fd88564cd7d0ce6bd7b6156c224e01c0ccb01f372a348",
+      "size_bytes": 16055
+    },
+    {
+      "record_id": "r2-probe-s39-uzp_staff_height.png",
+      "kind": "exported_map",
+      "sha256": "30568f972b14dd1841307ed4c70053271c4f0b79277e64776116e80ba0d09b16",
+      "size_bytes": 19004
+    },
+    {
+      "record_id": "r2-probe-s39-uzp_staff_metallic.png",
+      "kind": "exported_map",
+      "sha256": "9adba39e1ea4f0295ed206f520dee0c406a16e6f653017d6e70be684a3525189",
+      "size_bytes": 3406
+    },
+    {
+      "record_id": "r2-probe-s39-uzp_staff_normal.png",
+      "kind": "exported_map",
+      "sha256": "18651397cc8debcdb0182bc56ce61545add60cb6b1ffa99046000b4ebec6dd65",
+      "size_bytes": 307634
+    },
+    {
+      "record_id": "r2-probe-s39-uzp_staff_roughness.png",
+      "kind": "exported_map",
+      "sha256": "bf9190826312a59c67ff214485b8e781840c2de19b1c1c94b2ba95ba2e366bcc",
+      "size_bytes": 2898
+    },
+    {
+      "record_id": "r2-probe-s40-uzp_staff_basecolor.png",
+      "kind": "exported_map",
+      "sha256": "b603bfc1aaa2f90908186526f44e2860a8f69f27357dc7b649d46005aacadba2",
+      "size_bytes": 12246
+    },
+    {
+      "record_id": "r2-probe-s40-uzp_staff_height.png",
+      "kind": "exported_map",
+      "sha256": "a11ce25a5973b113fe5fc9e8d77f5d8d9093d3fbb035ac358b7589e9b4881039",
+      "size_bytes": 8766
+    },
+    {
+      "record_id": "r2-probe-s40-uzp_staff_metallic.png",
+      "kind": "exported_map",
+      "sha256": "b592b3264a8f926679785da6a6bf121417fb9bd959e7a0fe8d382d9caa5253ec",
+      "size_bytes": 2047
+    },
+    {
+      "record_id": "r2-probe-s40-uzp_staff_normal.png",
+      "kind": "exported_map",
+      "sha256": "13bce34fb07bd5dddb0eca752973d8243664f726bbec9dea43f9678b14802c33",
+      "size_bytes": 80297
+    },
+    {
+      "record_id": "r2-probe-s40-uzp_staff_roughness.png",
+      "kind": "exported_map",
+      "sha256": "2c7815b8d7e79e5273cd57a314c910c900826c1f3df65fe2fa937ca30c5cf6a6",
+      "size_bytes": 1893
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "62145b16600dc682b3954c368d0fd58a1d70cf04ca8312e8a64f2a08bcaac444",
+      "size_bytes": 402
+    }
+  ]
 }

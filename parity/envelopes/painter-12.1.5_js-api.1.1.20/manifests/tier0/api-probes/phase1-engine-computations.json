@@ -1,10 +1,10 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/api-probes/phase1-save-as-existing",
+  "golden_id": "tier0/api-probes/phase1-engine-computations",
   "tier": "0",
-  "domain": "tier0/api-probes/phase1-save-as-existing",
-  "description": "API probe P23-A (decision 113): save_as_copy (Full) writes existing.spp, which stays not open; a rename; then project.save_as onto existing.spp (Full): whether it raises (type, message) or saves there (file_path(), needs_saving(), the work files after each save, the fill's name); in the first session and after save/reopen, with the save events and the BaseColor export. The file's size and mtime are not read: the recorder lists the work files by name.",
+  "domain": "tier0/api-probes/phase1-engine-computations",
+  "description": "API probe (R10): application.enable_engine_computations(False), a set_source and an export request while disabled, enable_engine_computations(True), then a set_source inside disable_engine_computations(); engine_computations_status(), is_busy(), the order of EngineComputationsStatusChanged, BusyStatusChanged and export events, and whether the export completed (its files), in both recordings, with the BaseColor export.",
   "inputs": [
     {
       "input_id": "plane",
@@ -35,9 +35,11 @@
         "call": "substance_painter.event.Dispatcher.connect",
         "args": {
           "events": [
-            "ProjectAboutToSave",
-            "ProjectSaved",
-            "BusyStatusChanged"
+            "EngineComputationsStatusChanged",
+            "BusyStatusChanged",
+            "ExportTexturesAboutToStart",
+            "ExportTexturesEnded",
+            "LayerStacksModelDataChanged"
           ]
         }
       },
@@ -82,60 +84,98 @@
       },
       {
         "step": 7,
-        "call": "substance_painter.project.save_as_copy",
-        "args": {
-          "work_file": "existing.spp",
-          "mode": "Full",
-          "probe": true
-        }
+        "call": "substance_painter.application.engine_computations_status"
       },
       {
         "step": 8,
-        "call": "substance_painter.project.file_path",
-        "args": {}
+        "call": "substance_painter.project.is_busy"
       },
       {
         "step": 9,
-        "call": "substance_painter.project.needs_saving",
-        "args": {}
-      },
-      {
-        "step": 10,
-        "call": "substance_painter.layerstack.Node.set_name",
+        "call": "substance_painter.application.enable_engine_computations",
         "args": {
-          "node_step": 3,
-          "name": "uzp fill B",
+          "enable": false,
           "probe": true
         }
       },
       {
+        "step": 10,
+        "call": "substance_painter.application.engine_computations_status"
+      },
+      {
         "step": 11,
-        "call": "substance_painter.project.save_as",
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
         "args": {
-          "work_file": "existing.spp",
-          "mode": "Full",
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.1,
+            0.6,
+            0.3
+          ],
+          "color_space": "sRGB",
           "probe": true
         }
       },
       {
         "step": 12,
-        "call": "substance_painter.project.file_path",
-        "args": {}
+        "call": "substance_painter.project.is_busy"
       },
       {
         "step": 13,
-        "call": "substance_painter.project.needs_saving",
-        "args": {}
+        "call": "substance_painter.export.export_project_textures",
+        "args": {
+          "maps": [
+            "documentMap/basecolor:RGB"
+          ],
+          "file_format": "png",
+          "bit_depth": 16,
+          "padding": "infinite",
+          "dithering": false,
+          "probe": true
+        }
       },
       {
         "step": 14,
-        "call": "substance_painter.layerstack.Node.get_name",
+        "call": "substance_painter.application.enable_engine_computations",
         "args": {
-          "node_step": 3
+          "enable": true,
+          "probe": true
         }
       },
       {
         "step": 15,
+        "call": "substance_painter.application.engine_computations_status"
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.application.disable_engine_computations",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor",
+          "color": [
+            0.2,
+            0.2,
+            0.9
+          ],
+          "color_space": "sRGB",
+          "probe": true
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.application.engine_computations_status"
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 3,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 19,
         "call": "substance_painter.export.export_project_textures",
         "args": {
           "maps": [
@@ -191,5 +231,30 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "4acaba2821b078f6283e702647082c3d3ef44bb143db2017fe7a99fc52e1b424",
+      "size_bytes": 25950
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "4ff4517444452e80713a7e22476839a81721595f5cbebc72f91ac5630c1bffbe",
+      "size_bytes": 1012
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "4ff4517444452e80713a7e22476839a81721595f5cbebc72f91ac5630c1bffbe",
+      "size_bytes": 1012
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "62145b16600dc682b3954c368d0fd58a1d70cf04ca8312e8a64f2a08bcaac444",
+      "size_bytes": 402
+    }
+  ]
 }

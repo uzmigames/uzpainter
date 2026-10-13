@@ -393,5 +393,108 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "9ff068c77c2c953773695c50f1d067a2d5f46367d8fe064981e8f87b26377d83",
+      "size_bytes": 21207
+    },
+    {
+      "record_id": "r1-export-11-varinha-madeira_v1r2_basecolor",
+      "kind": "exported_map",
+      "sha256": "d90f391bd164909a4b6f98e50e16e2ef64894482aa35040f5ad901042de4f912",
+      "size_bytes": 2599215
+    },
+    {
+      "record_id": "r1-export-11-varinha-madeira_v1r2_roughness",
+      "kind": "exported_map",
+      "sha256": "75f9646644dc6bd9fc56d8dce4651e5c82a5a3737be14cb974676e823247cd1c",
+      "size_bytes": 221682
+    },
+    {
+      "record_id": "r1-export-11-varinha-madeira_v1r2_metallic",
+      "kind": "exported_map",
+      "sha256": "a7032d32273f1427e5e53930c7c6aa2b5622c53aad48d970eaaac1570c8644ec",
+      "size_bytes": 96941
+    },
+    {
+      "record_id": "r1-export-11-varinha-madeira_v1r2_height",
+      "kind": "exported_map",
+      "sha256": "c6dad51f4b365f2a30ba4646095e688a1471f1983cccd62a401ceca5bb2c1c6f",
+      "size_bytes": 123267
+    },
+    {
+      "record_id": "r1-export-11-varinha-madeira_v1r2_normal",
+      "kind": "exported_map",
+      "sha256": "ca048d689f861797b35f4928e9c673275012c51aea5cf1d63a2899a76735a2d7",
+      "size_bytes": 2798937
+    },
+    {
+      "record_id": "r1-repeat-export-11-varinha-madeira_v1r2_basecolor",
+      "kind": "exported_map",
+      "sha256": "d90f391bd164909a4b6f98e50e16e2ef64894482aa35040f5ad901042de4f912",
+      "size_bytes": 2599215
+    },
+    {
+      "record_id": "r1-repeat-export-11-varinha-madeira_v1r2_roughness",
+      "kind": "exported_map",
+      "sha256": "75f9646644dc6bd9fc56d8dce4651e5c82a5a3737be14cb974676e823247cd1c",
+      "size_bytes": 221682
+    },
+    {
+      "record_id": "r1-repeat-export-11-varinha-madeira_v1r2_metallic",
+      "kind": "exported_map",
+      "sha256": "a7032d32273f1427e5e53930c7c6aa2b5622c53aad48d970eaaac1570c8644ec",
+      "size_bytes": 96941
+    },
+    {
+      "record_id": "r1-repeat-export-11-varinha-madeira_v1r2_height",
+      "kind": "exported_map",
+      "sha256": "c6dad51f4b365f2a30ba4646095e688a1471f1983cccd62a401ceca5bb2c1c6f",
+      "size_bytes": 123267
+    },
+    {
+      "record_id": "r1-repeat-export-11-varinha-madeira_v1r2_normal",
+      "kind": "exported_map",
+      "sha256": "ca048d689f861797b35f4928e9c673275012c51aea5cf1d63a2899a76735a2d7",
+      "size_bytes": 2798937
+    },
+    {
+      "record_id": "r2-export-11-varinha-madeira_v1r2_basecolor",
+      "kind": "exported_map",
+      "sha256": "d90f391bd164909a4b6f98e50e16e2ef64894482aa35040f5ad901042de4f912",
+      "size_bytes": 2599215
+    },
+    {
+      "record_id": "r2-export-11-varinha-madeira_v1r2_roughness",
+      "kind": "exported_map",
+      "sha256": "75f9646644dc6bd9fc56d8dce4651e5c82a5a3737be14cb974676e823247cd1c",
+      "size_bytes": 221682
+    },
+    {
+      "record_id": "r2-export-11-varinha-madeira_v1r2_metallic",
+      "kind": "exported_map",
+      "sha256": "a7032d32273f1427e5e53930c7c6aa2b5622c53aad48d970eaaac1570c8644ec",
+      "size_bytes": 96941
+    },
+    {
+      "record_id": "r2-export-11-varinha-madeira_v1r2_height",
+      "kind": "exported_map",
+      "sha256": "c6dad51f4b365f2a30ba4646095e688a1471f1983cccd62a401ceca5bb2c1c6f",
+      "size_bytes": 123267
+    },
+    {
+      "record_id": "r2-export-11-varinha-madeira_v1r2_normal",
+      "kind": "exported_map",
+      "sha256": "ca048d689f861797b35f4928e9c673275012c51aea5cf1d63a2899a76735a2d7",
+      "size_bytes": 2798937
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "f428208e41a038a8d3f5fac2ac6fd4c11f5a896311b855de8f04e2abef2a4408",
+      "size_bytes": 402
+    }
+  ]
 }
