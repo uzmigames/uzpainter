@@ -21,7 +21,7 @@
 - [ ] 3.2 Repeatability: run the rebuild and export twice in separate processes; every file byte-identical
 - [ ] 3.3 Save/reopen: save the rebuilt project, reopen it and export again; maps equal to the first export
 - [x] 3.4 Oracle availability: a missing golden blob fails the comparison as `oracle_unavailable`, never as a pass (`tests/parity/tier1/test_tier1_compare.py`)
-- [x] 3.5 Guard: the repository guard passes on the manifest and report and rejects a planted copy of a recorded golden (guard contract test on synthetic 4x4 fixtures, `tests/parity/tier1/test_tier1_compare.py`, with the committed Wand request and a report the runner writes for it; guard rule for `parity/reports/<phase>/tier<tier>-*.json`; the admitted manifest and the real Wand report stay open under 4.1)
+- [x] 3.5 Guard: the repository guard passes on the manifest and report and rejects a planted copy of a recorded golden (guard contract test on synthetic 4x4 fixtures, `tests/parity/tier1/test_tier1_compare.py`, with the admitted Wand manifest (decision 180) and a report the runner writes for it; guard rule for `parity/reports/<phase>/tier<tier>-*.json`; the real Wand report stays open under 4.1)
 
 ## 4. Acceptance
 - [ ] 4.1 Acceptance (P1-WAND gate): maps equal and byte-stable across two runs; report published for the G1 gate record, listing any exceptions relied on (none expected)
