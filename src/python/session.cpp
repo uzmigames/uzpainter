@@ -508,7 +508,9 @@ void Session::NotifyDurableChange() const {
 CallResult Session::Mutate(const std::string& tool, core::json::Object arguments,
                            const std::function<void(core::Edit&)>& call) {
     ThreadState& thread = Thread();
-    const evaluator::BitmapShapes shapes = ShapesOf(*(thread.transaction ? thread.project : Current())->store);
+    // Inside a native Transaction the bitmaps' images and the set changes are checked once, by the
+    // commit (`CommitTransaction`): its calls may resize a set and rebind its bitmaps in either order.
+    const evaluator::BitmapShapes shapes = thread.transaction ? evaluator::BitmapShapes{} : ShapesOf(*Current()->store);
     const auto checked = [&call, &shapes](core::Edit& edit) {
         call(edit);
         evaluator::RequireSupported(edit.base(), edit.project(), shapes);
@@ -577,10 +579,22 @@ CallResult Session::CommitTransaction() {
     ThreadState& thread = Thread();
     if (!thread.transaction) throw ApiError("RuntimeError", "no Transaction is open on this thread");
     std::unique_ptr<core::Transaction> transaction = std::move(thread.transaction);
+    const std::shared_ptr<OpenProject> project = std::move(thread.project);
     thread.edit = nullptr;
-    thread.project.reset();
+    // The support check of the state that commits, with the bitmaps' images (support.h): a refusal
+    // fails the transaction, which then commits nothing and raises it.
+    std::exception_ptr error;
+    if (!transaction->failed()) {
+        const evaluator::BitmapShapes shapes = ShapesOf(*project->store);
+        try {
+            transaction->Apply(
+                [&shapes](core::Edit& edit) { evaluator::RequireSupported(edit.base(), edit.project(), shapes); });
+        } catch (...) {
+            error = std::current_exception();
+        }
+    }
     const core::RequestOutcome outcome = transaction->Commit();
-    CallResult result = FromResult(Settle(outcome, nullptr));
+    CallResult result = FromResult(Settle(outcome, error));
     Record(result);
     return result;
 }

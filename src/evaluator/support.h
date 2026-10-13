@@ -13,7 +13,10 @@
 // Session O records also need the image's kind and size (sources.h `OcioBitmapRecorded`): given a
 // reader of PNG headers, the check refuses them from the header before mutation, as the
 // evaluation would (decision 240), in the nodes a request touches and in every node of a texture
-// set whose resolution or channels it changes. Other refusals that need decoded bitmaps, the whole
+// set whose resolution or channels it changes. Both relate a node to its set, which a native
+// Transaction may change in either order (a resize and a rebind to the new size): only the state
+// that commits is checked, so a call inside one runs the check without the reader and its commit
+// runs it with the reader (python/session.cpp). Other refusals that need decoded bitmaps, the whole
 // stack or the virtual normal maps (legacy bilinear minification outside the texture unit's
 // measured domain, the legacy image rules of sources.h, height-to-normal resolutions, Normal mesh
 // maps, several DirectX Normal layers) are raised by the evaluation request, with the same class,
@@ -40,7 +43,8 @@ struct SupportGap {
 };
 
 /// The shape of a resource's PNG by its SHA-256 (`BitmapShapeOf` of its bytes), or nullopt when its
-/// bytes are not at hand; an empty reader checks no image.
+/// bytes are not at hand. An empty reader checks no image and no set change: the check of a call
+/// inside a native Transaction, whose commit checks them.
 using BitmapShapes = std::function<std::optional<BitmapShape>(std::string_view sha256)>;
 
 /// The first release gap of the node `uid` of `project` (a layer, or an effect of a content or
@@ -50,16 +54,18 @@ using BitmapShapes = std::function<std::optional<BitmapShape>(std::string_view s
                                                 const BitmapShapes& shapes = {});
 
 /// The first release gap `after` introduces relative to `before`: a colour-management mode other
-/// than legacy, then every created or modified node in ascending id order, then, under OCIO, an
-/// OCIO bitmap use that a change of a texture set's resolution or channels makes unrecorded in a
-/// node the request does not touch (a use that was recorded before). Other nodes the request does
-/// not touch are not checked, so a project that already holds a gap stays editable elsewhere.
+/// than legacy, then every created or modified node in ascending id order, then, with `shapes`
+/// under OCIO, an OCIO bitmap use that a change of a texture set's resolution or channels makes
+/// unrecorded in a node the request does not touch (a use that was recorded before). Other nodes
+/// the request does not touch are not checked, so a project that already holds a gap stays
+/// editable elsewhere.
 [[nodiscard]] std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::Project& after,
                                                     const BitmapShapes& shapes = {});
 
 /// Throws `core::NotYetSupported` with `FirstNewGap(before, after, shapes)` when there is one. An
 /// API call runs it on its transaction's working copy (`Edit::base()`, `Edit::project()`), so a
-/// refused request commits nothing.
+/// refused request commits nothing; a native Transaction runs it with `shapes` once more on its
+/// final working copy before it commits.
 void RequireSupported(const core::Project& before, const core::Project& after, const BitmapShapes& shapes = {});
 
 }  // namespace uzp::evaluator

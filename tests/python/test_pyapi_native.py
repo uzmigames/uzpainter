@@ -1087,6 +1087,75 @@ def test_ocio_bitmaps_the_evaluator_refuses_are_refused_before_mutation(
     assert result["legacy_small"] == "sRGB"
 
 
+OCIO_RESIZE = f"""
+SUBSTANCE = {OCIO_CONFIG!r}
+project.create(PLANE, project.Settings(default_texture_resolution=256, ocio_config_hash=SUBSTANCE))
+stack = ts.get_active_stack()
+material = stack.material()
+images = {{size: resource.import_project_resource(WORK + "/rgb8_" + str(size) + ".png",
+                                                  resource.Usage.TEXTURE).identifier()
+          for size in (256, 512)}}
+fill = ls.insert_fill(top(stack))
+fill.active_channels = {{CT.BaseColor}}
+fill.set_source(CT.BaseColor, images[256], "sRGB")
+out = {{}}
+
+def state():
+    return [material.get_resolution().width,
+            fill.get_source(CT.BaseColor).resource_id().url() == images[512].url()]
+
+with uzpainter.Transaction("resize, then rebind") as t:
+    material.set_resolution(ts.Resolution(512, 512))
+    fill.set_source(CT.BaseColor, images[512], "sRGB")
+out["resize_then_rebind"] = [t.result.status, state()]
+with uzpainter.Transaction("rebind, then resize") as t:
+    fill.set_source(CT.BaseColor, images[256], "sRGB")
+    material.set_resolution(ts.Resolution(256, 256))
+out["rebind_then_resize"] = [t.result.status, state()]
+
+# A transaction whose final state the evaluation refuses commits nothing.
+def resize_only():
+    with uzpainter.Transaction("resize only"):
+        material.set_resolution(ts.Resolution(512, 512))
+revision = project.revision()
+out["resize_only"] = [raises(resize_only), project.revision() == revision, state()]
+
+# Outside a transaction every call commits, so its state is checked: another source first.
+routed = [raises(material.set_resolution, ts.Resolution(512, 512))]
+fill.set_source(CT.BaseColor, cm.Color(0.5, 0.5, 0.5, "Working"))
+routed.append(uzpainter.last_result().status)
+routed.append(material.set_resolution(ts.Resolution(512, 512)).status)
+fill.set_source(CT.BaseColor, images[512], "sRGB")
+routed.append(uzpainter.last_result().status)
+out["routed"] = routed + [state()]
+result = out
+"""
+
+
+def test_an_ocio_resize_and_rebind_commit_in_one_transaction_in_either_order(
+    run: Run, tmp_path: Path
+) -> None:
+    """Decision 240 review: under OCIO a texture set holding a 1:1 bitmap is resized and rebound
+    to an image of the new size in one `uzpainter.Transaction`, in either order. The intermediate
+    state of each order is a use Session O does not record; only the state that commits is
+    checked. A transaction that commits such a state is refused at its end; outside one, every
+    call commits and is checked, so another source is bound before the resize."""
+    for size in (256, 512):
+        png_file(tmp_path / f"rgb8_{size}.png", size, 3, 8)
+    result = ok(run(OCIO_RESIZE))
+    assert result["resize_then_rebind"] == ["committed", [512, True]]
+    assert result["rebind_then_resize"] == ["committed", [256, False]]
+    message, unchanged, state = result["resize_only"]
+    assert message.startswith("NotYetSupported: node="), message
+    assert "a 256x256 8-bit colour bitmap on the channel BaseColor of a 512x512" in message
+    assert unchanged is True and state == [256, False]
+    refused, *statuses, routed = result["routed"]
+    assert refused.startswith("NotYetSupported: node="), refused
+    assert "bind another source first" in refused
+    assert statuses == ["committed", "committed", "committed"]
+    assert routed == [512, True]
+
+
 # ── 3.7 in-place resource replacement (LAY-08) ──────────────────────────────────────────────────
 
 

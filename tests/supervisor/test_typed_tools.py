@@ -798,7 +798,8 @@ def test_source_set_refuses_an_ocio_bitmap_the_evaluator_refuses(
     """B5 (practical-e2e, decision 240): under OCIO, `source_set` of an 8-bit colour bitmap that is
     not the texture set's size, or of an 8-bit grey mask source, is refused `capability_gap` before
     any change, as every later export would be; the set's size bitmap commits, and a
-    `set_resolution` that would break its 1:1 sampling is refused too."""
+    `set_resolution` that would break its 1:1 sampling is refused too. Every MCP call commits, so
+    the resize binds other sources first and the new size's image after (decision 240)."""
     session = Mcp(painter, tmp_path, *BASE)
     sessions.append(session)
     created = session.call(
@@ -814,6 +815,7 @@ def test_source_set_refuses_an_ocio_bitmap_the_evaluator_refuses(
     images = {
         "small": png(128, 128, 90, channels=3),
         "base": png(256, 256, 90, channels=3),
+        "base512": png(512, 512, 90, channels=3),
         "grey8": png(256, 256, 90),
         "grey16": png(256, 256, 9000, depth=16),
     }
@@ -848,7 +850,17 @@ def test_source_set_refuses_an_ocio_bitmap_the_evaluator_refuses(
     assert bitmap(mask, None, "grey16", "Data")["result"]["status"] == "committed"
     resized = session.call("set_resolution", {"width": 512, "height": 512})
     assert resized["error"]["code"] == "capability_gap", resized
+    assert "bind another source first" in resized["error"]["message"]
     assert revision_of(session) == revision + 2
+    for uid, channel in ((fill, "BaseColor"), (mask, None)):
+        uniform = {"kind": "uniform_color", "color": [0.5, 0.5, 0.5], "color_space": "Working"}
+        arguments: dict[str, Any] = {"uid": uid, "source": uniform}
+        if channel:
+            arguments["channel"] = channel
+        assert session.call("source_set", arguments)["result"]["status"] == "committed"
+    resized = session.call("set_resolution", {"width": 512, "height": 512})
+    assert resized["result"]["status"] == "committed", resized
+    assert bitmap(fill, "BaseColor", "base512", "sRGB")["result"]["status"] == "committed"
 
 
 def test_busy_and_wait_idle_timeout(painter: Path, tmp_path: Path, sessions: list[Mcp]) -> None:

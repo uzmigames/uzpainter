@@ -79,6 +79,7 @@ The dossier is in the session scratchpad. The claims and votes:
      - in every node a request creates or modifies (bind, projection change, rebind);
      - in every node of a texture set whose resolution or channels the request changes, when the use was recorded before.
    - Majority (2 of 3) over Kimi's PARTLY on resizing: UzPainter refuses a release gap before mutation as policy (decisions 081, 082), not as Painter parity.
+   - Both refusals relate a node to its texture set, which a native `Transaction` may change in either order: a resize and a rebind to the new size. Only the state that commits is checked. A call inside a `Transaction` runs the check without the images and the set changes, and `CommitTransaction` runs it with them on the final working copy; a refusal there commits nothing. Outside a `Transaction` every call commits and is checked, so another source is bound before such a resize, as the refusal says. (Adversarial review, 2026-10-13: the first version checked each call inside a `Transaction` and refused both orders.)
    - `rebuild_from_recipe` checks with the bytes it holds.
    - Legacy's image rules stay at evaluation, as before:
      - minification outside the texture unit's measured domain;
@@ -101,4 +102,4 @@ The dossier is in the session scratchpad. The claims and votes:
 ### Negative
 - A native or MCP client that relied on raw storage now gets Painter's value. A colour sent without a space is now decoded on BaseColor. Such a client must send `Working` or `Raw` to store values unchanged.
 - A native `get_color` reads back the working value tagged `Working`, not the value and tag given.
-- Under OCIO, `set_resolution` and `set_channels` are refused while they would break a bound bitmap's recorded use.
+- Under OCIO, `set_resolution` and `set_channels` are refused while they would break a bound bitmap's recorded use. Outside a `Transaction`, an MCP client binds another source first and the new image after, or does both in one `run_python` `Transaction`.

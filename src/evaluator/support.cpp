@@ -325,7 +325,7 @@ std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::P
     for (const core::Id uid : touched) {
         if (Gap gap = NodeGap(after, uid, shapes)) return gap;
     }
-    if (!PainterOcio(after)) return std::nullopt;
+    if (!shapes || !PainterOcio(after)) return std::nullopt;
     // Under OCIO a set's resolution and channels decide whether its bitmaps are a recorded use: a
     // change of them refuses a use it makes unrecorded in a node it does not touch.
     const auto changed = [&before](const core::TextureSet& set) {
@@ -346,7 +346,10 @@ std::optional<SupportGap> FirstNewGap(const core::Project& before, const core::P
                                       [&](const core::TextureSet& s) { return s.id == visit.texture_set; });
         if (set == after.texture_sets.end() || !changed(*set)) return;
         // The node is untouched, so `visit`'s fill is also its fill in `before`.
-        if (Gap gap = OcioGap(after, visit, shapes); gap && !OcioGap(before, visit, shapes)) found = gap;
+        if (Gap gap = OcioGap(after, visit, shapes); gap && !OcioGap(before, visit, shapes)) {
+            gap->feature += " once its texture set changes (bind another source first, or in the same Transaction)";
+            found = gap;
+        }
     });
     return found;
 }
