@@ -22,3 +22,20 @@
 - [ ] 5.1 Update or create documentation covering the implementation
 - [ ] 5.2 Write tests covering the new behavior
 - [ ] 5.3 Run tests and confirm they pass
+
+## 6. Notes (decision 194; 2026-10-12, branch `wt/p2-tunic`)
+- Inputs secured first. Assets3D git-ignores everything of the tunic but `report.json`, so these are now in the private store by SHA-256:
+  - `18-Tunica-v10.spp` (`c43db46a…`, the piece manifest's verified pin), `.blend` (`f6243a57…`), the five delivered `Textures/` maps, `Export/18-Tunica-v10.fbx` and `.glb`, `report.json`;
+  - from the `.blend`'s packed images: 7 v10 and 7 v9 masks, `Source_v6_HighNormal` and the older sources. Each one's SHA-1 equals the Painter resource version the report recorded.
+- Missing: nine masks the v10 stack binds (`M_pores`, `M_fiber`, `M_dyeinv`, `M_stains`, `M_fray`, `M_hem`, `M_cav`, `M_ridgewear`, `M_lining`). Their only copy is inside the `.spp`. They are not on any drive or in any recycle bin.
+- Recordings needed: one, the migration golden `phase2/tier1/tunic-v10` (r1, r1-repeat, r2) from `parity/envelopes/painter-12.1.5_js-api.1.1.20/requests/phase2/tier1/tunic-v10.json`, recorded with `python -m tools.parity.recorder record-migration <request> --assets-root E:\UzmiGames\Assets3D` under OCIO (substance config). It does not wait on the lost masks.
+- Blockers, each with its owner:
+  - Recording (owner's Painter session): blocks 2.2, 3.1 and 4.1.
+  - Nine lost masks (owner): restore their original bytes to `_tmp/claude/<name>.png`, then run `script_run manifest --pilot tunic-rebuild --assets-root E:\UzmiGames\Assets3D --out tests/parity/tier1/tunic_v10/rebuild-fixture.json --store`. Regenerated masks would be a new golden, not the approved v10. This blocks 2.1 and 2.3-2.5, 3.1-3.5.
+  - `infinite` padding (phase1.25 item 2.7): every pilot export is refused before writing until it lands.
+  - Double-sided state (decision needed): UzPainter's `shader_set` refuses `double_sided: true`, because decision 132 accepts only the `open-pbr` defaults. The tunic's approved state has it on. This blocks the double-sided part of 2.3 and 3.3 (decision 194, Blockers).
+  - 1.1: phase2.9, phase2.2 and phase2.8 are not accepted.
+- 2.1 (open): the generators are written and tested.
+  - `--pilot tunic` wrote the golden's request.
+  - `--pilot tunic-rebuild` pins the stack working copy (override on F03 only), 21 bindings over 17 files by SHA-256 and resource version, the Normal map, the mesh (the delivered FBX, an assumption the readback's `last_imported_mesh_path` checks) and the double-sided value. On the real Assets3D it refuses, listing the nine masks.
+- 2.2 (open): the recorder records migration goldens (`tools/parity/recorder/migration.py`, schema kind `painter_project`, interface `painter_project_migration`). The request is committed; the recording is the owner's.

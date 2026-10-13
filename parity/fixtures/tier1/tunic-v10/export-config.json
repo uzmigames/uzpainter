@@ -1,0 +1,16 @@
+{
+  "exportShaderParams": false,
+  "defaultExportPreset": "resource://starter_assets/Blender (Principled BSDF)",
+  "exportList": [{ "rootPath": "DefaultMaterial" }],
+  "exportParameters": [
+    {
+      "parameters": {
+        "fileFormat": "png",
+        "bitDepth": "16",
+        "sizeLog2": 12,
+        "paddingAlgorithm": "infinite",
+        "dithering": false
+      }
+    }
+  ]
+}

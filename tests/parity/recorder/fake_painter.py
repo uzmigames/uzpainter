@@ -108,6 +108,10 @@ class BlendingMode(enum.Enum):
     Screen = 3
 
 
+class NodeType(enum.Enum):
+    FillLayer = 1
+
+
 class SourceMode(enum.Enum):
     Split = 1
     Material = 2
@@ -449,6 +453,7 @@ class FakeWorld:
         self.environment: str | None = None
         self.color_lut: str | None = None
         self.scene_bounds: tuple[list[float], list[float]] = ([0.0] * 3, [0.0] * 3)
+        self.mesh_path: str | None = None  # project.last_imported_mesh_path
         self.tone_mapping = ToneMappingFunction.Linear
         self.camera: dict[str, Any] = {
             "projection_type": CameraProjectionType.Perspective,
@@ -518,6 +523,7 @@ class FakeWorld:
     def snapshot(self) -> dict[str, Any]:
         return {
             "resolution": list(self.resolution),
+            "mesh_path": self.mesh_path,
             "other_resolutions": {k: list(v) for k, v in self.other_resolutions.items()},
             "channels": {c.name: f.name for c, f in self.channels.items()},
             "layers": [
@@ -539,6 +545,7 @@ class FakeWorld:
 
     def restore(self, data: dict[str, Any]) -> None:
         self.resolution = (data["resolution"][0], data["resolution"][1])
+        self.mesh_path = data.get("mesh_path")
         self.other_resolutions = {k: (v[0], v[1]) for k, v in data["other_resolutions"].items()}
         self.channels = {ChannelType[c]: ChannelFormat[f] for c, f in data["channels"].items()}
         self.layers = [
@@ -610,6 +617,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
                 raise ValueError("template file is invalid")
             world.channels = dict(world.template_channels[template.stem])
         world.project_open, world.edition_polls, world.file_path = True, 0, None
+        world.mesh_path = mesh_file_path
         points = [
             [float(v) for v in line.split()[1:4]]
             for line in Path(mesh_file_path).read_text(encoding="utf-8").splitlines()
@@ -672,6 +680,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         is_in_edition_state=is_in_edition_state,
         is_busy=lambda: world.advance_bake() or world.busy,
         file_path=file_path,
+        last_imported_mesh_path=lambda: world.mesh_path,
         get_scene_bounding_box=get_scene_bounding_box,
         create=create,
         save_as=save_as,
@@ -823,6 +832,21 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
         def uid(self) -> int:
             return self.layer.uid_value
 
+        def get_type(self) -> NodeType:
+            return NodeType.FillLayer
+
+        def is_visible(self) -> bool:
+            return True
+
+        def has_mask(self) -> bool:
+            return False  # every fake fill layer is unmasked, with no effects
+
+        def content_effects(self) -> list[Any]:
+            return []
+
+        def mask_effects(self) -> list[Any]:
+            return []
+
     @dataclass
     class InsertPosition:
         index: int
@@ -852,6 +876,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
     layerstack = module(
         "substance_painter.layerstack",
         BlendingMode=BlendingMode,
+        NodeType=NodeType,
         InsertPosition=InsertPosition,
         insert_fill=insert_fill,
         get_root_layer_nodes=get_root_layer_nodes,

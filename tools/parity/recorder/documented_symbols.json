@@ -1339,6 +1339,10 @@
       "documented_as": "substance_painter.project.is_open",
       "page": "substance_painter/project.html"
     },
+    "substance_painter.project.last_imported_mesh_path": {
+      "documented_as": "substance_painter.project.last_imported_mesh_path",
+      "page": "substance_painter/project.html"
+    },
     "substance_painter.project.name": {
       "documented_as": "substance_painter.project.name",
       "page": "substance_painter/project.html"

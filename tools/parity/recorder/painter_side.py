@@ -1510,6 +1510,104 @@ def texture_set_names(args: dict[str, Any]) -> list[dict[str, str]]:
     return names
 
 
+LAYER_KINDS = ("FillLayer", "PaintLayer", "GroupLayer", "InstanceLayer")
+
+
+def read_or_raised(read: Any) -> Any:
+    """`read()`, or what it raised (a getter the node does not support is itself observed)."""
+    try:
+        return read()
+    except Exception as error:
+        return {"raised": raised_by(error)}
+
+
+def migration_node(node: Any, channels: list[Any]) -> dict[str, Any]:
+    """One node of an opened project and everything below it (decision 194; private readback):
+    name, type, uid and visibility; each source (a bitmap's resource URL carries its version);
+    the blending and opacity of every channel of its stack (`mask` in a mask stack); whether a
+    layer has a mask, enabled, and its background; then its sub-layers and effects."""
+    kind = node.get_type().name
+    in_mask = node.is_in_mask_stack()
+    entry: dict[str, Any] = {
+        "name": node.get_name(),
+        "type": kind,
+        "uid": node.uid(),
+        "visible": node.is_visible(),
+    }
+    if kind in ("FillLayer", "FillEffect") and in_mask:
+        source = read_or_raised(lambda: substance_description(node.get_source()))
+        entry["sources"] = {"mask": source}
+    elif kind in ("FillLayer", "FillEffect"):
+        active = sorted(node.active_channels, key=lambda c: c.name)
+        entry["active_channels"] = [channel.name for channel in active]
+        entry["sources"] = {
+            channel.name: read_or_raised(
+                lambda channel=channel: substance_description(node.get_source(channel))
+            )
+            for channel in active
+        }
+    elif kind in ("GeneratorEffect", "FilterEffect"):
+        entry["source"] = read_or_raised(lambda: substance_description(node.get_source()))
+    if in_mask:
+        entry["blending"] = {"mask": read_or_raised(lambda: blending_of(node, None))}
+    else:
+        entry["blending"] = {
+            channel.name: read_or_raised(lambda channel=channel: blending_of(node, channel))
+            for channel in channels
+        }
+    children: tuple[str, ...] = ("sub_layers",) if kind == "GroupLayer" else ()
+    if kind in LAYER_KINDS:
+        has_mask = node.has_mask()
+        entry["mask"] = {"has_mask": has_mask}
+        if has_mask:
+            entry["mask"]["enabled"] = node.is_mask_enabled()
+            entry["mask"]["background"] = read_or_raised(lambda: node.get_mask_background().name)
+        children += ("content_effects", "mask_effects")
+    for field in children:
+        entry[field] = read_or_raised(
+            lambda field=field: [migration_node(c, channels) for c in child_nodes(node, field)]
+        )
+    return entry
+
+
+def migration_readback(args: dict[str, Any]) -> dict[str, Any]:
+    """The state of the project opened for a migration golden (decision 194), read through the
+    documented API only: the mesh it was last imported from, and per texture set its resolution,
+    its mesh-map resources (URLs with versions) and, per stack, the channels' formats and every
+    root layer node with everything below it."""
+    sets: dict[str, Any] = {}
+    for texture_set in substance_painter.textureset.all_texture_sets():
+        resolution = texture_set.get_resolution()
+        maps: dict[str, Any] = {}
+        for usage_name, usage in sorted(MESH_MAP_USAGES.items()):
+            maps[usage_name] = read_or_raised(
+                lambda texture_set=texture_set, usage=usage: (
+                    None
+                    if (found := texture_set.get_mesh_map_resource(usage())) is None
+                    else resource_id_value(found)
+                )
+            )
+        stacks: dict[str, Any] = {}
+        for stack in texture_set.all_stacks():
+            all_channels = stack.all_channels()
+            channels = sorted(all_channels, key=lambda c: c.name)
+            roots = substance_painter.layerstack.get_root_layer_nodes(stack)
+            stacks[stack.name()] = {
+                "channels": {c.name: channel_description(all_channels[c]) for c in channels},
+                "layers": [migration_node(root, channels) for root in roots],
+            }
+        sets[texture_set.name()] = {
+            "resolution": [resolution.width, resolution.height],
+            "mesh_maps": maps,
+            "stacks": stacks,
+        }
+    return {
+        "file_path": substance_painter.project.file_path(),
+        "last_imported_mesh_path": substance_painter.project.last_imported_mesh_path(),
+        "texture_sets": sets,
+    }
+
+
 def show_node(args: dict[str, Any]) -> dict[str, Any]:
     """Make the stack of a recorded node the active one; returns the node's name as the Layers
     panel lists it, and its texture set."""
@@ -1544,6 +1642,7 @@ OPERATIONS = {
     "import_resource": import_resource,
     "set_color_lut": set_color_lut,
     "set_session_environment": set_session_environment,
+    "migration_readback": migration_readback,
 }
 
 

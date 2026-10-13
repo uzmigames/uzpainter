@@ -107,9 +107,10 @@
             "resource",
             "fixture_description",
             "recipe_json",
-            "pipeline_script"
+            "pipeline_script",
+            "painter_project"
           ],
-          "description": "recipe_json is a UzmiGames-authored recipe only; a recipe dumped or extracted from a Painter project is a private record, never a public input. pipeline_script is a UzmiGames pipeline script run byte-unchanged under the uzmigames_pipeline_scripts interface."
+          "description": "recipe_json is a UzmiGames-authored recipe only; a recipe dumped or extracted from a Painter project is a private record, never a public input. pipeline_script is a UzmiGames pipeline script run byte-unchanged under the uzmigames_pipeline_scripts interface. painter_project is a UzmiGames project file saved by Painter, named by SHA-256 only and never read by UzPainter: the recorder opens a hash-checked private copy in Painter under the painter_project_migration interface (decision 194)."
         },
         "path": { "$ref": "#/$defs/repo_path" },
         "assets3d_path": {
@@ -150,8 +151,12 @@
       "properties": {
         "author": { "const": "UzmiGames" },
         "interface": {
-          "description": "Painter's documented Python API (A-PYDOC): each step is one documented substance_painter call; or UzmiGames pipeline scripts run byte-unchanged, pinned by SHA-256, through Painter's documented remote control: each step is one script run (call uzmigames.pipeline.run_script); the scripts are UzmiGames code calling Painter's public Python API, pinned rather than checked symbol by symbol (a Tier 1 rebuild, decision 099). The community MCP bridge is never an interface.",
-          "enum": ["substance_painter_documented_python_api", "uzmigames_pipeline_scripts"]
+          "description": "Painter's documented Python API (A-PYDOC): each step is one documented substance_painter call; or UzmiGames pipeline scripts run byte-unchanged, pinned by SHA-256, through Painter's documented remote control: each step is one script run (call uzmigames.pipeline.run_script); the scripts are UzmiGames code calling Painter's public Python API, pinned rather than checked symbol by symbol (a Tier 1 rebuild, decision 099). The community MCP bridge is never an interface. painter_project_migration: a UzmiGames project saved by Painter (a painter_project input) is opened from a private copy and exported through the documented API, its state read back privately (a Tier 1 migration golden, decision 194).",
+          "enum": [
+            "substance_painter_documented_python_api",
+            "uzmigames_pipeline_scripts",
+            "painter_project_migration"
+          ]
         },
         "steps": {
           "type": "array",
