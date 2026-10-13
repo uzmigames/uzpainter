@@ -35,7 +35,7 @@ Historical analyses and discussion files are not implementation inputs until an 
 | `architecture/11-mcp-server.md` | MCP topology, tools and typed operation families, jobs, lease, path roots, opt-in `run_python` |
 | `architecture/12-mesh-import.md` | Mesh formats, texturing mesh, tangents, certification, reload |
 | `architecture/13-engine-integration.md` | Render core vendored from UzEngine with zero engine dependency, own build, DX12 and Vulkan backends, Windows platform, packaging |
-| `architecture/14-parity-testing.md` | Four-tier golden corpus, exact-equality gate, owner exception register, private oracle store, hosted CI and local runs |
+| `architecture/14-parity-testing.md` | Four-tier golden corpus, exact-equality gate, owner exception register, private oracle store, CPU lane and local runs |
 | `roadmap.md` | Phases with acceptance gates, pilot order, durations as labelled Hypotheses |
 | `dag.md` | Work-package dependency graph with stable parent ids (rulebook task ids), gate nodes, provisional dependency chain, parallelism |
 | `task-index.md` | Every rulebook task by phase and sub-phase level: id, DAG node, parent, same-phase prerequisites, one-line goal |

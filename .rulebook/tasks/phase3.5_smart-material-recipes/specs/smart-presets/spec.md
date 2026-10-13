@@ -39,7 +39,7 @@ Then parameters and resource hashes MUST be identical and the exported maps MUST
 ### Requirement: Smart Material Aliases Never Substitute
 A Painter smart-material name SHALL resolve through the internal alias table only to the private observed structure on the owner's machine; where that structure is unavailable the call MUST raise `UnsupportedProcedural{asset, reason: "private preset unavailable"}` and MUST NOT insert a UzmiGames recipe instead.
 
-#### Scenario: Hosted lane
+#### Scenario: Machine without the private store
 Given a machine without the private store
 When a script inserts Leather Damaged by its Painter name
 Then the call MUST raise `private preset unavailable` before any mutation and no UzmiGames recipe MUST be inserted

@@ -18,7 +18,7 @@
 - [ ] 3.2 Every exception entry's defect-detection test re-run on the frozen build (sparse seams, alpha defects, one wrong texel region; for renders a missing channel, a wrong lobe, a roughness offset, a wrong environment rotation) and each still fails the injected defect
 - [ ] 3.3 Tier 3 structural check: a wrong material binding, a missing map and a wrong camera/environment fail regardless of any exception entry
 - [ ] 3.4 A missing oracle blob fails its comparison as `oracle_unavailable`, never as a pass
-- [ ] 3.5 Repository guard over `parity/reports/phase5/` and `parity/exceptions.json`: no file whose hash is in the private store index; both validate against their public schemas on the hosted CPU lane
+- [ ] 3.5 Repository guard over `parity/reports/phase5/` and `parity/exceptions.json`: no file whose hash is in the private store index; both validate against their public schemas on the local CPU lane (decision 200)
 
 ## 4. Acceptance
 - [ ] 4.1 Tiers 0–2 green or covered by approved exceptions on DX12 and Vulkan; Tier 3 passed only through approved exceptions (otherwise blocked); register published; report hash and lock attached to `phase5.4_parity-report`

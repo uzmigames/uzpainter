@@ -4,7 +4,7 @@ Task `phase1.8_project-store` is the parent and acceptance task of P1-STORE (`do
 
 **Result:**
 - The complete §7 suite passes end to end on one store build: commit and `VACUUM INTO` interruption, blob and manifest corruption, recovery equality, two planes on one channel and tile, commit-then-die, pruned-key replay, and edit → revert → edit → reopen → compact with a protected checkpoint. The census was rerun on that same build for tunic v10, hat v8 and body v5/v6/v6b.
-- The gate is not recorded as met yet. Children `phase1.6_store-save-retention` and `phase1.7_store-inspect-census` (and these settle tests) still need their hosted CPU lane run, which needs the owner's push.
+- The gate is met on the local CPU lane (decision 200, 2026-10-13: the owner removed the hosted Parity CI, and the local full gate replaces it). Children `phase1.6_store-save-retention` and `phase1.7_store-inspect-census` and these settle tests waited only on the hosted run; their local evidence is below and in the children's notes.
 
 ## 1. Children and prerequisite
 
@@ -13,8 +13,8 @@ Task `phase1.8_project-store` is the parent and acceptance task of P1-STORE (`do
 | Prerequisite `phase1.3_document-model` | archived 2026-10-10 |
 | `phase1.4_store-container-operations` | archived 2026-10-10 |
 | `phase1.5_store-planes` | archived 2026-10-11; hosted run 38095977466 on `6fb4a16`, `tests/store` 23/23 |
-| `phase1.6_store-save-retention` | complete locally (26/27); waits for the hosted CPU lane |
-| `phase1.7_store-inspect-census` | complete locally (12/13); waits for the hosted CPU lane |
+| `phase1.6_store-save-retention` | complete (27/27) on the local CPU lane (decision 200) |
+| `phase1.7_store-inspect-census` | complete (13/13) on the local CPU lane (decision 200) |
 
 ## 2. The §7 suite on one store build (items 3.1-3.5)
 
@@ -93,5 +93,5 @@ What the numbers say about the store:
 
 | Item | Needs |
 |---|---|
-| 2.3, 2.4 | The hosted CPU lane (`parity.yml`, `python -m pytest`) green on the commit carrying children `phase1.6` and `phase1.7`. Owner action: push. |
-| 4.1 | The same hosted run showing `tests/store/test_store_settle.py` 7 passed (no skip: zig on PATH). Then the run id is recorded here and the parent is archived. |
+| 2.3, 2.4 | Met on the local CPU lane (decision 200): `python -m pytest tests/store` 56 passed on `a39594a`, which carries both children. |
+| 4.1 | Met on the local CPU lane (decision 200): the five settle cases green on the same build. The hosted run is no longer a condition (decision 200 lifts decision 045 item 5). The parent can be archived. |

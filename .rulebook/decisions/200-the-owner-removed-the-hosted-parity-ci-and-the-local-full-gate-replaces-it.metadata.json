@@ -1,0 +1,21 @@
+{
+  "id": 200,
+  "slug": "the-owner-removed-the-hosted-parity-ci-and-the-local-full-gate-replaces-it",
+  "title": "The owner removed the hosted Parity CI and the local full gate replaces it",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.6_store-save-retention",
+    "phase1.7_store-inspect-census",
+    "phase1.8_project-store",
+    "phase2.1_supervisor-ipc-worker",
+    "phase2.2_supervisor-admission-ledger",
+    "phase2.3_supervisor-jobs",
+    "phase2.4_supervisor-worker",
+    "phase2.5_mcp-transport-registry",
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.7_mcp-operation-matrix",
+    "phase2.8_mcp-server"
+  ],
+  "supersededBy": null
+}

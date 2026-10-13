@@ -21,7 +21,7 @@ The preset MUST be authored by hand from documented semantics with a provenance 
 
 #### Scenario: Provenance names sources and private hashes only
 Given the shipped preset
-When the reviewer and the hosted CI schema check inspect `unreal-engine-packed.provenance.json`
+When the reviewer and the local CPU-lane schema check (decision 200) inspect `unreal-engine-packed.provenance.json`
 Then it lists public sources and SHA-256 values of private observations, and no readback content is present in the repository
 
 ### Requirement: UE 5.6 Fixed-Name Consumption Is Atomic

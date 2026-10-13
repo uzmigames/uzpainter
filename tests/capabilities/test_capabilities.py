@@ -2,7 +2,7 @@
 
 `tools/capabilities/generate_capabilities.py` turns the documented Painter symbol inventory and
 the UzPainter additions into `capabilities.json` (docs/architecture/10-python-api.md §3). These
-tests run on the hosted CPU lane; the python-doc comparison runs where Painter's public
+tests run on the CPU lane; the python-doc comparison runs where Painter's public
 documentation is available, the build-step comparison where `zig` is on PATH.
 """
 

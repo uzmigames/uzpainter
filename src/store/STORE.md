@@ -229,7 +229,7 @@ plane and of every named resource, plus the checkpoint and operation rows.
 | `pruned_key_replay` | a stroke `k1` pruned by `compact`: replays with its precondition and with none are `outcome_unknown`, not executed, no revision or version; `k2` inside the window returns its stored outcome at a newer revision; the plane holds `k1` exactly once; the same after reopen and after a second (empty) compaction |
 | `revert_edit_reopen_compact` | approved (protected) → two strokes → 80 fills → revert → stroke → reopen → compact: every retained state equal byte for byte, the protected checkpoint's chunks written at revision 2 kept, a version only a collapsed revision bound collected; after reopen the protected checkpoint still reverts to its exact pixels |
 
-No GPU is used; the cases run on the hosted CPU lane.
+No GPU is used; the cases run on the CPU lane.
 
 ## 8. Raster planes
 

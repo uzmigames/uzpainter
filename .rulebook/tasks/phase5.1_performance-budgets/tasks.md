@@ -14,7 +14,7 @@
 - [ ] 3.1 VRAM admission test: a texture set whose resolution exceeds the budget is refused explicitly before any GPU allocation; sets within the budget are created
 - [ ] 3.2 Body v6b: the three 4096² sets evaluate and export in sequence within the tuned budget on both backends
 - [ ] 3.3 Repeatability under eviction: hat v8 exports with the default budget and with a lowered budget that forces LRU eviction are byte-identical
-- [ ] 3.4 Budget report validates against its schema on the hosted CPU lane and contains no file whose hash is in the private store index (repository guard)
+- [ ] 3.4 Budget report validates against its schema on the local CPU lane (decision 200) and contains no file whose hash is in the private store index (repository guard)
 
 ## 4. Acceptance
 - [ ] 4.1 Budgets published in `parity/reports/phase5/` and accepted; admission tuning complete before the release build is frozen; frozen build hash handed to `phase5.2_packaging` and `phase5.4_parity-report`

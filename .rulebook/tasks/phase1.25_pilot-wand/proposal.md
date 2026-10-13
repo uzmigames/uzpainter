@@ -19,6 +19,6 @@ DAG gate of P1-WAND: maps equal (every exported Wand v1 map equals the private P
 
 ## Impact
 - Affected specs: `parity`
-- Affected code: `parity/manifests/phase1/wand-v1.json`, `parity/reports/phase1/tier1-wand-v1.json`, `tests/parity/tier1/wand_v1` (runner executed locally on the owner's machine, decision 028; hosted CI skips it with an explicit reason)
+- Affected code: `parity/manifests/phase1/wand-v1.json`, `parity/reports/phase1/tier1-wand-v1.json`, `tests/parity/tier1/wand_v1` (runner executed locally on the owner's machine, decision 028; a machine without the store skips it with an explicit reason; decision 200)
 - Breaking change: NO
 - User benefit: The first real asset proves the whole Phase 1 chain — mesh, stack, compositor, export, scripts — against Painter, with numbers the owner can check.

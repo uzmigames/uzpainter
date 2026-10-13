@@ -17,7 +17,7 @@
 - [x] 3.5 `uzpainter.jobs` tests in the single-process `run` path
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green; results attached to `phase2.4_supervisor-worker`
+- [x] 4.1 Every §3 test green; results attached to `phase2.4_supervisor-worker`
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
@@ -35,3 +35,4 @@
 - 3.1-3.5, 5.3 (local run 2026-10-12, worktree `wt/p2-jobs`, `UZP_NO_GPU=1`, Vulkan workers without a device): `python -m pytest tests/supervisor tests/capabilities/test_capabilities.py` gave 101 passed, 1 failed and 4 skipped (the DX12 GPU tests, skipped under `UZP_NO_GPU`), exit 1, in 82 s. The failure was the phase2.2 test's expected `busy` message, which now names long jobs; after the fix, that node with the native export-job tests (`test_pyapi_native.py` export cases) and `tests/python/test_capability_conformance.py` gave 8 passed, exit 0, in 139 s. The new tests are `test_supervisor_jobs.py` (5) and one more case in `test_admission.py`.
 - 4.1: open. The local CPU run is green. Still open: the hosted CPU lane, which runs on the owner's push, and attaching the results to phase2.4_supervisor-worker.
 - 4.1 (attachment, 2026-10-12): the local results are attached to phase2.4_supervisor-worker in `parity/reports/phase2/supervisor-settling.md`. The parent's CPU run on the merged tree repeats this task's `tests/supervisor` cases (81 passed, exit 0). The hosted CPU lane is still open.
+- 4.1 (Decision 200 (2026-10-13): the owner removed the hosted Parity CI; the local CPU lane on the owner's machine (the coordinator's full gate before the owner pushes) replaces it.): the hosted lane was this item's only open condition. Met by the local CPU-lane runs on the owner's machine (the run above, then 8 passed, exit 0, after the message fix; the parent's merged-tree run 81 passed, exit 0), attached to phase2.4 in `parity/reports/phase2/supervisor-settling.md`.

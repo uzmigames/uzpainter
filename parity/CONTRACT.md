@@ -98,7 +98,7 @@ Tier 1 fixtures are rebuilt through Painter's documented API and proven by outpu
 - **Public repository** (independently authored or public data only): manifests under each envelope's manifest root (`parity/manifests/**/*.json` for the first envelope, `parity/envelopes/<envelope directory>/manifests/**/*.json` for later ones; schema `golden-public.json`), the envelope registry and drift reports (§6.5), fitted formulas `parity/semantics/*.json`, the register, comparison reports (numbers only).
 - **Private store only** (`UZP_PARITY_STORE`, content-addressed by SHA-256, on the owner's machine, never uploaded, never shipped): every recorded Painter output (schema `golden-private.json`): exported maps, Iray references, API readbacks (JSON included), effective-default and template captures, operator-recorded render settings and settings-panel evidence, asset recipes extracted or dumped from Painter projects; and anything derived pixel for pixel from one (difference maps, crops). Public templates and default tables are independently authored from documented semantics with provenance.
 - A missing or hash-mismatched blob yields `oracle_unavailable` (§3).
-- Store layout, the `uzpainter parity init|record|fetch|verify` prototype, the recorder hand-off, hosted CI and the local oracle run: `parity/STORE.md`.
+- Store layout, the `uzpainter parity init|record|fetch|verify` prototype, the recorder hand-off, the local full gate and the local oracle run: `parity/STORE.md`.
 
 ### 6.5 Oracle envelope (decisions 034, 037)
 

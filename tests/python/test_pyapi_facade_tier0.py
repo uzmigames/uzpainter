@@ -21,7 +21,7 @@ layer (decision 105, phase4.1_nodes-paint-layers item 2.8).
 
 Outputs that cannot be equal yet are listed in `EXCLUDED` with their reason and owner; a listed
 output must exist in the golden, and nothing else may differ. Where no private store exists the
-test skips, naming why (hosted lane).
+test skips, naming why.
 """
 
 from __future__ import annotations
@@ -282,7 +282,7 @@ def golden_record(probe: str) -> tuple[dict[str, Any], dict[str, Any]]:
     manifest = json.loads((API_PROBES / f"{probe}.json").read_text(encoding="utf-8"))
     store = locate()
     if store is None:
-        pytest.skip("no private oracle store on this machine (hosted lane, decision 028)")
+        pytest.skip("no private oracle store on this machine (decision 028)")
     record = next(r for r in manifest["private_records"] if r["record_id"] == "golden-record")
     data = store.load(record["sha256"])
     assert data is not None, f"{probe}: the golden record is not in the private store"
@@ -594,7 +594,7 @@ def texture_replay(
     manifest = json.loads((SEMANTICS / f"{name}.json").read_text(encoding="utf-8"))
     store = locate()
     if store is None:
-        pytest.skip("no private oracle store on this machine (hosted lane, decision 028)")
+        pytest.skip("no private oracle store on this machine (decision 028)")
     record = next(r for r in manifest["private_records"] if r["record_id"] == "golden-record")
     data = store.load(record["sha256"])
     assert data is not None, f"{name}: the golden record is not in the private store"
@@ -779,7 +779,7 @@ def test_project_templates_equal_painter(facade: Run, tmp_path: Path) -> None:
     manifest = json.loads(TEMPLATES.read_text(encoding="utf-8"))
     store = locate()
     if store is None:
-        pytest.skip("no private oracle store on this machine (hosted lane, decision 028)")
+        pytest.skip("no private oracle store on this machine (decision 028)")
     record = next(r for r in manifest["private_records"] if r["record_id"] == "golden-record")
     data = store.load(record["sha256"])
     assert data is not None, "project-templates: the golden record is not in the private store"

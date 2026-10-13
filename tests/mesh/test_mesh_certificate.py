@@ -5,7 +5,7 @@ The native cases (`uzp-mesh-tests.exe run`, listed in `test_mesh_import.NATIVE_C
 mirrored-UV, hard-edge, coincident-opposite-faces, defect and two-island fixtures. These tests add
 the certificate of every format's import report and the normal-convention fixture re-run with the
 production tangent frames: `uzp-normal-bake.exe` (`tests/mesh/normal_bake.cpp`) bakes the P0-NORMAL
-pairs through `src/mesh/` and must equal the Phase 0 prototype's bakes byte for byte (hosted CPU
+pairs through `src/mesh/` and must equal the Phase 0 prototype's bakes byte for byte (CPU
 lane) and reproduce `parity/semantics/tangent-frame.json` against the private Painter recordings
 (owner's machine, decision 028).
 """
@@ -157,7 +157,7 @@ def test_production_frames_bake_as_the_prototype(
     bake_prefix: Path, production_bakes: dict[str, PrototypeBake], tmp_path: Path
 ) -> None:
     """Every map of both P0-NORMAL pairs baked over the production importer and tangent frames
-    equals the Phase 0 prototype's, code for code (hosted CPU lane)."""
+    equals the Phase 0 prototype's, code for code (CPU lane)."""
     prototype = _bakes(bake_prefix / "uzp-normal-prototype.exe", tmp_path)
     for pair, bake in production_bakes.items():
         assert bake.maps.keys() == prototype[pair].maps.keys()
@@ -176,7 +176,7 @@ def test_normal_convention_rerun_reproduces_the_verdict(
     try:
         study = run_study(locate(), production_bakes)
     except OracleUnavailable as error:
-        pytest.skip(f"oracle_unavailable (hosted CI, decision 028): {error}")
+        pytest.skip(f"oracle_unavailable (no store, decision 028): {error}")
     semantics = semantics_document(study)
     published = load_json(SEMANTICS_PATH)
     assert residual_numbers(semantics) == residual_numbers(published)

@@ -28,8 +28,9 @@
 - [x] 3.10 Lock tests: second open refused while the owning pid lives; stale lock from a killed worker detected and replaced; `close` removes the sidecar
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green on the hosted CPU lane; results attached to `phase1.8_project-store` as part of its `09-…` §7 evidence
+- [x] 4.1 Every §3 test green on the local CPU lane (decision 200; it replaces the hosted CPU lane); results attached to `phase1.8_project-store` as part of its `09-…` §7 evidence
   - Local run 2026-10-10: `python -m pytest tests/store` 35 passed (`test_store_save.py`: the 10 cases of §3 plus the case-list and child checks). Pending the owner's push: the hosted `parity.yml` CPU lane (`python -m pytest`) must show `tests/store/test_store_save.py` all passed (no skip: zig on PATH) with `PASS checkpoints` … `PASS lock_sidecar`.
+  - Decision 200 (2026-10-13): the owner removed the hosted Parity CI; the local CPU lane on the owner's machine (the coordinator's full gate before the owner pushes) replaces it. The hosted lane was this item's only open condition. Local CPU-lane evidence: the run above (35 passed) and the parent's run on `a39594a` (`python -m pytest tests/store` 56 passed, `test_store_save.py` included; `phase1.8_project-store` notes on 3.1-3.5), attached to `phase1.8_project-store` in `parity/reports/phase1/project-store.md`.
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation

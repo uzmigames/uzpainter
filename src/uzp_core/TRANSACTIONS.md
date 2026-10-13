@@ -144,5 +144,5 @@ metadata) is serialised, reloaded and compared (equal project, bytes and digest)
 second time to the same bytes, and reopened with its revision, checkpoints and operation
 records (a retry returns the stored outcome, new ids continue from `next_id`).
 `uzp-core-transaction-tests integrated-manifest` prints that manifest; the pytest runs it in two
-processes and asserts the pinned digest, which the hosted CPU lane and the owner's machine
-both check (decision 028). No GPU is used.
+processes and asserts the pinned digest, which the CPU lane and the owner's GPU run
+both check (decisions 028, 200). No GPU is used.

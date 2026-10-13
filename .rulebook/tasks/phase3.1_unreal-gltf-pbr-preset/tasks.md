@@ -14,7 +14,7 @@
 - [ ] 3.1 Output parity on wand v1, belt v5 and tunic v10: every preset file equals Painter's export of the same preset in decoded values
 - [ ] 3.2 glTF consumer fixture on wand v1: the asset validates and loads with base colour, metallic-roughness, normal, occlusion and emissive bound as specified
 - [ ] 3.3 Defect detection: a metallic-roughness texture with swapped channels fails the packing check
-- [ ] 3.4 Provenance record validates against its schema in hosted CI
+- [ ] 3.4 Provenance record validates against its schema on the local CPU lane (decision 200)
 
 ## 4. Acceptance
 - [ ] 4.1 Child acceptance met and reported to `phase3.3_unreal-gltf-presets`: glTF fixture loads; packing confirmed

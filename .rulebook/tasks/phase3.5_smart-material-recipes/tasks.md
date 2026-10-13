@@ -15,7 +15,7 @@
 - [ ] 3.1 Tier 2a for every shipped recipe: unit sphere, bevelled cube, hat v6 low × {1024, 2048, 4096} × {defaults, each recipe's recorded set, two boundary sets} × {recorded seed, one other}, exact against the Painter rebuild
 - [ ] 3.2 Portable folder round trip: export from one project, insert into a fresh project, identical parameters, resource hashes and exported maps
 - [ ] 3.3 Transaction test: a recipe referencing an unavailable family fails with `UnsupportedProcedural`, nothing is attached and the revision does not advance
-- [ ] 3.4 Alias tests: a Painter smart-material name resolves to the private structure on the owner's machine and raises `private preset unavailable` on the hosted lane
+- [ ] 3.4 Alias tests: a Painter smart-material name resolves to the private structure on the owner's machine and raises `private preset unavailable` on a machine without the private store (decision 200: no hosted lane)
 - [ ] 3.5 Tier 0 API probes: insertion rules and readback of the expanded group (`get_root_layer_nodes`, `content_effects`, `get_source`, `get_parameters`) consistent with the recipe
 - [ ] 3.6 MCP `apply_smart` fixture with Python disabled
 

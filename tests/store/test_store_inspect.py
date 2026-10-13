@@ -8,7 +8,7 @@ missing blobs, the bundle round trip through `ProjectStore::Open` of the bundle 
 and OpenEXR codecs, and the census instrumentation on a scripted edit sequence. This driver also
 checks the ZIP form with `zipfile` and the PNG reader against PNGs that Python's zlib compressed
 (fixed and dynamic Huffman blocks, every scanline filter). No GPU is involved: everything runs on
-the hosted CPU lane.
+the CPU lane.
 """
 
 from __future__ import annotations

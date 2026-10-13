@@ -3,7 +3,7 @@
 `uzp-mesh-reload-tests.exe` (`tests/mesh/reload_test.cpp`, `zig build mesh-tests`) holds the
 cases: an identical reload, moved vertices, a UV change, the rename, split and merge fixtures,
 added and removed sets, and failures injected mid-reload. No GPU is involved: everything runs on
-the hosted CPU lane.
+the CPU lane.
 """
 
 from __future__ import annotations

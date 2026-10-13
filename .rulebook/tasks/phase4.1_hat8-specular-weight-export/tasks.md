@@ -12,7 +12,7 @@
 - [ ] 3.1 Tier 0: SpecularWeight uniform fills and blends exported at the template format equal the private goldens
 - [ ] 3.2 Hat v8 preset plan test: the dry run lists the seven delivered files with their formats, including SpecularWeight 8-bit RGBA
 - [ ] 3.3 Receipt test: SpecularWeight listed as a consumer gap for the UzEngine, UE and row 2 deliveries; other maps byte-identical with and without a SpecularWeight channel present
-- [ ] 3.4 Provenance record validates against its schema in hosted CI
+- [ ] 3.4 Provenance record validates against its schema on the local CPU lane (decision 200)
 
 ## 4. Acceptance
 - [ ] 4.1 Child acceptance met and reported to `phase4.2_coverage-hat-v8`: SpecularWeight channel and export exact; gaps reported, never compensated

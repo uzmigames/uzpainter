@@ -7,7 +7,7 @@ holding a stored resource bound to a fill layer and two paint layers with multi-
 the same channel and UV tile. It kills child copies of itself during `COMMIT`, between a commit's
 plane rows and its revision row, after the durable commit, during `VACUUM INTO` and before the
 rename, and checks recovery as whole-file equality. No GPU is involved: everything runs on the
-hosted CPU lane.
+CPU lane.
 """
 
 from __future__ import annotations

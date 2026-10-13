@@ -3,7 +3,7 @@
 
 `uzp-mesh-tests.exe` (`tests/mesh/mesh_test.cpp`, `zig build mesh-tests`) holds the native cases
 and imports files on request; these tests write the fixtures (`tests/mesh/mesh_fixtures.py`),
-run it and check its reports. No GPU is involved: everything runs on the hosted CPU lane.
+run it and check its reports. No GPU is involved: everything runs on the CPU lane.
 """
 
 from __future__ import annotations
@@ -590,7 +590,7 @@ def test_tier0_polygon_triangulation_equals_painter(mesh_tests: Path) -> None:
     try:
         maps = oracle_recordings(locate())
     except OracleUnavailable as error:
-        pytest.skip(f"oracle_unavailable (hosted CI, decision 028): {error}")
+        pytest.skip(f"oracle_unavailable (no store, decision 028): {error}")
     study = run_study(maps, uzpainter_triangulations(mesh_tests))
     assert status(study) == "exact"
     assert semantics_document(study) == load_json(SEMANTICS_PATH)

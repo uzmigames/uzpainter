@@ -2,7 +2,7 @@
 - [x] 1.1 Prerequisites accepted: phase1.3_document-model, phase1.4_store-container-operations, phase1.5_store-planes, phase1.6_store-save-retention
 
 `phase1.3`, `phase1.4` and `phase1.5` are archived. `phase1.6_store-save-retention` is complete
-locally (commit `4c75222`, all local checks green) and only waits for its hosted CI run; its code
+locally (commit `4c75222`, all local checks green); its hosted CI run is no longer a condition (decision 200); its code
 (`save.h`, `compact.h`, `lock.h`) is treated as accepted and is what this task's `inspect`,
 `export-bundle` and census build on.
 
@@ -19,18 +19,17 @@ locally (commit `4c75222`, all local checks green) and only waits for its hosted
 - [x] 3.4 Census instrumentation reports bytes per edit, reopen time, compaction time and retained-history size for a scripted edit sequence
 
 ## 4. Acceptance
-- [ ] 4.1 Tests of this child green on the hosted CPU lane; census report written; results attached to `phase1.8_project-store`
+- [x] 4.1 Tests of this child green on the local CPU lane (decision 200; it replaces the hosted CPU lane); census report written; results attached to `phase1.8_project-store`
 
 The census report is written (`parity/reports/phase1/store-census.json`) and the results are in
-`parity/reports/phase1/store-inspect-census.md`. Open: the hosted CPU lane. After the owner pushes,
-the hosted run must show `zig build painter uzp-store uzp-store-tests uzp-store-save-tests
-uzp-store-inspect-tests` with zero warnings and `python -m pytest` green, including
-`tests/store/test_store_inspect.py` (7 native cases, the ZIP bundle and the PNG-reader cases) and
-`tests/parity/test_guard.py::test_store_census_report_holds_numbers_and_identifiers_only` /
-`::test_repository_store_census_report_passes`, plus `python -m tools.parity.guard` reporting
-0 blocked with the census report in the tree (the hosted lane has no store index, decision 028).
-The census itself is a local run only: it reads the Assets3D corpus and the `.spp` file sizes,
-which no hosted machine has.
+`parity/reports/phase1/store-inspect-census.md`. Decision 200 (2026-10-13): the owner removed the hosted Parity CI; the local CPU lane on the owner's machine (the coordinator's full gate before the owner pushes) replaces it. The hosted
+lane was this item's only open condition. The local CPU-lane evidence below meets it: `zig build
+painter uzp-store uzp-store-tests uzp-store-save-tests uzp-store-inspect-tests` with no warnings,
+`python -m pytest tests/store` all passed (the 14 cases of `test_store_inspect.py` among them; 49
+passed after the decision-041 purge) and `python -m tools.parity.guard` 0 blocked with the census
+report in the tree. The results are attached to `phase1.8_project-store` in
+`parity/reports/phase1/project-store.md`. The census itself is a local run only: it reads the
+Assets3D corpus and the `.spp` file sizes, which only the owner's machine has.
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation

@@ -12,7 +12,7 @@
 ## 3. Tests
 - [ ] 3.1 Build identity check fails when one child result names a different build hash or lock
 - [ ] 3.2 Integration check fails when any child reports a failing tier, a blocked Tier 3 comparison without an approved entry, a failing conformance row or a `blocking` gap
-- [ ] 3.3 Repository guard over `parity/reports/phase5/`: no file whose hash is in the private store index; schema validation on the hosted CPU lane
+- [ ] 3.3 Repository guard over `parity/reports/phase5/`: no file whose hash is in the private store index; schema validation on the local CPU lane (decision 200)
 
 ## 4. Acceptance
 - [ ] 4.1 Tiers 0–2 green or covered by approved exceptions; Tier 3 passed through approved exceptions (blocked otherwise); full Python-disabled MCP conformance passes for every row of the requirement-to-typed-operation matrix; same build hash and lock as `phase5.2_packaging`; gate evidence attached to `phase5.6_gate-g5`

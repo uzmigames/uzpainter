@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 
 from tools.parity.guard.cli import main
 from tools.parity.guard.guard import (
@@ -44,7 +43,6 @@ AUTHORED_EXPECTATION = DATA / "authored-expectation.json"
 IMAGE_PATH = "parity/fixtures/images/authored-checker.png"
 EXPECTATION_PATH = "parity/manifests/guard/srgb8-checker-decode.json"
 PRIVATE_SAMPLE = SCHEMA_DIR / "samples" / "private" / "api-readback-record.json"
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "parity.yml"
 HOOK = REPO_ROOT / ".githooks" / "pre-commit"
 
 
@@ -843,25 +841,13 @@ def test_recipe_rebuild_report_holds_digests_hashes_and_names_only(
     assert blocked(repo, None) == ({} if allowed else {REBUILD_PATH: {"public-schema"}})
 
 
-# --- 3.4 CI ----------------------------------------------------------------------------------
-
-
-def _hosted_runs() -> list[str]:
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    return [step.get("run", "") for step in workflow["jobs"]["hosted"]["steps"]]
-
-
-def test_hosted_ci_runs_the_guard_on_every_commit() -> None:
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    triggers = workflow.get("on", workflow.get(True))
-    assert {"push", "pull_request"} <= set(triggers)
-    assert "python -m tools.parity.guard" in [run.strip() for run in _hosted_runs()]
+# --- 3.4 the guard command on a machine without the store (decision 200) ----------------------
 
 
 def _guard_process(repo: Path) -> subprocess.CompletedProcess[str]:
-    """`python -m tools.parity.guard` as the hosted job runs it: no store on the machine."""
+    """`python -m tools.parity.guard` run as a command on a machine without the store."""
     env = {k: v for k, v in os.environ.items() if k != STORE_ENV}
-    env["LOCALAPPDATA"] = str(repo.parent / "hosted-localappdata")
+    env["LOCALAPPDATA"] = str(repo.parent / "no-store-localappdata")
     return subprocess.run(
         [sys.executable, "-m", "tools.parity.guard", "--repo", str(repo)],
         cwd=REPO_ROOT,
@@ -872,7 +858,7 @@ def _guard_process(repo: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_ci_guard_fails_the_job_on_a_commit_with_a_blocked_file(repo: Path, outside: Path) -> None:
+def test_guard_command_fails_on_a_commit_with_a_blocked_file(repo: Path, outside: Path) -> None:
     add_authored(repo)
     assert git(repo, "commit", "-q", "-m", "authored").returncode == 0
     clean = _guard_process(repo)

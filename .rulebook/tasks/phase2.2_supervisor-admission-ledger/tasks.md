@@ -20,7 +20,7 @@
 - [x] 3.6 Unreadable operation records produce `outcome_unknown` and no execution
 
 ## 4. Acceptance
-- [ ] 4.1 Every §3 test green on the hosted CPU lane (GPU tests skip there with an explicit reason) and in a local run on the owner's machine (decision 028; the local run report is the evidence); results attached to `phase2.4_supervisor-worker`
+- [x] 4.1 Every §3 test green on the local CPU lane (decision 200 replaces the hosted CPU lane; GPU tests skip there with an explicit reason) and in a local run on the owner's machine (decision 028; the local run report is the evidence); results attached to `phase2.4_supervisor-worker`
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation
@@ -36,3 +36,4 @@
 - 3.1-3.6, 5.3 (local run 2026-10-12, worktree `wt/p2-admission-ledger`, `UZP_NO_GPU=1`, Vulkan workers without a device): `python -m pytest tests/supervisor` gave 66 passed and 4 skipped (the DX12 GPU tests, skipped under `UZP_NO_GPU`), exit 0, in 61 s. The new files are `test_admission.py` (6), `test_worker_admission.py` (3) and `test_supervisor_admission.py` (3).
 - 4.1: open. The local CPU run above is green. Still open: the hosted CPU lane, which runs on the owner's push, and attaching the results to phase2.4_supervisor-worker.
 - 4.1 (attachment, 2026-10-12): the local results are attached to phase2.4_supervisor-worker in `parity/reports/phase2/supervisor-settling.md`. The parent's CPU run on the merged tree repeats this task's `tests/supervisor` cases (81 passed, exit 0). The hosted CPU lane is still open.
+- 4.1 (Decision 200 (2026-10-13): the owner removed the hosted Parity CI; the local CPU lane on the owner's machine (the coordinator's full gate before the owner pushes) replaces it.): the hosted lane was this item's only open condition. Met by the local CPU-lane runs on the owner's machine (66 passed, 4 skipped, exit 0; the parent's merged-tree run 81 passed, exit 0), attached to phase2.4 in `parity/reports/phase2/supervisor-settling.md`.

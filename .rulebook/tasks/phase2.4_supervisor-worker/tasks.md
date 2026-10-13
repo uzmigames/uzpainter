@@ -41,3 +41,4 @@
   - `tests/parity/test_guard.py` plus `test_pyapi_cli.py::test_run_with_an_unavailable_backend`: 52 passed, exit 0.
   - The children's evidence and every number are in `parity/reports/phase2/supervisor-settling.md` and `.json`.
 - 4.1: open. It waits on the Vulkan device cases (decision 121), on the hosted CPU lane (the owner's push) and on the children's acceptance (G1).
+- 1.1-1.4, 4.1 (Decision 200 (2026-10-13): the owner removed the hosted Parity CI; the local CPU lane on the owner's machine (the coordinator's full gate before the owner pushes) replaces it.): the hosted CPU lane is no longer a condition; the local CPU-lane run above (81 passed, exit 0) is its evidence. phase2.2 and phase2.3 have their 4.1 checked; every child stays open on G1, and phase2.1 also on the Vulkan variant. 4.1 waits only on the Vulkan device cases (decision 121) and G1.

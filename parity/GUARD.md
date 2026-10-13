@@ -41,7 +41,7 @@ First match wins; any other JSON under `parity/` is blocked until a rule for its
 
 From the repository: `python -m tools.parity.guard [--staged] [--index FILE | --no-store] [PATH ...]`.
 
-- Without `--staged`: the working tree (tracked and untracked, not ignored, files); `PATH`s narrow the check. This is the hosted CI step.
+- Without `--staged`: the working tree (tracked and untracked, not ignored, files); `PATH`s narrow the check. This is the full-gate step (§5).
 - `--staged`: the files the next commit would record, read from the index (pre-commit hook). Manifests that declare fixtures are read from the index too.
 - `--index FILE`: match hashes against a store `index.json` (`uzpainter/parity/store-index/1`; hashes only, never blobs). `--no-store`: do not look for this machine's store.
 
@@ -57,10 +57,10 @@ git config core.hooksPath .githooks
 
 `python` (3.13 with `jsonschema`) must be on `PATH` in the shell git uses for hooks. On the owner's machine the hook finds the store and applies all three rules; elsewhere it applies the content and schema rules and says the hash rule was skipped. A blocked commit is fixed by removing the file from the commit, never by bypassing the hook.
 
-## 5. Hosted CI
+## 5. Local full gate
 
-The `hosted` job of `.github/workflows/parity.yml` runs `python -m tools.parity.guard` on the checked-out commit of every push and pull request to `main`. Decision 028: the job has no store and receives no index, so it applies the `private-record` and `public-schema` rules; a blocked file fails the job. The `store-hash` rule runs on the owner's machine (hook and local runs).
+There is no hosted CI (decision 200). `python -m tools.parity.guard` runs locally on the commit under test, in the coordinator's full gate before the owner pushes, besides the pre-commit hook. On a machine without the store it applies the `private-record` and `public-schema` rules and says the hash rule was skipped; a blocked file exits 1. The `store-hash` rule runs on the owner's machine (hook and local runs).
 
 ## 6. Tests
 
-`tests/parity/test_guard.py`: stand-ins for a recorded PNG and a recorded JSON readback are written outside the repository and recorded into a temporary store; each case runs in a throwaway git repository. Covered: the PNG blocked by hash when staged (API, CLI with the local store, and `git commit` through the committed hook); the readback blocked by hash, after line-ending conversion, and re-serialised under `parity/` (manifest, fixture, uncovered and schema paths, `.txt` name), outside `parity/`, and relabelled as a synthetic sample; the authored fixture image and expectation JSON (`tests/parity/guard_data/`) pass staged and in the working tree; declared and undeclared JSON fixtures; the repository's own `parity/schema` and register pass, synthetic private samples included; the CI step exists and the CI command fails on a commit carrying a blocked file.
+`tests/parity/test_guard.py`: stand-ins for a recorded PNG and a recorded JSON readback are written outside the repository and recorded into a temporary store; each case runs in a throwaway git repository. Covered: the PNG blocked by hash when staged (API, CLI with the local store, and `git commit` through the committed hook); the readback blocked by hash, after line-ending conversion, and re-serialised under `parity/` (manifest, fixture, uncovered and schema paths, `.txt` name), outside `parity/`, and relabelled as a synthetic sample; the authored fixture image and expectation JSON (`tests/parity/guard_data/`) pass staged and in the working tree; declared and undeclared JSON fixtures; the repository's own `parity/schema` and register pass, synthetic private samples included; the guard command, run without a store, fails on a commit carrying a blocked file.

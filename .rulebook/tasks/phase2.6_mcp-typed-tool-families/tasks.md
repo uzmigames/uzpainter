@@ -32,6 +32,7 @@
 ## 6. Notes (scope splits and evidence)
 - Recordings: none. The typed tools run the native operations the `uzpainter` API already runs (shared through `src/python/edits.h`). The MCP layer is UzPainter's own control plane, and it reproduces no new Painter behaviour.
 - 1.1: left open on purpose, as phase2.5 left its own. phase2.4_supervisor-worker is merged on main but not accepted: its 4.1 waits on the Vulkan device cases (decision 121), the hosted CPU lane and G1. phase2.5_mcp-transport-registry is merged with its 1.1 open for the same reason. This task builds on their code on main.
+- 1.1 (decision 200, 2026-10-13): the hosted CPU lane is removed and no longer a condition of phase2.4, which waits on the Vulkan device cases (decision 121) and G1.
 - Decisions:
   - 164: native single-transaction handlers over the API's shared edits; uid, stack-name and LAY-06 name addressing; `params` upserts; per-argument-value capability gating (`x-uzpainter-capability`, fail closed); the gap families; `project_create`'s row in the new project's first transaction; `project_save_as` a long lifecycle call; `sync_stack` without `state`; `mask_set` without mask blending.
   - 165: `status`, `capabilities` and `batch` in the supervisor; the capture image block built by the native helper `_uzpainter_image` (long edge 512, `image.built` explicit); the resources and prompts.

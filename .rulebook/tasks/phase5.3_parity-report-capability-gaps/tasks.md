@@ -9,7 +9,7 @@
 - [ ] 2.5 Wording check over the manifest, release notes and `README.md`: no "full replacement" claim while a required gap is open
 
 ## 3. Tests
-- [ ] 3.1 Generated manifest validates against its schema on the hosted CPU lane and lists the same symbols as the documented API inventory plus UzPainter additions
+- [ ] 3.1 Generated manifest validates against its schema on the local CPU lane (decision 200) and lists the same symbols as the documented API inventory plus UzPainter additions
 - [ ] 3.2 Every `release-gap` symbol raises `uzpainter.NotYetSupported` before any mutation; every `desktop-only-omitted` symbol raises `uzpainter.UnsupportedInUzPainter` with reason and alternative
 - [ ] 3.3 Every `supported` entry's `tier_evidence` resolves to a passing comparison in the Phase 5 tier report
 - [ ] 3.4 Gap register check: no in-scope gap without a decision id is reported as anything other than `blocking`

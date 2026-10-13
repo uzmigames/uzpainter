@@ -2,8 +2,8 @@
 the local half of 3.5).
 
 The executable is built once per session (`conftest.painter_bin`). The hardware slice (3.1)
-needs a DX12 hardware adapter and is skipped with its reason under `UZP_NO_GPU=1` (hosted CI,
-decision 028); every other test runs anywhere, the GPU stages then skipped by `--no-gpu`.
+needs a DX12 hardware adapter and is skipped with its reason under `UZP_NO_GPU=1` (decision
+028); every other test runs anywhere, the GPU stages then skipped by `--no-gpu`.
 """
 
 from __future__ import annotations
@@ -18,12 +18,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 
 from tools.toolchain.dll_closure import VC_RUNTIME, check_folder
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "parity.yml"
 HARDWARE_SLICE = ("dx12-device", "shader-compile", "compute-readback", "png16", "embree")
 GPU_STAGES = ("dx12-device", "compute-readback")
 WIDTH, HEIGHT = 100, 64
@@ -173,18 +171,6 @@ def test_uzp_no_gpu_environment_skips_with_reason(painter_bin: Path, tmp_path: P
         assert stage["reason"].startswith(
             "no GPU: UZP_NO_GPU=1 (hosted CI has no GPU, decision 028"
         )
-
-
-def test_hosted_ci_builds_and_runs_selftest() -> None:
-    """Hosted CI (no GPU, `UZP_NO_GPU=1`) builds `UzPainter.exe` and runs `selftest`, whose GPU
-    stages then skip with that reason (decision 028)."""
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    hosted = workflow["jobs"]["hosted"]
-    assert str(hosted["env"]["UZP_NO_GPU"]) == "1"
-    runs = [str(step.get("run", "")) for step in hosted["steps"]]
-    step = next(r for r in runs if "UzPainter.exe selftest" in r)
-    assert "zig build painter" in step
-    assert "--no-gpu" not in step
 
 
 def test_usage_error(painter_bin: Path) -> None:

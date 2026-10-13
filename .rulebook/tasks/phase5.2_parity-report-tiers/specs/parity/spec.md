@@ -34,7 +34,7 @@ Every comparison SHALL report oracle stability, UzPainter repeatability and equa
 
 #### Scenario: Guard over the published report
 Given the generated report and exception register
-When the repository guard runs on the hosted CPU lane
+When the repository guard runs on the local CPU lane (decision 200)
 Then no file whose hash is in the private store index is found and both files validate against their public schemas
 
 ### Requirement: Missing Oracle Never Passes

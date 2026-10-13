@@ -4,8 +4,8 @@
 ## 2. Children (each accepted before this parent closes)
 - [x] 2.1 `phase1.4_store-container-operations` accepted
 - [x] 2.2 `phase1.5_store-planes` accepted
-- [ ] 2.3 `phase1.6_store-save-retention` accepted
-- [ ] 2.4 `phase1.7_store-inspect-census` accepted
+- [x] 2.3 `phase1.6_store-save-retention` accepted
+- [x] 2.4 `phase1.7_store-inspect-census` accepted
 
 ## 3. Tests
 - [x] 3.1 Run the complete `docs/architecture/09-project-file-format.md` §7 suite end to end on one store build: commit/`VACUUM INTO` interruption, blob and manifest corruption, recovery equality of manifests and pixels
@@ -21,8 +21,9 @@ on the same build reproduces the dependency, project and per-edit sizes of `pari
 `parity/reports/phase1/project-store.md`.
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance (P1-STORE gate): `09-…` §7 tests pass; results and census numbers recorded in `parity/reports/phase1/` for the G1 gate record
+- [x] 4.1 Acceptance (P1-STORE gate): `09-…` §7 tests pass; results and census numbers recorded in `parity/reports/phase1/` for the G1 gate record
   - Recorded locally in `parity/reports/phase1/project-store.md`. Open: the hosted CPU lane run (owner's push) showing children 2.3/2.4 and `tests/store/test_store_settle.py` green.
+  - Decision 200 (2026-10-13): the owner removed the hosted Parity CI; the local CPU lane on the owner's machine (the coordinator's full gate before the owner pushes) replaces it. It lifts the policy hold of decision 045 item 5, whose only condition was that hosted run. Local CPU-lane evidence: the five settle cases green and `python -m pytest tests/store` 56 passed on `a39594a` (notes under §3 above), a commit that carries both children; children 2.3 and 2.4 have every item checked on their local evidence (their item 4.1).
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [x] 5.1 Update or create documentation covering the implementation

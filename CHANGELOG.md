@@ -147,6 +147,7 @@ index (work package `P0-SOURCES` in `docs/dag.md`) clears their exact revision.
 
 ### Changed
 
+- The hosted Parity CI is removed on the owner's order (decision 200): `.github/workflows/parity.yml` is deleted with the tests that read it. The guard, vendoring check, selftest, type-check, lint, tests and the `oracle_unavailable` check run locally in the coordinator's full gate before the owner pushes. Task items that waited only on the hosted lane are checked on their local evidence (phase1.6 4.1, phase1.7 4.1, phase1.8 2.3/2.4/4.1, phase2.2 4.1, phase2.3 4.1).
 - Tests that built from an empty Zig cache (vendoring check, link map, mesh build paths) share one build: 180 s to 86 s locally. The hosted CI Zig cache limit is raised to 6144 MiB so the cache survives between runs.
 - Wand R9 re-pinned to Assets3D `9a718b9` (decision 144): its route guard runs unadapted, and its 25 pinned inputs resolve from the private store when Assets3D's `_tmp` no longer has them.
 - Every phase1.24 exclusion has an owner (task `phase1.24_python-api-facade`, decision 117): P20-A/B go to `phase1.14` item 2.9, the reload-resources r2 residual to `phase5.2_parity-report-tiers` item 2.10, and the Dota 2 labels wait for the owner (question q1).

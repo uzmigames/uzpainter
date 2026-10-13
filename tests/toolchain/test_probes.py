@@ -7,7 +7,7 @@ Two sources:
   Tier 1.0, SM 6.5, absent or too-old Vulkan loader, a device without `VK_KHR_ray_query`, a WARP
   check that fails) and prints the probe report; these tests run anywhere.
 - `UzPainter.exe selftest` on this machine's GPU; those tests skip with the reason under
-  `UZP_NO_GPU=1` (hosted CI, decision 028), where the probe stages themselves skip.
+  `UZP_NO_GPU=1` (decision 028), where the probe stages themselves skip.
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ test-only fault hooks (`src/store/fault.h`): it kills a child copy of itself dur
 commit and between a commit's plane rows and its revision row, refuses database growth as a full
 disk does, and corrupts blobs, manifests and plane chunks through the container. These
 tests run each case and check that the release library `uzp_store.lib` (`zig build uzp-store`)
-contains none of the hooks. No GPU is involved: everything runs on the hosted CPU lane.
+contains none of the hooks. No GPU is involved: everything runs on the CPU lane.
 """
 
 from __future__ import annotations

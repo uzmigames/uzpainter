@@ -4,7 +4,7 @@ Task `phase1.6_store-save-retention`. `uzp-store-save-tests.exe` (`tests/store/s
 `zig build uzp-store-save-tests`) holds the native cases, built with the test-only fault hooks
 (`src/store/fault.h`): it fails the I/O of `VACUUM INTO` and of the rename after it, kills a child
 copy of itself during `VACUUM INTO` and before the rename, and kills a child holding the project's
-lock. No GPU is involved: everything runs on the hosted CPU lane.
+lock. No GPU is involved: everything runs on the CPU lane.
 """
 
 from __future__ import annotations
