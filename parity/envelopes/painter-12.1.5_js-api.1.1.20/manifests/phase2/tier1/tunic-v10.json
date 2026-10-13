@@ -94,5 +94,108 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "afa1309ace69d4a82b1c4e37eb0e6d9072b3c7d2359b300f314f540525803670",
+      "size_bytes": 137694
+    },
+    {
+      "record_id": "r1-export-defaultmaterial_basecolor_srgb",
+      "kind": "exported_map",
+      "sha256": "d821c2931f4b378b05d84ef5a28f7c4bf1e49800d1502bb416b5ceed02436e21",
+      "size_bytes": 16417775
+    },
+    {
+      "record_id": "r1-export-defaultmaterial_normal_raw",
+      "kind": "exported_map",
+      "sha256": "f372fdf3efbdddf2d5de0139d8b47c81c97e36c9d07154d9b3821b6c1d94c540",
+      "size_bytes": 37004784
+    },
+    {
+      "record_id": "r1-export-defaultmaterial_metallic_raw",
+      "kind": "exported_map",
+      "sha256": "d915331ab8750d70eed2630ced1cd2f9b6ed2adc11b1fdc5da7d9a720e799853",
+      "size_bytes": 98066
+    },
+    {
+      "record_id": "r1-export-defaultmaterial_roughness_raw",
+      "kind": "exported_map",
+      "sha256": "b36eeb5698b2370562d73d4a0ec36968bb98990c4d300b96a5878e68e2baeef9",
+      "size_bytes": 3888632
+    },
+    {
+      "record_id": "r1-export-defaultmaterial_displacement_raw",
+      "kind": "exported_map",
+      "sha256": "73998cf028cee4487b793967fa0041a363cc42f965a187bd6789b97cd286cf9a",
+      "size_bytes": 15579274
+    },
+    {
+      "record_id": "r1-repeat-export-defaultmaterial_basecolor_srgb",
+      "kind": "exported_map",
+      "sha256": "d821c2931f4b378b05d84ef5a28f7c4bf1e49800d1502bb416b5ceed02436e21",
+      "size_bytes": 16417775
+    },
+    {
+      "record_id": "r1-repeat-export-defaultmaterial_normal_raw",
+      "kind": "exported_map",
+      "sha256": "f372fdf3efbdddf2d5de0139d8b47c81c97e36c9d07154d9b3821b6c1d94c540",
+      "size_bytes": 37004784
+    },
+    {
+      "record_id": "r1-repeat-export-defaultmaterial_metallic_raw",
+      "kind": "exported_map",
+      "sha256": "d915331ab8750d70eed2630ced1cd2f9b6ed2adc11b1fdc5da7d9a720e799853",
+      "size_bytes": 98066
+    },
+    {
+      "record_id": "r1-repeat-export-defaultmaterial_roughness_raw",
+      "kind": "exported_map",
+      "sha256": "b36eeb5698b2370562d73d4a0ec36968bb98990c4d300b96a5878e68e2baeef9",
+      "size_bytes": 3888632
+    },
+    {
+      "record_id": "r1-repeat-export-defaultmaterial_displacement_raw",
+      "kind": "exported_map",
+      "sha256": "73998cf028cee4487b793967fa0041a363cc42f965a187bd6789b97cd286cf9a",
+      "size_bytes": 15579274
+    },
+    {
+      "record_id": "r2-export-defaultmaterial_basecolor_srgb",
+      "kind": "exported_map",
+      "sha256": "d821c2931f4b378b05d84ef5a28f7c4bf1e49800d1502bb416b5ceed02436e21",
+      "size_bytes": 16417775
+    },
+    {
+      "record_id": "r2-export-defaultmaterial_normal_raw",
+      "kind": "exported_map",
+      "sha256": "f372fdf3efbdddf2d5de0139d8b47c81c97e36c9d07154d9b3821b6c1d94c540",
+      "size_bytes": 37004784
+    },
+    {
+      "record_id": "r2-export-defaultmaterial_metallic_raw",
+      "kind": "exported_map",
+      "sha256": "d915331ab8750d70eed2630ced1cd2f9b6ed2adc11b1fdc5da7d9a720e799853",
+      "size_bytes": 98066
+    },
+    {
+      "record_id": "r2-export-defaultmaterial_roughness_raw",
+      "kind": "exported_map",
+      "sha256": "b36eeb5698b2370562d73d4a0ec36968bb98990c4d300b96a5878e68e2baeef9",
+      "size_bytes": 3888632
+    },
+    {
+      "record_id": "r2-export-defaultmaterial_displacement_raw",
+      "kind": "exported_map",
+      "sha256": "73998cf028cee4487b793967fa0041a363cc42f965a187bd6789b97cd286cf9a",
+      "size_bytes": 15579274
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "6302169572f47c290e690957daf7f2ebb5c3dc795f8de9eb0a19f19a10dca770",
+      "size_bytes": 402
+    }
+  ]
 }

@@ -277,6 +277,7 @@ Code: `tools/parity/recorder/migration.py` (host) and `migration_readback` in `p
   - It pins `18-Tunica-v10.spp`. A project that differs from the hash the piece manifest `manifests/v10.json` verifies is refused.
   - It exports with `parity/fixtures/tier1/tunic-v10/export-config.json`: Painter's shipped Blender preset, 16-bit PNG, 4096 px, `infinite` padding, no dithering.
   - Record it under OCIO with Painter's substance configuration.
+  - Decision 215 recorded it and admitted it to `manifests/phase2/tier1/tunic-v10.json`. The project opened with no dialog and stayed OCIO. All five maps are byte-identical in `r1`, `r1-repeat` and `r2`. The readback's `last_imported_mesh_path` is `_tmp/astra-tunica/normalized_low.obj`, not the FBX the rebuild fixture assumes.
 - **The rebuild fixture.** `--pilot tunic-rebuild` pins what UzPainter rebuilds from:
   - the stack working copy with the F03 override, every mask binding by SHA-256 and resource version, the Normal mesh map, the mesh and the double-sided value;
   - eight masks and the Normal map recovered from the `.blend` into the private store.
