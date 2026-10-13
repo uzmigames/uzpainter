@@ -79,15 +79,28 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "stale cache hit)",
         "on an sRGB8 channel the double-precision and the GPU's float32 sRGB decode store the "
         "same code for each of the 65 536 16-bit codes",
-        "a 16-bit colour sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code",
-        "the sRGB decode of each 8-bit code stores the code itself (double precision and the GPU's "
-        "float32)",
-        "an 8-bit colour sRGB bitmap at 1:1 stores each code as its sRGB8 code",
-        "a 16-bit grey sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code on "
-        "the three channels",
-        "an sRGB bitmap on a channel that is not sRGB8, 8-bit grey, or resampled, and a bitmap "
-        "in the Working colour space fail with unsupported_source",
+        "the sRGB8 decode of each 8-bit code stores the code itself",
+        "a bitmap in Working or Legacy Linear is read as in Raw, in Legacy sRGB as in sRGB",
+        "an sRGB bitmap on a channel that is not sRGB8 or minified by a bilinear filter, and an "
+        "unknown bitmap colour space fail with unsupported_source",
+        "Nearest at a tie takes the right texel across and the upper texel down the rows",
     } <= passed
+    # phase1.15_compositor-colour-fits item 2.2 (decision 174): sRGB bitmaps of every kind,
+    # 1:1, magnified and under Nearest.
+    for kind in ("16-bit colour", "8-bit colour", "16-bit grey", "8-bit grey"):
+        assert (
+            f"a {kind} sRGB bitmap at 1:1 stores the sRGB8 code of the sRGB decode of each code"
+        ) in passed
+        for name, scale in (
+            ("BilinearHQ", "1.000000"),
+            ("BilinearHQ", "0.500000"),
+            ("Nearest", "0.500000"),
+            ("Nearest", "2.000000"),
+        ):
+            assert (
+                f"a {kind} sRGB bitmap under {name} at scale {scale} stores the sRGB8 code of its "
+                "projected decoded texels"
+            ) in passed
 
 
 def test_order_case_stores_bitmaps_on_srgb8(evaluator_tests: Path) -> None:
@@ -101,10 +114,12 @@ def test_order_case_stores_bitmaps_on_srgb8(evaluator_tests: Path) -> None:
 
 def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> None:
     """2.4: the projection kernel equals the CPU reference bit for bit on random stacks (every
-    filter, wrap mode, transform, 8/16-bit grey and colour bitmap, nine formats, two tiles)."""
+    filter, wrap mode, transform, 8/16-bit grey and colour bitmap, nine formats, two tiles), and
+    on sRGB bitmaps decoded to float32 texels on an sRGB8 channel (decision 174)."""
     passed, _ = run_case(evaluator_tests, "projection-gpu-vs-cpu", str(tmp_path), needs_gpu=True)
     assert any(p.startswith("every random projection stack") for p in passed)
     assert any(p.startswith("every random minifying projection stack") for p in passed)
+    assert any(p.startswith("every random sRGB projection stack") for p in passed)
     assert (
         "GPU: after a resolution change the same evaluator re-evaluates at the new size" in passed
     )

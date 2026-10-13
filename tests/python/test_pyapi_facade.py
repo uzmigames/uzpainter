@@ -370,6 +370,76 @@ def test_colour_rules_implicit_space_conversions_and_the_pinned_profile(facade: 
     assert result["ocio_revision"] is True
 
 
+# ── Bitmap colour spaces Painter offers and refuses (decision 174) ───────────────────────────────
+
+BITMAP_SPACES = """
+stack = create()
+FORMATS = {"User1": "RGB8", "User2": "L8", "User3": "RGB16", "User4": "L16", "User5": "RGB16F",
+           "User7": "RGB32F"}
+for name, fmt in FORMATS.items():
+    stack.add_channel(getattr(CT, name), getattr(ts.ChannelFormat, fmt))
+colour = resource.import_project_resource(IMAGES + "/checker-16.png", resource.Usage.TEXTURE)
+grey = resource.import_project_resource(IMAGES + "/mask-left-half.png", resource.Usage.TEXTURE)
+fill = ls.insert_fill(top(stack))
+out = {"user": {}, "legacy": {}}
+
+def spaces(source):
+    return [[type(s).__name__, s.name] for s in source.list_available_color_spaces()]
+
+def attempt(source, space):
+    revision = uzpainter.project.revision()
+    raised = raises(source.set_color_space, space)
+    return [raised, type(source.get_color_space()).__name__, source.get_color_space().name,
+            uzpainter.project.revision() == revision]
+
+for name, fmt in FORMATS.items():
+    image = grey if fmt.startswith("L") else colour
+    source = fill.set_source(getattr(CT, name), image.identifier())
+    out["user"][name] = [spaces(source), attempt(source, cm.GenericColorSpace.sRGB)]
+fill.add_mask(ls.MaskBackground.Black)
+mask = ls.insert_fill(ls.InsertPosition.inside_node(fill, ls.NodeStack.Mask))
+mono = mask.set_source(None, grey.identifier())
+out["mask"] = [spaces(mono), attempt(mono, cm.GenericColorSpace.sRGB)]
+base = fill.set_source(CT.BaseColor, colour.identifier())
+for space in (cm.GenericColorSpace.Working, cm.LegacyColorSpace.Linear, cm.LegacyColorSpace.sRGB,
+              cm.GenericColorSpace.sRGB):
+    base.set_color_space(space)
+    read = base.get_color_space()
+    out["legacy"][type(space).__name__ + "." + space.name] = [type(read).__name__, read.name]
+result = out
+"""
+
+
+def test_bitmap_spaces_offered_and_refused_as_painter(facade: Run) -> None:
+    """phase1.15_compositor-colour-fits item 2.2 (decision 174; `srgb-bitmap-variants-v2`): a
+    bitmap on a user channel of every format but sRGB8 and a mask's mono source are offered Raw,
+    Data and DataSigned, keep Data, and refuse sRGB with Painter's ValueError before any mutation;
+    a BaseColor bitmap reads back the Working and Legacy spaces it is set to."""
+    result = ok(facade(BITMAP_SPACES))
+    data_spaces = [
+        ["GenericColorSpace", "Raw"],
+        ["DataColorSpace", "Data"],
+        ["DataColorSpace", "DataSigned"],
+    ]
+    refusal = [
+        "ValueError: Invalid colorspace 'standard sRGB'",
+        "DataColorSpace",
+        "Data",
+        True,
+    ]
+    assert result["user"] == {
+        name: [data_spaces, refusal]
+        for name in ("User1", "User2", "User3", "User4", "User5", "User7")
+    }
+    assert result["mask"] == [data_spaces, refusal]
+    assert result["legacy"] == {
+        "GenericColorSpace.Working": ["GenericColorSpace", "Working"],
+        "LegacyColorSpace.Linear": ["LegacyColorSpace", "Linear"],
+        "LegacyColorSpace.sRGB": ["LegacyColorSpace", "sRGB"],
+        "GenericColorSpace.sRGB": ["GenericColorSpace", "sRGB"],
+    }
+
+
 # ── 3.7 ScopedModification ──────────────────────────────────────────────────────────────────────
 
 SCOPED = """

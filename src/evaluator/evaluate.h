@@ -69,8 +69,8 @@ struct EvalEnvironment {
     /// Normal-channel bitmaps with their green codes inverted (the channel's import rule), by
     /// resource hash, made once per evaluation.
     std::unordered_map<std::string, std::shared_ptr<const DecodedImage>> greenInverted{};
-    /// sRGB bitmaps as the sRGB8 codes their decode stores (sources.h), by resource hash, made
-    /// once per evaluation.
+    /// sRGB bitmaps as the float32 linear images Painter samples (sources.h), by resource hash,
+    /// made once per evaluation.
     std::unordered_map<std::string, std::shared_ptr<const DecodedImage>> srgbDecoded{};
 };
 

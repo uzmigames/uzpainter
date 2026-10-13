@@ -1,0 +1,12 @@
+{
+  "id": 174,
+  "slug": "srgb-bitmaps-decode-each-texel-before-sampling-and-painter-s-srgb-refusals-on-other-channels-and-masks-are-matched",
+  "title": "sRGB bitmaps decode each texel before sampling, and Painter's sRGB refusals on other channels and masks are matched",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

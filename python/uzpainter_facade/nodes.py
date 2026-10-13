@@ -229,15 +229,17 @@ class SourceBitmap:
         return resource.from_native(native, SESSION.bound_context.get(self._key()))
 
     def get_color_space(self) -> Any:
-        return colour.space_member(self._native().get_color_space())
+        return colour.bitmap_space_member(self._native().get_color_space())
 
     @edits
     def set_color_space(self, color_space: Any) -> None:
-        name = colour.space_name(color_space)
-        available = [colour.space_name(s) for s in self.list_available_color_spaces()]
-        if name not in available:
-            raise ValueError(f"'{name}' is not an available colour space here ({available})")
-        self._native().set_color_space(name)
+        tag = colour.bitmap_space_tag(color_space)
+        available = [colour.bitmap_space_tag(s) for s in self.list_available_color_spaces()]
+        if tag not in available:
+            if tag == colour.space_name(colour.GenericColorSpace.sRGB):
+                raise ValueError(colour.SRGB_REFUSAL)
+            raise ValueError(f"'{tag}' is not an available colour space here ({available})")
+        self._native().set_color_space(tag)
 
     @edits
     def reset_color_space(self) -> None:

@@ -48,7 +48,7 @@ from tools.parity.fit.oracle import Golden, load
 from tools.parity.fit.stats import difference
 from tools.parity.recorder.job import Step, export_step
 from tools.parity.schemas import REGISTER_PATH, load_json
-from tools.parity.store.store import OracleStore, Status, locate
+from tools.parity.store.store import OracleStore, Status, load_oracle, locate
 from tools.parity.verdict import Comparison, evaluate
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -452,6 +452,18 @@ def working_colours(manifest: dict[str, Any]) -> dict[str, Any]:
     return dict(manifest, instruction_sequence=dict(manifest["instruction_sequence"], steps=steps))
 
 
+def _add_template_channels(spec: dict[str, Any]) -> None:
+    """The stack holds the default template's channels (BaseColor among them) and the added ones."""
+    added = {c["type"] for c in spec["channels"]}
+    spec["channels"] += [
+        {"type": c["type"], "format": c["format"]}
+        for c in json.loads((TEMPLATES_DIR / "default.json").read_text(encoding="utf-8"))[
+            "channels"
+        ]
+        if c["type"] not in added
+    ]
+
+
 def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
     """export-bit-depth's BaseColor, Specular and Emissive maps (bitmaps, uniform colours, empty
     channels over their linear template constants) rebuilt per texture set on the grid mesh and
@@ -473,15 +485,7 @@ def srgb8_material_written(exe: Path, tmp: Path) -> dict[str, Any]:
         spec_dir = tmp / texture_set / "spec"
         spec = export_spec(manifest, texture_set, spec_dir)
         spec["mesh"] = str(_mesh_of(manifest))
-        # The stack holds the default template's channels (BaseColor among them) and the added ones.
-        added = {c["type"] for c in spec["channels"]}
-        spec["channels"] += [
-            {"type": c["type"], "format": c["format"]}
-            for c in json.loads((TEMPLATES_DIR / "default.json").read_text(encoding="utf-8"))[
-                "channels"
-            ]
-            if c["type"] not in added
-        ]
+        _add_template_channels(spec)
         for step in SRGB8_STEPS:
             raw = by_step[step]
             out_dir = tmp / texture_set / f"out{step}"
@@ -696,6 +700,101 @@ def srgb8_bitmap_written(exe: Path, tmp: Path) -> dict[str, Any]:
                                 sorted({e for v in verdicts for e in v.exceptions_relied_on}),
                             )
                         )
+                        continue
+                    report["comparisons"] += 1
+                    if written["sha256"] == theirs.get(rel):
+                        report["identical"] += 1
+                    else:
+                        report["problems"].append(f"{where}: {rel} differs from {recording}")
+    return report
+
+
+# srgb-bitmap-variants-v2 (decisions 156, 166, 167, 174): one export step of each kind (PNG 16,
+# PNG 8, OpenEXR 32f; each was done twice, the repeats identical).
+SRGB_VARIANT_STEPS = (78, 80, 82)
+# Sets whose every map is compared: s0 the 8-bit grey ramp at 1:1, s2 BilinearHQ magnification
+# (scale 0.5) and s3 Nearest at scale 2 of field A (16-bit) on BaseColor and srgb8-ramp (8-bit)
+# on Emissive, s4 field A and grey A on the six user channels whose sRGB Painter refused (they
+# stay Data), s5 BaseColor under a mask whose grey A source stays Data (r1 only: Painter is
+# unstable there, decision 032), s6-s8 field A on BaseColor in Working, Legacy Linear and
+# Legacy sRGB.
+SRGB_VARIANT_SETS = ("s0", "s2", "s3", "s4", "s5", "s6", "s7", "s8")
+# s1: BilinearHQ minification (scale 2) at 30 degrees, refused for every bitmap (decisions 061,
+# 084).
+SRGB_VARIANT_REFUSED = {"s1": "at a rotation of 30.000000 degrees is a release gap"}
+
+
+def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """srgb-bitmap-variants-v2 rebuilt per texture set on the grid mesh and written by
+    `WriteExport` at each step of `SRGB_VARIANT_STEPS`, every map of the step: compared byte for
+    byte with Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032). The
+    `set_color_space` steps Painter refused (recorded as not applied) are left out, as they left
+    Painter's project unchanged. Returns the counts, the refused sets with their messages, the
+    files whose r2 differs from r1 (`unstable`), and the differing files or refusals."""
+    needs_store()
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    golden = load(locate(), root / "srgb-bitmap-variants-v2.json")
+    store = locate()
+    assert store is not None
+    reference = next(
+        r for r in golden.manifest["private_records"] if r["record_id"] == "golden-record"
+    )
+    data = load_oracle(store, reference)
+    assert data is not None, "srgb-bitmap-variants-v2: the golden record is not in the store"
+    record = json.loads(data.decode("utf-8"))
+    attempted = record["key"]["effective_defaults"]["set_color_space"]
+    refused = {int(step) for step, outcome in attempted.items() if not outcome["applied"]}
+    sequence = golden.manifest["instruction_sequence"]
+    by_step = {s["step"]: s for s in sequence["steps"]}
+    built = []
+    for raw in sequence["steps"]:
+        if raw["call"].endswith("list_available_color_spaces") or raw["step"] in refused:
+            continue
+        args = raw["args"]
+        if raw["call"].endswith("set_source") and "color" in args:
+            # s5's uniform BaseColor in the sRGB space, stored as its working value (the facade's
+            # rule, decision 107): the evaluator takes a stored colour as linear.
+            assert args["color_space"] == "sRGB" and args["channel"] in SRGB8_CHANNELS, raw
+            colour = [srgb_to_working(float(c)) for c in args["color"]]
+            raw = dict(raw, args=dict(args, color=colour, color_space="Working"))
+        built.append(raw)
+    manifest = dict(golden.manifest, instruction_sequence=dict(sequence, steps=built))
+    report: dict[str, Any] = {
+        "files": 0,
+        "comparisons": 0,
+        "identical": 0,
+        "refused": {},
+        "unstable": [],
+        "problems": [],
+    }
+    for texture_set in (*SRGB_VARIANT_SETS, *SRGB_VARIANT_REFUSED):
+        spec_dir = tmp / texture_set / "spec"
+        spec = export_spec(manifest, texture_set, spec_dir)
+        spec["mesh"] = str(_mesh_of(manifest))
+        _add_template_channels(spec)
+        for step in SRGB_VARIANT_STEPS:
+            raw = by_step[step]
+            config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                tmp / texture_set / f"out{step}", [texture_set]
+            )
+            result = write_export(exe, spec, spec_dir, config, tmp / texture_set / f"run{step}")
+            where = f"{texture_set} step {step}"
+            if "error" in result:
+                report["refused"].setdefault(texture_set, result["message"])
+                if texture_set not in SRGB_VARIANT_REFUSED:
+                    report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                continue
+            if texture_set in SRGB_VARIANT_REFUSED:
+                report["problems"].append(f"{where}: written, expected a refusal")
+                continue
+            theirs_r1 = _painter_files(golden, "r1", step, texture_set)
+            theirs_r2 = _painter_files(golden, "r2", step, texture_set)
+            for written in result["written"]:
+                rel = written["relativePath"]
+                report["files"] += 1
+                for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
+                    if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
+                        report["unstable"].append(f"{where}: {rel}")
                         continue
                     report["comparisons"] += 1
                     if written["sha256"] == theirs.get(rel):

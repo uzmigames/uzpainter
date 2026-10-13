@@ -110,11 +110,11 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             switch (BitmapColourSpaceOf(bitmap.color_space)) {
                 case BitmapColourSpace::Linear: break;
                 case BitmapColourSpace::Srgb:
-                    // Recorded on sRGB8 channels only (sources.h).
+                    // sRGB8 channels only: Painter refuses the space elsewhere (sources.h).
                     if (mask || !ctx.tileFormat.srgb) {
                         return EvalFail(EvalErrorKind::UnsupportedSource,
-                                        "an sRGB bitmap on a channel that is not sRGB8 is not recorded "
-                                        "(phase1.15_compositor-colour-fits)",
+                                        "an sRGB bitmap on a channel that is not sRGB8 or as a mask source: "
+                                        "Painter refuses the space there (decision 174)",
                                         uid);
                     }
                     result.srgbDecode = true;
