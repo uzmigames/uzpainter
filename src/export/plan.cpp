@@ -944,7 +944,7 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
     const VirtualMapRequest request{file.textureSetId, file.stackId, inputs.templateId, inputs.resources,
                                     inputs.geometry};
     const evaluator::DiagnosticRequest diagnostic{file.textureSetId, file.stackId, inputs.templateId, inputs.resources,
-                                                  inputs.geometry};
+                                                  inputs.geometry, inputs.materialViews};
     FileRaster raster;
     std::map<std::string, DiagnosticMap> evaluated;  // by srcMapType/srcMapName
     std::map<std::string, core::ChannelFormat> stored;  // documentMap sources: the channel's format

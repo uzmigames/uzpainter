@@ -82,9 +82,9 @@ py::dict ContributionDict(const core::Snapshot& snapshot, const DiagnosticMapId&
 }
 
 py::dict MaterialViewsDict(const core::Snapshot& snapshot, const DiagnosticMaterialViews& r) {
-    const core::Id material = r.views.material;
+    const core::Id material = r.views->material;
     py::dict views;
-    for (const evaluator::MaterialView& view : r.views.views) {
+    for (const evaluator::MaterialView& view : r.views->views) {
         py::dict v;
         v["source"] = evaluator::SourceName({DiagnosticSource::Kind::MaterialView, {}, view.view, material});
         v["leaks_source"] = evaluator::SourceName({DiagnosticSource::Kind::MaterialLeaks, {}, view.view, material});
@@ -107,15 +107,15 @@ py::dict MaterialViewsDict(const core::Snapshot& snapshot, const DiagnosticMater
         views[py::str(std::string(evaluator::MaterialViewName(view.view)))] = std::move(v);
     }
     py::list missing;
-    for (const evaluator::MaterialViewKind view : r.views.missing) missing.append(std::string(evaluator::MaterialViewName(view)));
+    for (const evaluator::MaterialViewKind view : r.views->missing) missing.append(std::string(evaluator::MaterialViewName(view)));
     py::dict refused;
     for (const auto& [view, reason] : r.refused) refused[py::str(view)] = reason;
     py::dict out;
     out["revision"] = snapshot.revision;
     out["material"] = material;
     out["mask_source"] = evaluator::SourceName({DiagnosticSource::Kind::MaterialMask, {}, {}, material});
-    out["mask"] = MapDict(r.views.mask);
-    out["inside"] = r.views.inside;
+    out["mask"] = MapDict(r.views->mask);
+    out["inside"] = r.views->inside;
     out["views"] = std::move(views);
     out["missing"] = std::move(missing);
     out["refused"] = std::move(refused);

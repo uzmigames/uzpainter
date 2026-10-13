@@ -95,8 +95,9 @@ DiagnosticRun::DiagnosticRun()
 
 evaluator::DiagnosticRequest DiagnosticRun::RequestFor(core::Id node) const {
     const exporter::SourceInputs& inputs = m_evaluation->inputs;
+    // The diagnostics of a run compute their views; only its export reads them (`Export`).
     evaluator::DiagnosticRequest request{core::kNoId, core::kNoId, inputs.templateId, inputs.resources,
-                                         inputs.geometry};
+                                         inputs.geometry, nullptr};
     core::ForEachNode(*m_snapshot.project, [&](const core::NodeVisit& visit) {
         if ((visit.layer ? visit.layer->uid : visit.effect->uid) == node) {
             request.textureSet = visit.texture_set;
@@ -141,11 +142,11 @@ evaluator::ContributionResult DiagnosticRun::Contribution(core::Id node, const e
 DiagnosticMaterialViews DiagnosticRun::MaterialViews(core::Id material) {
     const evaluator::DiagnosticRequest request = RequestFor(material);
     DiagnosticMaterialViews out;
-    out.views = Take(evaluator::MaterialViewsOn(*m_snapshot.project, m_snapshot.revision, material, request,
-                                                *m_evaluation->templates, m_evaluation->cpu.store(),
-                                                m_evaluation->cpu.cache()));
+    evaluator::MaterialViews views =
+        Take(evaluator::MaterialViewsOn(*m_snapshot.project, m_snapshot.revision, material, request,
+                                        *m_evaluation->templates, m_evaluation->cpu.store(), m_evaluation->cpu.cache()));
     m_evaluation.Keep();
-    std::erase_if(out.views.views, [&](const evaluator::MaterialView& view) {
+    std::erase_if(views.views, [&](const evaluator::MaterialView& view) {
         // A view refused for its values is refused for its leaks too: both read the channel.
         render::Result<void> identified = exporter::RequireIdentifiedBase(
             *m_snapshot.project, request.textureSet, request.stack,
@@ -155,6 +156,8 @@ DiagnosticMaterialViews DiagnosticRun::MaterialViews(core::Id material) {
         out.refused[std::string(evaluator::MaterialViewName(view.view))] = identified.error().reason;
         return true;
     });
+    out.views = std::make_shared<const evaluator::MaterialViews>(std::move(views));
+    m_views = out.views;
     return out;
 }
 
@@ -198,10 +201,11 @@ exporter::Publication DiagnosticRun::Export(core::Id node, const std::vector<eva
         exporter::PublishRequest publish;
         publish.identity = exporter::BuildIdentity{kAppVersion, std::string("uzpainter-") + UZP_BUILD_MODE};
         publish.projectPath = context.projectPath;
+        exporter::SourceInputs inputs = m_evaluation->inputs;
+        inputs.materialViews = m_views;  // computed once, for the reply and for its files
         exporter::Publication published =
-            Take(exporter::PublishExport(project, m_snapshot.revision, plan, m_evaluation->inputs,
-                                         *m_evaluation->templates, m_evaluation->cpu.store(), m_evaluation->cpu.cache(),
-                                         publish));
+            Take(exporter::PublishExport(project, m_snapshot.revision, plan, inputs, *m_evaluation->templates,
+                                         m_evaluation->cpu.store(), m_evaluation->cpu.cache(), publish));
         m_evaluation.Keep();
         return published;
     } catch (const core::ValueError& error) {

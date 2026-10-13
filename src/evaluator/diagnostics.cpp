@@ -726,6 +726,10 @@ render::Result<DiagnosticOutput> EvaluateDiagnosticOn(const core::Project& proje
             break;
         }
         case DiagnosticSource::Kind::MaterialMask: {
+            if (request.materialViews && request.materialViews->material == source.node) {
+                output.map = request.materialViews->mask;
+                break;
+            }
             render::Result<DiagnosticMap> mask = MaterialMaskOn(project, source.node, request, templates, store, cache);
             if (!mask) return render::Unexpected(mask.error());
             output.map = std::move(*mask);
@@ -733,6 +737,15 @@ render::Result<DiagnosticOutput> EvaluateDiagnosticOn(const core::Project& proje
         }
         case DiagnosticSource::Kind::MaterialView:
         case DiagnosticSource::Kind::MaterialLeaks: {
+            if (request.materialViews && request.materialViews->material == source.node) {
+                const std::vector<MaterialView>& given = request.materialViews->views;
+                const auto view = std::find_if(given.begin(), given.end(),
+                                               [&](const MaterialView& v) { return v.view == source.view; });
+                if (view != given.end()) {
+                    output.map = source.kind == DiagnosticSource::Kind::MaterialView ? view->values : view->leaks;
+                    break;
+                }
+            }
             render::Result<MaterialViews> views =
                 MaterialViewsOf(project, revision, source.node, request, templates, store, cache, source.view);
             if (!views) return render::Unexpected(views.error());

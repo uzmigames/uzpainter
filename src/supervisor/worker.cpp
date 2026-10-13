@@ -1414,7 +1414,7 @@ json::Object Worker::MaterialViews(const json::Object& arguments) {
     using Kind = evaluator::DiagnosticSource::Kind;
     std::vector<evaluator::DiagnosticSource> sources{{Kind::MaterialMask, {}, {}, material}};
     json::Object views;
-    for (const evaluator::MaterialView& view : result.views.views) {
+    for (const evaluator::MaterialView& view : result.views->views) {
         sources.push_back({Kind::MaterialView, {}, view.view, material});
         sources.push_back({Kind::MaterialLeaks, {}, view.view, material});
         views[std::string(evaluator::MaterialViewName(view.view))] =
@@ -1422,7 +1422,7 @@ json::Object Worker::MaterialViews(const json::Object& arguments) {
                          {"modal_id", view.modalId ? json::Value(Triple(*view.modalId)) : json::Value(nullptr)}};
     }
     json::Array missing;
-    for (const evaluator::MaterialViewKind view : result.views.missing) {
+    for (const evaluator::MaterialViewKind view : result.views->missing) {
         missing.emplace_back(std::string(evaluator::MaterialViewName(view)));
     }
     json::Object refused;
@@ -1430,7 +1430,7 @@ json::Object Worker::MaterialViews(const json::Object& arguments) {
     const exporter::Publication published = run.Export(material, sources, folder);
     return {{"revision", run.snapshot().revision},
             {"material", static_cast<std::int64_t>(material)},
-            {"inside", static_cast<std::int64_t>(result.views.inside)},
+            {"inside", static_cast<std::int64_t>(result.views->inside)},
             {"views", std::move(views)},
             {"missing", std::move(missing)},
             {"refused", std::move(refused)},
