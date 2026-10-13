@@ -10,12 +10,15 @@ P2-TUNIC in `docs/dag.md` (critical path), the milestone that counts in the owne
 - Tier 1 report `parity/reports/phase2/tunic-v10-tier1.json`: every exported map, save/reopen, dump-and-rebuild, the three separate results and the exceptions relied on (numbers only).
 - If recovery blocks on a schema or binding problem, that investigation moves earlier without dropping the smoke fixtures (`docs/roadmap.md` rule 4).
 
+- Before input-dependent work, publish one bounded input inventory and preserve available or recovered bytes by verified hash in the private store. Reuse documented searches; another sweep needs a newly identified source. Original restoration does not change scope. If a reference must be recreated, replaced or excluded, prepare one owner decision package and reuse any pending question; only an explicit recorded owner scope decision authorizes that route. Missing inputs or an unanswered scope choice never count as a parity pass.
+- Preserve the admitted OCIO golden of decision 215 unchanged. The missing normalized OBJ and original masks must be recovered and verified or covered by an explicitly authorized changed reference; the delivered FBX is not assumed equivalent. The existing decision 196 double-sided choice remains the owner's.
+
 ## Dependencies
 - DAG inputs: `phase2.9_pilot-belt` (P2-BELT), `phase2.2_recipe-and-diagnostics` (P2-RECIPE), `phase2.8_mcp-server` (P2-MCP).
 - Consumers: `phase2.11_gate-g2` and, after G2, the Phase 3 packages that take P2-TUNIC as input.
 
 ## Acceptance
-DAG gate: equal maps; rebuild equal. Every Tunic v10 map equals the private golden in native decoded values (or is covered by an owner-approved exception), C07 and F03 resolve to their distinct resources, and the dump-and-rebuild exports are byte-identical to the rebuilt tunic's.
+DAG gate: equal maps; rebuild equal; input inventory and preservation complete, with mesh/resource identity and any changed reference or double-sided scope explicitly settled. Every Tunic v10 map equals the private golden in native decoded values (or is covered by an owner-approved exception), C07 and F03 resolve to their distinct resources, and the dump-and-rebuild exports are byte-identical to the rebuilt tunic's.
 
 ## Impact
 - Affected specs: `pilots` (Tunic v10)
