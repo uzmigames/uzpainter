@@ -8,9 +8,10 @@ each refusal comes before admission (no job row, nothing sent to the worker):
 
 1. **Capability.** A worker tool lists the capability-manifest operations it performs
    (`capability: [{symbol, context}]`); while one of them is a `release-gap` in the build's
-   `capabilities.json`, or missing from it, the call fails `capability_gap`. The tool stays listed,
-   with its status under `_meta["uzpainter/capability"]`, and becomes callable when the manifest
-   entry changes, with no change here.
+   `capabilities.json`, or missing from it, the call fails `capability_gap {tool, type, reason,
+   operations}` (`type` `NotYetSupported`; the fields of every release-gap refusal, the worker's
+   too, decision 242). The tool stays listed, with its status under `_meta["uzpainter/capability"]`,
+   and becomes callable when the manifest entry changes, with no change here.
 2. **Schema.** The arguments are validated against the tool's public schema (JSON Schema 2020-12:
    types, numeric bounds, enums, required and unknown properties): `invalid_arguments` with each
    failure's argument and rule, never the value given. Then a property marked
@@ -28,7 +29,9 @@ each refusal comes before admission (no job row, nothing sent to the worker):
 6. **Lease.** In HTTP mode a mutating call needs an owner (`lease_acquire {owner}`):
    `lease_required` otherwise. The stdio session's owner is implicit. Admission (admission.py)
    then takes the lease, refuses `lease_held` and `busy`, and resolves the key and the
-   precondition.
+   precondition. A project an owner's call opens or creates is leased to that owner when the
+   worker switches to it; a session without an owner is admitted `anonymous` and takes no lease
+   (decision 243).
 
 Every forwarded call's structured result carries the contract of §2: `revision` (the revision it
 was admitted on), `committed_revision` (the project's committed revision after it), `job_id`,
@@ -48,6 +51,10 @@ decision 165): `batch {calls, stop_on_error, idempotency_key?}` runs each call i
 not atomic; with `stop_on_error` (the default) the calls after the first failure are reported
 `not_executed`. With a batch key, a mutating call without its own key gets `<key>/<index>` and the
 revision current at its admission, so a retried batch returns each committed call's stored outcome.
+Its reply carries the result contract too (decision 242): `revision` (the one its first call was
+admitted on), `committed_revision`, `job_id` null, the change lists of its calls on the project it
+ends on, every call's warnings, and a receipt `{tool: batch, job_id: null, revision, project,
+project_uuid, texture_set: null, committed_revision}`.
 """
 
 from __future__ import annotations
@@ -247,7 +254,8 @@ SUPERVISOR_TOOLS: dict[str, tuple[str, dict[str, Any], bool, bool]] = {
     ),
     "lease_acquire": (
         "Takes the open project's mutation lease for `owner` and binds the owner to this "
-        "session (HTTP mode); refused with lease_held while another live owner holds it.",
+        "session (HTTP mode); a project the session then opens or creates is leased to the owner "
+        "too. Refused with lease_held while another live owner holds it.",
         OWNER_SCHEMA,
         False,
         True,
@@ -431,6 +439,27 @@ def public_schema(tool: dict[str, Any]) -> dict[str, Any]:
 
 def _invalid(message: str, errors: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     return error_reply("invalid_arguments", message, {"errors": errors or []})
+
+
+def _gap(tool: str, message: str, operations: list[dict[str, Any]]) -> dict[str, Any]:
+    """`capability_gap {tool, type, reason, operations}`, the fields of every release-gap refusal
+    whichever layer raises it (decision 242): a gated operation's `type` is the API's release-gap
+    class, `NotYetSupported`, and `reason` names each operation with its manifest notes (its
+    owner task)."""
+    reasons = []
+    for operation in operations:
+        argument = f"{operation['argument']}: " if "argument" in operation else ""
+        notes = f" ({operation['notes']})" if operation.get("notes") else ""
+        reasons.append(
+            f"{argument}{operation['symbol']} [{operation['context']}] is a release gap{notes}"
+        )
+    details = {
+        "tool": tool,
+        "type": "NotYetSupported",
+        "reason": "; ".join(reasons),
+        "operations": operations,
+    }
+    return error_reply("capability_gap", message, details)
 
 
 def _schema_errors(schema: dict[str, Any], arguments: dict[str, Any]) -> list[dict[str, Any]]:
@@ -671,12 +700,14 @@ class Registry:
             long=bool(tool.get("long")),
             commit_point=tool.get("commit_point"),
             notify=notify,
+            anonymous=self.http and client.owner is None,
         )
         images = await self._images(name, body)
         return self._reply(name, body, scrub=name != "run_python", images=images)
 
     def _owner(self, client: Client) -> str:
-        """The lease owner of `client`'s calls: its acquired owner, or the stdio session's."""
+        """The lease owner of `client`'s calls: its acquired owner, or the stdio session's (an
+        HTTP session without an owner has none: its calls are admitted `anonymous`)."""
         return client.owner or self.admission.stdio_owner()
 
     async def _check(
@@ -687,11 +718,8 @@ class Registry:
         operations = self.manifest.operations(tool.get("capability"))
         gaps = [operation for operation in operations if operation["status"] == "release-gap"]
         if gaps:
-            return error_reply(
-                "capability_gap",
-                f"{name} needs an operation that is a release gap of this build",
-                {"tool": name, "operations": gaps},
-            )
+            message = f"{name} needs an operation that is a release gap of this build"
+            return _gap(name, message, gaps)
         schema = public_schema(tool)
         errors = _schema_errors(schema, arguments)
         if errors:
@@ -702,10 +730,10 @@ class Registry:
                 if operation["status"] == "release-gap":
                     value_gaps.append({**operation, "argument": argument, "value": value})
         if value_gaps:
-            return error_reply(
-                "capability_gap",
+            return _gap(
+                name,
                 f"{name}: an argument value needs an operation that is a release gap of this build",
-                {"tool": name, "operations": value_gaps},
+                value_gaps,
             )
         mutating = bool(tool.get("mutating"))
         if mutating and "idempotency_key" in arguments and "expected_revision" not in arguments:
@@ -900,6 +928,8 @@ class Registry:
         calls: list[dict[str, Any]] = arguments["calls"]
         stop = arguments.get("stop_on_error", True) is not False
         key = arguments.get("idempotency_key")
+        await self.worker.wait_ready()
+        started = self.worker.durable_revision
         results: list[dict[str, Any]] = []
         stopped = False
         for index, entry in enumerate(calls):
@@ -948,6 +978,18 @@ class Registry:
             status = "completed_with_errors"
         else:
             status = "completed"
+        # The result contract (decision 158) over the calls (decision 242): the revision the first
+        # call was admitted on, the change lists of the calls on the project the batch ends on.
+        first: dict[str, Any] = executed[0]["body"]
+        revision = first.get("revision", started)
+        committed = self.worker.durable_revision
+        project_uuid = self.worker.project_uuid
+        bodies = [row["body"] for row in executed]
+        same = [b for b in bodies if (b.get("receipt") or {}).get("project_uuid") == project_uuid]
+        lists = {
+            name: list(dict.fromkeys(item for body in same for item in body.get(name) or []))
+            for name in ("changed", *CHANGE_LISTS)
+        }
         return {
             "result": {
                 "status": status,
@@ -955,7 +997,20 @@ class Registry:
                 "failed": len(failures),
                 "results": results,
             },
-            "committed_revision": self.worker.durable_revision,
+            "receipt": {
+                "tool": BATCH_TOOL,
+                "job_id": None,
+                "revision": revision,
+                "project": self.worker.project_path,
+                "project_uuid": project_uuid,
+                "texture_set": None,
+                "committed_revision": committed,
+            },
+            "revision": revision,
+            "committed_revision": committed,
+            "job_id": None,
+            **lists,
+            "warnings": [warning for body in bodies for warning in body.get("warnings") or []],
         }
 
     async def _lease(self, name: str, arguments: dict[str, Any], client: Client) -> dict[str, Any]:

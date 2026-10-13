@@ -16,10 +16,15 @@
 // for an uncaught exception, `error: {type, message, traceback}`. The host then closes a project
 // left open.
 //
+// The arguments are UTF-8 (src/main.cpp): the script's path and `sys.argv` keep every character.
+// Ctrl+C or Ctrl+Break raises KeyboardInterrupt in the script, a structured failure; the host then
+// reports it and closes a project left open, as after any run.
+//
 // Exit status: 0 the script ran to its end and `result` is JSON; 1 a structured failure (the
 // script raised, could not be read, or `result` is not JSON); 2 a usage error (message on `err`,
-// no JSON line); 3 a host failure outside the script (the interpreter did not start), reported
-// as `UZP_JSON:{"status": "host_error", "error": {type, message}}`.
+// no JSON line); 3 a host failure outside the script (the interpreter did not start, or the host
+// failed around the script, such as output it cannot encode as UTF-8), reported as
+// `UZP_JSON:{"status": "host_error", "error": {type, message}}`; never an uncaught exception.
 
 #include <cstdio>
 #include <string>
