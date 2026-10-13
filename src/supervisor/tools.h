@@ -28,6 +28,21 @@ struct CallError {
     json::Object details;
 };
 
+/// Whether an API error class is a release gap: `NotYetSupported` and its subclasses
+/// `UnsupportedProcedural`, `ReleaseGap` and `PathTracerUnavailable`.
+bool IsGapClass(std::string_view cls);
+
+/// Whether an API error class is a `ProjectError`: the class itself and the mesh refusals that
+/// subclass it, `MeshParseError`, `UnsupportedFormat`, `DuplicateMaterialNames`, `UVOutsideTile`
+/// and `MaterialMappingError`.
+bool IsProjectErrorClass(std::string_view cls);
+
+/// A release gap met by `tool`: `capability_gap {tool, type, reason, operations}`, the fields the
+/// supervisor's capability gate gives too (decision 242). `operations` are the release-gap
+/// manifest operations of a gap family; empty when the native code refused the call.
+CallError GapError(const std::string& tool, const std::string& reason, const std::string& type,
+                   json::Array operations = {});
+
 struct Tool {
     std::string name;
     std::string description;

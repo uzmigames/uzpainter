@@ -1,0 +1,14 @@
+{
+  "id": 242,
+  "slug": "every-release-gap-is-one-capability-gap-an-invalid-export-configuration-is-invalid-arguments-and-batches-follow-the-result-contract",
+  "title": "Every release gap is one capability_gap, an invalid export configuration is invalid_arguments, and batches follow the result contract",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.5_mcp-transport-registry",
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.3_supervisor-jobs",
+    "phase2.2_preview-capture"
+  ],
+  "supersededBy": null
+}

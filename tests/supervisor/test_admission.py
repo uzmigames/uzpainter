@@ -347,3 +347,102 @@ def test_a_version_0_ledger_is_migrated_and_orphaned_jobs_are_interrupted(tmp_pa
         assert refused["result"]["cancel"] == "already_ended"
 
     asyncio.run(scenario())
+
+
+class CreatingWorker(FakeWorker):
+    """No project open; `project_create` opens one at revision 1."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.project_path = self.project_uuid = None
+        self.durable_revision = None
+
+    async def request(self, frame: dict[str, Any]) -> dict[str, Any]:
+        if frame.get("name") != "project_create":
+            return await super().request(frame)
+        self.frames.append(frame)
+        self.project_path, self.project_uuid, self.durable_revision = "C:/p/U.uzp", UUID, 1
+        self.project_epoch += 1
+        return {
+            "id": "x",
+            "result": {"status": "committed", "revision": 1, "committed_revision": 1},
+            "committed_revision": 1,
+            "admission": "executed",
+            "request_hash": "h-create",
+        }
+
+
+def test_a_mutation_with_no_project_open_is_admitted_on_revision_0(tmp_path: Path) -> None:
+    """practical-e2e B15 (decision 242): with no project open, a mutating call is admitted on
+    revision 0, the precondition it is given, so `project_create` reads `revision 0 -> 1`, never a
+    null revision beside committed revision 1; a read with no project open reads no revision."""
+
+    async def scenario() -> None:
+        worker = CreatingWorker()
+        admission = Admission(worker, Ledger(tmp_path / "ledger.sqlite3"))
+        read = await admission.call("project_inspect", {}, False)
+        assert read["revision"] is None and read["receipt"]["revision"] is None
+        created = await admission.call(
+            "project_create", {"mesh": "plane.obj", "wait": True}, True, long=True
+        )
+        assert calls(worker)[-1]["expected_revision"] == 0
+        assert created["revision"] == created["receipt"]["revision"] == 0
+        assert created["committed_revision"] == created["receipt"]["committed_revision"] == 1
+
+    asyncio.run(scenario())
+
+
+class JobWorker(FakeWorker):
+    """Runs `export` as a long job: one progress event, then the reply `ends` gives."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.admission: Admission | None = None
+        self.ends: dict[str, Any] = {}
+
+    async def request(self, frame: dict[str, Any]) -> dict[str, Any]:
+        if frame.get("name") != "export":
+            return await super().request(frame)
+        self.frames.append(frame)
+        assert self.admission is not None
+        event = {
+            "job_id": frame["job_id"],
+            "progress": 0.4,
+            "message": "evaluating",
+            "committed": None,
+        }
+        self.admission.on_job_event(event)
+        return {"id": "x", **self.ends}
+
+
+def test_a_finished_long_job_reports_its_terminal_progress(tmp_path: Path) -> None:
+    """practical-e2e B15 (decision 242): the worker reports no event when a long job ends, so its
+    ledger row takes the terminal receipt's progress and message: `job_status` and `job_list` of a
+    succeeded job read 1.0, as its `job_result` does. An interrupted job (no receipt) keeps the
+    progress it last reported."""
+
+    async def scenario() -> None:
+        worker = JobWorker()
+        admission = Admission(worker, Ledger(tmp_path / "ledger.sqlite3"))
+        worker.admission = admission
+        receipt = {"status": "succeeded", "progress": 1.0, "message": "published", "committed": {}}
+        worker.ends = {"result": {"files": []}, "committed_revision": 5, "job": receipt}
+        done = await admission.call("export", {"wait": True}, False, long=True)
+        status = admission.job_status(done["job_id"])["result"]
+        assert (status["status"], status["progress"], status["message"]) == (
+            "succeeded",
+            1.0,
+            "published",
+        )
+        assert admission.job_list(1)["result"]["jobs"][0]["progress"] == 1.0
+        assert admission.job_result(done["job_id"])["receipt"]["job"]["progress"] == 1.0
+
+        worker.ends = {
+            "error": {"code": "interrupted", "message": "the worker ended", "details": {}}
+        }
+        cut = await admission.call("export", {"wait": True}, False, long=True)
+        interrupted = admission.job_status(cut["job_id"])["result"]
+        assert (interrupted["status"], interrupted["progress"]) == ("interrupted", 0.4)
+        assert interrupted["message"] == "evaluating"
+
+    asyncio.run(scenario())

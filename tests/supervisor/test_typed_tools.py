@@ -16,7 +16,16 @@ import zlib
 from pathlib import Path
 from typing import Any
 
-from tests.supervisor.conftest import PLANE, REPO_ROOT, Mcp, Pipe, make_project, run_script
+from tests.supervisor.conftest import (
+    OCIO_CONFIG,
+    PLANE,
+    REPO_ROOT,
+    Mcp,
+    Pipe,
+    make_project,
+    ocio_with_a_refused_bitmap,
+    run_script,
+)
 
 PROBE_IMAGES = REPO_ROOT / "parity" / "fixtures" / "api-probes"
 BASE = ("--gpu-backend", "vulkan")
@@ -624,10 +633,6 @@ def test_long_tools_with_and_without_wait(
     assert workflow["error"]["code"] == "capability_gap"
 
 
-# Painter's substance config (decisions 134, 207): the one OCIO configuration a project is made in.
-OCIO_CONFIG = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
-
-
 def test_project_create_takes_its_colour_management_as_an_argument(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:
@@ -670,6 +675,209 @@ def test_project_create_takes_its_colour_management_as_an_argument(
         "working_space": "",
     }
     assert colour["legacy"]["mode"] == "" and colour["legacy"]["config_hash"] == ""
+
+
+GAP_FIELDS = {"tool", "type", "reason", "operations"}
+
+
+def basecolor_config(out: Path, *rules: dict[str, Any]) -> dict[str, Any]:
+    """An export of the plane's BaseColor document map as PNG 16 with passthrough padding, `rules`
+    after the one that sets every parameter."""
+    channels = [
+        {"destChannel": c, "srcChannel": c, "srcMapType": "documentMap", "srcMapName": "baseColor"}
+        for c in "RGB"
+    ]
+    base = {"fileFormat": "png", "bitDepth": "16", "dithering": False}
+    return {
+        "exportPath": str(out),
+        "defaultExportPreset": "b",
+        "exportPresets": [
+            {"name": "b", "maps": [{"fileName": "$textureSet_BaseColor", "channels": channels}]}
+        ],
+        "exportList": [{"rootPath": "uzp_plane"}],
+        "exportParameters": [
+            {"parameters": rule} for rule in ({**base, "paddingAlgorithm": "passthrough"}, *rules)
+        ],
+    }
+
+
+def test_every_release_gap_is_one_capability_gap(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """practical-e2e B4 (decision 242): a release gap reaches the client as `capability_gap {tool,
+    type, reason, operations}` whichever layer refuses it: the supervisor's gate (a gap family, a
+    gated value), the capture's `painter_iray` (`PathTracerUnavailable`, formerly `call_failed`)
+    and the evaluator, whose `NotYetSupported` (an OCIO bitmap sampling Session O does not record)
+    was `call_failed` in `export`, `capture`, `material_views` and `region_stats`. Nothing is
+    written."""
+    session = Mcp(painter, tmp_path, *BASE)
+    sessions.append(session)
+    fill = ocio_with_a_refused_bitmap(session, tmp_path)
+    out = tmp_path / "out"
+    evaluated: dict[str, dict[str, Any]] = {
+        "export": {"config": basecolor_config(out / "basecolor"), "wait": True},
+        "capture": {"mode": "base_color", "path": "caps/base.png"},
+        "material_views": {"mask": fill, "path": "views"},
+        "region_stats": {"mask": fill, "map": "BaseColor"},
+    }
+    for name, arguments in evaluated.items():
+        reply = session.call(name, arguments)
+        assert reply["error"]["code"] == "capability_gap", (name, reply)
+        details = reply["error"]["details"]
+        assert set(details) == GAP_FIELDS and details["tool"] == name, details
+        assert details["type"] == "NotYetSupported" and details["operations"] == [], details
+        assert "evaluator:unsupported_source" in details["reason"], details
+        assert "under OCIO" in details["reason"], details
+    iray = session.call("capture", {"mode": "painter_iray", "path": "caps/iray.png"})["error"]
+    assert iray["code"] == "capability_gap" and set(iray["details"]) == GAP_FIELDS, iray
+    assert (iray["details"]["tool"], iray["details"]["type"]) == (
+        "capture",
+        "PathTracerUnavailable",
+    )
+    family = session.call("resource_search", {"query": "rust"})["error"]
+    assert family["code"] == "capability_gap" and set(family["details"]) == GAP_FIELDS, family
+    assert family["details"]["type"] == "NotYetSupported" and family["details"]["operations"]
+    painted = session.call("layer_insert", {"kind": "paint"})["error"]
+    assert painted["code"] == "capability_gap" and set(painted["details"]) == GAP_FIELDS, painted
+    assert not any(out.rglob("*.png")) and not any(out.rglob("*.exr"))
+
+
+def test_mesh_refusals_keep_their_api_class(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """Decision 242 (review of practical-e2e B4): a mesh refusal of `project_create` or
+    `mesh_reload` has the class the `uzpainter` API raises, with its details, not `call_failed
+    {type: RuntimeError}`. A `.ply` or `.dae` mesh is the release gap `ReleaseGap`, so
+    `capability_gap {tool, type, reason, operations: []}`. An unknown format (`UnsupportedFormat`)
+    and renamed materials (`MaterialMappingError`) are `ProjectError`s, so `project_error {type,
+    details}`; the reload's proposal, passed back as `material_mapping`, then commits. Nothing is
+    created or committed by a refusal."""
+    meshes = tmp_path / "meshes"
+    meshes.mkdir()
+    for suffix in ("ply", "dae", "stl"):
+        shutil.copy(PLANE, meshes / f"plane.{suffix}")
+    renamed = meshes / "renamed.obj"
+    text = PLANE.read_text(encoding="utf-8")
+    renamed.write_text(text.replace("usemtl uzp_plane", "usemtl renamed"), encoding="utf-8")
+    project = make_project(painter, tmp_path)
+    ply, stl = (meshes / "plane.ply").as_posix(), (meshes / "plane.stl").as_posix()
+    api = run_script(
+        painter,
+        tmp_path,
+        f"""
+        from uzpainter import project
+        result = {{}}
+        for name, path in (("ply", {ply!r}), ("stl", {stl!r})):
+            try:
+                project.create(path)
+            except Exception as error:
+                result[name] = [type(error).__name__, error.details]
+        project.open({project.as_posix()!r})
+        try:
+            project.reload_mesh({renamed.as_posix()!r})
+        except Exception as error:
+            result["renamed"] = [type(error).__name__, error.details]
+        """,
+    )
+
+    session = Mcp(painter, tmp_path, *BASE)
+    sessions.append(session)
+    gap = session.call("project_create", {"mesh": str(meshes / "plane.ply"), "wait": True})["error"]
+    assert gap["code"] == "capability_gap" and set(gap["details"]) == GAP_FIELDS, gap
+    assert (gap["details"]["tool"], gap["details"]["type"]) == ("project_create", api["ply"][0])
+    assert gap["details"]["operations"] == [] and "'.ply' meshes" in gap["details"]["reason"]
+    unknown = session.call("project_create", {"mesh": str(meshes / "plane.stl"), "wait": True})
+    error = unknown["error"]
+    assert error["code"] == "project_error", unknown
+    assert [error["details"]["type"], error["details"]["details"]] == api["stl"]
+    assert api["stl"] == ["UnsupportedFormat", {"format": "stl"}]
+    assert session.call("project_inspect")["result"] == {"open": False}
+
+    opened_reply = session.call("project_open", {"path": str(project), "wait": True})
+    revision = opened_reply["result"]["revision"]
+    dae = session.call("mesh_reload", {"path": str(meshes / "plane.dae"), "wait": True})["error"]
+    assert dae["code"] == "capability_gap" and set(dae["details"]) == GAP_FIELDS, dae
+    assert (dae["details"]["tool"], dae["details"]["type"]) == ("mesh_reload", "ReleaseGap")
+    assert dae["details"]["operations"] == []
+    mapping = session.call("mesh_reload", {"path": str(renamed), "wait": True})["error"]
+    assert mapping["code"] == "project_error", mapping
+    assert [mapping["details"]["type"], mapping["details"]["details"]] == api["renamed"]
+    assert mapping["details"]["details"]["mapping"] == {"uzp_plane": "renamed"}
+    assert revision_of(session) == revision
+    arguments = {
+        "path": str(renamed),
+        "settings": {"material_mapping": mapping["details"]["details"]["mapping"]},
+        "wait": True,
+    }
+    accepted = session.call("mesh_reload", arguments)
+    assert accepted["result"]["status"] == "committed", accepted
+    assert accepted["result"]["returned"]["reload"]["sets"]["renamed"] == [
+        {"from": "uzp_plane", "to": "renamed"}
+    ]
+
+
+def test_an_invalid_export_configuration_is_invalid_arguments(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """practical-e2e B6 (decision 242): `diffusion`, `color` or `transparent` padding with no
+    `dilationDistance` after the preset map and every matching rule is an invalid configuration,
+    `invalid_arguments {type: ValueError}` (formerly `call_failed RuntimeError`), refused before
+    the job runs and before anything is written: for an export, its dry run and the `padding`
+    override. The distance resolves across the rules: one an earlier rule gives completes a later
+    rule's algorithm (that padding is then a release gap, not fitted)."""
+    session, revision = opened(painter, tmp_path, sessions)
+    out = tmp_path / "out" / "padded"
+    for padding in ("diffusion", "color", "transparent"):
+        config = basecolor_config(out, {"paddingAlgorithm": padding})
+        refused = session.call("export", {"config": config, "wait": True})
+        error = refused["error"]
+        assert error["code"] == "invalid_arguments", refused
+        assert error["details"]["type"] == "ValueError" and "dilationDistance" in error["message"]
+        assert refused["receipt"]["job"] is None  # the job never ran
+    config = basecolor_config(out, {"paddingAlgorithm": "diffusion"})
+    dry = session.call("export", {"config": config, "dry_run": True, "wait": True})
+    assert dry["error"]["code"] == "invalid_arguments", dry
+    padded = session.call("export", {"config": basecolor_config(out), "padding": "color"})
+    assert padded["result"]["status"] == "running", padded  # a job without wait
+    assert "error" not in session.call("wait_idle", {"timeout": 120})
+    failed = session.call("job_result", {"job_id": padded["job_id"]})
+    assert failed["error"]["code"] == "invalid_arguments", failed
+    resolved = basecolor_config(out, {"dilationDistance": 16}, {"paddingAlgorithm": "diffusion"})
+    gap = session.call("export", {"config": resolved, "wait": True})
+    assert gap["error"]["code"] == "capability_gap" and "not fitted" in gap["error"]["message"]
+    assert not out.exists() or not any(out.rglob("*.png"))
+    assert revision_of(session) == revision
+
+
+def test_jobs_batches_and_creates_follow_the_result_contract(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """practical-e2e B15 (decisions 158, 242): a `project_create` admitted with no project open
+    reads `revision 0 -> 1`, not a null revision; once its job succeeded, `job_status` and
+    `job_list` read progress 1.0, as `job_result` does; a `batch` reply carries a receipt, the
+    revisions and its calls' change lists like every other reply."""
+    session = Mcp(painter, tmp_path, *BASE)
+    sessions.append(session)
+    started = session.call("project_create", {"mesh": str(PLANE)})
+    job_id = started["job_id"]
+    assert started["revision"] == started["receipt"]["revision"] == 0, started
+    assert "error" not in session.call("wait_idle", {"timeout": 120})
+    created = session.call("job_result", {"job_id": job_id})
+    assert (created["revision"], created["committed_revision"]) == (0, 1), created
+    status = session.call("job_status", {"job_id": job_id})["result"]
+    assert (status["status"], status["progress"]) == ("succeeded", 1.0), status
+    jobs = session.call("job_list")["result"]["jobs"]
+    [listed] = [job for job in jobs if job["job_id"] == job_id]
+    assert listed["progress"] == created["receipt"]["job"]["progress"] == 1.0, listed
+
+    calls = [{"tool": "layer_insert", "arguments": {"kind": "fill", "name": n}} for n in "AB"]
+    batch = session.call("batch", {"calls": calls})
+    assert batch["result"]["status"] == "completed", batch
+    assert (batch["revision"], batch["committed_revision"], batch["job_id"]) == (1, 3, None)
+    assert batch["receipt"]["tool"] == "batch" and batch["receipt"]["revision"] == 1
+    uids = [row["body"]["result"]["returned"]["node"] for row in batch["result"]["results"]]
+    assert set(uids) <= set(batch["created"]) and batch["warnings"] == [], batch
+    assert "error" not in session.call("project_close", {"discard": True})
 
 
 def test_busy_and_wait_idle_timeout(painter: Path, tmp_path: Path, sessions: list[Mcp]) -> None:
