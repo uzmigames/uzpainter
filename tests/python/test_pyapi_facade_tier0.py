@@ -22,6 +22,13 @@ layer (decision 105, phase4.1_nodes-paint-layers item 2.8).
 Outputs that cannot be equal yet are listed in `EXCLUDED` with their reason and owner; a listed
 output must exist in the golden, and nothing else may differ. Where no private store exists the
 test skips, naming why.
+
+A Session O golden (recorded with `OCIO` naming Painter's substance config) is replayed with the
+project declaring that configuration (`OCIO_DECLARATION`): no creation path yields an OCIO project,
+so the replay script makes `get_color_management` report it, and the facade applies its OCIO
+profile (decision 202). The native project stays Legacy, so these replays compare readbacks only;
+the OCIO evaluation and export are compared by `tests/export/test_export_encoders.py` (decision
+190).
 """
 
 from __future__ import annotations
@@ -84,6 +91,10 @@ UID_VALUE = (
     "identity outputs compare what a uid resolves to"
 )
 REOPEN = "found_by lists the nodes of the refused steps"
+OCIO_NATIVE = (
+    "the replay's native project is Legacy (no creation path yields an OCIO project); the OCIO "
+    "export is compared by tests/export/test_export_encoders.py (decision 190)"
+)
 
 
 def excluded(reason: str, *ids: str) -> dict[str, str]:
@@ -124,6 +135,10 @@ EXCLUDED: dict[str, dict[str, str]] = {
         ),
         "identity/reopen": REOPEN,
         "uzp_plane/basecolor": MASKED_EXPORT,
+    },
+    **{
+        f"phase1-srgb-uniform-decode-ocio-part{part}": excluded(OCIO_NATIVE, "uzp_plane/basecolor")
+        for part in range(1, 5)
     },
     "phase1-delete-node": excluded(UID_VALUE, "s17/uid"),
     "phase1-resource-update": excluded(UID_VALUE, "s14/uid", "s15/uid"),
@@ -166,6 +181,10 @@ EXCLUDED: dict[str, dict[str, str]] = {
 REPLAY = """
 import base64
 PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
+if PAYLOAD.get("ocio_config"):
+    _declared = uzpainter.colormanagement.get_color_management
+    uzpainter.colormanagement.get_color_management = lambda: dict(
+        _declared(), mode="ocio", config_hash=PAYLOAD["ocio_config"])
 TRACE = {"__name__": "uzp_capability_trace"}
 exec(compile(PAYLOAD["trace"], "capability_trace.py", "exec"), TRACE)
 TRACE["start"]()
@@ -259,6 +278,16 @@ result = {"defaults": defaults, "same_session": same_session, "after_save_reopen
 """
 
 
+# Session O: the colour management a replay of an OCIO golden declares (OCIO with Painter's
+# substance config, decision 202).
+OCIO_DECLARATION = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+
+
+def session_o(manifest: dict[str, Any]) -> bool:
+    """Whether the golden was recorded under OCIO (its applied settings name the variable)."""
+    return any(s["name"] == "OCIO" for s in manifest.get("applied_settings", []))
+
+
 def stage(job: Any, directory: Path) -> dict[str, Path]:
     """The inputs copied as `<input_id><suffix>`, the names Painter imported them under."""
     directory.mkdir(parents=True, exist_ok=True)
@@ -322,6 +351,7 @@ def replay(facade: Run, probe: str, work: Path) -> tuple[dict[str, Any], dict[st
         "exports": exports,
         "save_to": (work / "project" / "probe.spp").as_posix(),
         "trace": SOURCE,
+        "ocio_config": OCIO_DECLARATION if session_o(manifest) else None,
     }
     encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
     report = facade(REPLAY.replace("__PAYLOAD__", encoded))
@@ -436,7 +466,8 @@ def compare(probe: str, facade: Run, work: Path) -> list[str]:
         theirs = {
             k: v
             for k, v in expected[condition].items()
-            if probe not in R10_PROBES or not k.endswith(("/events", "/states"))
+            if probe not in (*R10_PROBES, *OCIO_DECODE_PROBES)
+            or not k.endswith(("/events", "/states"))
         }
         for output_id, value in ours.items():
             if output_id.endswith("/get_root_layer_nodes"):
@@ -483,6 +514,9 @@ READBACK_PROBES = ("fill-layer-readback", "textureset-project-readback")
 # The R10 probes of the project, layer and resource operations (decision 100): their readbacks,
 # events aside (test_pyapi_lifecycle_tier0.py compares the observed ones), and exported maps.
 R10_PROBES = ("phase1-create-settings", "phase1-delete-node", "phase1-resource-update")
+# P20-B's OCIO twin (decisions 198 and 202): the 256 greys c / 255 and 64 random colours set in sRGB
+# on BaseColor and read back in the working space, events aside, under OCIO.
+OCIO_DECODE_PROBES = tuple(f"phase1-srgb-uniform-decode-ocio-part{part}" for part in range(1, 5))
 
 
 @pytest.mark.parametrize("probe", QUIRK_PROBES)
@@ -509,20 +543,34 @@ def test_facade_r10_probe_equals_painter(facade: Run, tmp_path: Path, probe: str
     assert differences == [], "\n".join(differences)
 
 
-# ── Colour rules: the readbacks of R5's Legacy twin (items 3.6, 3.7) ──────────────────────────
+@pytest.mark.parametrize("probe", OCIO_DECODE_PROBES)
+def test_facade_ocio_uniform_decode_equals_painter(facade: Run, tmp_path: Path, probe: str) -> None:
+    """phase1.15 item 2.6 (decision 202): under OCIO with Painter's substance config every sRGB
+    uniform colour reads back Painter's working value, both recordings."""
+    differences = compare(probe, facade, tmp_path)
+    assert differences == [], "\n".join(differences)
+
+
+# ── Colour rules: the readbacks of R5 and its Legacy twin (items 3.6, 3.7) ─────────────────────
 
 SEMANTICS = API_PROBES.parent / "semantics"
-COLOUR_GOLDEN = "export-ocio-encode-legacy"
-# Painter's sRGB decode of 70/255 reads 2 float32 ulp below the facade's float32 transfer, which
-# reproduces the six other recorded components exactly (decision 107; the dense conversion probe
-# of the recording list settles it).
-COLOUR_EXCLUDED = {
-    "readback/get_source/29/BaseColor": "the sRGB decode of 70/255 (decision 107 residual)",
+# Painter's Legacy sRGB decode of 70/255 reads 2 float32 ulp below the facade's float32 transfer,
+# which reproduces the six other recorded components exactly (decision 107; the dense conversion
+# probe of the recording list settles it). Under OCIO (`export-ocio-encode`) nothing is excluded.
+COLOUR_GOLDENS = {
+    "export-ocio-encode-legacy": {
+        "readback/get_source/29/BaseColor": "the sRGB decode of 70/255 (decision 107 residual)",
+    },
+    "export-ocio-encode": {},
 }
 
 TEXTURE_REPLAY = """
 import base64
 PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
+if PAYLOAD.get("ocio_config"):
+    _declared = uzpainter.colormanagement.get_color_management
+    uzpainter.colormanagement.get_color_management = lambda: dict(
+        _declared(), mode="ocio", config_hash=PAYLOAD["ocio_config"])
 TRACE = {"__name__": "uzp_capability_trace"}
 exec(compile(PAYLOAD["trace"], "capability_trace.py", "exec"), TRACE)
 TRACE["start"]()
@@ -646,6 +694,7 @@ def texture_replay(
         "exports": configs,
         "save_to": (work / "project" / "probe.spp").as_posix(),
         "trace": SOURCE,
+        "ocio_config": OCIO_DECLARATION if session_o(manifest) else None,
     }
     encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
     report = facade(TEXTURE_REPLAY.replace("__PAYLOAD__", encoded))
@@ -662,13 +711,18 @@ def texture_replay(
     return replayed, golden, job, readbacks
 
 
-def test_colour_rule_readbacks_equal_painter(facade: Run, tmp_path: Path) -> None:
+@pytest.mark.parametrize("colour_golden", COLOUR_GOLDENS)
+def test_colour_rule_readbacks_equal_painter(
+    facade: Run, tmp_path: Path, colour_golden: str
+) -> None:
     """Items 3.6 and 3.7: a uniform colour as sRGB, without a space (sRGB on BaseColor, Raw on the
     data channels) and as Raw, read back in the working space; bitmap colour spaces and the lists
     Painter offers on BaseColor and in a mask (`export-ocio-encode-legacy` readbacks and colour-
-    space captures, both recordings). Its exported maps are compositor fits outside this task
-    (decision 107)."""
-    replayed, golden, _, readbacks = texture_replay(facade, COLOUR_GOLDEN, tmp_path, False)
+    space captures, both recordings; under OCIO `export-ocio-encode`, phase1.15 item 2.6, decision
+    202). Their exported maps are compositor and export fits outside this test (decisions 107 and
+    190)."""
+    excluded = COLOUR_GOLDENS[colour_golden]
+    replayed, golden, _, readbacks = texture_replay(facade, colour_golden, tmp_path, False)
     expected = golden_outputs(golden)
     differences = []
     compared = 0
@@ -677,16 +731,16 @@ def test_colour_rule_readbacks_equal_painter(facade: Run, tmp_path: Path) -> Non
         for output_id, painter in expected[condition].items():
             if output_id not in ours:
                 continue  # the export probes and exported maps: compositor and export fits
-            if output_id in COLOUR_EXCLUDED:
+            if output_id in excluded:
                 assert ours[output_id] != painter, f"{output_id} is equal now: drop its exclusion"
                 continue
             compared += 1
             if ours[output_id] != painter:
                 differences.append(f"{condition} {output_id}: {ours[output_id]} != {painter}")
     assert differences == [], "\n".join(differences)
-    assert compared == 2 * (len(readbacks) + 1 - len(COLOUR_EXCLUDED))
-    symbols = exercised(replayed["trace"], COLOUR_EXCLUDED)
-    check_trace(f"facade/{COLOUR_GOLDEN}", f"tier0/semantics/{COLOUR_GOLDEN}", symbols)
+    assert compared == 2 * (len(readbacks) + 1 - len(excluded))
+    symbols = exercised(replayed["trace"], excluded)
+    check_trace(f"facade/{colour_golden}", f"tier0/semantics/{colour_golden}", symbols)
 
 
 # ── Uniform colours composite as given (decision 115) ─────────────────────────────────────────
@@ -730,6 +784,10 @@ LABELS = {("templates/Dota 2.spt", f"User{i}") for i in range(4)}
 TEMPLATE_REPLAY = """
 import base64
 PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
+if PAYLOAD.get("ocio_config"):
+    _declared = uzpainter.colormanagement.get_color_management
+    uzpainter.colormanagement.get_color_management = lambda: dict(
+        _declared(), mode="ocio", config_hash=PAYLOAD["ocio_config"])
 TRACE = {"__name__": "uzp_capability_trace"}
 exec(compile(PAYLOAD["trace"], "capability_trace.py", "exec"), TRACE)
 TRACE["start"]()

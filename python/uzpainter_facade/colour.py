@@ -1,11 +1,12 @@
 """`substance_painter.colormanagement` and the facade's colour rules (10 §4 Colour row; decisions
-105 §2 and 107; `python/FACADE.md` §4).
+105 §2, 107 and 202; `python/FACADE.md` §4).
 
-Colour management is Painter's Legacy mode, the one pinned profile (`PROFILES`): the working space
-is linear sRGB and images come in and go out as sRGB, the Assets3D contract (PRJ-05). A project
-declaring any other configuration fails with `NotYetSupported` before anything is evaluated;
-recording `OCIO` or `PAINTER_ACE_CONFIG` does not make it supported. The facade never rewrites a
-project's declared mode, working space, input rules or display transform.
+Two colour-management configurations are pinned profiles: Painter's Legacy mode (`PROFILES`; the
+working space is linear sRGB and images come in and go out as sRGB, the Assets3D contract PRJ-05)
+and OCIO with Painter's substance config, identified by its SHA-256 (`PAINTER_OCIO_CONFIG_SHA256`,
+the evaluator's `kPainterOcioConfigSha256`; the file is never read). A project declaring any other
+configuration fails with `NotYetSupported` before anything is evaluated. The facade never rewrites
+a project's declared mode, working space, input rules or display transform.
 
 Uniform colours. A colour without a space is sRGB on a colour-managed channel (an sRGB8 channel:
 BaseColor in the templates) and Raw elsewhere, as Painter documents and the
@@ -24,6 +25,16 @@ Bitmap sources. A bitmap takes Painter's default space for its channel when boun
 (`DEFAULT_BITMAP_SPACES`, from the recorded `get_source` readbacks) and lists Painter's available
 spaces (`fill-layer-readback` s43, `export-ocio-encode-legacy` colour-space captures); a channel
 without a recorded default or list raises `NotYetSupported` naming the recording that settles it.
+
+Under OCIO (decision 202) only what Session O records is admitted; everything else raises
+`NotYetSupported` before any change:
+- an sRGB uniform colour (explicit, or without a space on a decoding channel) reads Painter's
+  measured working value of each float32 component (`ocio_srgb`: the 256 codes c / 255 and every
+  other recorded component); no analytic decode reproduces it. Raw, Working and a colour without a
+  space on a channel that does not decode are taken as given, as recorded;
+- a bitmap on BaseColor lists the eleven spaces Painter offers there (`OCIO_COLOUR_SPACES` after
+  the generic three) and a mask's mono source the three data spaces; a colour bitmap on BaseColor
+  defaults to sRGB and a mask source to Data (`export-ocio-encode` captures and readbacks).
 """
 
 from __future__ import annotations
@@ -33,6 +44,8 @@ import struct
 from typing import Any
 
 import uzpainter
+
+from uzpainter_facade import ocio_srgb
 
 MODULE = "substance_painter.colormanagement"
 
@@ -80,12 +93,11 @@ for _enum in SPACE_ENUMS:
 # unset mode for a project it created; Legacy is the mode every Tier 0 golden was recorded in.
 PROFILES = {"": "legacy", "legacy": "legacy"}
 DEFAULT_PROFILE = "legacy"
-SESSION_O = (
-    "the facade's OCIO colour rules are fitted: Session O (export-ocio-encode) records Painter's "
-    "working value of an sRGB uniform colour 1e-7 to 7e-6 apart (relative) from the Legacy rule on "
-    "all six recorded components and an eleven-space bitmap listing; the native evaluator and "
-    "export take Painter's substance config for what Session O records (decision 190)"
-)
+OCIO_PROFILE = "ocio"
+# SHA-256 of Painter 12.1.5's resources/ocio/substance/config.ocio (decision 134): the evaluator's
+# kPainterOcioConfigSha256 (src/evaluator/sources.h).
+PAINTER_OCIO_CONFIG_SHA256 = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+OCIO_GAP = "phase1.15_compositor-colour-fits item 2.6, decision 202"
 
 
 def require_supported_configuration() -> str:
@@ -93,14 +105,23 @@ def require_supported_configuration() -> str:
     declared configuration is not pinned."""
     declared = uzpainter.colormanagement.get_color_management()
     mode = str(declared.get("mode", ""))
-    if mode not in PROFILES:
-        raise uzpainter.NotYetSupported(
-            f"colour management '{mode}' (working space '{declared.get('working_space', '')}') "
-            f"is not a pinned colour profile; only Painter's Legacy mode (linear working space, "
-            f"sRGB I/O) is supported until {SESSION_O} "
-            "(phase1.15_compositor-colour-fits item 2.6, decision 107)"
-        )
-    return PROFILES[mode]
+    if mode in PROFILES:
+        return PROFILES[mode]
+    if mode == OCIO_PROFILE and declared.get("config_hash") == PAINTER_OCIO_CONFIG_SHA256:
+        return OCIO_PROFILE
+    raise uzpainter.NotYetSupported(
+        f"colour management '{mode}' (working space '{declared.get('working_space', '')}', config "
+        f"hash '{declared.get('config_hash', '')}') is not a pinned colour profile; only Painter's "
+        "Legacy mode and OCIO with Painter's substance config (SHA-256 "
+        f"{PAINTER_OCIO_CONFIG_SHA256[:8]}...) are supported (decisions 107, 190 and 202)"
+    )
+
+
+def active_profile() -> str:
+    """The pinned profile of the open project, Legacy without one."""
+    if not uzpainter.project.is_open():
+        return DEFAULT_PROFILE
+    return require_supported_configuration()
 
 
 # ── float32 arithmetic ─────────────────────────────────────────────────────────────────────────
@@ -137,6 +158,36 @@ def linear_to_srgb(value: float) -> float:
     return f32(f32(_F_1_055 * f32(max(x, 0.0) ** _F_INV_2_4)) - _F_0_055)
 
 
+def _bits(value: float) -> int:
+    return int(struct.unpack("<I", struct.pack("<f", value))[0])
+
+
+# Painter's OCIO working value of an sRGB component, by the float32 bits of the component.
+_OCIO_SRGB: dict[int, float] = {
+    **{_bits(f32(c / 255)): working for c, working in enumerate(ocio_srgb.CODES)},
+    **{_bits(f32(x)): working for x, working in ocio_srgb.RECORDED},
+}
+
+
+def ocio_srgb_to_linear(value: float) -> float:
+    """Painter's OCIO decode of one sRGB component (`ocio_srgb`); `NotYetSupported` for a
+    component it does not record."""
+    working = _OCIO_SRGB.get(_bits(f32(value)))
+    if working is None:
+        raise uzpainter.NotYetSupported(
+            f"under OCIO, Painter's working value of the sRGB component {value!r} is not recorded: "
+            "the decode is Painter's measured value of the components c / 255 and of the other "
+            f"recorded components, and no analytic decode reproduces it ({OCIO_GAP}; a Tier 0 "
+            "readback of the component settles it)"
+        )
+    return working
+
+
+def _ocio_unrecorded(what: str) -> Exception:
+    error: Exception = uzpainter.NotYetSupported(f"under OCIO, {what} is not recorded ({OCIO_GAP})")
+    return error
+
+
 # ── Colour spaces by name ──────────────────────────────────────────────────────────────────────
 
 # Colour spaces of a uniform colour in Legacy mode, by how they relate to the working space.
@@ -163,7 +214,15 @@ def color_space_name(space: Any) -> str:
 
 
 def to_working(rgb: tuple[float, float, float], space: str) -> tuple[float, float, float]:
-    """`rgb` encoded in `space`, as float32 working-space values (Legacy mode)."""
+    """`rgb` encoded in `space`, as float32 working-space values (the open project's profile)."""
+    if active_profile() == OCIO_PROFILE:
+        if space in _SRGB:
+            r, g, b = (ocio_srgb_to_linear(c) for c in rgb)  # every component before any change
+        elif space in _RAW or space == "Working":
+            r, g, b = (f32(c) for c in rgb)
+        else:
+            raise _ocio_unrecorded(f"a uniform colour in the colour space '{space}'")
+        return (r, g, b)
     if space in _SRGB:
         r, g, b = (srgb_to_linear(c) for c in rgb)
     elif space in _LINEAR or space in _RAW:
@@ -174,7 +233,9 @@ def to_working(rgb: tuple[float, float, float], space: str) -> tuple[float, floa
 
 
 def from_working(rgb: tuple[float, float, float], space: str) -> tuple[float, float, float]:
-    """Working-space values encoded in `space` (Legacy mode), as float32."""
+    """Working-space values encoded in `space` (the open project's profile), as float32."""
+    if active_profile() == OCIO_PROFILE and not (space in _RAW or space == "Working"):
+        raise _ocio_unrecorded(f"the encode of a working-space colour in '{space}'")
     if space in _SRGB:
         r, g, b = (linear_to_srgb(c) for c in rgb)
     elif space in _LINEAR or space in _RAW:
@@ -260,7 +321,9 @@ def working_value(color: Any, colour_managed: bool) -> tuple[float, float, float
         space = "sRGB" if colour_managed else "Raw"
     else:
         space = color_space_name(color.color_space)
-    working = to_working(color.value_raw, space)  # a space outside Legacy mode raises here
+    if not colour_managed and space in _SRGB and active_profile() == OCIO_PROFILE:
+        raise _ocio_unrecorded("an sRGB uniform colour on a channel that does not decode it")
+    working = to_working(color.value_raw, space)  # a space outside the profile raises here
     if not colour_managed:
         r, g, b = (f32(c) for c in color.value_raw)  # taken as given (decision 115)
         return (r, g, b)
@@ -306,6 +369,8 @@ CHANNEL_DEFAULTS_PROBE = (
 
 def default_bitmap_space(channel: str | None, colour_image: bool) -> Any:
     """Painter's colour space of a bitmap bound on `channel` (None: a mask's mono source)."""
+    if active_profile() == OCIO_PROFILE and channel is not None and channel != "BaseColor":
+        raise _ocio_unrecorded(f"Painter's default colour space of a bitmap on {channel}")
     if channel is None or channel in DATA_CHANNELS:
         return DataColorSpace.Data
     if channel == "BaseColor" and colour_image:
@@ -343,10 +408,30 @@ def bitmap_space_member(tag: str) -> Any:
     return space_member(tag)
 
 
+# The spaces Painter offers for a bitmap on BaseColor under OCIO with its substance config after the
+# generic three, as strings (`export-ocio-encode` s43-s45, both recordings).
+OCIO_COLOUR_SPACES = (
+    "Linear",
+    "sRGB",
+    "Rec709",
+    "Rec2020",
+    "ACES - ACEScg",
+    "Display P3",
+    "ACES sRGB",
+    "False Color",
+)
+
+
 def available_bitmap_spaces(channel: str | None, colour_managed: bool) -> list[Any]:
-    """`SourceBitmap.list_available_color_spaces` in Legacy mode: a mask's mono source and a user
+    """`SourceBitmap.list_available_color_spaces`. Legacy mode: a mask's mono source and a user
     channel other than sRGB8 (RGB8, L8, RGB16, L16, RGB16F and RGB32F recorded) offer the data
-    spaces, an sRGB8 channel the colour spaces."""
+    spaces, an sRGB8 channel the colour spaces. OCIO: a mask's mono source offers the data spaces
+    and BaseColor the generic spaces and Painter's OCIO spaces."""
+    if active_profile() == OCIO_PROFILE and channel is not None:
+        if channel != "BaseColor":
+            raise _ocio_unrecorded(f"the colour spaces Painter lists for a bitmap on {channel}")
+        generic = [GenericColorSpace.Raw, GenericColorSpace.Working, GenericColorSpace.sRGB]
+        return [*generic, *OCIO_COLOUR_SPACES]
     if channel is None or (channel.startswith("User") and not colour_managed):
         return [GenericColorSpace.Raw, DataColorSpace.Data, DataColorSpace.DataSigned]
     if colour_managed:

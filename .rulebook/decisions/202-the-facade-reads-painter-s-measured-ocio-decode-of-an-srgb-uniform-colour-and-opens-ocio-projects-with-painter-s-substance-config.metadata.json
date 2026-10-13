@@ -1,0 +1,12 @@
+{
+  "id": 202,
+  "slug": "the-facade-reads-painter-s-measured-ocio-decode-of-an-srgb-uniform-colour-and-opens-ocio-projects-with-painter-s-substance-config",
+  "title": "The facade reads Painter's measured OCIO decode of an sRGB uniform colour and opens OCIO projects with Painter's substance config",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits",
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}
