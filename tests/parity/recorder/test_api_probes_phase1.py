@@ -44,6 +44,7 @@ STEMS = [
     "phase1-delete-node",
     "phase1-engine-computations",
     "phase1-execute-when-not-busy",
+    "phase1-fill-channel-defaults",
     "phase1-mesh-map-update",
     "phase1-reload-mesh",
     "phase1-reload-resources",
@@ -62,6 +63,16 @@ def probe_path(stem: str) -> Path:
 
 
 PROBES = [probe_path(stem) for stem in STEMS]
+# The maps each probe exports: BaseColor, except P20-A, which exports every channel of the default
+# project (decision 107).
+EVERY_DEFAULT_CHANNEL = ["basecolor", "basemetalness", "height", "normal", "specularroughness"]
+EXPORTED_MAPS = {"phase1-fill-channel-defaults": EVERY_DEFAULT_CHANNEL}
+
+
+def exported_maps(stem: str) -> list[str]:
+    return EXPORTED_MAPS.get(stem, ["basecolor"])
+
+
 PROBE_FAKE = "uzp_recorder_fake_probe_painter"
 SOFTWARE = {
     "product": "Adobe Substance 3D Painter",
@@ -85,9 +96,15 @@ def probe_fake(fake: types.ModuleType) -> types.ModuleType:
 
 
 def session_on(probe_fake: types.ModuleType, fake: types.ModuleType) -> ProbeSession:
-    """A probe session on a fake Painter of the manifests' build (12.1.5)."""
+    """A probe session on a fake Painter of the manifests' build (12.1.5), whose project created
+    without a template holds that build's default channels (`assets/templates/default.json`)."""
     world = probe_fake.ProbeWorld()
     world.version, world.version_info = SOFTWARE["version"], (12, 1, 5)
+    formats = {"BaseColor": "sRGB8", "Height": "L16F", "Normal": "RGB16F"}
+    world.default_channels = {
+        fake.ChannelType[name]: fake.ChannelFormat[formats.get(name, "L8")]
+        for name in ("BaseColor", "BaseMetalness", "Height", "Normal", "SpecularRoughness")
+    }
     return ProbeSession(
         fake.LocalTransport(world),
         sleep=lambda s: None,
@@ -127,7 +144,7 @@ def test_every_probe_manifest_is_an_observed_probe_job_requested_or_admitted() -
         assert manifest["software"]["painter"] == SOFTWARE
         assert manifest_symbol_problems(manifest) == []
         assert job.observed and not job.lifecycle
-        assert [m.name for e in job.exports for m in e.maps] == ["basecolor"]
+        assert [m.name for e in job.exports for m in e.maps] == exported_maps(path.stem)
 
 
 def edited_steps(stem: str, index: int, **changes: Any) -> dict[str, Any]:
@@ -182,13 +199,13 @@ def test_every_request_records_r1_and_r2(
             if step.call == EXPORT:
                 assert f"s{step.step}/files" in ids
         exported = [o for o in recording["outputs"] if o["kind"] == "exported_map"]
-        assert len(exported) == 1
+        assert len(exported) == len(exported_maps(path.stem))
     state = {f"s{s.step}/events" for s in job.state_steps[1:]}
     first, second = ({o["output_id"] for o in r["outputs"]} for r in data["recordings"])
     assert state <= first
     assert not state & second
     refs = json.loads((run / "manifest.json").read_text(encoding="utf-8"))["private_records"]
-    assert len(refs) == 2 + 2  # record, environment, BaseColor in r1 and r2
+    assert len(refs) == 2 + 2 * len(exported_maps(path.stem))  # record, environment, maps
 
 
 def test_delete_node_records_the_remaining_structure_and_the_deleted_uids(
@@ -367,3 +384,27 @@ def test_every_save_probe_edit_is_followed_by_a_readback(stem: str) -> None:
         assert (
             following.endswith(("needs_saving", "file_path")) or "probe" in steps[index + 1]["args"]
         )
+
+
+def test_fill_channel_defaults_reads_every_channel_and_exports_it(
+    probe_fake: types.ModuleType, fake: types.ModuleType, tmp_path: Path
+) -> None:
+    """P20-A (decision 107): the fresh fill's source on every default channel, each bitmap's
+    colour spaces on every channel and in both masks, and every channel exported."""
+    first, second = record(probe_fake, fake, "phase1-fill-channel-defaults", tmp_path)
+    for recording in (first, second):
+        active = recording["s27/active_channels"]["value"]
+        assert [c.lower() for c in active] == EVERY_DEFAULT_CHANNEL
+        assert all(
+            "uniform_color_working" in recording[f"s{s}/get_source"]["value"] for s in range(28, 33)
+        )
+        for step in range(33, 69, 3):
+            assert "bitmap" in recording[f"s{step}/get_source"]["value"]
+            assert {
+                f"s{step + 1}/get_color_space",
+                f"s{step + 2}/list_available_color_spaces",
+            } <= set(recording)
+        exported = sorted(
+            k.split("/")[-1] for k, o in recording.items() if o["kind"] == "exported_map"
+        )
+        assert exported == EVERY_DEFAULT_CHANNEL

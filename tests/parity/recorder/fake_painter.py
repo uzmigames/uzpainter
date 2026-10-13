@@ -90,6 +90,8 @@ class ChannelType(enum.Enum):
     Metallic = 3
     Normal = 4
     Height = 5
+    SpecularRoughness = 6
+    BaseMetalness = 7
 
 
 class ChannelFormat(enum.Enum):
@@ -97,6 +99,7 @@ class ChannelFormat(enum.Enum):
     L8 = 2
     RGB16 = 3
     RGB16F = 4
+    L16F = 5
 
 
 class BlendingMode(enum.Enum):
@@ -456,6 +459,7 @@ class FakeWorld:
         }
         self.export_hook = export_hook
         self.channels = dict(CHANNEL_FORMATS)
+        self.default_channels = dict(CHANNEL_FORMATS)  # a project created without a template
         self.shelf_path: Path | None = None  # application shelf (templates are its .spt files)
         self.template_channels: dict[str, dict[ChannelType, ChannelFormat]] = {}
         self.baking = fake_baking_parameters()
@@ -590,7 +594,7 @@ def build_modules(world: FakeWorld) -> dict[str, types.ModuleType]:
             raise ProjectError("there is already an opened project")
         if not Path(mesh_file_path).is_file():
             raise ValueError("mesh file does not exist")
-        world.channels = dict(CHANNEL_FORMATS)
+        world.channels = dict(world.default_channels)
         if template_file_path is not None:
             template = Path(template_file_path)
             if not template.is_file():
