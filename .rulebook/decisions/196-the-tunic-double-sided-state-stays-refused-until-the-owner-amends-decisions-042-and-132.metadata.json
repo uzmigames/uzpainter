@@ -1,0 +1,13 @@
+{
+  "id": 196,
+  "slug": "the-tunic-double-sided-state-stays-refused-until-the-owner-amends-decisions-042-and-132",
+  "title": "The Tunic double-sided state stays refused until the owner amends decisions 042 and 132",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.10_pilot-tunic-recovery",
+    "phase3.5_path-tracer-materials",
+    "phase3.6_path-tracer-tier3-report"
+  ],
+  "supersededBy": null
+}
