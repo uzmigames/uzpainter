@@ -69,7 +69,9 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "(release gap)",
         "Nearest evaluates at any scale",
         "a physical-size scale mode fails with unsupported_source",
-        "an OCIO colour-managed project fails with unsupported_source",
+        "an OCIO project without Painter's substance config fails with unsupported_source",
+        "under Painter's OCIO config a uniform evaluates and a Raw bitmap on an RGB16 channel "
+        "fails with unsupported_source",
         "a UV projection on a non-power-of-two set fails with unsupported_source",
         "bytes that are not a PNG fail to decode with unsupported_source",
         "a resource whose bytes do not hash to its key is unavailable",

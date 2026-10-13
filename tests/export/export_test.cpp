@@ -69,12 +69,13 @@
 //   uzp-export-tests recover --recover <exportPath> [--fixed-names <dir>]...
 //       (phase1.17) `UzPainter.exe export --recover ...` (src/export/cli.h): the same output.
 //
-// A project skeleton: {"color_management"?, "workflow"?, "normal_map_format"?, "mesh"?: <mesh file
+// A project skeleton: {"color_management"?, "config_hash"?, "workflow"?, "normal_map_format"?, "mesh"?: <mesh file
 // name>, "texture_sets": [{"name", "original_name"?, "resolution"?: [w, h], "mesh_maps"?:
 // [usage...], "stacks": [{"name", "channels":
 // {type: format}, "layers"?: [uid...]}]}]}. A spec is the evaluator test spec
 // (tests/evaluator/evaluator_test.cpp, `evaluate`) restricted to fill and group layers, plus
-// "name" (the texture set's name) and "mesh_maps" ({usage: resource sha256}).
+// "name" (the texture set's name), "mesh_maps" ({usage: resource sha256}) and "color_management"
+// and "config_hash" (the project's colour management, legacy when absent).
 
 #include "evaluator/admission.h"
 #include "evaluator/arith.h"
@@ -192,6 +193,7 @@ core::Project ParseSkeleton(const json::Value& value) {
     core::Project project;
     project.versions.evaluator_profile = std::string(evaluator::kCurrentProfile);
     if (o.contains("color_management")) project.settings.color_management.mode = Str(o.at("color_management"), "cm");
+    if (o.contains("config_hash")) project.settings.color_management.config_hash = Str(o.at("config_hash"), "hash");
     if (o.contains("workflow")) {
         project.settings.workflow = EnumOf<core::ProjectWorkflow>(Str(o.at("workflow"), "workflow"), "workflow");
     }
@@ -438,6 +440,8 @@ Spec ParseSpec(const fs::path& path) {
     project.versions.evaluator_profile = std::string(evaluator::kCurrentProfile);
     if (o.contains("evaluator_profile")) project.versions.evaluator_profile = Str(o.at("evaluator_profile"), "profile");
     if (o.contains("template")) spec.templateId = Str(o.at("template"), "template");
+    if (o.contains("color_management")) project.settings.color_management.mode = Str(o.at("color_management"), "cm");
+    if (o.contains("config_hash")) project.settings.color_management.config_hash = Str(o.at("config_hash"), "hash");
     if (o.contains("normal_map_format")) {
         project.settings.normal_map_format =
             EnumOf<core::NormalMapFormat>(Str(o.at("normal_map_format"), "normal_map_format"), "normal map format");

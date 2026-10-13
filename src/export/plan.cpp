@@ -1,5 +1,7 @@
 #include "export/plan.h"
 
+#include "export/encode.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -9,6 +11,7 @@
 
 #include "evaluator/error.h"
 #include "evaluator/evaluator.h"
+#include "evaluator/sources.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
@@ -396,9 +399,39 @@ std::string MeshFileName(const core::Project& project, const std::string& what) 
     Invalid(what, "$mesh needs the imported mesh's file name, and the project has none");
 }
 
-/// The value of a wildcard in `root` (probe P1, decision 091).
+/// `$colorSpace` of `file` under OCIO with Painter's substance config (decision 190), as the
+/// probes of `export-ocio-encode` (steps 50 and 51, PNG 16 and 8) name it: "sRGB" for a PNG of an
+/// sRGB8 BaseColor, "Raw" for a PNG whose every channel reads a document channel that is not
+/// sRGB8. Any other file is not recorded and is refused.
+std::string OcioColourSpace(const PlannedFile& file, const Root& root, const std::string& what) {
+    constexpr std::string_view owner = "Session O, export-ocio-encode; phase1.15_compositor-colour-fits, decision 190";
+    if (!file.parameters || file.parameters->fileFormat != FileFormat::png || file.channels.empty()) {
+        Gap(what, "$colorSpace under OCIO is recorded for PNG files only", owner);
+    }
+    bool srgb = true;
+    bool raw = true;
+    for (const PlannedChannel& channel : file.channels) {
+        const PlannedSource& s = channel.source;
+        const auto it = s.type == SourceType::documentMap && s.channel ? root.stack->channels.find(*s.channel)
+                                                                       : root.stack->channels.end();
+        if (it == root.stack->channels.end()) {
+            srgb = raw = false;
+            break;
+        }
+        const bool srgb8 = it->second.format == core::ChannelFormat::sRGB8;
+        srgb = srgb && srgb8 && *s.channel == core::ChannelType::BaseColor;
+        raw = raw && !srgb8;
+    }
+    if (srgb) return "sRGB";
+    if (raw) return "Raw";
+    Gap(what, "$colorSpace under OCIO of a file that is not one sRGB8 BaseColor or only non-sRGB8 document channels "
+              "is not recorded",
+        owner);
+}
+
+/// The value of a wildcard in `root` for `file` (probe P1, decision 091).
 std::string WildcardValue(std::string_view token, const core::Project& project, const PlanContext& context,
-                          const Root& root, const std::string& what) {
+                          const Root& root, const PlannedFile& file, const std::string& what) {
     if (token == "textureSet") return root.set->name;
     if (token == "sceneMaterial") {
         // Recorded on a set named after its material only (probe P1).
@@ -410,6 +443,7 @@ std::string WildcardValue(std::string_view token, const core::Project& project, 
     }
     if (token == "mesh") return Stem(MeshFileName(project, what), token, what);
     if (token == "project") return context.projectPath.empty() ? "Untitled" : Stem(context.projectPath, token, what);
+    if (token == "colorSpace" && evaluator::PainterOcio(project)) return OcioColourSpace(file, root, what);
     return {};  // colorSpace (legacy colour management), udim and uvTileName (Default workflow)
 }
 
@@ -443,7 +477,7 @@ void CheckComponent(const std::string& component, const std::string& name, const
 /// group with both empty and non-empty wildcards, and a `)` after no literal `(`, are not
 /// recorded and are refused.
 std::string ExpandName(const std::string& pattern, const core::Project& project, const PlanContext& context,
-                       const Root& root, const std::string& what) {
+                       const Root& root, const PlannedFile& file, const std::string& what) {
     // Expands the wildcards of `text`; returns whether they were empty (in a group: all or none).
     const auto expand = [&](std::string_view text, std::string& out, bool group) {
         bool empty = false;
@@ -462,7 +496,7 @@ std::string ExpandName(const std::string& pattern, const core::Project& project,
                 Invalid(what, "unknown wildcard \"$" + token + "\" in \"" + pattern + "\"; valid: " +
                                   JoinNames(Nearest("$" + token, valid)));
             }
-            const std::string value = WildcardValue(token, project, context, root, what);
+            const std::string value = WildcardValue(token, project, context, root, file, what);
             empty = empty || value.empty();
             filled = filled || !value.empty();
             out += value;
@@ -640,7 +674,7 @@ void CompileMap(const core::Project& project, const PlanContext& context, const 
         std::tie(file.width, file.height) = SizeOf(*root.set, file.parameters->sizeLog2);
     }
 
-    file.relativePath = ExpandName(map.fileName, project, context, root, what) + "." + Extension(file);
+    file.relativePath = ExpandName(map.fileName, project, context, root, file, what) + "." + Extension(file);
     file.path = JoinPath(config.exportPath, file.relativePath);
     plan.files.push_back(std::move(file));
 }
@@ -731,9 +765,10 @@ std::string_view SkipKindName(SkipKind kind) {
 
 ExportPlan CompilePlan(const core::Project& project, const ExportConfig& config, const PlanContext& context) {
     const std::string& mode = project.settings.color_management.mode;
-    if (!mode.empty() && mode != "legacy") {
+    if (!mode.empty() && mode != "legacy" && !evaluator::PainterOcio(project)) {
         throw core::NotYetSupported("export: the colour-management mode \"" + mode +
-                                    "\" (its $colorSpace and encodings) is a release gap (phase1.18_export-engine)");
+                                    "\" with this configuration (its $colorSpace and encodings) is not recorded: "
+                                    "legacy and OCIO with Painter's substance config are (decision 190)");
     }
     if (project.settings.workflow != core::ProjectWorkflow::Default) {
         throw core::NotYetSupported("export: the " + std::string(core::ToString(project.settings.workflow)) +
@@ -997,6 +1032,23 @@ render::Result<FileRaster> EvaluateFileOn(const core::Project& project, std::int
         }
         for (size_t t = 0; t < texels; ++t) {
             raster.values[t * raster.channels + c] = map.values[t * map.components + channel.component];
+        }
+    }
+    raster.ocio = evaluator::PainterOcio(project);
+    if (raster.ocio && file.parameters && file.parameters->fileFormat == FileFormat::png) {
+        // Session O records the PNG encode of an sRGB-encoded channel for the stored sRGB8 codes and
+        // the empty BaseColor only (encode.h, decision 190).
+        for (uint32_t c = 0; c < raster.channels; ++c) {
+            if (raster.srgbEncoded[c] == 0) continue;
+            for (size_t t = 0; t < texels; ++t) {
+                const float v = raster.values[t * raster.channels + c];
+                if (OcioSrgbPng16Code(v)) continue;
+                return evaluator::EvalFail(evaluator::EvalErrorKind::UnsupportedSource,
+                                           "under OCIO, the PNG encode of the linear value " + std::to_string(v) + " of " +
+                                               file.relativePath +
+                                               " is not recorded (Session O records the sRGB8 codes and the empty "
+                                               "BaseColor; phase1.15_compositor-colour-fits, decision 190)");
+            }
         }
     }
     return raster;

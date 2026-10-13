@@ -125,10 +125,28 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
                                         "' is not recorded (phase1.15_compositor-colour-fits)",
                                     uid);
             }
+            if (PainterOcio(ctx.project)) {
+                // Session O records three bitmap uses under OCIO (sources.h, decision 190).
+                if (mask) {
+                    result.ocio = DagSource::Ocio::Grey16Mask;
+                } else if (ctx.tileFormat.srgb && result.srgbDecode) {
+                    result.ocio = DagSource::Ocio::Srgb8Fill;
+                } else if (ctx.tileFormat.srgb && bitmap.color_space == "Raw") {
+                    result.ocio = DagSource::Ocio::Raw8Fill;
+                } else {
+                    return EvalFail(EvalErrorKind::UnsupportedSource,
+                                    "under OCIO, a bitmap in the colour space '" + bitmap.color_space +
+                                        "' on the channel " + std::string(core::ToString(ctx.channel)) +
+                                        " is not recorded (Session O records sRGB and Raw on an sRGB8 channel; "
+                                        "phase1.15_compositor-colour-fits, decision 190)",
+                                    uid);
+                }
+            }
             // Bound by content hash (LAY-13: the alias plays no part); the linear colour spaces
             // give the same samples (sources.h).
             writer.Str("bitmap").Str(result.sha256);
             if (result.srgbDecode) writer.Str("srgb");
+            if (result.ocio == DagSource::Ocio::Raw8Fill) writer.Str("ocio-raw");
             writer.U32(static_cast<uint32_t>(result.projection.filter));
             writer.U32(static_cast<uint32_t>(result.projection.wrap));
             for (const double value : {result.projection.cosR, result.projection.sinR,

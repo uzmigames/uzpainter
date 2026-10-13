@@ -3,9 +3,16 @@
 // Fill sources (docs/architecture/04-layer-stack-and-compositing.md §1, §4; parity/semantics/
 // colour-transfer.json): how uniform colours and bitmaps become channel values.
 //
-// Colour management: the rules below are those of Painter's legacy colour management, the mode
-// every Tier 0 golden was recorded in (an unset mode is legacy). An OCIO project fails explicitly
-// with `evaluator:unsupported_source` (no golden fits it yet).
+// Colour management: the rules below are those of Painter's legacy colour management (an unset
+// mode is legacy). OCIO with Painter's substance config (`kPainterOcioConfigSha256`, the
+// configuration of Session O: `export-ocio-encode`, decision 190) stores the same codes for every
+// recorded source but one: an 8-bit colour bitmap in Raw on an sRGB8 channel reads each code as
+// float32(c / 255) rounded toward zero to a binary16 (`OcioRawDecoded`, evaluate.cpp; c / 255
+// itself stores one code higher for c = 176, 245, 247 and 254). Under OCIO only what Session O
+// records evaluates: uniform colours (sRGB, unset and Raw), an 8-bit colour bitmap in sRGB or Raw
+// on an sRGB8 channel at 1:1, and a 16-bit grey bitmap in a linear space as a mask source at 1:1;
+// every other bitmap use, and any other OCIO configuration, fails with
+// `evaluator:unsupported_source`.
 //
 // - Uniform colour: each component (the mean of the three on a grey channel) is taken as a linear
 //   value and stored with the channel's write rule (dag.h `UniformOperand`): RGB16 codes are
@@ -75,7 +82,16 @@ namespace uzp::evaluator {
 enum class BitmapColourSpace : uint8_t { Linear, Srgb, Unrecorded };
 [[nodiscard]] BitmapColourSpace BitmapColourSpaceOf(std::string_view tag);
 
-/// Fails with `evaluator:unsupported_source` unless `project` uses legacy colour management.
+/// SHA-256 of Painter 12.1.5's `resources/ocio/substance/config.ocio`, the configuration Session O
+/// recorded (decision 134 pins the same file for the display transform; the file is never read).
+inline constexpr std::string_view kPainterOcioConfigSha256 =
+    "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4";
+
+/// True when `project` uses OCIO with Painter's substance config (`kPainterOcioConfigSha256`).
+[[nodiscard]] bool PainterOcio(const core::Project& project);
+
+/// Fails with `evaluator:unsupported_source` unless `project` uses legacy colour management or
+/// OCIO with Painter's substance config (`PainterOcio`).
 [[nodiscard]] render::Result<void> CheckColourManagement(const core::Project& project,
                                                          core::Id node);
 

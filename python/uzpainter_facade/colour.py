@@ -81,8 +81,10 @@ for _enum in SPACE_ENUMS:
 PROFILES = {"": "legacy", "legacy": "legacy"}
 DEFAULT_PROFILE = "legacy"
 SESSION_O = (
-    "the OCIO goldens export-ocio-encode and export-presets-ocio (Painter recording Session O, "
-    "decision 101)"
+    "the facade's OCIO colour rules are fitted: Session O (export-ocio-encode) records Painter's "
+    "working value of an sRGB uniform colour 1e-7 to 7e-6 apart (relative) from the Legacy rule on "
+    "all six recorded components and an eleven-space bitmap listing; the native evaluator and "
+    "export take Painter's substance config for what Session O records (decision 190)"
 )
 
 
@@ -95,8 +97,8 @@ def require_supported_configuration() -> str:
         raise uzpainter.NotYetSupported(
             f"colour management '{mode}' (working space '{declared.get('working_space', '')}') "
             f"is not a pinned colour profile; only Painter's Legacy mode (linear working space, "
-            f"sRGB I/O) is supported until {SESSION_O} are recorded and fitted "
-            "(phase1.15_compositor-colour-fits, decision 107)"
+            f"sRGB I/O) is supported until {SESSION_O} "
+            "(phase1.15_compositor-colour-fits item 2.6, decision 107)"
         )
     return PROFILES[mode]
 

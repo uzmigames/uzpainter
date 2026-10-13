@@ -19,13 +19,18 @@ BitmapColourSpace BitmapColourSpaceOf(std::string_view tag) {
     return BitmapColourSpace::Unrecorded;
 }
 
+bool PainterOcio(const core::Project& project) {
+    const core::ColorManagement& cm = project.settings.color_management;
+    return cm.mode == "ocio" && cm.config_hash == kPainterOcioConfigSha256;
+}
+
 render::Result<void> CheckColourManagement(const core::Project& project, core::Id node) {
     const std::string& mode = project.settings.color_management.mode;
-    if (mode.empty() || mode == "legacy") return {};
+    if (mode.empty() || mode == "legacy" || PainterOcio(project)) return {};
     return EvalFail(EvalErrorKind::UnsupportedSource,
                     "colour management mode '" + mode +
-                        "' is outside this profile (sources are fitted under legacy colour "
-                        "management)",
+                        "' with this configuration is outside this profile (sources are fitted under "
+                        "legacy colour management and OCIO with Painter's substance config, decision 190)",
                     node);
 }
 

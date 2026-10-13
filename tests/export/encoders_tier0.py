@@ -709,6 +709,121 @@ def srgb8_bitmap_written(exe: Path, tmp: Path) -> dict[str, Any]:
     return report
 
 
+# export-ocio-encode (Session O, decision 180): R5 under OCIO with Painter's substance config, the
+# sets of its Legacy twin (decision 190). Steps 46-49 write every map of each set at PNG 16, PNG 8,
+# OpenEXR 32f (BaseColor) and PNG 16 (Normal_OpenGL); the probes 50 and 51 name the PNG 16 and 8
+# files with $colorSpace.
+OCIO_CONFIG_SHA256 = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+OCIO_ENCODE_SETS = tuple(f"s{i}" for i in range(8))
+OCIO_ENCODE_STEPS = (46, 47, 48, 49)
+OCIO_PROBE_STEPS = {
+    50: "probe-colour-space-colour-space-png16",
+    51: "probe-colour-space-colour-space-png8",
+}
+
+
+def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """export-ocio-encode rebuilt per texture set on the grid mesh as an OCIO project with Painter's
+    substance config and written by `WriteExport`: every map of steps 46-49, and the probe
+    configurations of steps 50 and 51 (`$colorSpace` in the names), compared byte for byte with
+    Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032: r1 is the exact target
+    of a file whose r2 differs, listed in `unstable`). Uniform colours in the sRGB space (or in
+    none, Painter's default on BaseColor) are given as their working values (`working_colours`).
+    The probes' written names are compared with Painter's listing (`names`). Returns the counts
+    and the differing files or refusals."""
+    needs_store()
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    golden = load(locate(), root / "export-ocio-encode.json")
+    sequence = golden.manifest["instruction_sequence"]
+    by_step = {s["step"]: s for s in sequence["steps"]}
+    steps = []
+    for raw in sequence["steps"]:
+        args = raw.get("args", {})
+        if raw["call"].endswith("list_available_color_spaces"):
+            continue  # readbacks: the stack does not depend on them
+        if (
+            raw["call"].endswith("set_source")
+            and args.get("channel") in SRGB8_CHANNELS
+            and "color" in args
+            and args.get("color_space", "sRGB") == "sRGB"
+        ):
+            colour = [srgb_to_working(float(c)) for c in args["color"]]
+            raw = dict(raw, args=dict(args, color=colour, color_space="Working"))
+        steps.append(raw)
+    manifest = dict(golden.manifest, instruction_sequence=dict(sequence, steps=steps))
+    inputs = {i["input_id"]: REPO_ROOT / i["path"] for i in golden.manifest["inputs"]}
+    report: dict[str, Any] = {
+        "files": 0,
+        "comparisons": 0,
+        "identical": 0,
+        "names": 0,
+        "unstable": [],
+        "problems": [],
+    }
+
+    def compare(where: str, written: dict[str, Any], r1: str | None, r2: str | None) -> None:
+        report["files"] += 1
+        for recording, theirs in (("r1", r1), ("r2", r2)):
+            if recording == "r2" and r2 != r1:
+                report["unstable"].append(f"{where}: {written['relativePath']}")
+                continue
+            report["comparisons"] += 1
+            if theirs is not None and written["sha256"] == theirs:
+                report["identical"] += 1
+            else:
+                report["problems"].append(
+                    f"{where}: {written['relativePath']} differs from {recording}"
+                )
+
+    for texture_set in OCIO_ENCODE_SETS:
+        spec_dir = tmp / texture_set / "spec"
+        spec = export_spec(manifest, texture_set, spec_dir)
+        spec["mesh"] = str(_mesh_of(manifest))
+        spec["color_management"] = "ocio"
+        spec["config_hash"] = OCIO_CONFIG_SHA256
+        for step in OCIO_ENCODE_STEPS:
+            raw = by_step[step]
+            config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                tmp / texture_set / f"out{step}", [texture_set]
+            )
+            result = write_export(exe, spec, spec_dir, config, tmp / texture_set / f"run{step}")
+            where = f"{texture_set} step {step}"
+            if "error" in result:
+                report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                continue
+            theirs_r1 = _painter_files(golden, "r1", step, texture_set)
+            theirs_r2 = _painter_files(golden, "r2", step, texture_set)
+            if sorted(w["relativePath"] for w in result["written"]) != sorted(theirs_r1):
+                report["problems"].append(
+                    f"{where}: written {result['written']} vs {sorted(theirs_r1)}"
+                )
+            for written in result["written"]:
+                rel = written["relativePath"]
+                compare(where, written, theirs_r1.get(rel), theirs_r2.get(rel))
+        for step, input_id in OCIO_PROBE_STEPS.items():
+            config = json.loads(inputs[input_id].read_text(encoding="utf-8"))
+            config["exportList"] = [e for e in config["exportList"] if e["rootPath"] == texture_set]
+            config["exportPath"] = str(tmp / texture_set / f"out{step}")
+            result = write_export(exe, spec, spec_dir, config, tmp / texture_set / f"run{step}")
+            where = f"{texture_set} probe {step}"
+            if "error" in result:
+                report["problems"].append(f"{where}: {result['error']}: {result['message']}")
+                continue
+            listed = golden.recordings["r1"].outputs[f"probe/s{step}/list"]["value"][texture_set]
+            if [w["relativePath"] for w in result["written"]] != listed:
+                report["problems"].append(f"{where}: names {result['written']} vs {listed}")
+            else:
+                report["names"] += len(listed)
+            for written in result["written"]:
+                rel = written["relativePath"]
+                files = []
+                for recording in ("r1", "r2"):
+                    output = golden.recordings[recording].outputs.get(f"probe/s{step}/{rel}")
+                    files.append(None if output is None else str(output["blob"]["sha256"]))
+                compare(where, written, files[0], files[1])
+    return report
+
+
 # srgb-bitmap-variants-v2 (decisions 156, 166, 167, 174): one export step of each kind (PNG 16,
 # PNG 8, OpenEXR 32f; each was done twice, the repeats identical).
 SRGB_VARIANT_STEPS = (78, 80, 82)
