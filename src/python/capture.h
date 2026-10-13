@@ -82,8 +82,8 @@ void RefuseUnavailableMode(std::string_view mode);
 /// Runs the capture: the receipt it wrote, with `files` {png, exr, receipt} (absolute paths).
 /// Raises `ApiError`: `PathTracerUnavailable`; `ValueError` for an unknown mode, a malformed or
 /// inapplicable argument, a node in no stack; `UnsupportedInUzPainter` for a display
-/// configuration other than the pinned one (decision 134); `NotYetSupported` for an orthographic
-/// camera; `ProjectError` without an open project, a mesh or an environment;
+/// configuration other than the pinned one (decision 134); `ProjectError` without an open
+/// project, a mesh or an environment;
 /// `ResourceNotFoundError` for an environment the project does not store; `RuntimeError` inside
 /// an open Transaction, without a device (`gpu_backend_unavailable {backend, reason}`) or when
 /// rendering fails;

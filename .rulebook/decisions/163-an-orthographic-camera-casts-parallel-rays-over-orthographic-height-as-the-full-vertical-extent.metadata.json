@@ -1,0 +1,14 @@
+{
+  "id": 163,
+  "slug": "an-orthographic-camera-casts-parallel-rays-over-orthographic-height-as-the-full-vertical-extent",
+  "title": "An orthographic camera casts parallel rays over orthographic_height as the full vertical extent",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.3_realtime-preview",
+    "phase2.2_preview-capture",
+    "phase2.1_preview-display-presets",
+    "phase3.4_path-tracer-transport"
+  ],
+  "supersededBy": null
+}

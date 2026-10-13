@@ -73,7 +73,7 @@ Two ways to run it:
   - **Checks.** The display configuration, the mesh and the environment are checked before any evaluation or device. An unsupported configuration raises `UnsupportedInUzPainter` with decision 134's `unsupported_configuration` text.
   - **Device.** The pass runs on the worker's engine, or on a device of `run`'s `--gpu-backend` created for the call (`gpu_backend_unavailable` without one). It uploads its buffers and dispatches in one submission, waits for it, and reads both targets back through `TextureReadback`.
   - **Files.** `path`, a 16-bit RGB PNG of the display codes, and `<stem>.exr`, RGB binary16 of the linear colour. Alpha is always 1 and is not written.
-  - **Camera.** A Painter camera record, with right, up and forward `R·x`, `R·y`, `-R·z` for `R = Rx @ Ry @ Rz`. `field_of_view` is taken as the vertical angle; this is UzPainter's convention, not a measured Painter fact. Without one, the display state's default camera, else `FitCamera`. An orthographic camera raises `NotYetSupported` (phase2.3_realtime-preview).
+  - **Camera.** A Painter camera record, with right, up and forward `R·x`, `R·y`, `-R·z` for `R = Rx @ Ry @ Rz`. `field_of_view` is taken as the vertical angle; this is UzPainter's convention, not a measured Painter fact. Without one, the display state's default camera, else `FitCamera`. An `Orthographic` record casts parallel rays along the forward axis from the plane through its position; `orthographic_height` is the view's full vertical extent in scene units and the width is that times the aspect, again UzPainter's convention (decision 163). Only hits in front of that plane count, and `field_of_view` does not apply.
   - **Arguments.** `size` is required, `samples` is 1, and `seed` is only recorded.
   - **Today.** It renders only OCIO projects without fill sources (phase1.15, phase1.18).
 - **`base_color`, `channel:<name>`, `mask:<uid>`** are texture-space captures of one stack, at its set's resolution.
@@ -101,3 +101,5 @@ A golden is keyed by build, adapter and driver:
 - the driver is the UMD version from DXGI.
 
 The goldens are exact for a fixed key. They are a repeatability check, never a tier result. A key the file does not hold fails the test. It is recorded with `uzp-preview-tests viewport-golden <dir> tests/preview/viewport-goldens.json --bless` on the owner's machine (decision 028).
+
+When a change to the kernel is meant to leave existing images alone, the new key's hashes are compared with the previous key's before the old entries are removed: the orthographic camera (decision 163) re-keyed the file to `3f173b7573f95bba` (CRLF checkout) and `91bc3285269b6519` (LF) with every image hash unchanged.

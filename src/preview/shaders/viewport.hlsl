@@ -189,11 +189,15 @@ void main(uint3 id : SV_DispatchThreadID) {
     const uint levels = frame.Load(21u * 4u);
     const uint brdfSize = frame.Load(22u * 4u);
     const uint tilesX = frame.Load(23u * 4u);
+    const bool orthographic = frame.Load(24u * 4u) != 0u;
 
-    // The ray through the pixel centre.
+    // The ray through the pixel centre: from the eye (perspective; tanHalf is the tangent of half
+    // the field of view), or along `forward` from the pixel's point on the plane through the eye
+    // (orthographic; tanHalf is half the orthographic height).
     const float sx = ((float(id.x) + 0.5f) / float(g_width) * 2.0f - 1.0f) * tanHalf * aspect;
     const float sy = (1.0f - (float(id.y) + 0.5f) / float(g_height) * 2.0f) * tanHalf;
-    const float3 dir = normalize(forward + right * sx + up * sy);
+    const float3 dir = orthographic ? forward : normalize(forward + right * sx + up * sy);
+    const float3 origin = orthographic ? eye + right * sx + up * sy : eye;
 
     // Nearest hit among the tile's triangles (Moller-Trumbore), ascending index, strict nearer.
     const uint tile = (id.y / TILE) * tilesX + id.x / TILE;
@@ -215,7 +219,7 @@ void main(uint3 id : SV_DispatchThreadID) {
         const float det = dot(e1, pv);
         if (det == 0.0f) continue;
         const float inv = 1.0f / det;
-        const float3 tv = eye - p0;
+        const float3 tv = origin - p0;
         const float u = dot(tv, pv) * inv;
         if (u < 0.0f || u > 1.0f) continue;
         const float3 qv = cross(tv, e1);

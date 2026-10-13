@@ -308,11 +308,6 @@ std::pair<preview::CameraPose, json::Object> CameraOf(const CaptureArguments& a,
                                    {"field_of_view", pose.fovDegrees}}};
     }
     const json::Object camera = display::CameraFromJson(record, kSymbol);
-    if (std::get<std::string>(camera.at("projection_type").data) != "Perspective") {
-        throw ApiError("NotYetSupported",
-                       "capture: an orthographic camera is a release gap of painter_viewport, whose pass casts "
-                       "perspective rays only (phase2.3_realtime-preview)");
-    }
     const std::array<std::array<double, 3>, 3> r = display::CameraRotation(json::Value(camera), kSymbol);
     preview::CameraPose pose;
     const json::Array& position = std::get<json::Array>(camera.at("position").data);
@@ -323,9 +318,15 @@ std::pair<preview::CameraPose, json::Object> CameraOf(const CaptureArguments& a,
         pose.up[i] = r[i][1];
         pose.forward[i] = -r[i][2] + 0.0;
     }
-    const json::Value& fov = camera.at("field_of_view");
-    pose.fovDegrees = fov.IsInt() ? static_cast<double>(std::get<std::int64_t>(fov.data)) : std::get<double>(fov.data);
+    const auto number = [](const json::Value& v) {
+        return v.IsInt() ? static_cast<double>(std::get<std::int64_t>(v.data)) : std::get<double>(v.data);
+    };
+    pose.fovDegrees = number(camera.at("field_of_view"));
     pose.nearPlane = 1e-6;
+    // Decision 163: parallel rays over `orthographic_height` (the full vertical extent, a UzPainter
+    // convention like the vertical field of view).
+    pose.orthographic = std::get<std::string>(camera.at("projection_type").data) == "Orthographic";
+    if (pose.orthographic) pose.orthographicHeight = number(camera.at("orthographic_height"));
     return {pose, json::Object{{"source", a.camera ? "argument" : "default_camera"}, {"record", camera}}};
 }
 
@@ -480,6 +481,15 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     const std::int64_t seed =
         a.seed ? *a.seed : (state.contains("seed") && state.at("seed").IsInt() ? std::get<std::int64_t>(state.at("seed").data) : 0);
     const json::Array size{width64, height64};
+    json::Object poseRecord{{"position", Json3(pose.eye)},
+                            {"right", Json3(pose.right)},
+                            {"up", Json3(pose.up)},
+                            {"forward", Json3(pose.forward)},
+                            {"field_of_view", pose.fovDegrees}};
+    if (pose.orthographic) {  // perspective records stay as they were (decision 163)
+        poseRecord["projection"] = "orthographic";
+        poseRecord["orthographic_height"] = pose.orthographicHeight;
+    }
     const json::Object renderState{
         {"mode", a.mode},
         {"environment", json::Object{{"sha256", frame.environmentHash},
@@ -489,11 +499,7 @@ json::Object CaptureViewport(const CaptureArguments& a) {
                                           static_cast<double>(scene->background[1]),
                                           static_cast<double>(scene->background[2])}},
         {"camera", cameraRecord},
-        {"pose", json::Object{{"position", Json3(pose.eye)},
-                              {"right", Json3(pose.right)},
-                              {"up", Json3(pose.up)},
-                              {"forward", Json3(pose.forward)},
-                              {"field_of_view", pose.fovDegrees}}},
+        {"pose", poseRecord},
         {"size", size},
         {"samples", std::int64_t{1}},
         {"seed", seed},

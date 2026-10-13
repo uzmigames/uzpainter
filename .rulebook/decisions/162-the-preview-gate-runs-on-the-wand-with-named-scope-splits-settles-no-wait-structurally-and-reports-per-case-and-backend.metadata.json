@@ -1,0 +1,17 @@
+{
+  "id": 162,
+  "slug": "the-preview-gate-runs-on-the-wand-with-named-scope-splits-settles-no-wait-structurally-and-reports-per-case-and-backend",
+  "title": "The preview gate runs on the wand with named scope splits, settles \"no wait\" structurally, and reports per case and backend",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.3_realtime-preview",
+    "phase2.1_preview-viewport-window",
+    "phase2.2_preview-capture",
+    "phase1.15_compositor-colour-fits",
+    "phase1.25_pilot-wand",
+    "phase2.6_mcp-typed-tool-families",
+    "phase3.1_vulkan-compute-parity"
+  ],
+  "supersededBy": null
+}

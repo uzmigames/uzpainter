@@ -7,8 +7,9 @@
 // never parity or acceptance evidence (decision 018).
 //
 // Pass, one compute dispatch on the render layer (src/render/):
-// - Visibility: the CPU bins every triangle by its screen bounds into 16 x 16-pixel tiles (a
-//   triangle crossing the camera plane goes to every tile); each pixel casts its centre ray
+// - Visibility: the CPU bins every triangle by its screen bounds into 16 x 16-pixel tiles (with
+//   a perspective camera, a triangle crossing the camera plane goes to every tile; an
+//   orthographic projection is affine, so it keeps its bounds); each pixel casts its centre ray
 //   against its tile's triangles in ascending index order and keeps the nearest hit (ties: the
 //   lowest index). No clipping, no depth buffer; both faces are visible.
 // - Material (decision 042: the default open-pbr instance at its defaults, emission luminance 0,
@@ -77,9 +78,13 @@ struct OrbitCamera {
 /// bounding sphere with a 10 % margin at a 40-degree field of view.
 [[nodiscard]] OrbitCamera FitCamera(const mesh::TexturingMesh& mesh);
 
-/// A perspective camera as its eye and orthonormal basis (right, up, forward), its vertical field
-/// of view, and the distance along `forward` at or below which a corner counts as behind the eye
-/// (triangle binning only). Captures pass Painter's camera records this way (python/capture.h).
+/// A camera as its eye and orthonormal basis (right, up, forward), its vertical field of view,
+/// and the distance along `forward` at or below which a corner counts as behind the eye (triangle
+/// binning only). Captures pass Painter's camera records this way (python/capture.h).
+///
+/// Orthographic (decision 163): every pixel's ray runs along `forward` from its point on the plane
+/// through the eye, `orthographicHeight` (scene units) high and `orthographicHeight * aspect` wide;
+/// `fovDegrees` is not used. Only hits in front of that plane count, as for perspective rays.
 struct CameraPose {
     std::array<double, 3> eye{0.0, 0.0, 0.0};
     std::array<double, 3> right{1.0, 0.0, 0.0};
@@ -87,6 +92,8 @@ struct CameraPose {
     std::array<double, 3> forward{0.0, 0.0, -1.0};
     double fovDegrees = 40.0;
     double nearPlane = 1e-6;
+    bool orthographic = false;
+    double orthographicHeight = 0.0;
 };
 
 /// The pose of an orbit camera (its near distance is `distance * 1e-6`).
