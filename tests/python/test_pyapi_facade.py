@@ -341,6 +341,28 @@ revision = uzpainter.project.revision()
 out["ocio_export"] = raises(sp.export.export_project_textures, {"exportPath": WORK + "/ocio"})
 out["ocio_nothing_written"] = not os.path.exists(WORK + "/ocio")
 out["ocio_revision"] = uzpainter.project.revision() == revision
+
+# OCIO with Painter's substance config (decision 202): recorded components read Painter's measured
+# working value; an unrecorded component, an sRGB colour on a data channel and the OCIO encode
+# raise before any change.
+PAINTER_OCIO = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+uzpainter.colormanagement.get_color_management = lambda: dict(declared, mode="ocio",
+                                                                 config_hash=PAINTER_OCIO)
+fill.set_source(CT.BaseColor, cm.Color(75 / 255, 70 / 255, 65 / 255, cm.GenericColorSpace.sRGB))
+out["ocio_base"] = working(CT.BaseColor)
+fill.set_source(CT.BaseColor, cm.Color(0.2, 0.5, 0.8))
+out["ocio_implicit_base"] = working(CT.BaseColor)
+revision = uzpainter.project.revision()
+out["ocio_unrecorded"] = raises(fill.set_source, CT.BaseColor,
+                                cm.Color(0.2, 0.51, 0.8, cm.GenericColorSpace.sRGB))
+out["ocio_data_srgb"] = raises(fill.set_source, CT.SpecularRoughness,
+                               cm.Color(0.2, 0.2, 0.2, cm.GenericColorSpace.sRGB))
+out["ocio_space"] = raises(fill.set_source, CT.BaseColor, cm.Color(0.2, 0.2, 0.2, "Rec709"))
+out["ocio_unchanged"] = uzpainter.project.revision() == revision and working(CT.BaseColor) == (
+    out["ocio_implicit_base"])
+out["ocio_raw_rough"] = (fill.set_source(CT.SpecularRoughness, cm.Color(0.37, 0.37, 0.37)),
+                         working(CT.SpecularRoughness))[1]
+out["ocio_encode"] = raises(lambda: cm.Color(0.2, 0.2, 0.2, cm.GenericColorSpace.Working).sRGB)
 uzpainter.colormanagement.get_color_management = original
 result = out
 """
@@ -368,6 +390,18 @@ def test_colour_rules_implicit_space_conversions_and_the_pinned_profile(facade: 
     assert "not a pinned colour profile" in result["ocio_export"]
     assert result["ocio_nothing_written"] is True
     assert result["ocio_revision"] is True
+    # Painter's OCIO readbacks (`export-ocio-encode` s0 and s6, `phase1-srgb-uniform-decode-ocio`)
+    assert result["ocio_base"] == [0.07036010175943375, 0.06124616786837578, 0.0528603233397007]
+    assert result["ocio_implicit_base"] == [
+        0.033104557543992996,
+        0.21404145658016205,
+        0.6038273572921753,
+    ]
+    for key in ("ocio_unrecorded", "ocio_data_srgb", "ocio_space", "ocio_encode"):
+        assert result[key].startswith("NotYetSupported: under OCIO"), result[key]
+    assert "0.51" in result["ocio_unrecorded"]
+    assert result["ocio_unchanged"] is True
+    assert result["ocio_raw_rough"] == [0.3700000047683716] * 3
 
 
 # ── Bitmap colour spaces Painter offers and refuses (decision 174) ───────────────────────────────

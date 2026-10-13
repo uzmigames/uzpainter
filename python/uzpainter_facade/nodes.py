@@ -563,8 +563,10 @@ class _Fill(Node):
 
 
 def reset_to_default(native: Any, channel: Any) -> None:
-    """Painter's default source on `channel` (None: the mono source) of a native fill."""
-    default = None if channel is None else DEFAULT_SOURCES.get(channel.name)
+    """Painter's default source on `channel` (None: the mono source) of a native fill. Under OCIO
+    every default is unrecorded (DEFAULT_SOURCES are Legacy recordings; decision 202)."""
+    recorded = channel is not None and colour.active_profile() != colour.OCIO_PROFILE
+    default = DEFAULT_SOURCES.get(channel.name) if recorded else None
     if default is not None:
         native.set_source(channel, uzpainter.colormanagement.Color(*default, "Working"))
     elif native.get_source(channel) is not None:
