@@ -227,6 +227,34 @@ def test_png16_round_trip_is_bit_exact(painter_bin: Path, tmp_path: Path) -> Non
     assert sum((v & 0xFF) != (v >> 8) for v in expected) > len(expected) // 2
 
 
+def test_out_dir_outside_the_code_page(painter_bin: Path, tmp_path: Path) -> None:
+    """practical-e2e B2 review, UZP-MOD-010: an `--out-dir` outside the ANSI code page gets the
+    report, the log and the 16-bit PNG, and the report and stdout name the paths in UTF-8
+    (narrowing that folder used to abort `selftest` with an uncaught `filesystem_error`)."""
+    out_dir = tmp_path / "ação ☃ 日本"
+    environment = dict(os.environ)
+    environment.pop("UZP_NO_GPU", None)
+    proc = subprocess.run(
+        [str(painter_bin / "UzPainter.exe"), "selftest", "--out-dir", str(out_dir), "--no-gpu"],
+        capture_output=True,
+        timeout=600,
+        env=environment,
+        check=False,
+    )
+    output = proc.stdout.decode("utf-8") + proc.stderr.decode("utf-8", errors="replace")
+    assert proc.returncode == 0, output
+    report_path = out_dir / "selftest-report.json"
+    summary = f"selftest: passed; DX12 hardware slice skipped; report {report_path}"
+    assert summary in output.splitlines(), output
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["result"] == "passed"
+    png16 = stages(report)["png16"]
+    assert png16["status"] == "passed"
+    assert png16["details"]["file"] == str(out_dir / "selftest-pattern16.png")
+    assert (out_dir / "selftest-pattern16.png").is_file()
+    assert (out_dir / "selftest.log").is_file()
+
+
 # ── 2.9 / 3.5 Closure of the built folder and start without SDK paths ─────────────────────
 
 
