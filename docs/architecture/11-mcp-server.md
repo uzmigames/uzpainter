@@ -4,7 +4,7 @@ Implements D10 (`05-resolution.md`) as answered by the owner on 2026-10-10 (Q12:
 
 ## 1. Topology
 
-The supervisor (`02-runtime-topology.md`) hosts the official Python MCP SDK (pinned release, vendored) in its embedded interpreter. Transports: **stdio** (default; stdout carries protocol frames only, logs go to stderr and to the ledger) and **Streamable HTTP** on `127.0.0.1:<port>` when started with `--mcp-http` for a resident instance (Origin validation, bearer token generated at start or given by `--token`; never bound to a non-loopback address without `--allow-remote`). Both transports call the same tool registry; tool handlers forward to the worker over the private pipe and run in an executor so the event loop keeps serving progress and cancellation.
+The supervisor (`02-runtime-topology.md`) hosts the official Python MCP SDK (pinned release, vendored) in its embedded interpreter. Transports: **stdio** (default; stdout carries protocol frames only, logs go to stderr and to the ledger) and **Streamable HTTP** on `127.0.0.1:<port>` when started with `--mcp-http` for a resident instance (Origin validation, bearer token generated at start or given by `--token`; never bound to a non-loopback address without `--allow-remote`). Both transports call the same tool registry; tool handlers forward to the worker over the private pipe and run in an executor so the event loop keeps serving progress and cancellation. The server opens no window: only `--preview` asks for one, and `--headless` or `UZP_HEADLESS=1` refuses even that (decision 252, `02-runtime-topology.md` §1).
 
 ## 2. Tools
 

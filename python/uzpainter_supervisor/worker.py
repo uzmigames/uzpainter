@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ctypes
 import itertools
 import logging
 import os
@@ -50,6 +51,24 @@ ERROR_PIPE_BUSY = 231
 
 class FatalSupervisorError(Exception):
     """The supervisor cannot go on: a handshake mismatch, or a worker that cannot be started."""
+
+
+def creation_flags() -> int:
+    """The worker's process creation flags.
+
+    A process group of its own: a console Ctrl+C or Ctrl+Break stops the supervisor (HTTP mode),
+    never the worker behind it, which ends when its supervisor does (02 §5). Without a console of
+    the supervisor's own (a host that started it detached or windowless), `CREATE_NO_WINDOW` too,
+    or Windows would give the worker a new console with a window (decision 252). With one, the
+    worker inherits it, which shows no new window, and writes its log there: a `CREATE_NO_WINDOW`
+    child cannot write to its parent's console. `GetConsoleProcessList` returns 0 only when it
+    fails, and with no console it fails; any failure takes the windowless flag."""
+    flags = subprocess.CREATE_NEW_PROCESS_GROUP
+    processes = (ctypes.c_ulong * 1)()
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined,unused-ignore]
+    if kernel32.GetConsoleProcessList(processes, 1) == 0:
+        flags |= subprocess.CREATE_NO_WINDOW
+    return flags
 
 
 @dataclass(frozen=True)
@@ -213,14 +232,12 @@ class Supervisor:
         stdout: int = subprocess.DEVNULL
         with contextlib.suppress(AttributeError, OSError, ValueError):
             stdout = sys.stderr.fileno()  # the worker's stdout never reaches the MCP stream
-        # A process group of its own: a console Ctrl+C or Ctrl+Break stops the supervisor (HTTP
-        # mode), never the worker behind it, which ends when its supervisor does (02 §5).
         process = await asyncio.create_subprocess_exec(
             *self.config.argv(pipe, crash_dir),
             stdin=subprocess.DEVNULL,
             stdout=stdout,
             stderr=None,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            creationflags=creation_flags(),
         )
         loop = asyncio.get_running_loop()
         generation = _Generation(

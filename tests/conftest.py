@@ -11,6 +11,7 @@ and the prefix stay until the session ends, so the link inputs can be relinked.
 
 from __future__ import annotations
 
+import ctypes
 import shutil
 import uuid
 from collections.abc import Iterator
@@ -23,6 +24,15 @@ from tools.vendoring.vendor_check import BUILD_STEPS, verbose_build
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FRESH_BUILD_STEPS = (*BUILD_STEPS, "mesh-tests")
+# SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX
+NO_ERROR_DIALOGS = 0x8003
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """No Windows error dialog from any program a test starts (decision 252): they inherit this
+    error mode, which also covers a DLL that fails to load before their own `main()` runs."""
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined,unused-ignore]
+    kernel32.SetErrorMode(kernel32.GetErrorMode() | NO_ERROR_DIALOGS)
 
 
 @dataclass(frozen=True)

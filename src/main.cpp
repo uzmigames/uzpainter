@@ -5,7 +5,8 @@
 // its publication's recovery `export` (src/export/cli.h), the Python API the script host `run`
 // (src/python/run.h) and `capabilities` (src/python/capabilities.h), the supervisor and worker
 // roles `--mcp` and `--worker` (src/supervisor/), the preview window `--preview` (src/preview/cli.h);
-// the other commands are added by their phases.
+// the other commands are added by their phases. A leading `--headless` (decision 252) sets
+// `UZP_HEADLESS=1` for the process and its children before the command runs.
 
 #include "export/cli.h"
 #include "preview/cli.h"
@@ -21,9 +22,33 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include <windows.h>
+#include <werapi.h>
+
+namespace {
+
+/// No Windows dialog in any role (decision 252): a critical error, a fault or a file that cannot
+/// be opened fails instead of waiting for a click (the launcher's other error-mode bits are kept,
+/// and children inherit the mode), Windows Error Reporting shows no UI, and `abort()` without a
+/// SIGABRT handler exits with status 3 instead of reaching it. `assert` already writes to stderr
+/// in a console program. The worker then installs its crash handler and its SIGABRT handler
+/// (src/supervisor/worker.cpp), which write the minidump. A DLL that fails to load before main()
+/// is the launcher's error mode to silence (adapters/assets3d/client.py does).
+void SuppressErrorDialogs() {
+    SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    WerSetFlags(WER_FAULT_REPORTING_NO_UI);
+    _set_abort_behavior(0, _CALL_REPORTFAULT);
+}
+
+}  // namespace
 
 int main(int argc, char** argv) {
-    const std::vector<std::string> args(argv + (argc > 0 ? 1 : 0), argv + argc);
+    SuppressErrorDialogs();
+    std::vector<std::string> args(argv + (argc > 0 ? 1 : 0), argv + argc);
+    if (!args.empty() && args.front() == uzp::preview::kHeadlessOption) {
+        uzp::preview::SetHeadless();
+        args.erase(args.begin());
+    }
     if (!args.empty() && uzp::supervisor::IsWorkerCommand(args.front())) {
         const int status = uzp::supervisor::RunWorkerCommand(args, stderr);
         std::fflush(stderr);
@@ -73,6 +98,9 @@ int main(int argc, char** argv) {
                          "       UzPainter.exe --mcp [--gpu-backend dx12|vulkan] [--allow-python] ... "
                          "(src/supervisor/supervisor.h)\n"
                          "       UzPainter.exe --worker --pipe <pipe> --gpu-backend dx12|vulkan ... "
-                         "(src/supervisor/worker.h)\n");
+                         "(src/supervisor/worker.h)\n"
+                         "       UzPainter.exe --preview <file.uzp> [--gpu-backend dx12|vulkan]\n"
+                         "       UzPainter.exe --headless <command> ...  (no window: sets UZP_HEADLESS=1, "
+                         "which refuses --preview)\n");
     return uzp::selftest::kExitUsage;
 }

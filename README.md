@@ -102,6 +102,9 @@ with `--mcp` as an argument. The server uses stdio; arbitrary Python execution i
 `--allow-python` is supplied. See the [MCP contract](docs/architecture/11-mcp-server.md) for typed
 tools, jobs and roots, and the [Python API](docs/architecture/10-python-api.md) for script support.
 
+No command opens a window unless `--preview` asks for one. For agents, set `UZP_HEADLESS=1` in
+their environment, or pass `--headless`, and a requested preview is refused too.
+
 ## Parity and contributions
 
 Texture acceptance requires equal native decoded values. A non-zero difference is a failure unless

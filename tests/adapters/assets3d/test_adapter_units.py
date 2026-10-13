@@ -1,13 +1,16 @@
 """The Assets3D adapter's host-side parts without UzPainter (task phase1.23 items 2.1-2.5, 5.2;
 decision 113): the manifest rebase, the fixed-name verification, the redirects, the result
-normalisation, the pins, the capability gate and the client's usage errors. Every lane.
+normalisation, the pins, the capability gate and the client's usage errors, and how the client
+starts UzPainter without a window or an error dialog (decision 252). Every lane.
 """
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -256,6 +259,43 @@ def test_a_missing_uzpainter_is_a_host_error(
         (tmp_path / "out" / "painter-last-response.json").read_text(encoding="utf-8")
     )
     assert saved == reply
+
+
+# The child's error mode, the processes on its console and whether that console has a window.
+CHILD_REPORT = (
+    "import ctypes, json; k = ctypes.windll.kernel32; p = (ctypes.c_ulong * 8)(); "
+    "print(json.dumps([k.GetErrorMode(), k.GetConsoleProcessList(p, 8), "
+    "bool(k.GetConsoleWindow())]))"
+)
+IMAGE_SUBSYSTEM_WINDOWS_GUI = 2
+
+
+def test_uzpainter_is_started_without_a_window_or_an_error_dialog() -> None:
+    """The child inherits the no-dialog error mode, which the client then takes back, and has a
+    console of its own without a window (`CREATE_NO_WINDOW`, every standard handle redirected)."""
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined,unused-ignore]
+    saved = kernel32.SetErrorMode(0)
+    try:
+        done = client.run_painter([sys.executable, "-I", "-c", CHILD_REPORT])
+        assert kernel32.GetErrorMode() == 0
+    finally:
+        kernel32.SetErrorMode(saved)
+    assert done.returncode == 0, done.stderr
+    mode, console_processes, console_window = json.loads(done.stdout)
+    assert mode & client.NO_ERROR_DIALOGS == client.NO_ERROR_DIALOGS
+    assert (console_processes, console_window) == (1, False)
+
+
+def test_the_layer_stack_script_starts_the_client_where_windows_gives_no_console() -> None:
+    """The script's own `execute()` starts the client without creation flags, so the adapter hands
+    it `pythonw.exe`, a GUI-subsystem program, which Windows never gives a console."""
+    if not Path(sys.executable).with_name("pythonw.exe").is_file():
+        pytest.skip(f"no pythonw.exe beside {sys.executable}")
+    image = client.windowless_python().read_bytes()[:4096]
+    header = int.from_bytes(image[0x3C:0x40], "little")
+    assert int.from_bytes(image[header + 0x5C : header + 0x5E], "little") == (
+        IMAGE_SUBSYSTEM_WINDOWS_GUI
+    )
 
 
 def test_one_call_at_a_time_holds_the_session(tmp_path: Path) -> None:

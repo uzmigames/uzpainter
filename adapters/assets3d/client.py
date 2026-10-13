@@ -43,6 +43,8 @@ PAINTER_ENV = "UZPAINTER_EXE"
 SESSION_ENV = "UZP_ASSETS3D_SESSION"
 OK, FAILED, USAGE, HOST_ERROR = 0, 1, 2, 3
 TOOL = "execute_python"
+# SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX
+NO_ERROR_DIALOGS = 0x8003
 
 
 class HostError(RuntimeError):
@@ -95,6 +97,55 @@ def session_lock(session: Path) -> Iterator[None]:
                 fcntl.flock(handle, fcntl.LOCK_UN)
 
 
+@contextlib.contextmanager
+def no_error_dialogs() -> Iterator[None]:
+    """While UzPainter.exe runs, Windows shows it no error dialog, not even for a DLL that fails
+    to load before its `main()`: the child inherits this error mode, so a broken installation
+    fails the call instead of blocking it on a click (decision 252). This process's own mode is
+    restored afterwards."""
+    if sys.platform != "win32":
+        yield
+        return
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined,unused-ignore]
+    previous = kernel32.SetErrorMode(kernel32.GetErrorMode() | NO_ERROR_DIALOGS)
+    try:
+        yield
+    finally:
+        kernel32.SetErrorMode(previous)
+
+
+def run_painter(argv: list[str]) -> subprocess.CompletedProcess[str]:
+    """UzPainter.exe `argv` without any window (decision 252): every standard handle is
+    redirected, and its console is a windowless one of its own (`CREATE_NO_WINDOW`), which a
+    console child of a process without a console would otherwise get with a window."""
+    with no_error_dialogs():
+        return subprocess.run(
+            argv,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            check=False,
+        )
+
+
+def windowless_python() -> Path:
+    """The running interpreter's windowless twin, `pythonw.exe` beside `python.exe`, which
+    Windows never gives a console. The layer-stack script's own `execute()` starts this client
+    with it and without creation flags, where `python.exe` would get a new console with a window
+    whenever the adapter itself runs without one (decision 252). The running interpreter when it
+    has no such twin."""
+    executable = Path(sys.executable)
+    twin = executable.with_name("pythonw.exe")
+    if sys.platform == "win32" and executable.name.lower() == "python.exe" and twin.is_file():
+        return twin
+    return executable
+
+
 def report_line(stdout: str) -> dict[str, Any] | None:
     lines = [line for line in stdout.splitlines() if line.startswith(JSON_PREFIX)]
     return json.loads(lines[-1][len(JSON_PREFIX) :]) if lines else None
@@ -106,7 +157,7 @@ def execute_python(code: str) -> tuple[dict[str, Any], int]:
     with session_lock(session), tempfile.TemporaryDirectory(prefix="uzp-a3d-") as tmp:
         code_file, report_file = Path(tmp) / "code.py", Path(tmp) / "report.json"
         code_file.write_bytes(code.encode("utf-8"))
-        process = subprocess.run(
+        process = run_painter(
             [
                 str(painter),
                 "run",
@@ -115,12 +166,7 @@ def execute_python(code: str) -> tuple[dict[str, Any], int]:
                 str(code_file),
                 str(session),
                 str(report_file),
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
+            ]
         )
         host = report_line(process.stdout)
         if (

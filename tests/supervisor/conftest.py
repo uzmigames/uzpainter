@@ -44,6 +44,7 @@ from typing import IO, Any
 
 import pytest
 
+from tests.desktop import DesktopProcess, PrivateDesktop
 from tools.parity.settling import mcp_contract
 from tools.parity.settling import report as settling_report
 
@@ -153,28 +154,35 @@ result = None
 
 
 class Pipe:
-    """The test process as a worker's supervisor, on the worker's pipe."""
+    """The test process as a worker's supervisor, on the worker's pipe. With `desktop` the worker
+    runs on that desktop, which nobody sees, so the window of a `--preview` worker never reaches
+    the owner's screen and headless need not refuse it there (decision 252)."""
 
-    def __init__(self, painter: Path, tmp_path: Path, *args: str) -> None:
+    def __init__(
+        self, painter: Path, tmp_path: Path, *args: str, desktop: PrivateDesktop | None = None
+    ) -> None:
         self.name = rf"\\.\pipe\uzpainter-{os.getpid()}-{next(_pipe_numbers)}"
         self.stderr_path = tmp_path / f"worker-{next(_pipe_numbers)}.log"
         self._stderr = self.stderr_path.open("wb")
-        self.process = subprocess.Popen(
-            [
-                str(painter),
-                "--worker",
-                "--pipe",
-                self.name,
-                "--output-root",
-                str(tmp_path / "out"),
-                "--crash-dir",
-                str(tmp_path / "crashes"),
-                *args,
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=self._stderr,
-            stderr=self._stderr,
-        )
+        argv = [
+            str(painter),
+            "--worker",
+            "--pipe",
+            self.name,
+            "--output-root",
+            str(tmp_path / "out"),
+            "--crash-dir",
+            str(tmp_path / "crashes"),
+            *args,
+        ]
+        self.process: subprocess.Popen[bytes] | DesktopProcess
+        if desktop is None:
+            self.process = subprocess.Popen(
+                argv, stdin=subprocess.DEVNULL, stdout=self._stderr, stderr=self._stderr
+            )
+        else:
+            env = {k: v for k, v in os.environ.items() if k != "UZP_HEADLESS"}
+            self.process = desktop.spawn(argv, output=self._stderr, env=env)
         self.file = self._open()
         self._buffer = b""
         self._ids = itertools.count(1)
@@ -251,6 +259,7 @@ class Mcp:
         env: dict[str, str] | None = None,
         initialize: bool = True,
         ledger: Path | None = None,
+        creationflags: int = 0,
     ) -> None:
         # Never the user's own ledger: one per test unless the test shares one.
         self.ledger = ledger or tmp_path / f"ledger-{next(_pipe_numbers)}.sqlite3"
@@ -272,6 +281,7 @@ class Mcp:
             stdout=subprocess.PIPE,
             stderr=self._stderr,
             env={**os.environ, **(env or {})},
+            creationflags=creationflags,
         )
         self.lines: queue.Queue[str | None] = queue.Queue()
         self.stdout_lines: list[str] = []
