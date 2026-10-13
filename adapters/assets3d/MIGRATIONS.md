@@ -103,5 +103,5 @@ Any Python 3.13 runs it; the script needs only the standard library. Environment
 
 ## Not adapted (UzPainter differs; owners named)
 
-- **`painter_create.py` run again onto an existing `.spp`:** `save_as` onto an existing file raises `ProjectError` (native store semantics, decision 105). What Painter does there is unrecorded: recording **P23-A** (decision 113), owner `phase1.24_python-api-facade`.
+- **`painter_create.py` run again onto an existing `.spp`:** `save_as` onto an existing file raises `ProjectError` (native store semantics, decision 105). Painter raises nothing there: recording **P23-A** (decision 113), admitted by decision 180. Matching it is not implemented; owner `phase1.24_python-api-facade`.
 - **The wand's five-map export:** its BaseColor is written exactly (decision 126), but `infinite` padding on the wand's UV islands is refused before writing, naming recording R-090 (decision 127). Owner: `phase1.25_pilot-wand` item 2.7.

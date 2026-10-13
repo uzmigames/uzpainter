@@ -11,7 +11,7 @@ Task `phase1.20_pyapi-facade` (child of `phase1.24_python-api-facade`, P1-PYAPI)
 |---|---|
 | `substance_painter/` | Painter's documented modules. Each one only re-exports names, so a module holds documented symbols and nothing else. `__version__ = "0.3.7"` and `_version.py` give the API level (10 §4 Versions row). `_version` is the one private name. |
 | `substance_painter_plugins/` | `path`, `plugins`, `start_plugin`, `close_plugin`, `is_plugin_started`, `reload_plugin`, `startup_module_names`, `plugin_module_names`, `load_startup_modules`, `close_all_plugins`, `update_sys_path`. They load non-UI `startup/`, `plugins/` and `modules/` folders (`uzpainter_facade/plugins.py`). |
-| `uzpainter_facade/` | The implementation, pure Python over the native `uzpainter` (`src/python/PYAPI.md`): `state` (per-interpreter state, one transaction per call), `host` (busy, edition and engine-computation state, §9), `event` (the event classes and the dispatcher), `colour`, `nodes` (layerstack and source), `textureset`, `resource`, `project`, `export`, `levels`, `js`, `ui`, `async_utils`, `plugins`. |
+| `uzpainter_facade/` | The implementation, pure Python over the native `uzpainter` (`src/python/PYAPI.md`): `state` (per-interpreter state, one transaction per call), `host` (busy, edition and engine-computation state, §9), `event` (the event classes and the dispatcher), `colour`, `ocio_srgb` (Painter's measured OCIO sRGB decode, §4), `nodes` (layerstack and source), `textureset`, `resource`, `project`, `export`, `levels`, `display` (§10), `js`, `ui`, `async_utils`, `plugins`. |
 
 `zig build pyapi-tests` and `zig build painter` install the `.py` files into `bin/python/`. That folder is on the embedded interpreter's search path (`src/python/python313._pth`).
 
@@ -111,7 +111,7 @@ Each row comes from a Tier 0 recording and is compared exactly by `test_pyapi_li
 
 | Operation | Events, with what a handler reads (open, edition, busy) | Returns |
 |---|---|---|
-| `create`, `open` | `BusyStatusChanged(1)` (F, F, T) → `BusyStatusChanged(0)` (T, F, F) → `ProjectCreated` / `ProjectOpened` (T, F, F) → `ProjectEditionEntered` (T, T, F) | Once in edition. Painter's polls saw the project ready right after the call, 4 times out of 4 (`lifecycle-events`); whether Painter's call itself waits is unrecorded (recording P21-F, decision 109). |
+| `create`, `open` | `BusyStatusChanged(1)` (F, F, T) → `BusyStatusChanged(0)` (T, F, F) → `ProjectCreated` / `ProjectOpened` (T, F, F) → `ProjectEditionEntered` (T, T, F) | Once in edition. Painter's polls saw the project ready right after the call, 4 times out of 4 (`lifecycle-events`); whether Painter's call itself waits is not settled: recording P21-F (decision 109), admitted by decision 198, is unstable through its timing polls and is not compared yet. |
 | `close` | `ProjectEditionLeft` (T, F, F) → `BusyStatusChanged(1)` (T, F, T) → `ProjectAboutToClose` (T, F, T) → `ProjectClosed` (F, F, T) → `BusyStatusChanged(0)` (F, F, F) | After the events. What was not saved is discarded: the project returns to its last save, so reopening gives the saved content with nothing to save. |
 | `save`, `save_as`, `save_as_copy` | `ProjectAboutToSave(file_path)` → `ProjectSaved`, delivered during the call | After the events. Refused with `ProjectError` while busy. |
 | `export_project_textures` | `BusyStatusChanged(1)` → `ExportTexturesAboutToStart` → `ExportTexturesEnded` → `BusyStatusChanged(0)` | After the events. The export events' place in that window is unrecorded (decision 110). |
@@ -134,5 +134,5 @@ Each row comes from a Tier 0 recording and is compared exactly by `test_pyapi_li
 `substance_painter.display` keeps Painter's documented symbols over the native `uzpainter.display` (`src/python/PYAPI.md`, Display). It accepts only the fixed render pipeline.
 - `get/set_environment_resource` take and return Painter-shaped `resource.ResourceID`s. The environment is a project resource imported with `Usage.ENVIRONMENT`: an OpenEXR equirectangular map, versioned `<sha1>.image` like a texture. Anything other than a `ResourceID` raises `TypeError`, as documented.
 - `set_color_lut_resource(None)` is accepted, and `get_color_lut_resource()` is None. Any LUT raises `UnsupportedInUzPainter` naming decision 038.
-- `get/set_tone_mapping` raise `UnsupportedInUzPainter` on the Legacy projects the facade opens. On a colour-managed project the native call raises `RuntimeError`, as Painter documents.
+- `get/set_tone_mapping` raise `UnsupportedInUzPainter` on a Legacy project. On a colour-managed project (an OCIO project the facade opens or creates, §4) the native call raises `RuntimeError`, as Painter documents.
 - `Camera`, `CameraProjectionType` and `ToneMappingFunction` are the native ones. A project has no camera until one is set, and `field_of_view` and `focal_length` cannot be set one at a time (decision 132; recordings R-132-A and R-132-B).
