@@ -100,6 +100,9 @@ The conditions are adopted below, with one exception. C2's "pin the maps, not th
 - **Nine lost masks (owner):** restore them to `_tmp/claude/`, then run `script_run manifest --pilot tunic-rebuild --store`. This blocks 2.1 (the fixture), 2.3–2.5 and 3.1–3.5.
 - **Mesh identity:** check the readback's `last_imported_mesh_path` against the FBX. The maps decide.
 - **`infinite` padding (phase1.25 item 2.7):** every pilot export is refused before writing until it lands.
+- **Double-sided state (needs a decision before 2.3 and 3.3):** the tunic's approved state has `doubleSided` on. UzPainter's `shader_set` accepts only the `open-pbr` defaults (decision 132), so `double_sided: true` is refused as `UnsupportedInUzPainter`, and the fixed render pipeline pins the shader (decisions 038 and 046).
+  - Recommendation: store `double_sided` as project state that survives save, reopen and readback, while renders under the fixed pipeline keep their pinned value.
+  - This changes decision 132's rule, so it is left to the coordinator or owner rather than decided here. It does not affect exported maps.
 - **1.1:** phase2.9, phase2.2 and phase2.8 are not accepted.
 
 ## Alternatives Considered
