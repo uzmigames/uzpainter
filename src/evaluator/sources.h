@@ -55,11 +55,24 @@
 //   samples an sRGB8 texture, whose mip levels hold sRGB8 codes and whose filter (operands cut
 //   to about 8 bits below the largest texel's exponent, a binary16 result) is not the float32
 //   texture's (decision 203).
+// - sRGB bitmap on an L8 BaseColor, Specular or Emissive (`SrgbL8MaterialChannel`, decision 208:
+//   `export-l8-material` s0 and s1, bitmaps left in Painter's default space): a grey bitmap at 1:1 is read
+//   decoded and stored with the L8 write rule. A 16-bit code decodes as on an sRGB8 channel (the
+//   GPU's float32 shader decode above). An 8-bit code takes the same float32 shader decode of
+//   x = float32(c / 255), rounded toward zero to a binary16 (the binary16 texel of decision 190),
+//   not the sRGB8 texel: exact on all 256 codes of the 8-bit ramp and of grey A (`257 c`), every
+//   channel, r1 and r2. The IEC decode rounded to nearest stores one code higher for 13 of the
+//   256 8-bit codes (7, 18, 72, 82, 123, 148, 167, 170, 178, 194, 209, 220, 243) and for 10 of
+//   grey A's (the same but 194, 209, 243); the sRGB8 texel misses 30, the float32 decode
+//   without the binary16 3 (194, 209, 243). A colour bitmap there, any resampling, any other
+//   format of these channels and OCIO are not recorded and fail with
+//   `evaluator:unsupported_source`.
 // - Working and `LegacyColorSpace.Linear` read the codes as Raw does (s6, s7). Painter offers
-//   sRGB on sRGB8 channels only: on every other channel format (RGB8, L8, RGB16, L16, RGB16F and
+//   sRGB on a user channel only in sRGB8: in every other format (RGB8, L8, RGB16, L16, RGB16F and
 //   RGB32F recorded) and on a mask's mono source it refuses the space and the bitmap stays Data
 //   (s4, s5; decision 174), so an sRGB tag there fails with `evaluator:unsupported_source`
-//   (support.h before any mutation). Any other tag is not recorded and fails the same way.
+//   (support.h before any mutation). On any other channel that is neither sRGB8 nor the L8
+//   material channels above, sRGB is not recorded and fails the same way, as does any other tag.
 
 #include "evaluator/resources.h"
 #include "evaluator/tile_store.h"
@@ -85,6 +98,10 @@ namespace uzp::evaluator {
 /// LegacyColorSpace.sRGB: decoded) or `Unrecorded` (any other tag: no golden).
 enum class BitmapColourSpace : uint8_t { Linear, Srgb, Unrecorded };
 [[nodiscard]] BitmapColourSpace BitmapColourSpaceOf(std::string_view tag);
+
+/// True for BaseColor, Specular and Emissive in L8, where Painter reads an sRGB bitmap decoded
+/// (above, decision 208).
+[[nodiscard]] bool SrgbL8MaterialChannel(core::ChannelType channel, core::ChannelFormat format);
 
 /// SHA-256 of Painter 12.1.5's `resources/ocio/substance/config.ocio`, the configuration Session O
 /// recorded (decision 134 pins the same file for the display transform; the file is never read).

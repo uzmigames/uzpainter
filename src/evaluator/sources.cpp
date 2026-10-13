@@ -19,6 +19,12 @@ BitmapColourSpace BitmapColourSpaceOf(std::string_view tag) {
     return BitmapColourSpace::Unrecorded;
 }
 
+bool SrgbL8MaterialChannel(core::ChannelType channel, core::ChannelFormat format) {
+    return format == core::ChannelFormat::L8 &&
+           (channel == core::ChannelType::BaseColor || channel == core::ChannelType::Specular ||
+            channel == core::ChannelType::Emissive);
+}
+
 bool PainterOcio(const core::Project& project) {
     const core::ColorManagement& cm = project.settings.color_management;
     return cm.mode == "ocio" && cm.config_hash == kPainterOcioConfigSha256;

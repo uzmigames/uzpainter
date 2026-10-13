@@ -110,11 +110,22 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             switch (BitmapColourSpaceOf(bitmap.color_space)) {
                 case BitmapColourSpace::Linear: break;
                 case BitmapColourSpace::Srgb:
-                    // sRGB8 channels only: Painter refuses the space elsewhere (sources.h).
-                    if (mask || !ctx.tileFormat.srgb) {
+                    // sRGB8 channels, and an L8 BaseColor, Specular or Emissive (its image checked at
+                    // evaluation); Painter refuses the space on other user channels and on a mask's source,
+                    // and on any other channel it is not recorded (sources.h).
+                    if (!mask && SrgbL8MaterialChannel(ctx.channel, ctx.format)) {
+                        result.l8Material = true;
+                    } else if (mask || (!ctx.tileFormat.srgb && core::ToString(ctx.channel).starts_with("User"))) {
                         return EvalFail(EvalErrorKind::UnsupportedSource,
-                                        "an sRGB bitmap on a channel that is not sRGB8 or as a mask source: "
+                                        "an sRGB bitmap on a user channel that is not sRGB8 or as a mask source: "
                                         "Painter refuses the space there (decision 174)",
+                                        uid);
+                    } else if (!ctx.tileFormat.srgb) {
+                        return EvalFail(EvalErrorKind::UnsupportedSource,
+                                        "an sRGB bitmap on the " + std::string(core::ToString(ctx.format)) + " channel " +
+                                            std::string(core::ToString(ctx.channel)) +
+                                            " is not recorded (Painter reads one decoded on sRGB8 channels and on an L8 "
+                                            "BaseColor, Specular or Emissive; phase1.15_compositor-colour-fits, decision 208)",
                                         uid);
                     }
                     result.srgbDecode = true;

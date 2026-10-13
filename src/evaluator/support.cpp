@@ -56,9 +56,11 @@ Gap OcioBitmapGap(const core::Project& project, const core::Stack* stack, const 
 }
 
 /// The colour space of a bitmap source in `stack` for `channel` (sources.h): an sRGB bitmap
-/// exists on sRGB8 channels only (Painter refuses the space on every other channel format and on
-/// a mask's mono source: decision 174); tags outside sources.h are not recorded. A channel the
-/// stack lacks is never evaluated.
+/// exists on sRGB8 channels and on an L8 BaseColor, Specular or Emissive (decision 208; the image's
+/// kind and its 1:1 sampling are checked at evaluation). Painter refuses the space on a user
+/// channel in any other format and on a mask's mono source (decision 174); on any other channel,
+/// and for tags outside sources.h, it is not recorded. A channel the stack lacks is never
+/// evaluated.
 Gap BitmapColourSpaceGap(const core::Stack* stack, const core::BitmapSource& bitmap, std::optional<ChannelType> channel,
                          core::Id node) {
     switch (BitmapColourSpaceOf(bitmap.color_space)) {
@@ -67,11 +69,17 @@ Gap BitmapColourSpaceGap(const core::Stack* stack, const core::BitmapSource& bit
             if (!channel) return Make(node, "an sRGB bitmap as a mask source (Painter refuses it)", "decision 174");
             if (stack == nullptr) return std::nullopt;
             const auto it = stack->channels.find(*channel);
-            if (it == stack->channels.end() || it->second.format == core::ChannelFormat::sRGB8) return std::nullopt;
+            if (it == stack->channels.end() || it->second.format == core::ChannelFormat::sRGB8 ||
+                SrgbL8MaterialChannel(*channel, it->second.format)) {
+                return std::nullopt;
+            }
+            const std::string format(core::ToString(it->second.format));
+            if (core::ToString(*channel).starts_with("User")) {
+                return Make(node, "an sRGB bitmap on a " + format + " user channel (Painter refuses it)", "decision 174");
+            }
             return Make(node,
-                        "an sRGB bitmap on a " + std::string(core::ToString(it->second.format)) +
-                            " channel (Painter refuses it)",
-                        "decision 174");
+                        "an sRGB bitmap on the " + format + " channel " + std::string(core::ToString(*channel)),
+                        "phase1.15_compositor-colour-fits, decision 208");
         }
         case BitmapColourSpace::Unrecorded:
             return Make(node, "the bitmap colour space '" + bitmap.color_space + "'",

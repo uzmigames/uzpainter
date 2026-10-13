@@ -45,6 +45,11 @@
     - the anisotropic unit's cross-probe arithmetic: 515 of 96 000 validation samples differ by one binary16 step, and no variant tried below 74 of 8 000;
     - how Painter builds its sRGB8 mip levels.
   - Refused until then with `evaluator:unsupported_source` ("bilinear minification of an 8-bit sRGB bitmap is a release gap ... (decision 203)").
+- [x] 2.8 (decisions 174 and 204) An sRGB grey bitmap on an L8 BaseColor, Specular or Emissive, which Painter reads decoded (`export-l8-material` s0 and s1, admitted by decision 198), while decision 174's message said Painter refuses the space there: fit the decode exactly, lift the refusal only for the recorded cases, correct the message, and write s0 and s1 end to end byte-identical
+  - Done (decision 208). A 16-bit code uses decision 174's float32 shader decode. An 8-bit code uses the same decode of float32(c / 255), rounded toward zero to a binary16 (decision 190's rounding), not the sRGB8 texel. Both are stored with the L8 write rule, and the result is exact on all 256 codes of each set, every channel, r1 and r2. For comparison, the IEC rounding misses 13 and 10 codes, the sRGB8 texel 30, and the decode without the binary16 3.
+  - Lifted for a grey 8- or 16-bit bitmap at 1:1 under Legacy (`SrgbL8MaterialChannel`, `CheckSrgbL8MaterialBitmap`). Decision 174's message now covers only user channels and mask sources. Every other non-sRGB8 channel is refused as not recorded.
+  - `test_l8_material_channels_equal_painter_files`: 144 files, 288 of 288 comparisons byte-identical, nothing refused. Native `sources`, `not-yet-supported` and `projection-gpu-vs-cpu` (DX12) also pass, as does `test_lifted_colour_fits_gpu_equals_cpu[export-l8-material-s0/s1]`.
+  - Still unrecorded, and named in decision 208 with the recording that settles them: a colour or resampled bitmap there, other formats and channels, and the facade's default space and listing there.
 
 ## 3. Tests
 - [ ] 3.1 Every fitted output exact against both recordings on CPU and DX12; the refusals of what stays unrecorded still fire before any mutation and name this task

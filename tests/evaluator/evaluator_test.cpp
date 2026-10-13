@@ -2863,6 +2863,89 @@ int RunSources(const fs::path& assets) {
         Check(refused, "an sRGB bitmap on a channel that is not sRGB8, an 8-bit sRGB bitmap minified by a bilinear filter, and "
                        "an unknown bitmap colour space fail with unsupported_source",
               detail);
+
+        // An L8 BaseColor, Specular or Emissive (decision 208; export-l8-material s0 and s1): a grey sRGB bitmap at 1:1
+        // stores the L8 code of its decode, an 8-bit code's float32 decode rounded toward zero to a binary16. Painter
+        // stores one code below the IEC decode rounded to nearest at these codes c of the 8-bit ramp and of grey A
+        // (16-bit, 257 c).
+        constexpr uint32_t kRamp = 256;
+        const std::vector<uint32_t> below8{7, 18, 72, 82, 123, 148, 167, 170, 178, 194, 209, 220, 243};
+        const std::vector<uint32_t> below16{7, 18, 72, 82, 123, 148, 167, 170, 178, 220};
+        auto ramp = [&](render::TexelEncoding encoding, uint32_t channels, uint32_t step) {
+            auto image = std::make_shared<DecodedImage>();
+            image->width = kRamp;
+            image->height = kRamp;
+            image->channels = channels;
+            image->encoding = encoding;
+            for (uint32_t y = 0; y < kRamp; ++y) {
+                for (uint32_t x = 0; x < kRamp; ++x) {
+                    for (uint32_t c = 0; c < channels; ++c) image->values.push_back(x * step);
+                }
+            }
+            return image;
+        };
+        const std::string shaRamp8 = std::string(63, 'a') + "8";
+        const std::string shaRamp16 = std::string(63, 'a') + "6";
+        const std::string shaRampColour = std::string(63, 'a') + "3";
+        provider->Add(shaRamp8, ramp(render::TexelEncoding::Unorm8, 1, 1));
+        provider->Add(shaRamp16, ramp(render::TexelEncoding::Unorm16, 1, 257));
+        provider->Add(shaRampColour, ramp(render::TexelEncoding::Unorm8, 3, 1));
+        auto l8 = [&](ChannelType channel, ChannelFormat format, const std::string& sha, double scale) {
+            Builder builder(kRamp, kRamp, {{channel, format}});
+            const std::vector<ChannelType> channels{channel};
+            core::Layer layer = builder.Fill("bitmap", SameSource(channels, Bitmap(sha, "sRGB")), Same(channels, BlendingMode::Normal, 1.0));
+            SetUv(layer, core::FilteringMode::BilinearHQ, core::UVWrapMode::Repeat, {scale, scale}, 0.0, {0.0, 0.0});
+            builder.AddResource(sha, 100);
+            builder.SetRoot({layer});
+            CpuEvaluator cpu(templates, kWideLimits);
+            return evaluate(builder, channel, cpu);
+        };
+        bool l8Exact = true;
+        std::string l8Detail;
+        for (const ChannelType channel : {ChannelType::BaseColor, ChannelType::Specular, ChannelType::Emissive}) {
+            for (const auto& [sha, below] : {std::pair{shaRamp8, &below8}, std::pair{shaRamp16, &below16}}) {
+                render::Result<ChannelResult> result = l8(channel, ChannelFormat::L8, sha, 1.0);
+                if (!result) {
+                    l8Exact = false;
+                    l8Detail += std::string(core::ToString(channel)) + ": " + Describe(result) + " ";
+                    continue;
+                }
+                const std::vector<uint32_t> samples = Samples(*result);
+                for (uint32_t c = 0; c < kRamp; ++c) {
+                    const bool lower = std::find(below->begin(), below->end(), c) != below->end();
+                    const uint32_t iec = static_cast<uint32_t>(std::lround(255.0 * arith::SrgbDecode(c / 255.0)));
+                    for (uint32_t y = 0; y < kRamp; ++y) {
+                        if (samples[size_t{y} * kRamp + c] != iec - (lower ? 1u : 0u)) {
+                            l8Exact = false;
+                            l8Detail = std::string(core::ToString(channel)) + " code " + std::to_string(c) + " ";
+                        }
+                    }
+                }
+            }
+        }
+        Check(l8Exact, "a grey 8- or 16-bit sRGB bitmap at 1:1 on an L8 BaseColor, Specular or Emissive stores Painter's codes "
+                       "of export-l8-material (the IEC rounding but one code lower at 13 8-bit and 10 16-bit codes)",
+              l8Detail);
+        bool l8Refused = true;
+        std::string l8RefusedDetail;
+        for (const auto& [name, result, says] :
+             {std::tuple{"a colour bitmap on an L8 BaseColor", l8(ChannelType::BaseColor, ChannelFormat::L8, shaRampColour, 1.0),
+                         "decision 208"},
+              std::tuple{"an L8 Specular at scale 0.5", l8(ChannelType::Specular, ChannelFormat::L8, shaRamp8, 0.5), "decision 208"},
+              std::tuple{"an RGB16 BaseColor", l8(ChannelType::BaseColor, ChannelFormat::RGB16, shaRamp8, 1.0), "decision 208"},
+              std::tuple{"an L8 AO", l8(ChannelType::AO, ChannelFormat::L8, shaRamp8, 1.0), "decision 208"},
+              std::tuple{"an L8 user channel", l8(ChannelType::User0, ChannelFormat::L8, shaRamp8, 1.0),
+                         "Painter refuses the space there (decision 174)"}}) {
+            if (result || KindName(result.error()) != "unsupported_source" ||
+                result.error().reason.find(says) == std::string::npos) {
+                l8Refused = false;
+                l8RefusedDetail += std::string(name) + ": " + Describe(result) + " ";
+            }
+        }
+        Check(l8Refused, "an sRGB bitmap on an L8 material channel that is colour or resampled, and on another channel or format "
+                         "that is not sRGB8, fails with unsupported_source (not recorded, decision 208; Painter's refusal on a "
+                         "user channel, decision 174)",
+              l8RefusedDetail);
     }
     {
         // Nearest at scale 2 puts every texel on a tie: across, the right texel (2 i + 1 - W / 2); down the rows, the
@@ -3491,6 +3574,68 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
           "BilinearSharp through the texture unit) evaluates to the same bytes on the GPU and on the CPU (" +
               std::to_string(decodedMinified) + " samples)",
           "");
+
+    // An sRGB grey bitmap at 1:1 on an L8 BaseColor, Specular or Emissive (decision 208): its float32 decode (an 8-bit
+    // code's through a binary16) is projected and stored as on the CPU, after an sRGB8 evaluation of the same bitmap
+    // on the warm GPU evaluator (the decodes do not share an upload).
+    {
+        bool l8Equal = true;
+        std::string l8Detail;
+        size_t l8Samples = 0;
+        for (const auto& [encoding, step] : {std::pair{render::TexelEncoding::Unorm8, 1u}, std::pair{render::TexelEncoding::Unorm16, 257u}}) {
+            char buffer[65];
+            std::snprintf(buffer, sizeof(buffer), "%064d", ++serial);
+            const std::string sha(buffer);
+            auto image = std::make_shared<DecodedImage>();
+            image->width = 256;
+            image->height = 256;
+            image->channels = 1;
+            image->encoding = encoding;
+            for (uint32_t y = 0; y < 256; ++y) {
+                for (uint32_t x = 0; x < 256; ++x) image->values.push_back(((x + y) & 0xFF) * step);
+            }
+            auto provider = std::make_shared<MapResourceProvider>();
+            provider->Add(sha, image);
+            for (const auto& [channel, format] : {std::pair{ChannelType::BaseColor, ChannelFormat::sRGB8},
+                                                  std::pair{ChannelType::BaseColor, ChannelFormat::L8},
+                                                  std::pair{ChannelType::Specular, ChannelFormat::L8},
+                                                  std::pair{ChannelType::Emissive, ChannelFormat::L8}}) {
+                Builder builder(256, 256, {{channel, format}});
+                builder.AddResource(sha, 100);
+                const std::vector<ChannelType> channels{channel};
+                builder.SetRoot({builder.Fill("srgb", SameSource(channels, Bitmap(sha, "sRGB")), Same(channels, BlendingMode::Normal, 1.0))});
+                EvaluateRequest request;
+                request.textureSet = builder.SetId();
+                request.stack = builder.StackId();
+                request.channel = channel;
+                request.resources = provider;
+                CpuEvaluator cpu(templates, kWideLimits);
+                render::Result<ChannelResult> cpuResult = cpu.Evaluate(builder.project, request);
+                auto project = std::make_shared<const core::Project>(builder.project);
+                std::future<render::Result<ChannelResult>> future = gpu.Evaluate(core::Snapshot{1, project}, request);
+                render::Result<ChannelResult> gpuResult = Get(future);
+                const std::string label = std::string(core::ToString(format)) + " " + std::string(core::ToString(channel)) +
+                                          (encoding == render::TexelEncoding::Unorm8 ? " 8-bit" : " 16-bit");
+                if (!cpuResult || !gpuResult) {
+                    l8Equal = false;
+                    l8Detail += label + ": " + Describe(cpuResult) + " / " + Describe(gpuResult) + " ";
+                    continue;
+                }
+                std::string first;
+                const std::vector<uint32_t> expected = Samples(*cpuResult);
+                const size_t mismatches = Mismatches(expected, Samples(*gpuResult), first, cpuResult->tileFormat.encoding);
+                l8Samples += expected.size();
+                if (mismatches != 0) {
+                    l8Equal = false;
+                    l8Detail += label + ": " + std::to_string(mismatches) + " mismatches; " + first + " ";
+                }
+            }
+        }
+        Check(l8Equal, "a grey 8- and 16-bit sRGB bitmap at 1:1 on an L8 BaseColor, Specular and Emissive, after the same bitmap on "
+                       "an sRGB8 BaseColor, evaluates to the same bytes on the GPU and on the CPU (" +
+                           std::to_string(l8Samples) + " samples)",
+              l8Detail);
+    }
 
     // The grid size reaches the GPU cache keys too.
     {
@@ -7154,6 +7299,13 @@ std::vector<ExcludedFeature> ExcludedFeatures() {
     features.push_back({"an sRGB bitmap on an RGB16 channel", "decision 174", ChannelType::User0,
                         [](core::Project& p, core::Id fill) {
                             FillOf(p, fill).sources[ChannelType::User0] = Bitmap(std::string(64, 'd'), "sRGB");
+                        }});
+    // On a channel that is neither sRGB8, a user channel nor an L8 BaseColor, Specular or Emissive, sRGB is not recorded.
+    features.push_back({"an sRGB bitmap on the Height channel", "decision 208", ChannelType::Height,
+                        [](core::Project& p, core::Id fill) {
+                            core::FillContent& content = FillOf(p, fill);
+                            content.sources[ChannelType::Height] = Bitmap(std::string(64, 'f'), "sRGB");
+                            content.active_channels.insert(ChannelType::Height);
                         }});
     features.push_back({"a bitmap in an unrecorded colour space", "phase1.15_compositor-colour-fits", ChannelType::User0,
                         [](core::Project& p, core::Id fill) {

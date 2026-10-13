@@ -33,11 +33,14 @@ render::Result<std::shared_ptr<const DecodedImage>> GreenInverted(const DecodedI
 }
 
 /// An sRGB bitmap as the texture Painter samples (sources.h): a float32 image of its linear
-/// values, the bitmap's size and channel count. An 8-bit code c is the recording GPU's sRGB8
-/// decode `Srgb8Operand(c)`; a 16-bit code is the GPU's float32 decode of x = float32(c / 65535):
-/// x float32(1 / 12.92) up to 0.04045, above it pow(fma(x, r, float32(0.055) r), 2.4) with
-/// r = float32(1 / 1.055) (the shader's contracted (x + 0.055) r) and the GPU's pow (hw::Pow).
-render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedImage& image, core::Id node) {
+/// values, the bitmap's size and channel count. A 16-bit code is the GPU's float32 decode of
+/// x = float32(c / 65535): x float32(1 / 12.92) up to 0.04045, above it
+/// pow(fma(x, r, float32(0.055) r), 2.4) with r = float32(1 / 1.055) (the shader's contracted
+/// (x + 0.055) r) and the GPU's pow (hw::Pow). An 8-bit code c is the recording GPU's sRGB8
+/// decode `Srgb8Operand(c)`, or with `l8Material` (an L8 BaseColor, Specular or Emissive,
+/// decision 208) the same float32 decode of x = float32(c / 255) rounded toward zero to a binary16.
+render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedImage& image, bool l8Material,
+                                                                core::Id node) {
     const bool sixteen = image.encoding == render::TexelEncoding::Unorm16;
     if (!sixteen && image.encoding != render::TexelEncoding::Unorm8) {
         return EvalFail(EvalErrorKind::UnsupportedSource, "an sRGB bitmap is an 8- or 16-bit image", node);
@@ -46,17 +49,38 @@ render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedIma
     decoded->encoding = render::TexelEncoding::Float32;
     const float invLow = static_cast<float>(1.0 / 12.92);
     const float invHigh = static_cast<float>(1.0 / 1.055);
+    auto shaderDecode = [&](float x) {
+        const float base = std::fma(x, invHigh, 0.055f * invHigh);
+        const float high = hw::Pow(base, 2.4f);
+        return x <= 0.04045f ? x * invLow : high;
+    };
     for (uint32_t& value : decoded->values) {
-        float linear = arith::Srgb8Operand(value);
+        float linear = 0.0f;
         if (sixteen) {
-            const float x = arith::UnormOperand(value, 16);
-            const float base = std::fma(x, invHigh, 0.055f * invHigh);
-            const float high = hw::Pow(base, 2.4f);
-            linear = x <= 0.04045f ? x * invLow : high;
+            linear = shaderDecode(arith::UnormOperand(value, 16));
+        } else if (l8Material) {
+            linear = arith::HalfToFloat(arith::HalfTowardZero(shaderDecode(arith::UnormOperand(value, 8))));
+        } else {
+            linear = arith::Srgb8Operand(value);
         }
         value = std::bit_cast<uint32_t>(linear);
     }
     return std::shared_ptr<const DecodedImage>(std::move(decoded));
+}
+
+/// Fails unless `image` sampled by `projection` on a `width` x `height` set is what decision 208
+/// records for an sRGB bitmap on an L8 BaseColor, Specular or Emissive: a grey image at 1:1 (the
+/// image is the set's size and the projection is the identity).
+render::Result<void> CheckSrgbL8MaterialBitmap(const UvProjection& projection, uint32_t width, uint32_t height,
+                                               const DecodedImage& image, core::Id node) {
+    const bool oneToOne = image.width == width && image.height == height && projection.scale[0] == 1.0 &&
+                          projection.scale[1] == 1.0 && projection.cosR == 1.0 && projection.sinR == 0.0 &&
+                          projection.offset[0] == 0.0 && projection.offset[1] == 0.0;
+    if (image.channels == 1 && oneToOne) return {};
+    return EvalFail(EvalErrorKind::UnsupportedSource,
+                    "on an L8 BaseColor, Specular or Emissive, only a grey sRGB bitmap sampled 1:1 is recorded "
+                    "(export-l8-material; phase1.15_compositor-colour-fits, decision 208)",
+                    node);
 }
 
 /// An 8-bit Raw bitmap under OCIO with Painter's substance config as the texture Painter samples
@@ -294,6 +318,11 @@ private:
             image = decoded;
         }
         if (source.srgbDecode) {
+            if (source.l8Material) {
+                render::Result<void> recorded = CheckSrgbL8MaterialBitmap(source.projection, m_dag.grid.width,
+                                                                          m_dag.grid.height, *image, node);
+                if (!recorded) return render::Unexpected(recorded.error());
+            }
             if (image->encoding == render::TexelEncoding::Unorm8 &&
                 Minifies(source.projection, m_dag.grid.width, m_dag.grid.height, *image)) {
                 return EvalFail(EvalErrorKind::UnsupportedSource,
@@ -301,10 +330,11 @@ private:
                                 "an sRGB8 texture, whose filter and mip chain differ from the float32 texture's "
                                 "(decision 203)", node);
             }
-            imageKey += "/srgb";
-            std::shared_ptr<const DecodedImage>& decoded = m_env.srgbDecoded[source.sha256];
+            imageKey += source.l8Material ? "/srgb-l8" : "/srgb";
+            std::shared_ptr<const DecodedImage>& decoded =
+                m_env.srgbDecoded[source.l8Material ? source.sha256 + "/l8" : source.sha256];
             if (!decoded) {
-                render::Result<std::shared_ptr<const DecodedImage>> made = SrgbDecoded(*image, node);
+                render::Result<std::shared_ptr<const DecodedImage>> made = SrgbDecoded(*image, source.l8Material, node);
                 if (!made) return render::Unexpected(made.error());
                 decoded = *made;
             }

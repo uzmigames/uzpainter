@@ -87,6 +87,13 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
         "an sRGB bitmap on a channel that is not sRGB8, an 8-bit sRGB bitmap minified by a "
         "bilinear filter, and an unknown bitmap colour space fail with unsupported_source",
         "Nearest at a tie takes the right texel across and the upper texel down the rows",
+        # phase1.15_compositor-colour-fits item 2.8 (decision 208): an L8 material channel.
+        "a grey 8- or 16-bit sRGB bitmap at 1:1 on an L8 BaseColor, Specular or Emissive stores "
+        "Painter's codes of export-l8-material (the IEC rounding but one code lower at 13 8-bit "
+        "and 10 16-bit codes)",
+        "an sRGB bitmap on an L8 material channel that is colour or resampled, and on another "
+        "channel or format that is not sRGB8, fails with unsupported_source (not recorded, "
+        "decision 208; Painter's refusal on a user channel, decision 174)",
     } <= passed
     # phase1.15_compositor-colour-fits items 2.2 and 2.5 (decisions 174, 203): sRGB bitmaps of
     # every kind, 1:1, magnified and under Nearest; 16-bit ones minified.
@@ -125,12 +132,16 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
     """2.4: the projection kernel equals the CPU reference bit for bit on random stacks (every
     filter, wrap mode, transform, 8/16-bit grey and colour bitmap, nine formats, two tiles), and
     on sRGB bitmaps decoded to float32 texels on an sRGB8 channel (decision 174), 16-bit ones
-    minified too (decision 203)."""
+    minified too (decision 203), and on an L8 BaseColor, Specular and Emissive (decision 208)."""
     passed, _ = run_case(evaluator_tests, "projection-gpu-vs-cpu", str(tmp_path), needs_gpu=True)
     assert any(p.startswith("every random projection stack") for p in passed)
     assert any(p.startswith("every random minifying projection stack") for p in passed)
     assert any(p.startswith("every random sRGB projection stack") for p in passed)
     assert any(p.startswith("every random minifying 16-bit sRGB projection stack") for p in passed)
+    assert any(
+        p.startswith("a grey 8- and 16-bit sRGB bitmap at 1:1 on an L8 BaseColor, Specular and")
+        for p in passed
+    )
     assert (
         "GPU: after a resolution change the same evaluator re-evaluates at the new size" in passed
     )
@@ -150,8 +161,8 @@ def test_lifted_colour_fits_gpu_equals_cpu(
     evaluator_tests: Path, tmp_path: Path, stem: str, texture_set: str
 ) -> None:
     """phase1.15_compositor-colour-fits items 3.1 and 4.1: every texture set whose files the
-    colour fits made byte-identical to Painter's on the CPU store (decisions 145, 152, 174 and
-    190; `tests/export/test_export_encoders.py`), its spec as `WriteExport` evaluates it, gives
+    colour fits made byte-identical to Painter's on the CPU store (decisions 145, 152, 174, 190
+    and 208; `tests/export/test_export_encoders.py`), its spec as `WriteExport` evaluates it, gives
     the same bytes on the DX12 store as on the CPU store in every channel of its stack."""
     from tests.export.encoders_tier0 import lifted_colour_spec
 
