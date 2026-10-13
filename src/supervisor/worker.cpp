@@ -182,8 +182,10 @@ void InstallCrashReporting(const std::filesystem::path& crash_dir) {
     if (!crash_dir.empty()) {
         std::error_code ignored;
         std::filesystem::create_directories(crash_dir, ignored);
-        // The handler keeps its own copy of the ANSI path.
-        uz::CrashHandler_SetCrashDir(crash_dir.string().c_str());
+        // The handler keeps its own UTF-16 copy of the UTF-8 path (UZP-MOD-010), so any folder
+        // works; `string()` would throw for one outside the ANSI code page.
+        const std::u8string utf8 = crash_dir.u8string();
+        uz::CrashHandler_SetCrashDir(std::string(utf8.begin(), utf8.end()).c_str());
     }
     uz::InstallCrashHandler();
     std::signal(SIGABRT, AbortToCrashReport);

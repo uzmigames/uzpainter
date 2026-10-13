@@ -1,3 +1,5 @@
+// Modified by UzmiGames for UzPainter — see thirdparty/uzengine-render-core/MODIFICATIONS.md UZP-MOD-010. Original: UzEngine runtime/engine/logging/log.h at 380c142e481d56fe16b045f63315b42359e86a7d. Licensed under the Apache License, Version 2.0.
+
 #pragma once
 
 /// UzEngine Structured Logging System
@@ -50,7 +52,8 @@ struct LogCategory {
 /// Initializes the global logging system.
 ///
 /// # Arguments
-/// * `logFilePath` - Path to rotating log file. If empty or nullptr, only console logging.
+/// * `logFilePath` - Path to rotating log file, UTF-8 (UZP-MOD-010: the file is opened through
+///   its UTF-16 form, so any path works). If empty or nullptr, only console logging.
 ///   Default: `%LOCALAPPDATA%/UzEngine/logs/uzengine_YYYY-MM-DD_HH-MM-SS.log` (Windows)
 ///            `~/.local/share/uzengine/logs/uzengine_YYYY-MM-DD_HH-MM-SS.log` (Linux/macOS)
 ///   Pass an explicit path to override (e.g., in tests).
@@ -61,7 +64,7 @@ struct LogCategory {
 /// - Safe to call multiple times (no-op if already initialized)
 void LogInit(const char* logFilePath = "uzengine.log");
 
-/// Returns the path of the current log file, or empty string if not initialized.
+/// Returns the path of the current log file (UTF-8), or empty string if not initialized.
 const std::string& LogGetFilePath();
 
 /// Suppresses console (stdout) logging output.
