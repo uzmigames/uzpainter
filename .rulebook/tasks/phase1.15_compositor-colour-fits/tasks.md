@@ -44,6 +44,9 @@
   - Open after decision 209:
     - the anisotropic unit's cross-probe arithmetic: 515 of 96 000 validation samples differ by one binary16 step, and no variant tried below 74 of 8 000;
     - how Painter builds its sRGB8 mip levels.
+  - Decision 213 (2-hour cap reached; no replica code committed):
+    - Each probe's sum is truncated to 2^(max(Coarse(E), -6) - 16), and the running sum to 2^(Coarse(g) - 16) before every probe after the first. With these rules 52 of 96 000 samples differ (seed 0) and 53 of 96 000 (seed 1), down from 515.
+    - Still open: a p = 0 probe pair sometimes truncates its two halves separately, and neither the sign nor the weight decides when; the sRGB8 mip build is not measured.
   - Refused until then with `evaluator:unsupported_source` ("bilinear minification of an 8-bit sRGB bitmap is a release gap ... (decision 203)").
 
 ## 3. Tests
