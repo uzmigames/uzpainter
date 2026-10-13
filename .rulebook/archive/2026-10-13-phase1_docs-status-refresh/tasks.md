@@ -11,3 +11,5 @@
 - [ ] 2.3 Run tests and confirm they pass (waive: documentation-only task, no code)
 
 <!-- tail-waiver: documentation-only task, no code changed; codespell (the repo's docs lint) passes on every changed file; no tests apply -->
+
+<!-- tail-waiver: Documentation-only task: no code changed, so there are no tests to write or run. codespell (the repo's docs lint) passes on every changed file. -->
