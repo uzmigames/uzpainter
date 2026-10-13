@@ -1,0 +1,13 @@
+{
+  "id": 159,
+  "slug": "http-mode-guards-origin-host-and-bearer-in-front-of-the-sdk-binds-the-lease-to-a-named-owner-and-keeps-handlers-async",
+  "title": "HTTP mode guards Origin, Host and bearer in front of the SDK, binds the lease to a named owner, and keeps handlers async",
+  "status": "accepted",
+  "date": "2026-10-12",
+  "relatedTasks": [
+    "phase2.5_mcp-transport-registry",
+    "phase2.2_supervisor-admission-ledger",
+    "phase2.8_mcp-server"
+  ],
+  "supersededBy": null
+}

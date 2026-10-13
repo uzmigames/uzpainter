@@ -150,10 +150,12 @@ def test_handshake_mismatch_is_a_fatal_supervisor_error(
 
 
 def test_supervisor_usage_errors(painter: Path, tmp_path: Path) -> None:
-    """2.1: the supervisor's command line; HTTP mode and roots belong to phase2.5."""
+    """2.1: the supervisor's command line; phase2.5's HTTP mode refuses a non-loopback bind
+    without --allow-remote, and a --roots entry needs its kind."""
     for args in (
         ["--gpu-backend", "metal"],
-        ["--mcp-http", "127.0.0.1:9000"],
+        ["--mcp-http", "0.0.0.0:9000"],
+        ["--token", "t"],
         ["--roots", "C:/"],
         ["--gpu-deadline-ms", "0"],
         ["--bogus"],
@@ -513,12 +515,21 @@ def test_mutating_tools_publish_their_key_and_precondition(
     sessions.append(session)
     tools = {tool["name"]: tool for tool in session.request("tools/list", {})["tools"]}
     schema = tools["run_python"]["inputSchema"]
-    assert schema["required"] == ["code"]
-    assert set(schema["properties"]) == {"code", "args", "idempotency_key", "expected_revision"}
+    assert schema["required"] == []
+    assert set(schema["properties"]) == {
+        "code",
+        "path",
+        "args",
+        "idempotency_key",
+        "expected_revision",
+    }
     validator = Draft202012Validator(schema)
     call = {"code": "result = 1", "idempotency_key": "k-1", "expected_revision": 0}
     assert list(validator.iter_errors(call)) == []
     assert list(validator.iter_errors({"code": "result = 1"})) == []
+    assert list(validator.iter_errors({"path": "script.py"})) == []
+    assert list(validator.iter_errors({"code": "1", "path": "script.py"}))  # code or path
+    assert list(validator.iter_errors({}))
     assert list(validator.iter_errors({"code": "1", "expected_revision": "0"}))
     reply = session.call("run_python", call)
     assert reply["result"]["result"] == 1

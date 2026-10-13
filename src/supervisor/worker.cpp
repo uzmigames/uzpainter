@@ -209,6 +209,9 @@ struct Tool {
     /// The call is refused before it runs when the device is unavailable (`gpu`); a tool whose
     /// mode decides whether it uses the GPU (`capture`) checks the device itself.
     bool gpu_gate = true;
+    /// The capability-manifest operations the tool performs (`[{symbol, context}]`): the supervisor
+    /// refuses the call with `capability_gap` while one of them is a `release-gap` (phase2.5).
+    json::Array capability = {};
 };
 
 /// The long job the command thread runs, and the cancellations the pipe's reader thread received
@@ -256,9 +259,21 @@ json::Object Schema(json::Object properties, json::Array required) {
 
 json::Object StringProperty(const char* description) { return {{"type", "string"}, {"description", description}}; }
 
-json::Object UidProperty(const char* description) {
-    return {{"type", "integer"}, {"minimum", 1}, {"description", description}};
+/// A path argument: the supervisor's `--roots` confine it to the root of kind `root` (`project`,
+/// `mesh`, `bake_mesh`, `resource` or `export`; 11-mcp-server.md §5) and hand over its canonical
+/// absolute form.
+json::Object PathProperty(const char* description, const char* root) {
+    return {{"type", "string"}, {"minLength", 1}, {"description", description}, {"x-uzpainter-root", root}};
 }
+
+/// A node of the committed revision (a layer or an effect), by uid: the supervisor rejects a uid that
+/// names no node before admission (`x-uzpainter-ref`, phase2.5).
+json::Object UidProperty(const char* description) {
+    return {{"type", "integer"}, {"minimum", 1}, {"description", description}, {"x-uzpainter-ref", "node"}};
+}
+
+/// The capability-manifest operation `symbol` in the context `any`.
+json::Array Operation(const char* symbol) { return {json::Object{{"symbol", symbol}, {"context", "any"}}}; }
 
 const json::Value* Field(const json::Object& object, std::string_view key) {
     const auto it = object.find(key);
@@ -447,25 +462,29 @@ void Worker::DefineTools() {
         m_tools.push_back(std::move(tool));
     };
     add_job({"project_open", "Opens a project file in the worker (one project at a time; a long job).",
-             Schema({{"path", StringProperty("The .uzp file.")}}, {"path"}), false, false},
+             Schema({{"path", PathProperty("The .uzp file.", "project")}}, {"path"}), false, false, true,
+             Operation("substance_painter.project.open")},
             std::nullopt, [this](const json::Object& a) { return ProjectOpen(a); });
     add_job({"export",
              "Exports the current revision with Painter's json_config: a new generation under its exportPath with "
              "its receipt, then the fixed-name folders (a long job; phase2.6 adds presets and overrides).",
              Schema({{"config", json::Object{{"type", json::Array{"object", "string"}},
-                                             {"description", "Painter's json_config, as an object or JSON text."}}},
+                                             {"description", "Painter's json_config, as an object or JSON text."},
+                                             // Its `exportPath` is a path under the export root.
+                                             {"x-uzpainter-paths", json::Object{{"exportPath", "export"}}}}},
                      {"fixed_names",
                       json::Object{{"type", "array"},
-                                   {"items", json::Object{{"type", "string"}}},
+                                   {"items", PathProperty("A folder.", "export")},
                                    {"description", "Folders that receive the generation's files under fixed names."}}}},
                     {"config"}),
-             false, false},
+             false, false, true, Operation("substance_painter.export.export_project_textures")},
             "publication", [this](const json::Object& a) { return Export(a); });
-    add({"project_close", "Closes the open project.", Schema({}, {}), false, false},
+    add({"project_close", "Closes the open project.", Schema({}, {}), false, false, true,
+         Operation("substance_painter.project.close")},
         [this](const json::Object& a) { return ProjectClose(a); });
     add({"project_save", "Names a checkpoint of the current revision (save; `full` also compacts).",
          Schema({{"mode", json::Object{{"type", "string"}, {"enum", json::Array{"incremental", "full"}}}}}, {}), false,
-         false},
+         false, true, Operation("substance_painter.project.save")},
         [this](const json::Object& a) { return ProjectSave(a); });
     add({"project_inspect", "The open project: path, revision and texture sets with their stacks.", Schema({}, {}), false,
          false},
@@ -473,8 +492,12 @@ void Worker::DefineTools() {
     add({"evaluate_channel",
          "Evaluates one channel of one stack on the GPU and writes its tiles under the output root "
          "(path + SHA-256).",
-         Schema({{"texture_set", StringProperty("Texture set name; the active one when omitted.")},
-                 {"stack", StringProperty("Stack name; the texture set's active or first stack when omitted.")},
+         Schema({{"texture_set", json::Object{{"type", "string"},
+                                              {"description", "Texture set name; the active one when omitted."},
+                                              {"x-uzpainter-ref", "texture_set"}}},
+                 {"stack", json::Object{{"type", "string"},
+                                        {"description", "Stack name; the texture set's active or first stack when omitted."},
+                                        {"x-uzpainter-ref", "stack"}}},
                  {"channel", StringProperty("Channel type, e.g. BaseColor.")}},
                 {"channel"}),
          false, true},
@@ -496,25 +519,26 @@ void Worker::DefineTools() {
          Schema({{"uid", UidProperty("The node to hide.")},
                  {"channels", json::Object{{"type", "array"},
                                            {"minItems", 1},
+                                           {"uniqueItems", true},
                                            {"items", json::Object{{"type", "string"}}},
                                            {"description", "Channel types, Normal_OpenGL or Normal_DirectX."}}},
-                 {"path", StringProperty("The export folder, relative to the output root.")}},
+                 {"path", PathProperty("The export folder, relative to the output root.", "export")}},
                 {"uid", "channels", "path"}),
-         false, false},
+         false, false, true, Operation("uzpainter.diagnostics.isolate")},
         [this](const json::Object& a) { return IsolateLayer(a); });
     add({"material_views",
          "Exports the material's mask and its views with their leaks (diagnosticMap materialMask, materialView, "
          "materialLeaks; OpenEXR 32f) as a generation under `path`, a folder inside the output root.",
          Schema({{"mask", UidProperty("The material: a fill layer or group.")},
-                 {"path", StringProperty("The export folder, relative to the output root.")}},
+                 {"path", PathProperty("The export folder, relative to the output root.", "export")}},
                 {"mask", "path"}),
-         false, false},
+         false, false, true, Operation("uzpainter.diagnostics.material_views")},
         [this](const json::Object& a) { return MaterialViews(a); });
     add({"region_stats", "Statistics of a map inside a material's region (diagnosticMap regionStats/<map>/<uid>).",
          Schema({{"mask", UidProperty("The material: a fill layer or group.")},
                  {"map", StringProperty("A channel type, Normal_OpenGL or Normal_DirectX.")}},
                 {"mask", "map"}),
-         false, false},
+         false, false, true, Operation("uzpainter.diagnostics.region_stats")},
         [this](const json::Object& a) { return RegionStats(a); });
     // The display state of the fixed render pipeline (src/python/display.h; decisions 038, 042, 132).
     add({"display_get", "The display state: the active preset's fields, `parity` and the shader.", Schema({}, {}), false,
@@ -522,8 +546,8 @@ void Worker::DefineTools() {
         [](const json::Object&) { return python::display::State(*python::Session::Get().ReadProject()); });
     add({"display_set",
          "Sets display values in one transaction: a whole `preset` first, then any of environment (SHA-256 or null), "
-         "exposure, rotation, opacity, blur, shadows, background (sRGB8) and color_lut (null). Values outside the "
-         "fixed render pipeline are refused before any change (decision 038).",
+         "exposure, rotation, opacity, blur, shadows, background (sRGB8) and color_lut (SHA-256 or null; the fixed "
+         "pipeline has none). Values outside the fixed render pipeline are refused before any change (decision 038).",
          Schema({{"preset", json::Object{{"type", "object"}}},
                  {"environment", json::Object{{"type", json::Array{"string", "null"}}}},
                  {"exposure", json::Object{{"type", "number"}}},
@@ -532,7 +556,9 @@ void Worker::DefineTools() {
                  {"blur", json::Object{{"type", "number"}}},
                  {"shadows", json::Object{{"type", "boolean"}}},
                  {"background", json::Object{{"type", "array"}, {"items", json::Object{{"type", "integer"}}}}},
-                 {"color_lut", json::Object{{"type", "null"}}}},
+                 // A LUT is a valid request that the fixed pipeline refuses (UnsupportedInUzPainter, decision
+                 // 038), not a malformed argument, so its schema admits a SHA-256 string.
+                 {"color_lut", json::Object{{"type", json::Array{"string", "null"}}}}},
                 {}),
          true, false},
         [this](const json::Object& a) { return DisplaySet(a); });
@@ -558,7 +584,7 @@ void Worker::DefineTools() {
          "export; painter_iray is unavailable until the path tracer (PathTracerUnavailable). Writes the PNG, an "
          "OpenEXR and the receipt beside it, inside the output root; returns the receipt.",
          Schema({{"mode", StringProperty("painter_viewport, base_color, channel:<name>, mask:<uid> or painter_iray.")},
-                 {"path", StringProperty("The .png to write, relative to the output root.")},
+                 {"path", PathProperty("The .png to write, relative to the output root.", "export")},
                  {"camera", json::Object{{"type", "object"}, {"description", "painter_viewport: a camera record (Painter's convention)."}}},
                  {"size", json::Object{{"type", "array"},
                                        {"items", json::Object{{"type", "integer"}, {"minimum", 1}}},
@@ -569,17 +595,32 @@ void Worker::DefineTools() {
                  {"seed", json::Object{{"type", "integer"}, {"minimum", 0}}},
                  {"preset", json::Object{{"type", json::Array{"string", "object"}},
                                          {"description", "painter_viewport: a standard preset's name or a whole preset."}}},
-                 {"texture_set", StringProperty("base_color, channel:<name>: the texture set; the active one when omitted.")},
-                 {"stack", StringProperty("base_color, channel:<name>: the stack; the active or first one when omitted.")}},
+                 {"texture_set",
+                  json::Object{{"type", "string"},
+                               {"description", "base_color, channel:<name>: the texture set; the active one when omitted."},
+                               {"x-uzpainter-ref", "texture_set"}}},
+                 {"stack",
+                  json::Object{{"type", "string"},
+                               {"description", "base_color, channel:<name>: the stack; the active or first one when omitted."},
+                               {"x-uzpainter-ref", "stack"}}}},
                 {"mode", "path"}),
-         false, true, false},
+         // painter_iray's own release gap (`mode:painter_iray`) is refused by the tool itself
+         // (PathTracerUnavailable, decision 148), before the path is looked at.
+         false, true, false, Operation("uzpainter.render.capture")},
         [this](const json::Object& a) { return CaptureTool(a); });
     if (m_options.allow_python) {
-        add({"run_python", "Runs Python source in the worker's interpreter (only with --allow-python).",
-             Schema({{"code", StringProperty("The Python source.")},
-                     {"args", json::Object{{"type", "array"}, {"items", json::Object{{"type", "string"}}}}}},
-                    {"code"}),
-             true, false},
+        // `code` or `path`, a script file the roots never confine (11-mcp-server.md §5, §6).
+        json::Object script = Schema(
+            {{"code", StringProperty("The Python source.")},
+             {"path", json::Object{{"type", "string"}, {"minLength", 1}, {"description", "A Python script file to run."}}},
+             {"args", json::Object{{"type", "array"}, {"items", json::Object{{"type", "string"}}}}}},
+            {});
+        script["oneOf"] = json::Array{json::Object{{"required", json::Array{"code"}}},
+                                      json::Object{{"required", json::Array{"path"}}}};
+        add({"run_python",
+             "Runs Python source (`code`) or a script file (`path`) in the worker's interpreter (only with "
+             "--allow-python); returns `result`, stdout and stderr separately.",
+             std::move(script), true, false},
             [this](const json::Object& a) { return RunPython(a); });
     }
     if (m_previewHost) {
@@ -638,6 +679,7 @@ json::Object Worker::ListTools() const {
                                      {"mutating", tool.mutating},
                                      {"gpu", tool.gpu},
                                      {"long", long_job},
+                                     {"capability", tool.capability},
                                      {"commit_point", long_job && long_tool->second.commit_point
                                                           ? json::Value(*long_tool->second.commit_point)
                                                           : json::Value(nullptr)}});
@@ -1205,8 +1247,8 @@ std::filesystem::path Worker::OutputDirectory(const json::Object& arguments) con
 }
 
 std::filesystem::path Worker::InsideOutputRoot(const std::string& path) const {
-    // Exports and captures stay inside the output root until MCP roots exist
-    // (phase2.5_mcp-transport-registry).
+    // Exports and captures stay inside the output root. With `--roots` the supervisor hands over the
+    // canonical path under the export root, which holds the output root (phase2.5_mcp-transport-registry).
     const std::filesystem::path root = std::filesystem::weakly_canonical(std::filesystem::absolute(m_options.output_root));
     std::filesystem::path folder = python::PathFromUtf8(path);
     if (folder.is_relative()) folder = root / folder;
@@ -1306,7 +1348,10 @@ json::Object Worker::RegionStats(const json::Object& arguments) {
 
 json::Object Worker::RunPython(const json::Object& arguments) {
     const std::optional<std::string> code = StringField(arguments, "code");
-    if (!code) throw CallError{"invalid_arguments", "run_python needs code", {}};
+    const std::optional<std::string> path = StringField(arguments, "path");
+    if (code.has_value() == path.has_value()) {
+        throw CallError{"invalid_arguments", "run_python needs either code or path", {}};
+    }
     std::vector<std::string> args;
     if (const json::Value* given = Field(arguments, "args"); given && !given->IsNull()) {
         if (!given->IsArray()) throw CallError{"invalid_arguments", "args must be a list of strings", {}};
@@ -1318,7 +1363,8 @@ json::Object Worker::RunPython(const json::Object& arguments) {
     json::Object report;
     {
         pybind11::gil_scoped_acquire gil;
-        report = python::RunSource("<run_python>", *code, args);
+        report = code ? python::RunSource("<run_python>", *code, args)
+                      : python::RunScript(python::PathFromUtf8(*path), args);
     }
     if (std::get<std::string>(report.at("status").data) != "ok") {
         // A script is not a transaction: the calls it committed before raising stay committed and

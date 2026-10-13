@@ -19,14 +19,20 @@ point while it runs, records a cancel request, and keeps its terminal reply (`re
 receipt) and, for an `interrupted` job, how its outcome was resolved (`resolution`), so terminal
 states stay readable after a restart. The file is versioned with `PRAGMA user_version`; a version 0
 file (phase2.2) is migrated in place in one transaction.
+
+Logs (phase2.5, decision 159): the supervisor's log records at INFO and above go to stderr and to
+the `log` table (`LogHandler`), with their time, level, supervisor and message; the newest
+`LOG_RETAINED` rows are kept. A generated HTTP bearer token is never logged.
 """
 
 from __future__ import annotations
 
 import ctypes
 import json
+import logging
 import os
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,6 +85,13 @@ CREATE TABLE IF NOT EXISTS acknowledgement (
     project_uuid TEXT PRIMARY KEY,
     revision INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    time TEXT NOT NULL,
+    level TEXT NOT NULL,
+    supervisor TEXT NOT NULL,
+    message TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS outcome (
     project_uuid TEXT NOT NULL,
     idempotency_key TEXT NOT NULL,
@@ -92,7 +105,8 @@ CREATE TABLE IF NOT EXISTS outcome (
 )
 
 
-VERSION = 1
+VERSION = 2  # 2: the `log` table (phase2.5)
+LOG_RETAINED = 10_000
 # The job columns of a version 0 file (phase2.2), copied by the migration.
 _V0_JOB_COLUMNS = (
     "job_id, project_uuid, tool, idempotency_key, key_source, expected_revision, state, created, "
@@ -354,6 +368,26 @@ class Ledger:
         job["long"] = bool(job["long"])
         return job
 
+    # ── Logs ────────────────────────────────────────────────────────────────────────────────
+
+    def log(self, level: str, supervisor: str, message: str) -> None:
+        """Appends one log record and drops those beyond the newest `LOG_RETAINED`."""
+        cursor = self._db.execute(
+            "INSERT INTO log (time, level, supervisor, message) VALUES (?, ?, ?, ?)",
+            (now_utc(), level, supervisor, message),
+        )
+        if cursor.lastrowid is not None and cursor.lastrowid % 1000 == 0:
+            self._db.execute("DELETE FROM log WHERE id <= ?", (cursor.lastrowid - LOG_RETAINED,))
+
+    def logs(self, limit: int) -> list[dict[str, Any]]:
+        """The newest `limit` log records, newest first."""
+        rows = self._db.execute(
+            "SELECT time, level, supervisor, message FROM log ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [
+            dict(zip(("time", "level", "supervisor", "message"), row, strict=True)) for row in rows
+        ]
+
     # ── Acknowledgements and outcomes ───────────────────────────────────────────────────────
 
     def acknowledged(self, project_uuid: str) -> int | None:
@@ -406,3 +440,24 @@ class Ledger:
             "outcome": json.loads(row[2]),
             "source": row[3],
         }
+
+
+class LogHandler(logging.Handler):
+    """Writes the supervisor's log records to the ledger's `log` table (11-mcp-server.md §1).
+
+    The ledger's connection belongs to the event loop's thread: a record logged on another thread
+    (an executor job) reaches stderr only."""
+
+    def __init__(self, ledger: Ledger, supervisor: str) -> None:
+        super().__init__(logging.INFO)
+        self.ledger = ledger
+        self.supervisor = supervisor
+        self.thread = threading.get_ident()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.thread != self.thread:
+            return
+        try:
+            self.ledger.log(record.levelname, self.supervisor, record.getMessage())
+        except Exception:  # a log record must never fail the call that logged it
+            self.handleError(record)

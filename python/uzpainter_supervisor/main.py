@@ -1,123 +1,47 @@
-"""`UzPainter.exe --mcp`: the command line and the stdio MCP server (src/supervisor/supervisor.h).
+"""`UzPainter.exe --mcp`: the command line and the MCP transports (src/supervisor/supervisor.h).
 
-The MCP surface is the forwarding path of phase2.1 with the admission of phase2.2: the tools
-are the worker's own (`tools/list` asks the worker) plus `supervisor_status` and `wait_idle`. A
-mutating tool's schema takes its `idempotency_key` and `expected_revision` among the arguments
-(`public_schema`); both may be omitted, and the supervisor then generates the key and resolves
-the precondition. Every call goes through `admission.Admission`, which lifts them into the pipe
-request. A long tool (the worker lists it as `long`) takes `wait` too and runs as a job
-(phase2.3): its progress reaches a client that waits as `notifications/progress` on the request's
-progress token, with `{job_id, status, progress, message}` under `_meta["uzpainter/job"]`; the
-supervisor's `job_status`, `job_result`, `job_cancel` and `job_list` follow it. The tool registry
-with its schemas, HTTP mode, roots, resources and prompts come with phase2.5-phase2.8.
+Both transports serve one tool registry (registry.py; task phase2.5, decisions 158 and 159):
+
+- **stdio** (the default): the SDK's `stdio_server`. While it serves, stdout carries protocol
+  frames only: the SDK points the process's file descriptor 1 at stderr, so stray output from any
+  code in the process misses the wire. Logs go to stderr and to the ledger's `log` table.
+- **Streamable HTTP** (`--mcp-http <host>:<port>`, transport_http.py): Origin, Host and bearer
+  checks; a non-loopback bind needs `--allow-remote`. HTTP clients take the mutation lease
+  explicitly with `lease_acquire {owner}`.
+
+`--roots` confines the structured tools' path arguments (roots.py). The registry checks every call
+before admission (admission.py); a long tool (the worker lists it as `long`) takes `wait` too and
+runs as a job (phase2.3): its progress reaches a client that waits as `notifications/progress` on
+the request's progress token, with `{job_id, status, progress, message}` under
+`_meta["uzpainter/job"]`.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import copy
-import json
 import logging
 import os
+import secrets
 import sqlite3
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from . import transport_http
 from . import worker as worker_module
 from .admission import Admission
-from .ledger import DEFAULT_PATH, Ledger
+from .ledger import DEFAULT_PATH, Ledger, LogHandler, process_identity
+from .registry import Client, Manifest, ManifestError, Registry
+from .roots import Roots, RootsError
 
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_FATAL = 4
 
-STATUS_TOOL = "supervisor_status"
-WAIT_IDLE_TOOL = "wait_idle"
 JOB_META_KEY = "uzpainter/job"
-JOB_LIST_LIMIT = 50
-# The MCP arguments of a mutating tool carry its key and precondition (02 §2); the supervisor
-# lifts them into the pipe request, so the worker's own schema does not list them. Both may be
-# omitted together; a client that supplies its own key supplies its original precondition with
-# it on every attempt (11-mcp-server.md §4).
-MUTATION_PROPERTIES: dict[str, Any] = {
-    "idempotency_key": {
-        "type": "string",
-        "minLength": 1,
-        "description": "The mutation's idempotency key, kept for every retry of it; generated "
-        "by the supervisor (and returned in the receipt) when omitted.",
-    },
-    "expected_revision": {
-        "type": "integer",
-        "description": "The revision the mutation is based on (its precondition), kept with "
-        "the key on every retry; resolved by the supervisor when both are omitted.",
-    },
-}
-WAIT_PROPERTY: dict[str, Any] = {
-    "type": "boolean",
-    "description": "Wait for the job's end (streaming its progress) instead of returning "
-    "{job_id, status} at once.",
-}
-JOB_ID_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {"job_id": {"type": "string", "minLength": 1}},
-    "required": ["job_id"],
-    "additionalProperties": False,
-}
-JOB_LIST_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "description": f"The newest jobs to list ({JOB_LIST_LIMIT} when omitted).",
-        }
-    },
-    "additionalProperties": False,
-}
-# The supervisor's job tools: their descriptions and schemas.
-JOB_TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
-    "job_status": (
-        "A job's status: a running job's progress, message and commit point, or a finished "
-        "job's terminal state (succeeded, failed, cancelled or interrupted) and resolution.",
-        JOB_ID_SCHEMA,
-    ),
-    "job_result": (
-        "A finished job's reply with its receipt, as it was answered.",
-        JOB_ID_SCHEMA,
-    ),
-    "job_cancel": (
-        "Asks a running long job to stop at its next checkpoint (acknowledged at once); its "
-        "receipt then says whether it stopped before or after its commit point.",
-        JOB_ID_SCHEMA,
-    ),
-    "job_list": ("The ledger's newest jobs, newest first.", JOB_LIST_SCHEMA),
-}
-WAIT_IDLE_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "timeout": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Seconds to wait before failing with `timeout`.",
-        }
-    },
-    "required": ["timeout"],
-    "additionalProperties": False,
-}
-
-
-def public_schema(tool: dict[str, Any]) -> dict[str, Any]:
-    """The MCP input schema of a worker tool; a mutating one takes its key and precondition too."""
-    schema: dict[str, Any] = copy.deepcopy(tool["inputSchema"])
-    if tool["mutating"]:
-        schema.setdefault("properties", {}).update(copy.deepcopy(MUTATION_PROPERTIES))
-    if tool.get("long"):
-        schema.setdefault("properties", {})["wait"] = copy.deepcopy(WAIT_PROPERTY)
-    return schema
-
+MAX_HTTP_CLIENTS = 10_000  # the SDK's session limit
 
 log = logging.getLogger("uzpainter.supervisor")
 
@@ -141,12 +65,48 @@ def parse_args(argv: list[str], hooks_compiled: bool) -> argparse.Namespace:
     parser.add_argument("--ledger", type=Path)
     parser.add_argument("--test-faults", action="store_true")
     parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--mcp-http")
+    parser.add_argument("--token")
+    parser.add_argument("--allow-remote", action="store_true")
+    parser.add_argument("--roots")
     args = parser.parse_args(argv)
     if args.gpu_deadline_ms is not None and not 1 <= args.gpu_deadline_ms <= 86_400_000:
         raise _UsageError("--gpu-deadline-ms must be between 1 and 86400000")
     if args.test_faults and not hooks_compiled:
         raise _UsageError("--test-faults needs a Debug build (the fault hooks are not compiled in)")
+    args.bind = None
+    if args.mcp_http is None:
+        if args.token is not None or args.allow_remote:
+            raise _UsageError("--token and --allow-remote need --mcp-http")
+    else:
+        try:
+            args.bind = transport_http.parse_bind(args.mcp_http, args.allow_remote)
+        except transport_http.BindError as error:
+            raise _UsageError(str(error)) from None
+        if args.token is not None and (not args.token or any(c.isspace() for c in args.token)):
+            raise _UsageError("--token must be a non-empty token without spaces")
+    args.root_set = None
+    if args.roots is not None:
+        try:
+            args.root_set = Roots.parse(args.roots)
+        except RootsError as error:
+            raise _UsageError(str(error)) from None
+        args.output_root = _output_root(args.root_set, args.output_root)
     return args
+
+
+def _output_root(roots: Roots, given: Path | None) -> Path:
+    """With `--roots`: the worker's output root, the export root by default; it must lie inside
+    a root, so the files it holds are never outside the roots."""
+    if given is None:
+        export = roots.roots.get("export")
+        if export is None:
+            raise _UsageError("--roots needs an export root, or an --output-root inside a root")
+        return Path(export)
+    resolved = Path(os.path.realpath(given))
+    if not roots.contains(str(resolved)):
+        raise _UsageError("--output-root must lie inside one of the --roots")
+    return resolved
 
 
 def main(argv: list[str], exe: str, build: str, protocol: str, hooks_compiled: bool) -> int:
@@ -156,13 +116,6 @@ def main(argv: list[str], exe: str, build: str, protocol: str, hooks_compiled: b
         level=logging.INFO,
         format="uzpainter supervisor: %(levelname)s %(message)s",
     )
-    if any(arg in ("--mcp-http", "--roots") for arg in argv):
-        print(
-            "UzPainter.exe --mcp: --mcp-http and --roots are delivered by phase2.5 "
-            "(task phase2.5_mcp-transport-registry)",
-            file=sys.stderr,
-        )
-        return EXIT_USAGE
     try:
         args = parse_args(argv, hooks_compiled)
     except _UsageError as error:
@@ -186,13 +139,27 @@ def main(argv: list[str], exe: str, build: str, protocol: str, hooks_compiled: b
     except (OSError, sqlite3.Error) as error:
         log.critical("fatal supervisor error: cannot open the ledger: %s", error)
         return EXIT_FATAL
+    handler = LogHandler(ledger, process_identity(os.getpid()) or f"{os.getpid()}:0")
+    logging.getLogger().addHandler(handler)
     try:
-        return asyncio.run(_serve(config, build, ledger))
+        try:
+            manifest = Manifest.load(Path(exe).parent / "capabilities.json")
+        except ManifestError as error:
+            log.critical("fatal supervisor error: %s", error)
+            return EXIT_FATAL
+        return asyncio.run(_serve(config, build, ledger, manifest, args))
     finally:
+        logging.getLogger().removeHandler(handler)
         ledger.close()
 
 
-async def _serve(config: worker_module.WorkerConfig, build: str, ledger: Ledger) -> int:
+async def _serve(
+    config: worker_module.WorkerConfig,
+    build: str,
+    ledger: Ledger,
+    manifest: Manifest,
+    args: argparse.Namespace,
+) -> int:
     supervisor = worker_module.Supervisor(config)
     try:
         await supervisor.start()
@@ -201,112 +168,93 @@ async def _serve(config: worker_module.WorkerConfig, build: str, ledger: Ledger)
         return EXIT_FATAL
     admission = Admission(supervisor, ledger)
     supervisor.on_job_event = admission.on_job_event
+    registry = Registry(
+        supervisor,
+        admission,
+        manifest,
+        roots=args.root_set,
+        http=args.bind is not None,
+    )
     try:
-        await _run_mcp(supervisor, admission, build)
+        if args.bind is None:
+            await _run_stdio(registry, build)
+        else:
+            host, port = args.bind
+            token = args.token
+            if token is None:
+                token = secrets.token_urlsafe(32)
+                # Printed once for the operator; never logged, so never in the ledger.
+                print(f"uzpainter supervisor: bearer token {token}", file=sys.stderr, flush=True)
+            server = _server(registry, build, _http_clients())
+            await transport_http.serve(server, host, port, token)
     finally:
+        registry.close()
         admission.close()
         await supervisor.close()
     return EXIT_OK
 
 
-async def _run_mcp(supervisor: worker_module.Supervisor, admission: Admission, build: str) -> None:
-    import mcp_types as types
-    from mcp.server.lowlevel import Server
+def _http_clients() -> Any:
+    """The client of each Streamable HTTP session, by its `Mcp-Session-Id`; a request without a
+    session (stateless) is its own client and holds no owner."""
+    clients: dict[str, Client] = {}
+
+    def client_for(ctx: Any) -> Client:
+        request = getattr(ctx, "request", None)
+        headers = getattr(request, "headers", None)
+        session_id = headers.get("mcp-session-id") if headers is not None else None
+        if not isinstance(session_id, str):
+            return Client("http")
+        client = clients.get(session_id)
+        if client is None:
+            if len(clients) >= MAX_HTTP_CLIENTS:
+                clients.pop(next(iter(clients)))
+            client = clients[session_id] = Client("http")
+        return client
+
+    return client_for
+
+
+async def _run_stdio(registry: Registry, build: str) -> None:
     from mcp.server.stdio import stdio_server
 
-    known: dict[str, dict[str, Any]] = {}
+    client = Client("stdio")
+    server = _server(registry, build, lambda ctx: client)
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, server.create_initialization_options())
 
-    async def worker_tools() -> list[dict[str, Any]]:
-        reply = await supervisor.request({"method": "tools/list"})
-        if "error" in reply:  # the worker died while listing: ask the relaunched one
-            reply = await supervisor.request({"method": "tools/list"})
-        listed: list[dict[str, Any]] = reply.get("result", {}).get("tools", [])
-        known.update({tool["name"]: tool for tool in listed})
-        return listed
+
+def _server(registry: Registry, build: str, client_for: Any) -> Any:
+    """The SDK's low-level `Server` over `registry`; `client_for(ctx)` names a request's client."""
+    import mcp_types as types
+    from mcp.server.lowlevel import Server
 
     async def list_tools(ctx: Any, params: Any) -> Any:
-        tools = [
-            types.Tool(
-                name=STATUS_TOOL,
-                description="The supervisor's worker: pid, backend, Python policy, project and "
-                "every recovery with its cause, minidump and time; the ledger, the project's "
-                "lease and the running calls.",
-                input_schema={"type": "object", "properties": {}, "additionalProperties": False},
-                annotations=types.ToolAnnotations(read_only_hint=True),
-            ),
-            types.Tool(
-                name=WAIT_IDLE_TOOL,
-                description="Waits until no mutating call or long job runs; a timeout is an error.",
-                input_schema=copy.deepcopy(WAIT_IDLE_SCHEMA),
-                annotations=types.ToolAnnotations(read_only_hint=True),
-            ),
-        ]
-        for name, (description, schema) in JOB_TOOLS.items():
-            tools.append(
-                types.Tool(
-                    name=name,
-                    description=description,
-                    input_schema=copy.deepcopy(schema),
-                    annotations=types.ToolAnnotations(read_only_hint=name != "job_cancel"),
-                )
-            )
-        for tool in await worker_tools():
-            tools.append(
+        return types.ListToolsResult(
+            tools=[
                 types.Tool(
                     name=tool["name"],
                     description=tool["description"],
-                    input_schema=public_schema(tool),
-                    annotations=types.ToolAnnotations(read_only_hint=not tool["mutating"]),
+                    input_schema=tool["inputSchema"],
+                    annotations=types.ToolAnnotations(read_only_hint=tool["readOnly"]),
+                    _meta=tool["meta"],
                 )
-            )
-        return types.ListToolsResult(tools=tools)
+                for tool in await registry.list_tools()
+            ]
+        )
 
     async def call_tool(ctx: Any, params: Any) -> Any:
-        arguments = dict(params.arguments or {})
-        if params.name == STATUS_TOOL:
-            return _tool_result({"result": {**supervisor.status(), **admission.status()}})
-        if params.name == WAIT_IDLE_TOOL:
-            timeout = arguments.get("timeout")
-            if isinstance(timeout, bool) or not isinstance(timeout, int | float) or timeout < 0:
-                return _tool_result(
-                    {
-                        "error": {
-                            "code": "invalid_arguments",
-                            "message": "wait_idle needs timeout (seconds, at least 0)",
-                            "details": {},
-                        }
-                    }
-                )
-            return _tool_result(await admission.wait_idle(float(timeout)))
-        if params.name in JOB_TOOLS:
-            return _tool_result(await job_tool(params.name, arguments))
-        if params.name not in known:
-            await worker_tools()
-        tool = known.get(params.name, {})
-        reply = await admission.call(
-            params.name,
-            arguments,
-            bool(tool.get("mutating")),
-            long=bool(tool.get("long")),
-            commit_point=tool.get("commit_point"),
-            notify=progress_sender(ctx),
+        reply = await registry.call(
+            params.name, dict(params.arguments or {}), client_for(ctx), progress_sender(ctx)
         )
-        return _tool_result(reply)
-
-    async def job_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        if name == "job_list":
-            limit = arguments.get("limit", JOB_LIST_LIMIT)
-            if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-                return _invalid("job_list's limit must be a whole number of at least 1")
-            return admission.job_list(limit)
-        job_id = arguments.get("job_id")
-        if not isinstance(job_id, str) or not job_id:
-            return _invalid(f"{name} needs job_id")
-        if name == "job_status":
-            return admission.job_status(job_id)
-        if name == "job_result":
-            return admission.job_result(job_id)
-        return await admission.cancel(job_id)
+        content: list[Any] = [types.TextContent(text=reply.summary)]
+        content += [
+            types.ImageContent(data=image["data"], mime_type=image["mimeType"])
+            for image in reply.images
+        ]
+        return types.CallToolResult(
+            content=content, structured_content=reply.body, is_error="error" in reply.body
+        )
 
     def progress_sender(ctx: Any) -> Any:
         """Sends a waited job's events as `notifications/progress` on the request's token."""
@@ -331,16 +279,4 @@ async def _run_mcp(supervisor: worker_module.Supervisor, admission: Admission, b
 
         return notify
 
-    def _invalid(message: str) -> dict[str, Any]:
-        return {"error": {"code": "invalid_arguments", "message": message, "details": {}}}
-
-    def _tool_result(body: dict[str, Any]) -> Any:
-        return types.CallToolResult(
-            content=[types.TextContent(text=json.dumps(body, sort_keys=True, ensure_ascii=False))],
-            structured_content=body,
-            is_error="error" in body,
-        )
-
-    server = Server("uzpainter", version=build, on_list_tools=list_tools, on_call_tool=call_tool)
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+    return Server("uzpainter", version=build, on_list_tools=list_tools, on_call_tool=call_tool)

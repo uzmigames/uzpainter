@@ -141,10 +141,14 @@ def test_a_replay_beyond_retention_with_a_lost_ledger_never_mutates(
 
     fresh, _, reopened = opened(painter, tmp_path, sessions, project=project, ledger=ledger)
     assert reopened == current
-    for expected in (revision, None):
-        replay = mutate(fresh, "A", "k-1", expected)
-        assert replay["error"]["code"] == "outcome_unknown", replay
-        assert replay["error"]["details"]["committed_revision"] == current
+    replay = mutate(fresh, "A", "k-1", revision)
+    assert replay["error"]["code"] == "outcome_unknown", replay
+    assert replay["error"]["details"]["committed_revision"] == current
+    # Without its precondition the key is refused at the MCP boundary before admission
+    # (phase2.5, decision 158); the worker's own key-only decision is test_worker_admission.py's.
+    replay = mutate(fresh, "A", "k-1", None)
+    assert replay["error"]["code"] == "invalid_arguments", replay
+    assert replay["receipt"]["job_id"] is None
     assert revision_of(fresh) == current
 
 
