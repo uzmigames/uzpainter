@@ -161,7 +161,8 @@ def test_difference_is_judged_against_the_repeat_noise() -> None:
 
 
 def test_answers_cover_every_unconfirmed_row_of_07() -> None:
-    """Item 3.3: one answer per "not confirmed" row (plus §3.3 height), each with evidence."""
+    """Item 3.3: one answer per row of 07 §2.1 that was "not confirmed" (plus §3.3 height), each
+    with evidence; 07 states every answer, so no row is "not confirmed" any more."""
     data = load_answers()
     assert problems(data) == []
     assert set(data["rows"]) == set(ROWS)
@@ -169,9 +170,8 @@ def test_answers_cover_every_unconfirmed_row_of_07() -> None:
         encoding="utf-8"
     )
     table = text.split("### 2.1", 1)[1].split("### 2.2", 1)[0]
-    unconfirmed = [
-        line for line in table.splitlines() if line.startswith("|") and "not confirmed" in line
-    ]
+    lines = [line for line in table.splitlines() if line.startswith("|")]
+    assert not [line for line in lines if "not confirmed" in line]
     answered_by = {
         "| Colour LUT": "colour_lut",
         "| Colour-management mode": "display_view_transform",
@@ -184,11 +184,10 @@ def test_answers_cover_every_unconfirmed_row_of_07() -> None:
         "| Random seed": "random_seed",
         "| Save Render": "save_render",
     }
-    for line in unconfirmed:
-        (row,) = [row for start, row in answered_by.items() if line.startswith(start)]
+    for start, row in answered_by.items():
+        assert len([line for line in lines if line.startswith(start)]) == 1, start
         assert row in data["rows"]
-    assert len(unconfirmed) == len(answered_by)
-    assert re.search(r"bump or as displacement", text) and "height" in data["rows"]
+    assert re.search(r"applies a painted height as bump", text) and "height" in data["rows"]
     assert pending(data) == []
     for row, entry in data["rows"].items():
         assert entry["status"] in STATUSES and entry["status"] != "pending_probe", row
