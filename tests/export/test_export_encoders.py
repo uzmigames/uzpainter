@@ -1054,6 +1054,75 @@ def test_ocio_encode_equals_painter_files(export_tests: Path, tmp_path: Path) ->
     assert report["identical"] == report["comparisons"] == 2 * report["files"] - 5, report
 
 
+def test_painter_ocio_png16_differs_from_legacy_on_74_values() -> None:
+    """B17 of the practical end-to-end run (decision 190): Painter's own PNG 16 of an sRGB8
+    BaseColor differs between its OCIO and Legacy twins (export-ocio-encode against
+    export-ocio-encode-legacy) by one code, on exactly `OCIO_PNG16_DIFFERING_CODES` of the 256
+    sRGB8 codes (s3) and on the empty BaseColor (s7), in both recordings; their PNG 8 and OpenEXR
+    32f files are byte-identical. A Legacy and an OCIO export of one stack differing there is
+    parity, not a bug."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.painter_ocio_against_legacy()
+    assert report["problems"] == [], report["problems"]
+    assert report["different"] == [], report["different"]
+    assert len(report["same"]) == 2 * len(encoders_tier0.OCIO_TWIN_SETS) * 2, report["same"]
+    for recording in ("r1", "r2"):
+        ocio = report["tables"][("ocio", recording)]
+        legacy = report["tables"][("legacy", recording)]
+        assert sorted(ocio) == sorted(legacy) == list(range(256)), recording
+        differing = [c for c in range(256) if ocio[c] != legacy[c]]
+        assert differing == list(encoders_tier0.OCIO_PNG16_DIFFERING_CODES), (recording, differing)
+        assert {c: ocio[c] - legacy[c] for c in differing if ocio[c] - legacy[c] != -1} == {6: 1}
+        for mode, code in encoders_tier0.OCIO_EMPTY_BASECOLOR_PNG16.items():
+            assert report["empty"][(mode, recording)] == [code], (mode, recording)
+
+
+def test_ocio_png16_differs_from_legacy_where_painter_does(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """B17 of the practical end-to-end run (decision 190): a stack that stores the same values
+    under Legacy and OCIO, exported from a Legacy and from an OCIO project, gives the same PNG 8
+    and OpenEXR 32f files, and PNG 16 files that differ by one code exactly where Painter's do
+    (`OCIO_PNG16_DIFFERING_CODES` and the empty BaseColor, pinned on Painter's files by
+    `test_painter_ocio_png16_differs_from_legacy_on_74_values`): export-ocio-encode's s3 (every
+    sRGB8 code of the authored ramp on BaseColor at 1:1) and s7 (the empty BaseColor), rebuilt
+    from the repository's manifest. A value outside the recorded ones, the luma of the ramp, is
+    written under Legacy and refused under OCIO before anything is written."""
+    from tests.export import encoders_tier0
+    from tools.parity.fit.decode import decode
+
+    report = encoders_tier0.ocio_twin_written(export_tests, tmp_path)
+    files = report["files"]
+    expected = ["s3 luma", *(f"{s} step {n}" for s in ("s3", "s7") for n in (46, 47, 48))]
+    assert sorted(files) == expected, dict(report["refused"])
+    for where in ("s3 step 47", "s3 step 48", "s7 step 47", "s7 step 48"):
+        assert files[where]["legacy"].read_bytes() == files[where]["ocio"].read_bytes(), where
+
+    def values(where: str, mode: str) -> np.ndarray:
+        result: np.ndarray = decode(files[where][mode].read_bytes()).values.reshape(-1)
+        return result.astype(np.int64)
+
+    codes = values("s3 step 47", "legacy")
+    legacy, ocio = values("s3 step 46", "legacy"), values("s3 step 46", "ocio")
+    assert sorted(set(codes.tolist())) == list(range(256))
+    for png16 in (legacy, ocio):  # each a function of the stored code
+        assert len(set(zip(codes.tolist(), png16.tolist(), strict=True))) == 256
+    assert sorted(set(codes[legacy != ocio].tolist())) == list(
+        encoders_tier0.OCIO_PNG16_DIFFERING_CODES
+    )
+    assert set((ocio - legacy).tolist()) == {-1, 0, 1}
+    for mode, code in encoders_tier0.OCIO_EMPTY_BASECOLOR_PNG16.items():
+        assert sorted(set(values("s7 step 46", mode).tolist())) == [code], mode
+
+    assert set(files["s3 luma"]) == {"legacy"}, dict(report["refused"])
+    error, message, written = report["refused"]["s3 luma"]["ocio"]
+    assert error == "Failure" and message.startswith("evaluator:unsupported_source"), message
+    assert "under OCIO, the PNG encode of the linear value" in message, message
+    assert "decision 190" in message, message
+    assert written == []
+
+
 def test_srgb_variants_equal_painter_files(export_tests: Path, tmp_path: Path) -> None:
     """phase1.15_compositor-colour-fits item 2.2 (decision 174): srgb-bitmap-variants-v2 rebuilt
     per texture set and written by WriteExport at PNG 16, PNG 8 and OpenEXR 32f, every map, is
