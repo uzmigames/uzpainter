@@ -306,58 +306,34 @@ const core::TextureSet& SetNamed(const core::Project& project, const std::string
 
 // ── Errors ──────────────────────────────────────────────────────────────────────────────────────
 
-bool GapClass(const std::string& cls) {
-    return cls == "NotYetSupported" || cls == "UnsupportedProcedural" || cls == "ReleaseGap" ||
-           cls == "PathTracerUnavailable";
-}
-
-CallError Gap(const std::string& tool, const std::string& reason, const std::string& type) {
-    return CallError{"capability_gap", tool + ": a release gap of this build: " + reason,
-                     json::Object{{"tool", tool}, {"type", type}, {"reason", reason}}};
-}
-
-/// Runs a typed tool's work and gives its errors their MCP codes: an ambiguous name is
-/// `ambiguous_name {candidates}` (LAY-06), a release gap met by the native code (`NotYetSupported`
-/// and its kin) `capability_gap` (nothing is committed either way).
-json::Object Translated(const std::string& tool, const std::function<json::Object()>& run) {
+/// Runs a typed tool's work and gives an ambiguous name its MCP code, `ambiguous_name
+/// {candidates}` (LAY-06), before anything is committed. A release gap is `capability_gap` at the
+/// worker's boundary (`Worker::Execute`), as every worker tool's.
+json::Object Translated(const std::function<json::Object()>& run) {
     try {
         return run();
     } catch (const core::AmbiguousNameError& error) {
         throw CallError{"ambiguous_name", error.what(), json::Object{{"candidates", UidList(error.candidates())}}};
-    } catch (const core::NotYetSupported& error) {
-        throw Gap(tool, error.what(), "NotYetSupported");
-    } catch (const python::ApiError& error) {
-        if (GapClass(error.cls())) throw Gap(tool, error.what(), error.cls());
-        throw;
-    } catch (const CallError& error) {
-        // A transaction the support check failed (`evaluator::RequireSupported`, decision 082).
-        const json::Value* type = Field(error.details, "type");
-        if (error.code == "call_failed" && type && type->IsString() && GapClass(std::get<std::string>(type->data))) {
-            throw Gap(tool, error.message, std::get<std::string>(type->data));
-        }
-        throw;
     }
 }
 
 ToolDefinition Define(Tool tool, Handler handler) {
-    const std::string name = tool.name;
     return {std::move(tool),
-            [name, handler = std::move(handler)](const json::Object& arguments) {
-                return Translated(name, [&] { return handler(arguments); });
+            [handler = std::move(handler)](const json::Object& arguments) {
+                return Translated([&] { return handler(arguments); });
             },
             nullptr, std::nullopt};
 }
 
 ToolDefinition DefineJob(Tool tool, std::optional<std::string> commit_point, JobHandler job) {
-    const std::string name = tool.name;
-    JobHandler wrapped = [name, job = std::move(job)](const json::Object& arguments) -> python::JobBody {
+    JobHandler wrapped = [job = std::move(job)](const json::Object& arguments) -> python::JobBody {
         python::JobBody body;
-        Translated(name, [&] {
+        Translated([&] {
             body = job(arguments);
             return json::Object{};
         });
-        return [name, body = std::move(body)](python::JobContext& context) {
-            return Translated(name, [&] { return body(context); });
+        return [body = std::move(body)](python::JobContext& context) {
+            return Translated([&] { return body(context); });
         };
     };
     return {std::move(tool), nullptr, std::move(wrapped), std::move(commit_point)};
@@ -370,9 +346,7 @@ ToolDefinition GapTool(Tool tool, std::string reason) {
     const json::Array operations = tool.capability;
     return {std::move(tool),
             [name, reason, operations](const json::Object&) -> json::Object {
-                CallError gap = Gap(name, reason, "NotYetSupported");
-                gap.details["operations"] = operations;
-                throw gap;
+                throw GapError(name, reason, "NotYetSupported", operations);
             },
             nullptr, std::nullopt};
 }

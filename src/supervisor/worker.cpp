@@ -30,6 +30,7 @@
 #include <pybind11/embed.h>
 
 #include "crash_handler.h"
+#include "evaluator/error.h"
 #include "evaluator/evaluator.h"
 #include "evaluator/geometry_mask.h"
 #include "evaluator/sources.h"
@@ -512,7 +513,9 @@ void Worker::DefineTools() {
          "pass offscreen on the GPU; base_color, channel:<name> and mask:<uid> are texture-space captures equal to the "
          "export; painter_iray is unavailable until the path tracer (PathTracerUnavailable). Writes the PNG, an "
          "OpenEXR and the receipt beside it, inside the output root; returns the receipt.",
-         Schema({{"mode", StringProperty("painter_viewport, base_color, channel:<name>, mask:<uid> or painter_iray.")},
+         Schema({{"mode", StringProperty("painter_viewport, base_color, channel:<name>, mask:<uid> or painter_iray; "
+                                         "<name> is a channel type as evaluate_channel takes it (SpecularRoughness) "
+                                         "or the export's documentMap name (specularroughness).")},
                  {"path", PathProperty("The .png to write, relative to the output root.", "export")},
                  {"camera", json::Object{{"type", "object"}, {"description", "painter_viewport: a camera record (Painter's convention)."}}},
                  {"size", json::Object{{"type", "array"},
@@ -735,8 +738,21 @@ json::Object Worker::Execute(const json::Value& id, const json::Object& request,
         }
         return reply;
     } catch (const CallError& error) {
+        // A transaction the support check failed (`evaluator::RequireSupported`, decision 082)
+        // fails `call_failed` with its error class: a release gap among them is `capability_gap`.
+        const json::Value* type = Field(error.details, "type");
+        if (error.code == "call_failed" && type && type->IsString() && IsGapClass(std::get<std::string>(type->data))) {
+            const CallError gap = GapError(tool.name, error.message, std::get<std::string>(type->data));
+            return ErrorReply(id, gap.code, gap.message, gap.details);
+        }
         return ErrorReply(id, error.code, error.message, error.details);
     } catch (const python::ApiError& error) {
+        if (IsGapClass(error.cls())) {
+            // A release gap the API's code meets: the evaluator's (a source it does not sample yet),
+            // a capture mode's (painter_iray), a typed edit's (decision 242).
+            const CallError gap = GapError(tool.name, error.what(), error.cls());
+            return ErrorReply(id, gap.code, gap.message, gap.details);
+        }
         json::Object details{{"type", error.cls()}};
         std::string code = "call_failed";
         if (error.cls() == "StaleRevisionError") {
@@ -753,9 +769,9 @@ json::Object Worker::Execute(const json::Value& id, const json::Object& request,
         return ErrorReply(id, std::move(code), error.what(), std::move(details));
     } catch (const core::NotYetSupported& error) {
         // A release gap the native code meets (an export's unfitted setting, refused before anything
-        // is written): `capability_gap`, as the typed tools' (typed_tools.cpp `Translated`).
-        return ErrorReply(id, "capability_gap", tool.name + ": a release gap of this build: " + error.what(),
-                          json::Object{{"tool", tool.name}, {"type", "NotYetSupported"}, {"reason", error.what()}});
+        // is written; a typed edit's): `capability_gap`.
+        const CallError gap = GapError(tool.name, error.what(), "NotYetSupported");
+        return ErrorReply(id, gap.code, gap.message, gap.details);
     } catch (const std::exception& error) {
         return ErrorReply(id, "call_failed", error.what(), json::Object{{"type", "RuntimeError"}});
     }
@@ -869,6 +885,11 @@ json::Object Worker::Reopen(const json::Value& id, const json::Object& request) 
 }
 
 void Worker::FailRender(const render::Error& error) {
+    if (const std::optional<evaluator::EvalErrorKind> kind = evaluator::EvalErrorKindOf(error)) {
+        // An evaluator failure carries its API class (decision 082), as the export's, the capture's
+        // and the diagnostics' do: a release gap is `capability_gap` (Execute).
+        throw python::ApiError(std::string(evaluator::ErrorClassName(*kind)), error.reason);
+    }
     // A removed device or a stalled GPU leaves the engine unusable: the call fails and the worker
     // exits after the reply (02 §5).
     if (error.code == render::ErrorCode::DeviceRemoved || error.code == render::ErrorCode::Timeout) {
@@ -889,6 +910,24 @@ python::JobBody Worker::ProjectOpen(const json::Object& arguments) {
         session.Open(python::PathFromUtf8(path));
         return json::Object{{"path", DurableStore(*session.Current())}, {"revision", session.Revision()}};
     };
+}
+
+/// Refuses an invalid export configuration before its job starts (decision 242): the
+/// `core::ValueError` of the configuration parser and the plan compiler (export/plan.h: a
+/// parameter undefined after the preset map and every matching rule, an unknown map, ...) is a
+/// malformed call, `invalid_arguments`. Only the plan resolves a map's parameters across the
+/// preset and the rules, so the supervisor's schema cannot decide it. A release gap the plan meets
+/// is `capability_gap` (Execute); what fails later is the job's own error.
+void CheckConfiguration(const std::string& text) {
+    python::Session& session = python::Session::Get();
+    const std::shared_ptr<const core::Project> project = session.ReadProject();
+    const std::optional<std::filesystem::path> path = session.FilePath();
+    const exporter::PlanContext context{path ? exporter::Utf8String(*path) : std::string()};
+    try {
+        exporter::CheckExportable(exporter::CompilePlan(*project, text, context));
+    } catch (const core::ValueError& error) {
+        throw CallError{"invalid_arguments", error.what(), json::Object{{"type", "ValueError"}}};
+    }
 }
 
 python::JobBody Worker::Export(const json::Object& arguments) {
@@ -976,6 +1015,7 @@ python::JobBody Worker::Export(const json::Object& arguments) {
         document["exportParameters"] = std::move(rules);
     }
     std::string text = json::WriteCanonical(document);
+    CheckConfiguration(text);
     const json::Value* dry_run = Field(arguments, "dry_run");
     if (dry_run && dry_run->IsBool() && std::get<bool>(dry_run->data)) {
         if (!fixed_names.empty()) throw CallError{"invalid_arguments", "a dry run writes nothing: fixed_names do not apply", {}};

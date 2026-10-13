@@ -659,6 +659,26 @@ def test_argument_values_gate_capabilities_and_fail_closed(tmp_path: Path) -> No
     assert invalid["error"]["code"] == "invalid_arguments"  # the schema comes first
 
 
+def test_capability_gaps_name_the_tool_type_reason_and_operations(tmp_path: Path) -> None:
+    """practical-e2e B4 (decision 242): the gate's refusals carry the fields of every release-gap
+    refusal, the worker's too: `{tool, type, reason, operations}`, `type` the API's release-gap
+    class `NotYetSupported` and `reason` each gap operation with its manifest notes (the owner)."""
+    _, _, registry = make(tmp_path)
+    fields = {"tool", "type", "reason", "operations"}
+    tool = run(registry.call("bake_start", {}, STDIO, None)).body["error"]["details"]
+    assert set(tool) == fields and (tool["tool"], tool["type"]) == ("bake_start", "NotYetSupported")
+    assert tool["reason"] == (
+        "uzpainter.baking.bake_async [any] is a release gap (owner phase3.4_baker-ao)"
+    )
+    value = run(registry.call("layer_insert", {"kind": "paint"}, STDIO, None)).body["error"]
+    assert value["code"] == "capability_gap" and set(value["details"]) == fields
+    assert value["details"]["type"] == "NotYetSupported"
+    assert value["details"]["reason"] == (
+        "/kind: substance_painter.layerstack.insert_paint [any] is a release gap"
+    )
+    assert value["details"]["operations"][0]["value"] == "paint"
+
+
 def test_batch_runs_calls_in_order_with_per_call_results(tmp_path: Path) -> None:
     """phase2.6 2.4, 3.4 (INT-06, decision 165): each call runs through every check and its own
     admission; with stop_on_error the calls after the first failure are not executed; without it
@@ -695,6 +715,35 @@ def test_batch_runs_calls_in_order_with_per_call_results(tmp_path: Path) -> None
     assert [r["idempotency_key"] for r in receipts] == ["b-1/0", "b-1/1"]
     assert [r["expected_revision"] for r in receipts] == [8, 9]
     assert {r["key_source"] for r in receipts} == {"client"}
+
+
+def test_a_batch_reply_carries_the_result_contract(tmp_path: Path) -> None:
+    """practical-e2e B15 (decisions 158, 242): a batch's reply has a receipt and the contract
+    fields like every other call's: the revision its first call was admitted on, the committed
+    revision after it, no job of its own, its calls' change lists and warnings, and the one-line
+    summary; each call's own body stays in `results`."""
+    _, _, registry = make(tmp_path)
+    calls = [
+        {"tool": "layer_set", "arguments": {"uid": 10}},
+        {"tool": "layer_set", "arguments": {"uid": 11}},
+    ]
+    reply = run(registry.call("batch", {"calls": calls}, STDIO, None))
+    body = reply.body
+    assert (body["revision"], body["committed_revision"], body["job_id"]) == (5, 7, None)
+    assert body["receipt"] == {
+        "tool": "batch",
+        "job_id": None,
+        "revision": 5,
+        "project": "C:/p/plane.uzp",
+        "project_uuid": UUID,
+        "texture_set": None,
+        "committed_revision": 7,
+    }
+    assert body["changed"] == [10, 12] and body["created"] == [21]
+    assert body["imported"] == ["res://a"] and body["hidden"] == body["skipped"] == []
+    assert body["warnings"] == []
+    assert reply.summary == "batch: completed; revision 5 -> 7; changed 2, created 1, imported 1"
+    assert [row["body"]["revision"] for row in body["result"]["results"]] == [5, 6]
 
 
 def test_status_and_capabilities_tools(tmp_path: Path) -> None:

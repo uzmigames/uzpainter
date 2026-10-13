@@ -4,6 +4,19 @@
 
 namespace uzp::supervisor {
 
+bool IsGapClass(std::string_view cls) {
+    return cls == "NotYetSupported" || cls == "UnsupportedProcedural" || cls == "ReleaseGap" ||
+           cls == "PathTracerUnavailable";
+}
+
+CallError GapError(const std::string& tool, const std::string& reason, const std::string& type, json::Array operations) {
+    return CallError{"capability_gap", tool + ": a release gap of this build: " + reason,
+                     json::Object{{"tool", tool},
+                                  {"type", type},
+                                  {"reason", reason},
+                                  {"operations", std::move(operations)}}};
+}
+
 json::Object Schema(json::Object properties, json::Array required) {
     return {{"type", "object"},
             {"properties", std::move(properties)},

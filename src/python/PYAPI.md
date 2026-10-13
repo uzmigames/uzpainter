@@ -96,7 +96,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
     `set_parameters` accepts these at their default values only.
 - **Capture** (`capture.{h,cpp}`, bound in `bind_display.cpp`; task phase2.2_preview-capture, decision 148). `render.capture(path, mode, camera=None, size=None, samples=None, seed=None, preset=None, stack=None)` captures the committed revision and returns the receipt (`capture-receipt.schema.json`), which is also written as `<stem>.receipt.json`. Nothing commits.
   - `painter_viewport` is the preview pass rendered offscreen (needs `size`).
-  - `base_color`, `channel:<name>` and `mask:<uid>` are texture-space files equal to the export.
+  - `base_color`, `channel:<name>` and `mask:<uid>` are texture-space files equal to the export. `<name>` is a `ChannelType` name or the export's documentMap name of one (decision 242).
   - `painter_iray` raises `PathTracerUnavailable`, a `NotYetSupported`, before anything else.
   - See `src/preview/PREVIEW.md`.
 - **Later phases.** `baking` (phase3.5) is importable. Every call raises `NotYetSupported` naming the owner before anything changes.

@@ -23,14 +23,16 @@ Every `tools/call` goes through `Admission.call`:
    timeout is an error.
 5. **Receipts.** Every reply carries `receipt`: the project the worker holds afterwards (path
    and UUID), the texture set the call named or returned, the job, the revision the call was
-   admitted on and the committed revision; a mutating call adds its key (`key_source`: client
-   or supervisor), its precondition, its request hash and the worker's admission
-   (`executed` or `stored_outcome`).
+   admitted on (with no project open: 0 for a mutating call, the precondition it is given, and
+   null for a read; decision 242) and the committed revision; a mutating call adds its key
+   (`key_source`: client or supervisor), its precondition, its request hash and the worker's
+   admission (`executed` or `stored_outcome`).
 6. **Long jobs** (phase2.3, decisions 140, 141). A tool the worker lists as `long` runs as a job:
    the call returns `{job_id, status: "running"}` at once, or with `wait=true` waits for the end
    while `notify` streams `{job_id, status, progress, message}`. A long job holds its project's
    running slot like a mutating call (`busy {job_id}`), and its row in the ledger follows its
-   progress and its commit point. `job_status`, `job_result`, `job_cancel` and `job_list` answer
+   progress and its commit point, then takes its terminal receipt's progress and message
+   (decision 242). `job_status`, `job_result`, `job_cancel` and `job_list` answer
    from this supervisor and its ledger; `job_cancel` records the request and sends
    `worker/cancel`, which the worker acknowledges at once. The terminal receipt adds `status`
    (`succeeded`, `failed`, `cancelled` or `interrupted`), the worker's job receipt (`job`:
@@ -268,6 +270,10 @@ class Admission:
                 break
         project_uuid = worker.project_uuid
         admitted_revision = worker.durable_revision
+        if mutating and admitted_revision is None:
+            # With no project open a mutation is decided against revision 0, the precondition it
+            # is given; a read reads no revision (null, decision 242).
+            admitted_revision = 0
         receipt: dict[str, Any] = {"tool": name, "job_id": None, "revision": admitted_revision}
         frame: dict[str, Any] = {"method": "tools/call", "name": name, "arguments": arguments}
         if not mutating and not long:
@@ -442,6 +448,11 @@ class Admission:
         if resolution is not None and resolution.get("committed") is True:
             committed = resolution.get("committed_revision", committed)
         request_hash = reply.get("request_hash")
+        # A long job's row ends with its terminal receipt's progress and message (1.0 when it
+        # succeeded; the worker reports no event at the end); an interrupted one has none.
+        job = reply.get("job")
+        progress = job.get("progress") if isinstance(job, dict) else None
+        message = job.get("message") if isinstance(job, dict) else None
         self.ledger.finish_job(
             run.job_id,
             state,
@@ -450,6 +461,10 @@ class Admission:
             error_code,
             reply=body,
             resolution=resolution,
+            progress=float(progress)
+            if isinstance(progress, int | float) and not isinstance(progress, bool)
+            else None,
+            message=message if isinstance(message, str) else None,
         )
         worker = self.worker
         project_uuid = run.project_uuid

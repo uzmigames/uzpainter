@@ -49,6 +49,8 @@ from tools.parity.settling import report as settling_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLANE = REPO_ROOT / "parity" / "fixtures" / "meshes" / "plane.obj"
+# Painter's substance config (decisions 134, 207): the one OCIO configuration a project is made in.
+OCIO_CONFIG = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
 JSON_PREFIX = "UZP_JSON:"
 NO_GPU = os.environ.get("UZP_NO_GPU") == "1"
 BACKEND = os.environ.get("UZP_SUPERVISOR_BACKEND", "vulkan")
@@ -386,6 +388,35 @@ class Mcp:
             if self.process.poll() is None:
                 self.process.kill()
             self._stderr.close()
+
+
+def ocio_with_a_refused_bitmap(session: Mcp, tmp_path: Path) -> int:
+    """An untitled OCIO project of the plane at 256 px whose fill takes BaseColor from a 16 px
+    colour bitmap, a sampling Session O does not record (decision 190), so the evaluator refuses
+    it with `NotYetSupported` (practical-e2e B4); the fill's uid."""
+    created = session.call(
+        "project_create",
+        {
+            "mesh": str(PLANE),
+            "ocio_config_hash": OCIO_CONFIG,
+            "settings": {"default_texture_resolution": 256},
+            "wait": True,
+        },
+    )
+    assert created["result"]["status"] == "committed", created
+    checker = tmp_path / "checker-16.png"
+    shutil.copy(REPO_ROOT / "parity" / "fixtures" / "api-probes" / "checker-16.png", checker)
+    imported = session.call("resource_import", {"path": str(checker), "usage": "TEXTURE"})
+    assert imported["result"]["status"] == "committed", imported
+    inserted = session.call(
+        "layer_insert", {"kind": "fill", "params": {"active_channels": ["BaseColor"]}}
+    )
+    fill = inserted["result"]["returned"]["node"]
+    assert isinstance(fill, int), inserted
+    bitmap = {"kind": "bitmap", "resource": "checker-16", "color_space": "sRGB"}
+    sourced = session.call("source_set", {"uid": fill, "channel": "BaseColor", "source": bitmap})
+    assert sourced["result"]["status"] == "committed", sourced
+    return fill
 
 
 @pytest.fixture

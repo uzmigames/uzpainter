@@ -281,6 +281,55 @@ def test_receipts_have_every_field(painter: Path, tmp_path: Path) -> None:
     assert receipt["render_state_digest"] == hashlib.sha256(canonical(state)).hexdigest()
 
 
+CHANNELS = """
+project.create(PLANE, project.Settings(default_texture_resolution=256))
+fill = ls.insert_fill(ls.InsertPosition.from_textureset_stack(ts.get_active_stack()))
+fill.active_channels = {CT.SpecularRoughness, CT.BaseColor}
+fill.set_source(CT.SpecularRoughness, cm.Color(0.3, 0.3, 0.3, "Raw"))
+fill.set_source(CT.BaseColor, cm.Color(0.7, 0.3, 0.1, "Raw"))
+modes = ["channel:SpecularRoughness", "channel:specularroughness", "channel:Roughness",
+         "channel:roughness", "channel:BaseColor", "base_color"]
+caps = {mode: capture(WORK + "/cap/%d.png" % i, mode) for i, mode in enumerate(modes)}
+result = {
+    "caps": {mode: {"png": c["files"]["png"], "source": c["source"]["name"]}
+             for mode, c in caps.items()},
+    "unknown": raises(capture, WORK + "/r.png", "channel:Rough"),
+    "absent": raises(capture, WORK + "/r.png", "channel:User7"),
+}
+"""
+
+
+def test_channel_mode_takes_channel_types(painter: Path, tmp_path: Path) -> None:
+    """practical-e2e B11 (decision 242): `channel:<name>` takes a channel type as `evaluate_channel`
+    and `source_set` do (`SpecularRoughness`), the documentMap the export records for it, and the
+    export's documentMap names it took before (`specularroughness`): both capture the same values.
+    A name that is neither says so, never that a documentMap spelling is not recorded; a channel
+    the stack lacks says the stack has no such channel."""
+    result = ok(run(painter, tmp_path, CHANNELS))
+    caps = result["caps"]
+    sources = {mode: cap["source"] for mode, cap in caps.items()}
+    assert sources == {
+        "channel:SpecularRoughness": "specularroughness",
+        "channel:specularroughness": "specularroughness",
+        "channel:Roughness": "roughness",
+        "channel:roughness": "roughness",
+        "channel:BaseColor": "baseColor",
+        "base_color": "baseColor",
+    }
+    for first, second in (
+        ("channel:SpecularRoughness", "channel:specularroughness"),
+        ("channel:Roughness", "channel:roughness"),
+        ("channel:SpecularRoughness", "channel:Roughness"),
+        ("channel:BaseColor", "base_color"),
+    ):
+        assert np.array_equal(values(caps[first]["png"]), values(caps[second]["png"])), first
+    assert result["unknown"].startswith("ValueError: channel:Rough names no channel")
+    assert "SpecularRoughness" in result["unknown"] and "specularroughness" in result["unknown"]
+    assert (
+        result["absent"].startswith("ValueError: ") and "has no channel User7" in result["absent"]
+    )
+
+
 # ── 3.2 Freshness of the diagnostic modes ───────────────────────────────────────────────────────
 
 FRESH = """
@@ -342,7 +391,7 @@ def test_worker_capture_tool(painter: Path, tmp_path: Path, pipes: list[Pipe]) -
 
     revision = pipe.call("project_open", {"path": str(legacy)})["result"]["revision"]
     iray = pipe.call("capture", {"mode": "painter_iray", "path": "../../outside.png"})
-    assert iray["error"]["code"] == "call_failed", iray
+    assert iray["error"]["code"] == "capability_gap", iray  # a release gap (decision 242)
     assert iray["error"]["details"]["type"] == "PathTracerUnavailable"
     outside = pipe.call("capture", {"mode": "base_color", "path": str(tmp_path / "x.png")})
     assert outside["error"]["code"] == "invalid_arguments", outside
@@ -362,6 +411,13 @@ def test_worker_capture_tool(painter: Path, tmp_path: Path, pipes: list[Pipe]) -
     assert receipt["revision"] == revision
     assert Path(receipt["files"]["png"]).resolve() == (tmp_path / "out" / "caps" / "rough.png")
     assert reply["committed_revision"] == revision
+    # practical-e2e B11 (decision 242): the channel types evaluate_channel and source_set take.
+    typed = pipe.call("capture", {"mode": "channel:SpecularRoughness", "path": "caps/sr.png"})
+    assert typed["result"]["source"]["name"] == "specularroughness", typed
+    unknown = pipe.call("capture", {"mode": "channel:Rough", "path": "caps/rough-x.png"})
+    assert unknown["error"]["code"] == "call_failed", unknown
+    assert unknown["error"]["details"]["type"] == "ValueError"
+    assert "names no channel" in unknown["error"]["message"]
 
 
 # ── 3.1, 3.2 painter_viewport (GPU) ─────────────────────────────────────────────────────────────
