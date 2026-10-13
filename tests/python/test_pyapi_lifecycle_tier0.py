@@ -21,7 +21,7 @@ happened before the probe call returned: a timing that varies in Painter itself 
 recordings of `phase1-execute-when-not-busy` s10 differ in it).
 
 Outputs that cannot be equal are listed in `EXCLUDED` with their reason; the test requires them
-to still differ. Where no private store exists the test skips, naming why (hosted lane).
+to still differ. Where no private store exists the test skips, naming why.
 """
 
 from __future__ import annotations

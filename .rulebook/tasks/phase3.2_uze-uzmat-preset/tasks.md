@@ -18,7 +18,7 @@
 - [ ] 3.3 Canonical-map test: canonical maps equal, in decoded values, the same channels exported through the proven PNG route on wand v1
 - [ ] 3.4 Receipt test: SpecularWeight and SM5 opacity gaps present; every file has hash, size, format and binding
 - [ ] 3.5 Publication interruption test across the new file types: interrupting after each `.uztexture`/`.uzmat` write leaves the previous generation selected (EXP-06)
-- [ ] 3.6 Provenance record validates against its schema in hosted CI
+- [ ] 3.6 Provenance record validates against its schema on the local CPU lane (decision 200)
 
 ## 4. Acceptance
 - [ ] 4.1 Child acceptance met and reported to `phase3.4_uzengine-preset`: complete preset with explicit bindings, canonical maps, receipts and provenance

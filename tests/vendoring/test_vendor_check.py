@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
-import yaml
 
 from tools.vendoring.hashing import sha256_hex
 from tools.vendoring.manifest import verbatim_entry
@@ -37,7 +36,6 @@ if TYPE_CHECKING:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VENDORED = REPO_ROOT / VENDORED_DIR
 ZIG = shutil.which("zig")
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "parity.yml"
 VERBATIM = f"{VENDORED_DIR}/engine/math/mat4.cpp"
 MODIFIED = f"{VENDORED_DIR}/engine/rhi/rhi_factory.cpp"
 
@@ -100,22 +98,6 @@ def test_full_check_with_build_passes(
     verbose build of `build.zig` (the session's shared one, `tests/conftest.py`) exit zero."""
     assert main(["--build-log", str(fresh_verbose_build.log_path)]) == 0, capsys.readouterr().err
     assert "build paths checked" in capsys.readouterr().out
-
-
-def test_check_runs_in_the_hosted_ci_lane() -> None:
-    """2.8: the hosted CPU lane runs the full check (build included, with the pinned Zig) on
-    every push to `main` and every pull request into it, before the other gates."""
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    triggers = workflow[True]  # PyYAML reads the `on` key as the boolean True
-    assert {"push", "pull_request"} <= set(triggers)
-    hosted = workflow["jobs"]["hosted"]
-    assert hosted["runs-on"] == "windows-latest"
-    steps = hosted["steps"]
-    zig = next(s for s in steps if str(s.get("uses", "")).startswith("mlugg/setup-zig@"))
-    assert str(zig["with"]["version"]) == "0.15.2"
-    runs = [s.get("run", "") for s in steps]
-    check = runs.index("python -m tools.vendoring.vendor_check")
-    assert steps.index(zig) < check < runs.index("python -m pytest")
 
 
 # ── Negative fixtures (3.2) ────────────────────────────────────────────────────────────────

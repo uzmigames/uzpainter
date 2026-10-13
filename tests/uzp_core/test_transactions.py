@@ -4,7 +4,7 @@
 `zig build uzp-core-transaction-tests`) holds the native cases; these tests run each of them and
 check that the native `request_hash` equals the SHA-256 of Python's `canonical_json`
 (`tools/parity/recorder/job.py`) of `{"tool": ..., "arguments": ...}`, whatever the key order.
-No GPU is involved: everything runs on the hosted CPU lane.
+No GPU is involved: everything runs on the CPU lane.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from tools.parity.recorder.job import canonical_json
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = REPO_ROOT / "src" / "uzp_core" / "schema" / "manifest.schema.json"
 # SHA-256 of the canonical manifest of the document `integrated-manifest` builds through
-# transactions (phase1.3_document-model 3.2). Pinned: the hosted CPU lane and a local run on the
+# transactions (phase1.3_document-model 3.2). Pinned: the CPU lane and a local run on the
 # owner's machine (decision 028) both assert this value, so equal results on the two machines
 # are a passing test on each. Re-pinned by phase1.4_mesh-importers for decision 031 (unset tangent
 # space = PerVertex); the only byte that changed is settings.tangent_space.

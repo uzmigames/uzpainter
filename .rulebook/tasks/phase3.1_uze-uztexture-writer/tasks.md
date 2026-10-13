@@ -12,7 +12,7 @@
 - [ ] 2.8 Test-only BC decoder and `.uztexture` reader (UzPainter's own code; the vendored header's read/write declarations stay unimplemented)
 
 ## 3. Tests
-- [ ] 3.1 Encoder determinism: each BC format encoded twice and at 1, 4 and max worker threads yields identical bytes (hosted CPU lane, `14-parity-testing.md` §7)
+- [ ] 3.1 Encoder determinism: each BC format encoded twice and at 1, 4 and max worker threads yields identical bytes (local CPU lane, decision 200, `14-parity-testing.md` §7)
 - [ ] 3.2 Colour mip test on an authored sRGB ramp: each level equals the linear-space box/declared filter result re-encoded to sRGB
 - [ ] 3.3 Normal mip test on an authored hemisphere normal map: every texel of every level is unit length within the storage precision
 - [ ] 3.4 Alpha-coverage test on an authored masked-albedo image: coverage above the alpha threshold is preserved per level

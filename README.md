@@ -112,13 +112,18 @@ stage failed, 2 = usage error. Stages:
 `--no-gpu` or `UZP_NO_GPU=1` skips the stages that need a GPU. Other build steps:
 `zig build render-core` (`uzrendercore.lib`), `zig build native-tests`, `zig build probe-tests`.
 
-Repository tooling (Python, `tools/`) and its quality gate, as hosted CI runs them
-([`.github/workflows/parity.yml`](.github/workflows/parity.yml), CPU-only; GPU and Painter-oracle
-checks run locally on the owner's machine, [decision 028](.rulebook/decisions/028-ci-github-runs-hosted-cpu-only-ci-gpu-and-painter-oracle-checks-run-locally-on-the-owner-s-machine.md)):
+Repository tooling (Python, `tools/`) and its quality gate. There is no hosted CI: every check
+runs locally, in the coordinator's full gate before the owner pushes
+([decision 200](.rulebook/decisions/200-the-owner-removed-the-hosted-parity-ci-and-the-local-full-gate-replaces-it.md); GPU and
+Painter-oracle checks run on the owner's machine,
+[decision 028](.rulebook/decisions/028-ci-github-runs-hosted-cpu-only-ci-gpu-and-painter-oracle-checks-run-locally-on-the-owner-s-machine.md)):
 
 ```bash
-python -m pip install jsonschema numpy pyyaml ruff mypy pytest   # pinned versions: parity.yml
+python -m pip install jsonschema==4.25.1 numpy==2.4.4 pyyaml==6.0.3 ruff==0.14.3 mypy==1.20.1 pytest==9.1.1
+python -m tools.parity.guard && python -m tools.vendoring.vendor_check
+zig build painter && ./zig-out/bin/UzPainter.exe selftest
 python -m mypy && python -m ruff check . && python -m pytest
+python -m tools.parity.store verify parity/schema/samples/public   # without a store: exit 1, oracle_unavailable
 git config core.hooksPath .githooks   # once per clone: blocks committing recorded oracle outputs
 ```
 

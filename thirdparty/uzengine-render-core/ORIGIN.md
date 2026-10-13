@@ -133,8 +133,8 @@ level); `13-engine-integration.md` §4.2 records both.
 
 ## Vendoring check (§3.3)
 
-`python -m tools.vendoring.vendor_check` guards this folder on every commit (hosted CPU lane of
-`.github/workflows/parity.yml`). It prints one `[rule] message` line per failure and exits 1:
+`python -m tools.vendoring.vendor_check` guards this folder. It runs locally, in the coordinator's
+full gate before the owner pushes (decision 200). It prints one `[rule] message` line per failure and exits 1:
 
 | Rule | Fails on |
 |---|---|

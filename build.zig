@@ -854,7 +854,7 @@ pub fn build(b: *std.Build) void {
 
     // ── The document model as a static library (phase1.3_document-model) ─────────────────────
     // Only `src/` and the C++ runtime: no render layer, render core, system library or GPU, so
-    // it builds and its tests run on the hosted CPU lane.
+    // it builds and its tests run on the CPU lane.
 
     const uzp_core_mod = b.createModule(.{
         .target = target,
@@ -926,7 +926,7 @@ pub fn build(b: *std.Build) void {
 
     // ── Mesh importers (phase1.4_mesh-importers) ─────────────────────────────────────────────
     // UzPainter's own OBJ parser and its FBX (ufbx) and glTF (fastgltf on simdjson) loaders, over
-    // the document model; CPU only, so the tests run on the hosted CPU lane. `src/mesh/` compiles
+    // the document model; CPU only, so the tests run on the CPU lane. `src/mesh/` compiles
     // with `-Wall -Wextra -Werror` including the ufbx and fastgltf headers it uses; the vendored
     // sources keep their own flags.
 
@@ -1065,7 +1065,7 @@ pub fn build(b: *std.Build) void {
 
     // ── Project store (phase1.4_store-container-operations) ──────────────────────────────────
     // The `.uzp` container over the document model: SQLite and zstd compiled in, CPU only, so the
-    // tests run on the hosted CPU lane. `sqlite3.h` and `zstd.h` compile warning-free under the
+    // tests run on the CPU lane. `sqlite3.h` and `zstd.h` compile warning-free under the
     // store's `-Wall -Wextra -Werror`. The test executable compiles the store sources again with
     // the fault hooks; the library never contains them.
 
@@ -1297,7 +1297,7 @@ pub fn build(b: *std.Build) void {
 
     // ── The export plan compiler (phase1.15_export-plan-compiler) ─────────────────────────────
     // `src/export/` over the evaluator; its tests evaluate on the CPU store only, so they run on
-    // hosted runners without a GPU.
+    // machines without a GPU.
     const export_tests_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,

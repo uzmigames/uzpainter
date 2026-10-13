@@ -182,7 +182,7 @@ Consolidated requirement list. Sources: the owner's requirements (`vision.md`), 
 
 | ID | Requirement | Priority | Source | Acceptance criterion | Doc |
 |---|---|---|---|---|---|
-| NFR-01 | Fully headless on Windows 10/11 x64 for CI/batch (no window, no focus); opening the live viewer is optional | MUST | 08 §4; owner 2026-10-10 (Q9, Q9b) | Hosted CPU lane and the local GPU run on the owner's machine (decision 028), both without a window | 02, 13, 14 |
+| NFR-01 | Fully headless on Windows 10/11 x64 for CI/batch (no window, no focus); opening the live viewer is optional | MUST | 08 §4; owner 2026-10-10 (Q9, Q9b) | Local CPU lane (decision 200) and the local GPU run on the owner's machine (decision 028), both without a window | 02, 13, 14 |
 | NFR-02 | Determinism: identical inputs + recipe + seed + resources + build ⇒ identical exports | MUST | 08 §4 | Repeatability lane | 14 |
 | NFR-03 | Scale, supported for each recorded workload separately: three 4096² texture sets in one project; 30–45-layer stacks; more than twenty 4K 16-bit masks; up to seven delivered maps per set. A combined worst case is a proposed stress fixture, not an observed baseline | MUST | 08 §4 | Body v6b (sets), bracer 21 and hat v8 (layers), hat v6 (masks), hat v8 (maps), each measured separately | 04, 13 |
 | NFR-04 | Compact project file; candidate budget 10 % of the matched `.spp`, ratified after the census | MUST | 08 §4; owner 2026-10-10 (Q11) | Census report | 09 |

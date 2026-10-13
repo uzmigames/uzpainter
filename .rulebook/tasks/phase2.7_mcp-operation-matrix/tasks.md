@@ -26,6 +26,7 @@
   - phase2.4 waits on the Vulkan device cases (decision 121), the hosted CPU lane and G1.
   - phase2.6 has its 1.1 and 3.5 open.
   - This task builds on their code on main.
+- 1.1 (decision 200, 2026-10-13): the hosted CPU lane is removed and no longer a condition of phase2.4, which waits on the Vulkan device cases (decision 121) and G1.
 - Decision 182 (panel, one round: C1 AGREE ×3; C2 PARTLY ×2, AGREE ×1; C3 PARTLY ×2, AGREE ×1; C4 PARTLY ×1, AGREE ×2; refinements adopted):
   - The build reads the registered tools from `tools/capabilities/mcp-tools.json`, a snapshot that a live test keeps exact.
   - The statuses are derived and fail closed.

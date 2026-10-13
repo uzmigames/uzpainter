@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 
 from tools.parity.schemas import REPO_ROOT, SCHEMA_DIR, load_json
 from tools.parity.store.cli import main
@@ -37,7 +36,6 @@ from tools.parity.verdict import Comparison, Outcome, evaluate
 SAMPLES = SCHEMA_DIR / "samples"
 PUBLIC_SAMPLE = SAMPLES / "public" / "tier0-blend-multiply.json"
 PRIVATE_SAMPLE = SAMPLES / "private" / "exported-map-record.json"
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "parity.yml"
 # An authored sample: a 2x2 8-bit greyscale PGM written by this test, nothing recorded.
 AUTHORED = b"P5 2 2 255\n" + bytes([0, 64, 128, 255])
 
@@ -371,14 +369,14 @@ def test_records_are_kept_per_painter_build(
     assert corpora == ["synthetic-next-build", "synthetic-sample-build"]
 
 
-# --- 3.4 hosted lane -------------------------------------------------------------------------
+# --- 3.4 a machine without the store (decision 200) ------------------------------------------
 
 
-def test_hosted_runner_without_store_reports_oracle_unavailable(tmp_path: Path) -> None:
+def test_machine_without_store_reports_oracle_unavailable(tmp_path: Path) -> None:
     environment = {
         key: value for key, value in os.environ.items() if key not in {STORE_ENV, "LOCALAPPDATA"}
     }
-    environment["LOCALAPPDATA"] = str(tmp_path / "hosted-appdata")
+    environment["LOCALAPPDATA"] = str(tmp_path / "no-store-appdata")
     assert locate(environment) is None
     completed = subprocess.run(
         [sys.executable, "-m", "tools.parity.store", "verify", str(PUBLIC_SAMPLE)],
@@ -402,39 +400,3 @@ def test_store_inside_the_repository_is_refused(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv(STORE_ENV, str(REPO_ROOT / "parity" / "store"))
     with pytest.raises(StoreError, match="inside the repository"):
         locate()
-
-
-def _jobs() -> dict[str, dict[str, Any]]:
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    jobs: dict[str, dict[str, Any]] = workflow["jobs"]
-    return jobs
-
-
-def _labels(job: dict[str, Any]) -> list[str]:
-    runs_on = job["runs-on"]
-    return [runs_on] if isinstance(runs_on, str) else list(runs_on)
-
-
-def test_ci_is_hosted_cpu_only() -> None:
-    """Decision 028: no self-hosted or GPU runner, no store access, no oracle comparison of the
-    public manifests in CI (those run locally on the owner's machine), and the hosted lane sets
-    the GPU-skip flag."""
-    jobs = _jobs()
-    for name, job in jobs.items():
-        labels = set(_labels(job))
-        assert not labels & {"self-hosted", "uzpainter-gpu"}, name
-        assert STORE_ENV not in json.dumps(job), name
-        assert "UZP_GPU_RUNNER" not in json.dumps(job), name
-        for step in job["steps"]:
-            run = step.get("run", "")
-            assert "parity/manifests" not in run, name
-            assert "tools.parity.store record" not in run, name
-    assert jobs["hosted"]["env"]["UZP_NO_GPU"] == "1"
-
-
-def test_hosted_lane_checks_oracle_unavailable() -> None:
-    hosted = _jobs()["hosted"]
-    assert _labels(hosted) == ["windows-latest"]
-    runs = "\n".join(step.get("run", "") for step in hosted["steps"])
-    assert "tools.parity.store verify" in runs
-    assert "oracle_unavailable" in runs

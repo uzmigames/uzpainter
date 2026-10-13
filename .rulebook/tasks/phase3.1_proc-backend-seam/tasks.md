@@ -13,7 +13,7 @@
 ## 3. Tests
 - [ ] 3.1 Seam tests: no backend can serve → `UnsupportedProcedural` and the revision does not advance; no similar asset is substituted
 - [ ] 3.2 Tier 0 API-probe goldens for `SourceSubstance` (set→get readback, booleans as int, `ResolutionOverride` errors, Filter-effect restriction) exact
-- [ ] 3.3 Primitive-library tests against independently authored public expectations on the hosted lane; DX12 repeatability (identical bytes across runs)
+- [ ] 3.3 Primitive-library tests against independently authored public expectations on the local CPU lane (decision 200); DX12 repeatability (identical bytes across runs)
 - [ ] 3.4 Reopen test: a project pinning `uzasset://…@<version>` reproduces identical evaluation after save/reopen (RES-04)
 - [ ] 3.5 Harness self-test: a seeded one-texel residual is reported with exact max/mean/p99 and affected-texel count and is never a pass
 

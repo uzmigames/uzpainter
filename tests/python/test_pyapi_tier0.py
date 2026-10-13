@@ -15,7 +15,7 @@ resource ids (context and version are Painter's internal identifiers; the native
 compared by resource name). The project file's extension is `.uzp`, not `.spp` (only the stem is
 compared). Painter's new stack holds an empty paint layer, "Layer 1", which the native project does
 not create (decision 105); the structure readback is compared without it. Where no private oracle
-store exists the test skips, naming why (hosted lane).
+store exists the test skips, naming why.
 
 The `fill-layer-readback` replay reaches Painter's outputs through UzPainter's own operations
 (phase1.24, decision 115): its state steps are one native `Transaction` whose result's created ids
@@ -244,7 +244,7 @@ def golden_outputs(probe: str) -> dict[str, dict[str, Any]]:
     manifest = json.loads((API_PROBES / f"{probe}.json").read_text(encoding="utf-8"))
     store = locate()
     if store is None or not manifest["private_records"]:
-        pytest.skip("no private oracle store on this machine (hosted lane, decision 028)")
+        pytest.skip("no private oracle store on this machine (decision 028)")
     data = store.load(manifest["private_records"][0]["sha256"])
     assert data is not None, f"{probe}: the golden record is not in the private store"
     record = json.loads(data)

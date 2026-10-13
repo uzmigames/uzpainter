@@ -41,5 +41,5 @@ The lost-acknowledgement test also gained a changed request with the same key (d
 
 ## Open
 
-- **Acceptance of the prerequisites (1.1-1.4).** phase2.4_supervisor-worker is not accepted. It waits on G1, on the Vulkan device cases (decision 121) and on the hosted CPU lane. The three children each have their 1.1 open for that reason.
-- **Hosted CPU lane.** It runs on the owner's push. These results are local.
+- **Acceptance of the prerequisites (1.1-1.4).** phase2.4_supervisor-worker is not accepted. It waits on G1 and on the Vulkan device cases (decision 121); the hosted CPU lane was removed (decision 200). The three children each have their 1.1 open for that reason.
+- **Hosted CPU lane.** Removed by the owner (decision 200). These local results are the evidence.

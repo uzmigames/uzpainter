@@ -37,5 +37,5 @@ The shipped UzEngine preset MUST have a provenance record with the fields of `08
 
 #### Scenario: Missing record fails CI
 Given `assets/export-presets/uzengine.json` without `uzengine.provenance.json`
-When the hosted CI provenance check runs
+When the provenance check runs on the local CPU lane (decision 200)
 Then the check fails and names the preset

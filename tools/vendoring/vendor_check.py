@@ -1,6 +1,6 @@
 """The vendoring check of `thirdparty/uzengine-render-core/` (`13-engine-integration.md` §3.3).
 
-Run on every commit by the hosted CPU lane of CI (`.github/workflows/parity.yml`):
+Run locally, in the coordinator's full gate before the owner pushes (decision 200):
 
     python -m tools.vendoring.vendor_check              # folder rules + a fresh verbose build
     python -m tools.vendoring.vendor_check --no-build   # folder rules only

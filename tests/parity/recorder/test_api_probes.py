@@ -2,7 +2,7 @@
 
 The recording tests run the probe recorder against the fake Painter (`fake_probe_painter.py`).
 The admission test checks the recorded goldens in this machine's private store and skips with an
-explicit reason where there is no store (hosted CI, decision 028).
+explicit reason where there is no store (decision 028).
 """
 
 from __future__ import annotations
@@ -342,7 +342,7 @@ def test_every_probe_golden_is_admitted_with_two_recordings() -> None:
         assert refs and refs[0]["record_id"] == "golden-record", f"{path.name} is not admitted"
     store = locate()
     if store is None:
-        pytest.skip("no private oracle store on this machine (hosted lane, decision 028)")
+        pytest.skip("no private oracle store on this machine (decision 028)")
     for path in MANIFESTS:
         manifest = load_json(path)
         for ref in manifest["private_records"]:

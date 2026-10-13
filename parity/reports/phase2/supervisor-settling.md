@@ -62,6 +62,6 @@ The parent's CPU run above repeats all three children's `tests/supervisor` cases
 ## Open
 
 - **Vulkan device cases.** The Vulkan device-loss hook and GPU stall wait for the Vulkan device: phase3.1_vulkan-compute-parity items 2.2 and 3.4 (decision 121). They are `pending` in the report.
-- **Hosted CPU lane.** It runs on the owner's push. It is the children's item 4.1, attached here.
+- **Hosted CPU lane.** Removed by the owner (decision 200). The local CPU-lane run above is the evidence of the children's item 4.1.
 - **G1.** phase1.25_pilot-wand is not accepted yet, so no prerequisite item is checked.
 - **HTTP reconnect.** Reconnecting to a running supervisor over HTTP is phase2.5_mcp-transport-registry's (decision 150).

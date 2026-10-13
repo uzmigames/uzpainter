@@ -11,7 +11,7 @@ Work package P0-STORE (`docs/dag.md`), task `phase0.3_oracle-store-cli`. Impleme
 
 ## 2. Location and layout
 
-Root: `UZP_PARITY_STORE` when set, else `%LOCALAPPDATA%\UzPainter\parity-store`. A folder without `store.json` is not a store: a machine without one (every hosted CI machine) has no oracle.
+Root: `UZP_PARITY_STORE` when set, else `%LOCALAPPDATA%\UzPainter\parity-store`. A folder without `store.json` is not a store: a machine without one has no oracle.
 
 | Path under the root | Content |
 |---|---|
@@ -51,16 +51,16 @@ The Painter recorder (`phase0.3_painter-oracle-recorder`) writes each recording 
 
 `record --run` requires `READY`, matches every `private_records` entry to a file of the run by SHA-256 and size, checks that each blob file is named by its hash and that the manifest names every blob the record names, then stores everything. Fetched blobs take their extension from the record's `media_type`. The run is never deleted by the store.
 
-## 5. Hosted CI and the local oracle run
+## 5. Local full gate and the local oracle run
 
-Decision 028: there is no GPU CI on GitHub and no self-hosted runner. `.github/workflows/parity.yml` (`14-parity-testing.md` §7) runs only hosted, CPU-only work:
+Decision 028: there is no GPU CI on GitHub and no self-hosted runner. Decision 200: there is no hosted CI either; the owner removed it. Every check runs locally (`14-parity-testing.md` §7):
 
 | Where | Runs on | Does |
 |---|---|---|
-| Hosted CI (`hosted` job) | `windows-latest`, no GPU, no store, no `UZP_PARITY_STORE` | Type-check, lint, full test suite (GPU and oracle tests skip with an explicit reason); then checks that `verify` of the sample manifests reports `oracle_unavailable` |
+| Local full gate | The coordinator's run before the owner pushes | Type-check, lint, full test suite (GPU and oracle tests skip with an explicit reason where the GPU or store is missing); `python -m tools.parity.store verify parity/schema/samples/public` on a machine without the store exits 1 and reports `oracle_unavailable` |
 | Local oracle run | The owner's machine only, started by hand (§5.1) | Whole-store integrity, then `verify parity/manifests`. Later comparisons against recorded Painter values run the same way, locally, and nowhere else |
 
-The local run report is the gate evidence for every check that needs the store or Painter; a hosted run never stands in for it.
+The local run report is the gate evidence for every check that needs the store or Painter.
 
 ### 5.1 Local oracle run procedure (owner's machine)
 
@@ -72,6 +72,6 @@ The first run (P0-STORE acceptance, 2026-10-10) initialised the store at the def
 
 ## 6. Tests
 
-`tests/parity/test_store.py` (every test uses a temporary store): round trip record → delete the local copy → fetch → hash (single file and recorder run), missing/unreadable/mismatched blob → `oracle_unavailable` (CLI, API and verdict), write-once refusal and idempotent re-record, per-build corpora, store and fetch paths inside the repository refused, the hosted lane without a store (subprocess without `UZP_PARITY_STORE`), and the workflow's lane rules.
+`tests/parity/test_store.py` (every test uses a temporary store): round trip record → delete the local copy → fetch → hash (single file and recorder run), missing/unreadable/mismatched blob → `oracle_unavailable` (CLI, API and verdict), write-once refusal and idempotent re-record, per-build corpora, store and fetch paths inside the repository refused, a machine without a store (subprocess without `UZP_PARITY_STORE`).
 
 `tests/parity/test_store_integration.py` is the P0-STORE gate on one commit: with one temporary store it makes the round trip of an authored sample, checks that a machine without the store gets `oracle_unavailable` for the same manifest, records stand-ins for a recorded PNG and a JSON readback with `record`, and in a throwaway repository the committed pre-commit hook accepts the authored fixture image and expectation JSON and rejects both stand-ins by their store hash.
