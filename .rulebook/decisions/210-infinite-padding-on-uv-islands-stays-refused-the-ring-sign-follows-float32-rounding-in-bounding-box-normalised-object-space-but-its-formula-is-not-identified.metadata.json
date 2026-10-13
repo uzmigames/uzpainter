@@ -1,0 +1,13 @@
+{
+  "id": 210,
+  "slug": "infinite-padding-on-uv-islands-stays-refused-the-ring-sign-follows-float32-rounding-in-bounding-box-normalised-object-space-but-its-formula-is-not-identified",
+  "title": "infinite padding on UV islands stays refused: the ring sign follows float32 rounding in bounding-box-normalised object space, but its formula is not identified",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
