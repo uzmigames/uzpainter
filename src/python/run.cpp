@@ -30,6 +30,16 @@ void PrintJson(std::FILE* out, const json::Object& object) {
     std::fflush(out);
 }
 
+/// Ctrl+C and Ctrl+Break raise KeyboardInterrupt in the script, a structured failure, after which
+/// the host closes the project it left open as after any run. Without a handler the console's
+/// default ends the process at once (exit status 0xC000013A). Requires the GIL.
+void InterruptOnConsoleBreak() {
+    const pybind11::module_ signal = pybind11::module_::import("signal");
+    for (const char* name : {"SIGINT", "SIGBREAK"}) {
+        signal.attr("signal")(signal.attr(name), signal.attr("default_int_handler"));
+    }
+}
+
 }  // namespace
 
 bool IsRunCommand(std::string_view verb) { return verb == "run"; }
@@ -71,13 +81,22 @@ int RunRunCommand(const std::vector<std::string>& args, std::FILE* out, std::FIL
                                                            {"message", "cannot start the interpreter: " + error}}}});
         return kRunHostError;
     }
-    int status = kRunFailed;
+    int status = kRunHostError;
     {
         pybind11::gil_scoped_acquire gil;
-        json::Object report = RunScript(std::filesystem::path(positional.front()),
-                                        std::vector<std::string>(positional.begin() + 1, positional.end()));
+        json::Object report;
+        try {
+            InterruptOnConsoleBreak();
+            report = RunScript(PathFromUtf8(positional.front()),
+                               std::vector<std::string>(positional.begin() + 1, positional.end()));
+            status = std::get<std::string>(report.at("status").data) == "ok" ? kRunOk : kRunFailed;
+        } catch (const std::exception& error) {
+            // The host failed around the script (a value it could not hand over or report): never
+            // an uncaught exception, which would end the process without a report.
+            report = json::Object{{"status", "host_error"},
+                                  {"error", json::Object{{"type", "HostError"}, {"message", error.what()}}}};
+        }
         report["gpu_backend"] = backend_name;
-        status = std::get<std::string>(report.at("status").data) == "ok" ? kRunOk : kRunFailed;
         PrintJson(out, report);
     }
     // A project the script left open is closed (its lock released, an untitled folder removed)

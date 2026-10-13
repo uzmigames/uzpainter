@@ -1,5 +1,6 @@
 """`UzPainter.exe run` and `UzPainter.exe capabilities` (task phase1.22_pyapi-cli-capabilities items
-3.1-3.4; decisions 111 and 112).
+3.1-3.4; decisions 111 and 112), and the command line fixes of the practical end-to-end run
+(parity/reports/phase2/practical-e2e.md B2, B3, B14 and B16).
 
 `UzPainter.exe` comes from a fresh `zig build painter` install, so the shipped `capabilities.json`,
 the embedded interpreter and `python/` are beside it. CPU only: no Phase 1 Python call uses the
@@ -9,9 +10,13 @@ GPU, so `run` creates no device (decision 111).
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
+import signal
 import subprocess
 import textwrap
+import time
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +27,21 @@ from tests.python.conftest import JSON_PREFIX, PLANE, REPO_ROOT
 from tools.capabilities.generate_capabilities import generate
 
 SCHEMA = REPO_ROOT / "tools" / "capabilities" / "capabilities.schema.json"
+NON_ASCII = "ação ☃ 日本"  # outside every ANSI code page
+# The verbs whose own usage text names their options; `--help` names every one of them.
+VERB_USAGES = [
+    REPO_ROOT / "src" / name
+    for name in (
+        "selftest/harness.cpp",
+        "store/cli.cpp",
+        "export/cli.cpp",
+        "python/run.cpp",
+        "python/capabilities.cpp",
+        "preview/cli.cpp",
+        "supervisor/worker.cpp",
+    )
+]
+SUPERVISOR_MAIN = REPO_ROOT / "python" / "uzpainter_supervisor" / "main.py"
 
 
 @pytest.fixture(scope="module")
@@ -136,6 +156,158 @@ def test_run_usage_errors(painter: Path, args: list[str]) -> None:
     assert status == 2
     assert documents == []
     assert "usage: UzPainter.exe run" in err
+
+
+def test_run_passes_non_ascii_arguments(painter: Path, tmp_path: Path) -> None:
+    """practical-e2e B3: an argument outside the ANSI code page reaches `sys.argv` as given. It
+    used to abort the process (`UnicodeDecodeError`, exit status 0xC0000409, no report)."""
+    path = script(tmp_path, "import sys\nresult = sys.argv[1:]\n")
+    status, documents, stderr = cli(painter, "run", path, "ação ☃", NON_ASCII)
+    assert status == 0, stderr
+    (report,) = documents
+    assert report["status"] == "ok"
+    assert report["result"] == ["ação ☃", NON_ASCII]
+
+
+def test_run_reports_a_host_failure_instead_of_crashing(painter: Path, tmp_path: Path) -> None:
+    """practical-e2e B3: a failure of the host around the script, here output it cannot encode
+    as UTF-8 (a lone surrogate), is the documented host failure: exit status 3 and one
+    `host_error` report, never an uncaught exception that ends the process without one."""
+    path = script(tmp_path, 'print("\\udc80")\nresult = 1\n')
+    status, documents, _ = cli(painter, "run", path)
+    assert status == 3
+    (report,) = documents
+    assert report["status"] == "host_error"
+    assert report["error"]["type"] == "HostError" and report["error"]["message"]
+    assert report["gpu_backend"] == "dx12"
+
+
+def test_cli_verbs_take_non_ascii_paths(painter: Path, tmp_path: Path) -> None:
+    """practical-e2e B2: `run`, `inspect`, `export-bundle` and `export` open paths outside the ANSI
+    code page. The arguments used to arrive mangled (`ação ☃ 日本` became `a��o ? ??`), so the
+    script and the project were not found."""
+    folder = tmp_path / NON_ASCII
+    folder.mkdir()
+    source = folder / "script ☃.py"
+    body = f"""
+        import sys
+        from uzpainter import project
+        settings = project.Settings(default_texture_resolution=256)
+        project.create({str(PLANE.as_posix())!r}, settings)
+        project.save_as(sys.argv[1])
+        result = project.file_path()
+        """
+    source.write_text(textwrap.dedent(body), encoding="utf-8")
+    saved = folder / "projeto ☃.uzp"
+    status, documents, stderr = cli(painter, "run", str(source), str(saved))
+    assert status == 0, stderr
+    (report,) = documents
+    assert report["status"] == "ok", report
+    reported = Path(report["result"])
+    assert (reported.parent.name, reported.name) == (NON_ASCII, saved.name) and saved.is_file()
+
+    def verb(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [str(painter), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=600,
+            check=False,
+        )
+
+    inspected = verb("inspect", str(saved))
+    assert inspected.returncode == 0, inspected.stderr
+    assert Path(json.loads(inspected.stdout)["file"]) == saved
+    bundle = folder / "pacote ☃"
+    bundled = verb("export-bundle", str(saved), str(bundle))
+    assert bundled.returncode == 0, bundled.stderr
+    assert json.loads(bundled.stdout)["target"] == str(bundle)
+    assert bundle.is_dir() and any(bundle.iterdir())
+    delivery = folder / "saída ☃"
+    delivery.mkdir()
+    recovered = verb("export", "--recover", str(delivery), "--fixed-names", str(folder))
+    assert recovered.returncode == 0, recovered.stderr
+    [fixed] = json.loads(recovered.stdout)["fixed_names"]
+    assert Path(fixed["directory"]) == folder
+
+
+def test_run_ctrl_break_interrupts_the_script(painter: Path, tmp_path: Path) -> None:
+    """practical-e2e B14: Ctrl+Break during a script raises KeyboardInterrupt in it, a structured
+    failure (exit status 1 and its report, not 0xC000013A). The host then closes the project the
+    script left open, as after any run: its lock is gone."""
+    ready = tmp_path / "ready"
+    saved = tmp_path / "open.uzp"
+    path = script(
+        tmp_path,
+        f"""
+        import pathlib, time
+        from uzpainter import project
+        project.create({str(PLANE.as_posix())!r}, project.Settings(default_texture_resolution=256))
+        project.save_as({str(saved.as_posix())!r})
+        pathlib.Path({str(ready.as_posix())!r}).write_text("ready")
+        while True:
+            time.sleep(0.05)
+        """,
+    )
+    process = subprocess.Popen(
+        [str(painter), "run", path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+    )
+    try:
+        deadline = time.monotonic() + 300
+        while not ready.exists():
+            assert process.poll() is None and time.monotonic() < deadline
+            time.sleep(0.05)
+        assert Path(f"{saved}.lock").exists()
+        os.kill(process.pid, signal.CTRL_BREAK_EVENT)
+        out, err = process.communicate(timeout=120)
+    finally:
+        if process.poll() is None:
+            process.kill()
+    assert process.returncode == 1, (hex(process.returncode & 0xFFFFFFFF), err)
+    lines = out.decode("utf-8").splitlines()
+    (report,) = [json.loads(line[len(JSON_PREFIX) :]) for line in lines]
+    assert report["status"] == "failed"
+    assert report["error"]["type"] == "KeyboardInterrupt"
+    assert not Path(f"{saved}.lock").exists()
+
+
+def usage_flags(path: Path) -> set[str]:
+    """The options a verb's own usage text names (the string literal from `usage: UzPainter.exe`
+    to the end of its statement)."""
+    text = path.read_text(encoding="utf-8")
+    start = text.index('"usage: UzPainter.exe')
+    return set(re.findall(r"--[a-z][a-z0-9-]*", text[start : text.index(";", start)]))
+
+
+def test_help_prints_every_verb_and_option(painter: Path) -> None:
+    """practical-e2e B16: `--help` prints the usage on stdout with exit status 0. It names every
+    verb, every option a verb's own usage names and every option the supervisor parses
+    (`--preview`, `--mcp-http`, `--token`, `--roots` and `--ledger` were missing). An unknown
+    command stays a usage error: the usage on stderr, exit status 2."""
+    shown = subprocess.run(
+        [str(painter), "--help"], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert shown.returncode == 0, shown.stderr
+    usage = shown.stdout
+    for verb in ("selftest", "inspect", "export-bundle", "store-census", "export", "run"):
+        assert f"UzPainter.exe {verb} " in usage, verb
+    for verb in ("capabilities", "--preview", "--mcp", "--worker", "--help"):
+        assert f"UzPainter.exe {verb}" in usage, verb
+    supervisor = set(
+        re.findall(r'add_argument\("(--[a-z-]+)"', SUPERVISOR_MAIN.read_text(encoding="utf-8"))
+    )
+    assert {"--preview", "--mcp-http", "--token", "--roots", "--ledger"} <= supervisor
+    options = supervisor.union(*(usage_flags(path) for path in VERB_USAGES))
+    assert sorted(option for option in options if option not in usage) == []
+    unknown = subprocess.run(
+        [str(painter), "--no-such-verb"], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert unknown.returncode == 2
+    assert unknown.stdout == "" and unknown.stderr == usage
 
 
 def test_run_with_an_unavailable_backend(painter: Path, tmp_path: Path) -> None:
