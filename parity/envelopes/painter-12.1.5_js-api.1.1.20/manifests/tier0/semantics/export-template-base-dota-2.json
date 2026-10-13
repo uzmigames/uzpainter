@@ -136,5 +136,114 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "06399ec6a82c416fe76dfda86f912d03728f29589f30ec487da7ceabaaeed3bd",
+      "size_bytes": 13639
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor-step2",
+      "kind": "exported_map",
+      "sha256": "95d3913324423cda9805702e8ff5a106be83a677550c05c553f27df4507003cf",
+      "size_bytes": 52489
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step2",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor-step3",
+      "kind": "exported_map",
+      "sha256": "95d3913324423cda9805702e8ff5a106be83a677550c05c553f27df4507003cf",
+      "size_bytes": 52489
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step3",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor-step4",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step4",
+      "kind": "exported_map",
+      "sha256": "de9d3688b9c487a60630aeb474c2f05cf351d2b522765e84419c75b615f5a9c3",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor-step5",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r1-uzp_plane-specular-step5",
+      "kind": "exported_map",
+      "sha256": "de9d3688b9c487a60630aeb474c2f05cf351d2b522765e84419c75b615f5a9c3",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor-step2",
+      "kind": "exported_map",
+      "sha256": "95d3913324423cda9805702e8ff5a106be83a677550c05c553f27df4507003cf",
+      "size_bytes": 52489
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step2",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor-step3",
+      "kind": "exported_map",
+      "sha256": "95d3913324423cda9805702e8ff5a106be83a677550c05c553f27df4507003cf",
+      "size_bytes": 52489
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step3",
+      "kind": "exported_map",
+      "sha256": "2de2c6c8567ff9c0591c53583b8ba72fd7dd3783c6dba445d4a6e7dac4e28e66",
+      "size_bytes": 28809
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor-step4",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step4",
+      "kind": "exported_map",
+      "sha256": "de9d3688b9c487a60630aeb474c2f05cf351d2b522765e84419c75b615f5a9c3",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor-step5",
+      "kind": "exported_map",
+      "sha256": "67e0c8a2c67533ecce1b06f50b9984edc4a510442a044b6830942e4ec4861bca",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "r2-uzp_plane-specular-step5",
+      "kind": "exported_map",
+      "sha256": "de9d3688b9c487a60630aeb474c2f05cf351d2b522765e84419c75b615f5a9c3",
+      "size_bytes": 1009
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "62145b16600dc682b3954c368d0fd58a1d70cf04ca8312e8a64f2a08bcaac444",
+      "size_bytes": 402
+    }
+  ]
 }

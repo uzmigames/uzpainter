@@ -351,7 +351,7 @@ foreach ($g in "phase1-srgb-uniform-decode", "phase1-mesh-map-update", "phase1-r
 }
 ```
 
-Decision 160 admitted the template bases, `export-padding-tie-512` and the void first P-ramp and P-tie 2048 records; the `-v2` names re-author the void ones with the ramp files `uv-ramp-n1024.exr` and `uv-ramp-n2048.exr` (decision 166); decision 167 admitted all eleven. `srgb-bitmap-variants-v2` s4 and s5 attempt `set_color_space(sRGB)` (decisions 156 and 167): a refusal there is recorded (`set_color_space.<step>` in the effective defaults), not a refused golden. A P-ramp or P-tie record whose `passthrough` User0 differs from the ramp on a covered texel, or whose template capture shows User0 other than RGB32F, is void (decision 129); report it.
+Decision 160 admitted the template bases, `export-padding-tie-512` and the void first P-ramp and P-tie 2048 records; the `-v2` names re-author the void ones with the ramp files `uv-ramp-n1024.exr` and `uv-ramp-n2048.exr` (decision 166); decision 167 admitted all eleven, and decision 172 admitted the 21 `export-template-base-*` requests of decision 168. `srgb-bitmap-variants-v2` s4 and s5 attempt `set_color_space(sRGB)` (decisions 156 and 167): a refusal there is recorded (`set_color_space.<step>` in the effective defaults), not a refused golden. A P-ramp or P-tie record whose `passthrough` User0 differs from the ramp on a covered texel, or whose template capture shows User0 other than RGB32F, is void (decision 129); report it.
 
 ### 11.3 After the sessions
 
