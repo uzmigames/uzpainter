@@ -37,6 +37,13 @@
     - Code 47 enters the pair (47, 48) as 0.0283203125.
     - Painter's BilinearHQ composed from hardware samples equals s0 on every column tested.
   - Needs no Painter recording. The measurement runs on the owner's machine (RTX 4090) without Painter.
+  - Decision 209: one bilinear probe of an sRGB8 texture is exact on 61 440 of 61 440 hardware samples.
+    - Each decode is floor(d 2^(8 - E)), where E is the largest segment exponent of the live taps: the exponent of the decode of c | 7.
+    - The sum is rounded once to binary16, to nearest with ties away from zero. A full-weight tap returns its decode.
+    - This explains code 47.
+  - Open after decision 209:
+    - the anisotropic unit's cross-probe arithmetic: 515 of 96 000 validation samples differ by one binary16 step, and no variant tried below 74 of 8 000;
+    - how Painter builds its sRGB8 mip levels.
   - Refused until then with `evaluator:unsupported_source` ("bilinear minification of an 8-bit sRGB bitmap is a release gap ... (decision 203)").
 
 ## 3. Tests

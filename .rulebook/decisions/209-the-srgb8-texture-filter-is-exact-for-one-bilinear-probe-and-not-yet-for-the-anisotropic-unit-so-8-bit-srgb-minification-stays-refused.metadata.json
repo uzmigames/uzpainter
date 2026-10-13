@@ -1,0 +1,11 @@
+{
+  "id": 209,
+  "slug": "the-srgb8-texture-filter-is-exact-for-one-bilinear-probe-and-not-yet-for-the-anisotropic-unit-so-8-bit-srgb-minification-stays-refused",
+  "title": "The sRGB8 texture filter is exact for one bilinear probe and not yet for the anisotropic unit, so 8-bit sRGB minification stays refused",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}
