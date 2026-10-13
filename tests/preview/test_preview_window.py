@@ -438,6 +438,27 @@ def test_window_presents_only_complete_frames(
     print(f"{sampler.samples} composed frames sampled, none erased or half drawn")
 
 
+def test_a_new_evaluation_of_the_same_mesh_keeps_the_camera(
+    painter: Path, tmp_path: Path, pipes: list[Pipe]
+) -> None:
+    """The worker derives a new mesh object for every evaluation. The preview fits its camera on
+    the first frame and again only for another mesh, so an edit does not undo the user's orbit."""
+    bundle = ocio_bundle(painter, tmp_path / "fixture")
+    pipe = Pipe(painter, tmp_path, *WORKER, "--preview")
+    pipes.append(pipe)
+    if pipe.handshake["gpu_status"] != "ready":
+        pytest.skip("no DX12 device on this machine")
+    wait_for(lambda: status(pipe)["window_open"])
+    run = Run(pipe, bundle, tmp_path / "export")
+    run.evaluate("BaseColor")
+    wait_for(lambda: status(pipe)["revision_shown"] == run.revision)
+    assert status(pipe)["camera_fits"] == 1
+    run.python(INSERT_FILL)
+    run.evaluate("BaseColor")
+    wait_for(lambda: status(pipe)["revision_shown"] == run.revision)
+    assert len(run.revisions) == 2 and status(pipe)["camera_fits"] == 1
+
+
 def test_standalone_preview_opens_and_closes(painter: Path, tmp_path: Path) -> None:
     """2.5: `UzPainter.exe --preview <file.uzp>` evaluates the project, shows the read-only window
     with the unsupported-configuration message for a Legacy project, and reports on close."""

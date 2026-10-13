@@ -1300,6 +1300,7 @@ json::Object Worker::PreviewStatus(const json::Object&) {
             {"frames_taken", static_cast<std::int64_t>(status.framesTaken)},
             {"frames_rendered", static_cast<std::int64_t>(status.framesRendered)},
             {"presents", static_cast<std::int64_t>(status.presents)},
+            {"camera_fits", static_cast<std::int64_t>(status.cameraFits)},
             {"revision_shown", status.revisionShown},
             {"last_error", status.lastError}};
 }

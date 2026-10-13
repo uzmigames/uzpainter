@@ -46,6 +46,11 @@ Refinements adopted:
    - a Vulkan counterpart.
    None of this removes the GDI erase of the window, and it brings no visible gain for a read-only preview that renders at most 5 frames a second. The capture path is unchanged, so the `painter_viewport` goldens stay byte-identical.
 4. **Instrumentation.** `PreviewStatus::presents` counts BitBlts of the back buffer. The worker's `preview_status` returns it as `presents`.
+5. **The camera survives an edit.**
+   - The worker derives a new `TexturingMesh` for every `evaluate_channel`. The preview fitted its orbit camera again whenever the mesh pointer changed, so every edit while Claude worked snapped the user's view back to the fitted pose.
+   - Double buffering does not cover this: the content itself changed.
+   - The camera is now fitted on the first frame, and again only when the project's mesh reference (`core::MeshReference`) changes.
+   - `PreviewStatus::cameraFits` counts the fits, and `preview_status` returns it as `camera_fits`.
 
 ## Consequences
 
@@ -53,4 +58,5 @@ Refinements adopted:
   - the class brush is NULL;
   - `presents` does not change over 1 s while the window is idle, and grows after `RedrawWindow`;
   - a sampler paced by `DwmFlush` finds no erased view and no panel without its text. It runs through five resizes, a minimise and restore, ten `RedrawWindow` calls and a new evaluation.
+- `test_a_new_evaluation_of_the_same_mesh_keeps_the_camera` checks that two evaluations of the same mesh fit the camera once.
 - Errors are still shown in place of the image, as `preview.h` documents.

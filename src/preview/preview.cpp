@@ -214,6 +214,7 @@ PreviewStatus PreviewHost::Status() const {
     status.framesTaken = m_taken;
     status.framesRendered = m_rendered;
     status.presents = m_presents;
+    status.cameraFits = m_cameraFits;
     status.revisionShown = m_revisionShown;
     std::lock_guard lock(m_errorMutex);
     status.lastError = m_lastError;
@@ -254,7 +255,10 @@ void PreviewHost::Run() {
     std::shared_ptr<const PreviewFrame> sceneOf;  // the frame `scene` was built from
     ViewportScene scene;
     LightingCache lightingCache;
-    std::shared_ptr<const mesh::TexturingMesh> cameraMesh;
+    // The project's mesh the camera was fitted to. The worker derives a new TexturingMesh for every
+    // evaluation; one of the same mesh keeps the user's orbit.
+    std::optional<core::MeshReference> cameraMesh;
+    bool cameraFitted = false;
     OrbitCamera camera;
     std::string message = "waiting for the first evaluation";
     std::vector<uint8_t> pixels;  // BGRA, rows top first
@@ -270,9 +274,11 @@ void PreviewHost::Run() {
         if (!next) return next.error();
         scene = std::move(*next);
         sceneOf = current;
-        if (cameraMesh != scene.mesh) {
+        if (!cameraFitted || cameraMesh != current->project->mesh) {
             camera = FitCamera(*scene.mesh);
-            cameraMesh = scene.mesh;
+            cameraMesh = current->project->mesh;
+            cameraFitted = true;
+            ++m_cameraFits;
         }
         return std::nullopt;
     };

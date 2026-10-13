@@ -123,6 +123,8 @@ struct PreviewStatus {
     std::uint64_t framesRendered = 0;
     /// Frames presented: one BitBlt of the whole back buffer each (a composed frame, or WM_PAINT).
     std::uint64_t presents = 0;
+    /// Times the orbit camera was fitted: on the first frame and on another mesh.
+    std::uint64_t cameraFits = 0;
     std::int64_t revisionShown = -1;
     std::string lastError;
 };
@@ -171,6 +173,7 @@ private:
     std::atomic<std::uint64_t> m_taken{0};
     std::atomic<std::uint64_t> m_rendered{0};
     std::atomic<std::uint64_t> m_presents{0};
+    std::atomic<std::uint64_t> m_cameraFits{0};
     std::atomic<std::int64_t> m_revisionShown{-1};
     mutable std::mutex m_errorMutex;  // guards m_lastError only; the publisher never takes it
     std::string m_lastError;

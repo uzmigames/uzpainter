@@ -52,6 +52,7 @@ The same scene, build, adapter and driver give the same bytes. Kernels are IEEE-
 - **The preview thread.** `PreviewHost` owns the preview thread. That thread has:
   - its own `render::Engine`, so preview rendering never queues in front of or behind evaluation on the worker's device;
   - the window, through the vendored `platform_window` and `input`. It is read-only, with an orbit camera only: left drag orbits, the wheel zooms.
+  - The camera is fitted to the mesh on the first frame and again only when the project's mesh reference changes. The worker derives a new mesh object for every evaluation; one of the same mesh keeps the user's orbit. `preview_status` counts the fits (`camera_fits`).
 - **Rendering.** At most one render every 200 ms, and none while the window is minimised.
 - **Presenting (decision 227).** The window is double buffered with GDI. Nothing is ever drawn straight onto the window.
   - **Composing.** Each frame is composed whole in a memory bitmap the size of the client area: the image stretched to the view (HALFTONE), or the message, then the panel and its text. A frame is composed only when something it shows has changed: a new image or message, a newly taken frame's revision, or another client size.
