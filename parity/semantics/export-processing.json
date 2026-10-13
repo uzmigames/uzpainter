@@ -35,10 +35,14 @@
     "tier0/api-probes/mask-stack",
     "tier0/api-probes/phase1-create-settings",
     "tier0/api-probes/phase1-delete-node",
+    "tier0/api-probes/phase1-engine-computations",
     "tier0/api-probes/phase1-execute-when-not-busy",
+    "tier0/api-probes/phase1-mesh-map-update",
     "tier0/api-probes/phase1-reload-mesh",
     "tier0/api-probes/phase1-reload-resources",
     "tier0/api-probes/phase1-resource-update",
+    "tier0/api-probes/phase1-restored-values",
+    "tier0/api-probes/phase1-save-as-existing",
     "tier0/api-probes/phase1-save-modes",
     "tier0/recorder-sample/blend-multiply-plane",
     "tier0/semantics-ui/group-passthrough-masks",
@@ -98,15 +102,61 @@
     "tier0/semantics/export-alpha-layouts",
     "tier0/semantics/export-bit-depth",
     "tier0/semantics/export-dither",
+    "tier0/semantics/export-ocio-encode",
     "tier0/semantics/export-ocio-encode-legacy",
     "tier0/semantics/export-padding",
     "tier0/semantics/export-padding-bevelled-cube",
+    "tier0/semantics/export-padding-ramp-r1-p0",
+    "tier0/semantics/export-padding-ramp-r1-p0-v2",
+    "tier0/semantics/export-padding-ramp-r1-p25",
+    "tier0/semantics/export-padding-ramp-r1-p25-v2",
+    "tier0/semantics/export-padding-ramp-r1-p75",
+    "tier0/semantics/export-padding-ramp-r1-p75-v2",
+    "tier0/semantics/export-padding-ramp-r15-p0",
+    "tier0/semantics/export-padding-ramp-r15-p0-v2",
+    "tier0/semantics/export-padding-ramp-r15-p25",
+    "tier0/semantics/export-padding-ramp-r15-p25-v2",
+    "tier0/semantics/export-padding-ramp-r15-p75",
+    "tier0/semantics/export-padding-ramp-r15-p75-v2",
+    "tier0/semantics/export-padding-ramp-r2-p0",
+    "tier0/semantics/export-padding-ramp-r2-p0-v2",
+    "tier0/semantics/export-padding-ramp-r2-p25",
+    "tier0/semantics/export-padding-ramp-r2-p25-v2",
+    "tier0/semantics/export-padding-ramp-r2-p75",
+    "tier0/semantics/export-padding-ramp-r2-p75-v2",
     "tier0/semantics/export-padding-seam-1024",
     "tier0/semantics/export-padding-seam-256",
     "tier0/semantics/export-padding-seam-field-1024",
     "tier0/semantics/export-padding-seam-field-256",
     "tier0/semantics/export-padding-sphere",
+    "tier0/semantics/export-padding-tie-2048",
+    "tier0/semantics/export-padding-tie-2048-v2",
+    "tier0/semantics/export-padding-tie-512",
     "tier0/semantics/export-resize",
+    "tier0/semantics/export-template-base-asm-pbr-metallic-roughness",
+    "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-anisotropy-angle",
+    "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-coated",
+    "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sheen",
+    "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sss",
+    "tier0/semantics/export-template-base-blender",
+    "tier0/semantics/export-template-base-dota-2",
+    "tier0/semantics/export-template-base-keyshot",
+    "tier0/semantics/export-template-base-lens-studio",
+    "tier0/semantics/export-template-base-maxwell-metallic-roughness",
+    "tier0/semantics/export-template-base-maxwell-specular-glossiness",
+    "tier0/semantics/export-template-base-non-pbr-specular-glossiness",
+    "tier0/semantics/export-template-base-openpbr-anisotropy",
+    "tier0/semantics/export-template-base-openpbr-fuzz",
+    "tier0/semantics/export-template-base-openpbr-subsurface-scattering",
+    "tier0/semantics/export-template-base-pbr-metallic-roughness-alpha-test",
+    "tier0/semantics/export-template-base-pbr-specular-glossiness",
+    "tier0/semantics/export-template-base-roblox-materialvariant",
+    "tier0/semantics/export-template-base-roblox-surfaceappearance",
+    "tier0/semantics/export-template-base-spark-ar-studio",
+    "tier0/semantics/export-template-base-unity-hd-render-pipeline-metallic-standard",
+    "tier0/semantics/export-template-base-unreal-engine",
+    "tier0/semantics/export-template-base-vraymtl-metallic-roughness",
+    "tier0/semantics/export-template-base-vraymtl-specular-glossiness",
     "tier0/semantics/group-coverage-order",
     "tier0/semantics/group-masks",
     "tier0/semantics/height-normal-bevelled-cube",
@@ -133,6 +183,7 @@
     "tier0/semantics/resample-uv-lod-boundaries",
     "tier0/semantics/resample-uv-minify",
     "tier0/semantics/resample-uv-rotation",
+    "tier0/semantics/srgb-bitmap-variants-v2",
     "tier0/semantics/view-2d-state-camera",
     "tier0/semantics/view-2d-state-default",
     "tier0/semantics/view-2d-state-default-repeat",
@@ -196,7 +247,7 @@
         },
         {
           "name": "files",
-          "value": 1826,
+          "value": 1852,
           "origin": "fitted"
         }
       ],
@@ -1102,6 +1153,36 @@
           }
         },
         {
+          "golden_id": "tier0/api-probes/phase1-engine-computations",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-engine-computations",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
           "golden_id": "tier0/api-probes/phase1-execute-when-not-busy",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -1118,6 +1199,36 @@
         },
         {
           "golden_id": "tier0/api-probes/phase1-execute-when-not-busy",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-mesh-map-update",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-mesh-map-update",
           "map": "png files re-encoded",
           "compared_against": "r2",
           "unit": "file (bytes identical)",
@@ -1208,6 +1319,66 @@
         },
         {
           "golden_id": "tier0/api-probes/phase1-resource-update",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-restored-values",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-restored-values",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-save-as-existing",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/api-probes/phase1-save-as-existing",
           "map": "png files re-encoded",
           "compared_against": "r2",
           "unit": "file (bytes identical)",
@@ -2899,6 +3070,36 @@
             "total": 56,
             "affected_texels": 0,
             "texels": 56
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-ocio-encode",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 28,
+            "affected_texels": 0,
+            "texels": 28
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-ocio-encode",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 28,
+            "affected_texels": 0,
+            "texels": 28
           }
         },
         {
@@ -3172,6 +3373,726 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-anisotropy-angle",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-anisotropy-angle",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-coated",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-coated",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sheen",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sheen",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sss",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sss",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-blender",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-blender",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-dota-2",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-dota-2",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-keyshot",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-keyshot",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-lens-studio",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-lens-studio",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-maxwell-metallic-roughness",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-maxwell-metallic-roughness",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-maxwell-specular-glossiness",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-maxwell-specular-glossiness",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-non-pbr-specular-glossiness",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-non-pbr-specular-glossiness",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-anisotropy",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-anisotropy",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-fuzz",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-fuzz",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-subsurface-scattering",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-subsurface-scattering",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-pbr-metallic-roughness-alpha-test",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-pbr-metallic-roughness-alpha-test",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-pbr-specular-glossiness",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-pbr-specular-glossiness",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-roblox-materialvariant",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-roblox-materialvariant",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-roblox-surfaceappearance",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-roblox-surfaceappearance",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-spark-ar-studio",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-spark-ar-studio",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-unity-hd-render-pipeline-metallic-standard",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-unity-hd-render-pipeline-metallic-standard",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-unreal-engine",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-unreal-engine",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-vraymtl-metallic-roughness",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-vraymtl-metallic-roughness",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-vraymtl-specular-glossiness",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-vraymtl-specular-glossiness",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
           "golden_id": "tier0/semantics/group-coverage-order",
           "map": "png files re-encoded",
           "compared_against": "r1",
@@ -3938,6 +4859,36 @@
         },
         {
           "golden_id": "tier0/semantics/resample-uv-rotation",
+          "map": "png files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 33,
+            "affected_texels": 0,
+            "texels": 33
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-variants-v2",
+          "map": "png files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 33,
+            "affected_texels": 0,
+            "texels": 33
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-variants-v2",
           "map": "png files re-encoded",
           "compared_against": "r2",
           "unit": "file (bytes identical)",
@@ -4191,7 +5142,7 @@
         },
         {
           "name": "files",
-          "value": 823,
+          "value": 847,
           "origin": "fitted"
         }
       ],
@@ -4857,6 +5808,36 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-ocio-encode",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-ocio-encode",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 7,
+            "affected_texels": 0,
+            "texels": 7
+          }
+        },
+        {
           "golden_id": "tier0/semantics/export-ocio-encode-legacy",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -4944,6 +5925,546 @@
             "total": 27,
             "affected_texels": 0,
             "texels": 27
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p0-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p0-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p25",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p25",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p25-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p25-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p75",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p75",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p75-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r1-p75-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p0-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p0-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p25",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p25",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p25-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p25-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p75",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p75",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p75-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r15-p75-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p0-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p0-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p25",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p25",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p25-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p25-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p75",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p75",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p75-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-ramp-r2-p75-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
           }
         },
         {
@@ -5097,6 +6618,96 @@
           }
         },
         {
+          "golden_id": "tier0/semantics/export-padding-tie-2048",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-2048",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-2048-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-2048-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-512",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-512",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
           "golden_id": "tier0/semantics/export-resize",
           "map": "exr files re-encoded",
           "compared_against": "r1",
@@ -5124,6 +6735,726 @@
             "total": 45,
             "affected_texels": 0,
             "texels": 45
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-anisotropy-angle",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-anisotropy-angle",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-coated",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-coated",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sheen",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sheen",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sss",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sss",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-blender",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-blender",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-dota-2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-dota-2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 2,
+            "affected_texels": 0,
+            "texels": 2
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-keyshot",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-keyshot",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-lens-studio",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-lens-studio",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-maxwell-metallic-roughness",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-maxwell-metallic-roughness",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-maxwell-specular-glossiness",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-maxwell-specular-glossiness",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-non-pbr-specular-glossiness",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-non-pbr-specular-glossiness",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-anisotropy",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-anisotropy",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-fuzz",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-fuzz",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-subsurface-scattering",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-openpbr-subsurface-scattering",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-pbr-metallic-roughness-alpha-test",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-pbr-metallic-roughness-alpha-test",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-pbr-specular-glossiness",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-pbr-specular-glossiness",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-roblox-materialvariant",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-roblox-materialvariant",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-roblox-surfaceappearance",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-roblox-surfaceappearance",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-spark-ar-studio",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-spark-ar-studio",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-unity-hd-render-pipeline-metallic-standard",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-unity-hd-render-pipeline-metallic-standard",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-unreal-engine",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-unreal-engine",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-vraymtl-metallic-roughness",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-vraymtl-metallic-roughness",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-vraymtl-specular-glossiness",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-template-base-vraymtl-specular-glossiness",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 1,
+            "affected_texels": 0,
+            "texels": 1
           }
         },
         {
@@ -5664,6 +7995,36 @@
             "total": 16,
             "affected_texels": 0,
             "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-variants-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18,
+            "affected_texels": 0,
+            "texels": 18
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/srgb-bitmap-variants-v2",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 18,
+            "affected_texels": 0,
+            "texels": 18
           }
         },
         {
