@@ -1,0 +1,11 @@
+{
+  "id": 249,
+  "slug": "on-the-normal-channel-only-recorded-bitmap-uses-evaluate-colour-maps-at-1-1-and-under-nearest-and-8-bit-maps-magnified-as-p20-a-records-them",
+  "title": "On the Normal channel only recorded bitmap uses evaluate: colour maps at 1:1 and under Nearest, and 8-bit colour maps magnified as P20-A records them",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

@@ -3074,12 +3074,13 @@ int RunSources(const fs::path& assets) {
               greyRefusedDetail);
 
         // A bitmap on the Normal channel (decision 226, P20-A): an 8-bit colour image's blue codes below 127 become 127 and
-        // its green codes are inverted, a grey image feeds its value to the three components unchanged, and the filter's
-        // result is written as a 16-bit code before the channel stores it half toward zero. P20-A's checker magnified 16
-        // times: at (71, 32) the taps weigh 8/256 of (204, 51, 26) and 248/256 of (26, 128, 204), whose red filters to
-        // 0.12377451, 8112 / 65535 at 16 bits, stored 0.123779296875 (0.12371826171875 without the 16-bit code); at (8, 32)
-        // the first colour alone stores green 204 / 255 and blue 127 / 255 (0.7998046875 and 0.497802734375). The grey
-        // half-left image at (124, 32) filters to 184 / 256, 47103 / 65535 at 16 bits, stored 0.71826171875.
+        // its green codes are inverted, and the filter's result is written as a 16-bit code before the channel stores it
+        // half toward zero. P20-A's checker magnified 16 times: at (71, 32) the taps weigh 8/256 of (204, 51, 26) and
+        // 248/256 of (26, 128, 204), whose red filters to 0.12377451, 8112 / 65535 at 16 bits, stored 0.123779296875
+        // (0.12371826171875 without the 16-bit code); at (8, 32) the first colour alone stores green 204 / 255 and blue
+        // 127 / 255 (0.7998046875 and 0.497802734375). A grey image is refused (decision 249, below): the half-left image
+        // at (124, 32) filters to 184 / 256, which a plain fill stores as 0.71875 without the 16-bit code and as
+        // 0.71826171875 with it, and P20-A, where it sits under NormalMapDetail, is exact both ways.
         const std::string shaChecker = std::string(63, 'a') + "e";
         const std::string shaHalf = std::string(63, 'a') + "f";
         const std::string shaHalf16 = std::string(62, 'a') + "f0";
@@ -3108,28 +3109,144 @@ int RunSources(const fs::path& assets) {
         provider->Add(shaHalf16, half(render::TexelEncoding::Unorm16, 65535));
         render::Result<ChannelResult> normalChecker =
             mono(ChannelType::Normal, ChannelFormat::RGB16F, shaChecker, core::FilteringMode::BilinearHQ, 1.0);
-        render::Result<ChannelResult> normalGrey =
-            mono(ChannelType::Normal, ChannelFormat::RGB16F, shaHalf, core::FilteringMode::BilinearHQ, 1.0);
-        bool normalExact = normalChecker && normalGrey;
+        bool normalExact = normalChecker.has_value();
         if (normalExact) {
             const std::vector<uint32_t> colour = Samples(*normalChecker);
-            const std::vector<uint32_t> grey = Samples(*normalGrey);
-            auto at = [](const std::vector<uint32_t>& samples, uint32_t x, uint32_t y, uint32_t c) {
-                return arith::HalfToFloat(static_cast<uint16_t>(samples[(size_t{y} * kRamp + x) * 3 + c]));
+            auto at = [&](uint32_t x, uint32_t y, uint32_t c) {
+                return arith::HalfToFloat(static_cast<uint16_t>(colour[(size_t{y} * kRamp + x) * 3 + c]));
             };
-            normalExact = at(colour, 71, 32, 0) == 0.123779296875f && at(colour, 8, 32, 1) == 0.7998046875f &&
-                          at(colour, 8, 32, 2) == 0.497802734375f && at(grey, 124, 32, 0) == 0.71826171875f &&
-                          at(grey, 124, 32, 1) == 0.71826171875f && at(grey, 124, 32, 2) == 0.71826171875f;
+            normalExact = at(71, 32, 0) == 0.123779296875f && at(8, 32, 1) == 0.7998046875f &&
+                          at(8, 32, 2) == 0.497802734375f;
         }
-        Check(normalExact, "an 8-bit colour and grey bitmap on the Normal channel are imported, filtered and written as 16-bit "
-                           "codes as P20-A records (decision 226)",
-              normalExact ? "" : Describe(normalChecker) + " " + Describe(normalGrey));
+        Check(normalExact, "an 8-bit colour bitmap on the Normal channel is imported, filtered and written as 16-bit codes as "
+                           "P20-A records (decision 226)",
+              Describe(normalChecker));
         render::Result<ChannelResult> normalGrey16 =
             mono(ChannelType::Normal, ChannelFormat::RGB16F, shaHalf16, core::FilteringMode::BilinearHQ, 1.0);
         Check(!normalGrey16 && KindName(normalGrey16.error()) == "unsupported_source" &&
                   normalGrey16.error().reason.find("item 2.9, decision 226") != std::string::npos,
               "a 16-bit grey bitmap on the Normal channel fails with unsupported_source naming item 2.9 (decision 226)",
               Describe(normalGrey16));
+
+        // Decision 249: on the Normal channel only the recorded uses evaluate. A colour image at 1:1 or under Nearest whose
+        // import raises no blue code keeps its codes, green inverted, in any channel format and convention (decision 226
+        // changes none of them: normal-a, normal-b and normal-a-8bit at 1:1, normal-a under Nearest at 2x in export-resize
+        // s0); an 8-bit colour image magnified 16 times as P20-A records it, on an RGB16F channel in an OpenGL project,
+        // evaluates (above). Every other use, and every grey image, fails with unsupported_source naming item 2.9.
+        auto normal = [&](const std::string& sha, core::FilteringMode filter, double scale, double rotation,
+                          std::array<double, 2> offset, core::UVWrapMode wrap, ChannelFormat format = ChannelFormat::RGB16F,
+                          core::NormalMapFormat convention = core::NormalMapFormat::OpenGL) {
+            Builder builder(kRamp, kRamp, {{ChannelType::Normal, format}});
+            builder.project.settings.normal_map_format = convention;
+            const std::vector<ChannelType> channels{ChannelType::Normal};
+            core::Layer layer = builder.Fill("bitmap", SameSource(channels, Bitmap(sha)), Same(channels, BlendingMode::Normal, 1.0));
+            SetUv(layer, filter, wrap, {scale, scale}, rotation, offset);
+            builder.AddResource(sha, 100);
+            builder.SetRoot({layer});
+            CpuEvaluator cpu(templates, kWideLimits);
+            return evaluate(builder, ChannelType::Normal, cpu);
+        };
+        constexpr auto kHQ = core::FilteringMode::BilinearHQ;
+        constexpr auto kRepeat = core::UVWrapMode::Repeat;
+        const std::string shaNormal16 = std::string(62, 'b') + "16";
+        const std::string shaNormal8 = std::string(62, 'b') + "08";
+        const std::string shaGreyCell = std::string(62, 'b') + "01";
+        std::shared_ptr<DecodedImage> normal16 = PatternImage(kRamp, kRamp, 3, render::TexelEncoding::Unorm16, 41);
+        std::shared_ptr<DecodedImage> normal8 = PatternImage(kRamp, kRamp, 3, render::TexelEncoding::Unorm8, 42);
+        for (size_t i = 2; i < normal8->values.size(); i += 3) normal8->values[i] = 127u + normal8->values[i] % 129u;
+        provider->Add(shaNormal16, normal16);
+        provider->Add(shaNormal8, normal8);
+        provider->Add(shaGreyCell, PatternImage(16, 16, 1, render::TexelEncoding::Unorm8, 43));
+        bool normalKept = true;
+        std::string normalKeptDetail;
+        constexpr auto kOpenGl = core::NormalMapFormat::OpenGL;
+        // (label, sha, image, bits, filter, magnification, format, convention): the expected texel is the image's
+        // (x / m, y / m).
+        for (const auto& [label, sha, img, bits, filter, m, format, convention] :
+             {std::tuple{"16-bit at 1:1", shaNormal16, normal16, 16u, kHQ, 1u, ChannelFormat::RGB16F, kOpenGl},
+              std::tuple{"16-bit under Nearest at 1:1", shaNormal16, normal16, 16u, core::FilteringMode::Nearest, 1u,
+                         ChannelFormat::RGB16F, kOpenGl},
+              std::tuple{"16-bit under Nearest magnified 2 times", sha16, image16, 16u, core::FilteringMode::Nearest, 2u,
+                         ChannelFormat::RGB16F, kOpenGl},
+              std::tuple{"8-bit at 1:1", shaNormal8, normal8, 8u, kHQ, 1u, ChannelFormat::RGB16F, kOpenGl},
+              std::tuple{"8-bit under Nearest at 1:1", shaNormal8, normal8, 8u, core::FilteringMode::Nearest, 1u,
+                         ChannelFormat::RGB16F, kOpenGl},
+              std::tuple{"16-bit at 1:1 on RGB16", shaNormal16, normal16, 16u, kHQ, 1u, ChannelFormat::RGB16, kOpenGl},
+              std::tuple{"8-bit at 1:1 in a DirectX project", shaNormal8, normal8, 8u, kHQ, 1u, ChannelFormat::RGB16F,
+                         core::NormalMapFormat::DirectX}}) {
+            render::Result<ChannelResult> result = normal(sha, filter, 1.0, 0.0, {0.0, 0.0}, kRepeat, format, convention);
+            if (!result) {
+                normalKept = false;
+                normalKeptDetail += std::string(label) + ": " + Describe(result) + " ";
+                continue;
+            }
+            const std::vector<uint32_t> samples = Samples(*result);
+            const uint32_t max = (1u << bits) - 1u;
+            for (uint32_t y = 0; y < kRamp; ++y) {
+                for (uint32_t x = 0; x < kRamp; ++x) {
+                    for (uint32_t c = 0; c < 3; ++c) {
+                        const uint32_t code = img->At(x / m, y / m, c);
+                        const uint32_t expected =
+                            ExpectedSample(c == 1 ? max - code : code, bits, result->tileFormat, c, 1.0f);
+                        if (samples[(size_t{y} * kRamp + x) * 3 + c] != expected && normalKept) {
+                            normalKept = false;
+                            normalKeptDetail += std::string(label) + " texel (" + std::to_string(x) + ", " +
+                                                std::to_string(y) + ") ";
+                        }
+                    }
+                }
+            }
+        }
+        Check(normalKept, "on the Normal channel, an 8- or 16-bit colour bitmap whose blue codes are all 127 or above keeps "
+                          "its codes, green inverted, at 1:1 and under Nearest, also on RGB16 and in a DirectX project "
+                          "(decision 249)",
+              normalKeptDetail);
+        bool normalRefused = true;
+        std::string normalRefusedDetail;
+        for (const auto& [name, result] :
+             {std::pair{"a 16-bit colour bitmap magnified 2 times", normal(sha16, kHQ, 1.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"a 16-bit colour bitmap magnified 16 times", normal(shaCell16, kHQ, 1.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"a 16-bit colour bitmap rotated at scale 1", normal(shaNormal16, kHQ, 1.0, 30.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"a 16-bit colour bitmap minified", normal(shaNormal16, kHQ, 2.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit colour bitmap minified", normal(shaNormal8, kHQ, 2.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit colour bitmap magnified 2 times", normal(sha8, kHQ, 1.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit colour bitmap magnified 8 times", normal(shaChecker, kHQ, 2.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit colour bitmap magnified 16 times and rotated",
+                        normal(shaChecker, kHQ, 1.0, 30.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit colour bitmap magnified 16 times and offset",
+                        normal(shaChecker, kHQ, 1.0, 0.0, {0.1, 0.0}, kRepeat)},
+              std::pair{"an 8-bit colour bitmap magnified 16 times with RepeatNone",
+                        normal(shaChecker, kHQ, 1.0, 0.0, {0.0, 0.0}, core::UVWrapMode::RepeatNone)},
+              std::pair{"an 8-bit normal map with a blue code below 127 at 1:1",
+                        normal(shaRampColour, kHQ, 1.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit normal map with a blue code below 127 under Nearest",
+                        normal(shaRampColour, core::FilteringMode::Nearest, 1.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit grey bitmap at 1:1", normal(shaRamp8, kHQ, 1.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit grey bitmap under Nearest",
+                        normal(shaHalf, core::FilteringMode::Nearest, 1.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit grey bitmap with the codes 0 and 255 magnified 16 times as P20-A samples it, in Normal "
+                        "mode without a mask",
+                        normal(shaHalf, kHQ, 1.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit grey bitmap with other codes magnified 16 times",
+                        normal(shaGreyCell, kHQ, 1.0, 0.0, {0.0, 0.0}, kRepeat)},
+              std::pair{"an 8-bit colour bitmap magnified 16 times on an RGB32F Normal channel",
+                        normal(shaChecker, kHQ, 1.0, 0.0, {0.0, 0.0}, kRepeat, ChannelFormat::RGB32F)},
+              std::pair{"an 8-bit colour bitmap magnified 16 times on an RGB16 Normal channel",
+                        normal(shaChecker, kHQ, 1.0, 0.0, {0.0, 0.0}, kRepeat, ChannelFormat::RGB16)},
+              std::pair{"an 8-bit colour bitmap magnified 16 times in a DirectX project",
+                        normal(shaChecker, kHQ, 1.0, 0.0, {0.0, 0.0}, kRepeat, ChannelFormat::RGB16F,
+                               core::NormalMapFormat::DirectX)}}) {
+            if (result || KindName(result.error()) != "unsupported_source" ||
+                result.error().reason.find("item 2.9, decision 226; decision 249") == std::string::npos) {
+                normalRefused = false;
+                normalRefusedDetail += std::string(name) + ": " + Describe(result) + " ";
+            }
+        }
+        Check(normalRefused, "on the Normal channel, a grey bitmap at any sampling, a 16-bit bitmap resampled by a bilinear "
+                             "filter, any bilinear minification, an 8-bit magnification other than P20-A's (another "
+                             "factor, transform, wrap mode, channel format or convention) and a blue code below 127 at 1:1 "
+                             "or under Nearest fail with unsupported_source naming item 2.9 (decision 249)",
+              normalRefusedDetail);
     }
     {
         // Nearest at scale 2 puts every texel on a tie: across, the right texel (2 i + 1 - W / 2); down the rows, the
@@ -3934,25 +4051,33 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
               greyDetail);
     }
 
-    // An 8-bit colour and grey bitmap magnified on the Normal channel (decision 226): the blue codes below 127 raised to
-    // 127, the 16-bit code of the filter's result and the half store, as on the CPU, upright and rotated.
+    // An 8-bit colour bitmap magnified on the Normal channel as P20-A records it (decisions 226 and 249): the blue codes
+    // below 127 raised to 127, the 16-bit code of the filter's result and the half store, as on the CPU, under both
+    // bilinear filters. A rotated projection and a grey bitmap (P20-A's codes 0 and 255 included), not recorded, fail
+    // with unsupported_source on the GPU as on the CPU.
     {
         bool normalEqual = true;
+        bool normalRefused = true;
         std::string normalDetail;
+        std::string refusedDetail;
         size_t normalSamples = 0;
         auto provider = std::make_shared<MapResourceProvider>();
         const std::string colourSha = std::string(63, 'e') + "9";
         const std::string greySha = std::string(62, 'e') + "a0";
         provider->Add(colourSha, PatternImage(16, 16, 3, render::TexelEncoding::Unorm8, 31));
-        provider->Add(greySha, PatternImage(16, 16, 1, render::TexelEncoding::Unorm8, 37));
+        std::shared_ptr<DecodedImage> grey = PatternImage(16, 16, 1, render::TexelEncoding::Unorm8, 37);
+        for (uint32_t& code : grey->values) code = code < 128u ? 0u : 255u;  // P20-A's grey codes
+        provider->Add(greySha, grey);
         for (const std::string& sha : {colourSha, greySha}) {
-            for (const double rotation : {0.0, 30.0}) {
+            for (const auto& [filter, rotation] : {std::pair{core::FilteringMode::BilinearHQ, 0.0},
+                                                   std::pair{core::FilteringMode::BilinearSharp, 0.0},
+                                                   std::pair{core::FilteringMode::BilinearHQ, 30.0}}) {
                 Builder builder(256, 256, {{ChannelType::Normal, ChannelFormat::RGB16F}});
                 builder.AddResource(sha, 100);
                 const std::vector<ChannelType> channels{ChannelType::Normal};
                 core::Layer layer =
                     builder.Fill("normal", SameSource(channels, Bitmap(sha)), Same(channels, BlendingMode::Normal, 1.0));
-                SetUv(layer, core::FilteringMode::BilinearHQ, core::UVWrapMode::Repeat, {1.0, 1.0}, rotation, {0.1, 0.0});
+                SetUv(layer, filter, core::UVWrapMode::Repeat, {1.0, 1.0}, rotation, {0.0, 0.0});
                 builder.SetRoot({layer});
                 EvaluateRequest request;
                 request.textureSet = builder.SetId();
@@ -3964,7 +4089,16 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
                 auto project = std::make_shared<const core::Project>(builder.project);
                 std::future<render::Result<ChannelResult>> future = gpu.Evaluate(core::Snapshot{1, project}, request);
                 render::Result<ChannelResult> gpuResult = Get(future);
-                const std::string label = std::string(sha == colourSha ? "colour" : "grey") + " at " + std::to_string(rotation);
+                const std::string label = std::string(sha == colourSha ? "colour" : "grey") + " " +
+                                          std::string(core::ToString(filter)) + " at " + std::to_string(rotation);
+                if (rotation != 0.0 || sha == greySha) {
+                    if (cpuResult || gpuResult || KindName(cpuResult.error()) != "unsupported_source" ||
+                        KindName(gpuResult.error()) != "unsupported_source") {
+                        normalRefused = false;
+                        refusedDetail += label + ": " + Describe(cpuResult) + " / " + Describe(gpuResult) + " ";
+                    }
+                    continue;
+                }
                 if (!cpuResult || !gpuResult) {
                     normalEqual = false;
                     normalDetail += label + ": " + Describe(cpuResult) + " / " + Describe(gpuResult) + " ";
@@ -3980,9 +4114,12 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
                 }
             }
         }
-        Check(normalEqual, "an 8-bit colour and grey bitmap magnified on the Normal channel evaluate to the same bytes on the "
-                           "GPU and on the CPU (" + std::to_string(normalSamples) + " samples)",
+        Check(normalEqual, "an 8-bit colour bitmap magnified on the Normal channel evaluates to the same bytes on the GPU and "
+                           "on the CPU (" + std::to_string(normalSamples) + " samples)",
               normalDetail);
+        Check(normalRefused, "a rotated 8-bit colour bitmap and a grey bitmap on the Normal channel fail with "
+                             "unsupported_source on the GPU as on the CPU (decision 249)",
+              refusedDetail);
     }
 
     // The grid size reaches the GPU cache keys too.

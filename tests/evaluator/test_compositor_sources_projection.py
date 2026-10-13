@@ -64,10 +64,21 @@ def test_sources_on_the_cpu(evaluator_tests: Path) -> None:
     } <= set(passed)
     # A bitmap on the Normal channel: P20-A's import, filter and 16-bit code (decision 226).
     assert {
-        "an 8-bit colour and grey bitmap on the Normal channel are imported, filtered and written "
-        "as 16-bit codes as P20-A records (decision 226)",
+        "an 8-bit colour bitmap on the Normal channel is imported, filtered and written as 16-bit "
+        "codes as P20-A records (decision 226)",
         "a 16-bit grey bitmap on the Normal channel fails with unsupported_source naming item 2.9 "
         "(decision 226)",
+    } <= set(passed)
+    # Only the recorded Normal-channel uses evaluate; a grey bitmap is refused (decision 249).
+    assert {
+        "on the Normal channel, an 8- or 16-bit colour bitmap whose blue codes are all 127 or "
+        "above keeps its codes, green inverted, at 1:1 and under Nearest, also on RGB16 and in a "
+        "DirectX project (decision 249)",
+        "on the Normal channel, a grey bitmap at any sampling, a 16-bit bitmap resampled by a "
+        "bilinear filter, any bilinear minification, an 8-bit magnification other than P20-A's "
+        "(another factor, transform, wrap mode, channel format or convention) and a blue code "
+        "below 127 at 1:1 or under Nearest fail with unsupported_source naming item 2.9 (decision "
+        "249)",
     } <= set(passed)
     # 8-bit sRGB magnification and 1:1: one probe of the sRGB8 texture unit (decision 224).
     assert (
@@ -158,7 +169,8 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
     on sRGB bitmaps decoded to float32 texels on an sRGB8 channel (decision 174), 16-bit ones
     minified too (decision 203), 8-bit ones minified on level 0 as sRGB8 textures (decision 219),
     on an L8 BaseColor, Specular and Emissive (decision 208), a colour bitmap's grey texture on
-    L8 and L16F (decision 218), and an 8-bit colour and grey bitmap on Normal (decision 226)."""
+    L8 and L16F (decision 218), and an 8-bit colour bitmap magnified on Normal as P20-A records
+    it, a rotated one and a grey one refused on both (decisions 226 and 249)."""
     passed, _ = run_case(evaluator_tests, "projection-gpu-vs-cpu", str(tmp_path), needs_gpu=True)
     assert any(p.startswith("every random projection stack") for p in passed)
     assert any(p.startswith("every random minifying projection stack") for p in passed)
@@ -176,9 +188,13 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
         for p in passed
     )
     assert any(
-        p.startswith("an 8-bit colour and grey bitmap magnified on the Normal channel evaluate to")
+        p.startswith("an 8-bit colour bitmap magnified on the Normal channel evaluates to")
         for p in passed
     )
+    assert (
+        "a rotated 8-bit colour bitmap and a grey bitmap on the Normal channel fail with "
+        "unsupported_source on the GPU as on the CPU (decision 249)"
+    ) in passed
     assert (
         "GPU: after a resolution change the same evaluator re-evaluates at the new size" in passed
     )

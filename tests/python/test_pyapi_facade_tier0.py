@@ -140,6 +140,15 @@ EXCLUDED: dict[str, dict[str, str]] = {
         f"phase1-srgb-uniform-decode-ocio-part{part}": excluded(OCIO_NATIVE, "uzp_plane/basecolor")
         for part in range(1, 5)
     },
+    # BaseColor, BaseMetalness, Height and SpecularRoughness are exact (decisions 218 and 224).
+    "phase1-fill-channel-defaults": excluded(
+        "the grey bitmap on Normal (RGB16F) is refused by the evaluator "
+        "(evaluator:unsupported_source): P20-A sees it only through NormalMapDetail, whose decode "
+        "hides its value and whether its filter result is written as a 16-bit code "
+        "(phase1.15_compositor-colour-fits item 2.9, decision 249; the recording of 8-bit grey "
+        "images on Normal that decision 249 lists settles it)",
+        "uzp_plane/normal",
+    ),
     "phase1-delete-node": excluded(UID_VALUE, "s17/uid"),
     "phase1-resource-update": excluded(UID_VALUE, "s14/uid", "s15/uid"),
     "insert-positions": {
@@ -577,11 +586,11 @@ def test_facade_legacy_uniform_decode_equals_painter(
 
 
 def test_facade_fill_channel_defaults_equal_painter(facade: Run, tmp_path: Path) -> None:
-    """phase1.15 items 2.1, 2.7 and 2.9 (decisions 214, 218, 224 and 226): a fill's default sources
-    after the active-channel reset, the bitmaps' default and available colour spaces, and all five
+    """phase1.15 items 2.1, 2.7 and 2.9 (decisions 214, 218, 224 and 249): a fill's default sources
+    after the active-channel reset, the bitmaps' default and available colour spaces, and four
     maps, both recordings: BaseColor (the 8-bit sRGB checker magnified 16 times through the sRGB8
     texture filter), BaseMetalness, Height and SpecularRoughness (the colour checker on L8 and L16F
-    and as a mask source) and Normal (the checker and the grey bitmap on RGB16F)."""
+    and as a mask source). Normal is `EXCLUDED`: its grey bitmap is refused (decision 249)."""
     differences = compare(DEFAULTS_PROBE, facade, tmp_path)
     assert differences == [], "\n".join(differences)
 

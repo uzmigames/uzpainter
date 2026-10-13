@@ -127,6 +127,8 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
                 // `height-normal-channel-import`: a DirectX project's export of the channel
                 // inverts the stored green again); a grey bitmap is not inverted (decision 226).
                 result.invertGreen = true;
+                result.p20aNormal = ctx.format == core::ChannelFormat::RGB16F &&
+                                    ctx.project.settings.normal_map_format == core::NormalMapFormat::OpenGL;
             }
             switch (BitmapColourSpaceOf(bitmap.color_space)) {
                 case BitmapColourSpace::Linear: break;
@@ -178,6 +180,9 @@ render::Result<DagSource> ResolveSource(const Context& ctx, const core::FillCont
             // give the same samples (sources.h).
             writer.Str("bitmap").Str(result.sha256);
             if (result.srgbDecode) writer.Str("srgb");
+            // What the Normal channel admits depends on the project's normal convention, which the
+            // start hash does not hold (evaluate.cpp CheckNormalTexture, decision 249).
+            if (result.invertGreen) writer.Str("normal").U32(result.p20aNormal ? 1u : 0u);
             // The OCIO use is checked when its content tile is made (evaluate.cpp CheckOcioBitmap):
             // a tile cached under legacy or under another use never serves it.
             if (result.ocio != DagSource::Ocio::None) writer.Str("ocio").U32(static_cast<uint32_t>(result.ocio));

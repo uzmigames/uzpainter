@@ -80,6 +80,10 @@ struct DagSource {
     /// blend-modes.json `blend-normal-channel-import`, height_to_normal.h) and samples it as a
     /// 16-bit texture (evaluate.cpp `NormalTexture`, decision 226).
     bool invertGreen = false;
+    /// The Normal channel is RGB16F in an OpenGL project, the channel P20-A records: only there is
+    /// an 8-bit bitmap's bilinear magnification recorded (evaluate.cpp `CheckNormalTexture`,
+    /// decision 249).
+    bool p20aNormal = false;
     /// An sRGB bitmap (sources.h): its codes are decoded with the sRGB transfer function onto an
     /// sRGB8 channel, or with `l8Material` onto an L8 BaseColor, Specular or Emissive.
     bool srgbDecode = false;

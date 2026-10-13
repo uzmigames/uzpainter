@@ -27,6 +27,8 @@ constexpr uint32_t kFlatNormalBlue8 = 127u;
 ///   `blend-normal-channel-import`), and an 8-bit blue code below 127, the flat normal's code,
 ///   becomes 127 (a negative z clamped to 0 before the filter).
 /// - A grey image feeds its code to the three components, green not inverted and blue not raised.
+///   `CheckNormalTexture` then refuses it: neither its value nor whether its filtered result
+///   passes through the 16-bit code is recorded (decision 249).
 /// An 8-bit code c becomes 257 c, the same value c / 255 (P20-A, decision 226). 8- and 16-bit
 /// colour images and 8-bit grey ones only (a 16-bit grey one is not recorded).
 render::Result<std::shared_ptr<const DecodedImage>> NormalTexture(const DecodedImage& image, core::Id node) {
@@ -49,10 +51,71 @@ render::Result<std::shared_ptr<const DecodedImage>> NormalTexture(const DecodedI
     for (size_t i = 0; i < texture->values.size(); ++i) {
         uint32_t code = texture->values[i];
         if (image.channels >= 3 && i % image.channels == 1) code = max - code;
-        if (image.channels >= 3 && i % image.channels == 2 && eight) code = std::max(code, kFlatNormalBlue8);
+        if (image.channels >= 3 && i % image.channels == 2 && eight && code < kFlatNormalBlue8) {
+            code = kFlatNormalBlue8;
+            texture->blueRaised = true;
+        }
         texture->values[i] = code * scale;
     }
     return std::shared_ptr<const DecodedImage>(std::move(texture));
+}
+
+/// Whether `projection` is the identity transform: scale 1, rotation 0 and offset 0.
+bool Identity(const UvProjection& projection) {
+    return projection.scale[0] == 1.0 && projection.scale[1] == 1.0 && projection.cosR == 1.0 &&
+           projection.sinR == 0.0 && projection.offset[0] == 0.0 && projection.offset[1] == 0.0;
+}
+
+/// Whether `projection` samples `image` 1:1 on a `width` x `height` set: the image is the set's size and the
+/// projection is the identity.
+bool OneToOne(const UvProjection& projection, uint32_t width, uint32_t height, const DecodedImage& image) {
+    return image.width == width && image.height == height && Identity(projection);
+}
+
+/// Fails unless the bitmap `image`, sampled by `source`'s projection on the Normal channel of a `width` x `height` set
+/// through its `NormalTexture` `texture`, is a use the recordings hold (decision 249):
+/// - a colour image at 1:1 or under Nearest whose import raised no blue code: decision 226 changes none of these
+///   samples, in any channel format or convention (normal-a, normal-b and normal-a-8bit at 1:1; normal-a under Nearest
+///   at 2x and 4x, export-resize s0);
+/// - an 8-bit colour image magnified as P20-A records it: on an RGB16F Normal channel in an OpenGL project
+///   (`DagSource::p20aNormal`), by a bilinear filter, with Repeat, an upright projection at scale 1 and offset 0, and an
+///   image 16 times smaller than the set on each axis (decision 226).
+/// A grey image is not recorded: P20-A sees its grey only through NormalMapDetail, whose decode normalises it, so neither
+/// its value nor whether its filter result passes through the 16-bit code is shown (its transitions are exact both
+/// ways there), and a plain fill stores either value (at a weight of 184 / 256, 0.71875 or 0.71826171875). A 16-bit image resampled by a bilinear filter misses export-resize s3 under decision
+/// 226's rule (2 048 of 262 144 texels at 512, 6 880 of 1 048 576 at 1024); bilinear minification, any other
+/// magnification, transform, channel format or convention, and a raised blue code at 1:1 or under Nearest are not
+/// recorded.
+render::Result<void> CheckNormalTexture(const DagSource& source, uint32_t width, uint32_t height,
+                                        const DecodedImage& image, const DecodedImage& texture, core::Id node) {
+    const UvProjection& projection = source.projection;
+    const bool nearest = projection.filter == core::FilteringMode::Nearest;
+    std::string what;
+    if (image.channels == 1) {
+        what = "a grey bitmap is not recorded (P20-A's grey does not show whether its filter result is written as a "
+               "16-bit code)";
+    } else if (nearest || OneToOne(projection, width, height, image)) {
+        if (!texture.blueRaised) return {};
+        what = std::string("an 8-bit normal map with a blue code below 127 is recorded only magnified 16 times by a "
+                           "bilinear filter, not ") +
+               (nearest ? "under Nearest" : "at 1:1");
+    } else if (Minifies(projection, width, height, image)) {
+        what = "bilinear minification is not recorded";
+    } else if (image.encoding != render::TexelEncoding::Unorm8) {
+        what = "a 16-bit bitmap resampled by a bilinear filter misses export-resize s3";
+    } else if (!source.p20aNormal) {
+        what = "an 8-bit bitmap is recorded magnified only on an RGB16F Normal channel in an OpenGL project";
+    } else if (projection.wrap != core::UVWrapMode::Repeat || !Identity(projection) || width != 16 * image.width ||
+               height != 16 * image.height) {
+        what = "an 8-bit bitmap is recorded magnified only 16 times, with Repeat, by a projection at scale 1, "
+               "rotation 0 and offset 0";
+    } else {
+        return {};
+    }
+    return EvalFail(EvalErrorKind::UnsupportedSource,
+                    "on the Normal channel, " + what +
+                        " (phase1.15_compositor-colour-fits item 2.9, decision 226; decision 249)",
+                    node);
 }
 
 /// An sRGB bitmap as the texture Painter samples (sources.h): a float32 image of its linear
@@ -136,9 +199,7 @@ render::Result<void> CheckGreyTexture(const DagSource& source, uint32_t width, u
 /// image is the set's size and the projection is the identity).
 render::Result<void> CheckSrgbL8MaterialBitmap(const UvProjection& projection, uint32_t width, uint32_t height,
                                                const DecodedImage& image, core::Id node) {
-    const bool oneToOne = image.width == width && image.height == height && projection.scale[0] == 1.0 &&
-                          projection.scale[1] == 1.0 && projection.cosR == 1.0 && projection.sinR == 0.0 &&
-                          projection.offset[0] == 0.0 && projection.offset[1] == 0.0;
+    const bool oneToOne = OneToOne(projection, width, height, image);
     if (image.channels == 1 && oneToOne) return {};
     return EvalFail(EvalErrorKind::UnsupportedSource,
                     "on an L8 BaseColor, Specular or Emissive, only a grey sRGB bitmap sampled 1:1 is recorded "
@@ -360,6 +421,9 @@ private:
                 if (!made) return render::Unexpected(made.error());
                 texture = *made;
             }
+            render::Result<void> recorded =
+                CheckNormalTexture(source, m_dag.grid.width, m_dag.grid.height, *image, *texture, node);
+            if (!recorded) return render::Unexpected(recorded.error());
             image = texture;
         }
         render::Result<void> sampling = CheckSampling(source.projection, m_dag.grid.width,

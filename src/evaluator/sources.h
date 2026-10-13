@@ -36,11 +36,28 @@
 //   texture and writes the filter's result as a 16-bit code before the channel stores it half
 //   toward zero (evaluate.cpp `NormalTexture`, `DecodedImage::unorm16Target`). A colour image has
 //   its green codes inverted, and an 8-bit blue code below 127 (the flat normal's) raised to 127;
-//   a grey image feeds its value to the three components, neither inverted nor raised. Exact on
-//   all 65 536 texels of the Normal map, r1 and r2. The clamp at 1/2 or 128/255, no clamp, the
+//   a grey image feeds its value to the three components, neither inverted nor raised (only the
+//   direction NormalMapDetail decodes is seen, decision 249). Exact on all 65 536 texels of the
+//   Normal map, r1 and r2. The clamp at 1/2 or 128/255, no clamp, the
 //   decode clamped and normalised per texel, and the float32 or binary16 filter result each miss
 //   texels. A 1:1 sample keeps its code (the recorded imports stay exact). A 16-bit grey image is
 //   not recorded and fails with `evaluator:unsupported_source`.
+//   Only the recorded uses evaluate (decision 249, evaluate.cpp `CheckNormalTexture`): a colour
+//   image at 1:1 or under Nearest whose import raises no blue code, in any channel format and
+//   convention (decision 226 changes none of these samples: normal-a, normal-b and normal-a-8bit
+//   at 1:1; normal-a under Nearest at 2x and 4x, `export-resize` s0, exact), and an 8-bit colour
+//   image magnified as P20-A records it, on an RGB16F Normal channel in an OpenGL project (a
+//   bilinear filter, Repeat, scale 1, rotation 0, offset 0, an image 16 times smaller than the
+//   set). A grey image is refused at every sampling: P20-A sees it only through NormalMapDetail,
+//   whose decode normalises it, so neither its value nor the 16-bit code of its filtered result is
+//   recorded (a plain fill stores 0.71875 or 0.71826171875 at a weight of 184 / 256, and the
+//   decoded normals of the two differ by one float32 step at 33 of the 257 weights); P20-A's
+//   Normal map is therefore refused. A 16-bit image resampled by a bilinear filter misses
+//   `export-resize` s3 under this rule (normal-a magnified 2 and 4 times by BilinearHQ, seen
+//   through the virtual normal maps: 2 048 of 262 144 texels at 512, 6 880 of 1 048 576 at 1024,
+//   up to 32 PNG 16 codes; 21 888 at 512 before it, decision 103). Those, any bilinear
+//   minification, another magnification, transform, channel format or convention, and a raised
+//   blue code at 1:1 or under Nearest fail with `evaluator:unsupported_source`.
 // - Colour bitmap read by a one-channel tile (decision 218: P20-A, `phase1-fill-channel-defaults`,
 //   the 8-bit checker magnified 16 times on L8, on L16F Height and as a mask source): Painter
 //   samples an R16F texture. Each texel is the mean ((r + g) + b) / 3 of its float32(c / 255)
