@@ -33,7 +33,11 @@
   - Recording (owner's Painter session): blocks 2.2, 3.1 and 4.1.
   - Nine lost masks (owner): restore their original bytes to `_tmp/claude/<name>.png`, then run `script_run manifest --pilot tunic-rebuild --assets-root E:\UzmiGames\Assets3D --out tests/parity/tier1/tunic_v10/rebuild-fixture.json --store`. Regenerated masks would be a new golden, not the approved v10. This blocks 2.1 and 2.3-2.5, 3.1-3.5.
   - `infinite` padding (phase1.25 item 2.7): every pilot export is refused before writing until it lands.
-  - Double-sided state (decision needed): UzPainter's `shader_set` refuses `double_sided: true`, because decision 132 accepts only the `open-pbr` defaults. The tunic's approved state has it on. This blocks the double-sided part of 2.3 and 3.3 (decision 194, Blockers).
+  - Double-sided state (owner; decision 196): UzPainter's `shader_set` keeps refusing `double_sided: true`, because decisions 042 and 132 accept only the `open-pbr` defaults and the panel cannot widen an owner-scoped setter contract. The tunic's approved state has it on. The double-sided parts of 2.3 and 3.3 are a scope split owned by the owner. The owner can:
+    - amend 042 item 5 and 132 item 7 to store it as project state with renders pinned (decision 196 item 5 specifies this, tests included);
+    - or drop the pin from the rebuild fixture and from 2.3 and 3.3.
+
+    The rest of 2.3 and 3.3 is unaffected, and so are the exported maps.
   - 1.1: phase2.9, phase2.2 and phase2.8 are not accepted.
 - 2.1 (open): the generators are written and tested.
   - `--pilot tunic` wrote the golden's request.
