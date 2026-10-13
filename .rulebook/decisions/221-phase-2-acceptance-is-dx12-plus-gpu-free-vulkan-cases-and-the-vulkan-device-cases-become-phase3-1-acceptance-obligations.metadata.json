@@ -1,0 +1,18 @@
+{
+  "id": 221,
+  "slug": "221-phase-2-acceptance-is-dx12-plus-gpu-free-vulkan-cases-and-the-vulkan-device-cases-become-phase3-1-acceptance-obligations",
+  "title": "Phase 2 acceptance is DX12 plus the GPU-free Vulkan cases, and the Vulkan device cases become phase3.1_vulkan-compute-parity's acceptance obligations",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.1_supervisor-ipc-worker",
+    "phase2.4_supervisor-worker",
+    "phase2.3_realtime-preview",
+    "phase2.5_mcp-transport-registry",
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.7_mcp-operation-matrix",
+    "phase2.8_mcp-server",
+    "phase3.1_vulkan-compute-parity"
+  ],
+  "supersededBy": null
+}

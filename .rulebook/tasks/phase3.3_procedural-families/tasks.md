@@ -10,12 +10,12 @@
 - [ ] 2.6 phase3.2_proc-material-families accepted
 
 ## 3. Integration
-- [ ] 3.1 Run the full Tier 2a certification for every certified asset on the owner's machine (unit sphere, bevelled cube, hat v6 low with its mesh maps × {1024, 2048, 4096} × {defaults, recipe sets, two boundary sets} × {recorded seed, one other})
-- [ ] 3.2 Publish the Tier 2a report under `parity/reports/phase3/` (max/mean/p99 |Δ|, affected-texel counts, parity status per asset, exceptions relied on; numbers and hashes only)
-- [ ] 3.3 Regenerate the capability manifest: certified assets `supported`; uncertified Painter assets and `.sbsar` execution listed as release gaps; `uzpainter assets list --parity` matches the report
+- [ ] 3.1 Run the full Tier 2a certification for every certified asset on the owner's machine (unit sphere, bevelled cube, hat v6 low with its mesh maps × {1024, 2048, 4096} × {defaults, recipe sets, two boundary sets} × {recorded seed, one other}) and on each asset's held-out set, whose hash list was committed before its calibration (decision 222)
+- [ ] 3.2 Publish the Tier 2a report under `parity/reports/phase3/` (max/mean/p99 |Δ|, affected-texel counts, parity status per asset, exceptions relied on, calibration and held-out results separately, each asset's certified editable domain; numbers and hashes only)
+- [ ] 3.3 Regenerate the capability manifest: certified assets `supported` inside their certified editable domain; the rest of each documented range, uncertified Painter assets and `.sbsar` execution listed as release gaps; `uzpainter assets list --parity` matches the report
 
 ## 4. Acceptance
-- [ ] 4.1 Acceptance: Tier 2a published; every certified asset exact or covered by an owner-approved exception; every mandatory child accepted
+- [ ] 4.1 Acceptance: Tier 2a published; every certified asset exact on its calibration and held-out sets or covered by an owner-approved exception, inside a declared editable domain outside which it is refused; every mandatory child accepted
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 5.1 Update or create documentation covering the implementation

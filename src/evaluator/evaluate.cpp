@@ -69,6 +69,45 @@ render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedIma
     return std::shared_ptr<const DecodedImage>(std::move(decoded));
 }
 
+/// A colour bitmap read by a one-channel tile (a mono channel or a mask source) as the texture
+/// Painter samples (sources.h, decision 218): an R16F image of the mean of each texel's three
+/// float32(c / 255) values, ((r + g) + b) / 3, taken as the signed 2 m - 1 on the Height channel,
+/// rounded toward zero to a binary16. Its bilinear filter returns a binary16 (projection_uv.cpp).
+std::shared_ptr<const DecodedImage> GreyTexture(const DecodedImage& image, bool signedRange) {
+    auto grey = std::make_shared<DecodedImage>();
+    grey->width = image.width;
+    grey->height = image.height;
+    grey->channels = 1;
+    grey->encoding = render::TexelEncoding::Float16;
+    grey->values.resize(size_t{image.width} * image.height);
+    for (size_t t = 0; t < grey->values.size(); ++t) {
+        const float r = arith::UnormOperand(image.values[t * 3], 8);
+        const float g = arith::UnormOperand(image.values[t * 3 + 1], 8);
+        const float b = arith::UnormOperand(image.values[t * 3 + 2], 8);
+        float mean = ((r + g) + b) / 3.0f;
+        if (signedRange) mean = RangeValue(mean, true);
+        grey->values[t] = std::bit_cast<uint32_t>(arith::HalfToFloat(arith::HalfTowardZero(mean)));
+    }
+    return grey;
+}
+
+/// Fails unless the colour `image` sampled by `projection` into a one-channel tile is what P20-A
+/// records (decision 218): an 8-bit image, magnified or at 1:1 by a bilinear filter, where `source`
+/// takes the grey texture (`DagSource::greyTexture`).
+render::Result<void> CheckGreyTexture(const DagSource& source, uint32_t width, uint32_t height,
+                                      const DecodedImage& image, core::Id node) {
+    if (source.greyTexture && image.encoding == render::TexelEncoding::Unorm8 &&
+        source.projection.filter != core::FilteringMode::Nearest &&
+        !Minifies(source.projection, width, height, image)) {
+        return {};
+    }
+    return EvalFail(EvalErrorKind::UnsupportedSource,
+                    "a colour bitmap on a one-channel channel or as a mask source is recorded only as an 8-bit image "
+                    "magnified by a bilinear filter on an L8 or L16F channel or in a mask (phase1-fill-channel-defaults; "
+                    "phase1.15_compositor-colour-fits item 2.9, decision 218)",
+                    node);
+}
+
 /// Fails unless `image` sampled by `projection` on a `width` x `height` set is what decision 208
 /// records for an sRGB bitmap on an L8 BaseColor, Specular or Emissive: a grey image at 1:1 (the
 /// image is the set's size and the projection is the identity).
@@ -340,10 +379,21 @@ private:
             }
             image = decoded;
         }
+        bool signedRange = source.signedRange;
+        if (image->channels == 3 && format.channels == 1) {
+            render::Result<void> recorded =
+                CheckGreyTexture(source, m_dag.grid.width, m_dag.grid.height, *image, node);
+            if (!recorded) return render::Unexpected(recorded.error());
+            imageKey += signedRange ? "/grey-signed" : "/grey";
+            std::shared_ptr<const DecodedImage>& grey = m_env.greyTextures[imageKey];
+            if (!grey) grey = GreyTexture(*image, signedRange);
+            image = grey;
+            signedRange = false;  // the texture holds the signed values
+        }
         // A wrap mode that can leave texels uncovered gives the content a coverage plane: the
         // fill keeps the value below there (resampling.json, RepeatNone).
         format.alpha = source.projection.MayUncover();
-        return Projected(key, format, image, imageKey, source.projection, source.signedRange);
+        return Projected(key, format, image, imageKey, source.projection, signedRange);
     }
 
     render::Result<Operand> Projected(const CacheKey& key, const TileFormat& format,

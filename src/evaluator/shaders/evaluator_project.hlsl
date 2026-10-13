@@ -82,12 +82,14 @@ int64_t Address(int64_t index, uint extent, bool repeat) {
 #define IMAGE_UNORM8 0u
 #define IMAGE_UNORM16 1u
 #define IMAGE_FLOAT32 2u
+// An R16F texture (decision 218): float32 bits of binary16 values; its filter returns a binary16.
+#define IMAGE_FLOAT16 3u
 
 uint Code(uint srv, uint sixteen, uint width, uint channels, int64_t x, int64_t y, uint c) {
     StructuredBuffer<uint> image = ResourceDescriptorHeap[srv];
     const uint channel = channels == 1u ? 0u : c;
     const uint k = ((uint)y * width + (uint)x) * channels + channel;
-    if (sixteen == IMAGE_FLOAT32) return image[k];
+    if (sixteen == IMAGE_FLOAT32 || sixteen == IMAGE_FLOAT16) return image[k];
     if (sixteen != 0u) {
         const uint word = image[k >> 1];
         return (k & 1u) != 0u ? word >> 16 : word & 0xFFFFu;
@@ -122,7 +124,7 @@ float DivNearest(uint s, uint d) {
 // value of a float32 image (a decoded sRGB bitmap).
 float TexelValue(uint srv, uint sixteen, uint width, uint channels, int64_t x, int64_t y, uint c, uint range) {
     const uint code = Code(srv, sixteen, width, channels, x, y, c);
-    return sixteen == IMAGE_FLOAT32 ? asfloat(code) : DivNearest(code, range);
+    return sixteen == IMAGE_FLOAT32 || sixteen == IMAGE_FLOAT16 ? asfloat(code) : DivNearest(code, range);
 }
 
 // projection_uv.h BilinearFilter on float32 texels: E the frexp exponent of the largest texel
@@ -161,6 +163,27 @@ float BilinearFilter(uint4 w, float4 t) {
     const float scale = asfloat((uint)(shift + exponent - 36 + 127) << 23);  // 2^(shift + E - 36)
     const float magnitude = (float)significand * scale;
     return negative ? -magnitude : magnitude;
+}
+
+// The float32 value of the binary16 nearest to v, ties away from zero (arith.cpp HalfNearestAway):
+// the result of the bilinear filter of an R16F texture (decision 218).
+float HalfNearestAway(float v) {
+    const uint bits = asuint(v);
+    const uint sign = bits & 0x80000000u;
+    const uint magnitude = bits & 0x7FFFFFFFu;
+    if (magnitude >= 0x7F800000u) return v;
+    if (magnitude >= 0x477FF000u) return asfloat(sign | 0x7F800000u);
+    if (magnitude < 0x38800000u) {
+        if (magnitude < 0x33000000u) return asfloat(sign);
+        const uint significand = (magnitude & 0x7FFFFFu) | 0x800000u;
+        const uint shift = 126u - (magnitude >> 23);
+        uint q = significand >> shift;
+        if ((significand & ((1u << shift) - 1u)) >= (1u << (shift - 1u))) q += 1u;
+        return asfloat(sign | asuint(float(q) * 5.9604644775390625e-08f));
+    }
+    uint h = magnitude & 0xFFFFE000u;
+    if ((magnitude & 0x1FFFu) >= 0x1000u) h += 0x2000u;
+    return asfloat(sign | h);
 }
 
 // projection_uv.h RangeValue: on the Height channel a bitmap texel enters the filter as 2 t - 1,
@@ -862,6 +885,7 @@ void main(uint3 id : SV_DispatchThreadID) {
                 const float t01 = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xa, yb, c, range), signedRange);
                 const float t11 = SignedValue(TexelValue(srv, sixteen, imageWidth, channels, xb, yb, c, range), signedRange);
                 value[c] = BilinearFilter(uint4(w00, w10, w01, w11), float4(t00, t10, t01, t11));
+                if (sixteen == IMAGE_FLOAT16) value[c] = HalfNearestAway(value[c]);
             }
         }
     }

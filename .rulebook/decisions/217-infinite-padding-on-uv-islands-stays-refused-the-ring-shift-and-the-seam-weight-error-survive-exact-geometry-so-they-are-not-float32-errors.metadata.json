@@ -1,0 +1,13 @@
+{
+  "id": 217,
+  "slug": "217-infinite-padding-on-uv-islands-stays-refused-the-ring-shift-and-the-seam-weight-error-survive-exact-geometry-so-they-are-not-float32-errors",
+  "title": "`infinite` padding on UV islands stays refused: the ring shift and the seam weight error survive exact geometry, so they are not float32 errors",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}

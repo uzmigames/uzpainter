@@ -76,6 +76,9 @@ struct EvalEnvironment {
     /// 8-bit Raw bitmaps under OCIO as the float32 images Painter samples (sources.h), by resource
     /// hash, made once per evaluation.
     std::unordered_map<std::string, std::shared_ptr<const DecodedImage>> ocioRawDecoded{};
+    /// Colour bitmaps read by a one-channel tile as the R16F grey textures Painter samples
+    /// (decision 218), by image key, made once per evaluation.
+    std::unordered_map<std::string, std::shared_ptr<const DecodedImage>> greyTextures{};
 };
 
 /// Evaluates every tile of `dag`, reading each back. The root meets the base as the profile says

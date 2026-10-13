@@ -531,9 +531,10 @@ render::Result<void> GpuTileStore::Project(const ProjectOp& op) {
     }
     const DecodedImage& image = *op.image;
     const std::string key =
-        op.imageKey + (image.encoding == render::TexelEncoding::Float32
-                           ? "/f32"
-                           : (image.encoding == render::TexelEncoding::Unorm16 ? "/16" : "/8"));
+        op.imageKey + (image.encoding == render::TexelEncoding::Float32   ? "/f32"
+                       : image.encoding == render::TexelEncoding::Float16 ? "/f16"
+                       : image.encoding == render::TexelEncoding::Unorm16 ? "/16"
+                                                                          : "/8");
     const bool minified = Minifies(op.projection, op.setWidth, op.setHeight, image);
     render::Result<ProjectBuffers> buffers = ProjectionBuffers(key, image, minified);
     if (!buffers) return render::Unexpected(buffers.error());

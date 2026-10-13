@@ -526,6 +526,27 @@ uint16_t HalfNearestEven(float v) {
     return static_cast<uint16_t>(sign | h);
 }
 
+uint16_t HalfNearestAway(float v) {
+    const uint32_t bits = std::bit_cast<uint32_t>(v);
+    const uint16_t sign = static_cast<uint16_t>((bits >> 16) & 0x8000u);
+    const uint32_t magnitude = bits & 0x7FFFFFFFu;
+    if (magnitude >= 0x7F800000u) return HalfTowardZero(v);  // infinity or NaN
+    if (magnitude >= 0x477FF000u) {                          // >= 65520: rounds to infinity
+        return static_cast<uint16_t>(sign | 0x7C00u);
+    }
+    if (magnitude < 0x38800000u) {  // below 2^-14: a subnormal half (or zero), step 2^-24
+        if (magnitude < 0x33000000u) return sign;  // below 2^-25 (2^-25 itself ties away to 2^-24)
+        const uint32_t significand = (magnitude & 0x7FFFFFu) | 0x800000u;
+        const uint32_t shift = 126u - (magnitude >> 23);  // 14 .. 24
+        uint32_t q = significand >> shift;
+        if ((significand & ((1u << shift) - 1u)) >= (1u << (shift - 1u))) ++q;
+        return static_cast<uint16_t>(sign | q);
+    }
+    uint32_t h = (magnitude >> 13) - (112u << 10);  // exponent rebiased from 127 to 15
+    if ((magnitude & 0x1FFFu) >= 0x1000u) ++h;      // a carry moves the exponent
+    return static_cast<uint16_t>(sign | h);
+}
+
 float HalfToFloat(uint16_t bits) {
     const uint32_t sign = (static_cast<uint32_t>(bits) & 0x8000u) << 16;
     const uint32_t exponent = (bits >> 10) & 0x1Fu;

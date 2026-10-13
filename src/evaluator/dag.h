@@ -85,6 +85,11 @@ struct DagSource {
     /// An sRGB bitmap on an L8 BaseColor, Specular or Emissive (sources.h, decision 208): a grey
     /// image at 1:1, checked at evaluation, whose 8-bit codes decode through a binary16.
     bool l8Material = false;
+    /// Where P20-A records it (a mask source, an L8 or an L16F channel; decision 218): a colour
+    /// image read by this one-channel tile is the R16F texture of its mean (evaluate.cpp
+    /// `GreyTexture`), checked at evaluation. Elsewhere a colour image on a one-channel tile is
+    /// refused there.
+    bool greyTexture = false;
     /// Under OCIO with Painter's substance config (sources.h): the one recorded use this bitmap
     /// must be, checked against the image at evaluation (decision 190). `Srgb8Fill`: an 8-bit
     /// colour image in sRGB on an sRGB8 channel at 1:1, decoded as under legacy; `Raw8Fill`: an
