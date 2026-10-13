@@ -62,8 +62,7 @@ def inverted_spec(tmp: Path) -> Path:
 
     path = spec(tmp)
     document = json.loads(path.read_text(encoding="utf-8"))
-    samples = np.repeat((65535 - ramp_codes())[:, :, None], 3, axis=-1)
-    data = png.encode(samples.astype(np.int64), 16)
+    data = png.encode((65535 - ramp_codes()).astype(np.int64), 16)
     (tmp / "inverted.png").write_bytes(data)
     sha = hashlib.sha256(data).hexdigest()
     document["resources"] = [{"sha256": sha, "png": "inverted.png"}]
