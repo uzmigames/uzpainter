@@ -44,6 +44,12 @@ result, LDR on the stored codes scaled to [0, 1] (a grey map repeated to three c
 dropped), with the tool's identity in `flip_tool`. It is a diagnostic only: it never enters a
 verdict. Without the pinned package (hosted runners), or for float maps, it is omitted.
 
+Padding (decision 223): for a texture set whose UV triangles the subject names, each map is split
+by the set's texel-centre coverage (`tools.parity.coverage`). The verdict receives the coverage, so
+an owner scope split (EXC-007) can except the uncovered texels while the covered ones stay exact,
+and the map's `padding` block publishes the covered and uncovered statistics and the uncovered
+ones within 1, 2, 4 and 8 texels of coverage, whatever the verdict.
+
 Nothing here writes into the repository except `write_report`: decoded values stay in memory, and
 the report holds numbers and hashes only.
 """
@@ -63,6 +69,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from tools.parity.coverage import BANDS, Triangles, coverage, distance_bands
 from tools.parity.envelope.registry import current_envelope
 from tools.parity.feasibility import png
 from tools.parity.fit.decode import Decoded, decode
@@ -120,13 +127,15 @@ class RunIdentity:
 
 @dataclass(frozen=True)
 class Subject:
-    """The job the runs executed (its public manifest, request or admitted), its material regions
-    and the names of its maps that are tangent-space normals."""
+    """The job the runs executed (its public manifest, request or admitted), its material regions,
+    the names of its maps that are tangent-space normals, and the UV triangles of its texture sets
+    by name (the mesh material of each set; decision 223)."""
 
     manifest: Mapping[str, Any]
     manifest_sha256: str
     regions: Mapping[str, Mask] = field(default_factory=dict)
     normal_maps: frozenset[str] = frozenset()
+    uv_triangles: Mapping[str, Triangles] = field(default_factory=dict)
 
 
 def material_regions(stack: Mapping[str, Any], masks: Path) -> dict[str, Mask]:
@@ -176,6 +185,32 @@ def region_diagnostics(
         if mask.shape == oracle.shape[:2] and mask.any():
             found[name] = diagnose(oracle[mask], candidate[mask])
     return found
+
+
+def padding_block(
+    oracle: npt.NDArray[Any], candidate: npt.NDArray[Any], covered: Mask
+) -> dict[str, Any]:
+    """The map split by coverage (decision 223): the covered texels, the uncovered ones and the
+    uncovered ones within each band of `BANDS` texels of coverage."""
+    distance = distance_bands(covered)
+    uncovered = ~covered
+    bands = []
+    for band in BANDS:
+        within = uncovered & (distance <= band)
+        if within.any():
+            stats = stat_block(diagnose(oracle[within], candidate[within]))
+            bands.append({"within_texels": band, "texels": int(within.sum()), **stats})
+    return {
+        "covered_texels": int(covered.sum()),
+        "uncovered_texels": int(uncovered.sum()),
+        "covered": stat_block(diagnose(oracle[covered], candidate[covered])),
+        "uncovered": (
+            stat_block(diagnose(oracle[uncovered], candidate[uncovered]))
+            if uncovered.any()
+            else None
+        ),
+        "bands": bands,
+    }
 
 
 def _vectors(decoded: Decoded) -> npt.NDArray[np.float64]:
@@ -270,6 +305,7 @@ def map_entry(
     normal: Mapping[str, float] | None = None,
     difference_map: str | None = None,
     flip: float | None = None,
+    padding: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "output_id": output_id,
@@ -288,6 +324,8 @@ def map_entry(
         entry["private_difference_map_sha256"] = difference_map
     if flip is not None:
         entry["flip_mean"] = flip
+    if padding is not None:
+        entry["padding"] = dict(padding)
     return entry
 
 
@@ -414,6 +452,7 @@ def equality(
     ]
     verdicts: list[Verdict] = []
     entries: list[dict[str, Any]] = []
+    masks: dict[tuple[str, int, int], Mask] = {}
     for key, output_id in sorted(first.items()):
         path = run.files.get(key)
         if path is None:
@@ -429,6 +468,17 @@ def equality(
             continue
         regions = region_diagnostics(oracle.values, candidate.values, subject.regions)
         normal = normal_diagnostics(oracle, candidate) if key[1] in subject.normal_maps else None
+        covered: Mask | None = None
+        if key[0] in subject.uv_triangles:
+            height, width = oracle.values.shape[:2]
+            if (key[0], width, height) not in masks:
+                masks[key[0], width, height] = coverage(subject.uv_triangles[key[0]], width, height)
+            covered = masks[key[0], width, height]
+        padding = (
+            padding_block(oracle.values, candidate.values, covered)
+            if covered is not None and covered.any()
+            else None
+        )
         verdict = evaluate(
             Comparison(
                 tier,
@@ -440,6 +490,7 @@ def equality(
                 oracle_stable=stable[key],
                 exact_target=not stable[key],
                 envelope_id=resolved.envelope_id,
+                covered=covered,
             ),
             register_entries,
         )
@@ -450,7 +501,7 @@ def equality(
         )
         flip = flip_mean(oracle, candidate)
         entries.append(
-            map_entry(_name(key), recorded, whole, regions, normal, difference_map, flip)
+            map_entry(_name(key), recorded, whole, regions, normal, difference_map, flip, padding)
         )
     outcome = _outcome(verdicts, structural, resolved.stale, oracle_unpaired)
     relied = sorted({pair for v in verdicts for pair in v.exceptions_relied_on})

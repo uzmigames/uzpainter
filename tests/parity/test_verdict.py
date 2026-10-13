@@ -323,6 +323,89 @@ def test_decision_032_entries_catch_injected_defects() -> None:
         assert entry["defect_detection_test"]["outcome"] == "every_injected_defect_fails"
 
 
+# --- decision 223: an owner scope split excepts the uncovered texels only ---------------------
+
+
+def scope_split_entry() -> dict[str, Any]:
+    register = load_json(REGISTER_PATH)
+    (entry,) = [e for e in register["entries"] if e["exception_id"] == "EXC-007"]
+    return dict(entry)
+
+
+def scope_split_case() -> tuple[np.ndarray, np.ndarray]:
+    """An 8 x 8 PNG 16 map with a 4 x 4 island: the oracle, and its coverage."""
+    oracle = np.arange(64, dtype=np.int64).reshape(8, 8) * 512
+    covered = np.zeros((8, 8), dtype=bool)
+    covered[2:6, 2:6] = True
+    return oracle, covered
+
+
+def test_owner_scope_split_excepts_only_the_uncovered_texels() -> None:
+    """EXC-007 (decision 223): any padding difference passes and names the entry; the comparison
+    is still exact where it is exact; another tier or domain is not covered."""
+    entry = scope_split_entry()
+    assert is_valid(load_json(REGISTER_PATH), Schema.EXCEPTIONS)
+    assert entry["evidence"]["basis"] == "owner_scope_split"
+    assert entry["bounds"] == [{"metric": "max_abs_diff", "scope": "covered", "max": 0}]
+    domain = entry["domain"]["selector"]
+    oracle, covered = scope_split_case()
+    padded = oracle.copy()
+    padded[~covered] = 65535 - padded[~covered]  # every padding texel wrong, by up to 65535
+    verdict = evaluate(Comparison("1", domain, oracle, padded, covered=covered), [entry])
+    assert verdict.outcome is Outcome.PASS
+    assert verdict.exceptions_relied_on == (("EXC-007", 1),)
+    assert verdict.diagnostics is not None and verdict.diagnostics.max_abs_diff > 0
+    exact = evaluate(Comparison("1", domain, oracle, oracle.copy(), covered=covered), [entry])
+    assert exact.outcome is Outcome.PASS and exact.exceptions_relied_on == ()
+    for tier, selector in (("0", domain), ("1", TIER1_DOMAIN)):
+        other = evaluate(Comparison(tier, selector, oracle, padded, covered=covered), [entry])
+        assert other.outcome is Outcome.FAIL, (tier, selector)
+
+
+def test_owner_scope_split_catches_injected_defects() -> None:
+    """EXC-007's defect test: every injected defect on the covered texels fails, and so does any
+    padding difference when the comparison has no usable coverage mask."""
+    entry = scope_split_entry()
+    domain = entry["domain"]["selector"]
+    oracle, covered = scope_split_case()
+    padding = oracle.copy()
+    padding[~covered] += 7  # an excepted difference, present in every case below
+    defects: dict[str, tuple[np.ndarray, np.ndarray | None]] = {}
+    one = padding.copy()
+    one[3, 3] += 1
+    defects["one_covered_value_off_by_one_code"] = (one, covered)
+    defects["uniform_offset_one_code"] = (padding + 1, covered)
+    region = padding.copy()
+    region[2:4, 2:6] += 4096
+    defects["one_wrong_covered_region"] = (region, covered)
+    defects["no_coverage_mask"] = (padding, None)
+    defects["coverage_mask_of_another_size"] = (padding, np.ones((4, 4), dtype=bool))
+    assert set(defects) == set(entry["defect_detection_test"]["injected_defects"])
+    for name, (candidate, mask) in defects.items():
+        verdict = evaluate(Comparison("1", domain, oracle, candidate, covered=mask), [entry])
+        assert verdict.outcome is Outcome.FAIL, name
+        assert verdict.exceptions_relied_on == (), name
+    nothing = evaluate(
+        Comparison("1", domain, oracle, padding, covered=np.zeros((8, 8), dtype=bool)), [entry]
+    )
+    assert nothing.outcome is Outcome.FAIL  # no covered texel: the entry covers nothing
+    assert entry["defect_detection_test"]["outcome"] == "every_injected_defect_fails"
+
+
+def test_an_owner_scope_split_must_hold_the_covered_texels_exact() -> None:
+    """The schema admits `owner_scope_split` only with covered-scope bounds including max |delta|
+    0 on the covered texels, and the `covered` scope only for it."""
+    entry = scope_split_entry()
+    register = {"schema": "uzpainter/parity/exceptions/1", "entries": [entry]}
+    assert is_valid(register, Schema.EXCEPTIONS)
+    loose = {**entry, "bounds": [{"metric": "max_abs_diff", "scope": "covered", "max": 1}]}
+    whole = {**entry, "bounds": [{"metric": "max_abs_diff", "scope": "whole", "max": 0}]}
+    other = load_json(REGISTER_PATH)["entries"][0]
+    stray = {**other, "bounds": [{"metric": "max_abs_diff", "scope": "covered", "max": 0}]}
+    for bad in (loose, whole, stray):
+        assert not is_valid({**register, "entries": [bad]}, Schema.EXCEPTIONS)
+
+
 # --- decisions 034 and 037: the envelope -------------------------------------------------------
 
 CURRENT = "painter-12.1.5+js-api.1.1.20"

@@ -88,8 +88,9 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
 #if defined(UZP_EXPORT_FAULT_HOOKS)
             if (fault::Fails(fault::Point::fail_encode, i)) throw std::runtime_error("injected encoder failure");
 #endif
-            if (file.layout != FileLayout::Statistics) ApplyPadding(file, *raster, coverages.at(file.textureSetId));
-            EncodedImage image = EncodeFile(file, *raster);
+            const Coverage* coverage =
+                file.layout != FileLayout::Statistics ? &coverages.at(file.textureSetId) : nullptr;
+            EncodedImage image = EncodeFile(file, *raster, coverage);
             encoded.push_back({std::move(image.bytes), raster->normalTag, image.layout});
         } catch (const std::exception& e) {
             return ExportFail("encoding " + file.relativePath + " failed: " + e.what());

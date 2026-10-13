@@ -24,6 +24,10 @@ this machine's private store (`UZP_PARITY_STORE`). Regions are the stack's mater
 the normal map is the file the pinned `painter_export.py` exports from the virtual map
 `Normal_OpenGL`, `<prefix>_Normal`.
 
+The texture sets' UV coverage (decision 223) comes from the job's staged OBJ mesh inputs: each set
+is the mesh material of its name, and the comparison splits each map into its covered texels,
+compared exactly, and its padding texels, which exception EXC-007 excepts and the report publishes.
+
 An export UzPainter refuses before writing (`NotYetSupported`, while phase1.25 items 2.6 and 2.7
 are open) is reported as the structural failure `candidate_export_refused`; any other failed call
 stops the run. Nothing is written under the Assets3D root or into the repository except the
@@ -37,6 +41,7 @@ from pathlib import Path
 from typing import Any
 
 from tests.adapters.assets3d.wand import REQUEST, Call, Wand
+from tools.parity.coverage import obj_materials, obj_triangles
 from tools.parity.recorder.environment import video_controllers
 from tools.parity.recorder.script_run import texture_set_of
 from tools.parity.schemas import REGISTER_PATH, load_json
@@ -116,11 +121,17 @@ def run(
     stack = load_json(wand.stack)
     masks = wand.staged[wand.job.sync.args["masks"][0]].parent
     assert wand.job.export.arguments is not None
+    meshes = [
+        wand.staged[item.input_id]
+        for item in wand.job.inputs.values()
+        if item.kind == "mesh" and wand.staged[item.input_id].suffix.lower() == ".obj"
+    ]
     subject = Subject(
         wand.job.manifest,
         sha256_of(manifest),
         material_regions(stack, masks),
         frozenset({f"{wand.job.export.arguments['prefix']}{NORMAL_SUFFIX}"}),
+        {m: obj_triangles(mesh, m) for mesh in meshes for m in obj_materials(mesh)},
     )
     hardware, driver = video_controllers()
     identity = RunIdentity(
