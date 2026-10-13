@@ -38,7 +38,7 @@ from tools.parity.verdict import ResolvedGolden
 
 SET = "Wand"
 BASE, ROUGH, NORMAL = "W_BaseColor", "W_Roughness", "W_Normal"
-WAND_REQUEST = "parity/envelopes/painter-12.1.5_js-api.1.1.20/requests/phase1/tier1/wand-v1.json"
+WAND_REQUEST = "parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/phase1/tier1/wand-v1.json"
 REPORT_PATH = "parity/reports/phase1/tier1-wand-v1.json"
 IDENTITY = RunIdentity("synthetic adapter", "0.0", "dx12", "0" * 64, ("1" * 64,))
 LEFT = np.zeros((4, 4), np.bool_)
@@ -412,8 +412,8 @@ def test_material_regions_are_the_stack_group_masks(tmp_path: Path) -> None:
 
 
 def wand_report(tmp_path: Path) -> dict[str, Any]:
-    """The report the runner writes today: the request's job, the golden not admitted and the
-    export refused (phase1.25 items 2.6, 2.7)."""
+    """The report of the admitted R9 manifest's job with no golden loaded and the export refused
+    (phase1.25 items 2.6, 2.7)."""
     request = REPO_ROOT / WAND_REQUEST
     manifest = load_json(request)
     digest = hashlib.sha256(request.read_bytes()).hexdigest()

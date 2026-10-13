@@ -5,8 +5,8 @@ inputs: `painter_create.py` through the adapter's client (`client.py execute_pyt
 for the MCP client the pipeline sends it with: since Assets3D 9a718b9 the layer-stack script's
 `run` sends a route-guard probe first, which needs a saved project open), then
 `painter_layer_stack.py sync` and `run painter_export.py` through
-`adapters/assets3d/layer_stack.py`. The pins are those of the committed R9 request manifest
-(`phase1/tier1/wand-v1`, decision 099), loaded by the recorder's own loader: every input
+`adapters/assets3d/layer_stack.py`. The pins are those of the admitted R9 manifest
+(`phase1/tier1/wand-v1`, decisions 099 and 180), loaded by the recorder's own loader: every input
 resolves in Assets3D or, by hash, in the private store (decision 144) before anything runs, and
 each layer-stack call passes `--pin` for the scripts it runs and imports, so the adapter refuses
 a changed script before anything reaches UzPainter.
@@ -37,7 +37,7 @@ from tools.parity.recorder.script_run import ScriptJob, load_script_job, stage_i
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ASSETS3D = Path(os.environ.get("UZP_TEST_ASSETS3D", r"E:\UzmiGames\Assets3D"))
 REQUEST = (
-    REPO_ROOT / "parity/envelopes/painter-12.1.5_js-api.1.1.20/requests/phase1/tier1/wand-v1.json"
+    REPO_ROOT / "parity/envelopes/painter-12.1.5_js-api.1.1.20/manifests/phase1/tier1/wand-v1.json"
 )
 ENTRY = REPO_ROOT / "adapters" / "assets3d" / "layer_stack.py"
 CLIENT = REPO_ROOT / "adapters" / "assets3d" / "client.py"
