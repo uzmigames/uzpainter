@@ -78,14 +78,14 @@ void BindProject(py::module_& m) {
         .def(py::init([](std::optional<core::NormalMapFormat> normal_map_format, std::optional<core::TangentSpace> tangent,
                          std::optional<core::ProjectWorkflow> workflow, std::optional<int> resolution,
                          std::optional<double> mesh_unit_scale, std::optional<bool> import_cameras,
-                         std::optional<std::string> template_id) {
-                 return CreateSettings{normal_map_format, tangent,        workflow,   resolution,
-                                       mesh_unit_scale,   import_cameras, template_id};
+                         std::optional<std::string> template_id, std::optional<std::string> ocio_config_hash) {
+                 return CreateSettings{normal_map_format, tangent,        workflow,    resolution,
+                                       mesh_unit_scale,   import_cameras, template_id, ocio_config_hash};
              }),
              py::arg("normal_map_format") = py::none(), py::arg("tangent_space_mode") = py::none(),
              py::arg("project_workflow") = py::none(), py::arg("default_texture_resolution") = py::none(),
              py::arg("mesh_unit_scale") = py::none(), py::arg("import_cameras") = py::none(),
-             py::arg("template") = py::none())
+             py::arg("template") = py::none(), py::arg("ocio_config_hash") = py::none())
         .def_readwrite("normal_map_format", &CreateSettings::normal_map_format)
         .def_readwrite("tangent_space_mode", &CreateSettings::tangent_space)
         .def_readwrite("project_workflow", &CreateSettings::workflow)
@@ -95,7 +95,11 @@ void BindProject(py::module_& m) {
         .def_readwrite("template", &CreateSettings::template_id,
                        "The id of an installed project template (`templates()`); None creates the project with "
                        "no template (\"default\"). The project records it: its base values are the backdrop of "
-                       "every evaluation and export (decision 116).");
+                       "every evaluation and export (decision 116).")
+        .def_readwrite("ocio_config_hash", &CreateSettings::ocio_config_hash,
+                       "The SHA-256 of the OCIO configuration to create the project under; None creates a Legacy "
+                       "project. Only Painter's substance config is supported; any other hash raises "
+                       "NotYetSupported before anything is created (decision 207).");
     SealClass(settings);
 
     m.def(

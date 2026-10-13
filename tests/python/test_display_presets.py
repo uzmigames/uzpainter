@@ -499,8 +499,8 @@ result = {"mode": cm.get_color_management()["mode"], "get": raises(d.get_tone_ma
 
 def test_tone_mapping_raises_runtime_error_on_a_colour_managed_project(run: Run) -> None:
     """3.4: on an OCIO project `get_tone_mapping` and `set_tone_mapping` raise `RuntimeError`, as
-    Painter documents. No creation path yields an OCIO project yet (phase1.14), so the project is a
-    bundle whose manifest declares OCIO (decision 132)."""
+    Painter documents. The project is a bundle whose manifest declares OCIO (decision 132); the
+    creation path of decision 207 needs Painter's installed config, which this test does not."""
     result = ok(run(OCIO))
     assert result["mode"] == "ocio" and result["unchanged"]
     for key in ("get", "set"):

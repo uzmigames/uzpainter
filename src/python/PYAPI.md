@@ -129,7 +129,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
 4. attaches the new group at the top of the stack in one step;
 5. hides every other visible root layer, unless its name starts with a keep-visible prefix. It never deletes them.
 
-Every node it builds starts with the insert defaults of §3, as the script's inserted nodes do, so it builds the document `painter_layer_stack.py sync` builds through the facade (decision 115; compared node for node in `tests/adapters/assets3d`).
+Every node it builds starts with the insert defaults of §3, as the script's inserted nodes do, so it builds the document `painter_layer_stack.py sync` builds through the facade on a Legacy project (decision 115). On an OCIO project, a layer's sRGB `base` on an sRGB8 BaseColor raises `NotYetSupported`, and nothing is committed: the facade stores Painter's measured decode there (decision 202), which the native module does not hold (decision 207).
 
 The result's `returned["sync"]` lists the groups, layers, imported and skipped images, deleted and hidden nodes. The JSON fields and their channels are documented in `stack_sync.h`. The MCP `sync_stack` also names the imported entries `<resource_prefix><name>` in a `resource_group` (`SyncOptions`, decision 164); the API call keeps the image names.
 

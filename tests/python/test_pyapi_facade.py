@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from tests.python.conftest import REPO_ROOT, Run
 
 INVENTORY = REPO_ROOT / "tools" / "capabilities" / "painter-api-inventory.json"
@@ -402,6 +404,96 @@ def test_colour_rules_implicit_space_conversions_and_the_pinned_profile(facade: 
     assert "0.51" in result["ocio_unrecorded"]
     assert result["ocio_unchanged"] is True
     assert result["ocio_raw_rough"] == [0.3700000047683716] * 3
+
+
+# ── Colour management at create (decision 207) ──────────────────────────────────────────────────
+
+# Painter's substance config where Painter 12.1 installs it (the Wand's `painter_create.py` names
+# this path); it is hashed, never read otherwise, and never copied into the repository.
+PAINTER_OCIO_CONFIG = Path(
+    r"C:\Program Files\Adobe\Adobe Substance 3D Painter\resources\ocio\substance\config.ocio"
+)
+PAINTER_OCIO_SHA256 = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+
+CREATE_COLOUR = """
+def attempt(**variables):
+    for name in ("OCIO", "PAINTER_ACE_CONFIG"):
+        os.environ.pop(name, None)
+    os.environ.update(variables)
+    raised = raises(create)
+    declared = None if raised else uzpainter.colormanagement.get_color_management()
+    if project.is_open():
+        project.close()
+    return [raised, declared]
+
+other = WORK + "/other.ocio"
+with open(other, "w", encoding="utf-8") as file:
+    file.write("ocio_profile_version: 2\\n")
+ace = WORK + "/ace.json"
+with open(ace, "w", encoding="utf-8") as file:
+    file.write("{}")
+out = {
+    "legacy": attempt(),
+    "empty": attempt(OCIO=""),
+    "other": attempt(OCIO=other),
+    "missing": attempt(OCIO=WORK + "/missing.ocio"),
+    "ace": attempt(PAINTER_ACE_CONFIG=ace),
+    "ace_missing": attempt(PAINTER_ACE_CONFIG=WORK + "/missing.json"),
+    "ocio_and_ace": attempt(OCIO=__CONFIG__, PAINTER_ACE_CONFIG=ace),
+}
+out["open_after_refusals"] = uzpainter.project.is_open()
+
+# As the Wand's painter_create.py: OCIO set in-process right before create.
+for name in ("OCIO", "PAINTER_ACE_CONFIG"):
+    os.environ.pop(name, None)
+os.environ["OCIO"] = __CONFIG__
+stack = create()
+fill = ls.insert_fill(top(stack))
+fill.active_channels = {CT.BaseColor}
+fill.set_source(CT.BaseColor, cm.Color(75 / 255, 70 / 255, 65 / 255, cm.GenericColorSpace.sRGB))
+out["ocio_base"] = list(fill.get_source(CT.BaseColor).get_color().working)
+# A colour bitmap on BaseColor binds in its default space, sRGB, in one call (the Wand's T_base).
+image = resource.import_project_resource(IMAGES + "/checker-16.png", resource.Usage.TEXTURE)
+bitmap = ls.insert_fill(top(stack))
+bitmap.active_channels = {CT.BaseColor}
+out["ocio_bitmap"] = bitmap.set_source(CT.BaseColor, image.identifier()).get_color_space().name
+project.save_as(WORK + "/ocio.spp")
+project.close()
+del os.environ["OCIO"]
+project.open(WORK + "/ocio.spp")
+out["reopened"] = uzpainter.colormanagement.get_color_management()
+project.close()
+result = out
+"""
+
+
+def test_create_takes_colour_management_from_the_environment_at_the_call(facade: Run) -> None:
+    """Painter's documented `create` rule (decision 207): `OCIO` naming Painter's substance config
+    gives an OCIO project with its hash (over `PAINTER_ACE_CONFIG` too), read at the call as the
+    Wand sets it; any other OCIO configuration or ACE raises `NotYetSupported`, a file that cannot
+    be read `ProjectError`, before anything is created; neither variable gives Legacy. On the OCIO
+    project a colour bitmap binds on BaseColor in its default space, sRGB."""
+    if not PAINTER_OCIO_CONFIG.is_file():
+        pytest.skip(f"Painter's substance config is not installed at {PAINTER_OCIO_CONFIG}")
+    config = PAINTER_OCIO_CONFIG.as_posix()
+    result = ok(facade(CREATE_COLOUR.replace("__CONFIG__", repr(config))))
+    ocio = {"config_hash": PAINTER_OCIO_SHA256, "io_rules": [], "mode": "ocio", "working_space": ""}
+    legacy = {"config_hash": "", "io_rules": [], "mode": "", "working_space": ""}
+    assert result["legacy"] == [None, legacy]
+    assert result["empty"] == [None, legacy]
+    assert result["other"][0].startswith("NotYetSupported: create under the OCIO configuration")
+    assert "pinned colour profile" in result["other"][0]
+    assert result["missing"][0].startswith("ProjectError: the OCIO configuration")
+    assert result["ace"][0].startswith("NotYetSupported: create under PAINTER_ACE_CONFIG")
+    assert result["ace_missing"][0].startswith("ProjectError: the PAINTER_ACE_CONFIG configuration")
+    for key in ("other", "missing", "ace", "ace_missing"):
+        assert result[key][1] is None, key
+    assert result["ocio_and_ace"] == [None, ocio]
+    assert result["open_after_refusals"] is False
+    # Painter's OCIO readback of (75, 70, 65)/255 in sRGB (`export-ocio-encode` s6, decision 202)
+    assert result["ocio_base"] == [0.07036010175943375, 0.06124616786837578, 0.0528603233397007]
+    assert result["ocio_bitmap"] == "sRGB"
+    assert result["reopened"] == ocio
 
 
 # ── Bitmap colour spaces Painter offers and refuses (decision 174) ───────────────────────────────

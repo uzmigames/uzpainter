@@ -511,12 +511,13 @@ class _Fill(Node):
                     source.identifier() if isinstance(source, resource.Resource) else source
                 )
                 target = resource.to_native(identifier)
-                bitmap = native.set_source(channeltype, target)
                 space = colour.default_bitmap_space(
                     None if channeltype is None else channeltype.name,
                     resource.is_colour_image(target.version),
                 )
-                bitmap.set_color_space(colour.space_name(space))
+                # Bound in its default space in one native call: under OCIO a bitmap without a
+                # space on BaseColor is unrecorded, and the support check runs per call.
+                native.set_source(channeltype, target, colour.space_name(space))
                 key = ("source", uid, None if channeltype is None else channeltype.name)
                 SESSION.bound_context[key] = identifier.context
             elif isinstance(source, AnchorPointEffectNode):

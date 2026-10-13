@@ -7,6 +7,7 @@
 #include <map>
 #include <set>
 
+#include "evaluator/sources.h"
 #include "python/session.h"
 #include "uzp_core/document/nodes.h"
 #include "uzp_core/manifest/sha256.h"
@@ -306,6 +307,13 @@ Object SyncStack(core::Edit& edit, store::ProjectStore& store, const Object& sta
                 std::array<double, 3> working = *l.base;
                 const auto base_channel = channels.find(core::ChannelType::BaseColor);
                 if (base_channel != channels.end() && base_channel->second.format == core::ChannelFormat::sRGB8) {
+                    // Under OCIO the facade reads Painter's measured decode (`ocio_srgb.py`,
+                    // decision 202), which the native module does not hold.
+                    if (evaluator::PainterOcio(edit.project())) {
+                        throw core::NotYetSupported(
+                            "sync_stack: under OCIO, the working value of the sRGB base colour of '" + l.name +
+                            "' is Painter's measured decode, which only the facade holds (decisions 202 and 207)");
+                    }
                     for (double& c : working) c = SrgbToLinear(c);
                 }
                 content.sources[core::ChannelType::BaseColor] = Uniform(working, "Working");

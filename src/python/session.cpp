@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "evaluator/profile.h"
+#include "evaluator/sources.h"
 #include "evaluator/support.h"
 #include "evaluator/templates.h"
 #include "mesh/mesh_import.h"
@@ -171,6 +172,11 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
         ThrowNotYetSupported("project workflow " + std::string(core::ToString(*settings.workflow)) +
                              " is a release gap: the UV-tile workflow (phase4.5_uv-tiles)");
     }
+    if (settings.ocio_config_hash && *settings.ocio_config_hash != evaluator::kPainterOcioConfigSha256) {
+        ThrowNotYetSupported("an OCIO project with the configuration " + *settings.ocio_config_hash +
+                             ": only Painter's substance config (" + std::string(evaluator::kPainterOcioConfigSha256) +
+                             ") is a pinned colour profile (decisions 190, 202 and 207)");
+    }
     const std::string bytes = ReadFile(mesh_path);
     mesh::ImportSettings import;
     import.mesh_unit_scale = settings.mesh_unit_scale;
@@ -205,6 +211,10 @@ core::TransactionResult Session::Create(const std::filesystem::path& mesh_path, 
     }
     if (settings.mesh_unit_scale) p.settings.mesh_unit_scale = *settings.mesh_unit_scale;
     if (settings.import_cameras) p.settings.import_cameras = *settings.import_cameras;
+    if (settings.ocio_config_hash) {
+        p.settings.color_management.mode = "ocio";
+        p.settings.color_management.config_hash = *settings.ocio_config_hash;
+    }
     p.settings.template_id = template_id;
     display::InitialiseNewProject(p);
     core::Validate(p);

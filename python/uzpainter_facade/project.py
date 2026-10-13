@@ -19,10 +19,11 @@ Painter's asynchronous host (task phase1.21_pyapi-dispatcher-lifecycle, decision
   that does not exist gives only `ReloadMeshStatus.ERROR` (Tier 0 `phase1-reload-mesh`).
 
 A project file keeps the path the script gives it (`probe.spp` reads back as `probe.spp`,
-`textureset-project-readback` s13). Opening a project checks its declared colour configuration
-against the pinned profiles (`colour.PROFILES`) before anything is evaluated. Saving drops the
-content effects of groups first, as Painter's save and reopen does
-(`nodes.drop_group_content_effects`).
+`textureset-project-readback` s13). `create` takes its colour management from the environment at
+the call, as Painter documents (`colour.creation_ocio_config_hash`, decision 207). Opening a
+project checks its declared colour configuration against the pinned profiles (`colour.PROFILES`)
+before anything is evaluated. Saving drops the content effects of groups first, as Painter's save
+and reopen does (`nodes.drop_group_content_effects`).
 """
 
 from __future__ import annotations
@@ -148,6 +149,7 @@ def create(
             raise uzpainter.NotYetSupported(f"Settings.{name} is a release gap ({owner})")
     if _p.is_open():
         raise uzpainter.ProjectError("a project is already open")
+    ocio_config_hash = colour.creation_ocio_config_hash()
     native = _p.Settings(
         normal_map_format=settings.normal_map_format,
         tangent_space_mode=settings.tangent_space_mode,
@@ -156,6 +158,7 @@ def create(
         mesh_unit_scale=settings.mesh_unit_scale,
         import_cameras=settings.import_cameras,
         template=template,
+        ocio_config_hash=ocio_config_hash,
     )
     with host.busy_section():
         _p.create(mesh_file_path, native)
