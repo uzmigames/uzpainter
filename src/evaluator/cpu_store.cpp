@@ -1,7 +1,13 @@
 #include "evaluator/cpu_store.h"
 
+#include <algorithm>
 #include <bit>
 #include <cstring>
+#include <exception>
+#include <thread>
+#include <vector>
+
+#include <immintrin.h>
 
 #include "evaluator/arith.h"
 #include "evaluator/error.h"
@@ -15,6 +21,49 @@ namespace {
 using render::TexelEncoding;
 
 bool IsCoverage(const TileFormat& format, uint32_t plane) { return format.alpha && plane == 3; }
+
+/// Runs `body(first, last)` over [0, count) split into contiguous ranges, one per hardware thread,
+/// the calling thread taking the first (B19, decision 246). Every element is computed by the same
+/// code from the same inputs and written by exactly one thread, so the result is the
+/// single-threaded one bit for bit; each worker first takes the caller's MXCSR (rounding,
+/// flush-to-zero, denormals-are-zero), the state the arithmetic runs under. An exception is
+/// rethrown once every range has ended: the one of the first range that threw, which holds the
+/// first element whose computation throws, as the single-threaded loop would have thrown it.
+template <typename Body>
+void ForEachRange(size_t count, const Body& body) {
+    const size_t ranges = std::clamp<size_t>(std::thread::hardware_concurrency(), 1, std::max<size_t>(count, 1));
+    if (ranges == 1) {
+        body(size_t{0}, count);
+        return;
+    }
+    const size_t step = (count + ranges - 1) / ranges;
+    const unsigned int control = _mm_getcsr();
+    std::vector<std::exception_ptr> failures(ranges);
+    const auto run = [&](size_t range) {
+        try {
+            body(range * step, std::min(count, (range + 1) * step));
+        } catch (...) {
+            failures[range] = std::current_exception();
+        }
+    };
+    std::vector<std::thread> workers;
+    workers.reserve(ranges - 1);
+    for (size_t range = 1; range < ranges && range * step < count; ++range) {
+        try {
+            workers.emplace_back([&run, control, range] {
+                _mm_setcsr(control);
+                run(range);
+            });
+        } catch (...) {
+            run(range);  // no thread to start: this one computes the range
+        }
+    }
+    run(0);
+    for (std::thread& worker : workers) worker.join();
+    for (const std::exception_ptr& failure : failures) {
+        if (failure) std::rethrow_exception(failure);
+    }
+}
 
 }  // namespace
 
@@ -100,21 +149,23 @@ render::Result<void> CpuTileStore::Upload(TileHandle handle, const DecodedImage&
                         "(phase1.8_compositor-sources-projection)");
     }
     const uint32_t stored = tile.format.StoredChannels();
-    for (uint32_t y = 0; y < tile.height; ++y) {
-        for (uint32_t x = 0; x < tile.width; ++x) {
-            uint32_t* out = &tile.values[(size_t{y} * tile.width + x) * stored];
-            for (uint32_t c = 0; c < tile.format.channels; ++c) {
-                const uint32_t sample = image.At(x0 + x, y0 + y, c);
-                out[c] = codesToFloat32
-                             ? std::bit_cast<uint32_t>(arith::UnormOperand(sample & 0xFFFF, 16))
-                             : sample;
-            }
-            if (stored == 4) {
-                for (uint32_t c = tile.format.channels; c < 3; ++c) out[c] = 0;
-                out[3] = StoreValue(1.0f, tile.format, 3);
+    ForEachRange(tile.height, [&](size_t first, size_t last) {
+        for (auto y = static_cast<uint32_t>(first); y < last; ++y) {
+            for (uint32_t x = 0; x < tile.width; ++x) {
+                uint32_t* out = &tile.values[(size_t{y} * tile.width + x) * stored];
+                for (uint32_t c = 0; c < tile.format.channels; ++c) {
+                    const uint32_t sample = image.At(x0 + x, y0 + y, c);
+                    out[c] = codesToFloat32
+                                 ? std::bit_cast<uint32_t>(arith::UnormOperand(sample & 0xFFFF, 16))
+                                 : sample;
+                }
+                if (stored == 4) {
+                    for (uint32_t c = tile.format.channels; c < 3; ++c) out[c] = 0;
+                    out[3] = StoreValue(1.0f, tile.format, 3);
+                }
             }
         }
-    }
+    });
     return {};
 }
 
@@ -136,20 +187,22 @@ render::Result<void> CpuTileStore::Project(const ProjectOp& op) {
         if (!made) made = std::make_shared<const tu::Chain>(BitmapChain(image));
         chain = made.get();
     }
-    for (uint32_t y = 0; y < tile.height; ++y) {
-        for (uint32_t x = 0; x < tile.width; ++x) {
-            const ProjectedTexel texel = ProjectTexel(op.projection, image, op.x0 + x, op.y0 + y,
-                                                      op.setWidth, op.setHeight, op.signedRange, chain);
-            uint32_t* out = &tile.values[(size_t{y} * tile.width + x) * stored];
-            for (uint32_t c = 0; c < tile.format.channels; ++c) {
-                out[c] = StoreValue(texel.covered ? texel.value[c] : 0.0f, tile.format, c);
-            }
-            if (stored == 4) {
-                for (uint32_t c = tile.format.channels; c < 3; ++c) out[c] = 0;
-                out[3] = StoreValue(texel.covered ? 1.0f : 0.0f, tile.format, 3);
+    ForEachRange(tile.height, [&](size_t first, size_t last) {
+        for (auto y = static_cast<uint32_t>(first); y < last; ++y) {
+            for (uint32_t x = 0; x < tile.width; ++x) {
+                const ProjectedTexel texel = ProjectTexel(op.projection, image, op.x0 + x, op.y0 + y,
+                                                          op.setWidth, op.setHeight, op.signedRange, chain);
+                uint32_t* out = &tile.values[(size_t{y} * tile.width + x) * stored];
+                for (uint32_t c = 0; c < tile.format.channels; ++c) {
+                    out[c] = StoreValue(texel.covered ? texel.value[c] : 0.0f, tile.format, c);
+                }
+                if (stored == 4) {
+                    for (uint32_t c = tile.format.channels; c < 3; ++c) out[c] = 0;
+                    out[3] = StoreValue(texel.covered ? 1.0f : 0.0f, tile.format, 3);
+                }
             }
         }
-    }
+    });
     return {};
 }
 
@@ -201,28 +254,31 @@ render::Result<void> CpuTileStore::Blend(const BlendOp& op) {
         out[3] = tile.format.alpha ? OperandOf(values[3], tile.format, 3) : 1.0f;
     };
     const size_t texels = size_t{dst.width} * dst.height;
-    for (size_t texel = 0; texel < texels; ++texel) {
-        if (acc != nullptr) load(*acc, texel, in.acc);
-        else in.acc = op.acc.value;
-        if (src != nullptr) load(*src, texel, in.src);
-        else in.src = op.source.value;
-        if (mask != nullptr) {
-            const uint32_t* values = &mask->values[texel * mask->format.StoredChannels()];
-            in.mask = OperandOf(values[0], mask->format, 0);
-        } else {
-            in.mask = op.mask.value[0];
+    ForEachRange(texels, [&, operands = in](size_t first, size_t last) {
+        arith::CompositeInput in = operands;  // each range its own operands
+        for (size_t texel = first; texel < last; ++texel) {
+            if (acc != nullptr) load(*acc, texel, in.acc);
+            else in.acc = op.acc.value;
+            if (src != nullptr) load(*src, texel, in.src);
+            else in.src = op.source.value;
+            if (mask != nullptr) {
+                const uint32_t* values = &mask->values[texel * mask->format.StoredChannels()];
+                in.mask = OperandOf(values[0], mask->format, 0);
+            } else {
+                in.mask = op.mask.value[0];
+            }
+            const std::array<float, 4> out = arith::Composite(in);
+            uint32_t* values = &dst.values[texel * stored];
+            for (uint32_t c = 0; c < dst.format.channels; ++c) {
+                values[c] = StoreValue(out[c], dst.format, c);
+            }
+            if (stored == 4) {
+                for (uint32_t c = dst.format.channels; c < 3; ++c) values[c] = 0;
+                values[3] = dst.format.alpha ? StoreValue(out[3], dst.format, 3)
+                                             : StoreValue(1.0f, dst.format, 3);
+            }
         }
-        const std::array<float, 4> out = arith::Composite(in);
-        uint32_t* values = &dst.values[texel * stored];
-        for (uint32_t c = 0; c < dst.format.channels; ++c) {
-            values[c] = StoreValue(out[c], dst.format, c);
-        }
-        if (stored == 4) {
-            for (uint32_t c = dst.format.channels; c < 3; ++c) values[c] = 0;
-            values[3] = dst.format.alpha ? StoreValue(out[3], dst.format, 3)
-                                         : StoreValue(1.0f, dst.format, 3);
-        }
-    }
+    });
     return {};
 }
 
@@ -238,18 +294,20 @@ render::Result<void> CpuTileStore::Levels(const LevelsOp& op) {
     }
     const uint32_t stored = dst.format.StoredChannels();
     const size_t texels = size_t{dst.width} * dst.height;
-    for (size_t texel = 0; texel < texels; ++texel) {
-        const uint32_t* in = &src->values[texel * stored];
-        uint32_t* out = &dst.values[texel * stored];
-        for (uint32_t c = 0; c < stored; ++c) {
-            if (c < dst.format.channels) {
-                const float v = OperandOf(in[c], dst.format, c);
-                out[c] = StoreValue(arith::Levels(v, op.components[c]), dst.format, c);
-            } else {
-                out[c] = in[c];
+    ForEachRange(texels, [&](size_t first, size_t last) {
+        for (size_t texel = first; texel < last; ++texel) {
+            const uint32_t* in = &src->values[texel * stored];
+            uint32_t* out = &dst.values[texel * stored];
+            for (uint32_t c = 0; c < stored; ++c) {
+                if (c < dst.format.channels) {
+                    const float v = OperandOf(in[c], dst.format, c);
+                    out[c] = StoreValue(arith::Levels(v, op.components[c]), dst.format, c);
+                } else {
+                    out[c] = in[c];
+                }
             }
         }
-    }
+    });
     return {};
 }
 
@@ -296,34 +354,36 @@ render::Result<void> CpuTileStore::VirtualNormal(const VirtualNormalOp& op) {
         return std::bit_cast<float>(tile.values[static_cast<size_t>(ly) * dst.width + static_cast<size_t>(lx)]);
     };
     const uint32_t stored = dst.format.StoredChannels();
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            HeightNeighbourhood h{};
-            for (int dy = -1; dy <= 1; ++dy) {
-                for (int dx = -1; dx <= 1; ++dx) h[static_cast<size_t>((dy + 1) * 3 + dx + 1)] = at(x + dx, y + dy);
+    ForEachRange(static_cast<size_t>(height), [&](size_t first, size_t last) {
+        for (auto y = static_cast<int>(first); y < static_cast<int>(last); ++y) {
+            for (int x = 0; x < width; ++x) {
+                HeightNeighbourhood h{};
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) h[static_cast<size_t>((dy + 1) * 3 + dx + 1)] = at(x + dx, y + dy);
+                }
+                const size_t texel = static_cast<size_t>(y) * dst.width + static_cast<size_t>(x);
+                NormalInputs inputs;
+                inputs.channel = {op.normal.value[0], op.normal.value[1], op.normal.value[2]};
+                inputs.coverage = op.normal.value[3];
+                if (normal != nullptr) {
+                    const uint32_t* values = &normal->values[texel * normal->format.StoredChannels()];
+                    for (uint32_t c = 0; c < 3; ++c) inputs.channel[c] = OperandOf(values[c], normal->format, c);
+                    inputs.coverage = OperandOf(values[3], normal->format, 3);
+                }
+                inputs.hasMesh = mesh != nullptr;
+                inputs.meshDirectX = op.meshDirectX;
+                if (mesh != nullptr) {
+                    const uint32_t* values = &mesh->values[texel * mesh->format.StoredChannels()];
+                    for (uint32_t c = 0; c < 3; ++c) inputs.mesh[c] = std::bit_cast<float>(values[c]);
+                }
+                const std::array<float, 3> e =
+                    VirtualNormalTexel(HeightVector(op.method, h, op.z), inputs, op.convention);
+                uint32_t* out = &dst.values[texel * stored];
+                for (uint32_t c = 0; c < 3; ++c) out[c] = std::bit_cast<uint32_t>(arith::Float32Store(e[c]));
+                out[3] = std::bit_cast<uint32_t>(1.0f);
             }
-            const size_t texel = static_cast<size_t>(y) * dst.width + static_cast<size_t>(x);
-            NormalInputs inputs;
-            inputs.channel = {op.normal.value[0], op.normal.value[1], op.normal.value[2]};
-            inputs.coverage = op.normal.value[3];
-            if (normal != nullptr) {
-                const uint32_t* values = &normal->values[texel * normal->format.StoredChannels()];
-                for (uint32_t c = 0; c < 3; ++c) inputs.channel[c] = OperandOf(values[c], normal->format, c);
-                inputs.coverage = OperandOf(values[3], normal->format, 3);
-            }
-            inputs.hasMesh = mesh != nullptr;
-            inputs.meshDirectX = op.meshDirectX;
-            if (mesh != nullptr) {
-                const uint32_t* values = &mesh->values[texel * mesh->format.StoredChannels()];
-                for (uint32_t c = 0; c < 3; ++c) inputs.mesh[c] = std::bit_cast<float>(values[c]);
-            }
-            const std::array<float, 3> e =
-                VirtualNormalTexel(HeightVector(op.method, h, op.z), inputs, op.convention);
-            uint32_t* out = &dst.values[texel * stored];
-            for (uint32_t c = 0; c < 3; ++c) out[c] = std::bit_cast<uint32_t>(arith::Float32Store(e[c]));
-            out[3] = std::bit_cast<uint32_t>(1.0f);
         }
-    }
+    });
     return {};
 }
 

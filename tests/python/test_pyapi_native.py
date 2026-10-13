@@ -1166,25 +1166,27 @@ def timed(folder, **parameters):
     return [time.perf_counter() - start, {f["relative_path"]: f["sha256"] for f in out["files"]}]
 """
 
-# A bitmap fill magnified under a bitmap mask and a Levels effect, over a uniform base: enough
-# evaluation that a call which evaluates the stack again stands out against one that only encodes.
+# Eight bitmap fills magnified under bitmap masks and Levels effects, over a uniform base: so much
+# more evaluation than encoding that a call which evaluates the stack again stands out against one
+# that only encodes, on one thread or on many.
 REVISION_STACK = (
     EXPORT_HELPERS
     + """
-stack = create(512)
+stack = create(256)
 checker = resource.import_project_resource(IMAGES + "/checker-16.png", resource.Usage.TEXTURE)
 left = resource.import_project_resource(IMAGES + "/mask-left-half.png", resource.Usage.TEXTURE)
 base = ls.insert_fill(top(stack))
 base.active_channels = {CT.BaseColor, CT.Height}
 base.set_source(CT.BaseColor, cm.Color(0.2, 0.3, 0.4))
 base.set_source(CT.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
-detail = ls.insert_fill(top(stack))
-detail.active_channels = {CT.BaseColor}
-detail.set_source(CT.BaseColor, checker.identifier())
-detail.add_mask(ls.MaskBackground.Black)
-mask = ls.insert_fill(ls.InsertPosition.inside_node(detail, ls.NodeStack.Mask))
-mask.set_source(None, left.identifier())
-ls.insert_levels_effect(ls.InsertPosition.inside_node(detail, ls.NodeStack.Content))
+for _ in range(8):
+    detail = ls.insert_fill(top(stack))
+    detail.active_channels = {CT.BaseColor}
+    detail.set_source(CT.BaseColor, checker.identifier())
+    detail.add_mask(ls.MaskBackground.Black)
+    mask = ls.insert_fill(ls.InsertPosition.inside_node(detail, ls.NodeStack.Mask))
+    mask.set_source(None, left.identifier())
+    ls.insert_levels_effect(ls.InsertPosition.inside_node(detail, ls.NodeStack.Content))
 """
 )
 
@@ -1229,7 +1231,7 @@ def test_a_commit_supersedes_the_kept_evaluation(run: Run) -> None:
             REVISION_STACK
             + """
 before = timed("before")
-detail.set_opacity(0.5, CT.BaseColor)
+base.set_source(CT.BaseColor, cm.Color(0.6, 0.3, 0.1))
 after = timed("after")
 project.save_as(WORK + "/edited.uzp")
 result = {"before": before[1], "after": after[1]}

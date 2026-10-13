@@ -2,7 +2,9 @@
 
 // The CPU tile store: the compositor's operations in plain C++ through arith.h. It is the
 // reference the GPU store must equal bit for bit (tests/evaluator/), and the evaluation path on
-// a machine without a GPU (hosted CI, `UZP_NO_GPU=1`).
+// a machine without a GPU (hosted CI, `UZP_NO_GPU=1`). Each operation computes its texels on every
+// hardware thread, in contiguous ranges under the caller's floating-point control state; every
+// texel is the single-threaded result bit for bit (decision 246).
 
 #include "evaluator/texture_unit.h"
 #include "evaluator/tile_store.h"
