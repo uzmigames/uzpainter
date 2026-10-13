@@ -32,7 +32,9 @@
 // other than the texture set's (resize), and the `color`, `transparent` and `diffusion` paddings.
 // An sRGB8 channel other than a User channel, BaseColor, Specular and Emissive (EmissionColor,
 // Diffuse, CoatColor, ...) is refused as not recorded: no recording shows whether Painter writes it
-// linear or sRGB-encoded.
+// linear or sRGB-encoded. A PNG of an L8 BaseColor, Specular or Emissive is refused as recorded but
+// not fitted: Dota 2's empty L8 Specular, float32(10/255) in OpenEXR, writes (14330, 2570, 14330)
+// at PNG 16 (decision 169). Its OpenEXR files hold the linear value.
 
 #include <string>
 

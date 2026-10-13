@@ -27,16 +27,16 @@
         0.49803921580314636
       ],
       "base_provenance": {
-        "kind": "inferred",
-        "golden_id": "tier0/semantics/base-values-asm-pbr-metallic-roughness-sheen",
-        "record_sha256": "ff39ba958b3dae140325e5da04f09937b2600883f17bcc4bf669723b8c54fe47",
+        "kind": "observed",
+        "golden_id": "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-sheen",
+        "record_sha256": "73d59ba738a8b06338d8f2ca72ec225a1ba26cd0f9882fb70f3202eb4eb1e9b2",
         "map": "uzp_plane/basecolor",
         "export16": [
           48107,
           48107,
           48107
         ],
-        "note": "linear (decision 126): the 16-bit PNG export of the empty channel is the PNG write of the sRGB export encode of float32(127/255) (src/export/encode.h); no OpenEXR export of an empty channel with this code is recorded: float32(127/255) is the value k/255 whose encode writes it (the class of the flat normal's 127/255); every float32 from 0.4980261 to 0.4980471 writes it too"
+        "note": "linear (decision 126): its OpenEXR 32f export of the empty channel holds float32(127/255) in every texel, r1 and r2 (decisions 172, 169); its 16-bit PNG export, code 48107 in tier0/semantics/base-values-asm-pbr-metallic-roughness-sheen, is the PNG write of the sRGB export encode of that value (src/export/encode.h)"
       }
     },
     {

@@ -325,32 +325,32 @@ def test_material_views_detect_a_seeded_roughness_leak(run: Run) -> None:
     assert stats_file == r["stats"]["stats"]
 
 
-# ── Decision 126 per source ─────────────────────────────────────────────────────────────────────
+# ── Decisions 126 and 169 per source ───────────────────────────────────────────────────────────
 
-INFERRED = """
+OBSERVED = """
 project.create(PLANE, project.Settings(default_texture_resolution=256, template="dota-2"))
 stack = ts.get_active_stack()
 mat = ls.insert_fill(top(stack))
 mat.active_channels = {CT.BaseMetalness}
 mat.set_source(CT.BaseMetalness, cm.Color(0.2, 0.2, 0.2, "Raw"))
 views = diagnostics.material_views(mat)
-result = {"isolate": raises(diagnostics.isolate, mat, CT.BaseColor),
-          "contribution": raises(diagnostics.contribution, mat, CT.BaseColor),
-          "stats": raises(diagnostics.region_stats, CT.BaseColor, mat),
-          "metal": diagnostics.isolate(mat, CT.BaseMetalness)["source"],
-          "views": sorted(views["views"]), "refused": sorted(views["refused"]),
-          "reason": views["refused"].get("BaseColor", "")}
+result = {"isolate": diagnostics.isolate(mat, CT.BaseColor)["source"],
+          "contribution": diagnostics.contribution(mat, CT.BaseColor)["source"],
+          "stats": diagnostics.region_stats(CT.BaseColor, mat)["source"],
+          "views": sorted(views["views"]), "refused": sorted(views["refused"])}
 """
 
 
-def test_an_inferred_template_base_is_refused_per_source(run: Run) -> None:
-    r = ok(run(HELPERS + INFERRED))
-    for call in ("isolate", "contribution", "stats"):
-        assert r[call].startswith("NotYetSupported") and "decision 126" in r[call]
-    assert r["metal"].startswith("isolated/BaseMetalness/")
+def test_a_template_base_shown_in_openexr_is_read_per_source(run: Run) -> None:
+    """Decision 126's refusal of inferred template bases applies per source; since decision 169
+    every shipped template's base is observed, so on Dota 2 (once inferred) each BaseColor view
+    is returned."""
+    r = ok(run(HELPERS + OBSERVED))
+    assert r["isolate"].startswith("isolated/BaseColor/")
+    assert r["contribution"].startswith("contribution/BaseColor/")
+    assert r["stats"].startswith("regionStats/BaseColor/")
     # Dota 2 has no SpecularRoughness, Height or Normal channel: those views are missing.
-    assert r["refused"] == ["BaseColor"] and r["views"] == ["Metallic"]
-    assert "decision 126" in r["reason"]
+    assert r["refused"] == [] and r["views"] == ["BaseColor", "Metallic"]
 
 
 # ── 3.5: layer-tree snapshot and diff ───────────────────────────────────────────────────────────

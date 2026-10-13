@@ -238,26 +238,26 @@ def recipes() -> dict[Any, tuple[str, str]]:
             "",
             export_call(file_format),
         )
-    # The export of an sRGB8 BaseColor whose template base is inferred from its PNG export only
-    # (decision 126): refused before writing until a recording shows the template's linear base.
+    # The PNG export of Dota 2's L8 Specular (decision 169): Painter writes (14330, 2570, 14330)
+    # for its float32(10/255), which is not fitted; refused before writing.
     for symbol, module, create in (
         (
             "substance_painter.export.export_project_textures",
             "export",
             # The facade maps a shipped template by its file name; the file must exist and is
             # never read (decision 116).
-            "open(WORK + '/Blender.spt', 'wb').close()\n"
-            "project.create(PLANE, template_file_path=WORK + '/Blender.spt')",
+            "open(WORK + '/Dota 2.spt', 'wb').close()\n"
+            "project.create(PLANE, template_file_path=WORK + '/Dota 2.spt')",
         ),
         (
             "uzpainter.export.export_project_textures",
             "uzpainter.export",
-            "uzpainter.project.create(PLANE, uzpainter.project.Settings(template='blender'))",
+            "uzpainter.project.create(PLANE, uzpainter.project.Settings(template='dota-2'))",
         ),
     ):
-        r[(symbol, "srgb8-inferred-template-base")] = (
+        r[(symbol, "l8-material-channel-png")] = (
             f"{CLOSED}\n{create}",
-            export_call("png", "basecolor", "16", module, "RGB"),
+            export_call("png", "specular", "16", module, "RGB"),
         )
     r[("substance_painter.resource.update_layer_stack_resource", "mesh-map")] = (
         MESH_MAP,
@@ -282,7 +282,7 @@ PAYLOAD = json.loads(base64.b64decode("__PAYLOAD__").decode("utf-8"))
 REFUSALS = {"release-gap": uzpainter.NotYetSupported,
             "desktop-only-omitted": uzpainter.UnsupportedInUzPainter}
 # Contexts whose refusal must name what settles it.
-NAMED = {"srgb8-inferred-template-base": "decision 126"}
+NAMED = {"l8-material-channel-png": "decision 169"}
 
 
 def resolve(symbol):

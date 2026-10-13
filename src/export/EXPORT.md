@@ -79,9 +79,10 @@ Tasks `phase1.16_export-processing-encoders` and `phase1.18_export-engine` item 
   - resize (a sizeLog2 other than the set's size): partly fitted, `parity/semantics/export-processing.json` `resize`;
   - the `color`, `transparent` and `diffusion` paddings, and `infinite` on islanded sets;
   - an sRGB8 channel other than a User channel, BaseColor, Specular and Emissive (EmissionColor, Diffuse, CoatColor, ...): not recorded (decision 126);
-  - any file whose values depend on a channel whose template base is `inferred` (21 shipped templates for BaseColor or the sRGB8 Specular: only its PNG 16 code is recorded; `default` and the five templates of decision 168 are observed), whatever the format and through documentMap or diagnosticMap sources: `unsupported_source` at evaluation (decision 126). The guard is `RequireIdentifiedBase` (`plan.h`); `uzpainter.diagnostics` applies the same function to every view it returns (decision 136).
+  - a PNG of an L8 BaseColor, Specular or Emissive: Dota 2's empty L8 Specular, `float32(10/255)` in OpenEXR, writes (14330, 2570, 14330) at PNG 16, which no fit explains (decision 169). Its OpenEXR files are exact;
+  - any file whose values depend on a channel whose template base is `inferred` (none ships since decision 169: OpenEXR 32f shows every shipped template's base), whatever the format and through documentMap or diagnosticMap sources: `unsupported_source` at evaluation (decision 126). The guard is `RequireIdentifiedBase` (`plan.h`); `uzpainter.diagnostics` applies the same function to every view it returns (decision 136).
 
-  Their owners: `phase1.25_pilot-wand` (inferred template bases, `infinite` on islands: decisions 126 and 127) and `phase3.2_unreal-ue56-packed-preset` (dithering, resize, dilation paddings).
+  Their owners: `phase1.25_pilot-wand` (`infinite` on islands: decision 127), the export encoder owner (the L8 material channel's PNG, decision 169) and `phase3.2_unreal-ue56-packed-preset` (dithering, resize, dilation paddings).
 - **Order.** `WriteExport` checks every file's processing and padding, then evaluates, pads and encodes every file in memory, and only then writes. A refusal or an evaluation failure leaves nothing written. Two runs in two processes write identical bytes.
 
 ## 5. Shipped presets (decision 095)
