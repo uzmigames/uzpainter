@@ -35,6 +35,7 @@ Both transports serve the same `registry.Registry` (decision 159).
   - While it serves, the SDK points file descriptor 1 at stderr and writes frames to a private duplicate. So stdout carries protocol frames only, whatever else in the process writes.
   - The worker's own stdout goes to stderr.
   - Logs at INFO and above go to stderr and to the ledger's `log` table (`ledger.LogHandler`, newest 10 000 rows). Each call is logged as `call <tool>: ok|error <code> (job <id>)`.
+  - Ctrl+C or Ctrl+Break stops it as it stops HTTP (exit 0): `_serve` ends the worker, then `main` closes the ledger, which checkpoints its WAL. The SDK's stdin reader thread cannot be cancelled, so the loop is left with that task pending and the process ends (`main._run`, not `asyncio.run`).
 - **Streamable HTTP**: `--mcp-http <host>:<port>` serves `http://<host>:<port>/mcp` on uvicorn, in the supervisor's event loop. The address is logged once the server listens.
   - A host that is not loopback is a usage error without `--allow-remote`. `--token` and `--allow-remote` need `--mcp-http`.
   - `transport_http.Guard` checks every request before the SDK sees it:
@@ -233,7 +234,7 @@ It then answers one request at a time on the interpreter's thread; a long tool's
 | `project_open {path}` | GPU-free, long (no commit point) | `{path, revision}` |
 | `export {config \| preset, output_dir?, texture_sets?, size_log2?, file_format?, bit_depth?, padding?, dry_run?, fixed_names?}` | GPU-free (CPU evaluator), long (commit point: the publication) | the export job's result (`uzpainter.export`): `{directory, files, fixed_names, generation, plan_hash, project_path, mesh_path, receipt, receipt_sha256, revision}`. `preset` exports a shipped preset for the texture sets into `output_dir`; the overrides are one last unfiltered `exportParameters` rule; `dry_run` returns `{dry_run, revision, plan, textures}` and writes nothing |
 | `export_presets_list` | GPU-free | the shipped presets: `{id, aliases, maps, layout, pending_recordings}` |
-| `project_close {discard?}` | GPU-free | `{}`; an untitled project needs `discard: true`, because closing deletes it |
+| `project_close {discard?}` | GPU-free | `{}`. Without `discard` every commit is kept. `discard: true` drops what was not saved, as Painter's close does (decision 244): a saved project returns to its last save (`Session::DiscardUnsaved`: one revert to the last named checkpoint, saved); an untitled project, which needs it, is deleted |
 | `project_save {mode?: incremental\|full}` | GPU-free, names a checkpoint | `{current, named, previous}` |
 | `project_inspect {path?}` | GPU-free | `{open, path, revision, texture_sets: [{name, stacks}]}`; with `path`, `{open: false, path, report}`: the store's inspection report of that file, read without opening it |
 | `evaluate_channel {channel, texture_set?, stack?}` | GPU (the GPU evaluator on the engine thread) | `{revision, texture_set, stack, channel, format, width, height, tiles, payload: {path, sha256, size}}`; the texels go to a file under `--output-root` |
@@ -398,6 +399,7 @@ All tests are in `tests/supervisor/`:
   - every family listed with its capability status;
   - the spec's stack edit with its receipts;
   - Project and Texture sets; Resources and Stack; Export, Mesh and Render with the image block;
+  - `project_close` keeping every commit and `discard: true` returning to the last save (B10, decision 244), and a damaged project file refused by `project_open` with its bytes unchanged (B9 of `parity/reports/phase2/practical-e2e.md`);
   - LAY-06 through MCP, and LAY-07 through `sync_stack`;
   - `batch`, long tools with and without `wait`, `busy` and `wait_idle`;
   - the gap families, refused before admission and listed in `uzpainter://capabilities`;
@@ -409,6 +411,7 @@ All tests are in `tests/supervisor/`:
   - roots, with a junction and the `file:///` and `\\?\` forms;
   - `run_python` with and without `--allow-python`;
   - HTTP mode: the guard, the bind usage errors, a reconnect that keeps the lease and the job, and a clean Ctrl+Break.
+  - stdio mode: Ctrl+Break with a saved project open ends like HTTP, with no lock sidecar and no ledger `-wal`/`-shm` left (B14 of `parity/reports/phase2/practical-e2e.md`).
 - `test_supervisor_gpu.py` runs on DX12 and skips under `UZP_NO_GPU=1`. It checks that the device lives only in the worker, the evaluation payload by path and hash, and device removal and GPU stall with relaunch on the same backend.
 - `test_settling.py` holds the settling cases of 02 §7 that the children's tests do not cover, over stdio MCP (phase2.4_supervisor-worker, decisions 150 and 151):
   - the worker killed inside a save's checkpoint commit and inside a full save's compaction;

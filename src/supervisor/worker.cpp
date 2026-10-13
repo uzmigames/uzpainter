@@ -400,10 +400,13 @@ void Worker::DefineTools() {
          Schema({}, {}), false, false},
         [this](const json::Object& a) { return ExportPresetsList(a); });
     add({"project_close",
-         "Closes the open project. Every commit is durable in a saved project's file; closing an untitled project "
-         "deletes it, so that needs discard: true.",
+         "Closes the open project. Without discard every commit is kept: a saved project's file holds the last "
+         "committed revision, saved or not. discard: true drops what was not saved, as Painter's close does: a saved "
+         "project returns to its last save (one revert, saved; the dropped revisions stay in its history), an "
+         "untitled project is deleted (closing an untitled project needs it).",
          Schema({{"discard", json::Object{{"type", "boolean"},
-                                          {"description", "Allow closing an untitled project, which deletes it."}}}},
+                                          {"description", "Drop what was not saved: return a saved project to its last "
+                                                          "save, or delete an untitled project."}}}},
                 {}),
          false, false, true,
          Operation("substance_painter.project.close")},
@@ -1035,6 +1038,7 @@ json::Object Worker::ProjectClose(const json::Object& arguments) {
                         "discard: true",
                         json::Object{{"untitled", true}}};
     }
+    if (discarding && session.IsOpen()) session.DiscardUnsaved();
     session.Close();
     return {};
 }

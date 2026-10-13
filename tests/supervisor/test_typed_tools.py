@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import json
+import random
 import shutil
 import zlib
 from pathlib import Path
@@ -268,6 +269,83 @@ def test_project_and_texture_set_families(
     saved = session.call("project_save_as", {"path": str(copy_path), "wait": True})
     assert saved["result"]["path"].endswith("plane-copy.uzp") and copy_path.is_file()
     assert session.call("status")["result"]["project"]["path"].endswith("plane-copy.uzp")
+
+
+def test_close_keeps_every_commit_and_discard_returns_to_the_last_save(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """B10 of parity/reports/phase2/practical-e2e.md (decision 244): `project_close` keeps every
+    commit, so the reopened project shows an unsaved rename; `discard: true` drops what was not
+    saved, as Painter's close (and the facade's) does: the project reopens as saved, its current
+    revision is its last save and the dropped revision stays in its history."""
+    session, _ = opened(painter, tmp_path, sessions)
+    project = tmp_path / "plane.uzp"
+    uid = inserted(session.call("layer_insert", {"kind": "fill", "name": "Base"}))
+    assert "error" not in session.call("project_save")
+    assert session.call("layer_set", {"uid": uid, "name": "x"})["result"]["status"] == "committed"
+    assert "error" not in session.call("project_close")
+    session.call("project_open", {"path": str(project), "wait": True})
+    assert nodes(session)[uid]["name"] == "x"
+
+    assert "error" not in session.call("project_close", {"discard": True})
+    report = session.call("project_inspect", {"path": str(project)})["result"]["report"]
+    saves = [row["revision"] for row in report["checkpoints"] if row["name"].startswith("save-")]
+    assert report["revision"]["current"] == max(saves)
+    assert report["revisions"]["last"] == max(saves)
+    revisions = report["revisions"]
+    assert revisions["count"] == revisions["last"] - revisions["first"] + 1  # nothing removed
+    session.call("project_open", {"path": str(project), "wait": True})
+    assert nodes(session)[uid]["name"] == "Base"
+    # Nothing unsaved: discard changes nothing.
+    assert "error" not in session.call("project_close", {"discard": True})
+    after = session.call("project_inspect", {"path": str(project)})["result"]["report"]
+    assert after["revisions"] == report["revisions"]
+
+
+def test_a_damaged_project_file_is_refused_before_any_write(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """B9 of parity/reports/phase2/practical-e2e.md: a saved project whose middle 64 KiB were
+    overwritten with 0xAB (SQLite's quick_check fails) does not open: `project_open` names the
+    damage, no project is open for a mutation, and the file's bytes are unchanged."""
+    session, _ = opened(painter, tmp_path, sessions)
+    project = tmp_path / "plane.uzp"
+    noise = tmp_path / "noise.png"
+    width = 1024
+    rows = random.Random(9).randbytes(width * width)
+    header = width.to_bytes(4, "big") * 2 + bytes([8, 0, 0, 0, 0])
+    body = b"".join(b"\x00" + rows[y * width : (y + 1) * width] for y in range(width))
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (
+            len(data).to_bytes(4, "big") + kind + data + zlib.crc32(kind + data).to_bytes(4, "big")
+        )
+
+    noise.write_bytes(
+        bytes([0x89])
+        + b"PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(body, 0))
+        + chunk(b"IEND", b"")
+    )
+    imported = session.call("resource_import", {"path": str(noise), "usage": "TEXTURE"})
+    assert imported["result"]["status"] == "committed", imported
+    assert "error" not in session.call("project_save")
+    assert "error" not in session.call("project_close")
+
+    data = bytearray(project.read_bytes())
+    assert len(data) > 4 * 65536  # the noise fills the middle of the file
+    middle = len(data) // 2
+    data[middle : middle + 65536] = b"\xab" * 65536
+    project.write_bytes(bytes(data))
+
+    refused = session.call("project_open", {"path": str(project), "wait": True})
+    message = refused["error"]["message"]
+    assert "corrupt: sqlite quick_check" in message and "nothing is written to it" in message
+    assert session.call("project_inspect")["result"] == {"open": False}
+    assert "error" in session.call("layer_insert", {"kind": "fill"})
+    assert project.read_bytes() == bytes(data)
+    assert not project.with_name(project.name + ".lock").exists()
 
 
 def test_resource_and_stack_families(painter: Path, tmp_path: Path, sessions: list[Mcp]) -> None:
