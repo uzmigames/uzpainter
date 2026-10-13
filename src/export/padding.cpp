@@ -9,14 +9,24 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace uzp::exporter {
 
 namespace {
 
-[[noreturn]] void Unfitted(const PlannedFile& file, const std::string& what) {
+/// The owner of padding on UV-islanded sets (decisions 103, 223 and 245).
+constexpr std::string_view kIslandsOwner = "owner phase1.25_pilot-wand item 2.7";
+
+[[noreturn]] void Unfitted(const PlannedFile& file, const std::string& what,
+                           std::string_view owner = kProcessingRecording) {
     throw core::NotYetSupported("export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
-                                "): " + what + " (" + std::string(kProcessingRecording) + ")");
+                                "): " + what + " (" + std::string(owner) + ")");
+}
+
+/// A channel reading Normal_OpenGL or Normal_DirectX.
+bool IsCombinedNormal(const PlannedChannel& channel) {
+    return channel.source.type == SourceType::virtualMap && channel.source.normalRole == core::MeshMapRole::combined;
 }
 
 // The ring's weights (decisions 176, 206): f = 0.4142245, a diagonal weighs f / (1 - f) against a
@@ -204,10 +214,31 @@ void CheckPadding(const PlannedFile& file, const Coverage& coverage) {
     for (const PlannedChannel& channel : file.channels) {
         const SourceType type = channel.source.type;
         if (type == SourceType::meshMap || type == SourceType::virtualMap) {
-            Unfitted(file, "the padding \"passthrough\" of a " + std::string(SourceTypeName(type)) +
-                               " source outside the UV islands is not recorded");
+            Unfitted(file,
+                     "the padding \"passthrough\" of a " + std::string(SourceTypeName(type)) +
+                         " source outside the UV islands is not recorded (R-090 records it for a virtual normal "
+                         "from layers without a mesh map only, where Painter's values there differ between "
+                         "recordings)",
+                     std::string(kIslandsOwner) + ", " + std::string(kProcessingRecording) + ", decision 245");
         }
     }
+}
+
+bool ReadsCombinedNormal(const PlannedFile& file) {
+    return std::any_of(file.channels.begin(), file.channels.end(), IsCombinedNormal);
+}
+
+void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage, bool flatZeroHeight) {
+    if (flatZeroHeight || file.layout == FileLayout::Statistics || !ReadsCombinedNormal(file) || coverage.Complete()) {
+        return;
+    }
+    const auto normal = std::find_if(file.channels.begin(), file.channels.end(), IsCombinedNormal);
+    Unfitted(file,
+             "the virtualMap \"" + normal->source.name +
+                 "\" on a texture set whose UV islands do not cover the whole tile reads the Height outside the "
+                 "islands at its island-edge texels, and Painter's Height there (the same under every padding) is not "
+                 "reproduced; it is exact only when no layer writes the Height",
+             std::string(kIslandsOwner) + ": the Height outside the UV islands; decision 245");
 }
 
 bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored) {

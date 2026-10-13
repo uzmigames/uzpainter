@@ -74,16 +74,17 @@ Tasks `phase1.16_export-processing-encoders` and `phase1.18_export-engine` item 
 - **Padding.**
   - With complete UV coverage, `infinite` and `passthrough` change nothing.
   - With incomplete coverage, `passthrough` is no operation; Painter's own texels outside the islands are session state.
-  - Refused with incomplete coverage: `infinite`, `passthrough` of meshMap and virtualMap sources, and the alpha layouts.
+  - With incomplete coverage, `infinite` is written under exception EXC-007 (decision 223): covered texels exact, the padding texels by the coverage-only rule of `padding.h`.
+  - Refused with incomplete coverage: `passthrough` of meshMap and virtualMap sources, the alpha layouts, and under every padding a `Normal_OpenGL` or `Normal_DirectX` whose stack has a layer on the Height (`CheckIslandNormal`, decision 245). Its island-edge texels read the Height outside the islands, where Painter's Height is not reproduced. A stack with no layer on the Height reads 0 there, and its virtual normal is written.
 - **Refused before anything is written** (`NotYetSupported`, recorded by R-090 but not fitted, decision 103):
   - dithering at PNG 8 (deterministic, not a threshold matrix) and in OpenEXR (no recording compares it with off);
   - resize (a sizeLog2 other than the set's size): partly fitted, `parity/semantics/export-processing.json` `resize`;
-  - the `color`, `transparent` and `diffusion` paddings, and `infinite` on islanded sets;
+  - the `color`, `transparent` and `diffusion` paddings;
   - an sRGB8 channel other than a User channel, BaseColor, Specular and Emissive (EmissionColor, Diffuse, CoatColor, ...): not recorded (decision 126);
   - a PNG of an L8 BaseColor, Specular or Emissive under OCIO, or in any file other than the RGB file whose R, G and B (or the L file whose L) read those letters of the one L8 channel: not recorded (decision 204). Its OpenEXR files are exact;
   - any file whose values depend on a channel whose template base is `inferred` (none ships since decision 169: OpenEXR 32f shows every shipped template's base), whatever the format and through documentMap or diagnosticMap sources: `unsupported_source` at evaluation (decision 126). The guard is `RequireIdentifiedBase` (`plan.h`); `uzpainter.diagnostics` applies the same function to every view it returns (decision 136).
 
-  Their owners: `phase1.25_pilot-wand` (`infinite` on islands: decision 127), the export encoder owner (the L8 material channel's PNG outside the recorded files, decision 204) and `phase3.2_unreal-ue56-packed-preset` (dithering, resize, dilation paddings).
+  Their owners: `phase1.25_pilot-wand` item 2.7 (padding on islands and the Height outside them: decisions 127, 223 and 245), the export encoder owner (the L8 material channel's PNG outside the recorded files, decision 204) and `phase3.2_unreal-ue56-packed-preset` (dithering, resize, dilation paddings).
 - **Order.** `WriteExport` checks every file's processing and padding, then evaluates, pads and encodes every file in memory, and only then writes. A refusal or an evaluation failure leaves nothing written. Two runs in two processes write identical bytes.
 
 ## 5. Shipped presets (decision 095)

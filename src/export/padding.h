@@ -14,8 +14,10 @@
 //   value. Inside the islands Painter's r1 and r2 agree. Outside them Painter's own exports of
 //   layer content differ between r1 and r2 at up to every uncovered texel (session state), so
 //   they have no exact target (decision 032). A file reading a meshMap or virtualMap source is
-//   refused: what Painter writes outside the islands of an imported mesh map is not recorded
-//   (R-090).
+//   refused: what Painter writes outside the islands of an imported mesh map, or of a virtual
+//   map that reads one or a Height without layers, is not recorded (R-090 exports a virtual
+//   normal with `passthrough` only from layers and no mesh map, where Painter's r1 and r2 differ
+//   on 37095 of 37214 uncovered texels; owner phase1.25_pilot-wand item 2.7, decision 245).
 // - `infinite` with incomplete coverage (decision 223, under exception EXC-007): covered texels
 //   keep their evaluated values; the others are filled in two steps.
 //   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), takes the
@@ -35,6 +37,17 @@
 //   at seam corners and at poles is not identified (decision 220), so outside the islands the
 //   values differ from Painter's; EXC-007 excepts exactly those texels, and the exact rule stays
 //   open (phase1.25_pilot-wand item 2.7).
+// - A combined virtual normal (`Normal_OpenGL`, `Normal_DirectX`) with incomplete coverage, under
+//   every padding (decision 245): its island-edge texels, the covered texels with an uncovered
+//   8-neighbour, read the Height outside the islands through the height-to-normal stencil.
+//   Painter's covered texels there are the same under every padding (all 46 PNG 16 steps of
+//   tier0 export-padding) and stable across recordings, but they are not the stencil of the
+//   evaluated Height: 445 of 1452 edge texels differ on export-padding, 592 to 2296 on the
+//   height-normal sphere and bevelled cube, 1071 on the Wand v1, while every interior texel is
+//   exact. Such a file is refused (`CheckIslandNormal`) unless no layer writes the Height
+//   (evaluator `FlatZeroHeight`): the stencil then reads 0 everywhere, and Painter's Height
+//   outside the islands, made from the covered texels or the empty channel's base, is 0 too.
+//   That case is deduced from the fits, not recorded.
 
 #include <cstdint>
 #include <vector>
@@ -57,6 +70,14 @@ struct Coverage {
 /// and std::invalid_argument when the coverage does not have the file's size. A statistics file
 /// has no padding and always passes.
 void CheckPadding(const PlannedFile& file, const Coverage& coverage);
+
+/// Whether a channel of `file` reads a combined virtual normal (Normal_OpenGL, Normal_DirectX).
+[[nodiscard]] bool ReadsCombinedNormal(const PlannedFile& file);
+
+/// Throws `core::NotYetSupported` (see above) when `file` reads a combined virtual normal over
+/// `coverage` with uncovered texels and the Height of its stack is not 0 everywhere
+/// (`flatZeroHeight`, evaluator `FlatZeroHeight`), whatever the padding.
+void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage, bool flatZeroHeight);
 
 /// Applies `file`'s padding over `coverage` to `stored`, the values the file stores (above),
 /// `channels` per texel, rows top first, after CheckPadding (which it repeats): `infinite` on

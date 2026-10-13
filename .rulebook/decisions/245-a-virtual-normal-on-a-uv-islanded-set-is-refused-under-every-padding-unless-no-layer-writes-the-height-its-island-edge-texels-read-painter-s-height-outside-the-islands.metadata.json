@@ -1,0 +1,13 @@
+{
+  "id": 245,
+  "slug": "a-virtual-normal-on-a-uv-islanded-set-is-refused-under-every-padding-unless-no-layer-writes-the-height-its-island-edge-texels-read-painter-s-height-outside-the-islands",
+  "title": "A virtual normal on a UV-islanded set is refused under every padding unless no layer writes the Height: its island-edge texels read Painter's Height outside the islands",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase3.2_unreal-ue56-packed-preset"
+  ],
+  "supersededBy": null
+}

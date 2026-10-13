@@ -162,13 +162,16 @@ def ramp_png(path: Path) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def spec(tmp: Path, mesh: Path | None = GRID, name: str = "s0") -> Path:
+def spec(tmp: Path, mesh: Path | None = GRID, name: str = "s0", height: bool = True) -> Path:
     """A texture set `name` (the mesh material it covers) of the grid mesh: User0 sRGB8, BaseColor
-    sRGB8, Height L16F and SpecularRoughness L16 filled from a ramp bitmap, and an empty Normal
-    RGB16F."""
+    sRGB8, Height L16F (empty when not `height`) and SpecularRoughness L16 filled from a ramp
+    bitmap, and an empty Normal RGB16F."""
     tmp.mkdir(parents=True, exist_ok=True)
     sha = ramp_png(tmp / "ramp.png")
     bitmap = {"bitmap": sha, "color_space": "Raw"}
+    sources = {"User0": bitmap, "BaseColor": bitmap, "Height": bitmap, "SpecularRoughness": bitmap}
+    if not height:
+        del sources["Height"]
     document: dict[str, Any] = {
         "name": name,
         "resolution": [256, 256],
@@ -180,17 +183,7 @@ def spec(tmp: Path, mesh: Path | None = GRID, name: str = "s0") -> Path:
             {"type": "Normal", "format": "RGB16F"},
         ],
         "resources": [{"sha256": sha, "png": "ramp.png"}],
-        "layers": [
-            {
-                "kind": "fill",
-                "sources": {
-                    "User0": bitmap,
-                    "BaseColor": bitmap,
-                    "Height": bitmap,
-                    "SpecularRoughness": bitmap,
-                },
-            }
-        ],
+        "layers": [{"kind": "fill", "sources": sources}],
     }
     if mesh is not None:
         document["mesh"] = str(mesh)
@@ -200,6 +193,11 @@ def spec(tmp: Path, mesh: Path | None = GRID, name: str = "s0") -> Path:
 
 def chan(dest: str, kind: str, name: str) -> dict[str, str]:
     return {"destChannel": dest, "srcChannel": dest, "srcMapType": kind, "srcMapName": name}
+
+
+def normal_map(name: str = "Normal_OpenGL") -> list[dict[str, Any]]:
+    """One RGB file `$textureSet_n` of the virtual normal `name`."""
+    return [{"fileName": "$textureSet_n", "channels": [chan(c, "virtualMap", name) for c in "RGB"]}]
 
 
 def config(
@@ -752,8 +750,6 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
     - `infinite` padding is written (exception EXC-007): the covered texels hold their evaluated
       values, and the OpenEXR 32f Height equals the padding of padding.h written independently
       (`reference_padding`) over the coverage of `tools.parity.coverage`, value for value;
-    - a virtualMap source with `infinite` is written; with `passthrough` it is refused (not
-      recorded outside the islands);
     - `passthrough` writes every texel's evaluated value (the L16 roughness holds the ramp's codes
       inside and outside the islands);
     - without a texturing mesh the export fails before writing."""
@@ -784,36 +780,92 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
     expected = reference_padding(evaluated.astype(np.float32), covered)
     assert np.array_equal(height.astype(np.float32).view(np.uint32), expected.view(np.uint32))
 
-    normal = [
-        {
-            "fileName": "$textureSet_n",
-            "channels": [chan(c, "virtualMap", "Normal_OpenGL") for c in "RGB"],
-        }
-    ]
-    out = tmp_path / "virtual-infinite"
-    cfg = config(out, root="uzp_sphere")
-    cfg["exportPresets"][0]["maps"] = normal
-    cfg["exportParameters"] = cfg["exportParameters"][:1]
-    result = export(export_tests, sphere, cfg, tmp_path / "run-virtual-infinite")
-    assert "error" not in result, result
-    assert list(files_under(out)) == ["uzp_sphere_n.png"]
-
-    out = tmp_path / "virtual"
-    cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
-    cfg["exportPresets"][0]["maps"] = normal
-    cfg["exportParameters"] = cfg["exportParameters"][:1]
-    result = export(export_tests, sphere, cfg, tmp_path / "run-virtual")
-    assert result.get("error") == "NotYetSupported", result
-    assert "virtualMap source outside the UV islands" in result["message"]
-    assert files_under(out) == {}
-
     out = tmp_path / "no-mesh"
     result = export(export_tests, spec(tmp_path / "bare", None), config(out), tmp_path / "run-bare")
     assert result.get("error") == "Failure" and "no texturing mesh" in result["message"], result
     assert files_under(out) == {}
 
 
+def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
+    """B18 (decision 245): on the sphere, whose UV islands leave texels uncovered, a combined
+    virtual normal reads the Height outside the islands at its island-edge texels, where Painter's
+    Height is not reproduced:
+    - with a layer writing the Height, Normal_OpenGL and Normal_DirectX are refused before
+      anything is written under `infinite` and `passthrough`, naming the cause and the owner, and
+      so is the pipeline's five-map export that holds one, as a whole;
+    - with no layer on the Height (the stencils read 0 everywhere) Normal_OpenGL is written under
+      `infinite`: the flat normal (32767, 32767, 65535) on every texel, the empty Normal channel
+      and no mesh map adding nothing; under `passthrough` it is refused, Painter's virtual map
+      outside the islands being unrecorded there (decision 090)."""
+    from tools.parity.feasibility import png
+
+    relief = spec(tmp_path / "sphere", SPHERE, "uzp_sphere")
+    for name in ("Normal_OpenGL", "Normal_DirectX"):
+        for padding in ("infinite", "passthrough"):
+            out = tmp_path / f"{name}-{padding}"
+            cfg = config(out, root="uzp_sphere", paddingAlgorithm=padding)
+            cfg["exportPresets"][0]["maps"] = normal_map(name)
+            cfg["exportParameters"] = cfg["exportParameters"][:1]
+            result = export(export_tests, relief, cfg, tmp_path / f"run-{name}-{padding}")
+            assert result.get("error") == "NotYetSupported", result
+            assert f'the virtualMap "{name}" on a texture set whose UV islands' in result["message"]
+            assert "island-edge texels" in result["message"]
+            assert "phase1.25_pilot-wand item 2.7" in result["message"]
+            assert "decision 245" in result["message"]
+            assert files_under(out) == {}
+
+    out = tmp_path / "five"
+    cfg = config(out, root="uzp_sphere")
+    cfg["exportPresets"][0]["maps"] += normal_map()
+    result = export(export_tests, relief, cfg, tmp_path / "run-five")
+    assert result.get("error") == "NotYetSupported", result
+    assert "island-edge texels" in result["message"]
+    assert files_under(out) == {}
+
+    flat = spec(tmp_path / "sphere-flat", SPHERE, "uzp_sphere", height=False)
+    out = tmp_path / "flat"
+    cfg = config(out, root="uzp_sphere")
+    cfg["exportPresets"][0]["maps"] = normal_map()
+    cfg["exportParameters"] = cfg["exportParameters"][:1]
+    result = export(export_tests, flat, cfg, tmp_path / "run-flat")
+    assert "error" not in result, result
+    assert list(files_under(out)) == ["uzp_sphere_n.png"]
+    codes = png.decode((out / "uzp_sphere_n.png").read_bytes()).astype(np.int64)
+    assert np.array_equal(np.unique(codes.reshape(-1, 3), axis=0), [[32767, 32767, 65535]])
+
+    out = tmp_path / "flat-passthrough"
+    cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
+    cfg["exportPresets"][0]["maps"] = normal_map()
+    cfg["exportParameters"] = cfg["exportParameters"][:1]
+    result = export(export_tests, flat, cfg, tmp_path / "run-flat-passthrough")
+    assert result.get("error") == "NotYetSupported", result
+    assert "virtualMap source outside the UV islands is not recorded" in result["message"]
+    assert "phase1.25_pilot-wand item 2.7" in result["message"]
+    assert files_under(out) == {}
+
+
 # ── Tier 0 (owner's machine) ─────────────────────────────────────────────────
+
+
+def test_island_edge_normals_differ_from_painter(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 245, the evidence of the refusal above: on the recorded height-normal sphere and
+    bevelled cube, UzPainter's evaluated Normal_OpenGL equals Painter's on every interior texel and
+    differs on island-edge texels, where Painter's r1 and r2 agree; and Painter's Normal_OpenGL
+    covered texels are the same under every padding of export-padding (passthrough, infinite,
+    color, transparent and diffusion at every dilation), so no padding rule can make them exact."""
+    from tests.export import encoders_tier0
+
+    report = encoders_tier0.island_edge_normals(export_tests, tmp_path)
+    print(json.dumps(report, indent=1))
+    goldens = report["goldens"]
+    assert set(goldens) == set(encoders_tier0.ISLAND_NORMAL_GOLDENS)
+    for counts in goldens.values():
+        assert counts["interior_differing"] == 0, counts
+        assert 0 < counts["edge_differing"] <= counts["edge"], counts
+        assert counts["edge_r1_r2_differing"] == 0, counts
+    paddings = report["every_padding"]
+    assert len(paddings) == 46, sorted(paddings)
+    assert set(paddings.values()) == {0}, paddings
 
 
 @pytest.fixture(scope="module")

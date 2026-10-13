@@ -51,6 +51,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "uzp_core/types/enums.h"
@@ -155,5 +156,14 @@ struct VirtualNormalResult {
 [[nodiscard]] render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(
     const core::Project& project, std::int64_t revision, const VirtualNormalRequest& request,
     const TemplateLibrary& templates, ITileStore& store, TileCache& cache);
+
+/// Whether the Height read-out the stencils of `stack` read is 0 on every texel, decided from the
+/// stack without evaluating it: the stack has no Height channel, or no layer contributes to its
+/// Height (an empty root list reads out as the base) and its base is 0. On a texture set whose
+/// UV islands do not cover the tile, a combined virtual map is exact at its island-edge texels
+/// only then (export/padding.h `CheckIslandNormal`, decision 245). Fails with `not_found` for an
+/// unknown set or stack and with the failures of the Height DAG.
+[[nodiscard]] render::Result<bool> FlatZeroHeight(const core::Project& project, core::Id textureSet, core::Id stack,
+                                                  const TemplateLibrary& templates, std::string_view templateId);
 
 }  // namespace uzp::evaluator

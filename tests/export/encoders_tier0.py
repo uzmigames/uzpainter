@@ -377,6 +377,90 @@ def padding_goldens(exe: Path, tmp: Path) -> dict[str, Any]:
     return {"files": files, "position_probe_mismatches": probes}
 
 
+# The recorded virtual normals on UV-islanded meshes evaluated by UzPainter (decision 245): golden
+# (tier0/semantics) -> texture set.
+ISLAND_NORMAL_GOLDENS = {
+    "height-normal-sphere": "uzp_sphere",
+    "height-normal-bevelled-cube": "uzp_bevelled_cube",
+}
+# The golden whose Normal_OpenGL Painter exported under every padding, on an islanded mesh.
+EVERY_PADDING_GOLDEN = "export-padding"
+
+
+def island_classes(covered: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The interior (covered, every 8-neighbour covered) and the island edge (covered, with an
+    uncovered 8-neighbour) of a coverage; x wraps and y does not, as the padding ring."""
+    uncovered = np.pad(~covered, ((1, 1), (0, 0)), constant_values=False)
+    near = np.zeros_like(covered)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if dy or dx:
+                rows = uncovered[1 + dy : 1 + dy + covered.shape[0]]
+                near |= np.roll(rows, -dx, axis=1)
+    return covered & ~near, covered & near
+
+
+def island_edge_normals(exe: Path, tmp: Path) -> dict[str, Any]:
+    """Decision 245, the evidence of `CheckIslandNormal` (src/export/padding.h):
+
+    - per golden of `ISLAND_NORMAL_GOLDENS`, the texels where UzPainter's evaluated Normal_OpenGL
+      (`uzp-export-tests files`, the 16-bit write rule) differs from Painter's r1 PNG 16 file, on
+      the interior and on the island edge, and where Painter's r1 and r2 differ on the edge;
+    - per PNG 16 export step of `EVERY_PADDING_GOLDEN` (passthrough, infinite, and color,
+      transparent and diffusion at every dilation), the covered texels where Painter's
+      Normal_OpenGL differs from its first step's."""
+    from tests.export.tier0 import evaluate_files, export_config, write16
+    from tools.parity.coverage import coverage, obj_triangles
+
+    needs_store()
+    store = locate()
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    goldens: dict[str, dict[str, int]] = {}
+    for name, texture_set in ISLAND_NORMAL_GOLDENS.items():
+        golden = load(store, root / f"{name}.json")
+        spec = export_spec(golden.manifest, texture_set, tmp / name)
+        rasters = evaluate_files(
+            exe, spec, export_config(("Normal_OpenGL",), texture_set), tmp / name
+        )
+        ours = write16(rasters[f"{texture_set}_Normal_OpenGL.png"])
+        key = f"{texture_set}/Normal_OpenGL"
+        theirs = golden.map("r1", key).values.reshape(ours.shape)
+        again = golden.map("r2", key).values.reshape(ours.shape)
+        covered = coverage(
+            obj_triangles(_mesh_of(golden.manifest), texture_set), ours.shape[1], ours.shape[0]
+        )
+        interior, edge = island_classes(covered)
+        differs = np.any(ours != theirs, axis=-1)
+        goldens[name] = {
+            "interior": int(interior.sum()),
+            "edge": int(edge.sum()),
+            "interior_differing": int((differs & interior).sum()),
+            "edge_differing": int((differs & edge).sum()),
+            "edge_r1_r2_differing": int((np.any(theirs != again, axis=-1) & edge).sum()),
+        }
+    golden = load(store, root / f"{EVERY_PADDING_GOLDEN}.json")
+    steps = {s["step"]: s["args"] for s in golden.manifest["instruction_sequence"]["steps"]}
+    files = sorted(
+        (o["export_settings"]["step"], oid)
+        for oid, o in golden.recordings["r1"].outputs.items()
+        if o["kind"] == "exported_map"
+        and o["map"] == "Normal_OpenGL"
+        and o["storage_format"]["container"] == "png"
+        and o["storage_format"]["bits_per_channel"] == 16
+    )
+    first = golden.map("r1", files[0][1]).values
+    texture_set = str(golden.output("r1", files[0][1])["texture_set"]).split("/")[0]
+    covered = coverage(
+        obj_triangles(_mesh_of(golden.manifest), texture_set), first.shape[1], first.shape[0]
+    )
+    paddings: dict[str, int] = {}
+    for step, oid in files:
+        values = golden.map("r1", oid).values
+        label = f"{step} {steps[step]['padding']} {steps[step].get('dilation', '')}".strip()
+        paddings[label] = int((np.any(values != first, axis=-1) & covered).sum())
+    return {"goldens": goldens, "every_padding": paddings}
+
+
 # ── Goldens written by WriteExport ───────────────────────────────────────────
 
 

@@ -385,4 +385,22 @@ render::Result<VirtualNormalResult> EvaluateVirtualNormalOn(const core::Project&
     return result;
 }
 
+render::Result<bool> FlatZeroHeight(const core::Project& project, core::Id textureSet, core::Id stack,
+                                    const TemplateLibrary& templates, std::string_view templateId) {
+    const core::TextureSet* set = FindSet(project, textureSet);
+    if (set == nullptr) {
+        return EvalFail(EvalErrorKind::NotFound,
+                        "texture set " + std::to_string(textureSet) + " is not in the project");
+    }
+    const core::Stack* found = FindStack(*set, stack);
+    if (found == nullptr) {
+        return EvalFail(EvalErrorKind::NotFound, "stack " + std::to_string(stack) + " is not in the texture set");
+    }
+    if (!found->channels.contains(core::ChannelType::Height)) return true;
+    render::Result<ChannelDag> dag =
+        BuildDag(project, textureSet, stack, core::ChannelType::Height, templates, templateId);
+    if (!dag) return render::Unexpected(dag.error());
+    return dag->root.layers.empty() && dag->base == Vec3{0.0f, 0.0f, 0.0f};
+}
+
 }  // namespace uzp::evaluator

@@ -1,5 +1,6 @@
 #include "export/write.h"
 
+#include "evaluator/height_to_normal.h"
 #include "export/encode.h"
 #include "export/padding.h"
 #include "uzp_core/manifest/sha256.h"
@@ -70,7 +71,14 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
             }
             coverages.emplace(set->id, std::move(*coverage));
         }
-        CheckPadding(file, coverages.at(set->id));
+        const Coverage& coverage = coverages.at(set->id);
+        if (!coverage.Complete() && ReadsCombinedNormal(file)) {
+            render::Result<bool> flat =
+                evaluator::FlatZeroHeight(project, set->id, file.stackId, templates, inputs.templateId);
+            if (!flat) return render::Unexpected(flat.error());
+            CheckIslandNormal(file, coverage, *flat);
+        }
+        CheckPadding(file, coverage);
     }
     // 2. Every file evaluated, padded and encoded in memory. Every check passed in step 1, so a
     // padding or an encoder that throws here is a failure of this export, returned as such: the

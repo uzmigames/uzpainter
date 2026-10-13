@@ -6,7 +6,9 @@
 // delivery pointer and receipts are phase1.17_export-publication-receipts, which builds on this.
 //
 // Order, so that a refusal or a failure leaves nothing written:
-// 1. every file's processing is checked (CheckProcessing: NotYetSupported for an unrecorded one);
+// 1. every file's processing is checked (CheckProcessing: NotYetSupported for an unrecorded one),
+//    then a combined virtual normal on a UV-islanded set (CheckIslandNormal) and the padding
+//    (CheckPadding);
 // 2. every file is evaluated (EvaluateFileOn), padded over its texture set's coverage
 //    (ApplyPadding) and encoded (EncodeFile) in memory;
 // 3. only then are the files written, in plan order, sub-folders created as needed.
