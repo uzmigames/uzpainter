@@ -676,5 +676,78 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "c766a53a0c7cebbfc398b4542a963554ff79a34d5c693656bdf7bfe9d90f5672",
+      "size_bytes": 79323
+    },
+    {
+      "record_id": "r1-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "480f59cd38d5a7d317855d87d9c049c6751140b4e1f2bb5b8c79ea4ff0da45a4",
+      "size_bytes": 13366
+    },
+    {
+      "record_id": "r1-uzp_plane-basemetalness",
+      "kind": "exported_map",
+      "sha256": "3806433fe11f81ce7df2bb50ddd5a4239146c406840b9db1b67e63b1a0bd7d9d",
+      "size_bytes": 1934
+    },
+    {
+      "record_id": "r1-uzp_plane-height",
+      "kind": "exported_map",
+      "sha256": "766a794a8a1834743380a236f5ca1b115e22e848e30db533f3aa9d1eff971a35",
+      "size_bytes": 7070
+    },
+    {
+      "record_id": "r1-uzp_plane-normal",
+      "kind": "exported_map",
+      "sha256": "aff589d40e08b203c26be3e05110807c406cb0ca7bc959ad14da5c18afddb2fc",
+      "size_bytes": 17427
+    },
+    {
+      "record_id": "r1-uzp_plane-specularroughness",
+      "kind": "exported_map",
+      "sha256": "6efa78da14c56537eb3fdb18bcea390dd12ac583bc9eafcaa2b4b445a12d4783",
+      "size_bytes": 1897
+    },
+    {
+      "record_id": "r2-uzp_plane-basecolor",
+      "kind": "exported_map",
+      "sha256": "480f59cd38d5a7d317855d87d9c049c6751140b4e1f2bb5b8c79ea4ff0da45a4",
+      "size_bytes": 13366
+    },
+    {
+      "record_id": "r2-uzp_plane-basemetalness",
+      "kind": "exported_map",
+      "sha256": "3806433fe11f81ce7df2bb50ddd5a4239146c406840b9db1b67e63b1a0bd7d9d",
+      "size_bytes": 1934
+    },
+    {
+      "record_id": "r2-uzp_plane-height",
+      "kind": "exported_map",
+      "sha256": "766a794a8a1834743380a236f5ca1b115e22e848e30db533f3aa9d1eff971a35",
+      "size_bytes": 7070
+    },
+    {
+      "record_id": "r2-uzp_plane-normal",
+      "kind": "exported_map",
+      "sha256": "aff589d40e08b203c26be3e05110807c406cb0ca7bc959ad14da5c18afddb2fc",
+      "size_bytes": 17427
+    },
+    {
+      "record_id": "r2-uzp_plane-specularroughness",
+      "kind": "exported_map",
+      "sha256": "6efa78da14c56537eb3fdb18bcea390dd12ac583bc9eafcaa2b4b445a12d4783",
+      "size_bytes": 1897
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "5b3a03531a5044fc65b10e6b62a59c26b6b2f518af05b2e508725f2df2979b88",
+      "size_bytes": 402
+    }
+  ]
 }

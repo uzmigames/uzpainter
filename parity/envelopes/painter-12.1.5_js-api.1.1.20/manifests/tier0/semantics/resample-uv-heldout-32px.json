@@ -1,10 +1,10 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/semantics/resample-uv-heldout-128px",
+  "golden_id": "tier0/semantics/resample-uv-heldout-32px",
   "tier": "0",
   "domain": "tier0/resample/uv",
-  "description": "Held-out axis-aligned bilinear minification (decision 084 item 5: a fresh recording, never fitted, at new scales, offsets and bitmap sizes, inside the supported domain of rotations by multiples of 90 degrees, square power-of-two bitmaps and square sets). Per user channel (User0-User7) one fill projecting the authored 128x128 pattern at scale 3.37x3.37, offset 0.0419/0.7213; 7.19x7.19 at 90 degrees, offset 0.5821/0.0263; 14.63x5.29, offset 0.2087/0.4651; 5.29x14.63 at 180 degrees, offset 0.6967/0.3119; 29.41x29.41 at 270 degrees, offset 0.1153/0.8429; 11.03x2.71, offset 0/0; 41.17x13.39 at 90 degrees, offset 0.3571/0.5987; 9.53x9.53, offset 0/0; BilinearHQ with repeat (s0), BilinearSharp with repeat (s1), BilinearHQ without repeat (s2), BilinearSharp without repeat (s3). RGB16 channels.",
+  "description": "Held-out axis-aligned bilinear minification (decision 084 item 5: a fresh recording, never fitted, at new scales, offsets and bitmap sizes, inside the supported domain of rotations by multiples of 90 degrees, square power-of-two bitmaps and square sets). Per user channel (User0-User7) one fill projecting the authored 32x32 pattern at scale 9.61x9.61, offset 0.0263/0.5821; 18.37x18.37 at 270 degrees, offset 0.4651/0.2087; 42.13x11.87, offset 0.8429/0.1153; 11.87x42.13 at 90 degrees, offset 0.3119/0.6967; 71.03x71.03 at 180 degrees, offset 0.5987/0.3571; 25.73x8.93, offset 0/0; 123.7x35.11 at 270 degrees, offset 0.7331/0.4073; 33.97x33.97, offset 0/0; BilinearHQ with repeat (s0), BilinearSharp with repeat (s1), BilinearHQ without repeat (s2), BilinearSharp without repeat (s3). RGB16 channels.",
   "inputs": [
     {
       "input_id": "grid2x2",
@@ -18,10 +18,10 @@
       }
     },
     {
-      "input_id": "pattern128",
+      "input_id": "pattern32",
       "kind": "image",
-      "path": "parity/fixtures/tier0-semantics/bitmaps/pattern128.png",
-      "sha256": "72fef0258bd72035a4926a1d5a257535ca3870f9899f9e0ec58e7a730a24ad20",
+      "path": "parity/fixtures/tier0-semantics/bitmaps/pattern32.png",
+      "sha256": "96d08a0042629a6ddfdc2b2c1d867cfb653a650de9f266623b671e20e76fb5c6",
       "provenance": {
         "origin": "uzmigames_authored",
         "licence": "Apache-2.0",
@@ -110,7 +110,7 @@
         "step": 10,
         "call": "substance_painter.resource.import_project_resource",
         "args": {
-          "input": "pattern128",
+          "input": "pattern32",
           "usage": "TEXTURE"
         }
       },
@@ -150,13 +150,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            3.37,
-            3.37
+            9.61,
+            9.61
           ],
           "rotation": 0.0,
           "offset": [
-            0.0419,
-            0.7213
+            0.0263,
+            0.5821
           ]
         }
       },
@@ -195,13 +195,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            7.19,
-            7.19
+            18.37,
+            18.37
           ],
-          "rotation": 90.0,
+          "rotation": 270.0,
           "offset": [
-            0.5821,
-            0.0263
+            0.4651,
+            0.2087
           ]
         }
       },
@@ -240,13 +240,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            14.63,
-            5.29
+            42.13,
+            11.87
           ],
           "rotation": 0.0,
           "offset": [
-            0.2087,
-            0.4651
+            0.8429,
+            0.1153
           ]
         }
       },
@@ -285,13 +285,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            5.29,
-            14.63
+            11.87,
+            42.13
           ],
-          "rotation": 180.0,
+          "rotation": 90.0,
           "offset": [
-            0.6967,
-            0.3119
+            0.3119,
+            0.6967
           ]
         }
       },
@@ -330,13 +330,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            29.41,
-            29.41
+            71.03,
+            71.03
           ],
-          "rotation": 270.0,
+          "rotation": 180.0,
           "offset": [
-            0.1153,
-            0.8429
+            0.5987,
+            0.3571
           ]
         }
       },
@@ -375,8 +375,8 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            11.03,
-            2.71
+            25.73,
+            8.93
           ],
           "rotation": 0.0,
           "offset": [
@@ -420,13 +420,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            41.17,
-            13.39
+            123.7,
+            35.11
           ],
-          "rotation": 90.0,
+          "rotation": 270.0,
           "offset": [
-            0.3571,
-            0.5987
+            0.7331,
+            0.4073
           ]
         }
       },
@@ -465,8 +465,8 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            9.53,
-            9.53
+            33.97,
+            33.97
           ],
           "rotation": 0.0,
           "offset": [
@@ -511,13 +511,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            3.37,
-            3.37
+            9.61,
+            9.61
           ],
           "rotation": 0.0,
           "offset": [
-            0.0419,
-            0.7213
+            0.0263,
+            0.5821
           ]
         }
       },
@@ -556,13 +556,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            7.19,
-            7.19
+            18.37,
+            18.37
           ],
-          "rotation": 90.0,
+          "rotation": 270.0,
           "offset": [
-            0.5821,
-            0.0263
+            0.4651,
+            0.2087
           ]
         }
       },
@@ -601,13 +601,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            14.63,
-            5.29
+            42.13,
+            11.87
           ],
           "rotation": 0.0,
           "offset": [
-            0.2087,
-            0.4651
+            0.8429,
+            0.1153
           ]
         }
       },
@@ -646,13 +646,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            5.29,
-            14.63
+            11.87,
+            42.13
           ],
-          "rotation": 180.0,
+          "rotation": 90.0,
           "offset": [
-            0.6967,
-            0.3119
+            0.3119,
+            0.6967
           ]
         }
       },
@@ -691,13 +691,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            29.41,
-            29.41
+            71.03,
+            71.03
           ],
-          "rotation": 270.0,
+          "rotation": 180.0,
           "offset": [
-            0.1153,
-            0.8429
+            0.5987,
+            0.3571
           ]
         }
       },
@@ -736,8 +736,8 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            11.03,
-            2.71
+            25.73,
+            8.93
           ],
           "rotation": 0.0,
           "offset": [
@@ -781,13 +781,13 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            41.17,
-            13.39
+            123.7,
+            35.11
           ],
-          "rotation": 90.0,
+          "rotation": 270.0,
           "offset": [
-            0.3571,
-            0.5987
+            0.7331,
+            0.4073
           ]
         }
       },
@@ -826,8 +826,8 @@
           "uv_wrapping_mode": "Repeat",
           "scale_mode": "Factors",
           "scale": [
-            9.53,
-            9.53
+            33.97,
+            33.97
           ],
           "rotation": 0.0,
           "offset": [
@@ -872,13 +872,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            3.37,
-            3.37
+            9.61,
+            9.61
           ],
           "rotation": 0.0,
           "offset": [
-            0.0419,
-            0.7213
+            0.0263,
+            0.5821
           ]
         }
       },
@@ -917,13 +917,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            7.19,
-            7.19
+            18.37,
+            18.37
           ],
-          "rotation": 90.0,
+          "rotation": 270.0,
           "offset": [
-            0.5821,
-            0.0263
+            0.4651,
+            0.2087
           ]
         }
       },
@@ -962,13 +962,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            14.63,
-            5.29
+            42.13,
+            11.87
           ],
           "rotation": 0.0,
           "offset": [
-            0.2087,
-            0.4651
+            0.8429,
+            0.1153
           ]
         }
       },
@@ -1007,13 +1007,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            5.29,
-            14.63
+            11.87,
+            42.13
           ],
-          "rotation": 180.0,
+          "rotation": 90.0,
           "offset": [
-            0.6967,
-            0.3119
+            0.3119,
+            0.6967
           ]
         }
       },
@@ -1052,13 +1052,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            29.41,
-            29.41
+            71.03,
+            71.03
           ],
-          "rotation": 270.0,
+          "rotation": 180.0,
           "offset": [
-            0.1153,
-            0.8429
+            0.5987,
+            0.3571
           ]
         }
       },
@@ -1097,8 +1097,8 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            11.03,
-            2.71
+            25.73,
+            8.93
           ],
           "rotation": 0.0,
           "offset": [
@@ -1142,13 +1142,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            41.17,
-            13.39
+            123.7,
+            35.11
           ],
-          "rotation": 90.0,
+          "rotation": 270.0,
           "offset": [
-            0.3571,
-            0.5987
+            0.7331,
+            0.4073
           ]
         }
       },
@@ -1187,8 +1187,8 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            9.53,
-            9.53
+            33.97,
+            33.97
           ],
           "rotation": 0.0,
           "offset": [
@@ -1233,13 +1233,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            3.37,
-            3.37
+            9.61,
+            9.61
           ],
           "rotation": 0.0,
           "offset": [
-            0.0419,
-            0.7213
+            0.0263,
+            0.5821
           ]
         }
       },
@@ -1278,13 +1278,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            7.19,
-            7.19
+            18.37,
+            18.37
           ],
-          "rotation": 90.0,
+          "rotation": 270.0,
           "offset": [
-            0.5821,
-            0.0263
+            0.4651,
+            0.2087
           ]
         }
       },
@@ -1323,13 +1323,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            14.63,
-            5.29
+            42.13,
+            11.87
           ],
           "rotation": 0.0,
           "offset": [
-            0.2087,
-            0.4651
+            0.8429,
+            0.1153
           ]
         }
       },
@@ -1368,13 +1368,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            5.29,
-            14.63
+            11.87,
+            42.13
           ],
-          "rotation": 180.0,
+          "rotation": 90.0,
           "offset": [
-            0.6967,
-            0.3119
+            0.3119,
+            0.6967
           ]
         }
       },
@@ -1413,13 +1413,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            29.41,
-            29.41
+            71.03,
+            71.03
           ],
-          "rotation": 270.0,
+          "rotation": 180.0,
           "offset": [
-            0.1153,
-            0.8429
+            0.5987,
+            0.3571
           ]
         }
       },
@@ -1458,8 +1458,8 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            11.03,
-            2.71
+            25.73,
+            8.93
           ],
           "rotation": 0.0,
           "offset": [
@@ -1503,13 +1503,13 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            41.17,
-            13.39
+            123.7,
+            35.11
           ],
-          "rotation": 90.0,
+          "rotation": 270.0,
           "offset": [
-            0.3571,
-            0.5987
+            0.7331,
+            0.4073
           ]
         }
       },
@@ -1548,8 +1548,8 @@
           "uv_wrapping_mode": "RepeatNone",
           "scale_mode": "Factors",
           "scale": [
-            9.53,
-            9.53
+            33.97,
+            33.97
           ],
           "rotation": 0.0,
           "offset": [
@@ -1617,5 +1617,402 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "b767d687072413b747349de8cb666f2690912b626a2076dcec5cc41019ae287c",
+      "size_bytes": 110139
+    },
+    {
+      "record_id": "r1-s0-user0",
+      "kind": "exported_map",
+      "sha256": "ab85d711f6561b32f75de8c1b9906c928772e446a8b6958ab63b28414e10a12f",
+      "size_bytes": 394257
+    },
+    {
+      "record_id": "r1-s0-user1",
+      "kind": "exported_map",
+      "sha256": "2ef8f2869af77fc5d5f136729639017d7ef74c46e74c9481338ec2aef5256771",
+      "size_bytes": 390674
+    },
+    {
+      "record_id": "r1-s0-user2",
+      "kind": "exported_map",
+      "sha256": "94dde23d754e94b4a9fc6b3cfb3f6e41f9f55e0268e9b227719d2132b91609db",
+      "size_bytes": 392813
+    },
+    {
+      "record_id": "r1-s0-user3",
+      "kind": "exported_map",
+      "sha256": "96622b7ce58dd6aa32ac977bc71688d410c34c3ccbf82d60c29674c40c930439",
+      "size_bytes": 392883
+    },
+    {
+      "record_id": "r1-s0-user4",
+      "kind": "exported_map",
+      "sha256": "020152610474c6246dfb464506756719f6d5033fa9b01d98f4433239eca4284c",
+      "size_bytes": 363050
+    },
+    {
+      "record_id": "r1-s0-user5",
+      "kind": "exported_map",
+      "sha256": "81175dd260b10f776a51250f72640873ece25c8db2c47c94c7e3311c365cece6",
+      "size_bytes": 394257
+    },
+    {
+      "record_id": "r1-s0-user6",
+      "kind": "exported_map",
+      "sha256": "130f5672e08ee36e80fdb7e5b9ee2022355a44c0ae9db63c145de038475529d2",
+      "size_bytes": 368100
+    },
+    {
+      "record_id": "r1-s0-user7",
+      "kind": "exported_map",
+      "sha256": "21cfd213e21685b14ce168801c8380ad22a5ea9772a6e7f686dadf64aa7c113a",
+      "size_bytes": 380161
+    },
+    {
+      "record_id": "r1-s1-user0",
+      "kind": "exported_map",
+      "sha256": "c6501aeb60c5d8c6795f55116386ce8971822d0e2767492512e4c7252aeea7e2",
+      "size_bytes": 394257
+    },
+    {
+      "record_id": "r1-s1-user1",
+      "kind": "exported_map",
+      "sha256": "0b4d20841a0aa99e883512ee4f25ab86a07ee9d37995b2ef6d7e40836fb35c61",
+      "size_bytes": 394257
+    },
+    {
+      "record_id": "r1-s1-user2",
+      "kind": "exported_map",
+      "sha256": "fb0660d0efe7b828a40e8654bc749d45e33a0b1e934391643817372ab1a7f9e8",
+      "size_bytes": 389609
+    },
+    {
+      "record_id": "r1-s1-user3",
+      "kind": "exported_map",
+      "sha256": "3cf2541f31d5b085bb984f46739bb4c84d9a3f77a5f8cad0237f75af7bcb428a",
+      "size_bytes": 389915
+    },
+    {
+      "record_id": "r1-s1-user4",
+      "kind": "exported_map",
+      "sha256": "dca4c5d31dc721af59b0dd832f1782040d2cb9664e102b217156490e37fdf054",
+      "size_bytes": 374055
+    },
+    {
+      "record_id": "r1-s1-user5",
+      "kind": "exported_map",
+      "sha256": "c356ab9ab3675197423b29e0c940e6ae7b5eca468f21ad6c1e0d88e81b848b63",
+      "size_bytes": 389329
+    },
+    {
+      "record_id": "r1-s1-user6",
+      "kind": "exported_map",
+      "sha256": "8184ab6b1e4362024a8654933ce0a33e0b4c70734adce7c17cda9dfcd54bdc35",
+      "size_bytes": 379375
+    },
+    {
+      "record_id": "r1-s1-user7",
+      "kind": "exported_map",
+      "sha256": "46b27db4582b705e324725477570c8967832c64dc0c9bb0434791e54f993a36a",
+      "size_bytes": 386982
+    },
+    {
+      "record_id": "r1-s2-user0",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-s2-user1",
+      "kind": "exported_map",
+      "sha256": "55c60d898273a5c648bb0c2feb2c6a9feb6342928507c83177e7c3f47df45c74",
+      "size_bytes": 2581
+    },
+    {
+      "record_id": "r1-s2-user2",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-s2-user3",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-s2-user4",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-s2-user5",
+      "kind": "exported_map",
+      "sha256": "2c94395965902f9295768ee585196323c9214ca0a53fc6a68995b0accb8287a3",
+      "size_bytes": 3308
+    },
+    {
+      "record_id": "r1-s2-user6",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-s2-user7",
+      "kind": "exported_map",
+      "sha256": "439cd3e4341ab484bb3ac10a4b661d26bacdd85dcd45ca6f9bdb757a8a38702b",
+      "size_bytes": 1605
+    },
+    {
+      "record_id": "r1-s3-user0",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-s3-user1",
+      "kind": "exported_map",
+      "sha256": "43ed2bacfbda36102fa81e7babfced9c5cf6db0989179a80699f691aae5941fd",
+      "size_bytes": 2589
+    },
+    {
+      "record_id": "r1-s3-user2",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-s3-user3",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-s3-user4",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-s3-user5",
+      "kind": "exported_map",
+      "sha256": "f6fe3c7672bcdecf0ace27e0ea5b6ab1ac2474c8eed7a67d84a97dd2ab29fe2a",
+      "size_bytes": 3289
+    },
+    {
+      "record_id": "r1-s3-user6",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r1-s3-user7",
+      "kind": "exported_map",
+      "sha256": "1cc99e04df98b54566e25f3cc70dec4600fa54056773a81bd1279be462a9305a",
+      "size_bytes": 1615
+    },
+    {
+      "record_id": "r2-s0-user0",
+      "kind": "exported_map",
+      "sha256": "ab85d711f6561b32f75de8c1b9906c928772e446a8b6958ab63b28414e10a12f",
+      "size_bytes": 394257
+    },
+    {
+      "record_id": "r2-s0-user1",
+      "kind": "exported_map",
+      "sha256": "2ef8f2869af77fc5d5f136729639017d7ef74c46e74c9481338ec2aef5256771",
+      "size_bytes": 390674
+    },
+    {
+      "record_id": "r2-s0-user2",
+      "kind": "exported_map",
+      "sha256": "94dde23d754e94b4a9fc6b3cfb3f6e41f9f55e0268e9b227719d2132b91609db",
+      "size_bytes": 392813
+    },
+    {
+      "record_id": "r2-s0-user3",
+      "kind": "exported_map",
+      "sha256": "96622b7ce58dd6aa32ac977bc71688d410c34c3ccbf82d60c29674c40c930439",
+      "size_bytes": 392883
+    },
+    {
+      "record_id": "r2-s0-user4",
+      "kind": "exported_map",
+      "sha256": "020152610474c6246dfb464506756719f6d5033fa9b01d98f4433239eca4284c",
+      "size_bytes": 363050
+    },
+    {
+      "record_id": "r2-s0-user5",
+      "kind": "exported_map",
+      "sha256": "81175dd260b10f776a51250f72640873ece25c8db2c47c94c7e3311c365cece6",
+      "size_bytes": 394257
+    },
+    {
+      "record_id": "r2-s0-user6",
+      "kind": "exported_map",
+      "sha256": "130f5672e08ee36e80fdb7e5b9ee2022355a44c0ae9db63c145de038475529d2",
+      "size_bytes": 368100
+    },
+    {
+      "record_id": "r2-s0-user7",
+      "kind": "exported_map",
+      "sha256": "21cfd213e21685b14ce168801c8380ad22a5ea9772a6e7f686dadf64aa7c113a",
+      "size_bytes": 380161
+    },
+    {
+      "record_id": "r2-s1-user0",
+      "kind": "exported_map",
+      "sha256": "c6501aeb60c5d8c6795f55116386ce8971822d0e2767492512e4c7252aeea7e2",
+      "size_bytes": 394257
+    },
+    {
+      "record_id": "r2-s1-user1",
+      "kind": "exported_map",
+      "sha256": "0b4d20841a0aa99e883512ee4f25ab86a07ee9d37995b2ef6d7e40836fb35c61",
+      "size_bytes": 394257
+    },
+    {
+      "record_id": "r2-s1-user2",
+      "kind": "exported_map",
+      "sha256": "fb0660d0efe7b828a40e8654bc749d45e33a0b1e934391643817372ab1a7f9e8",
+      "size_bytes": 389609
+    },
+    {
+      "record_id": "r2-s1-user3",
+      "kind": "exported_map",
+      "sha256": "3cf2541f31d5b085bb984f46739bb4c84d9a3f77a5f8cad0237f75af7bcb428a",
+      "size_bytes": 389915
+    },
+    {
+      "record_id": "r2-s1-user4",
+      "kind": "exported_map",
+      "sha256": "dca4c5d31dc721af59b0dd832f1782040d2cb9664e102b217156490e37fdf054",
+      "size_bytes": 374055
+    },
+    {
+      "record_id": "r2-s1-user5",
+      "kind": "exported_map",
+      "sha256": "c356ab9ab3675197423b29e0c940e6ae7b5eca468f21ad6c1e0d88e81b848b63",
+      "size_bytes": 389329
+    },
+    {
+      "record_id": "r2-s1-user6",
+      "kind": "exported_map",
+      "sha256": "8184ab6b1e4362024a8654933ce0a33e0b4c70734adce7c17cda9dfcd54bdc35",
+      "size_bytes": 379375
+    },
+    {
+      "record_id": "r2-s1-user7",
+      "kind": "exported_map",
+      "sha256": "46b27db4582b705e324725477570c8967832c64dc0c9bb0434791e54f993a36a",
+      "size_bytes": 386982
+    },
+    {
+      "record_id": "r2-s2-user0",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-s2-user1",
+      "kind": "exported_map",
+      "sha256": "55c60d898273a5c648bb0c2feb2c6a9feb6342928507c83177e7c3f47df45c74",
+      "size_bytes": 2581
+    },
+    {
+      "record_id": "r2-s2-user2",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-s2-user3",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-s2-user4",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-s2-user5",
+      "kind": "exported_map",
+      "sha256": "2c94395965902f9295768ee585196323c9214ca0a53fc6a68995b0accb8287a3",
+      "size_bytes": 3308
+    },
+    {
+      "record_id": "r2-s2-user6",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-s2-user7",
+      "kind": "exported_map",
+      "sha256": "439cd3e4341ab484bb3ac10a4b661d26bacdd85dcd45ca6f9bdb757a8a38702b",
+      "size_bytes": 1605
+    },
+    {
+      "record_id": "r2-s3-user0",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-s3-user1",
+      "kind": "exported_map",
+      "sha256": "43ed2bacfbda36102fa81e7babfced9c5cf6db0989179a80699f691aae5941fd",
+      "size_bytes": 2589
+    },
+    {
+      "record_id": "r2-s3-user2",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-s3-user3",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-s3-user4",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-s3-user5",
+      "kind": "exported_map",
+      "sha256": "f6fe3c7672bcdecf0ace27e0ea5b6ab1ac2474c8eed7a67d84a97dd2ab29fe2a",
+      "size_bytes": 3289
+    },
+    {
+      "record_id": "r2-s3-user6",
+      "kind": "exported_map",
+      "sha256": "39bdbc9b9655b9acb932e9b553a9cf3cd49ad5f92d433690d393f14cccec07bc",
+      "size_bytes": 1005
+    },
+    {
+      "record_id": "r2-s3-user7",
+      "kind": "exported_map",
+      "sha256": "1cc99e04df98b54566e25f3cc70dec4600fa54056773a81bd1279be462a9305a",
+      "size_bytes": 1615
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "5b3a03531a5044fc65b10e6b62a59c26b6b2f518af05b2e508725f2df2979b88",
+      "size_bytes": 402
+    }
+  ]
 }
