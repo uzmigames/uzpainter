@@ -52,8 +52,9 @@
 //   every magnifying golden (decision 060).
 // - Nearest samples float32(c / M) of the texel.
 // - A float32 image (a decoded sRGB bitmap, sources.h) gives its stored values in place of
-//   float32(c / M), through the same addressing, filters and mip chain (`BitmapChain`; minified
-//   only when decoded from a 16-bit bitmap, decision 203).
+//   float32(c / M), through the same addressing, filters and mip chain (`BitmapChain`; decision
+//   203). Decoded from an 8-bit bitmap, the texture unit filters its codes as an sRGB8 texture
+//   on level 0 only (`ReadsMipLevels`, decision 219).
 //
 // The channel stores the sampled value with its own write rule (cpu_store.h `StoreValue`): at
 // 1:1 a bitmap is copied exactly. Wrap modes: `Repeat` takes tap
@@ -147,8 +148,17 @@ inline constexpr int kFilterOperandBits = 28;
 
 /// The bitmap's float32 RGB mip chain for the texture unit: level 0 holds float32(c / M), or the
 /// stored value of a float32 image (a decoded 16-bit sRGB bitmap, decision 203), rows bottom up
-/// (the GPU's orientation); a grey bitmap feeds all three channels.
+/// (the GPU's orientation); a grey bitmap feeds all three channels. A decoded 8-bit sRGB bitmap
+/// (`DecodedImage::srgb8`) gives an sRGB8 texture's chain of its codes, level 0 only
+/// (`tu::BuildSrgb8Chain`, decision 219).
 [[nodiscard]] tu::Chain BitmapChain(const DecodedImage& image);
+
+/// Whether the texture unit reads a mip level other than 0 when the projection minifies `image`
+/// on a `setWidth` x `setHeight` set (`Minifies`): the axis-aligned footprint of BilinearSharp
+/// (bias -1.5) or of BilinearHQ's samples (a third of the gradients, bias 0) resolves above
+/// lambda' = 0 (texture_unit.h, step 3). The domain is `CheckSampling`'s.
+[[nodiscard]] bool ReadsMipLevels(const UvProjection& projection, uint32_t setWidth, uint32_t setHeight,
+                                  const DecodedImage& image);
 
 /// Painter's float32 UV matrix (m00, m01, m02, m10, m11, m12) of a projection (decision 060).
 [[nodiscard]] std::array<float, 6> PainterMatrix(const UvProjection& projection);

@@ -442,12 +442,15 @@ def measure(work: Path, out: Path) -> dict[str, Any]:
 # ── Validation ────────────────────────────────────────────────────────────────
 
 
-def replica(exe: Path, work: Path, levels: list[np.ndarray], records: np.ndarray) -> np.ndarray:
-    """uzp-evaluator-tests texture-unit on a mip chain (rows bottom up) and sample records."""
+def replica(
+    exe: Path, work: Path, levels: list[np.ndarray], records: np.ndarray, srgb8: bool = False
+) -> np.ndarray:
+    """uzp-evaluator-tests texture-unit on a mip chain (rows bottom up; sRGB8 codes with
+    `srgb8`) and sample records."""
     folder = work / "texture-unit"
     folder.mkdir(parents=True, exist_ok=True)
     with open(folder / "tu-in.bin", "wb") as f:
-        f.write(struct.pack("<I", levels[0].shape[0]))
+        f.write(struct.pack("<I", levels[0].shape[0] | (0x80000000 if srgb8 else 0)))
         for level in levels:
             f.write(np.ascontiguousarray(level[..., :3], "<f4").tobytes())
         f.write(struct.pack("<I", len(records)))
@@ -560,6 +563,41 @@ def validate(work: Path, exe: Path) -> dict[str, Any]:
     return report
 
 
+def validate_srgb8(work: Path, exe: Path) -> dict[str, Any]:
+    """The sRGB8 texture's unit (decision 219) against the hardware: random codes on every level,
+    decision 084's footprints at sides 64 and 256."""
+    probe = Probe(work)
+    report: dict[str, Any] = {}
+    plan = [
+        (size, bias, clamp, kind)
+        for size in (64, 256)
+        for bias in (0.0, -1.5)
+        for clamp in (False, True)
+        for kind in ("random", "near", "edges")
+    ]
+    total = differing = 0
+    for index, (size, bias, clamp, kind) in enumerate(plan):
+        rng = np.random.default_rng(2000 + index)
+        levels = [
+            rng.integers(0, 256, (size >> k, size >> k, 3)).astype(np.float32)
+            for k in range(size.bit_length())
+        ]
+        n = 20000
+        u, v, ddx, ddy = random_set(rng, n, size, kind)
+        got = rg.sample(probe, levels, u, v, ddx, ddy, bias, clamp=clamp, srgb8=True)[:, :3]
+        flags = 0 if clamp else 3
+        ours = replica(
+            exe, work, levels, records(u, v, ddx, ddy, round(256 * bias), flags), srgb8=True
+        )
+        miss = int(np.any(ours != got, axis=1).sum())
+        name = f"{size}, bias {bias}, {'clamp' if clamp else 'repeat'}, {kind}"
+        report[name] = {"samples": n, "differing": miss}
+        total += n
+        differing += miss
+    report["all"] = {"samples": total, "differing": differing}
+    return report
+
+
 def main(argv: list[str]) -> int:
     if len(argv) >= 2 and argv[0] == "measure":
         out = Path(argv[2]) if len(argv) > 2 else TABLES
@@ -568,9 +606,13 @@ def main(argv: list[str]) -> int:
     if len(argv) == 3 and argv[0] == "validate":
         print(json.dumps(validate(Path(argv[1]), Path(argv[2])), indent=1))
         return 0
+    if len(argv) == 3 and argv[0] == "validate-srgb8":
+        print(json.dumps(validate_srgb8(Path(argv[1]), Path(argv[2])), indent=1))
+        return 0
     print(
         "usage: python -m tools.parity.vk_sampler_probe.tables measure <work-dir> [<out-dir>] | "
-        "validate <work-dir> <uzp-evaluator-tests.exe>"
+        "validate <work-dir> <uzp-evaluator-tests.exe> | "
+        "validate-srgb8 <work-dir> <uzp-evaluator-tests.exe>"
     )
     return 2
 

@@ -47,6 +47,7 @@ render::Result<std::shared_ptr<const DecodedImage>> SrgbDecoded(const DecodedIma
     }
     auto decoded = std::make_shared<DecodedImage>(image);
     decoded->encoding = render::TexelEncoding::Float32;
+    decoded->srgb8 = !sixteen && !l8Material;
     const float invLow = static_cast<float>(1.0 / 12.92);
     const float invHigh = static_cast<float>(1.0 / 1.055);
     auto shaderDecode = [&](float x) {
@@ -324,11 +325,10 @@ private:
                 if (!recorded) return render::Unexpected(recorded.error());
             }
             if (image->encoding == render::TexelEncoding::Unorm8 &&
-                Minifies(source.projection, m_dag.grid.width, m_dag.grid.height, *image)) {
+                ReadsMipLevels(source.projection, m_dag.grid.width, m_dag.grid.height, *image)) {
                 return EvalFail(EvalErrorKind::UnsupportedSource,
-                                "bilinear minification of an 8-bit sRGB bitmap is a release gap: Painter samples "
-                                "an sRGB8 texture, whose filter and mip chain differ from the float32 texture's "
-                                "(decision 203)", node);
+                                "bilinear minification of an 8-bit sRGB bitmap that reads its mip levels is a "
+                                "release gap: Painter's sRGB8 mip levels are not measured (decision 219)", node);
             }
             imageKey += source.l8Material ? "/srgb-l8" : "/srgb";
             std::shared_ptr<const DecodedImage>& decoded =

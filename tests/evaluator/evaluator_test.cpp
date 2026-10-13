@@ -2752,7 +2752,8 @@ int RunSources(const fs::path& assets) {
 
     // sRGB bitmaps (sources.h): decoded to float32 linear texels (8-bit: the GPU's sRGB8 decode; 16-bit: its float32
     // shader decode), sampled like any bitmap (a 16-bit one minified through the texture unit on the decoded mip chain,
-    // decision 203; an 8-bit one is refused there), and stored on an sRGB8 channel.
+    // decision 203; an 8-bit one through the sRGB8 texture's filter on level 0, and refused where it reads a mip level,
+    // decision 219), and stored on an sRGB8 channel.
     {
         const float invLow = static_cast<float>(1.0 / 12.92);
         const float invHigh = static_cast<float>(1.0 / 1.055);
@@ -2793,6 +2794,7 @@ int RunSources(const fs::path& assets) {
         auto expected = [&](const DecodedImage& img, core::FilteringMode filter, double scale) {
             DecodedImage linear = img;
             linear.encoding = render::TexelEncoding::Float32;
+            linear.srgb8 = img.encoding == render::TexelEncoding::Unorm8;
             for (uint32_t& v : linear.values) {
                 v = std::bit_cast<uint32_t>(img.encoding == render::TexelEncoding::Unorm16 ? decode16(v) : arith::Srgb8Operand(v));
             }
@@ -2814,11 +2816,15 @@ int RunSources(const fs::path& assets) {
             {"16-bit colour", sha16, image16}, {"8-bit colour", sha8, image8}, {"16-bit grey", shaGrey, grey}, {"8-bit grey", shaGrey8, grey8}};
         const std::vector<std::pair<core::FilteringMode, double>> samplings{
             {core::FilteringMode::BilinearHQ, 1.0}, {core::FilteringMode::BilinearHQ, 0.5}, {core::FilteringMode::Nearest, 0.5},
-            {core::FilteringMode::Nearest, 2.0}, {core::FilteringMode::BilinearHQ, 2.0}, {core::FilteringMode::BilinearSharp, 4.0}};
+            {core::FilteringMode::Nearest, 2.0}, {core::FilteringMode::BilinearHQ, 2.0}, {core::FilteringMode::BilinearSharp, 2.0},
+            {core::FilteringMode::BilinearSharp, 4.0}};
         for (const auto& [name, sha, img] : images) {
             for (const auto& [filter, scale] : samplings) {
-                // Bilinear minification of an 8-bit sRGB bitmap is refused (below).
-                if (scale > 1.0 && filter != core::FilteringMode::Nearest && img->encoding == render::TexelEncoding::Unorm8) continue;
+                // Bilinear minification of an 8-bit sRGB bitmap that reads a mip level is refused (below).
+                UvProjection projection;
+                projection.filter = filter;
+                projection.scale = {scale, scale};
+                if (img->encoding == render::TexelEncoding::Unorm8 && ReadsMipLevels(projection, kSize, kSize, *img)) continue;
                 render::Result<ChannelResult> result = srgb(ChannelFormat::sRGB8, sha, filter, scale, "sRGB");
                 Check(result && Samples(*result) == expected(*img, filter, scale),
                       "a " + name + " sRGB bitmap under " + std::string(core::ToString(filter)) + " at scale " +
@@ -2851,8 +2857,8 @@ int RunSources(const fs::path& assets) {
         std::string detail;
         for (const auto& [name, result] :
              {std::pair{"RGB16 channel", srgb(ChannelFormat::RGB16, sha16, core::FilteringMode::BilinearHQ, 1.0, "sRGB")},
-              std::pair{"8-bit BilinearHQ at scale 2", srgb(ChannelFormat::sRGB8, sha8, core::FilteringMode::BilinearHQ, 2.0, "sRGB")},
-              std::pair{"8-bit BilinearSharp at scale 2", srgb(ChannelFormat::sRGB8, sha8, core::FilteringMode::BilinearSharp, 2.0, "sRGB")},
+              std::pair{"8-bit BilinearHQ at scale 4", srgb(ChannelFormat::sRGB8, sha8, core::FilteringMode::BilinearHQ, 4.0, "sRGB")},
+              std::pair{"8-bit BilinearSharp at scale 4", srgb(ChannelFormat::sRGB8, sha8, core::FilteringMode::BilinearSharp, 4.0, "sRGB")},
               std::pair{"8-bit grey BilinearSharp at scale 4", srgb(ChannelFormat::sRGB8, shaGrey8, core::FilteringMode::BilinearSharp, 4.0, "sRGB")},
               std::pair{"ACEScg", srgb(ChannelFormat::sRGB8, sha16, core::FilteringMode::BilinearHQ, 1.0, "ACEScg")}}) {
             if (result || KindName(result.error()) != "unsupported_source") {
@@ -2860,8 +2866,8 @@ int RunSources(const fs::path& assets) {
                 detail += std::string(name) + ": " + Describe(result) + " ";
             }
         }
-        Check(refused, "an sRGB bitmap on a channel that is not sRGB8, an 8-bit sRGB bitmap minified by a bilinear filter, and "
-                       "an unknown bitmap colour space fail with unsupported_source",
+        Check(refused, "an sRGB bitmap on a channel that is not sRGB8, an 8-bit sRGB bitmap minified by a bilinear filter "
+                       "that reads its mip levels, and an unknown bitmap colour space fail with unsupported_source",
               detail);
 
         // An L8 BaseColor, Specular or Emissive (decision 208; export-l8-material s0 and s1): a grey sRGB bitmap at 1:1
@@ -3573,6 +3579,67 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
           "every random minifying 16-bit sRGB projection stack (grey and colour bitmaps decoded to float32, BilinearHQ and "
           "BilinearSharp through the texture unit) evaluates to the same bytes on the GPU and on the CPU (" +
               std::to_string(decodedMinified) + " samples)",
+          "");
+
+    // 8-bit sRGB bitmaps minified on level 0 as sRGB8 textures (decision 219): grey and colour, BilinearHQ and
+    // BilinearSharp over footprints of up to 2.65 texels, rotations by multiples of 90 degrees, Repeat and RepeatNone.
+    size_t srgb8Minified = 0;
+    for (int variant = 0; variant < 4; ++variant) {
+        Builder builder(256, 256, {{ChannelType::User0, ChannelFormat::sRGB8}});
+        auto provider = std::make_shared<MapResourceProvider>();
+        const std::vector<ChannelType> channels{ChannelType::User0};
+        std::vector<core::Layer> layers;
+        for (int i = 0; i < 2; ++i) {
+            const uint32_t imageChannels = (rng() & 3) == 0 ? 1 : 3;
+            const uint32_t side = (rng() & 1) != 0 ? 64 : 256;
+            char buffer[65];
+            std::snprintf(buffer, sizeof(buffer), "%064d", ++serial);
+            const std::string sha(buffer);
+            provider->Add(sha, PatternImage(side, side, imageChannels, render::TexelEncoding::Unorm8, rng()));
+            builder.AddResource(sha, 100);
+            core::Layer layer = builder.Fill("srgb8-minified" + std::to_string(i), SameSource(channels, Bitmap(sha, "sRGB")),
+                                             Same(channels, i == 0 ? BlendingMode::Normal : modes[rng() % modes.size()], 0.3 + 0.7 * unit()));
+            const core::FilteringMode filter = (rng() & 1) != 0 ? core::FilteringMode::BilinearHQ : core::FilteringMode::BilinearSharp;
+            const double fit = 256.0 / side;
+            const double major = fit * (1.05 + 1.6 * unit());
+            const double minor = major / (1.0 + 3.0 * unit());
+            const bool uMajor = (rng() & 1) != 0;
+            SetUv(layer, filter, (rng() & 1) != 0 ? core::UVWrapMode::Repeat : core::UVWrapMode::RepeatNone,
+                  {uMajor ? major : minor, uMajor ? minor : major}, 90.0 * static_cast<double>(rng() % 4),
+                  {unit() - 0.5, unit() - 0.5});
+            layers.push_back(std::move(layer));
+        }
+        builder.SetRoot(layers);
+        if (!builder.Validate("minifying sRGB8 projection stack")) return Finish();
+        EvaluateRequest request;
+        request.textureSet = builder.SetId();
+        request.stack = builder.StackId();
+        request.channel = ChannelType::User0;
+        request.resources = provider;
+        CpuEvaluator cpu(templates, kWideLimits);
+        render::Result<ChannelResult> cpuResult = cpu.Evaluate(builder.project, request);
+        auto project = std::make_shared<const core::Project>(builder.project);
+        std::future<render::Result<ChannelResult>> future = gpu.Evaluate(core::Snapshot{1, project}, request);
+        render::Result<ChannelResult> gpuResult = Get(future);
+        const std::string label = "minifying sRGB8 projection stack " + std::to_string(variant);
+        if (!cpuResult || !gpuResult) {
+            allEqual = false;
+            Check(false, label + " evaluates on both stores", Describe(cpuResult) + " / " + Describe(gpuResult));
+            continue;
+        }
+        std::string first;
+        const std::vector<uint32_t> expected = Samples(*cpuResult);
+        const size_t mismatches = Mismatches(expected, Samples(*gpuResult), first, cpuResult->tileFormat.encoding);
+        srgb8Minified += expected.size();
+        if (mismatches != 0) {
+            allEqual = false;
+            Check(false, label + ": GPU equals CPU", std::to_string(mismatches) + " mismatches; " + first);
+        }
+    }
+    Check(srgb8Minified > 0 && allEqual,
+          "every random level-0 minifying 8-bit sRGB projection stack (grey and colour bitmaps as sRGB8 textures, "
+          "BilinearHQ and BilinearSharp through the texture unit) evaluates to the same bytes on the GPU and on the CPU (" +
+              std::to_string(srgb8Minified) + " samples)",
           "");
 
     // An sRGB grey bitmap at 1:1 on an L8 BaseColor, Specular or Emissive (decision 208): its float32 decode (an 8-bit
@@ -7486,11 +7553,14 @@ int RunNotYetSupported(const fs::path& assets) {
 /// comparison with the recording GPU. `tu-in.bin`: uint32 side W, then the texels of every level
 /// of the mip chain (W x W, W/2 x W/2, ... 1 x 1; three float32 each, rows bottom up), uint32 N,
 /// then N records of six float32 (u, v, ddx.x, ddx.y, ddy.x, ddy.y), int32 bias (1/256) and
-/// uint32 flags (1 repeat u, 2 repeat v). Writes `tu-out.bin`, N x 3 float32.
+/// uint32 flags (1 repeat u, 2 repeat v). Writes `tu-out.bin`, N x 3 float32. A side with bit 31
+/// set is an sRGB8 texture (decision 219): its texels are sRGB8 codes, as float32 integers.
 int RunTextureUnit(const fs::path& dir) {
     std::ifstream in(dir / "tu-in.bin", std::ios::binary);
     uint32_t side = 0;
     in.read(reinterpret_cast<char*>(&side), sizeof side);
+    const bool srgb8 = (side & 0x80000000u) != 0;
+    side &= 0x7FFFFFFFu;
     if (!in || side == 0 || (side & (side - 1)) != 0) {
         Check(false, "texture-unit input", "unreadable tu-in.bin");
         return Finish();
@@ -7504,6 +7574,13 @@ int RunTextureUnit(const fs::path& dir) {
     }
     chain.texels.resize(texels * 3);
     in.read(reinterpret_cast<char*>(chain.texels.data()), static_cast<std::streamsize>(chain.texels.size() * sizeof(float)));
+    if (srgb8) {
+        chain.codes.resize(chain.texels.size());
+        for (size_t i = 0; i < chain.texels.size(); ++i) {
+            chain.codes[i] = static_cast<uint8_t>(chain.texels[i]);
+            chain.texels[i] = arith::Srgb8Operand(chain.codes[i]);
+        }
+    }
     uint32_t count = 0;
     in.read(reinterpret_cast<char*>(&count), sizeof count);
     std::vector<uint32_t> records(size_t{count} * 8);

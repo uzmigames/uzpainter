@@ -128,18 +128,24 @@ class Probe:
         anisotropy: int = MAX_ANISOTROPY,
         bias: float = 0.0,
         clamp: bool = False,
+        srgb8: bool = False,
     ) -> np.ndarray:
-        """`params` holds two float4 per output texel: (u, v, ddx), (ddy, level-0 flag, 0)."""
+        """`params` holds two float4 per output texel: (u, v, ddx), (ddy, level-0 flag, 0). With
+        `srgb8` the texture is R8G8B8A8_SRGB and the levels hold its codes (alpha 255)."""
         height, size = levels[0].shape[0], levels[0].shape[1]
         rows = params.shape[0] // (2 * width)
-        header = struct.pack(
-            "<8I", size, height, len(levels), width, rows, 2, anisotropy, int(clamp)
-        )
+        flags = int(clamp) | (8 if srgb8 else 0)
+        header = struct.pack("<8I", size, height, len(levels), width, rows, 2, anisotropy, flags)
         data = bytearray(header + struct.pack("<3f", bias, 0.0, 1000.0))
         start = len(data)
         for level in levels:
-            texels = level.astype("<f4")
-            pitch = (texels.shape[1] * 16 + 255) & ~255
+            if srgb8:
+                rgb = level[..., :3].astype(np.uint8)
+                alpha = np.full((*level.shape[:2], 1), 255, np.uint8)
+                texels = np.concatenate([rgb, alpha], axis=2)
+            else:
+                texels = level.astype("<f4")
+            pitch = (texels.shape[1] * texels.shape[2] * texels.itemsize + 255) & ~255
             for row in texels:
                 data += row.tobytes().ljust(pitch, b"\0")
             data += b"\0" * (((len(data) - start + 511) & ~511) - (len(data) - start))

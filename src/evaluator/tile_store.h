@@ -35,6 +35,9 @@ struct DecodedImage {
     uint32_t channels = 0;
     render::TexelEncoding encoding = render::TexelEncoding::Unorm16;
     std::vector<uint32_t> values;
+    /// The float32 values are the decodes `Srgb8Operand` of an 8-bit sRGB bitmap's codes (evaluate.cpp
+    /// `SrgbDecoded`): Painter samples it as an sRGB8 texture (decision 219).
+    bool srgb8 = false;
 
     [[nodiscard]] uint32_t At(uint32_t x, uint32_t y, uint32_t c) const {
         return values[(size_t{y} * width + x) * channels + c];

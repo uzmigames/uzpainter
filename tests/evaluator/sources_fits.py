@@ -385,7 +385,8 @@ def colour_transfer(ev: Evaluations, decode: np.ndarray) -> dict[str, Any]:
             "management",
             "Not observed. Uniform colours on Height are stored like any channel value (no "
             "remap); 8-bit bitmaps follow bitmap-import-linear; bilinear minification of an 8-bit "
-            "sRGB bitmap (decision 203), a bitmap colour space other than Raw, Data, DataSigned, "
+            "sRGB bitmap that reads a mip level (decision 219), a bitmap colour space other than "
+            "Raw, Data, DataSigned, "
             "NormalXYZLeft, Working, sRGB and the Legacy Linear and sRGB spaces, an OCIO project "
             "without Painter's substance config, and under it every source use Session O does not "
             "record (decision 190) fail with evaluator:unsupported_source.",

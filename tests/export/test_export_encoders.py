@@ -911,20 +911,21 @@ def test_srgb_variants_equal_painter_files(export_tests: Path, tmp_path: Path) -
 
 
 def test_srgb_minification_equals_painter_files(export_tests: Path, tmp_path: Path) -> None:
-    """phase1.15_compositor-colour-fits item 2.5 (decision 203): srgb-bitmap-minification rebuilt
-    per texture set and written by WriteExport at PNG 16, PNG 8 and OpenEXR 32f is byte-identical
-    to Painter's files, r1 and r2, for field A (16-bit, s4-s7) on BaseColor minified by BilinearHQ
-    and BilinearSharp at scales 2 and 4: each texel decoded to float32 before the texture unit
-    samples its float32 mip chain. The 8-bit sRGB ramp (s0-s3) is refused: Painter samples an
-    sRGB8 texture there, whose filter and mip chain are not the float32 texture's."""
+    """phase1.15_compositor-colour-fits items 2.5 and 2.7 (decisions 203, 219):
+    srgb-bitmap-minification rebuilt per texture set and written by WriteExport at PNG 16, PNG 8
+    and OpenEXR 32f is byte-identical to Painter's files, r1 and r2, for field A (16-bit, s4-s7)
+    on BaseColor minified by BilinearHQ and BilinearSharp at scales 2 and 4 (each texel decoded to
+    float32 before the texture unit samples its float32 mip chain) and for the 8-bit sRGB ramp at
+    scale 2 (s0, s2: the sRGB8 texture's filter on level 0). The ramp at scale 4 (s1, s3) reads
+    the sRGB8 mip levels, which are not measured, and is refused."""
     from tests.export import encoders_tier0
 
     report = encoders_tier0.srgb_minification_written(export_tests, tmp_path)
     assert report["problems"] == [], report["problems"][:10]
-    assert set(report["refused"]) == {"s0", "s1", "s2", "s3"}, report["refused"]
+    assert set(report["refused"]) == {"s1", "s3"}, report["refused"]
     for message in report["refused"].values():
-        assert "8-bit sRGB bitmap" in message and "decision 203" in message, message
-    assert report["files"] == 4 * 3, report
+        assert "8-bit sRGB bitmap" in message and "decision 219" in message, message
+    assert report["files"] == 6 * 3, report
     assert report["identical"] == report["comparisons"] == 2 * report["files"], report
 
 
