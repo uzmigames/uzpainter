@@ -449,6 +449,7 @@ def test_srgb8_material_channels_are_written_encoded(export_tests: Path, tmp_pat
     fails its evaluation (`unsupported_source`) before writing."""
     from tests.export.tier0 import srgb16
 
+    pytest.importorskip("OpenEXR", reason="decodes the OpenEXR 32f BaseColor; owner's machine only")
     out = tmp_path / "out"
     cfg = config(out)
     cfg["exportPresets"][0]["maps"] = [
