@@ -1,4 +1,5 @@
-"""`uzpainter.diagnostics` (task phase2.1_recipe-diagnostic-views, items 3.1-3.6; decision 136).
+"""`uzpainter.diagnostics` (task phase2.1_recipe-diagnostic-views, items 3.1-3.6; decision 136;
+decision 245).
 
 Each test runs a script in `uzp-pyapi-tests.exe` (conftest.py) on the plane fixture. CPU only. The
 diagnostics' maps are compared with OpenEXR 32f exports (padding `passthrough`) of the same
@@ -16,7 +17,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from tests.python.conftest import Run
+from tests.python.conftest import REPO_ROOT, Run
 from tests.python.test_pyapi_native import ok
 from tools.parity.fit.decode import decode
 
@@ -351,6 +352,63 @@ def test_a_template_base_shown_in_openexr_is_read_per_source(run: Run) -> None:
     assert r["stats"].startswith("regionStats/BaseColor/")
     # Dota 2 has no SpecularRoughness, Height or Normal channel: those views are missing.
     assert r["refused"] == [] and r["views"] == ["BaseColor", "Metallic"]
+
+
+# ── Decision 245: a virtual normal on UV islands ───────────────────────────────────────────────
+
+SPHERE = REPO_ROOT / "parity" / "fixtures" / "tier0-semantics" / "meshes" / "sphere.obj"
+
+ISLANDS = """
+def relief(mesh, height):
+    project.create(mesh, project.Settings(default_texture_resolution=256))
+    fill = ls.insert_fill(top(ts.get_active_stack()))
+    fill.active_channels = {CT.BaseColor, CT.Height} if height else {CT.BaseColor}
+    fill.set_source(CT.BaseColor, cm.Color(0.8, 0.2, 0.1, "Raw"))
+    if height:
+        fill.set_source(CT.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+    return fill
+
+def views(fill):
+    return [raises(diagnostics.isolate, fill, "Normal_OpenGL"),
+            raises(diagnostics.contribution, fill.uid(), "Normal_DirectX"),
+            raises(diagnostics.region_stats, "Normal_OpenGL", fill)]
+
+result = {}
+cases = (("relief", SPHERE, True), ("flat", SPHERE, False), ("plane", PLANE, True))
+for name, mesh, height in cases:
+    fill = relief(mesh, height)
+    rev = project.revision()
+    result[name] = {"uid": fill.uid(), "views": views(fill),
+                    "same_revision": project.revision() == rev,
+                    "height": raises(diagnostics.isolate, fill, CT.Height)}
+    project.close()
+"""
+
+
+def test_a_virtual_normal_on_uv_islands_is_refused_per_source(run: Run) -> None:
+    """Decision 245: on the sphere, whose UV islands leave texels uncovered, `isolate`,
+    `contribution` and `region_stats` of Normal_OpenGL and Normal_DirectX raise `NotYetSupported`
+    before evaluating, with a layer on the Height and without one, as the export of their source
+    is refused; the Height itself is still returned. On the plane, whose coverage is complete, the
+    same views are returned."""
+    r = ok(run(HELPERS + f"SPHERE = {SPHERE.as_posix()!r}\n" + ISLANDS))
+    for name in ("relief", "flat"):
+        uid = r[name]["uid"]
+        sources = [
+            f"isolated/Normal_OpenGL/{uid}",
+            f"contribution/Normal_DirectX/{uid}",
+            f"regionStats/Normal_OpenGL/{uid}",
+        ]
+        for refusal, source in zip(r[name]["views"], sources, strict=True):
+            assert refusal is not None, (name, source)
+            assert refusal.startswith(
+                f'NotYetSupported: diagnostics: the diagnosticMap "{source}" reads the combined '
+                "virtual normal on a texture set whose UV islands do not cover the whole tile"
+            ), refusal
+            assert "island-edge texels" in refusal and "decision 245" in refusal, refusal
+        assert r[name]["same_revision"] and r[name]["height"] is None, r[name]
+    assert r["plane"]["views"] == [None, None, None], r["plane"]
+    assert r["plane"]["height"] is None
 
 
 # ── 3.5: layer-tree snapshot and diff ───────────────────────────────────────────────────────────

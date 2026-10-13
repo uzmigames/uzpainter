@@ -31,7 +31,8 @@ const core::TextureSet* SetOf(const core::Project& project, core::Id id) {
     return nullptr;
 }
 
-/// The texel-centre coverage of every object of `set`'s material, or nullopt without a mesh.
+}  // namespace
+
 std::optional<Coverage> CoverageOf(const core::TextureSet& set, const SourceInputs& inputs) {
     if (!inputs.geometry) return std::nullopt;
     evaluator::GeometryMaskQuery query;
@@ -49,8 +50,6 @@ std::optional<Coverage> CoverageOf(const core::TextureSet& set, const SourceInpu
     return coverage;
 }
 
-}  // namespace
-
 render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& project, std::int64_t revision,
                                                       const ExportPlan& plan, const SourceInputs& inputs,
                                                       const evaluator::TemplateLibrary& templates,
@@ -61,7 +60,10 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
         const core::TextureSet* set = SetOf(project, file.textureSetId);
         if (set == nullptr) return ExportFail("the texture set of " + file.relativePath + " is not in the project");
         CheckProcessing(project, file);
-        if (file.layout == FileLayout::Statistics) continue;
+        // A statistics file has no padding; one of a combined virtual normal reads its island-edge
+        // texels, and without a texturing mesh there are no UV islands.
+        const bool statistics = file.layout == FileLayout::Statistics;
+        if (statistics && (!ReadsCombinedNormal(file) || !inputs.geometry)) continue;
         if (!coverages.contains(set->id)) {
             std::optional<Coverage> coverage = CoverageOf(*set, inputs);
             if (!coverage) {
@@ -70,7 +72,9 @@ render::Result<std::vector<EncodedFile>> EncodeExport(const core::Project& proje
             }
             coverages.emplace(set->id, std::move(*coverage));
         }
-        CheckPadding(file, coverages.at(set->id));
+        const Coverage& coverage = coverages.at(set->id);
+        CheckIslandNormal(file, coverage);
+        CheckPadding(file, coverage);
     }
     // 2. Every file evaluated, padded and encoded in memory. Every check passed in step 1, so a
     // padding or an encoder that throws here is a failure of this export, returned as such: the

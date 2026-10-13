@@ -14,6 +14,10 @@
 // - Decision 126 applies per source (`exporter::RequireIdentifiedBase`): `isolate`, `contribution`
 //   and `region_stats` on a channel whose template base is inferred raise `NotYetSupported`;
 //   `material_views` moves each such channel view to `refused` and returns the others.
+// - Decision 245 applies per source too (`exporter::IslandNormalRefusal`): `isolate`,
+//   `contribution` and `region_stats` of Normal_OpenGL or Normal_DirectX on a texture set whose
+//   UV islands do not cover the tile raise `NotYetSupported` before evaluating, as the export of
+//   their source is refused: the island-edge texels read Painter's Height outside the islands.
 // - `Export` publishes diagnostic sources as an ordinary export generation (OpenEXR 32f, padding
 //   `passthrough`, so every value is the source's float32 value), with its plan and receipt.
 //
@@ -66,8 +70,8 @@ public:
 private:
     /// The request of the stack holding `node`; `ValueError` when no stack holds it.
     [[nodiscard]] evaluator::DiagnosticRequest RequestFor(core::Id node) const;
-    /// Raises the refusal of decision 126 for `source` of the stack of `request`, if any.
-    void RequireIdentified(const evaluator::DiagnosticRequest& request, const evaluator::DiagnosticSource& source) const;
+    /// Raises the refusal of decision 126 or 245 for `source` of the stack of `request`, if any.
+    void RequireExact(const evaluator::DiagnosticRequest& request, const evaluator::DiagnosticSource& source) const;
 
     std::shared_ptr<OpenProject> m_open;
     core::Snapshot m_snapshot;
