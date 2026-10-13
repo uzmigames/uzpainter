@@ -249,7 +249,7 @@ The scripts' own Painter calls are pinned, not checked symbol by symbol. `delete
 
 Belt v5 (phase2.9, decision 192) uses the same runner and comparison: `python -m pytest tests/parity/tier1/belt_v5` with `UZP_TIER1_REPORT=parity/reports/phase2/tier1-belt-v5.json`. The same file runs the Python-disabled MCP round (`UZP_MCP_ROUND_REPORT=parity/reports/phase2/belt-v5-mcp-round.json`). Until the request exists, `tests/parity/tier1/test_mcp_round.py` runs the round on the Wand v1 inputs as a stand-in for the tool only.
 
-The report (`comparison-report.json`) keeps three results apart: oracle stability, UzPainter repeatability and equality to Painter. Structural differences fail and are listed: a refused export, a map on one side only, a differing storage format or shape. A golden that is not admitted, or one whose record or blobs are missing, is `oracle_unavailable`.
+The report (`comparison-report.json`) keeps three results apart: oracle stability, UzPainter repeatability and equality to Painter. Structural differences fail and are listed: a refused export (listed alone, its maps not listed again as missing; decision 255), a map on one side only, a differing storage format or shape. A golden that is not admitted, or one whose record or blobs are missing, is `oracle_unavailable`.
 
 ## 9b. Migration goldens (Tier 1, decision 194)
 

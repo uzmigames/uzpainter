@@ -31,8 +31,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tests.adapters.assets3d.wand import REQUEST, Call
-from tests.parity.tier1.wand_v1.runner import GOLDEN_ID, REFUSAL, RunError, built, exported
+from tests.adapters.assets3d.wand import REQUEST
+from tests.parity.tier1.wand_v1.runner import (
+    GOLDEN_ID,
+    REFUSAL,
+    RunError,
+    built,
+    exported,
+    refusal,
+)
 from tools.parity.recipe_rebuild import Side, report, sha256_of
 from tools.parity.tier1.compare import CandidateRun
 from tools.parity.verdict import resolve_golden
@@ -69,16 +76,6 @@ def side(dump: dict[str, Any], candidate: CandidateRun) -> Side:
     if candidate.refused:
         return Side(dump, None, REFUSAL)
     return Side(dump, {path.name: path for path in candidate.files.values()})
-
-
-def refusal(call: Call) -> str:
-    """The message of a refused export: the error of the adapter's JSON reply on standard error,
-    which also names this run's paths, or else the line naming the refusal."""
-    line = next(line.strip() for line in call.stderr.splitlines() if REFUSAL in line)
-    try:
-        return str(json.loads(line)["error"]["message"])
-    except (ValueError, KeyError, TypeError):
-        return line
 
 
 def resources(painter: Path, project_file: Path, work: Path) -> Path:

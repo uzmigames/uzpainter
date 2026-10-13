@@ -1,0 +1,11 @@
+{
+  "id": 255,
+  "slug": "a-refused-export-is-one-structural-failure-and-the-wand-tier1-test-ends-as-an-expected-failure-naming-decision-245-s-refusal",
+  "title": "A refused export is one structural failure, and the Wand Tier 1 test ends as an expected failure naming decision 245's refusal",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase1.25_pilot-wand"
+  ],
+  "supersededBy": null
+}

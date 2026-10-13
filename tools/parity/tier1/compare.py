@@ -19,7 +19,9 @@ and classified by their measured storage format (container, sample type, bits, c
 encoding): a candidate whose measured format differs from the recorded one is a structural
 difference before any value is compared. Structural differences (the export refused before
 writing, a map on one side only, a storage format or shape that differs) fail in every tier and
-are listed in `structural`.
+are listed in `structural`. A refused export is listed once, as `candidate_export_refused`: it
+wrote nothing and nothing is compared, so its maps are not listed again as missing (decision 255);
+`missing_from_candidate` names a map that an export which wrote its files left out.
 
 The golden's outcome, in this order: `oracle_unavailable` when the golden is not admitted, or its
 private record or any of its blobs is missing (checked before anything is compared; nothing is
@@ -108,10 +110,12 @@ Mask = npt.NDArray[np.bool_]
 
 @dataclass(frozen=True)
 class CandidateRun:
-    """One UzPainter rebuild: its exported files by (texture set, map name), or its refusal."""
+    """One UzPainter rebuild: its exported files by (texture set, map name), or its refusal and
+    the refusal's message (kept for the caller; the public report holds no message)."""
 
     files: Mapping[MapKey, Path] = field(default_factory=dict)
     refused: bool = False
+    refusal: str = ""
 
 
 @dataclass(frozen=True)
@@ -442,11 +446,18 @@ def equality(
     store: OracleStore | None,
     register_entries: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """The first rebuild's maps against r1, each judged by the contract."""
+    """The first rebuild's maps against r1, each judged by the contract. A refused export is one
+    structural failure, with no map compared (decision 255)."""
     tier, domain = str(subject.manifest["tier"]), str(subject.manifest["domain"])
+    if run.refused:
+        return {
+            "outcome": _outcome([], [REFUSED], resolved.stale, oracle_unpaired).value,
+            "exceptions_relied_on": [],
+            "maps": [],
+            "structural": [{"output_id": EXPORT, "reason": REFUSED}],
+        }
     first = _exported(golden, FIRST)
-    structural = [{"output_id": EXPORT, "reason": REFUSED}] if run.refused else []
-    structural += [
+    structural: list[dict[str, str]] = [
         {"output_id": _name(key), "reason": MISSING_FROM_ORACLE}
         for key in sorted(set(run.files) - set(first))
     ]

@@ -94,7 +94,7 @@
         },
         "maps": { "type": "array", "items": { "$ref": "#/$defs/map_diagnostics" } },
         "structural": {
-          "description": "Structural differences, each a failure in every tier: UzPainter's export refused before writing (output_id `export`), a map exported on one side only, measured storage formats or map shapes that differ. Such a map has no diagnostics.",
+          "description": "Structural differences, each a failure in every tier: UzPainter's export refused before writing (output_id `export`, listed alone: nothing was written or compared, decision 255), a map exported on one side only, measured storage formats or map shapes that differ. Such a map has no diagnostics.",
           "type": "array",
           "items": {
             "type": "object",

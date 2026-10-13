@@ -17,6 +17,8 @@ from typing import Any
 import numpy as np
 import pytest
 
+from tests.adapters.assets3d.wand import Call
+from tests.parity.tier1.wand_v1.runner import refusal
 from tools.parity.envelope.registry import current_envelope
 from tools.parity.feasibility import png
 from tools.parity.guard.guard import Snapshot, run_guard
@@ -395,20 +397,28 @@ def test_a_missing_golden_blob_is_oracle_unavailable_never_a_pass(
 # --- structural differences -------------------------------------------------------------------
 
 
-def test_a_refused_export_fails_naming_the_refusal_and_every_missing_map(tmp_path: Path) -> None:
+def test_a_refused_export_fails_naming_the_refusal_once(tmp_path: Path) -> None:
+    """Decision 255: a refused export wrote nothing and nothing is compared, so it is the one
+    structural failure; its maps are not listed again as missing. An export that finished without
+    writing a map still lists each map r1 holds as missing."""
     resolved, store = stable_golden(tmp_path)
-    refused = CandidateRun(refused=True)
+    refused = CandidateRun(refused=True, refusal="export: ... (decision 245)")
     report = report_of(resolved, store, (refused, refused))
     equality = report["equality_to_painter"]
-    assert equality["outcome"] == "fail" and equality["maps"] == []
-    assert equality["structural"] == [
-        {"output_id": "export", "reason": "candidate_export_refused"},
-        *(
-            {"output_id": f"{SET}/{name}", "reason": "missing_from_candidate"}
-            for name in sorted((BASE, NORMAL, ROUGH))
-        ),
-    ]
+    assert equality == {
+        "outcome": "fail",
+        "exceptions_relied_on": [],
+        "maps": [],
+        "structural": [{"output_id": "export", "reason": "candidate_export_refused"}],
+    }
     assert report["uzpainter_repeatability"] == {"status": "not_measured", "maps": []}
+    assert report["oracle_stability"]["status"] == "stable"
+    empty = report_of(resolved, store, (CandidateRun(), CandidateRun()))["equality_to_painter"]
+    assert empty["outcome"] == "fail" and empty["maps"] == []
+    assert empty["structural"] == [
+        {"output_id": f"{SET}/{name}", "reason": "missing_from_candidate"}
+        for name in sorted((BASE, NORMAL, ROUGH))
+    ]
     unavailable = report_of(None, None, (refused, refused))["equality_to_painter"]
     assert unavailable["outcome"] == "oracle_unavailable"
     assert unavailable["structural"] == [
@@ -439,6 +449,11 @@ def test_a_golden_of_another_envelope_is_stale(tmp_path: Path) -> None:
     runs = (candidate(tmp_path / "a", maps()), candidate(tmp_path / "b", maps()))
     equality = report_of(resolved, store, runs)["equality_to_painter"]
     assert equality["outcome"] == "stale" and equality["exceptions_relied_on"] == []
+    refused = CandidateRun(refused=True)
+    equality = report_of(resolved, store, (refused, refused))["equality_to_painter"]
+    assert equality["outcome"] == "stale" and equality["structural"][0]["reason"] == (
+        "candidate_export_refused"
+    )
 
 
 def test_a_golden_recorded_from_another_job_is_refused(tmp_path: Path) -> None:
@@ -521,3 +536,30 @@ def test_the_guard_rejects_a_planted_golden_and_an_invalid_report(tmp_path: Path
     assert ("tests/parity/tier1/planted.png", "store-hash") in found
     assert (REPORT_PATH, "store-hash") in found
     assert ("parity/reports/phase1/tier1-other.json", "public-schema") in found
+
+
+# --- the runner's refusal message (decision 255) ------------------------------------------------
+
+
+@pytest.mark.parametrize("cut", [False, True])
+def test_the_refusal_message_is_read_from_a_whole_or_cut_reply(cut: bool) -> None:
+    """The pinned `painter_layer_stack.py` raises with the client's reply cut to its last 3000
+    characters (`text[-3000:]`), so a long reply is not JSON; the message is then the last line
+    of its traceback, unescaped."""
+    message = 'export: W map "W_Normal" (W_Normal.png): ... (owner X; decision 245)'
+    traceback = "Traceback (most recent call last):\n" + "  File ...\n" * 400
+    reply = json.dumps(
+        {
+            "success": False,
+            "error": {
+                "message": message,
+                "traceback": f"{traceback}uzpainter.exception.NotYetSupported: {message}\n",
+                "type": "NotYetSupported",
+            },
+            "session": {"project": "C:/work/W.spp"},
+        }
+    )
+    text = reply[-3000:] if cut else reply
+    assert cut == (not text.startswith("{"))
+    stderr = f"Traceback ...\nRuntimeError: Painter MCP call failed:\n{text}\n\n"
+    assert refusal(Call(1, "", stderr)) == message

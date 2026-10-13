@@ -5,6 +5,13 @@ rebuilds with the private golden. It needs the UzmiGames asset repository (`UZP_
 default `E:\\UzmiGames\\Assets3D`), `zig` for a fresh `zig build painter`, the private store and the
 admitted golden `phase1/tier1/wand-v1` (recording R9); hosted CI has none of them and skips it
 with the reason. Synthetic host cases of the comparison are in `../test_tier1_compare.py`.
+
+While phase1.25 item 2.7 is open, UzPainter refuses the pinned five-map export before writing
+(decision 245: the virtual Normal on the Wand's UV islands is not exact). The test then checks that
+both rebuilds refused it with that refusal and that the report states it as the one structural
+failure `candidate_export_refused`, and ends as an expected failure naming the refusal (decision
+255). Any other refusal fails the test with its message; once the refusal is lifted, the equality
+and repeatability assertions run unchanged.
 """
 
 from __future__ import annotations
@@ -17,13 +24,15 @@ from pathlib import Path
 import pytest
 
 from tests.adapters.assets3d.wand import ASSETS3D, REPO_ROOT
-from tests.parity.tier1.wand_v1.runner import GOLDEN_ID, run
+from tests.parity.tier1.wand_v1.runner import GOLDEN_ID, compared
 from tools.parity.schemas import Schema, validation_errors
 from tools.parity.store.store import locate
 from tools.parity.tier1.compare import write_report
 from tools.parity.verdict import resolve_golden
 
 REPORT_ENV = "UZP_TIER1_REPORT"  # repository-relative path of the report to write
+# The decided refusal of the five-map export (src/export/padding.cpp `IslandNormalRefusal`).
+KNOWN_REFUSAL = "the Height outside the UV islands; decision 245"
 
 pytestmark = [
     pytest.mark.skipif(
@@ -63,11 +72,22 @@ def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 def test_wand_v1_maps_equal_painter_and_are_byte_stable(painter: Path, tmp_path: Path) -> None:
     """3.1 every exported map equals its golden; 3.2 the two rebuilds are byte-identical."""
-    report = run(painter, tmp_path)
+    report, runs = compared(painter, tmp_path)
     assert validation_errors(report, Schema.COMPARISON_REPORT) == []
     if os.environ.get(REPORT_ENV):
         write_report(report, REPO_ROOT / os.environ[REPORT_ENV])
     equality = report["equality_to_painter"]
+    if any(r.refused for r in runs):
+        refusals = [r.refusal for r in runs]
+        assert all(KNOWN_REFUSAL in message for message in refusals), refusals
+        assert equality == {
+            "outcome": "fail",
+            "exceptions_relied_on": [],
+            "maps": [],
+            "structural": [{"output_id": "export", "reason": "candidate_export_refused"}],
+        }
+        assert report["uzpainter_repeatability"] == {"status": "not_measured", "maps": []}
+        pytest.xfail(f"UzPainter refuses the five-map export (decision 245): {refusals[0]}")
     assert equality["structural"] == []
     assert equality["outcome"] == "pass", equality
     assert report["uzpainter_repeatability"]["status"] == "repeatable"
