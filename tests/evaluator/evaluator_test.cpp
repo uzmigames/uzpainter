@@ -2081,6 +2081,9 @@ Spec ParseSpec(const fs::path& path) {
     if (o.contains("color_management")) {
         spec.builder.project.settings.color_management.mode = Str(o.at("color_management"), "color_management");
     }
+    if (o.contains("config_hash")) {
+        spec.builder.project.settings.color_management.config_hash = Str(o.at("config_hash"), "config_hash");
+    }
     if (o.contains("normal_map_format")) {
         spec.builder.project.settings.normal_map_format =
             EnumOf<core::NormalMapFormat>(Str(o.at("normal_map_format"), "normal_map_format"), "normal map format");
@@ -3448,6 +3451,66 @@ int RunProjectionGpuVsCpu(const fs::path& assets, const fs::path& dir) {
         render::Result<ChannelResult> reference = cpu.Evaluate(builder.project, request);
         Check(r1 && r2 && reference && r2->width == 1024 && r2->stats.cacheHits == 0 && Samples(*r2) == Samples(*reference),
               "GPU: after a resolution change the same evaluator re-evaluates at the new size", Describe(r2));
+    }
+
+    // The OCIO bitmap use reaches the GPU cache keys too (decision 190): the warm GPU evaluator, after a legacy
+    // evaluation, refuses and evaluates under OCIO exactly as a fresh CPU evaluator does.
+    {
+        const std::string sha = std::string(63, 'e') + "2";
+        auto provider = std::make_shared<MapResourceProvider>();
+        provider->Add(sha, PatternImage(256, 256, 3, render::TexelEncoding::Unorm8, 6));
+        const std::vector<ChannelType> channels{ChannelType::User0};
+        auto bitmap = [&](const std::string& space, core::FilteringMode filter, double scale) {
+            Builder builder(256, 256, {{ChannelType::User0, ChannelFormat::sRGB8}});
+            builder.AddResource(sha, 100);
+            core::Layer layer =
+                builder.Fill("bitmap", SameSource(channels, Bitmap(sha, space)), Same(channels, BlendingMode::Normal, 1.0));
+            SetUv(layer, filter, core::UVWrapMode::Repeat, {scale, scale}, 0.0, {0.0, 0.0});
+            builder.SetRoot({layer});
+            return builder;
+        };
+        auto ocio = [](Builder& builder) {
+            builder.project.settings.color_management.mode = "ocio";
+            builder.project.settings.color_management.config_hash = std::string(kPainterOcioConfigSha256);
+        };
+        auto request = [&](Builder& builder) {
+            EvaluateRequest r;
+            r.textureSet = builder.SetId();
+            r.stack = builder.StackId();
+            r.channel = ChannelType::User0;
+            r.resources = provider;
+            return r;
+        };
+        auto onGpu = [&](Builder& builder) {
+            auto project = std::make_shared<const core::Project>(builder.project);
+            std::future<render::Result<ChannelResult>> future = gpu.Evaluate(core::Snapshot{1, project}, request(builder));
+            return Get(future);
+        };
+        auto onFreshCpu = [&](Builder& builder) {
+            CpuEvaluator cpu(templates, kWideLimits);
+            return cpu.Evaluate(builder.project, request(builder));
+        };
+        // Prohibited: an sRGB bitmap at Nearest scale 2 evaluates under legacy; Session O records only 1:1 under OCIO.
+        Builder scaled = bitmap("sRGB", core::FilteringMode::Nearest, 2.0);
+        render::Result<ChannelResult> legacyScaled = onGpu(scaled);
+        ocio(scaled);
+        render::Result<ChannelResult> warmScaled = onGpu(scaled);
+        render::Result<ChannelResult> freshScaled = onFreshCpu(scaled);
+        Check(legacyScaled && !freshScaled && !warmScaled && warmScaled.error().reason == freshScaled.error().reason,
+              "GPU: after a legacy evaluation an OCIO evaluation of an sRGB bitmap at scale 2 fails as on a fresh evaluator "
+              "(no stale cache hit)",
+              Describe(legacyScaled) + " / " + Describe(warmScaled) + " / " + Describe(freshScaled));
+        // Allowed: a Raw bitmap at 1:1 gives the OCIO codes on the warm GPU evaluator, which differ from the legacy ones.
+        Builder raw = bitmap("Raw", core::FilteringMode::BilinearHQ, 1.0);
+        render::Result<ChannelResult> legacyRaw = onGpu(raw);
+        ocio(raw);
+        render::Result<ChannelResult> warmRaw = onGpu(raw);
+        render::Result<ChannelResult> freshRaw = onFreshCpu(raw);
+        Check(legacyRaw && warmRaw && freshRaw && Samples(*warmRaw) == Samples(*freshRaw) &&
+                  Samples(*warmRaw) != Samples(*legacyRaw),
+              "GPU: after a legacy evaluation an OCIO evaluation of a Raw bitmap at 1:1 stores the OCIO codes of a fresh "
+              "evaluator, not the legacy ones",
+              Describe(legacyRaw) + " / " + Describe(warmRaw) + " / " + Describe(freshRaw));
     }
     gpu.Shutdown();
     return Finish();

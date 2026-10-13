@@ -30,6 +30,7 @@ from tests.evaluator.test_compositor_tile_dag import (
     spec_from_manifest,
 )
 from tests.evaluator.union_run import observe
+from tests.export.encoders_tier0 import LIFTED_COLOUR_SETS
 from tools.parity.fit.oracle import Golden
 from tools.parity.schemas import load_json
 
@@ -125,6 +126,40 @@ def test_projection_kernel_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> 
     assert (
         "GPU: after a resolution change the same evaluator re-evaluates at the new size" in passed
     )
+    assert {
+        "GPU: after a legacy evaluation an OCIO evaluation of an sRGB bitmap at scale 2 fails as "
+        "on a fresh evaluator (no stale cache hit)",
+        "GPU: after a legacy evaluation an OCIO evaluation of a Raw bitmap at 1:1 stores the OCIO "
+        "codes of a fresh evaluator, not the legacy ones",
+    } <= passed
+
+
+@pytest.mark.parametrize(
+    ("stem", "texture_set"),
+    [(stem, s) for stem, sets in LIFTED_COLOUR_SETS.items() for s in sets],
+)
+def test_lifted_colour_fits_gpu_equals_cpu(
+    evaluator_tests: Path, tmp_path: Path, stem: str, texture_set: str
+) -> None:
+    """phase1.15_compositor-colour-fits items 3.1 and 4.1: every texture set whose files the
+    colour fits made byte-identical to Painter's on the CPU store (decisions 145, 152, 174 and
+    190; `tests/export/test_export_encoders.py`), its spec as `WriteExport` evaluates it, gives
+    the same bytes on the DX12 store as on the CPU store in every channel of its stack."""
+    from tests.export.encoders_tier0 import lifted_colour_spec
+
+    needs_store()
+    spec = lifted_colour_spec(stem, texture_set, tmp_path)
+    cpu = evaluate(evaluator_tests, spec, tmp_path, "cpu")
+    gpu = evaluate(evaluator_tests, spec, tmp_path, "gpu")
+    assert sorted(cpu["channels"]) == sorted(gpu["channels"]) == sorted(spec["outputs"])
+    for channel in spec["outputs"]:
+        assert raster(gpu, channel).shape == raster(cpu, channel).shape, channel
+        ours, theirs = (
+            np.frombuffer((Path(r["_dir"]) / r["channels"][channel]["file"]).read_bytes(), np.uint8)
+            for r in (gpu, cpu)
+        )
+        differing = int(np.count_nonzero(ours != theirs))
+        assert differing == 0, f"{stem} {texture_set} {channel}: {differing} bytes differ"
 
 
 def test_bilinear_filter_equals_the_gpu(evaluator_tests: Path, tmp_path: Path) -> None:
