@@ -1088,7 +1088,13 @@ def _ocio_encode_golden() -> tuple[Golden, dict[str, Any]]:
     uniform colour in the sRGB space (or in none: Painter's default on BaseColor) given as its
     working value."""
     golden = _semantics_golden("export-ocio-encode")
-    sequence = golden.manifest["instruction_sequence"]
+    return golden, _ocio_encode_manifest(golden.manifest)
+
+
+def _ocio_encode_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    """`manifest` (export-ocio-encode) without the colour-space listings, its sRGB uniform colours
+    given as their working values (`_ocio_encode_golden`)."""
+    sequence = manifest["instruction_sequence"]
     steps = []
     for raw in sequence["steps"]:
         args = raw.get("args", {})
@@ -1103,7 +1109,7 @@ def _ocio_encode_golden() -> tuple[Golden, dict[str, Any]]:
             colour = [srgb_to_working(float(c)) for c in args["color"]]
             raw = dict(raw, args=dict(args, color=colour, color_space="Working"))
         steps.append(raw)
-    return golden, dict(golden.manifest, instruction_sequence=dict(sequence, steps=steps))
+    return dict(manifest, instruction_sequence=dict(sequence, steps=steps))
 
 
 def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
@@ -1184,6 +1190,125 @@ def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
                     output = golden.recordings[recording].outputs.get(f"probe/s{step}/{rel}")
                     files.append(None if output is None else str(output["blob"]["sha256"]))
                 compare(where, written, files[0], files[1])
+    return report
+
+
+# B17 of the practical end-to-end run (parity/reports/phase2/practical-e2e.md, decision 190).
+# Painter's PNG 16 of an sRGB8 BaseColor under OCIO differs from its Legacy twin's by one code on
+# these 73 of the 256 sRGB8 codes (one higher on code 6, one lower on the others) and on the empty
+# BaseColor, float32(0.8): 74 of the 257 recorded values. Measured on Painter's own files:
+# export-ocio-encode against export-ocio-encode-legacy, s3 (every code of the authored 8-bit ramp)
+# and s7 (the empty BaseColor), r1 and r2 identical; s3's and s7's PNG 8 and OpenEXR files are
+# the same. s4's are not: OCIO stores four codes of its 8-bit Raw bitmap one sRGB8 code lower
+# (decision 190 fact 3).
+OCIO_PNG16_DIFFERING_CODES = (
+    4, 6, 9, 11, 13, 18, 20, 23, 24, 30, 31, 32, 34, 41, 42, 46, 48, 50, 52, 54, 58, 60, 62, 63,
+    68, 73, 76, 78, 80, 81, 85, 86, 87, 90, 92, 97, 98, 100, 105, 107, 111, 113, 114, 116, 119,
+    120, 121, 127, 131, 133, 134, 138, 139, 141, 142, 144, 145, 146, 147, 152, 153, 157, 163, 166,
+    167, 177, 182, 189, 199, 204, 207, 212, 235,
+)  # fmt: skip
+OCIO_EMPTY_BASECOLOR_PNG16 = {"legacy": 59397, "ocio": 59396}
+OCIO_TWIN_SETS = ("s3", "s7")
+
+
+def ocio_twin_written(exe: Path, tmp: Path) -> dict[str, Any]:
+    """export-ocio-encode's s3 (the authored 8-bit sRGB ramp on BaseColor at 1:1) and s7 (the empty
+    BaseColor), rebuilt from the repository's manifest (no store needed) once as a Legacy project
+    and once as an OCIO project with Painter's substance config. Their BaseColor is written by
+    `WriteExport` at PNG 16, PNG 8 and OpenEXR 32f (steps 46-48), and s3's luma (srcChannel L of
+    the RGB channel) as an L file at PNG 16 (`luma`). Returns `files`, "<set> <step>" -> mode
+    ("legacy", "ocio") -> the written file, and `refused`, the same keys -> mode -> (error,
+    message, the files under the export folder)."""
+    root = manifest_root(current_envelope()) / "tier0" / "semantics"
+    manifest = _ocio_encode_manifest(load_json(root / "export-ocio-encode.json"))
+    by_step = {s["step"]: s for s in manifest["instruction_sequence"]["steps"]}
+    report: dict[str, Any] = {"files": defaultdict(dict), "refused": defaultdict(dict)}
+    for texture_set in OCIO_TWIN_SETS:
+        for mode in ("legacy", "ocio"):
+            base = tmp / texture_set / mode
+            spec = _set_spec(manifest, texture_set, base / "spec", ocio=mode == "ocio")
+            configs = {}
+            for step in SRGB8_BITMAP_STEPS:
+                raw = by_step[step]
+                config = export_step(Step(raw["step"], raw["call"], raw["args"])).config(
+                    base / f"out{step}", [texture_set]
+                )
+                preset = config["exportPresets"][0]
+                preset["maps"] = [m for m in preset["maps"] if m["fileName"].endswith("_basecolor")]
+                configs[f"step {step}"] = config
+            if texture_set == "s3":
+                luma = json.loads(json.dumps(configs["step 46"]))
+                luma["exportPath"] = str(base / "luma")
+                luma["exportPresets"][0]["maps"][0]["channels"] = [
+                    {
+                        "destChannel": "L",
+                        "srcChannel": "L",
+                        "srcMapType": "documentMap",
+                        "srcMapName": "basecolor",
+                    }
+                ]
+                configs["luma"] = luma
+            for name, config in configs.items():
+                result = write_export(exe, spec, base / "spec", config, base / f"run-{name}")
+                key = f"{texture_set} {name}"
+                if "error" in result:
+                    out = Path(config["exportPath"])
+                    files = (
+                        sorted(p.name for p in out.rglob("*") if p.is_file())
+                        if out.exists()
+                        else []
+                    )
+                    report["refused"][key][mode] = (result["error"], result["message"], files)
+                    continue
+                [written] = result["written"]
+                report["files"][key][mode] = Path(written["path"])
+    return report
+
+
+def painter_ocio_against_legacy() -> dict[str, Any]:
+    """Painter's files of export-ocio-encode (OCIO) and export-ocio-encode-legacy (Legacy), the
+    BaseColor of `OCIO_TWIN_SETS` at steps 46-48, both recordings: per golden and recording, the
+    PNG 16 code of each sRGB8 code (s3, step 46 against step 47: `tables`) and the empty
+    BaseColor's PNG 16 codes (s7: `empty`), and which PNG 8 and OpenEXR 32f files are the same in
+    both goldens (`same`, `different`). Codes and counts only."""
+    goldens = {
+        "ocio": _semantics_golden("export-ocio-encode"),
+        "legacy": _semantics_golden("export-ocio-encode-legacy"),
+    }
+    report: dict[str, Any] = {
+        "tables": {},
+        "empty": {},
+        "same": [],
+        "different": [],
+        "problems": [],
+    }
+    for recording in ("r1", "r2"):
+        maps: dict[tuple[str, str, int], tuple[str, str]] = {}
+        for mode, golden in goldens.items():
+            for output_id, output in golden.recordings[recording].outputs.items():
+                if output["kind"] != "exported_map" or output["map"] != "basecolor":
+                    continue
+                texture_set = str(output["texture_set"]).split("/")[0]
+                step = int(output["export_settings"]["step"])
+                if texture_set in OCIO_TWIN_SETS and step in SRGB8_BITMAP_STEPS:
+                    maps[(mode, texture_set, step)] = (output_id, str(output["blob"]["sha256"]))
+        for mode, golden in goldens.items():
+            codes = golden.map(recording, maps[(mode, "s3", 47)][0]).values.reshape(-1).tolist()
+            png16 = golden.map(recording, maps[(mode, "s3", 46)][0]).values.reshape(-1).tolist()
+            pairs = set(zip(codes, png16, strict=True))
+            table = dict(pairs)
+            if len(table) != len(pairs):
+                report["problems"].append(f"{mode} {recording}: a code has several PNG 16 codes")
+            report["tables"][(mode, recording)] = table
+            empty = golden.map(recording, maps[(mode, "s7", 46)][0]).values
+            report["empty"][(mode, recording)] = sorted(set(empty.reshape(-1).tolist()))
+        for texture_set in OCIO_TWIN_SETS:
+            for step in (47, 48):
+                where = f"{recording} {texture_set} step {step}"
+                same = (
+                    maps[("ocio", texture_set, step)][1] == maps[("legacy", texture_set, step)][1]
+                )
+                report["same" if same else "different"].append(where)
     return report
 
 
