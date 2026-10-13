@@ -6,14 +6,17 @@ The Belt v5 round folder is gone from Assets3D until the owner restores it, so t
 pipeline round, the same export configuration. This is evidence for the tool only, never for the
 Belt: item 2.5 closes on the Belt's own report (`belt_v5/test_belt_v5.py`). It needs the UzmiGames
 asset repository, the private store (the Wand's inputs resolve there by hash, decision 144) and
-`zig`; hosted CI skips it with the reason.
+`zig`; hosted CI skips it with the reason. The rule that derives `equal_to_tier1` from the maps is
+tested on its own and runs everywhere.
 """
 
 from __future__ import annotations
 
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -21,10 +24,10 @@ from tests.adapters.assets3d.wand import ASSETS3D, REPO_ROOT
 from tests.parity.tier1.mcp_round import round_report, run_round
 from tests.parity.tier1.wand_v1 import runner as wand_runner
 from tools.parity.store.store import locate
-from tools.parity.tier1.mcp_round import report_problems
+from tools.parity.tier1.mcp_round import equality, report_problems
 from tools.parity.verdict import resolve_golden
 
-pytestmark = [
+_NEEDS_THE_WAND = [
     pytest.mark.skipif(
         not (ASSETS3D / "AGENTS.md").is_file(),
         reason=f"the UzmiGames asset repository is not at {ASSETS3D} (local run, decision 028)",
@@ -35,6 +38,14 @@ pytestmark = [
         reason=f"{wand_runner.GOLDEN_ID} is not admitted",
     ),
 ]
+
+
+def _needs_the_wand[T: Callable[..., None]](test: T) -> T:
+    """`test` skipped, with the reason, where the Wand's inputs or its golden are absent."""
+    for mark in _NEEDS_THE_WAND:
+        test = mark(test)
+    return test
+
 
 # The round's calls before the export, in order; each succeeds, and these commit a revision.
 BEFORE_EXPORT = [
@@ -69,6 +80,49 @@ def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return prefix / "bin" / "UzPainter.exe"
 
 
+A, B = "a" * 64, "b" * 64
+
+
+def _map(name: str, ours: str | None, tier1: str | None) -> dict[str, str | None]:
+    return {"texture_set": "w", "map": name, "sha256": ours, "tier1_sha256": tier1}
+
+
+@pytest.mark.parametrize(
+    ("maps", "expected"),
+    [
+        ([_map("w_BaseColor", A, A), _map("w_Normal", B, B)], "equal"),
+        ([_map("w_BaseColor", A, B)], "different"),
+        ([_map("w_BaseColor", A, A), _map("w_Normal", B, None)], "different"),
+        ([_map("w_BaseColor", A, A), _map("w_Normal", None, B)], "different"),
+    ],
+    ids=["same-bytes", "other-bytes", "extra-in-round", "extra-in-tier1"],
+)
+def test_both_runs_wrote_maps_so_equality_is_observed(
+    maps: list[dict[str, Any]], expected: str
+) -> None:
+    """Both runs wrote maps: unequal map sets or bytes are an observed divergence, `different`,
+    never `not_measured` (decision 192)."""
+    assert equality("completed", maps) == expected
+
+
+@pytest.mark.parametrize(
+    ("outcome", "maps"),
+    [
+        ("completed", []),
+        ("completed", [_map("w_BaseColor", A, None)]),
+        ("completed", [_map("w_BaseColor", None, A)]),
+        ("refused", []),
+        ("refused", [_map("w_BaseColor", None, A)]),
+    ],
+    ids=["neither-wrote", "tier1-wrote-nothing", "round-wrote-nothing", "refused", "refused-tier1"],
+)
+def test_a_run_that_wrote_nothing_is_not_measured(outcome: str, maps: list[dict[str, Any]]) -> None:
+    """Absence compares nothing: a run with no maps, or a round that did not complete, is
+    `not_measured` (a refused round is never a pass)."""
+    assert equality(outcome, maps) == "not_measured"
+
+
+@_needs_the_wand
 def test_wand_round_runs_through_typed_tools_with_python_disabled(
     painter: Path, tmp_path: Path
 ) -> None:

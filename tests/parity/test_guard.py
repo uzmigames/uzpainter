@@ -721,6 +721,16 @@ def _mcp_round() -> dict[str, Any]:
     }
 
 
+def _extra_map() -> dict[str, Any]:
+    """A map only the MCP round wrote: the map sets differ."""
+    return {
+        "texture_set": "23-Cinto",
+        "map": "23-Cinto_v5_Normal",
+        "sha256": SHA,
+        "tier1_sha256": None,
+    }
+
+
 def _refused(c: dict[str, Any]) -> dict[str, Any]:
     failed = {**c["calls"][1], "outcome": "error", "error_code": "capability_gap"}
     refusal = {"tool": "export", "error_code": "capability_gap", "type": "NotYetSupported"}
@@ -747,6 +757,19 @@ def _refused(c: dict[str, Any]) -> dict[str, Any]:
         (lambda c: {**c, "calls": [{**c["calls"][0], "note": "E:/Assets3D/_tmp/x.png"}]}, False),
         (lambda c: {**c, "equal_to_tier1": "not_measured"}, False),
         (lambda c: {**c, "maps": [{**c["maps"][0], "tier1_sha256": "b" * 64}]}, False),
+        (
+            lambda c: {
+                **c,
+                "maps": [{**c["maps"][0], "tier1_sha256": "b" * 64}],
+                "equal_to_tier1": "different",
+            },
+            True,
+        ),
+        (lambda c: {**c, "maps": [*c["maps"], _extra_map()], "equal_to_tier1": "different"}, True),
+        (
+            lambda c: {**c, "maps": [*c["maps"], _extra_map()], "equal_to_tier1": "not_measured"},
+            False,
+        ),
         (lambda c: {**_refused(c), "equal_to_tier1": "equal"}, False),
         (lambda c: {k: v for k, v in _refused(c).items() if k != "refusal"}, False),
         (lambda c: {**c, "calls": [c["calls"][1], c["calls"][0]]}, False),
