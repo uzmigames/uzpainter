@@ -253,6 +253,7 @@ class Mcp:
         env: dict[str, str] | None = None,
         initialize: bool = True,
         ledger: Path | None = None,
+        creationflags: int = 0,
     ) -> None:
         # Never the user's own ledger: one per test unless the test shares one.
         self.ledger = ledger or tmp_path / f"ledger-{next(_pipe_numbers)}.sqlite3"
@@ -274,6 +275,7 @@ class Mcp:
             stdout=subprocess.PIPE,
             stderr=self._stderr,
             env={**os.environ, **(env or {})},
+            creationflags=creationflags,
         )
         self.lines: queue.Queue[str | None] = queue.Queue()
         self.stdout_lines: list[str] = []

@@ -136,6 +136,13 @@ public:
     void Rebuild(const core::json::Value& dump, const std::filesystem::path& resources_dir);
     /// `ProjectError` when none is open, `BusyError` while a job runs.
     void Close();
+    /// Painter's close loses what was not saved (decision 244): a saved project whose current
+    /// revision is not its last named checkpoint gets one revert to that checkpoint, saved, so the
+    /// file reopens as it was saved with `needs_saving()` false; the dropped revisions stay in the
+    /// history. The facade's `discard_unsaved` makes the same two calls. Nothing for an untitled
+    /// project (closing removes it) or one without unsaved revisions. `ProjectError` when none is
+    /// open, `BusyError` while a job runs.
+    void DiscardUnsaved();
     bool IsOpen() const;
     /// `ProjectError` for an untitled project (it has no path yet).
     core::Checkpoints Save(store::SaveMode mode);

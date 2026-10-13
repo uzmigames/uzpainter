@@ -385,6 +385,16 @@ void Session::Close() {
     NotifyDurableChange();
 }
 
+void Session::DiscardUnsaved() {
+    const std::shared_ptr<OpenProject> project = Current();
+    RequireNotBusy("close()");
+    if (!project->untitled_dir.empty()) return;
+    const core::Checkpoints checkpoints = project->document->checkpoints();
+    if (!checkpoints.named || checkpoints.current == *checkpoints.named) return;
+    Revert(*checkpoints.named, "");
+    Save(store::SaveMode::incremental);
+}
+
 core::Checkpoints Session::Save(store::SaveMode mode) {
     const std::shared_ptr<OpenProject> project = Current();
     if (!project->untitled_dir.empty()) {

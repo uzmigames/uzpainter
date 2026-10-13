@@ -68,9 +68,10 @@ public:
 
     /// Opens `path`: takes its lock (`StoreError(locked)` while a live worker holds it; a stale
     /// lock is replaced) and removes the temporary files a killed `compact` left. Throws
-    /// `StoreError(version)` for a `format_version` of another major (the file is not changed),
-    /// `StoreError(not_a_project)`, and `CorruptionError` when the current manifest does not
-    /// verify. Corrupt history, blobs (with `VerifyLevel::full`) and missing dependencies are
+    /// `CorruptionError` (kind `sqlite`) when SQLite's structural check fails (`QuickCheck`),
+    /// before anything is read from the file or written to it, `StoreError(version)` for a
+    /// `format_version` of another major (the file is not changed), `StoreError(not_a_project)`,
+    /// and `CorruptionError` when the current manifest does not verify. Corrupt history, blobs (with `VerifyLevel::full`) and missing dependencies are
     /// reported in `Opened::report`, not thrown. A bundle directory (`IsBundleDirectory`) is first
     /// imported into `BundleImportTarget(path)`, `<dir>.uzp` beside it (`ImportBundle`;
     /// `StoreError(exists)` when that file exists), which is then opened; `ImportBundle` takes
