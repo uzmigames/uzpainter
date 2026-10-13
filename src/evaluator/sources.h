@@ -90,6 +90,14 @@ inline constexpr std::string_view kPainterOcioConfigSha256 =
 /// True when `project` uses OCIO with Painter's substance config (`kPainterOcioConfigSha256`).
 [[nodiscard]] bool PainterOcio(const core::Project& project);
 
+/// Painter's working value of an sRGB uniform colour component under OCIO with its substance
+/// config: the measured float32 readback by the float32 bits of the component (decision 202), the
+/// facade's table (`python/uzpainter_facade/ocio_srgb.py`) as generated into
+/// `ocio_srgb_table.inc` by `tools/parity/ocio_srgb_table.py`: the 256 codes c / 255 and the 193
+/// other recorded components. Empty for a component it does not record: no analytic decode
+/// reproduces it.
+[[nodiscard]] std::optional<float> PainterOcioSrgbDecode(float component);
+
 /// Fails with `evaluator:unsupported_source` unless `project` uses legacy colour management or
 /// OCIO with Painter's substance config (`PainterOcio`).
 [[nodiscard]] render::Result<void> CheckColourManagement(const core::Project& project,

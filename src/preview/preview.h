@@ -36,6 +36,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -65,13 +66,29 @@ struct PreviewFrame {
     std::int64_t revision = 0;
     std::shared_ptr<const core::Project> project;
     std::shared_ptr<const mesh::TexturingMesh> mesh;
-    /// The project's environment: its SHA-256, its bytes, or why there are none.
+    /// The environment the frame is lit by: its SHA-256, its bytes, or why there are none. The
+    /// project's, or the installation's default when the project names none (`environmentDefault`,
+    /// `DefaultEnvironment`).
     std::string environmentHash;
     std::shared_ptr<const std::string> environmentBytes;
     std::string environmentError;
+    bool environmentDefault = false;
     /// The last evaluated map of each (texture set id, slot).
     std::map<std::pair<core::Id, MaterialSlot>, EvaluatedMap> maps;
 };
+
+/// The installation's default environment (decision 212): the shipped CC0 `studio-small-09.exr`
+/// (`assets/environments/`, its provenance record's SHA-256), which lights a `painter_viewport`
+/// render of a project that names no environment, as Painter lights a new project with an
+/// installed default. It is neither preset's standard environment, so such a render is a
+/// non-parity preview, never parity evidence. A project that names an environment is lit by that
+/// one or fails with no substitute (RES-03).
+inline constexpr std::string_view kDefaultEnvironmentFile = "studio-small-09.exr";
+inline constexpr std::string_view kDefaultEnvironmentSha256 =
+    "44dcbed056512ecd8afd2a3d7ba73d2dd4c24694d0c72005fafcb2469bbc8fd4";
+/// Its bytes, read once from `bin/assets/environments/` beside the executable and checked against
+/// `kDefaultEnvironmentSha256`; otherwise why they are unavailable.
+[[nodiscard]] std::expected<std::shared_ptr<const std::string>, std::string> DefaultEnvironment();
 
 /// Reads a resource's bytes by SHA-256; empty when the project does not hold it.
 using ResourceReader = std::function<std::optional<std::string>(const std::string& sha256)>;
@@ -167,7 +184,7 @@ using LightingCache = std::unordered_map<std::string, std::shared_ptr<const Envi
 /// the environment's lighting (from `cache`, decoded and precomputed on first use), the material
 /// maps and the environment's rotation and exposure. Otherwise the message that replaces the
 /// image: the `unsupported_configuration` error (decision 134), no mesh, a missing environment or
-/// none named (RES-03), an environment that does not decode.
+/// a frame without one (RES-03), an environment that does not decode.
 [[nodiscard]] std::expected<ViewportScene, std::string> SceneOf(const PreviewFrame& frame, LightingCache& cache);
 
 }  // namespace uzp::preview

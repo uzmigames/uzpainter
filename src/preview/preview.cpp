@@ -44,12 +44,23 @@ std::optional<MaterialSlot> SlotOf(core::ChannelType channel) {
 void PreviewFeed::Update(std::int64_t revision, std::shared_ptr<const core::Project> project,
                          std::shared_ptr<const mesh::TexturingMesh> mesh, const ResourceReader& read) {
     m_state.revision = revision;
-    const std::string hash = project ? project->display.environment.resource.value_or("") : "";
-    if (hash != m_state.environmentHash) {
+    // A project that names no environment is lit by the installation's default (decision 212).
+    const std::string named = project ? project->display.environment.resource.value_or("") : "";
+    const bool isDefault = project && named.empty();
+    const std::string hash = isDefault ? std::string(kDefaultEnvironmentSha256) : named;
+    if (hash != m_state.environmentHash || isDefault != m_state.environmentDefault) {
         m_state.environmentHash = hash;
+        m_state.environmentDefault = isDefault;
         m_state.environmentBytes.reset();
         m_state.environmentError.clear();
-        if (!hash.empty()) {
+        if (isDefault) {
+            std::expected<std::shared_ptr<const std::string>, std::string> shipped = DefaultEnvironment();
+            if (shipped) {
+                m_state.environmentBytes = *shipped;
+            } else {
+                m_state.environmentError = shipped.error();
+            }
+        } else if (!hash.empty()) {
             std::optional<std::string> bytes = read(hash);
             if (bytes) {
                 m_state.environmentBytes = std::make_shared<const std::string>(std::move(*bytes));

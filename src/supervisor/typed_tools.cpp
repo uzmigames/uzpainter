@@ -594,7 +594,15 @@ void ProjectFamily(const ToolContext& context, std::vector<ToolDefinition>& tool
          Schema({{"mesh", PathProperty("The mesh file (OBJ, FBX or glTF).", "mesh")},
                  {"settings", std::move(settings)},
                  {"mesh_maps", ArrayProperty(std::move(mesh_map), "Mesh maps to bind after the texture sets exist.")},
-                 {"template", StringProperty("The id of an installed project template; \"default\" when omitted.")}},
+                 {"template", StringProperty("The id of an installed project template; \"default\" when omitted.")},
+                 {"ocio_config_hash",
+                  json::Object{{"type", "string"},
+                               {"pattern", "^[0-9a-f]{64}$"},
+                               {"description",
+                                "The SHA-256 of the OCIO configuration the project is created under, where Painter "
+                                "reads OCIO from its environment at create (the worker reads none). Only Painter's "
+                                "substance config is supported; any other hash is refused before anything is "
+                                "created. Omitted: a Legacy project (decisions 207 and 212)."}}}},
                 {"mesh"}),
          true, false, true, Operation("substance_painter.project.create")},
         "revision", [context](const json::Object& arguments) -> python::JobBody {
@@ -612,6 +620,8 @@ void ProjectFamily(const ToolContext& context, std::vector<ToolDefinition>& tool
                 if (const json::Value* v = Given(s, "import_cameras")) settings.import_cameras = Flag(*v, "import_cameras");
             }
             if (const json::Value* v = Given(arguments, "template")) settings.template_id = Text(*v, "template");
+            if (const json::Value* v = Given(arguments, "ocio_config_hash")) settings.ocio_config_hash = Text(*v, "ocio_config_hash");
+            python::CheckCreateSettings(settings);  // refused before the job, so nothing is created
             // The mesh maps' files are read before the job, so a missing one fails before anything.
             struct MeshMap {
                 std::string texture_set;

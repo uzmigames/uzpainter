@@ -54,6 +54,7 @@ The same scene, build, adapter and driver give the same bytes. Kernels are IEEE-
   - the window, through the vendored `platform_window` and `input`. It is read-only, with an orbit camera only: left drag orbits, the wheel zooms.
 - **Rendering.** At most one render every 200 ms, and none while the window is minimised. The image is drawn with GDI.
 - **Panel.** The right-hand panel states that `painter_iray` is unavailable: no capture can exist before P3-PATHTRACER. It also gives the display configuration and the revision shown.
+- **Environment.** A project that names no environment is lit by the installation's default, `bin/assets/environments/studio-small-09.exr` checked against its SHA-256 (`DefaultEnvironment`, decision 212); the capture receipt's `environment.default` is then true. A named environment whose bytes are missing fails with no substitute (RES-03).
 - **Errors.** An unsupported configuration, a missing environment or a project without a mesh is shown as text in place of the image.
 - **Stall hook.** `Stall(true)` blocks the thread while it holds its frame. It is the test hook of item 3.2. In a Debug worker it is reached with `test_fault preview_stall` / `preview_resume` (decision 120).
 

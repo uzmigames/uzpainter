@@ -13,7 +13,7 @@ Compact, task-shaped tools for the operations the pipeline performs, plus typed 
 | Group | Tools |
 |---|---|
 | Status | `status` (versions, profile, open project, revision, busy jobs, lease holder), `capabilities` |
-| Project | `project_create {mesh, settings, mesh_maps, template}`, `project_open`, `project_save {mode}`, `project_save_as`, `project_close {discard?}`, `project_inspect {path?}`, `project_recipe`, `project_revert {revision|checkpoint}` |
+| Project | `project_create {mesh, settings, mesh_maps, template, ocio_config_hash}`, `project_open`, `project_save {mode}`, `project_save_as`, `project_close {discard?}`, `project_inspect {path?}`, `project_recipe`, `project_revert {revision|checkpoint}` |
 | Texture sets | `set_list`, `set_resolution`, `set_rename`, `set_channels {add|remove|edit}`, `set_mesh_maps {usage → resource|path}` |
 | Resources | `resource_import {path, usage, name, group}`, `resource_list`, `resource_search {query}`, `resource_replace {old → new}`, `assets_search {query}` (UzPainter asset library with parity status) |
 | Stack (typed family) | `layer_list {set, stack}`, `layer_insert {kind, position, params}`, `layer_set {uid, name?, visible?, blending?, geometry_mask?}`, `layer_delete`, `layer_instantiate`, `effect_insert {uid, stack: content|mask, kind, position, params}`, `effect_set`, `mask_set {uid, present?, background?, enabled?}`, `source_set {uid, channel|None, source}`, `fill_set {uid, projection?, symmetry?, active_channels?, source_mode?}`, `procedural_set {uid, params|preset|image_inputs|output_mapping|resolution}`, `anchor_list`, `smart_material_insert`, `smart_mask_insert`, `smart_export {uid, kind, path}` |

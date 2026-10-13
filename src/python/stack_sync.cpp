@@ -303,17 +303,36 @@ Object SyncStack(core::Edit& edit, store::ProjectStore& store, const Object& sta
             } else {
                 // The script sets `base` as an sRGB colour; the facade stores the working value
                 // it decodes to on a colour-managed (sRGB8) BaseColor, the value as given on any
-                // other format (decision 115).
+                // other format (decision 115). Under OCIO it reads Painter's measured decode
+                // (evaluator::PainterOcioSrgbDecode, the facade's table, decisions 202 and 212) and
+                // refuses what the facade refuses: an unrecorded component, and an sRGB colour on
+                // a BaseColor that does not decode it.
                 std::array<double, 3> working = *l.base;
                 const auto base_channel = channels.find(core::ChannelType::BaseColor);
-                if (base_channel != channels.end() && base_channel->second.format == core::ChannelFormat::sRGB8) {
-                    // Under OCIO the facade reads Painter's measured decode (`ocio_srgb.py`,
-                    // decision 202), which the native module does not hold.
-                    if (evaluator::PainterOcio(edit.project())) {
-                        throw core::NotYetSupported(
-                            "sync_stack: under OCIO, the working value of the sRGB base colour of '" + l.name +
-                            "' is Painter's measured decode, which only the facade holds (decisions 202 and 207)");
+                const bool decodes =
+                    base_channel != channels.end() && base_channel->second.format == core::ChannelFormat::sRGB8;
+                if (evaluator::PainterOcio(edit.project())) {
+                    if (!decodes) {
+                        throw core::NotYetSupported("sync_stack: under OCIO, the sRGB base colour of '" + l.name +
+                                                    "' on a BaseColor that does not decode it is not recorded "
+                                                    "(phase1.15_compositor-colour-fits item 2.6, decision 202)");
                     }
+                    std::array<double, 3> decoded{};
+                    for (std::size_t c = 0; c < 3; ++c) {
+                        const std::optional<float> value = evaluator::PainterOcioSrgbDecode(static_cast<float>(working[c]));
+                        if (!value) {
+                            throw core::NotYetSupported(
+                                "sync_stack: under OCIO, Painter's working value of the sRGB component " +
+                                core::json::FormatDouble(working[c]) + " of the base colour of '" + l.name +
+                                "' is not recorded: the decode is Painter's measured value of the components c / 255 "
+                                "and of the other recorded components, and no analytic decode reproduces it "
+                                "(phase1.15_compositor-colour-fits item 2.6, decision 202; a Tier 0 readback of the "
+                                "component settles it)");
+                        }
+                        decoded[c] = static_cast<double>(*value);
+                    }
+                    working = decoded;
+                } else if (decodes) {
                     for (double& c : working) c = SrgbToLinear(c);
                 }
                 content.sources[core::ChannelType::BaseColor] = Uniform(working, "Working");

@@ -16,7 +16,7 @@ import zlib
 from pathlib import Path
 from typing import Any
 
-from tests.supervisor.conftest import PLANE, REPO_ROOT, Mcp, Pipe, make_project
+from tests.supervisor.conftest import PLANE, REPO_ROOT, Mcp, Pipe, make_project, run_script
 
 PROBE_IMAGES = REPO_ROOT / "parity" / "fixtures" / "api-probes"
 BASE = ("--gpu-backend", "vulkan")
@@ -622,6 +622,54 @@ def test_long_tools_with_and_without_wait(
         "project_create", {"mesh": str(PLANE), "settings": {"project_workflow": "UVTile"}}
     )
     assert workflow["error"]["code"] == "capability_gap"
+
+
+# Painter's substance config (decisions 134, 207): the one OCIO configuration a project is made in.
+OCIO_CONFIG = "15059d4b4e52893863f2063dfccb3902d182b522ad233564db32a5e30a43b7f4"
+
+
+def test_project_create_takes_its_colour_management_as_an_argument(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """Decisions 207 and 212: the worker reads no environment, so `project_create` takes the OCIO
+    configuration as `ocio_config_hash`. Painter's substance config creates an OCIO project with
+    that hash, which save and reopen keep; any other hash is refused `capability_gap` before the
+    job, with no project created; omitting it gives a Legacy project."""
+    session = Mcp(painter, tmp_path, *BASE)
+    sessions.append(session)
+    other = session.call(
+        "project_create", {"mesh": str(PLANE), "ocio_config_hash": "ab" * 32, "wait": True}
+    )
+    assert other["error"]["code"] == "capability_gap", other
+    assert "only Painter's substance config" in other["error"]["message"]
+    malformed = session.call("project_create", {"mesh": str(PLANE), "ocio_config_hash": "OCIO"})
+    assert malformed["error"]["code"] == "invalid_arguments"
+    assert session.call("project_inspect")["result"] == {"open": False}
+
+    colour: dict[str, Any] = {}
+    for name, extra in (("ocio", {"ocio_config_hash": OCIO_CONFIG}), ("legacy", {})):
+        created = session.call("project_create", {"mesh": str(PLANE), "wait": True, **extra})
+        assert created["result"]["status"] == "committed", created
+        path = tmp_path / f"{name}.uzp"
+        saved = session.call("project_save_as", {"path": str(path), "wait": True})
+        assert "error" not in saved, saved
+        assert "error" not in session.call("project_close")
+        colour[name] = run_script(
+            painter,
+            tmp_path,
+            f"""
+            from uzpainter import colormanagement as cm, project
+            project.open({str(path.as_posix())!r})
+            result = cm.get_color_management()
+            """,
+        )
+    assert colour["ocio"] == {
+        "config_hash": OCIO_CONFIG,
+        "io_rules": [],
+        "mode": "ocio",
+        "working_space": "",
+    }
+    assert colour["legacy"]["mode"] == "" and colour["legacy"]["config_hash"] == ""
 
 
 def test_busy_and_wait_idle_timeout(painter: Path, tmp_path: Path, sessions: list[Mcp]) -> None:

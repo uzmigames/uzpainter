@@ -1,5 +1,8 @@
 #include "evaluator/sources.h"
 
+#include <algorithm>
+#include <array>
+#include <bit>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -22,6 +25,24 @@ BitmapColourSpace BitmapColourSpaceOf(std::string_view tag) {
 bool PainterOcio(const core::Project& project) {
     const core::ColorManagement& cm = project.settings.color_management;
     return cm.mode == "ocio" && cm.config_hash == kPainterOcioConfigSha256;
+}
+
+namespace {
+
+/// {component bits, working-value bits}, sorted by component bits (sources.h).
+constexpr std::array<uint32_t, 2> kOcioSrgbDecode[] = {
+#include "evaluator/ocio_srgb_table.inc"
+};
+
+}  // namespace
+
+std::optional<float> PainterOcioSrgbDecode(float component) {
+    const uint32_t bits = std::bit_cast<uint32_t>(component);
+    const auto* end = std::end(kOcioSrgbDecode);
+    const auto* it = std::lower_bound(std::begin(kOcioSrgbDecode), end, bits,
+                                      [](const std::array<uint32_t, 2>& entry, uint32_t key) { return entry[0] < key; });
+    if (it == end || (*it)[0] != bits) return std::nullopt;
+    return std::bit_cast<float>((*it)[1]);
 }
 
 render::Result<void> CheckColourManagement(const core::Project& project, core::Id node) {

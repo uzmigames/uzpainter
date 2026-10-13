@@ -8,7 +8,7 @@
   "required": [
     "schema", "revision", "project_uuid", "evaluator_profile", "render_state_digest", "mode", "source",
     "encoding", "backend", "adapter", "driver", "samples", "seed", "camera", "size", "display_configuration",
-    "hashes"
+    "environment", "hashes"
   ],
   "properties": {
     "schema": {"const": "uzpainter/capture-receipt/1"},
@@ -63,6 +63,23 @@
       "prefixItems": [{"type": "integer", "minimum": 1}, {"type": "integer", "minimum": 1}],
       "items": false,
       "minItems": 2
+    },
+    "environment": {
+      "description": "The environment a painter_viewport capture is lit by: the project's, or with default true the installation's default (the shipped studio-small-09.exr) when the project names none, a non-parity preview (decision 212). Null for the diagnostic modes.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sha256", "default", "rotation", "exposure"],
+          "properties": {
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "default": {"type": "boolean"},
+            "rotation": {"type": "number"},
+            "exposure": {"type": "number"}
+          }
+        }
+      ]
     },
     "display_configuration": {
       "oneOf": [
