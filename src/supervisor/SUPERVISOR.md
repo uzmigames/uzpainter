@@ -1,6 +1,6 @@
 # Supervisor and worker (`src/supervisor/`, `python/uzpainter_supervisor/`)
 
-This folder holds the process boundary of `docs/architecture/02-runtime-topology.md` §1, §2 and §5 (task `phase2.1_supervisor-ipc-worker`, decisions 120 and 121) the command admission of §3 (task `phase2.2_supervisor-admission-ledger`, decisions 138 and 139) and the long jobs of §3 and 11 §3 (task `phase2.3_supervisor-jobs`, decisions 140 and 141), and the MCP transports, tool registry and roots of 11 §1, §2 and §4-§6 (task `phase2.5_mcp-transport-registry`, decisions 158 and 159). One executable has two roles:
+This folder holds the process boundary of `docs/architecture/02-runtime-topology.md` §1, §2 and §5 (task `phase2.1_supervisor-ipc-worker`, decisions 120 and 121) the command admission of §3 (task `phase2.2_supervisor-admission-ledger`, decisions 138 and 139) and the long jobs of §3 and 11 §3 (task `phase2.3_supervisor-jobs`, decisions 140 and 141), the MCP transports, tool registry and roots of 11 §1, §2 and §4-§6 (task `phase2.5_mcp-transport-registry`, decisions 158 and 159), and the typed tool families, resources and prompts of 11 §2 and §3 (task `phase2.6_mcp-typed-tool-families`, decisions 164 and 165). One executable has two roles:
 
 | Role | Command | Code |
 |---|---|---|
@@ -13,7 +13,8 @@ This folder holds the process boundary of `docs/architecture/02-runtime-topology
 `uzpainter_supervisor` runs inside the embedded interpreter, on the pinned MCP SDK (`thirdparty/python-wheels/`):
 
 - **`main.py`** parses the command line and serves one tool registry over the SDK's low-level `Server`, on stdio or Streamable HTTP (see Transports).
-- **`registry.py`** lists the tools and checks every call before admission (see Registry). A mutating call may carry `idempotency_key` and `expected_revision` among its arguments, and the supervisor lifts them into the pipe request. Resources and prompts belong to phase2.6-phase2.8.
+- **`registry.py`** lists the tools and checks every call before admission (see Registry). A mutating call may carry `idempotency_key` and `expected_revision` among its arguments, and the supervisor lifts them into the pipe request.
+- **`resources.py`** serves the MCP resources and prompts over the registry (see Resources and prompts).
 - **`roots.py`** canonicalises path arguments and scrubs results under `--roots` (see Roots).
 - **`transport_http.py`** is the HTTP mode's guard and server (see Transports).
 - **`admission.py`** admits every call, and **`ledger.py`** is the durable ledger (see Admission).
@@ -56,9 +57,12 @@ Both transports serve the same `registry.Registry` (decision 159).
 
 `tools/list` returns the supervisor's tools first, then the worker's.
 
-- The supervisor's tools are `supervisor_status`, `wait_idle`, `job_status`, `job_result`, `job_cancel` and `job_list`. In HTTP mode they also include `lease_acquire`, `lease_release` and `lease_status`.
+- The supervisor's tools are `status`, `capabilities`, `batch`, `supervisor_status`, `wait_idle`, `job_status`, `job_result`, `job_cancel` and `job_list`. In HTTP mode they also include `lease_acquire`, `lease_release` and `lease_status`.
+  - `status`: the worker's and the supervisor's builds, the IPC protocol, the manifest's compat profile, the GPU backend and its status, the Python policy, the open project (path, UUID, untitled), its committed revision, the running jobs and the lease.
+  - `capabilities`: the manifest's entry counts by status, and each worker tool's status with its gap operations and gap argument values.
+  - `batch {calls: [{tool, arguments}], stop_on_error = true, idempotency_key?}` (decision 165): each call goes through every check below and its own admission, job and transaction, in order; a long call runs with `wait`. With `stop_on_error`, the calls after the first failure are `not_executed`. A nested batch fails that call. The result is `{status: completed | completed_with_errors | stopped, executed, failed, results: [{index, tool, status, summary, body}]}`. A batch is not atomic. With a batch key, a mutating call without its own key gets `<key>/<index>` and the revision current at its admission, so a retried batch returns each committed call's stored outcome.
 - A mutating tool's schema also takes `idempotency_key` and `expected_revision`. A long tool's schema also takes `wait`.
-- A tool that declares capability-manifest operations carries `_meta["uzpainter/capability"] = {status: available | release-gap, operations}`.
+- A tool that declares capability-manifest operations carries `_meta["uzpainter/capability"] = {status: available | release-gap, operations, values}`. `values` lists the status of each argument value an `x-uzpainter-capability` map names (see step 2).
 
 Every `tools/call` is checked in the order below (decision 158). Each refusal comes before admission: no ledger job is written, and nothing is sent to the worker.
 
@@ -91,7 +95,12 @@ The registry then calls the admission. Two calls skip the checks and go straight
 
 The text content is one line: `<tool>: <status>[; revision a -> b][; <counts>][; job <id>]`, or `<tool>: error <code>: <message>`.
 
-Images are content blocks only for `capture`: the PNG its receipt names (`files.png`), read in the executor and attached when it is at most 4 MiB. A larger one is not attached, and a warning names its size. Downscaling it belongs to phase2.6's capture family.
+Images are content blocks only for `capture` (decision 165). The PNG its receipt names (`files.png`) is read in the executor and given to the built-in module `_uzpainter_image` (`image_block.{h,cpp}`).
+- `preview_png` decodes it (spng, 8- or 16-bit grey or RGB; alpha is not kept) and averages k×k blocks, with the smallest whole k that brings the long edge to at most 512 px. Each average is rounded to the nearest 8-bit code, half up, and the result is an 8-bit PNG.
+- It refuses a file over 512 MiB or a side over 16384 px before decoding.
+- The result's `image` is `{built: true, mime_type, width, height, max_edge, sha256, source_sha256}`.
+- A block that cannot be built (an unreadable file, a refused PNG, no helper) leaves the capture answered, with `image {built: false, reason}` and a warning.
+- The block is a preview for an agent, never parity evidence.
 
 ## Roots
 
@@ -184,7 +193,7 @@ The supervisor learns which project to reopen from the worker's `revision` event
 
 ## Jobs
 
-Long operations are jobs (02 §3, 11 §3; task phase2.3, decisions 140 and 141). The worker lists a tool as `long`, with its `commit_point`: `revision` (a project revision with its operation row), `publication` (an export generation) or none. Today they are `project_open` (no commit point), `export` (`publication`) and the Debug-only `test_job` (`revision`); phase2.6's long typed tools (`bake_start`, `mesh_reload`, `capture`, `project_create`) take the same path.
+Long operations are jobs (02 §3, 11 §3; task phase2.3, decisions 140 and 141). The worker lists a tool as `long`, with its `commit_point`: `revision` (a project revision with its operation row), `publication` (an export generation) or none. They are `project_open` and `project_save_as` (no commit point), `export` (`publication`), `project_create` and `mesh_reload` (`revision`), and the Debug-only `test_job` (`revision`). `bake_start` takes the same path when the native bakers land.
 
 - **Start.** A long call is admitted like any call (a mutating one also takes the lease, key and precondition) and gets a job id. Without `wait` it returns `{job_id, status: "running"}` at once. With `wait: true` it returns the terminal reply. If the request carries a progress token (`_meta.progressToken`), each event goes to the client as `notifications/progress {progress, total: 1, message}` whose `_meta["uzpainter/job"]` is `{job_id, status, progress, message}`: `running` at the start, the worker's progress, then the terminal state. A wait that the client cancels cancels the job.
 - **Worker side.** The worker runs the job's body on the native job pool (`uzpainter.jobs`, `src/python/jobs.h`) while its command thread waits, so it still answers one call at a time: a read sent during a long job is answered after it. The body's progress and its commit point reach the supervisor as `{"event": "job_progress", "job_id", "progress", "message", "committed"}`, which the ledger row follows.
@@ -222,10 +231,11 @@ It then answers one request at a time on the interpreter's thread; a long tool's
 | Tool | Kind | Result |
 |---|---|---|
 | `project_open {path}` | GPU-free, long (no commit point) | `{path, revision}` |
-| `export {config, fixed_names?}` | GPU-free (CPU evaluator), long (commit point: the publication) | the export job's result (`uzpainter.export`): `{directory, files, fixed_names, generation, plan_hash, project_path, mesh_path, receipt, receipt_sha256, revision}`; phase2.6 adds presets, overrides and the dry run |
-| `project_close` | GPU-free | `{}` |
+| `export {config \| preset, output_dir?, texture_sets?, size_log2?, file_format?, bit_depth?, padding?, dry_run?, fixed_names?}` | GPU-free (CPU evaluator), long (commit point: the publication) | the export job's result (`uzpainter.export`): `{directory, files, fixed_names, generation, plan_hash, project_path, mesh_path, receipt, receipt_sha256, revision}`. `preset` exports a shipped preset for the texture sets into `output_dir`; the overrides are one last unfiltered `exportParameters` rule; `dry_run` returns `{dry_run, revision, plan, textures}` and writes nothing |
+| `export_presets_list` | GPU-free | the shipped presets: `{id, aliases, maps, layout, pending_recordings}` |
+| `project_close {discard?}` | GPU-free | `{}`; an untitled project needs `discard: true`, because closing deletes it |
 | `project_save {mode?: incremental\|full}` | GPU-free, names a checkpoint | `{current, named, previous}` |
-| `project_inspect` | GPU-free | `{open, path, revision, texture_sets: [{name, stacks}]}` |
+| `project_inspect {path?}` | GPU-free | `{open, path, revision, texture_sets: [{name, stacks}]}`; with `path`, `{open: false, path, report}`: the store's inspection report of that file, read without opening it |
 | `evaluate_channel {channel, texture_set?, stack?}` | GPU (the GPU evaluator on the engine thread) | `{revision, texture_set, stack, channel, format, width, height, tiles, payload: {path, sha256, size}}`; the texels go to a file under `--output-root` |
 | `snapshot_layer_tree` | GPU-free | the layer-tree snapshot of the committed revision (`uzp_core/document/layer_tree.h`) |
 | `diff_snapshots {before, after}` | GPU-free | the nodes and stacks added, removed and modified between two snapshots |
@@ -242,6 +252,37 @@ It then answers one request at a time on the interpreter's thread; a long tool's
 | `test_fault {fault}` | Debug builds under `--test-faults` only; `preview_stall` and `preview_resume` only with `--preview` (the stall hook of the preview thread) | `{armed}` |
 | `test_mutation {name, fail?}` | mutating and typed (one transaction); Debug builds under `--test-faults` only (decision 138) | the committed `TransactionResult` (`{status, revision, committed_revision, created, ...}`). It inserts the fill layer `name` on the active stack. With `fail`, the call fails after its edit (`call_failed`) and commits nothing. |
 | `test_job {name, steps, step_ms?, commit_at?}` | mutating, typed and long (commit point: the revision); Debug builds under `--test-faults` only (decision 140) | `steps` cancellable steps of `step_ms`; at step `commit_at` it commits the fill layer `name` with its operation row and returns that `TransactionResult`; without `commit_at` it is a no-op (`{status: no_op, revision}`) |
+
+### Typed tools
+
+The typed families of 11 §2 (`typed_tools.{h,cpp}`; task phase2.6, decision 164) are listed after the tools above.
+
+- Each mutating tool is one transaction through `SubmitAdmitted`: its client's key and original precondition, so the operation row answers a retry.
+- They run the edits the `uzpainter` API runs (`src/python/edits.{h,cpp}`), so the API and MCP behave the same.
+- Setters address nodes by `uid`. Stack-level calls take `texture_set` and `stack` names, the active stack when omitted.
+- Inserts take at most one of `above`, `below` and `inside`, or the top of the stack. With a `name`, the node of that name and kind in the target list is used instead (`returned.created: false`, `no_op`). Several such nodes fail `ambiguous_name {candidates}` before mutation (LAY-06). `params` sets the matching setter's fields in the same transaction, on a found node too.
+- A release gap the native code meets (`NotYetSupported` and its kin) is `capability_gap`.
+
+| Family | Tools |
+|---|---|
+| Project | `project_create {mesh, settings?, mesh_maps?, template?}` (long, mutating, commit point `revision`; its operation row is in the new project's first transaction), `project_save_as {path, mode?}` (long), `project_recipe`, `project_revert {revision \| checkpoint}` |
+| Texture sets | `set_list`, `set_resolution {texture_set?, width, height}`, `set_rename {texture_set, name}` (keeps `original_name`), `set_channels {texture_set?, stack?, add?, remove?, edit?}`, `set_mesh_maps {texture_set, maps: {usage: {resource} \| {path} \| null}}` |
+| Resources | `resource_import {path, usage, name?, group?}`, `resource_list {used_only?}`, `resource_replace {old?, new, uid?, channel?}`; gaps: `resource_search`, `assets_search` |
+| Stack | `layer_list {texture_set?, stack?, name?}`, `layer_insert {kind, position, name?, params?}`, `layer_set {uid, ...}`, `layer_delete {uid}`, `effect_insert {uid, stack, kind, above?, below?, name?, params?}`, `effect_set {uid, ...}`, `mask_set {uid, present?, background?, enabled?}`, `source_set {uid, channel?, source}`, `fill_set {uid, ...}`; gaps: `layer_instantiate`, `procedural_set`, `anchor_list`, `smart_material_insert`, `smart_mask_insert`, `smart_export` |
+| Recipes | `sync_stack {stack_json, stack_key?, masks_dir, resource_prefix?, resource_group?, keep_visible?, texture_set?, stack?}`; gap: `apply_smart` |
+| Baking | gaps: `bake_inspect`, `bake_configure`, `bake_set_mesh_inputs`, `bake_start`, `bake_capture_preset`, `bake_apply_preset` |
+| Mesh | `mesh_reload {path, settings?}` (long, mutating, commit point `revision`), `mesh_certificate` |
+
+- A gap tool keeps its schema, declares its release-gap operations and refuses with `capability_gap` naming its owner task.
+- Values gated per argument (`x-uzpainter-capability`):
+  - the insert and effect kinds beyond fill, group, levels, compare mask and colour selection;
+  - the projection modes beyond UV and Fill;
+  - the source kind `reference`, and `source_mode: Material`;
+  - the project workflows beyond Default;
+  - any geometry mask;
+  - the resource usages, each of which declares its own symbol.
+
+### Checks
 
 The checks run in this order, and every refusal comes before the call runs:
 
@@ -275,6 +316,23 @@ The worker ends in four ways:
 - **Supervisor gone.** A broken pipe, or the end of the supervisor's process, terminates it at once with status 4, so nothing further is committed. SQLite's rollback journal keeps an interrupted commit atomic.
 - **Start failure.** A pipe it cannot create, a supervisor that never connects or an interpreter that fails gives status 3.
 - **Usage error.** Status 2.
+
+## Resources and prompts
+
+`resources.py` (decision 165) serves these resources, all `application/json`, through the registry: a project read is a read of the committed revision, and the roots scrub it.
+
+| URI | Content |
+|---|---|
+| `uzpainter://capabilities` | every manifest entry and each tool's status with its gaps |
+| `uzpainter://project/manifest` | `{project_uuid, revision, manifest}`, from the pipe method `worker/manifest` (`core::ProjectToJson` of the committed revision; not a tool) |
+| `uzpainter://project/recipe`, `/layers`, `/resources` | `{project_uuid, revision, content}` of `project_recipe`, `snapshot_layer_tree` and `resource_list` |
+| `uzpainter://assets/parity` | `{assets: [], status, operations}`: the asset library, a release gap until phase3.3 |
+| `uzpainter://jobs/{job_id}` | the resource template: `job_status` |
+| `uzpainter://ledger` | the 50 newest jobs |
+
+An unknown URI or job, or a project resource with no project open, is MCP error -32002.
+
+The prompts `stack_json_template`, `smart_json_template`, `baking_preset_template` and `export_config_template` are UzmiGames-authored templates. Each is one user message holding a JSON block and its rules.
 
 ## Test-only fault hooks (`fault_hooks.h`)
 
@@ -329,10 +387,21 @@ All tests are in `tests/supervisor/`:
   - schema and reference refusals before admission;
   - the omission rule;
   - the capability gap, and a manifest change that makes the tool callable;
+  - the argument-value gate, failing closed;
   - the result contract and its summary;
-  - the image blocks of `capture`;
+  - the image blocks of `capture`, built and refused;
+  - `status`, `capabilities` and `batch` (stop on error, keys);
+  - the resources and prompts;
   - the HTTP lease across a reconnect;
   - roots and scrubbing.
+- `test_typed_tools.py` drives the typed families through `UzPainter.exe --mcp` with Python disabled (phase2.6). It covers:
+  - every family listed with its capability status;
+  - the spec's stack edit with its receipts;
+  - Project and Texture sets; Resources and Stack; Export, Mesh and Render with the image block;
+  - LAY-06 through MCP, and LAY-07 through `sync_stack`;
+  - `batch`, long tools with and without `wait`, `busy` and `wait_idle`;
+  - the gap families, refused before admission and listed in `uzpainter://capabilities`;
+  - the resources and prompts.
 - `test_roots.py` covers the canonicalisation on real folders, with a junction out of the root. `test_transport_http.py` covers the guard and the bind rules.
 - `test_supervisor_transports.py` drives `UzPainter.exe --mcp` (phase2.5). It covers:
   - stdout under logging load;

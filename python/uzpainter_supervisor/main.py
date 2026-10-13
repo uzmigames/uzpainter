@@ -13,13 +13,16 @@ Both transports serve one tool registry (registry.py; task phase2.5, decisions 1
 before admission (admission.py); a long tool (the worker lists it as `long`) takes `wait` too and
 runs as a job (phase2.3): its progress reaches a client that waits as `notifications/progress` on
 the request's progress token, with `{job_id, status, progress, message}` under
-`_meta["uzpainter/job"]`.
+`_meta["uzpainter/job"]`. The resources and prompts (resources.py; phase2.6, decision 165) are
+served over the same registry; `capture`'s image block is built by the native helper
+`_uzpainter_image` of UzPainter.exe.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import secrets
@@ -33,7 +36,16 @@ from . import transport_http
 from . import worker as worker_module
 from .admission import Admission
 from .ledger import DEFAULT_PATH, Ledger, LogHandler, process_identity
-from .registry import Client, Manifest, ManifestError, Registry
+from .registry import Client, Manifest, ManifestError, Registry, Thumbnail
+from .resources import (
+    JOB_TEMPLATE,
+    JSON,
+    PROMPTS,
+    RESOURCE_NOT_FOUND,
+    RESOURCES,
+    ResourceError,
+    Resources,
+)
 from .roots import Roots, RootsError
 
 EXIT_OK = 0
@@ -147,15 +159,26 @@ def main(argv: list[str], exe: str, build: str, protocol: str, hooks_compiled: b
         except ManifestError as error:
             log.critical("fatal supervisor error: %s", error)
             return EXIT_FATAL
-        return asyncio.run(_serve(config, build, ledger, manifest, args))
+        return asyncio.run(_serve(config, build, protocol, ledger, manifest, args))
     finally:
         logging.getLogger().removeHandler(handler)
         ledger.close()
 
 
+def _thumbnail() -> Thumbnail | None:
+    """The native image helper of UzPainter.exe (`_uzpainter_image`, image_block.h)."""
+    try:
+        import _uzpainter_image  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    preview: Thumbnail = _uzpainter_image.preview_png
+    return preview
+
+
 async def _serve(
     config: worker_module.WorkerConfig,
     build: str,
+    protocol: str,
     ledger: Ledger,
     manifest: Manifest,
     args: argparse.Namespace,
@@ -174,6 +197,9 @@ async def _serve(
         manifest,
         roots=args.root_set,
         http=args.bind is not None,
+        thumbnail=_thumbnail(),
+        build=build,
+        protocol=protocol,
     )
     try:
         if args.bind is None:
@@ -243,6 +269,69 @@ def _server(registry: Registry, build: str, client_for: Any) -> Any:
             ]
         )
 
+    resources = Resources(registry)
+
+    async def list_resources(ctx: Any, params: Any) -> Any:
+        return types.ListResourcesResult(
+            resources=[
+                types.Resource(
+                    uri=item.uri, name=item.name, description=item.description, mime_type=JSON
+                )
+                for item in RESOURCES
+            ]
+        )
+
+    async def list_resource_templates(ctx: Any, params: Any) -> Any:
+        return types.ListResourceTemplatesResult(
+            resource_templates=[
+                types.ResourceTemplate(
+                    uri_template=JOB_TEMPLATE.uri,
+                    name=JOB_TEMPLATE.name,
+                    description=JOB_TEMPLATE.description,
+                    mime_type=JSON,
+                )
+            ]
+        )
+
+    async def read_resource(ctx: Any, params: Any) -> Any:
+        from mcp.shared.exceptions import MCPError
+
+        uri = str(params.uri)
+        try:
+            document = await resources.read(uri, client_for(ctx))
+        except ResourceError as error:
+            raise MCPError(RESOURCE_NOT_FOUND, str(error), error.data) from None
+        return types.ReadResourceResult(
+            contents=[
+                types.TextResourceContents(
+                    uri=uri, mime_type=JSON, text=json.dumps(document, sort_keys=True)
+                )
+            ]
+        )
+
+    async def list_prompts(ctx: Any, params: Any) -> Any:
+        return types.ListPromptsResult(
+            prompts=[
+                types.Prompt(name=prompt.name, description=prompt.description, arguments=[])
+                for prompt in PROMPTS
+            ]
+        )
+
+    async def get_prompt(ctx: Any, params: Any) -> Any:
+        from mcp.shared.exceptions import MCPError
+        from mcp_types import INVALID_PARAMS
+
+        try:
+            prompt = Resources.prompt(params.name)
+        except ResourceError as error:
+            raise MCPError(INVALID_PARAMS, str(error), error.data) from None
+        return types.GetPromptResult(
+            description=prompt.description,
+            messages=[
+                types.PromptMessage(role="user", content=types.TextContent(text=prompt.text))
+            ],
+        )
+
     async def call_tool(ctx: Any, params: Any) -> Any:
         reply = await registry.call(
             params.name, dict(params.arguments or {}), client_for(ctx), progress_sender(ctx)
@@ -279,4 +368,14 @@ def _server(registry: Registry, build: str, client_for: Any) -> Any:
 
         return notify
 
-    return Server("uzpainter", version=build, on_list_tools=list_tools, on_call_tool=call_tool)
+    return Server(
+        "uzpainter",
+        version=build,
+        on_list_tools=list_tools,
+        on_call_tool=call_tool,
+        on_list_resources=list_resources,
+        on_list_resource_templates=list_resource_templates,
+        on_read_resource=read_resource,
+        on_list_prompts=list_prompts,
+        on_get_prompt=get_prompt,
+    )

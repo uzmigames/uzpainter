@@ -34,6 +34,8 @@
 #include "evaluator/geometry_mask.h"
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
+#include "export/plan.h"
+#include "export/preset_aliases.h"
 #include "mesh/reload.h"
 #include "preview/preview.h"
 #include "python/capture.h"
@@ -42,16 +44,21 @@
 #include "python/errors.h"
 #include "python/interpreter.h"
 #include "python/jobs.h"
+#include "python/recipe.h"
 #include "python/script.h"
 #include "python/session.h"
 #include "render/backend.h"
 #include "render/engine_thread.h"
 #include "store/container.h"
+#include "store/inspect.h"
 #include "supervisor/fault_hooks.h"
 #include "supervisor/ipc.h"
 #include "supervisor/pipe.h"
+#include "supervisor/tools.h"
+#include "supervisor/typed_tools.h"
 #include "uzp_core/document/layer_tree.h"
 #include "uzp_core/document/nodes.h"
+#include "uzp_core/manifest/manifest.h"
 #include "uzp_core/manifest/sha256.h"
 #include "uzp_core/types/errors.h"
 #include "uzp_core/types/enums.h"
@@ -59,8 +66,6 @@
 namespace uzp::supervisor {
 
 namespace {
-
-namespace json = core::json;
 
 constexpr const char* kUsage =
     "usage: UzPainter.exe --worker --pipe \\\\.\\pipe\\uzpainter-<supervisor-pid>-<n> --gpu-backend dx12|vulkan\n"
@@ -193,27 +198,6 @@ void InstallCrashReporting(const std::filesystem::path& crash_dir) {
 
 // ── Tools ──────────────────────────────────────────────────────────────────────────────────────
 
-/// A failed call: the reply's `error`.
-struct CallError {
-    std::string code;
-    std::string message;
-    json::Object details;
-};
-
-struct Tool {
-    std::string name;
-    std::string description;
-    json::Object input_schema;
-    bool mutating = false;
-    bool gpu = false;
-    /// The call is refused before it runs when the device is unavailable (`gpu`); a tool whose
-    /// mode decides whether it uses the GPU (`capture`) checks the device itself.
-    bool gpu_gate = true;
-    /// The capability-manifest operations the tool performs (`[{symbol, context}]`): the supervisor
-    /// refuses the call with `capability_gap` while one of them is a `release-gap` (phase2.5).
-    json::Array capability = {};
-};
-
 /// The long job the command thread runs, and the cancellations the pipe's reader thread received
 /// (`worker/cancel`, answered by the reader thread at once, decision 140). A cancel for a job that
 /// has not started yet is kept, and the job stops at its first checkpoint.
@@ -250,63 +234,6 @@ private:
     std::set<std::string, std::less<>> m_pending;
 };
 
-json::Object Schema(json::Object properties, json::Array required) {
-    return {{"type", "object"},
-            {"properties", std::move(properties)},
-            {"required", std::move(required)},
-            {"additionalProperties", false}};
-}
-
-json::Object StringProperty(const char* description) { return {{"type", "string"}, {"description", description}}; }
-
-/// A path argument: the supervisor's `--roots` confine it to the root of kind `root` (`project`,
-/// `mesh`, `bake_mesh`, `resource` or `export`; 11-mcp-server.md §5) and hand over its canonical
-/// absolute form.
-json::Object PathProperty(const char* description, const char* root) {
-    return {{"type", "string"}, {"minLength", 1}, {"description", description}, {"x-uzpainter-root", root}};
-}
-
-/// A node of the committed revision (a layer or an effect), by uid: the supervisor rejects a uid that
-/// names no node before admission (`x-uzpainter-ref`, phase2.5).
-json::Object UidProperty(const char* description) {
-    return {{"type", "integer"}, {"minimum", 1}, {"description", description}, {"x-uzpainter-ref", "node"}};
-}
-
-/// The capability-manifest operation `symbol` in the context `any`.
-json::Array Operation(const char* symbol) { return {json::Object{{"symbol", symbol}, {"context", "any"}}}; }
-
-const json::Value* Field(const json::Object& object, std::string_view key) {
-    const auto it = object.find(key);
-    return it == object.end() ? nullptr : &it->second;
-}
-
-std::optional<std::string> StringField(const json::Object& object, std::string_view key) {
-    const json::Value* value = Field(object, key);
-    if (!value || !value->IsString()) return std::nullopt;
-    return std::get<std::string>(value->data);
-}
-
-/// The texture set and stack a call names by `texture_set` and `stack`: the active texture set,
-/// and its active or first stack, when omitted. `invalid_arguments` for a name that is not there.
-std::pair<const core::TextureSet*, const core::Stack*> NamedStack(const core::Project& project,
-                                                                  const python::OpenProject& open,
-                                                                  const json::Object& arguments) {
-    const core::TextureSet* set = nullptr;
-    const std::optional<std::string> set_name = StringField(arguments, "texture_set");
-    for (const core::TextureSet& candidate : project.texture_sets) {
-        if (set_name ? candidate.name == *set_name : candidate.id == open.active_set) set = &candidate;
-    }
-    if (!set) throw CallError{"invalid_arguments", "no texture set " + set_name.value_or("(active)"), {}};
-    const core::Stack* stack = nullptr;
-    const std::optional<std::string> stack_name = StringField(arguments, "stack");
-    for (const core::Stack& candidate : set->stacks) {
-        if (stack_name ? candidate.name == *stack_name : candidate.id == open.active_stack) stack = &candidate;
-    }
-    if (!stack && !stack_name && !set->stacks.empty()) stack = &set->stacks.front();
-    if (!stack) throw CallError{"invalid_arguments", "no stack " + stack_name.value_or("(active)"), {}};
-    return {set, stack};
-}
-
 /// The absolute path of the store that durably holds `open`: the file a saved project was
 /// opened or saved as (resolved when that call ran), or the temporary store of an untitled one.
 std::string DurableStore(const python::OpenProject& open) {
@@ -332,32 +259,6 @@ json::Object RevisionEvent() {
     return event;
 }
 
-/// The refusal of a mutating call the stored operation rows decided not to run (`09-...` §4), or
-/// nothing for `execute` and `stored_outcome`.
-std::optional<CallError> AdmissionRefusal(const core::AdmissionDecision& decision, const std::string& key) {
-    switch (decision.admission) {
-        case core::Admission::idempotency_conflict:
-            return CallError{"idempotency_conflict", "the idempotency key was committed with other arguments",
-                             json::Object{{"key", key}, {"committed_revision", decision.record->committed_revision}}};
-        case core::Admission::outcome_unknown:
-            return CallError{"outcome_unknown",
-                             "the key is unknown and its precondition is missing, expired or unreadable: the call "
-                             "is not run",
-                             json::Object{{"key", key}, {"committed_revision", decision.current_revision}}};
-        case core::Admission::stale_revision: {
-            json::Object details{{"expected", decision.expected_revision ? json::Value(*decision.expected_revision)
-                                                                         : json::Value(nullptr)},
-                                 {"current", decision.current_revision}};
-            return CallError{"stale_revision", "the project is at another revision than the call expected",
-                             std::move(details)};
-        }
-        case core::Admission::stored_outcome:
-        case core::Admission::execute:
-            break;
-    }
-    return std::nullopt;
-}
-
 class Worker {
 public:
     using Emit = std::function<void(const json::Object& frame)>;
@@ -380,10 +281,6 @@ public:
     std::optional<int> exit_after_reply;
 
 private:
-    using Handler = std::function<json::Object(const json::Object& arguments)>;
-    /// A long tool's handler: the job body of its arguments (checked before the job starts).
-    using JobHandler = std::function<python::JobBody(const json::Object& arguments)>;
-
     void DefineTools();
     json::Object Call(const json::Value& id, const json::Object& request);
     json::Object Execute(const json::Value& id, const json::Object& request, const Tool& tool,
@@ -391,6 +288,7 @@ private:
     json::Object RunJob(const json::Object& request, const Tool& tool, python::JobBody body);
     json::Object Reopen(const json::Value& id, const json::Object& request);
     json::Object Operations(const json::Value& id, const json::Object& request);
+    json::Object Manifest(const json::Value& id);
     json::Object ListTools() const;
     std::optional<std::int64_t> CommittedRevision() const;
 
@@ -412,6 +310,9 @@ private:
     /// Runs a typed setter as the admitted request (`m_mutation`); its transaction result, or the
     /// refusal or typed error.
     json::Object SubmitAdmitted(const std::function<void(core::Edit&)>& call);
+    /// The transaction result of an outcome of the admitted request, or its refusal or typed error.
+    json::Object SettleAdmitted(const core::RequestOutcome& outcome, const std::exception_ptr& error);
+    json::Object ExportPresetsList(const json::Object& arguments);
     json::Object RunPython(const json::Object& arguments);
     json::Object PreviewStatus(const json::Object& arguments);
     json::Object CaptureTool(const json::Object& arguments);
@@ -466,27 +367,55 @@ void Worker::DefineTools() {
              Operation("substance_painter.project.open")},
             std::nullopt, [this](const json::Object& a) { return ProjectOpen(a); });
     add_job({"export",
-             "Exports the current revision with Painter's json_config: a new generation under its exportPath with "
-             "its receipt, then the fixed-name folders (a long job; phase2.6 adds presets and overrides).",
+             "Exports the current revision as a new generation with its receipt, then the fixed-name folders (a long "
+             "job): Painter's json_config (`config`), or a shipped preset (`preset`) for the texture sets into "
+             "`output_dir`; size_log2, file_format, bit_depth and padding override every map. With dry_run it returns "
+             "the plan and the files the export would write, and writes nothing.",
              Schema({{"config", json::Object{{"type", json::Array{"object", "string"}},
                                              {"description", "Painter's json_config, as an object or JSON text."},
                                              // Its `exportPath` is a path under the export root.
                                              {"x-uzpainter-paths", json::Object{{"exportPath", "export"}}}}},
+                     {"preset", StringProperty("A shipped export preset (export_presets_list): its id or a Painter "
+                                               "name it answers to.")},
+                     {"output_dir", PathProperty("The export folder (the configuration's exportPath).", "export")},
+                     {"texture_sets", json::Object{{"type", "array"},
+                                                   {"items", json::Object{{"type", "string"}}},
+                                                   {"description", "The texture sets exported (every one when omitted)."}}},
+                     {"size_log2", json::Object{{"type", "integer"}, {"minimum", 7}, {"maximum", 13}}},
+                     {"file_format", StringProperty("The file format of every map (png, exr, ...).")},
+                     {"bit_depth", StringProperty("The bit depth of every map (8, 16, 16f, 32f).")},
+                     {"padding", StringProperty("The padding algorithm of every map (passthrough, color, "
+                                                "transparent, diffusion, infinite).")},
+                     {"dry_run", json::Object{{"type", "boolean"}, {"description", "Return the plan; write nothing."}}},
                      {"fixed_names",
                       json::Object{{"type", "array"},
                                    {"items", PathProperty("A folder.", "export")},
                                    {"description", "Folders that receive the generation's files under fixed names."}}}},
-                    {"config"}),
+                    {}),
              false, false, true, Operation("substance_painter.export.export_project_textures")},
             "publication", [this](const json::Object& a) { return Export(a); });
-    add({"project_close", "Closes the open project.", Schema({}, {}), false, false, true,
+    add({"export_presets_list",
+         "The shipped export presets: id, the Painter names they answer to, their maps, and whether their layout is "
+         "confirmed against Painter's recorded outputs (with the recordings that settle a pending one).",
+         Schema({}, {}), false, false},
+        [this](const json::Object& a) { return ExportPresetsList(a); });
+    add({"project_close",
+         "Closes the open project. Every commit is durable in a saved project's file; closing an untitled project "
+         "deletes it, so that needs discard: true.",
+         Schema({{"discard", json::Object{{"type", "boolean"},
+                                          {"description", "Allow closing an untitled project, which deletes it."}}}},
+                {}),
+         false, false, true,
          Operation("substance_painter.project.close")},
         [this](const json::Object& a) { return ProjectClose(a); });
     add({"project_save", "Names a checkpoint of the current revision (save; `full` also compacts).",
          Schema({{"mode", json::Object{{"type", "string"}, {"enum", json::Array{"incremental", "full"}}}}}, {}), false,
          false, true, Operation("substance_painter.project.save")},
         [this](const json::Object& a) { return ProjectSave(a); });
-    add({"project_inspect", "The open project: path, revision and texture sets with their stacks.", Schema({}, {}), false,
+    add({"project_inspect",
+         "The open project: path, revision and texture sets with their stacks; with `path`, the inspection report of a "
+         "project file read without opening it (09-project-file-format.md §6).",
+         Schema({{"path", PathProperty("A .uzp file to inspect instead of the open project.", "project")}}, {}), false,
          false},
         [this](const json::Object& a) { return ProjectInspect(a); });
     add({"evaluate_channel",
@@ -608,6 +537,23 @@ void Worker::DefineTools() {
          // (PathTracerUnavailable, decision 148), before the path is looked at.
          false, true, false, Operation("uzpainter.render.capture")},
         [this](const json::Object& a) { return CaptureTool(a); });
+    // The typed tool families (typed_tools.h; task phase2.6_mcp-typed-tool-families, decision 164).
+    const ToolContext context{
+        [this](const std::function<void(core::Edit&)>& call) { return SubmitAdmitted(call); },
+        [this]() -> const core::MutationRequest& {
+            if (!m_mutation) throw CallError{"invalid_request", "the call has no admitted mutation", {}};
+            return *m_mutation;
+        },
+        [this](const core::RequestOutcome& outcome, const std::exception_ptr& error) {
+            return SettleAdmitted(outcome, error);
+        }};
+    for (ToolDefinition& definition : TypedTools(context)) {
+        if (definition.job) {
+            add_job(std::move(definition.tool), std::move(definition.commit_point), std::move(definition.job));
+        } else {
+            add(std::move(definition.tool), std::move(definition.handler));
+        }
+    }
     if (m_options.allow_python) {
         // `code` or `path`, a script file the roots never confine (11-mcp-server.md §5, §6).
         json::Object script = Schema(
@@ -703,6 +649,7 @@ json::Object Worker::Handle(const json::Object& request) {
     if (method == "tools/call") return Call(*id, request);
     if (method == "worker/reopen") return Reopen(*id, request);
     if (method == "worker/operations") return Operations(*id, request);
+    if (method == "worker/manifest") return Manifest(*id);
     return ErrorReply(*id, "unknown_method", "unknown method " + method.value_or("(none)"),
                       json::Object{{"method", method ? json::Value(*method) : json::Value(nullptr)}});
 }
@@ -880,6 +827,21 @@ json::Object Worker::Operations(const json::Value& id, const json::Object& reque
     }
 }
 
+/// `worker/manifest`: the project manifest of the committed revision (`core::ProjectToJson`), for
+/// the supervisor's `uzpainter://project/manifest` resource; `{project_uuid: null}` when no project
+/// is open. Not a tool.
+json::Object Worker::Manifest(const json::Value& id) {
+    python::Session& session = python::Session::Get();
+    if (!session.IsOpen()) return ResultReply(id, {{"project_uuid", nullptr}}, std::nullopt);
+    const std::shared_ptr<python::OpenProject> open = session.Current();
+    const core::Snapshot snapshot = open->document->snapshot();
+    return ResultReply(id,
+                       {{"project_uuid", open->store->project_uuid()},
+                        {"revision", snapshot.revision},
+                        {"manifest", core::ProjectToJson(*snapshot.project)}},
+                       CommittedRevision());
+}
+
 /// `worker/reopen {path, untitled}`: the supervisor's recovery reopens the store the dead worker
 /// held (its last `revision` event), an untitled project as untitled. Not a tool.
 json::Object Worker::Reopen(const json::Value& id, const json::Object& request) {
@@ -926,7 +888,12 @@ python::JobBody Worker::ProjectOpen(const json::Object& arguments) {
 
 python::JobBody Worker::Export(const json::Object& arguments) {
     const json::Value* config = Field(arguments, "config");
-    if (!config || !(config->IsObject() || config->IsString())) {
+    const std::optional<std::string> preset = StringField(arguments, "preset");
+    if (config && config->IsNull()) config = nullptr;
+    if ((config == nullptr) == !preset.has_value()) {
+        throw CallError{"invalid_arguments", "export needs exactly one of config (Painter's json_config) and preset", {}};
+    }
+    if (config && !(config->IsObject() || config->IsString())) {
         throw CallError{"invalid_arguments", "export needs config (Painter's json_config, an object or JSON text)", {}};
     }
     std::vector<std::string> fixed_names;
@@ -937,13 +904,133 @@ python::JobBody Worker::Export(const json::Object& arguments) {
             fixed_names.push_back(std::get<std::string>(folder.data));
         }
     }
-    std::string text = config->IsString() ? std::get<std::string>(config->data)
-                                          : json::WriteCanonical(std::get<json::Object>(config->data));
+    std::optional<std::vector<std::string>> texture_sets;
+    if (const json::Value* given = Field(arguments, "texture_sets"); given && !given->IsNull()) {
+        if (!given->IsArray()) throw CallError{"invalid_arguments", "texture_sets must be a list of names", {}};
+        texture_sets.emplace();
+        for (const json::Value& name : std::get<json::Array>(given->data)) {
+            if (!name.IsString()) throw CallError{"invalid_arguments", "texture_sets must be a list of names", {}};
+            texture_sets->push_back(std::get<std::string>(name.data));
+        }
+    }
+    // The configuration: the given one, or one exporting the preset for the texture sets.
+    json::Object document;
+    if (config && config->IsString()) {
+        json::Value parsed;
+        try {
+            parsed = json::Parse(std::get<std::string>(config->data));
+        } catch (const json::ParseError& error) {
+            throw CallError{"invalid_arguments", std::string("config is not JSON: ") + error.what(), {}};
+        }
+        if (!parsed.IsObject()) throw CallError{"invalid_arguments", "config must be a JSON object", {}};
+        document = std::get<json::Object>(parsed.data);
+    } else if (config) {
+        document = std::get<json::Object>(config->data);
+    } else {
+        if (!StringField(arguments, "output_dir")) {
+            throw CallError{"invalid_arguments", "a preset export needs output_dir", {}};
+        }
+        document["defaultExportPreset"] = *preset;
+        json::Array roots;
+        const std::shared_ptr<const core::Project> project = python::Session::Get().ReadProject();
+        for (const core::TextureSet& set : project->texture_sets) {
+            if (!texture_sets || std::ranges::find(*texture_sets, set.name) != texture_sets->end()) {
+                roots.push_back(json::Object{{"rootPath", set.name}});
+            }
+        }
+        document["exportList"] = std::move(roots);
+        texture_sets.reset();
+    }
+    if (const std::optional<std::string> output = StringField(arguments, "output_dir")) document["exportPath"] = *output;
+    if (texture_sets) {
+        // The configuration's export list, restricted to the named texture sets (a root path is
+        // `<texture set>` or `<texture set>/<stack>`).
+        const json::Value* list = Field(document, "exportList");
+        if (!list || !list->IsArray()) throw CallError{"invalid_arguments", "texture_sets needs the config's exportList", {}};
+        json::Array kept;
+        for (const json::Value& entry : std::get<json::Array>(list->data)) {
+            const json::Value* root = entry.IsObject() ? Field(std::get<json::Object>(entry.data), "rootPath") : nullptr;
+            const std::string path = root && root->IsString() ? std::get<std::string>(root->data) : std::string();
+            if (std::ranges::find(*texture_sets, path.substr(0, path.find('/'))) != texture_sets->end()) kept.push_back(entry);
+        }
+        document["exportList"] = std::move(kept);
+    }
+    // The overrides: one unfiltered parameter rule after every other, so it wins for every map
+    // (rules apply in order, export/plan.cpp).
+    json::Object overrides;
+    if (const json::Value* size = Field(arguments, "size_log2"); size && size->IsInt()) overrides["sizeLog2"] = *size;
+    if (const std::optional<std::string> format = StringField(arguments, "file_format")) overrides["fileFormat"] = *format;
+    if (const std::optional<std::string> depth = StringField(arguments, "bit_depth")) overrides["bitDepth"] = *depth;
+    if (const std::optional<std::string> padding = StringField(arguments, "padding")) overrides["paddingAlgorithm"] = *padding;
+    if (!overrides.empty()) {
+        json::Array rules;
+        if (const json::Value* given = Field(document, "exportParameters"); given && given->IsArray()) {
+            rules = std::get<json::Array>(given->data);
+        }
+        rules.push_back(json::Object{{"parameters", std::move(overrides)}});
+        document["exportParameters"] = std::move(rules);
+    }
+    std::string text = json::WriteCanonical(document);
+    const json::Value* dry_run = Field(arguments, "dry_run");
+    if (dry_run && dry_run->IsBool() && std::get<bool>(dry_run->data)) {
+        if (!fixed_names.empty()) throw CallError{"invalid_arguments", "a dry run writes nothing: fixed_names do not apply", {}};
+        return [text](python::JobContext& job) {
+            job.SetProgress(0.0, "planning the export");
+            python::Session& session = python::Session::Get();
+            const std::shared_ptr<const core::Project> project = session.ReadProject();
+            const std::optional<std::filesystem::path> path = session.FilePath();
+            const exporter::PlanContext context{path ? exporter::Utf8String(*path) : std::string()};
+            json::Array textures;
+            for (const exporter::StackFiles& entry : exporter::ListProjectTextures(*project, text, context)) {
+                json::Array files;
+                for (const std::string& file : entry.files) files.push_back(file);
+                textures.push_back(json::Object{{"texture_set", entry.textureSet}, {"stack", entry.stack}, {"files", std::move(files)}});
+            }
+            json::Object result{{"dry_run", true},
+                                {"revision", session.Revision()},
+                                {"plan", exporter::PlanJson(exporter::CompilePlan(*project, text, context))},
+                                {"textures", std::move(textures)}};
+            job.NoOp();
+            return result;
+        };
+    }
     return python::ExportJob(std::move(text), std::move(fixed_names));
 }
 
-json::Object Worker::ProjectClose(const json::Object&) {
-    python::Session::Get().Close();
+json::Object Worker::ExportPresetsList(const json::Object&) {
+    const std::filesystem::path directory = exporter::DefaultPresetDirectory();
+    json::Array presets;
+    for (const std::string_view id : exporter::ShippedPresetIds()) {
+        const exporter::ShippedPreset preset = exporter::LoadShippedPreset(directory, id);
+        json::Array aliases;
+        for (const exporter::PresetAlias& alias : exporter::PresetAliases()) {
+            if (alias.presetId == id) aliases.push_back(std::string(alias.painterName));
+        }
+        json::Array maps;
+        for (const exporter::MapSpec& map : preset.spec.maps) maps.push_back(map.fileName);
+        json::Array pending;
+        for (const std::string& recording : preset.pendingRecordings) pending.push_back(recording);
+        static constexpr const char* kLayouts[] = {"pipeline", "confirmed", "unconfirmed"};
+        presets.push_back(json::Object{{"id", preset.id},
+                                       {"aliases", std::move(aliases)},
+                                       {"maps", std::move(maps)},
+                                       {"layout", kLayouts[static_cast<int>(preset.layout)]},
+                                       {"pending_recordings", std::move(pending)}});
+    }
+    return {{"presets", std::move(presets)}};
+}
+
+json::Object Worker::ProjectClose(const json::Object& arguments) {
+    python::Session& session = python::Session::Get();
+    const json::Value* discard = Field(arguments, "discard");
+    const bool discarding = discard && discard->IsBool() && std::get<bool>(discard->data);
+    if (session.IsOpen() && !session.Current()->untitled_dir.empty() && !discarding) {
+        throw CallError{"project_error",
+                        "the project is untitled: closing it deletes it. Save it with project_save_as first, or pass "
+                        "discard: true",
+                        json::Object{{"untitled", true}}};
+    }
+    session.Close();
     return {};
 }
 
@@ -961,7 +1048,14 @@ json::Object Worker::ProjectSave(const json::Object& arguments) {
     return result;
 }
 
-json::Object Worker::ProjectInspect(const json::Object&) {
+json::Object Worker::ProjectInspect(const json::Object& arguments) {
+    if (const std::optional<std::string> path = StringField(arguments, "path")) {
+        // A project file read without opening it: no lock, no change (store/inspect.h).
+        const core::RecipeHost host = python::HostRecipe();
+        store::InspectOptions options;
+        options.recipe = &host;
+        return {{"open", false}, {"path", *path}, {"report", store::Inspect(python::PathFromUtf8(*path), options)}};
+    }
     python::Session& session = python::Session::Get();
     if (!session.IsOpen()) return {{"open", false}};
     const std::shared_ptr<const core::Project> project = session.ReadProject();
@@ -990,6 +1084,10 @@ json::Object Worker::SubmitAdmitted(const std::function<void(core::Edit&)>& call
             throw;
         }
     });
+    return SettleAdmitted(outcome, error);
+}
+
+json::Object Worker::SettleAdmitted(const core::RequestOutcome& outcome, const std::exception_ptr& error) {
     if (std::optional<CallError> refusal = AdmissionRefusal(outcome.decision, m_mutation->idempotency_key)) {
         throw *refusal;
     }

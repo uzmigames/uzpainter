@@ -1,0 +1,14 @@
+{
+  "id": 164,
+  "slug": "typed-tools-are-native-single-transaction-handlers-over-the-api-s-shared-edits-gated-per-argument-value-with-gap-families-registered",
+  "title": "Typed tools are native single-transaction handlers over the API's shared edits, gated per argument value, with the gap families registered",
+  "status": "accepted",
+  "date": "2026-10-13",
+  "relatedTasks": [
+    "phase2.6_mcp-typed-tool-families",
+    "phase2.5_mcp-transport-registry",
+    "phase2.7_mcp-operation-matrix",
+    "phase2.8_mcp-server"
+  ],
+  "supersededBy": null
+}

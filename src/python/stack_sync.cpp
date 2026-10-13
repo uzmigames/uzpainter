@@ -253,11 +253,17 @@ Object SyncStack(core::Edit& edit, store::ProjectStore& store, const Object& sta
         std::optional<std::string> bytes = read(name);
         if (!bytes) Invalid("cannot read the image '" + name + "' (" + name + ".png)");
         const std::string sha = core::Sha256Hex(*bytes);
+        const std::string entry = options.resource_prefix + name;
         const auto existing = base_project.resources.find(sha);
         const bool stored = existing != base_project.resources.end() &&
                             std::any_of(existing->second.begin(), existing->second.end(),
-                                        [&](const core::ResourceMeta& m) { return m.name == name; });
-        sha_of[name] = ImportResource(edit, store, std::move(*bytes), name, "image/png", "TEXTURE", name + ".png");
+                                        [&](const core::ResourceMeta& m) { return m.name == entry; });
+        sha_of[name] = ImportResource(edit, store, std::move(*bytes), entry, "image/png", "TEXTURE", name + ".png");
+        if (options.resource_group) {
+            for (core::ResourceMeta& meta : edit.project().resources.at(sha_of[name])) {
+                if (meta.name == entry) meta.extra["group"] = *options.resource_group;
+            }
+        }
         (stored ? skipped : imported).push_back(name);
     }
 

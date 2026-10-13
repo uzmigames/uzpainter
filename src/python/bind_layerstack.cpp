@@ -13,6 +13,7 @@
 #include <iterator>
 
 #include "python/bindings.h"
+#include "python/edits.h"
 #include "python/errors.h"
 #include "python/stack_sync.h"
 #include "uzp_core/naming/naming.h"
@@ -25,7 +26,6 @@ namespace {
 
 using core::ChannelType;
 using core::Id;
-using ChannelArg = std::optional<ChannelType>;
 
 // ── Source handles (`uzpainter.source`) ─────────────────────────────────────────────────────────
 
@@ -67,33 +67,12 @@ core::json::Object NodeArgs(Id uid, const ChannelArg& channel) {
     return args;
 }
 
-/// Checks a channel argument against the node's context (see the file comment).
-void CheckChannel(bool mask, const ChannelArg& channel, Id uid) {
-    if (mask && channel) {
-        throw core::ValueError("node " + std::to_string(uid) + " is in a mask stack: its channel argument must be None");
-    }
-    if (!mask && !channel) ThrowEditionContext("node " + std::to_string(uid) + " is multichannel: give the channel");
-}
-
 bool InMask(const NodeInfo& info) { return info.in_mask(); }
 
 const core::FillContent& FillOf(const NodeInfo& info, Id uid) {
     const std::optional<core::FillContent>& fill = info.layer ? info.layer->fill : info.effect->fill;
     if (!fill) throw core::ValueError("node " + std::to_string(uid) + " is not a fill");
     return *fill;
-}
-
-core::FillContent& EditFill(core::Edit& edit, Id uid, bool* mask = nullptr) {
-    if (core::Layer* layer = core::FindLayer(edit.project(), uid)) {
-        if (mask) *mask = false;
-        if (layer->fill) return *layer->fill;
-    } else if (core::Effect* effect = core::FindEffect(edit.project(), uid)) {
-        if (mask) *mask = effect->mono_blending.has_value();
-        if (effect->fill) return *effect->fill;
-    } else {
-        throw core::ValueError("stale handle: node " + std::to_string(uid) + " no longer exists");
-    }
-    throw core::ValueError("node " + std::to_string(uid) + " is not a fill");
 }
 
 /// The source of `channel` (or the mono source) of a fill, nullptr when it has none.
@@ -103,23 +82,6 @@ const core::Source* SourceOf(const NodeInfo& info, Id uid, const ChannelArg& cha
     if (!channel) return fill.mono_source ? &*fill.mono_source : nullptr;
     const auto it = fill.sources.find(*channel);
     return it == fill.sources.end() ? nullptr : &it->second;
-}
-
-core::Source& EditSource(core::Edit& edit, Id uid, const ChannelArg& channel, core::SourceKind kind) {
-    bool mask = false;
-    core::FillContent& fill = EditFill(edit, uid, &mask);
-    CheckChannel(mask, channel, uid);
-    core::Source* source = nullptr;
-    if (!channel) {
-        if (fill.mono_source) source = &*fill.mono_source;
-    } else if (auto it = fill.sources.find(*channel); it != fill.sources.end()) {
-        source = &it->second;
-    }
-    if (source == nullptr || source->kind() != kind) {
-        throw core::ValueError("node " + std::to_string(uid) + " has no " + std::string(core::ToString(kind)) + " source" +
-                               (channel ? " on " + std::string(core::ToString(*channel)) : std::string()));
-    }
-    return *source;
 }
 
 py::object SourceObject(const core::Source* source, Id uid, const ChannelArg& channel) {
@@ -151,61 +113,7 @@ core::Blending ReadBlending(const NodeInfo& info, Id uid, const ChannelArg& chan
     return it == blending.end() ? core::Blending{} : it->second;
 }
 
-core::Blending& EditBlending(core::Edit& edit, Id uid, const ChannelArg& channel) {
-    if (core::Layer* layer = core::FindLayer(edit.project(), uid)) {
-        CheckChannel(false, channel, uid);
-        return layer->blending[*channel];
-    }
-    core::Effect& effect = EditEffect(edit, uid);
-    if (effect.mono_blending) {
-        CheckChannel(true, channel, uid);
-        return *effect.mono_blending;
-    }
-    CheckChannel(false, channel, uid);
-    return effect.blending[*channel];
-}
-
-bool HasBlending(core::NodeType type) {
-    return type != core::NodeType::AnchorPointEffect && type != core::NodeType::LevelsEffect;
-}
-
 // ── Insertion ───────────────────────────────────────────────────────────────────────────────────
-
-std::string DefaultName(core::NodeType type) {
-    switch (type) {
-        case core::NodeType::FillLayer: return "Fill";
-        case core::NodeType::PaintLayer: return "Layer";
-        case core::NodeType::GroupLayer: return "Folder";
-        case core::NodeType::InstanceLayer: return "Instance";
-        case core::NodeType::FillEffect: return "Fill";
-        case core::NodeType::PaintEffect: return "Paint";
-        case core::NodeType::GeneratorEffect: return "Generator";
-        case core::NodeType::FilterEffect: return "Filter";
-        case core::NodeType::LevelsEffect: return "Levels";
-        case core::NodeType::CompareMaskEffect: return "Compare mask";
-        case core::NodeType::ColorSelectionEffect: return "Color Selection";
-        case core::NodeType::AnchorPointEffect: return "Anchor Point";
-    }
-    return "Node";
-}
-
-/// The name scope of the list an insert position puts a node into.
-core::NameScope ScopeOf(const core::Project& project, const core::InsertPosition& position) {
-    switch (position.kind) {
-        case core::InsertPosition::Kind::TopOfStack:
-            return {position.texture_set, position.stack, core::kNoId, core::NodeStack::Substack};
-        case core::InsertPosition::Kind::InsideNode: {
-            const NodeInfo info = Resolve(project, position.node);
-            return {info.texture_set, info.stack, position.node, position.node_stack};
-        }
-        case core::InsertPosition::Kind::AboveNode:
-        case core::InsertPosition::Kind::BelowNode: {
-            const NodeInfo info = Resolve(project, position.node);
-            return {info.texture_set, info.stack, info.root ? core::kNoId : info.owner, info.owner_stack};
-        }
-    }
-    return {};
-}
 
 core::json::Object PositionArgs(const core::InsertPosition& p) {
     static constexpr const char* kKinds[] = {"top_of_stack", "above_node", "below_node", "inside_node"};
@@ -227,27 +135,7 @@ py::object Insert(const std::string& tool, const core::InsertPosition& position,
     if (name) args["name"] = *name;
     if (instance_source != core::kNoId) args["instance_source"] = static_cast<std::int64_t>(instance_source);
     Id uid = core::kNoId;
-    Mutate(tool, args, [&](core::Edit& edit) {
-        if (name) {
-            const core::NameScope scope = ScopeOf(edit.project(), position);
-            if (const std::optional<Id> found = core::ResolveName(edit.project(), scope, *name)) {
-                const std::optional<core::NodeType> found_type = core::FindNodeType(edit.project(), *found);
-                if (found_type != type) {
-                    throw core::ValueError("the node named '" + *name + "' (" + std::to_string(*found) + ") is a " +
-                                           std::string(core::ToString(*found_type)) + ", not a " +
-                                           std::string(core::ToString(type)));
-                }
-                uid = *found;
-                edit.returned()["node"] = static_cast<std::int64_t>(uid);
-                edit.returned()["created"] = false;
-                return;
-            }
-        }
-        uid = edit.Insert(position, type, name.value_or(DefaultName(type)), instance_source);
-        if (configure) configure(edit, uid);
-        edit.returned()["node"] = static_cast<std::int64_t>(uid);
-        edit.returned()["created"] = true;
-    });
+    Mutate(tool, args, [&](core::Edit& edit) { uid = InsertNode(edit, position, type, name, instance_source, configure).uid; });
     return MakeNode(*Read(), uid);
 }
 
@@ -287,76 +175,12 @@ const core::Layer& LayerOf(const NodeInfo& info, Id uid) {
     return *info.layer;
 }
 
-std::string ReadImage(const std::filesystem::path& dir, const std::string& name, std::optional<std::string>* out) {
-    std::ifstream file(dir / PathFromUtf8(name + ".png"), std::ios::binary);
-    if (!file) return {};
-    *out = std::string{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-    return name;
-}
-
 // ── Projection parameters ───────────────────────────────────────────────────────────────────────
 
 UVProjectionParams ParamsOf(const core::UVProjectionParams& uv) {
     return {uv.filtering_mode, uv.uv_wrapping_mode,
             {uv.uv_transformation.scale_mode, uv.uv_transformation.scale, uv.uv_transformation.rotation,
              uv.uv_transformation.offset}};
-}
-
-// ── Levels ──────────────────────────────────────────────────────────────────────────────────────
-
-core::LevelsComponent Component(double in_min, double in_max, double gamma, double out_min, double out_max, bool clamp) {
-    return {F32(in_min), F32(in_max), F32(gamma), F32(out_min), F32(out_max), clamp, {}};
-}
-
-bool RgbChannel(const core::Project& project, const NodeInfo& info, const core::LevelsParams* params) {
-    if (info.in_mask() || params == nullptr || !params->affected_channel) return params && params->components.size() == 3;
-    const core::Stack& stack = ResolveStack(project, {info.texture_set, info.stack});
-    const auto it = stack.channels.find(*params->affected_channel);
-    if (it == stack.channels.end()) return params->components.size() == 3;
-    const core::ChannelFormat f = it->second.format;
-    return f == core::ChannelFormat::sRGB8 || f == core::ChannelFormat::RGB8 || f == core::ChannelFormat::RGB16 ||
-           f == core::ChannelFormat::RGB16F || f == core::ChannelFormat::RGB32F;
-}
-
-// ── Insert defaults ─────────────────────────────────────────────────────────────────────────────
-
-/// Painter's effective defaults of a node `Insert` just created in a content stack (the inserted
-/// nodes of the Tier 0 api-probes; decision 115): a fill, fill effect or group gets Painter's
-/// per-channel blending, a fill its recorded default sources (active channels stay empty), and a
-/// levels effect, where the stack has BaseColor, affects BaseColor and is named
-/// "Levels - Base color" unless the call named it. A node in a mask stack keeps the plain defaults.
-void InsertDefaults(core::Edit& edit, Id uid, bool named) {
-    const NodeInfo info = Resolve(edit.project(), uid);
-    if (info.in_mask()) return;
-    const std::map<core::ChannelType, core::Channel> channels =
-        ResolveStack(edit.project(), {info.texture_set, info.stack}).channels;
-    switch (info.type()) {
-        case core::NodeType::FillLayer:
-        case core::NodeType::GroupLayer: {
-            core::Layer& layer = EditLayer(edit, uid);
-            ApplyDefaultBlending(layer.blending, channels);
-            if (layer.fill) ApplyDefaultSources(*layer.fill, channels);
-            break;
-        }
-        case core::NodeType::FillEffect: {
-            core::Effect& effect = EditEffect(edit, uid);
-            ApplyDefaultBlending(effect.blending, channels);
-            if (effect.fill) ApplyDefaultSources(*effect.fill, channels);
-            break;
-        }
-        case core::NodeType::LevelsEffect: {
-            if (!channels.contains(core::ChannelType::BaseColor)) break;
-            core::Effect& effect = EditEffect(edit, uid);
-            if (!named) effect.name = "Levels - Base color";
-            effect.levels = core::LevelsParams{};
-            effect.levels->affected_channel = core::ChannelType::BaseColor;
-            const std::size_t arity = RgbChannel(edit.project(), info, &*effect.levels) ? 3 : 1;
-            effect.levels->components.assign(arity, core::LevelsComponent{});
-            break;
-        }
-        default:
-            break;
-    }
 }
 
 // ── Bindings ────────────────────────────────────────────────────────────────────────────────────
@@ -867,19 +691,8 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             [](const LevelsEffectNode& n, ChannelType channel) {
                 core::json::Object args = NodeArgs(n.uid);
                 args["affected_channel"] = std::string(core::ToString(channel));
-                Mutate("layerstack.LevelsEffectNode.affected_channel", args, [&](core::Edit& edit) {
-                    const NodeInfo info = Resolve(edit.project(), n.uid);
-                    core::Effect& e = EditEffect(edit, n.uid);
-                    if (e.mono_blending) throw core::ValueError("a mask-stack levels effect has no affected channel");
-                    if (!e.levels) e.levels = core::LevelsParams{};
-                    e.levels->affected_channel = channel;
-                    // One component for a mono channel, three for an RGB one: an identity levels
-                    // gets the channel's arity; mono parameters spread to RGB, RGB keeps its first.
-                    const std::size_t arity = RgbChannel(edit.project(), info, &*e.levels) ? 3 : 1;
-                    std::vector<core::LevelsComponent>& components = e.levels->components;
-                    if (components.empty()) components.push_back(core::LevelsComponent{});
-                    components.resize(arity, components.front());
-                });
+                Mutate("layerstack.LevelsEffectNode.affected_channel", args,
+                       [&](core::Edit& edit) { SetAffectedChannel(edit, n.uid, channel); });
             })
         .def("get_parameters",
              [](const LevelsEffectNode& n) -> py::object {
@@ -1056,7 +869,7 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
             const StackHandle target = StackOrActive(stack);
             const std::shared_ptr<OpenProject> project = Session::Get().Current();
             const std::filesystem::path dir = PathFromUtf8(masks_dir);
-            SyncOptions options{target.texture_set, target.stack, keep_visible};
+            SyncOptions options{target.texture_set, target.stack, keep_visible, "", std::nullopt};
             core::json::Array keep;
             for (const std::string& k : keep_visible) keep.push_back(k);
             core::json::Object args{{"stack", object}, {"keep_visible", keep},
@@ -1064,13 +877,7 @@ void BindLayerStack(py::module_& m, py::module_& source, py::module_& levels) {
                                     {"stack_id", static_cast<std::int64_t>(target.stack)}};
             core::json::Object report;
             CallResult result = Mutate("layerstack.sync_stack", args, [&](core::Edit& edit) {
-                report = SyncStack(edit, *project->store, object,
-                                   [&dir](const std::string& name) {
-                                       std::optional<std::string> bytes;
-                                       ReadImage(dir, name, &bytes);
-                                       return bytes;
-                                   },
-                                   options);
+                report = SyncStack(edit, *project->store, object, MaskImageReader(dir), options);
                 edit.returned()["sync"] = report;
             });
             result.returned["sync"] = report;

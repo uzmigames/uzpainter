@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "python/bindings.h"
+#include "python/edits.h"
 #include "python/errors.h"
 #include "uzp_core/types/errors.h"
 
@@ -29,44 +30,6 @@ const core::Channel& ResolveChannel(const core::Project& project, const ChannelH
         throw core::ValueError("the stack has no " + std::string(core::ToString(handle.type)) + " channel");
     }
     return it->second;
-}
-
-core::Stack& EditStack(core::Edit& edit, const StackHandle& handle) {
-    for (core::TextureSet& set : edit.project().texture_sets) {
-        if (set.id != handle.texture_set) continue;
-        for (core::Stack& stack : set.stacks) {
-            if (stack.id == handle.stack) return stack;
-        }
-    }
-    throw core::ValueError("stale handle: stack " + std::to_string(handle.stack) + " no longer exists");
-}
-
-core::TextureSet& EditSet(core::Edit& edit, core::Id id) {
-    for (core::TextureSet& set : edit.project().texture_sets) {
-        if (set.id == id) return set;
-    }
-    throw core::ValueError("stale handle: texture set " + std::to_string(id) + " no longer exists");
-}
-
-/// Removes every per-node entry of `channel` from `layers` (active channels, sources, blending).
-void StripChannel(std::vector<core::Layer>& layers, core::ChannelType channel) {
-    const auto strip_fill = [channel](std::optional<core::FillContent>& fill) {
-        if (!fill) return;
-        fill->active_channels.erase(channel);
-        fill->sources.erase(channel);
-    };
-    for (core::Layer& layer : layers) {
-        layer.blending.erase(channel);
-        strip_fill(layer.fill);
-        if (layer.paint) layer.paint->planes.erase(channel);
-        for (core::Effect& effect : layer.content_effects) {
-            effect.blending.erase(channel);
-            effect.active_channels.erase(channel);
-            strip_fill(effect.fill);
-            if (effect.paint) effect.paint->planes.erase(channel);
-        }
-        StripChannel(layer.children, channel);
-    }
 }
 
 bool IsColor(core::ChannelFormat format) {
@@ -296,23 +259,8 @@ void BindTextureSet(py::module_& m) {
                  core::json::Object args = SetArgs(t.id);
                  args["usage"] = std::string(core::ToString(usage));
                  args["resource"] = resource ? core::json::Value(resource->name + "@" + resource->version) : core::json::Value(nullptr);
-                 return Mutate("textureset.TextureSet.set_mesh_map_resource", args, [&](core::Edit& edit) {
-                     core::TextureSet& set = EditSet(edit, t.id);
-                     if (!resource) {
-                         set.mesh_maps.erase(usage);
-                         return;
-                     }
-                     const std::string sha256 = ResolveResource(edit.project(), *resource);
-                     const core::Project& p = edit.project();
-                     core::MeshMapBinding binding;
-                     binding.resource = sha256;
-                     binding.format = core::ChannelFormat::RGB16;
-                     binding.color_space = "Raw";
-                     binding.provenance = core::ImportedProvenance{p.resources.at(sha256).front().origin, sha256,
-                                                                   core::MeshMapRole::geometry_only,
-                                                                   p.settings.normal_map_format, "", {}};
-                     set.mesh_maps[usage] = std::move(binding);
-                 });
+                 return Mutate("textureset.TextureSet.set_mesh_map_resource", args,
+                               [&](core::Edit& edit) { SetMeshMapResource(edit, t.id, usage, resource); });
              })
         .def("__eq__", [](const TextureSetHandle& a, const TextureSetHandle& b) { return a.id == b.id; })
         .def("__hash__", [](const TextureSetHandle& t) { return py::hash(py::int_(t.id)); })

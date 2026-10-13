@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import _winapi
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -194,17 +195,22 @@ def test_roots_confine_paths_and_never_echo_them(
     )
     assert escape["error"]["code"] == "path_outside_roots"
     assert escape["error"]["details"]["root"] == "export"
-    # capture (decision 148): its path is confined to the export root, and its PNG comes back as
-    # the one image content block.
+    # capture (decision 148): its path is confined to the export root, and its PNG comes back,
+    # downscaled to 8 bits and at most 512 pixels by the supervisor (decision 165), as the one
+    # image content block.
     shot = session.request(
         "tools/call", {"name": "capture", "arguments": {"mode": "base_color", "path": "caps/b.png"}}
     )
-    png = Path(Mcp.content(shot)["result"]["files"]["png"])
+    body = Mcp.content(shot)
+    png = Path(body["result"]["files"]["png"])
     assert png.is_relative_to(exports.resolve() / "caps"), shot
     [text, image] = shot["content"]
     assert text["type"] == "text" and text["text"].startswith("capture: ")
     assert image["type"] == "image" and image["mimeType"] == "image/png"
-    assert base64.b64decode(image["data"]) == png.read_bytes()
+    block = base64.b64decode(image["data"])
+    assert body["image"]["built"] is True
+    assert body["image"]["sha256"] == hashlib.sha256(block).hexdigest()
+    assert body["image"]["source_sha256"] == hashlib.sha256(png.read_bytes()).hexdigest()
     away = session.call("capture", {"mode": "base_color", "path": "..\\outside\\b.png"})
     assert away["error"]["code"] == "path_outside_roots"
     assert revision_of(session) == revision + 1
