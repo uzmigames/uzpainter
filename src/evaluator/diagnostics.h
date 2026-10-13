@@ -96,6 +96,8 @@ struct DiagnosticMap {
 /// tiles as their constant.
 [[nodiscard]] DiagnosticMap MapOf(const ChannelResult& result);
 
+struct MaterialViews;
+
 /// What every diagnostic evaluates: the stack, its template and the inputs of its sources.
 struct DiagnosticRequest {
     core::Id textureSet = core::kNoId;
@@ -105,6 +107,11 @@ struct DiagnosticRequest {
     std::shared_ptr<const IResourceProvider> resources;
     /// The rasters of `Mesh` geometry masks; may be null when the stack has none.
     std::shared_ptr<const IGeometryMaskProvider> geometry;
+    /// The material views `MaterialViewsOn` already gave for one material of the same revision, or
+    /// null: `EvaluateDiagnosticOn` reads that material's MaterialMask, and the MaterialView and
+    /// MaterialLeaks of every view they hold, from them instead of computing them again (each is
+    /// what a computation would give, bit for bit; B19, decision 246).
+    std::shared_ptr<const MaterialViews> materialViews;
 };
 
 /// A copy of `project` with every node of `nodes` (layers or effects of the stack, at any depth)

@@ -16,8 +16,6 @@
 
 #include "evaluator/error.h"
 #include "evaluator/evaluator.h"
-#include "evaluator/geometry_mask.h"
-#include "evaluator/sources.h"
 #include "evaluator/templates.h"
 #include "export/config.h"
 #include "export/exr_writer.h"
@@ -25,12 +23,13 @@
 #include "export/png_writer.h"
 #include "export/publish.h"
 #include "export/write.h"
-#include "mesh/reload.h"
+#include "mesh/texturing_mesh.h"
 #include "preview/display_transform.h"
 #include "preview/preview.h"
 #include "preview/viewport.h"
 #include "python/display.h"
 #include "python/errors.h"
+#include "python/evaluation.h"
 #include "python/session.h"
 #include "render/engine_thread.h"
 #include "store/container.h"
@@ -241,19 +240,8 @@ json::Object CaptureDiagnostic(const CaptureArguments& a, const ParsedMode& pars
     const std::optional<std::filesystem::path> file = session.FilePath();
     const exporter::PlanContext context{file ? exporter::Utf8String(*file) : std::string()};
 
-    auto templates = std::make_shared<const evaluator::TemplateLibrary>(
-        evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory()));
-    exporter::SourceInputs inputs;
-    inputs.templateId = project.settings.template_id;
-    store::ProjectStore* store = open->store.get();
-    inputs.resources = std::make_shared<evaluator::DecodingResourceProvider>(StoreReader(store));
-    if (project.mesh) {
-        mesh::ImportResult mesh =
-            mesh::RederiveMesh(project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
-        inputs.geometry = std::make_shared<evaluator::MeshGeometryMasks>(
-            std::make_shared<const mesh::TexturingMesh>(std::move(mesh.mesh)));
-    }
-    evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
+    // The revision's evaluation: the one an earlier call on this revision kept, tiles included.
+    EvaluationLease evaluation = LeaseEvaluation(open, snapshot);
 
     // A first plan reads the source's components, so a colour source is written R+G+B, never as
     // its luma (as the diagnostics' export does).
@@ -282,9 +270,11 @@ json::Object CaptureDiagnostic(const CaptureArguments& a, const ParsedMode& pars
             context);
         exporter::CheckExportable(plan);
         std::vector<exporter::EncodedFile> encoded =
-            Take(exporter::EncodeExport(project, snapshot.revision, plan, inputs, *templates, cpu.store(), cpu.cache()));
+            Take(exporter::EncodeExport(project, snapshot.revision, plan, evaluation->inputs, *evaluation->templates,
+                                        evaluation->cpu.store(), evaluation->cpu.cache()));
         bytes[i] = std::move(encoded.front().bytes);
     }
+    evaluation.Keep();
 
     const json::Object source{{"type", sourceType},
                               {"name", sourceName},
@@ -384,11 +374,11 @@ json::Object CaptureViewport(const CaptureArguments& a) {
     preview::PreviewFrame frame;
     frame.revision = snapshot.revision;
     frame.project = project;
-    {
-        mesh::ImportResult imported =
-            mesh::RederiveMesh(*project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
-        frame.mesh = std::make_shared<const mesh::TexturingMesh>(std::move(imported.mesh));
-    }
+    // The revision's evaluation (evaluation.h): its mesh, re-derived from the stored bytes (a preset
+    // changes display state only), and the tiles an earlier call on this revision computed.
+    std::optional<EvaluationLease> evaluation;
+    evaluation.emplace(LeaseEvaluation(open, snapshot));
+    frame.mesh = (*evaluation)->mesh;
     if (const std::optional<std::string>& hash = project->display.environment.resource) {
         frame.environmentHash = *hash;
         std::optional<std::string> bytes = read(*hash);
@@ -426,13 +416,12 @@ json::Object CaptureViewport(const CaptureArguments& a) {
         Value("capture: " + valid.error().reason);
     }
 
-    // The material maps of the committed revision, on a CPU evaluator with the export's inputs.
-    auto templates = std::make_shared<const evaluator::TemplateLibrary>(
-        evaluator::TemplateLibrary::Load(evaluator::TemplateLibrary::DefaultDirectory()));
-    evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
-    auto resources = std::make_shared<evaluator::DecodingResourceProvider>(read);
-    auto geometry = std::make_shared<evaluator::MeshGeometryMasks>(frame.mesh);
-    for (const core::TextureSet& set : project->texture_sets) {
+    // The material maps of the committed revision, on its CPU evaluation with the export's inputs.
+    // The evaluator never reads display state, so the revision itself is evaluated, not the copy
+    // the preset changed.
+    RevisionEvaluation& revision = **evaluation;
+    const core::Project& material = *snapshot.project;
+    for (const core::TextureSet& set : material.texture_sets) {
         if (set.stacks.empty()) continue;
         const core::Stack& stack = set.stacks.front();
         for (const preview::MaterialSlot slot :
@@ -443,23 +432,25 @@ json::Object CaptureViewport(const CaptureArguments& a) {
             request.textureSet = set.id;
             request.stack = stack.id;
             request.channel = *channel;
-            request.templateId = project->settings.template_id;
-            request.resources = resources;
-            request.geometry = geometry;
+            request.templateId = material.settings.template_id;
+            request.resources = revision.inputs.resources;
+            request.geometry = revision.inputs.geometry;
             frame.maps[{set.id, slot}] =
-                std::make_shared<const evaluator::ChannelResult>(Take(cpu.Evaluate(*project, request)));
+                std::make_shared<const evaluator::ChannelResult>(Take(revision.cpu.Evaluate(material, request)));
         }
         evaluator::VirtualNormalRequest normal;
         normal.textureSet = set.id;
         normal.stack = stack.id;
         normal.kind = evaluator::NormalSourceKind::Combined;
         normal.convention = core::NormalMapFormat::OpenGL;
-        normal.templateId = project->settings.template_id;
-        normal.resources = resources;
-        normal.geometry = geometry;
+        normal.templateId = material.settings.template_id;
+        normal.resources = revision.inputs.resources;
+        normal.geometry = revision.inputs.geometry;
         frame.maps[{set.id, preview::MaterialSlot::Normal}] = std::make_shared<const evaluator::VirtualNormalResult>(
-            Take(cpu.EvaluateNormal(*project, snapshot.revision, normal)));
+            Take(revision.cpu.EvaluateNormal(material, snapshot.revision, normal)));
     }
+    evaluation->Keep();
+    evaluation.reset();  // the next call may use it while this one renders
     scene->materials = preview::MaterialsOf(frame);
 
     // The GPU: the worker's engine, or a device of the process's backend for this capture.

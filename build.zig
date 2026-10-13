@@ -220,6 +220,7 @@ const pyapi_sources = [_][]const u8{
     "python/display.cpp",
     "python/edits.cpp",
     "python/errors.cpp",
+    "python/evaluation.cpp",
     "python/jobs.cpp",
     "python/recipe.cpp",
     "python/run.cpp",

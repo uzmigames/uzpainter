@@ -5,11 +5,14 @@
 // (src/supervisor/worker.cpp).
 //
 // - A `DiagnosticRun` reads the committed revision of the open project once (inside an open native
-//   `Transaction` it refuses, as the export does) and evaluates every diagnostic of the call on a
-//   CPU evaluator with the inputs the export reads: the project's template, its resources and the
-//   texturing mesh re-derived from its stored bytes. Each view is computed by the entry point the
-//   export's `diagnosticMap` sources use (`src/evaluator/diagnostics.h`, decisions 075, 076, 111),
-//   so a view equals the export of its source.
+//   `Transaction` it refuses, as the export does) and evaluates every diagnostic of the call on the
+//   revision's CPU evaluation (evaluation.h) with the inputs the export reads: the project's
+//   template, its resources and the texturing mesh re-derived from its stored bytes; the tiles an
+//   earlier export, capture or diagnostic of the revision computed serve it. Each view is computed
+//   by the entry point the export's `diagnosticMap` sources use (`src/evaluator/diagnostics.h`,
+//   decisions 075, 076, 111), so a view equals the export of its source. The export of a run that
+//   computed a material's views writes that mask and those views without computing them again
+//   (one computation per view, B19).
 // - The node of a call names its stack: uids are unique in a project.
 // - Decision 126 applies per source (`exporter::RequireIdentifiedBase`): `isolate`, `contribution`
 //   and `region_stats` on a channel whose template base is inferred raise `NotYetSupported`;
@@ -36,14 +39,16 @@
 #include "evaluator/evaluator.h"
 #include "export/plan.h"
 #include "export/publish.h"
+#include "python/evaluation.h"
 #include "python/session.h"
 #include "uzp_core/document/document.h"
 
 namespace uzp::python {
 
-/// The material views of a material with the views decision 126 refuses taken out.
+/// The material views of a material with the views decision 126 refuses taken out, shared with the
+/// run that computed them.
 struct DiagnosticMaterialViews {
-    evaluator::MaterialViews views;
+    std::shared_ptr<const evaluator::MaterialViews> views;
     /// View name -> the refusal's reason.
     std::map<std::string, std::string> refused;
 };
@@ -63,7 +68,8 @@ public:
     [[nodiscard]] evaluator::RegionStats RegionStats(const evaluator::DiagnosticMapId& map, core::Id material);
 
     /// Publishes `sources` (every one naming `node`) as one export generation under `exportPath`,
-    /// one file `$textureSet_<kind>_<map or view>_<uid>.exr` per source, in order.
+    /// one file `$textureSet_<kind>_<map or view>_<uid>.exr` per source, in order. The mask and the
+    /// views `MaterialViews` computed are written as computed, not computed again.
     [[nodiscard]] exporter::Publication Export(core::Id node, const std::vector<evaluator::DiagnosticSource>& sources,
                                                const std::filesystem::path& exportPath);
 
@@ -75,9 +81,9 @@ private:
 
     std::shared_ptr<OpenProject> m_open;
     core::Snapshot m_snapshot;
-    std::shared_ptr<const evaluator::TemplateLibrary> m_templates;
-    exporter::SourceInputs m_inputs;
-    std::unique_ptr<evaluator::CpuEvaluator> m_cpu;
+    EvaluationLease m_evaluation;
+    /// The views the last `MaterialViews` computed (null before), which `Export` reads.
+    std::shared_ptr<const evaluator::MaterialViews> m_views;
 };
 
 }  // namespace uzp::python

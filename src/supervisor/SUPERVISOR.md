@@ -245,7 +245,7 @@ It then answers one request at a time on the interpreter's thread; a long tool's
 | `snapshot_layer_tree` | GPU-free | the layer-tree snapshot of the committed revision (`uzp_core/document/layer_tree.h`) |
 | `diff_snapshots {before, after}` | GPU-free | the nodes and stacks added, removed and modified between two snapshots |
 | `isolate_layer {uid, channels, path}` | GPU-free (CPU evaluator, as the export) | `{revision, uid, was_visible, export}`: the sources `isolated/<channel>/<uid>` published as an export generation (OpenEXR 32f, padding `passthrough`) under `path` |
-| `material_views {mask, path}` | GPU-free | `{revision, material, inside, views: {view: {leak_count, modal_id}}, missing, refused, export}`: the material's mask and each view with its leaks published the same way |
+| `material_views {mask, path}` | GPU-free | `{revision, material, inside, views: {view: {leak_count, modal_id}}, missing, refused, export}`: the material's mask and each view with its leaks published the same way, written from the views the reply computed (each view computed once, B19) |
 | `region_stats {mask, map}` | GPU-free | `{source, revision, stats}`: the statistics the export writes for `regionStats/<map>/<mask>` |
 | `display_get` | GPU-free | `render.display.state()`: the preset's fields, `parity` and the shader (`src/python/display.h`, decision 132) |
 | `display_set {preset?, environment?, exposure?, rotation?, opacity?, blur?, shadows?, background?, color_lut?}` | mutating: the lease, key and precondition; one transaction (the preset first) | the transaction result, stored for the key (`display_get` reads the state); a value outside the fixed pipeline fails `call_failed` (`UnsupportedInUzPainter`, decision 038) with nothing committed |

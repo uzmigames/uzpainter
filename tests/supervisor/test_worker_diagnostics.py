@@ -19,7 +19,7 @@ from tools.parity.fit.decode import decode
 
 PROJECT = """
 from uzpainter import colormanagement as cm, diagnostics, layerstack as ls, project, resource
-from uzpainter import textureset as ts
+from uzpainter import export, textureset as ts
 CT = ts.ChannelType
 project.create(PLANE, project.Settings(default_texture_resolution=256))
 stack = ts.get_active_stack()
@@ -45,11 +45,25 @@ def save(name, m):
 
 iso = diagnostics.isolate(leak, CT.SpecularRoughness)
 views = diagnostics.material_views(mat)
+
+# The material's mask, views and leaks exported as sources, each computed by the export (B19).
+sources = [(views["mask_source"], 1)]
+for v in views["views"].values():
+    sources += [(v["source"], v["values"]["components"]), (v["leaks_source"], 1)]
+maps = [{"fileName": "$textureSet_" + name.replace("/", "_"), "channels": [
+    {"destChannel": c, "srcChannel": c, "srcMapType": "diagnosticMap", "srcMapName": name}
+    for c in ("RGB" if n == 3 else "L")]} for name, n in sources]
+written = export.export_project_textures({
+    "exportPath": WORK + "/views", "exportShaderParams": False, "defaultExportPreset": "d",
+    "exportPresets": [{"name": "d", "maps": maps}], "exportList": [{"rootPath": "uzp_plane"}],
+    "exportParameters": [{"parameters": {"fileFormat": "exr", "bitDepth": "32f",
+                                         "dithering": False, "paddingAlgorithm": "passthrough"}}]})
 result = {"mat": mat.uid(), "leak": leak.uid(), "revision": project.revision(),
           "snapshot": diagnostics.snapshot_layer_tree(),
           "iso": save("iso", iso["map"]), "mask": save("mask", views["mask"]),
           "rough": save("rough", views["views"]["Roughness"]["values"]),
           "leaks": {name: v["leak_count"] for name, v in views["views"].items()},
+          "views_export": {f["relative_path"]: f["sha256"] for f in written["files"]},
           "stats": diagnostics.region_stats("BaseColor", mat)}
 """
 
@@ -128,6 +142,10 @@ def test_diagnostics_tools_equal_the_python_views(
     assert np.array_equal(exported(files[f"materialMask/{mat}"]), saved(work, "mask", py["mask"]))
     rough = exported(files[f"materialView/Roughness/{mat}"])
     assert np.array_equal(rough, saved(work, "rough", py["rough"]))
+    # The tool writes the views its reply computed (B19, decision 246): the bytes an export that
+    # computes every source writes.
+    hashes = {f["relative_path"]: f["sha256"] for f in views["export"]["files"]}
+    assert hashes == py["views_export"]
 
     # region_stats: Python's statistics.
     stats = pipe.call("region_stats", {"mask": mat, "map": "BaseColor"})["result"]
