@@ -715,6 +715,103 @@ def test_belt_manifest_lists_every_missing_input(tmp_path: Path, capsys: Any) ->
     assert listed == [f"{BELT}/paint/masks-belt/T_belt.png", f"{BELT}/painter_create_args.json"]
 
 
+# --- the Sash v5 request (phase2.9 item 2.1; decision 260) -----------------------------------
+
+SASH_MESH = f"{BELT}/lows/25-Faixa-Cintura-v5-low.obj"
+SASH_STACK = {
+    "title": "stand-in sash",
+    "groups": [
+        {"key": "cloth", "name": "Pano", "mask": None},
+        {"key": "hem", "name": "Couro das abas", "mask": "M_hem"},
+    ],
+    "layers": [
+        {"id": "S01", "group": "cloth", "name": "Base", "mask": None, "base_tex": "T_sash"},
+        {"id": "S02", "group": "cloth", "name": "Weave", "mask": "M_weave", "base": [40, 31, 26]},
+        {"id": "H01", "group": "hem", "name": "Base", "mask": None, "base_tex": "T_sash"},
+    ],
+}
+
+
+def make_sash_assets(root: Path) -> Path:
+    """The waist-v5 stand-in with the round folder's arguments rewritten for the sash: the same
+    scripts and round folder, the sash's stack, masks, low and mesh maps."""
+    make_belt_assets(root)
+    windows = str(root).replace("/", "\\")
+    write(root / "Pipeline/retopology/waist-v5/stack-sash.json", json.dumps(SASH_STACK))
+    write(root / SASH_MESH, "mtllib 25-Faixa-Cintura-v5-low.mtl\nv 0 0 0\nv 1 0 0\nf 1 2 2\n")
+    write(root / BELT / "lows/25-Faixa-Cintura-v5-low.mtl", "newmtl 25-Faixa-Cintura\n")
+    write(root / BELT / "bake/25-Faixa-Cintura_Normal_OpenGL_v5.png", b"sash normal")
+    write(root / BELT / "bake/25-Faixa-Cintura_AO_v5.png", b"sash ao")
+    for name in ("M_hem", "M_weave", "T_sash"):
+        write(root / BELT / "paint/masks-sash" / f"{name}.png", name.encode("ascii"))
+    tmp = windows + r"\_tmp\claude\cintura-v5"
+    arguments = {
+        "mesh": tmp + r"\lows\25-Faixa-Cintura-v5-low.obj",
+        "normal": tmp + r"\bake\25-Faixa-Cintura_Normal_OpenGL_v5.png",
+        "ao": tmp + r"\bake\25-Faixa-Cintura_AO_v5.png",
+        "dst": windows + r"\Creatures\Undead\Skeletal Mage\Models3D\25-Faixa-Cintura\x.spp",
+        "name": "25-Faixa-Cintura",
+    }
+    write(root / BELT / "painter_create_args.json", json.dumps(arguments))
+    export = {"out": tmp + r"\paint\tex-sash-r8", "prefix": "25-Faixa-Cintura_v5r8"}
+    write(root / BELT / "painter_export_args.json", json.dumps(export))
+    return root
+
+
+def test_sash_manifest_pins_the_files_the_round_names(tmp_path: Path) -> None:
+    """The sash's request pins the shared waist-v5 scripts and round arguments with the sash's
+    stack, masks, low and mesh maps (decision 260)."""
+    assets = make_sash_assets(tmp_path / "assets3d")
+    manifest = script_run.sash_manifest(assets)
+    assert validation_errors(manifest, Schema.GOLDEN_PUBLIC) == []
+    assert manifest["golden_id"] == "phase2/tier1/sash-v5"
+    assert manifest["domain"] == "tier1/pilot/sash-v5"
+    paths = {item["input_id"]: item["assets3d_path"] for item in manifest["inputs"]}
+    assert paths["sash-mesh"] == SASH_MESH
+    assert paths["sash-mesh-mtl"] == f"{BELT}/lows/25-Faixa-Cintura-v5-low.mtl"
+    assert paths["sash-ao"] == f"{BELT}/bake/25-Faixa-Cintura_AO_v5.png"
+    assert paths["sash-stack"] == "Pipeline/retopology/waist-v5/stack-sash.json"
+    assert paths["painter-create-py"] == "Pipeline/retopology/waist-v5/painter_create.py"
+    assert "belt-stack" not in paths
+    sync = manifest["instruction_sequence"]["steps"][1]["args"]
+    assert sync["stack"] == "sash-stack"
+    assert sync["mask_files"] == ["M_hem.png", "M_weave.png", "T_sash.png"]
+    job = script_job_from_manifest(manifest, assets)
+    assert job.sync.imports[0].module == "run"
+
+
+def test_a_round_folder_holding_another_pieces_arguments_is_refused(tmp_path: Path) -> None:
+    """The round folder holds one pair of arguments files, rewritten per piece: the belt's
+    request is refused over the sash's arguments, and the sash's over the belt's."""
+    assets = make_sash_assets(tmp_path / "assets3d")
+    with pytest.raises(RecorderError, match="another piece's arguments"):
+        script_run.belt_manifest(assets)
+    belt = make_belt_assets(tmp_path / "belt")
+    write(belt / "Pipeline/retopology/waist-v5/stack-sash.json", json.dumps(SASH_STACK))
+    with pytest.raises(RecorderError, match="`name` is '23-Cinto'"):
+        script_run.sash_manifest(belt)
+
+
+def test_sash_manifest_lists_every_missing_input(tmp_path: Path, capsys: Any) -> None:
+    """Today's Assets3D: the round folder is gone, so the command lists both arguments files and
+    every bitmap of the sash's stack, and writes nothing."""
+    assets = make_sash_assets(tmp_path / "assets3d")
+    for path in sorted((assets / BELT).rglob("*"), reverse=True):
+        path.unlink() if path.is_file() else path.rmdir()
+    out = tmp_path / "out" / "sash-v5.json"
+    command = ["manifest", "--pilot", "sash", "--assets-root", str(assets), "--out", str(out)]
+    assert script_run.main(command) == 2
+    assert not out.exists()
+    printed = capsys.readouterr().err
+    assert json.loads(printed[printed.index("{") :])["missing"] == [
+        f"{BELT}/paint/masks-sash/M_hem.png",
+        f"{BELT}/paint/masks-sash/M_weave.png",
+        f"{BELT}/paint/masks-sash/T_sash.png",
+        f"{BELT}/painter_create_args.json",
+        f"{BELT}/painter_export_args.json",
+    ]
+
+
 def test_manifest_command_stores_every_pinned_input(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1,10 +1,11 @@
-"""The MCP-only round on the Wand v1 inputs, the stand-in for Belt v5 (phase2.9 item 2.5;
-decision 192).
+"""The MCP-only round on the Wand v1 inputs, the stand-in for Sash v5 (phase2.9 item 2.5;
+decisions 192, 260).
 
-The Belt v5 round folder is gone from Assets3D until the owner restores it, so the round tool
-(`mcp_round.py`) is exercised on the admitted Wand v1 golden's pinned inputs: the same three-step
-pipeline round, the same export configuration. This is evidence for the tool only, never for the
-Belt: item 2.5 closes on the Belt's own report (`belt_v5/test_belt_v5.py`). It needs the UzmiGames
+The waist-v5 round folder of the pilot (Sash v5, which replaced Belt v5) is gone from Assets3D
+until the owner restores it, so the round tool (`mcp_round.py`) is exercised on the admitted Wand
+v1 golden's pinned inputs: the same three-step pipeline round, the same export configuration. This
+is evidence for the tool only, never for the pilot: item 2.5 closes on the Sash's own report
+(`sash_v5/test_sash_v5.py`). It needs the UzmiGames
 asset repository, the private store (the Wand's inputs resolve there by hash, decision 144) and
 `zig`; hosted CI skips it with the reason. The rule that derives `equal_to_tier1` from the maps is
 tested on its own and runs everywhere.

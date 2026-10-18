@@ -2,7 +2,7 @@ r"""Tier 1 goldens from UzmiGames pipeline scripts run byte-unchanged in Painter
 
     python -m tools.parity.recorder record-script <manifest.json> --assets-root <Assets3D>
     python -m tools.parity.recorder.script_run manifest --assets-root <Assets3D> --out <path> \
-        [--pilot wand|belt|tunic|tunic-rebuild] [--store]
+        [--pilot wand|belt|sash|tunic|tunic-rebuild] [--store]
 
 The manifest's `instruction_sequence.interface` is `uzmigames_pipeline_scripts`: every step is one
 script run (`uzmigames.pipeline.run_script`), and its inputs live in the UzmiGames asset
@@ -942,7 +942,73 @@ def material_library(obj: Path) -> str | None:
     return None
 
 
-def belt_create_inputs(assets_root: Path, missing: list[str]) -> list[tuple[str, str, str]]:
+SASH_STACK = f"{BELT_SCRIPTS}/stack-sash.json"
+SASH_MASKS = f"{BELT}/paint/masks-sash"  # round.sh: waist_masks.py sash --out paint/masks-sash
+
+SASH_DESCRIPTION = (
+    "Tier 1 pilot golden of the UzmiGames sash 25-Faixa-Cintura v5 of the Skeletal Mage, the piece "
+    "that replaces Belt v5 as the phase2.9 pilot (owner, 2026-10-18; decisions 099, 144, 192 and "
+    "260). The sash was painted in the same waist-v5 round as the belt: the UzmiGames pipeline runs"
+    " byte-unchanged in Painter, each script pinned by SHA-256, through Painter's documented remote"
+    " control (never the community MCP bridge): painter_create.py (a new project from the low-poly "
+    "OBJ under OCIO with Painter's substance config, OpenGL normals, 2048 px, no cameras; imports "
+    "the Normal and AO mesh maps; save_as Full), painter_layer_stack.py sync (stack-sash.json: the "
+    "cloth and hem-leather groups, 20 fills, 19 bitmap masks and the base_tex colour bitmap T_sash "
+    "filled in final-UV space) and painter_export.py (BaseColor, Roughness, Metallic, Height and "
+    "Normal_OpenGL as 16-bit PNG, sizeLog2 11, infinite padding, no dithering). The two adaptations"
+    " of the wand golden (decision 099) apply unchanged: the arguments files are repointed at "
+    "staged copies, and the sync command's remote-execution function is the recorder's remote "
+    "control. Its route guard (Assets3D c6b74c2) imports locate from Pipeline/production/run.py, "
+    "pinned here and loaded from its pinned bytes; the project lies in the private work directory, "
+    "outside a production character's folder, so the guard passes with no attempt token. The mesh, "
+    "normal and AO are the files the round's arguments file names, which must name the sash. "
+    "Recordings: r1 (same session: create, sync, export), r1-repeat (same session, export again) "
+    "and r2 (after save, close and reopen, export again). Recorded on Painter 12.1.5."
+)
+
+
+@dataclass(frozen=True)
+class WaistPiece:
+    """One piece of the waist-v5 round (`Pipeline/retopology/waist-v5`, round folder `BELT`): the
+    belt and the sash share the scripts and the round folder, not the stack or the masks."""
+
+    golden_id: str
+    prefix: str  # input-id prefix: belt-mesh, sash-mesh, ...
+    name: str  # the texture set and the arguments files' `name` / export prefix
+    stack: str
+    masks: str
+    description: str
+
+
+BELT_PIECE = WaistPiece(
+    "phase2/tier1/belt-v5", "belt", "23-Cinto", BELT_STACK, BELT_MASKS, BELT_DESCRIPTION
+)
+SASH_PIECE = WaistPiece(
+    "phase2/tier1/sash-v5", "sash", "25-Faixa-Cintura", SASH_STACK, SASH_MASKS, SASH_DESCRIPTION
+)
+
+
+def piece_arguments(piece: WaistPiece, assets_root: Path) -> None:
+    """Refused when the round folder's arguments files name another piece: the round folder holds
+    one pair, rewritten for each piece the round creates or exports."""
+    for args_path, key in (
+        ("painter_create_args.json", "name"),
+        ("painter_export_args.json", "prefix"),
+    ):
+        file = assets_root / BELT / args_path
+        if not file.is_file():
+            continue  # listed missing with the other fixed inputs
+        value = str(json.loads(file.read_bytes().decode("utf-8")).get(key, ""))
+        if not value.startswith(piece.name):
+            raise RecorderError(
+                f"{BELT}/{args_path}: `{key}` is {value!r}, not the {piece.name} piece's: the "
+                f"round folder holds another piece's arguments"
+            )
+
+
+def belt_create_inputs(
+    assets_root: Path, missing: list[str], prefix: str = "belt"
+) -> list[tuple[str, str, str]]:
     """The mesh, its material library, the normal and the AO the round's arguments file names;
     every file not there is added to `missing`."""
     args_path = f"{BELT}/painter_create_args.json"
@@ -952,9 +1018,9 @@ def belt_create_inputs(assets_root: Path, missing: list[str]) -> list[tuple[str,
     arguments = json.loads(file.read_bytes().decode("utf-8"))
     found: list[tuple[str, str, str]] = []
     for key, input_id, kind in (
-        ("mesh", "belt-mesh", "mesh"),
-        ("normal", "belt-normal", "image"),
-        ("ao", "belt-ao", "image"),
+        ("mesh", f"{prefix}-mesh", "mesh"),
+        ("normal", f"{prefix}-normal", "image"),
+        ("ao", f"{prefix}-ao", "image"),
     ):
         relative = assets3d_relative(str(arguments.get(key, "")), assets_root)
         if relative is None:
@@ -970,50 +1036,67 @@ def belt_create_inputs(assets_root: Path, missing: list[str]) -> list[tuple[str,
             if library is None:
                 raise RecorderError(f"{relative} names no material library (`mtllib`)")
             mtl = str(PurePosixPath(relative).with_name(library))
-            found.append(("belt-mesh-mtl", "mesh", mtl))
+            found.append((f"{prefix}-mesh-mtl", "mesh", mtl))
             if not (assets_root / mtl).is_file():
                 missing.append(mtl)
     return found
 
 
-def belt_manifest(assets_root: Path) -> dict[str, Any]:
-    """The Belt v5 request, hashing the current Assets3D files (`--assets-root`); refused with
-    `MissingInputs` naming every file it needs that is not there."""
-    missing = [path for _, _, path in BELT_INPUTS if not (assets_root / path).is_file()]
-    created = belt_create_inputs(assets_root, missing)
+def waist_manifest(assets_root: Path, piece: WaistPiece) -> dict[str, Any]:
+    """The request of one waist-v5 piece, hashing the current Assets3D files (`--assets-root`);
+    refused with `MissingInputs` naming every file it needs that is not there."""
+    fixed = tuple(
+        (f"{piece.prefix}-stack", kind, piece.stack)
+        if input_id == "belt-stack"
+        else (input_id, kind, path)
+        for input_id, kind, path in BELT_INPUTS
+    )
+    missing = [path for _, _, path in fixed if not (assets_root / path).is_file()]
+    piece_arguments(piece, assets_root)
+    created = belt_create_inputs(assets_root, missing, piece.prefix)
     bitmaps: list[str] = []
-    if (assets_root / BELT_STACK).is_file():
-        stack = json.loads((assets_root / BELT_STACK).read_bytes().decode("utf-8"))
+    if (assets_root / piece.stack).is_file():
+        stack = json.loads((assets_root / piece.stack).read_bytes().decode("utf-8"))
         bitmaps = sorted(stack_bitmaps(stack))
         missing += [
-            f"{BELT_MASKS}/{name}.png"
+            f"{piece.masks}/{name}.png"
             for name in bitmaps
-            if not (assets_root / BELT_MASKS / f"{name}.png").is_file()
+            if not (assets_root / piece.masks / f"{name}.png").is_file()
         ]
     if missing:
-        raise MissingInputs("phase2/tier1/belt-v5", missing)
-    inputs = [assets3d_input(i, k, p, assets_root) for i, k, p in BELT_INPUTS + tuple(created)]
+        raise MissingInputs(piece.golden_id, missing)
+    inputs = [assets3d_input(i, k, p, assets_root) for i, k, p in fixed + tuple(created)]
     create = {
         "script": "painter-create-py",
         "args_file": "painter-create-args",
-        "mesh": "belt-mesh",
-        "mesh_material_library": "belt-mesh-mtl",
-        "normal": "belt-normal",
-        "ao": "belt-ao",
+        "mesh": f"{piece.prefix}-mesh",
+        "mesh_material_library": f"{piece.prefix}-mesh-mtl",
+        "normal": f"{piece.prefix}-normal",
+        "ao": f"{piece.prefix}-ao",
     }
     return script_manifest(
-        "phase2/tier1/belt-v5",
-        BELT_DESCRIPTION,
+        piece.golden_id,
+        piece.description,
         inputs,
-        mask_inputs(BELT_MASKS, bitmaps, assets_root),
+        mask_inputs(piece.masks, bitmaps, assets_root),
         create,
-        "belt-stack",
+        f"{piece.prefix}-stack",
         ["production-run-py"],
         assets_root,
     )
 
 
-PILOTS = {"wand": wand_manifest, "belt": belt_manifest}
+def belt_manifest(assets_root: Path) -> dict[str, Any]:
+    """The Belt v5 request (decision 192; replaced as the pilot by the sash, decision 260)."""
+    return waist_manifest(assets_root, BELT_PIECE)
+
+
+def sash_manifest(assets_root: Path) -> dict[str, Any]:
+    """The Sash v5 request, the phase2.9 pilot since decision 260."""
+    return waist_manifest(assets_root, SASH_PIECE)
+
+
+PILOTS = {"wand": wand_manifest, "belt": belt_manifest, "sash": sash_manifest}
 
 
 def store_inputs(manifest: dict[str, Any], assets_root: Path, store: OracleStore) -> int:

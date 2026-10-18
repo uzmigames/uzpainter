@@ -1,13 +1,13 @@
-"""Belt v5 Tier 1 and its MCP-only round on the owner's machine (phase2.9 items 2.3-2.5, 3.1-3.3;
-decisions 028, 192).
+"""Sash v5 Tier 1 and its MCP-only round on the owner's machine (phase2.9 items 2.3-2.5, 3.1-3.3;
+decisions 028, 192, 260).
 
-Rebuilds Belt v5 twice through the pipeline adapter on DX12 (`runner.py`) and compares both
+Rebuilds Sash v5 twice through the pipeline adapter on DX12 (`runner.py`) and compares both
 rebuilds with the private golden; runs the round through typed MCP tools with Python disabled
 (`../mcp_round.py`) and compares its maps with a Tier 1 rebuild's. They need the UzmiGames asset
 repository (`UZP_TEST_ASSETS3D`), `zig` for a fresh `zig build painter` and the private store; the
-Tier 1 test needs the admitted golden `phase2/tier1/belt-v5`, the round its request. Hosted CI has
-none of them and skips with the reason; until the owner restores the round folder (decision 192)
-both skip naming that.
+Tier 1 test needs the admitted golden `phase2/tier1/sash-v5`, the round its request. Hosted CI has
+none of them and skips with the reason; until the owner restores the waist-v5 round folder
+(decisions 192, 260) both skip naming that.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 
 from tests.adapters.assets3d.wand import ASSETS3D, REPO_ROOT
-from tests.parity.tier1.belt_v5.runner import GOLDEN_ID, REQUEST, run
 from tests.parity.tier1.mcp_round import round_report, run_round
+from tests.parity.tier1.sash_v5.runner import GOLDEN_ID, REQUEST, run
 from tests.parity.tier1.wand_v1.runner import rebuild
 from tools.parity.schemas import Schema, validation_errors
 from tools.parity.store.store import locate
@@ -40,7 +40,7 @@ pytestmark = [
     pytest.mark.skipif(locate() is None, reason="no private oracle store on this machine"),
 ]
 GOLDEN = resolve_golden(GOLDEN_ID)
-NO_REQUEST = "its request waits on the owner restoring the Belt v5 round folder (decision 192)"
+NO_REQUEST = "its request waits on the owner restoring the waist-v5 round folder (decision 260)"
 admitted = pytest.mark.skipif(
     GOLDEN is None,
     reason=f"{GOLDEN_ID} is not admitted: "
@@ -73,7 +73,7 @@ def painter(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @admitted
-def test_belt_v5_maps_equal_painter_and_are_byte_stable(painter: Path, tmp_path: Path) -> None:
+def test_sash_v5_maps_equal_painter_and_are_byte_stable(painter: Path, tmp_path: Path) -> None:
     """3.1 every exported map equals its golden; 3.2 the two rebuilds are byte-identical."""
     report = run(painter, tmp_path)
     assert validation_errors(report, Schema.COMPARISON_REPORT) == []
@@ -86,7 +86,7 @@ def test_belt_v5_maps_equal_painter_and_are_byte_stable(painter: Path, tmp_path:
 
 
 @requested
-def test_belt_v5_round_through_typed_mcp_tools_with_python_disabled(
+def test_sash_v5_round_through_typed_mcp_tools_with_python_disabled(
     painter: Path, tmp_path: Path
 ) -> None:
     """2.5, 3.3: the round through typed tools against a supervisor without `--allow-python`;
