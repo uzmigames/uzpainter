@@ -1,0 +1,13 @@
+{
+  "id": 261,
+  "slug": "261-the-border-ring-sign-is-the-nearer-diagonal-in-mesh-box-normalised-object-space-under-one-fma-order-exact-on-tie-to-5-texels-but-not-on-r15-s-384-texel-island",
+  "title": "The border-ring sign is the nearer diagonal in mesh-box-normalised object space, under one FMA order: tie misses 5 texels, r15's 384-texel island still misses",
+  "status": "accepted",
+  "date": "2026-10-18",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
