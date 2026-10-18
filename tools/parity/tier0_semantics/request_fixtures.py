@@ -387,6 +387,410 @@ def uv_ramp(size: int) -> bytes:
     return exr_float_rgb(rgb)
 
 
+# --- Decision 266: kernel-code padding probes -------------------------------------------------
+
+# A UV ramp reads only the centroid of each ring texel's kernel. The kernel code reads each tap:
+# three one-hot bitmaps give the texel (x, y) the class k = x mod 3 + 3 (y mod 3) (x the column,
+# y the row from the top), slot k of 9, so the 9 texels of any 3 x 3 window own one scalar each.
+# Four code bitmaps hold periodic pseudo-random values: d and e (codes k/256, k in 1..255, one
+# 17 x 13 texel tile each), f = (d + e)/2 (the superposition control) and g = 1 - d (the affine
+# control). Every value is exact in float32.
+KERNEL_RESOLUTIONS = (256, 512, 1024, 2048)
+KERNEL_ONEHOT = ("a", "b", "c")
+KERNEL_CODES = ("d", "e", "f", "g")
+KERNEL_PERIOD = (17, 13)  # columns, rows
+KERNEL_SEEDS = {"d": 20261018, "e": 20261266}
+
+
+def kernel_onehot(size: int, part: str) -> bytes:
+    """`size` x `size` float32: R, G, B are 1.0 where the class x mod 3 + 3 (y mod 3) is
+    3p, 3p + 1, 3p + 2 (p = 0, 1, 2 for parts a, b, c), else 0."""
+    p = KERNEL_ONEHOT.index(part)
+    k = np.arange(size)[None, :] % 3 + 3 * (np.arange(size)[:, None] % 3)
+    rgb = np.stack([k == 3 * p + c for c in range(3)], axis=-1).astype(np.float32)
+    return exr_float_rgb(rgb)
+
+
+def kernel_tile(name: str) -> npt.NDArray[np.float64]:
+    """The 13 x 17 x 3 tile of code `name` (rows, columns, RGB)."""
+    if name == "f":
+        return (kernel_tile("d") + kernel_tile("e")) / 2.0
+    if name == "g":
+        return 1.0 - kernel_tile("d")
+    columns, rows = KERNEL_PERIOD
+    state = [KERNEL_SEEDS[name]]
+
+    def nxt() -> int:
+        state[0] = (state[0] * 1664525 + 1013904223) % (1 << 32)
+        return state[0] >> 24
+
+    codes = [nxt() % 255 + 1 for _ in range(rows * columns * 3)]
+    return np.array(codes, dtype=np.float64).reshape(rows, columns, 3) / 256.0
+
+
+def kernel_code(size: int, name: str) -> bytes:
+    """`size` x `size` float32: code `name`'s tile repeated from the top-left texel."""
+    columns, rows = KERNEL_PERIOD
+    tile = kernel_tile(name)
+    rgb = np.tile(tile, (size // rows + 1, size // columns + 1, 1))[:size, :size]
+    return exr_float_rgb(np.ascontiguousarray(rgb, dtype=np.float32))
+
+
+# The kernel atlas: one texture set `uzp_kernel_atlas` of separate 3D pieces, each a small UV
+# configuration. Layout coordinates are texels (column, row from the top) of a 512 px tile; a
+# mesh for resolution N maps them to u = column / N, v = 1 - row / N, so every resolution sees
+# the same texel configuration. Flat islands are isometric: 3D (x, 0, z) = (column - 256, 0,
+# row - 256) cm. Two anchor triangles that cover no texel centre put the mesh box at exactly
+# [-256, 256] in x and z, so the box-normalised positions are exact in float32. Items are packed
+# in shelves 8 texels apart inside texels 16..496.
+ATLAS_RESOLUTIONS = (512, 1024, 2048)
+ATLAS_TEXELS = 512
+ATLAS_MARGIN = 16
+ATLAS_GAP = 8
+ATLAS_HALF = 256.0
+# The moved atlas (decision 266): positions scaled by 1.7 and offset, so that the box is
+# neither centred nor of power-of-two extent and the normalised positions round.
+ATLAS_MOVED_SCALE = 1.7
+ATLAS_MOVED_OFFSET = (3.1, 0.0, -2.3)
+
+Vec3 = tuple[float, float, float]
+Face = tuple[list[Vec3], list[tuple[float, float]]]  # 3D corners, layout (column, row) corners
+
+
+def _flat_face(uvs: list[tuple[float, float]]) -> Face:
+    """A flat isometric face from its layout corners."""
+    return [(c - ATLAS_HALF, 0.0, r - ATLAS_HALF) for c, r in uvs], uvs
+
+
+def _frame_face(
+    origin: Vec3, e1: Vec3, e2: Vec3, lp: float, lq: float, scale: float, turn: float
+) -> Face:
+    """A parallelogram origin + p e1 + q e2 (p in [0, lp], q in [0, lq]); its UV is (p, q) / scale
+    turned `turn` degrees (u right, v up), at layout origin (0, 0)."""
+    cos, sin = math.cos(math.radians(turn)), math.sin(math.radians(turn))
+    if turn % 90 == 0:
+        cos, sin = round(cos), round(sin)
+    corners3: list[Vec3] = []
+    uvs: list[tuple[float, float]] = []
+    for p, q in ((0.0, 0.0), (lp, 0.0), (lp, lq), (0.0, lq)):
+        x, y, z = (o + p * a + q * b for o, a, b in zip(origin, e1, e2, strict=True))
+        corners3.append((x, y, z))
+        uvs.append(((p * cos - q * sin) / scale, -(p * sin + q * cos) / scale))
+    return corners3, uvs
+
+
+def _moved_uv(face: Face, column: float, row: float) -> Face:
+    """`face` with its UV bounding box's top-left corner moved to (column, row)."""
+    corners3, uvs = face
+    c0, r0 = min(c for c, _ in uvs), min(r for _, r in uvs)
+    return corners3, [(c - c0 + column, r - r0 + row) for c, r in uvs]
+
+
+class AtlasItem:
+    """One configuration: the UV boxes it reserves (width, height), the faces it builds from
+    the boxes' top-left corners, and the texel centres it must cover."""
+
+    def __init__(
+        self,
+        name: str,
+        boxes: list[tuple[int, int]],
+        build: Any,
+        covers: int,
+    ) -> None:
+        self.name, self.boxes, self.build, self.covers = name, boxes, build, covers
+
+
+def _flat_item(name: str, polygons: list[list[tuple[float, float]]], covers: int) -> AtlasItem:
+    """Flat isometric islands given as polygons in item-local layout coordinates."""
+    width = math.ceil(max(c for poly in polygons for c, _ in poly))
+    height = math.ceil(max(r for poly in polygons for _, r in poly))
+
+    def build(origins: list[tuple[float, float]]) -> list[Face]:
+        [(oc, orow)] = origins
+        return [_flat_face([(oc + c, orow + r) for c, r in poly]) for poly in polygons]
+
+    return AtlasItem(name, [(width, height)], build, covers)
+
+
+def _texels(cells: list[tuple[int, int]], inset: float = 0.25) -> list[list[tuple[float, float]]]:
+    """One square island of side 1 - 2 inset around each texel (column, row)."""
+    return [
+        [
+            (c + inset, r + inset),
+            (c + 1 - inset, r + inset),
+            (c + 1 - inset, r + 1 - inset),
+            (c + inset, r + 1 - inset),
+        ]
+        for c, r in cells
+    ]
+
+
+def _rect(columns: int, rows: int) -> list[tuple[float, float]]:
+    """A rectangle covering the texel centres of `columns` x `rows` texels from (0, 0)."""
+    i = 0.25
+    return [(i, i), (columns - i, i), (columns - i, rows - i), (i, rows - i)]
+
+
+X_AXIS: Vec3 = (1.0, 0.0, 0.0)
+MINUS_Z: Vec3 = (0.0, 0.0, -1.0)
+
+
+def _seam_item(
+    name: str,
+    side: float,
+    ratio: float,
+    turn: float,
+    covers: int,
+    fold: tuple[float, float] = (1.0, 0.0),
+    phase: tuple[float, float] = (0.25, 0.25),
+) -> AtlasItem:
+    """Two 3D squares of side `side` sharing one edge: A flat and isometric, B beyond A's +x edge
+    (folded down by the angle of (cos, sin) = `fold`), its UV island at scale 1 / `ratio`, turned
+    `turn` degrees, in a box of its own. A's box reserves room for B in 3D."""
+    b_side = side / ratio
+    reach = math.ceil(2 * side + 1)
+    b_box = math.ceil(
+        b_side * (abs(math.cos(math.radians(turn))) + abs(math.sin(math.radians(turn)))) + 1
+    )
+
+    def build(origins: list[tuple[float, float]]) -> list[Face]:
+        (ac, ar), (bc, br) = origins
+        c0, r0 = ac + phase[0], ar + phase[0] + side  # A's (p, q) = (0, 0): its bottom-left
+        a_origin = (c0 - ATLAS_HALF, 0.0, r0 - ATLAS_HALF)
+        a_face = _frame_face(a_origin, X_AXIS, MINUS_Z, side, side, 1.0, 0.0)
+        a = _moved_uv(a_face, ac + phase[0], ar + phase[0])
+        e1 = (fold[0], -fold[1], 0.0)
+        b_origin = (a_origin[0] + side, 0.0, a_origin[2])
+        b = _frame_face(b_origin, e1, MINUS_Z, side, side, ratio, turn)
+        return [a, _moved_uv(b, bc + phase[1], br + phase[1])]
+
+    return AtlasItem(name, [(reach, math.ceil(side + 1)), (b_box, b_box)], build, covers)
+
+
+def _corner_item(
+    name: str,
+    side: float,
+    ratios: tuple[float, float],
+    turns: tuple[float, float],
+    covers: int,
+) -> AtlasItem:
+    """A cube corner: three squares of side `side` meeting at one 3D vertex V, F1 flat and
+    isometric, F2 hanging down from F1's far (-z) edge, F3 from its -x edge; three seams end at
+    V. F2 and F3 are UV islands of their own at scales 1 / `ratios`, turned by `turns`."""
+    boxes = [(math.ceil(side + 1), math.ceil(side + 1))]
+    boxes += [(math.ceil(side / r * 1.5 + 1), math.ceil(side / r * 1.5 + 1)) for r in ratios]
+
+    def build(origins: list[tuple[float, float]]) -> list[Face]:
+        (fc, fr), (c2, r2), (c3, r3) = origins
+        c0, r0 = fc + 0.25, fr + 0.25 + side
+        x0, z0 = c0 - ATLAS_HALF, r0 - side - ATLAS_HALF  # V = (x0, 0, z0)
+        f1_face = _frame_face((x0, 0.0, z0 + side), X_AXIS, MINUS_Z, side, side, 1.0, 0.0)
+        f1 = _moved_uv(f1_face, fc + 0.25, fr + 0.25)
+        f2 = _frame_face((x0, 0.0, z0), X_AXIS, (0.0, -1.0, 0.0), side, side, ratios[0], turns[0])
+        f3 = _frame_face(
+            (x0, -side, z0), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0), side, side, ratios[1], turns[1]
+        )
+        return [f1, _moved_uv(f2, c2 + 0.25, r2 + 0.25), _moved_uv(f3, c3 + 0.25, r3 + 0.25)]
+
+    return AtlasItem(name, boxes, build, covers)
+
+
+def _fan_item(
+    name: str, half: int, per_side: int, apex: float, phase: tuple[float, float], covers: int
+) -> AtlasItem:
+    """A pole: the 4 * `per_side` triangles of a square of half-size `half` cm around its centre
+    (lifted by `apex` cm), meeting at that one 3D vertex. In UV the triangles stand side by side
+    on one row, each with its own copy of the apex (as at a UV sphere's pole), so every spoke is
+    a seam whose two sides face each other across a V-shaped gap. `phase` offsets the strip so
+    that no texel centre lies on a triangle edge."""
+    segment = 2 * half / per_side
+    count = 4 * per_side
+    width, height = math.ceil(count * segment + 1), 2 * half + 1
+
+    def build(origins: list[tuple[float, float]]) -> list[Face]:
+        [(oc, orow)] = origins
+        cx, cz = oc + width // 2 - ATLAS_HALF, orow + height // 2 - ATLAS_HALF
+        steps = [-half + j * segment for j in range(per_side)]
+        loop = [(s, -half) for s in steps] + [(half, s) for s in steps]
+        loop += [(-s, half) for s in steps] + [(-half, -s) for s in steps]
+        ring = [(cx + x, 0.0, cz + z) for x, z in loop]
+        top: Vec3 = (cx, apex, cz)
+        if _normal(ring[0], ring[1], top)[1] < 0:
+            ring.reverse()
+        base_row = orow + phase[1] + half
+        faces: list[Face] = []
+        for i in range(count):
+            left = oc + phase[0] + i * segment
+            uvs = [
+                (left, base_row),
+                (left + segment, base_row),
+                (left + segment / 2, base_row - half),
+            ]
+            faces.append(([ring[i], ring[(i + 1) % count], top], uvs))
+        return faces
+
+    return AtlasItem(name, [(width, height)], build, covers)
+
+
+def _normal(a: Vec3, b: Vec3, c: Vec3) -> Vec3:
+    u = [b[i] - a[i] for i in range(3)]
+    w = [c[i] - a[i] for i in range(3)]
+    n = (u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0])
+    length = math.sqrt(sum(v * v for v in n))
+    return (n[0] / length + 0.0, n[1] / length + 0.0, n[2] / length + 0.0)
+
+
+FOLD_90 = (0.0, 1.0)
+FOLD_53 = (0.6, 0.8)  # cos, sin of atan(4/3): B's far edge at whole centimetres
+
+
+def atlas_items() -> list[AtlasItem]:
+    """The configurations of decision 266's kernel atlas, in packing order."""
+    tri = [(0.25, 0.25), (2.5, 0.25), (0.25, 2.5)]  # L-tromino: covers (0,0), (1,0), (0,1)
+    diamond = [(4.5, 0.25), (8.75, 4.5), (4.5, 8.75), (0.25, 4.5)]
+    diagonal = [(0.25, 0.5), (0.5, 0.25), (1.75, 1.5), (1.5, 1.75)]
+    anti = [(0.25, 1.5), (1.5, 0.25), (1.75, 0.5), (0.5, 1.75)]
+    return [
+        _flat_item("row-384", [_rect(384, 1)], 384),
+        _flat_item("row-128", [_rect(128, 1)], 128),
+        _flat_item("block-32", [_rect(32, 32)], 1024),
+        _flat_item("column-128", [_rect(1, 128)], 128),
+        _flat_item("row-32", [_rect(32, 1)], 32),
+        _flat_item("column-32", [_rect(1, 32)], 32),
+        _flat_item("row-8", [_rect(8, 1)], 8),
+        _flat_item("column-8", [_rect(1, 8)], 8),
+        _flat_item("row-3", [_rect(3, 1)], 3),
+        _flat_item("column-3", [_rect(1, 3)], 3),
+        _flat_item("point", _texels([(0, 0)]), 1),
+        _flat_item("pair-axis-x", [_rect(2, 1)], 2),
+        _flat_item("pair-axis-y", [_rect(1, 2)], 2),
+        _flat_item("pair-diagonal-one-quad", [diagonal], 2),
+        _flat_item("pair-antidiagonal-one-quad", [anti], 2),
+        _flat_item("pair-diagonal-two-pieces", _texels([(0, 0), (1, 1)]), 2),
+        _flat_item("pair-knight-two-pieces", _texels([(0, 0), (2, 1)]), 2),
+        _flat_item("gap-x-two-pieces", _texels([(0, 0), (2, 0)]), 2),
+        _flat_item("gap-y-two-pieces", _texels([(0, 0), (0, 2)]), 2),
+        _flat_item("gap-diagonal-two-pieces", _texels([(0, 0), (2, 2)]), 2),
+        _flat_item("l-tromino", [tri], 3),
+        _flat_item("block-2", [_rect(2, 2)], 4),
+        _flat_item("block-3", [_rect(3, 3)], 9),
+        _flat_item("block-4", [_rect(4, 4)], 16),
+        _flat_item("diamond-4", [diamond], 41),
+        _seam_item("seam-r1-single", 1.0, 1.0, 0.0, 2),
+        _seam_item("seam-r1-turn90", 2.0, 1.0, 90.0, 8),
+        _seam_item("seam-r1.5", 3.0, 1.5, 0.0, 13),
+        _seam_item("seam-r1.5-single", 1.5, 1.5, 0.0, 2, phase=(0.75, 0.25)),
+        _seam_item("seam-r2-turn90", 4.0, 2.0, 90.0, 20),
+        _seam_item("seam-r2-single-b", 2.0, 2.0, 0.0, 5),
+        _seam_item("seam-r1.25", 5.0, 1.25, 0.0, 41),
+        _seam_item("seam-r1-turn30", 4.0, 1.0, 30.0, 32),
+        _seam_item("seam-r1-turn90-fold90", 2.0, 1.0, 90.0, 8, FOLD_90),
+        _seam_item("seam-r2-turn90-fold90", 4.0, 2.0, 90.0, 20, FOLD_90),
+        _seam_item("seam-r1-turn90-fold53", 5.0, 1.0, 90.0, 50, FOLD_53),
+        _corner_item("corner-r1", 4.0, (1.0, 1.0), (90.0, 180.0), covers=48),
+        _corner_item("corner-r1-r1.5-r2", 6.0, (1.5, 2.0), (0.0, 90.0), covers=61),
+        _fan_item("pole-4", 6, 1, 0.0, (0.375, 0.125), covers=144),
+        _fan_item("pole-8", 8, 2, 0.0, (0.375, 0.125), covers=256),
+        _fan_item("pole-8-pyramid", 8, 2, 8.0, (0.375, 0.125), covers=256),
+        _fan_item("pole-12", 6, 3, 0.0, (0.375, 0.25), covers=120),
+    ]
+
+
+def _anchor_faces(origin: tuple[float, float]) -> list[Face]:
+    """Two triangles at the box corners (-256, 0, -256) and (256, 0, 256), their UVs inside
+    texel `origin` and its right neighbour, off every texel centre."""
+    oc, orow = origin
+    faces: list[Face] = []
+    for k, corner in enumerate((-ATLAS_HALF, ATLAS_HALF)):
+        step = 0.25 if corner < 0 else -0.25
+        corners3 = [
+            (corner, 0.0, corner),
+            (corner + step, 0.0, corner),
+            (corner, 0.0, corner + step),
+        ]
+        c, r = oc + k, orow
+        faces.append(
+            (corners3, [(c + 0.625, r + 0.625), (c + 0.875, r + 0.625), (c + 0.625, r + 0.875)])
+        )
+    return faces
+
+
+def atlas_faces() -> list[tuple[str, list[Face]]]:
+    """Every item's faces at its packed place (shelves left to right, top to bottom), then the
+    anchors."""
+    limit = ATLAS_TEXELS - ATLAS_MARGIN
+    column, row, shelf = ATLAS_MARGIN, ATLAS_MARGIN, 0
+    placed: list[tuple[str, list[Face]]] = []
+    for item in atlas_items():
+        origins = []
+        for width, height in item.boxes:
+            if column + width > limit:
+                column, row, shelf = ATLAS_MARGIN, row + shelf + ATLAS_GAP, 0
+            origins.append((float(column), float(row)))
+            column += width + ATLAS_GAP
+            shelf = max(shelf, height)
+        placed.append((item.name, item.build(origins)))
+    if column + 2 > limit:
+        column, row, shelf = ATLAS_MARGIN, row + shelf + ATLAS_GAP, 0
+    assert row + shelf <= limit, "the kernel atlas does not fit its tile"
+    placed.append(("anchors", _anchor_faces((float(column), float(row)))))
+    return placed
+
+
+def _number(value: float) -> str:
+    """The exact decimal of a dyadic value (at most 2^-24), else 9 decimals."""
+    if (value * (1 << 24)).is_integer():
+        text = f"{value:.24f}".rstrip("0")
+        return text + "0" if text.endswith(".") else text
+    return f"{value:.9f}"
+
+
+def kernel_atlas(resolution: int, moved: bool = False) -> bytes:
+    """The kernel atlas mesh for `resolution` (u = column / N, v = 1 - row / N); `moved` scales
+    the positions by 1.7 and offsets them (decision 266). Shared 3D corners of one item share
+    one `v` line, so its seams are real; every face has its own normal."""
+    data: list[str] = []
+    faces: list[str] = []
+    positions: dict[tuple[str, Vec3], int] = {}
+    uv_count = normal_count = 0
+    sx, sy, sz = ATLAS_MOVED_OFFSET if moved else (0.0, 0.0, 0.0)
+    scale = ATLAS_MOVED_SCALE if moved else 1.0
+    for name, item_faces in atlas_faces():
+        for corners3, uvs in item_faces:
+            area = sum(
+                uvs[i][0] * -uvs[(i + 1) % len(uvs)][1] - uvs[(i + 1) % len(uvs)][0] * -uvs[i][1]
+                for i in range(len(uvs))
+            )
+            order = list(range(len(uvs))) if area > 0 else list(reversed(range(len(uvs))))
+            n = _normal(*(corners3[i] for i in order[:3]))
+            data.append(f"vn {_number(n[0])} {_number(n[1])} {_number(n[2])}\n")
+            normal_count += 1
+            refs = []
+            for i in order:
+                key = (name, corners3[i])
+                if key not in positions:
+                    x, y, z = corners3[i]
+                    p = (x * scale + sx, y * scale + sy, z * scale + sz)
+                    data.append(
+                        f"v {fmt(*p)}\n" if moved else f"v {' '.join(_number(c) for c in p)}\n"
+                    )
+                    positions[key] = len(positions) + 1
+                c, r = uvs[i]
+                data.append(f"vt {_number(c / resolution)} {_number(1.0 - r / resolution)}\n")
+                uv_count += 1
+                refs.append(f"{positions[key]}/{uv_count}/{normal_count}")
+            for k in range(1, len(refs) - 1):
+                faces.append(f"f {refs[0]} {refs[k]} {refs[k + 1]}\n")
+    what = " positions x 1.7 offset by (3.1, 0, -2.3) cm;" if moved else ""
+    return obj(
+        "uzp_kernel_atlas",
+        f"Decision 266 kernel atlas at {resolution} px:{what} separate pieces of single texels, "
+        "pairs, gaps, rows, blocks, UV seams, cube corners and poles.",
+        [("uzp_kernel_atlas", faces)],
+        "".join(data),
+    )
+
+
 # --- Literal export configurations (recipe_json) ----------------------------------------------
 
 

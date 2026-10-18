@@ -413,6 +413,8 @@ Decision 216 adds three Legacy padding probes, recorded as in 11.1 step 3: `expo
 
 Decision 225 adds `srgb-bitmap-minification-random` (decision 219's sRGB8 mip filter), Legacy, recorded as in 11.1 step 3: `python -m tools.parity.recorder record "$req/tier0/semantics/srgb-bitmap-minification-random.json"`. Its seeded random 256 and 512 px bitmaps are minified at scales 2 and 4; it reads none of the held-out goldens. Open: Painter was in other use at batch H.
 
+Decision 266 adds thirteen Legacy kernel-code padding probes, `export-padding-kernel-*`, recorded as in 11.1 step 3, one `python -m tools.parity.recorder record "$req/tier0/semantics/<golden>.json"` each, the 2048 px ones (`-atlas-2048`, `-tie-2048`) last. Each adds User0-User7 as RGB32F and exports the eight maps at OpenEXR 32f with `infinite` and `passthrough`. The decision-129 void rule applies to every channel: a `passthrough` texel that differs from its source on a covered texel, or a template capture with a User channel other than RGB32F, voids the record; report it.
+
 ### 11.3 After the sessions
 
 - For each admitted Tier 0 golden, add its name to `recording_requests.ADMITTED` (the generator then plans its manifest under `manifests/`) and delete its request file. `python -m tools.parity.tier0_semantics check` must pass.

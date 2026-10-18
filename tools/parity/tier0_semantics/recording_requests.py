@@ -14,7 +14,8 @@ Later decisions add requests the same way (`later_goldens`): decision 145's sRGB
 (decision 156), decision 126's inferred template bases and decision 129's padding probes P-ramp
 and P-tie (decision 157), the other 21 inferred template bases (decision 168), decision 174's
 sRGB bitmap minification and decision 169's L8 material channels, decision 210's ring-sign probes
-and a position-encoded seam probe (decision 216).
+and a position-encoded seam probe (decision 216), decision 225's sRGB minification on random
+content and decision 266's kernel-code padding probes.
 
 Colour management: every golden runs under Legacy (Painter started without `OCIO`) except the
 two that name `OCIO` in `applied_settings` (`export-ocio-encode`, `export-presets-ocio`), which
@@ -193,6 +194,59 @@ REQUEST_FIXTURES["seam-ramp-r1-p0-box17"] = (
     f"{FIXTURE_DIR}/meshes/seam-ramp-r1-p0-box17.obj",
     lambda: rf.ramp_seam("r1", "p0", rf.RAMP_BOX17_EXTENT),
 )
+
+
+# Decision 266's kernel-code probes: per resolution the one-hot classes, the codes and a UV ramp;
+# the kernel atlas per resolution and moved.
+def kernel_onehot_generator(size: int, part: str) -> Generate:
+    return lambda: rf.kernel_onehot(size, part)
+
+
+def kernel_code_generator(size: int, name: str) -> Generate:
+    return lambda: rf.kernel_code(size, name)
+
+
+def kernel_atlas_generator(size: int, moved: bool) -> Generate:
+    return lambda: rf.kernel_atlas(size, moved)
+
+
+def kernel_bitmaps(size: int) -> list[str]:
+    """The fixture ids of User0-User7 in a kernel-code probe at `size` px: the one-hot parts,
+    the UV ramp, the codes. No image stem ends in a number from 1001 up (decision 166)."""
+    onehot = [f"kernel-onehot-{part}-n{size}" for part in rf.KERNEL_ONEHOT]
+    codes = [f"kernel-code-{name}-n{size}" for name in rf.KERNEL_CODES]
+    ramp = "uv-ramp-512" if size == 512 else renamed_ramp(size)
+    return [*onehot, ramp, *codes]
+
+
+def kernel_atlas_mesh(size: int, moved: bool = False) -> str:
+    return f"kernel-atlas-n{size}" + ("-moved" if moved else "")
+
+
+for _size in rf.KERNEL_RESOLUTIONS:
+    for _part in rf.KERNEL_ONEHOT:
+        REQUEST_FIXTURES[f"kernel-onehot-{_part}-n{_size}"] = (
+            "image",
+            f"{FIXTURE_DIR}/bitmaps/kernel-onehot-{_part}-n{_size}.exr",
+            kernel_onehot_generator(_size, _part),
+        )
+    for _name in rf.KERNEL_CODES:
+        REQUEST_FIXTURES[f"kernel-code-{_name}-n{_size}"] = (
+            "image",
+            f"{FIXTURE_DIR}/bitmaps/kernel-code-{_name}-n{_size}.exr",
+            kernel_code_generator(_size, _name),
+        )
+REQUEST_FIXTURES[renamed_ramp(256)] = (
+    "image",
+    f"{FIXTURE_DIR}/bitmaps/{renamed_ramp(256)}.exr",
+    uv_ramp_generator(256),
+)
+for _size, _moved in [*((n, False) for n in rf.ATLAS_RESOLUTIONS), (1024, True)]:
+    REQUEST_FIXTURES[kernel_atlas_mesh(_size, _moved)] = (
+        "mesh",
+        f"{FIXTURE_DIR}/meshes/{kernel_atlas_mesh(_size, _moved)}.obj",
+        kernel_atlas_generator(_size, _moved),
+    )
 for _group, _probes in probe_groups().items():
     for _probe in _probes:
         REQUEST_FIXTURES[f"probe-{_group}-{_probe}"] = (
@@ -214,6 +268,8 @@ MESH_SETS = {
     **{f"seam-ramp-{m}-{p}": ["uzp_seam"] for m in rf.RAMP_MESHES for p in rf.RAMP_PHASES},
     "tie-box16": ["uzp_tie"],
     "seam-ramp-r1-p0-box17": ["uzp_seam"],
+    **{kernel_atlas_mesh(n): ["uzp_kernel_atlas"] for n in rf.ATLAS_RESOLUTIONS},
+    kernel_atlas_mesh(1024, moved=True): ["uzp_kernel_atlas"],
 }
 
 
@@ -1160,6 +1216,94 @@ def padding_sign_probes() -> list[Golden]:
     ]
 
 
+# --- Decision 266: kernel-code padding probes --------------------------------------------------
+
+KERNEL_CHANNELS = tuple(f"User{i}" for i in range(8))
+KERNEL_MAPS = [f"documentMap/user{i}:RGB" for i in range(8)]
+KERNEL_TAIL = (
+    "User0-User7 added as RGB32F (a record whose template capture shows one of them not 32F is "
+    "void); one fill with the eight channels active, Normal at opacity 1, default projection "
+    "(read back), sources the authored float32 kernel code at the document size: User0-User2 "
+    "one-hot the nine classes x mod 3 + 3 (y mod 3) of the texel (column x, row y from the top), "
+    "User3 the UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5, User4 and User5 the periodic "
+    "codes d and e (k/256, one 17 x 13 texel tile each), User6 (d + e)/2 and User7 1 - d. The "
+    "eight maps at OpenEXR 32f with infinite padding and with passthrough (every covered texel "
+    "must equal its source bit for bit, or the probe is void), every export step done twice in "
+    "the session."
+)
+
+
+def kernel_probe(mesh: str, resolution: int) -> Sequence:
+    """Decision 129's probe sequence with the kernel code: User0-User7 RGB32F, one fill with
+    the eight bitmaps, the eight maps at OpenEXR 32f, infinite and passthrough."""
+    s = start(mesh, resolution=resolution)
+    s.channels(tuple((channel, "RGB32F") for channel in KERNEL_CHANNELS))
+    bitmaps = kernel_bitmaps(resolution)
+    res = s.imports(*bitmaps)
+    (texture_set,) = MESH_SETS[mesh]
+    node = s.fill(list(KERNEL_CHANNELS), position="top", texture_set=texture_set)
+    for channel, bitmap in zip(KERNEL_CHANNELS, bitmaps, strict=True):
+        s.bitmap(node, channel, res[bitmap])
+        s.blend(node, channel, "Normal", 1.0)
+    s.add(ps.GET_PROJECTION, node_step=node)
+    export(s, KERNEL_MAPS, EXR32F, "infinite")
+    export(s, KERNEL_MAPS, EXR32F, "passthrough")
+    return s
+
+
+# Decision 266's thirteen probes: golden suffix -> (mesh, resolution, what it holds).
+KERNEL_PROBES: dict[str, tuple[str, int, str]] = {
+    "atlas-512": (
+        kernel_atlas_mesh(512),
+        512,
+        "the kernel atlas (single texels, pairs, gaps, L, blocks, rows and columns, a diamond, "
+        "UV seam pairs at scale ratios 1, 1.25, 1.5 and 2, turned 0, 30 and 90 degrees, flat "
+        "and folded, two cube corners and four pole fans), its mesh box exactly [-256, 256] cm",
+    ),
+    "atlas-1024": (kernel_atlas_mesh(1024), 1024, "the kernel atlas, the same texels at 1024 px"),
+    "atlas-2048": (kernel_atlas_mesh(2048), 2048, "the kernel atlas, the same texels at 2048 px"),
+    "atlas-1024-moved": (
+        kernel_atlas_mesh(1024, moved=True),
+        1024,
+        "the kernel atlas at 1024 px with its positions scaled by 1.7 and offset by "
+        "(3.1, 0, -2.3) cm, so that the box-normalised positions round",
+    ),
+    "tie-512": ("tie", 512, "the P-tie mesh of export-padding-tie-512"),
+    "tie-2048": ("tie", 2048, "the P-tie mesh of export-padding-tie-2048-v2"),
+    **{
+        f"ramp-{m}-{p}": (
+            f"seam-ramp-{m}-{p}",
+            rf.RAMP_RESOLUTION,
+            f"the P-ramp mesh of export-padding-ramp-{m}-{p}-v2 (scale ratio {RAMP_RATIOS[m]}, "
+            f"{RAMP_SHIFTS[p]})",
+        )
+        for m, p in (("r1", "p0"), ("r2", "p0"), ("r2", "p25"), ("r15", "p0"), ("r15", "p25"))
+    },
+    "sphere-256": ("sphere", 256, "the UV sphere of export-padding-sphere"),
+    "bevelled-cube-256": (
+        "bevelled-cube",
+        256,
+        "the bevelled cube of export-padding-bevelled-cube",
+    ),
+}
+
+
+def padding_kernel_probes() -> list[Golden]:
+    """Decision 266's kernel-code probes: each ring texel's taps and weights, one by one."""
+    return [
+        Golden(
+            f"export-padding-kernel-{name}",
+            EXPORT_DOMAIN,
+            "Decision 266's kernel-code probe (phase1.25_pilot-wand item 2.7: the infinite ring "
+            f"tap by tap), exploratory: {what}; document resolution {resolution}. " + KERNEL_TAIL,
+            mesh,
+            [mesh, *kernel_bitmaps(resolution)],
+            kernel_probe(mesh, resolution),
+        )
+        for name, (mesh, resolution, what) in KERNEL_PROBES.items()
+    ]
+
+
 # --- Decision 174 item 6: bilinear minification of an sRGB bitmap ------------------------------
 
 SRGB_MINIFY_SOURCES = ("srgb8-ramp", "field-a")
@@ -1332,7 +1476,8 @@ def later_goldens() -> list[Golden]:
     """Requested goldens of later decisions (145, 126, 129, 168), in the order of the runbook,
     then the padding probes decision 160 voids under their new names (decision 166), then
     decision 174's sRGB minification and decision 169's L8 material channels, then decision
-    216's ring-sign and seam probes, then decision 225's sRGB minification on random content."""
+    216's ring-sign and seam probes, then decision 225's sRGB minification on random content,
+    then decision 266's kernel-code padding probes."""
     return [
         srgb_bitmap_variants(),
         *(template_base(t) for t in INFERRED_BASE_TEMPLATES),
@@ -1346,6 +1491,7 @@ def later_goldens() -> list[Golden]:
         *(resample_held_out(size) for size in rf.HELD_OUT_SIZES),
         *padding_sign_probes(),
         srgb_bitmap_minification_random(),
+        *padding_kernel_probes(),
     ]
 
 

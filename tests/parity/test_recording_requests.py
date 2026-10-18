@@ -291,3 +291,76 @@ def test_srgb_variants_attempt_the_user_channel_spaces() -> None:
         for s in steps
         if s["call"] != "substance_painter.source.SourceBitmap.set_color_space"
     )
+
+
+def test_kernel_code_bitmaps_one_hot_every_class_and_hold_the_controls() -> None:
+    """Decision 266: User0-User2 give the texel (x, y) the one slot x mod 3 + 3 (y mod 3) of 9;
+    d and e are k/256 with a 17 x 13 period, f = (d + e)/2 and g = 1 - d exactly."""
+    bitmaps = REPO_ROOT / FIXTURE_DIR / "bitmaps"
+    slots = [exr_rgb(bitmaps / f"kernel-onehot-{p}-n256.exr")[2] for p in rf.KERNEL_ONEHOT]
+    for y in (0, 1, 2, 100, 255):
+        for x in (0, 1, 2, 37, 255):
+            hot = [v for part in slots for v in part[y * 256 + x]]
+            assert hot == [1.0 if k == x % 3 + 3 * (y % 3) else 0.0 for k in range(9)], (x, y)
+    d, e, f, g = (exr_rgb(bitmaps / f"kernel-code-{n}-n256.exr")[2] for n in rf.KERNEL_CODES)
+    columns, rows = rf.KERNEL_PERIOD
+    for i in range(0, 256 * 256, 97):
+        x, y = i % 256, i // 256
+        assert d[i] == d[(y % rows) * 256 + x % columns]
+        assert all(0 < c < 1 and (c * 256).is_integer() for c in d[i] + e[i])
+        assert f[i] == tuple((a + b) / 2 for a, b in zip(d[i], e[i], strict=True))
+        assert g[i] == tuple(1 - a for a in d[i])
+
+
+def covered_centres(uvs: list[tuple[float, float]]) -> set[tuple[int, int]]:
+    """Texel centres (column, row from the top) strictly inside a convex UV polygon given in
+    texels; a centre on an edge fails the test."""
+    cells = set()
+    for x in range(math.floor(min(c for c, _ in uvs)), math.ceil(max(c for c, _ in uvs))):
+        for y in range(math.floor(min(r for _, r in uvs)), math.ceil(max(r for _, r in uvs))):
+            sides = [
+                (q[0] - p[0]) * (y + 0.5 - p[1]) - (q[1] - p[1]) * (x + 0.5 - p[0])
+                for p, q in zip(uvs, uvs[1:] + uvs[:1], strict=True)
+            ]
+            assert 0.0 not in sides, ("texel centre on an edge", x, y)
+            if all(s > 0 for s in sides) or all(s < 0 for s in sides):
+                cells.add((x, y))
+    return cells
+
+
+def test_kernel_atlas_covers_its_configurations_apart_at_every_resolution() -> None:
+    """Decision 266: every item covers its declared texel centres, items lie 8 texels apart;
+    the meshes at 512, 1024 and 2048 differ only in u = column / N, v = 1 - row / N, the box is
+    exactly [-256, 256] cm in x and z, and the moved mesh scales it by 1.7."""
+    items = {item.name: item.covers for item in rf.atlas_items()}
+    covered = {}
+    for name, faces in rf.atlas_faces():
+        covered[name] = set().union(*(covered_centres(uvs) for _, uvs in faces))
+        assert len(covered[name]) == items.get(name, 0), name
+    names = sorted(covered)
+    for i, a in enumerate(names):
+        for b in names[i + 1 :]:
+            assert all(
+                max(abs(x - u), abs(y - v)) >= rf.ATLAS_GAP
+                for x, y in covered[a]
+                for u, v in covered[b]
+            ), (a, b)
+    meshes = {n: obj_uvs(f"kernel-atlas-n{n}") for n in rf.ATLAS_RESOLUTIONS}
+    vertices, uvs, face_lines = meshes[512]
+    for n, (v_n, uv_n, f_n) in meshes.items():
+        assert (v_n, f_n) == (vertices, face_lines)
+        texels = [c for u, v in uv_n for c in (u * n, (1 - v) * n)]
+        # Dyadic UVs are exact; the 30-degree seam's are written with 9 decimals.
+        assert texels == pytest.approx(
+            [c for u, v in uvs for c in (u * 512, (1 - v) * 512)], abs=1e-5
+        )
+    low = tuple(min(c) for c in zip(*vertices, strict=True))
+    high = tuple(max(c) for c in zip(*vertices, strict=True))
+    assert (low[0], low[2], high[0], high[2]) == (-256.0, -256.0, 256.0, 256.0)
+    moved, moved_uvs, moved_faces = obj_uvs("kernel-atlas-n1024-moved")
+    assert (moved_uvs, moved_faces) == meshes[1024][1:]
+    offset = rf.ATLAS_MOVED_OFFSET
+    for p, q in zip(vertices, moved, strict=True):
+        assert q == pytest.approx(
+            [c * rf.ATLAS_MOVED_SCALE + o for c, o in zip(p, offset, strict=True)]
+        )

@@ -1,0 +1,13 @@
+{
+  "id": 266,
+  "slug": "266-thirteen-kernel-code-padding-probes-read-each-infinite-ring-tap-s-weight-directly-on-the-old-ramp-geometries-and-on-an-atlas-of-isolated-configurations",
+  "title": "Thirteen kernel-code padding probes read each infinite-ring tap's weight directly, on the old ramp geometries and on an atlas of isolated configurations",
+  "status": "accepted",
+  "date": "2026-10-18",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
