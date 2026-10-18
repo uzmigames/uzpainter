@@ -1,0 +1,13 @@
+{
+  "id": 265,
+  "slug": "265-the-seam-and-border-ring-weights-are-not-1-d-of-decision-261-s-float32-object-space-distance-the-rounding-is-two-orders-too-small-and-absent-on-exact-geometry",
+  "title": "The seam and border-ring weights are not 1/d of decision 261's float32 object-space distance: the rounding is two orders too small and absent on exact geometry",
+  "status": "accepted",
+  "date": "2026-10-18",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
