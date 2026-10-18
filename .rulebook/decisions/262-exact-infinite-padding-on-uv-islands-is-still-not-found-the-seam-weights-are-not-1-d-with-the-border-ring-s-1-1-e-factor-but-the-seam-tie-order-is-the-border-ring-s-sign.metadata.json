@@ -1,0 +1,13 @@
+{
+  "id": 262,
+  "slug": "262-exact-infinite-padding-on-uv-islands-is-still-not-found-the-seam-weights-are-not-1-d-with-the-border-ring-s-1-1-e-factor-but-the-seam-tie-order-is-the-border-ring-s-sign",
+  "title": "Exact `infinite` padding on UV islands is still not found: the seam weights are not 1/d with the border ring's 1/(1+e) factor, but the seam's tie order is the border ring's sign",
+  "status": "accepted",
+  "date": "2026-10-18",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
