@@ -1,0 +1,13 @@
+{
+  "id": 263,
+  "slug": "the-virtual-normal-s-island-edge-texels-read-painter-s-infinite-padded-height-in-float32-before-its-half-write-so-decision-245-s-refusal-waits-only-on-the-padding-ring",
+  "title": "The virtual normal's island-edge texels read Painter's infinite-padded Height in float32, before its half write, so decision 245's refusal waits only on the padding ring",
+  "status": "accepted",
+  "date": "2026-10-18",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.12_compositor-height-normal",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}
