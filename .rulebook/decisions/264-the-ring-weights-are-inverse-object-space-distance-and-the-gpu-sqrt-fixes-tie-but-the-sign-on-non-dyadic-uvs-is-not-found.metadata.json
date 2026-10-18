@@ -1,0 +1,13 @@
+{
+  "id": 264,
+  "slug": "the-ring-weights-are-inverse-object-space-distance-and-the-gpu-sqrt-fixes-tie-but-the-sign-on-non-dyadic-uvs-is-not-found",
+  "title": "The ring weights are inverse object-space distance with one diagonal divided by 1 + 1/382, and the GPU square root fixes tie's four 1-ulp misses, but the sign on non-dyadic UVs is still not found",
+  "status": "accepted",
+  "date": "2026-10-18",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
