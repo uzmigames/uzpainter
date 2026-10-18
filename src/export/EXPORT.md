@@ -75,7 +75,7 @@ Tasks `phase1.16_export-processing-encoders` and `phase1.18_export-engine` item 
 - **Padding.**
   - With complete UV coverage, `infinite` and `passthrough` change nothing.
   - With incomplete coverage, `passthrough` is no operation; Painter's own texels outside the islands are session state.
-  - With incomplete coverage, `infinite` is written under exception EXC-007 (decision 223): covered texels exact, the padding texels by the coverage-only rule of `padding.h`.
+  - With incomplete coverage, `infinite` is refused before writing, naming R-090 (decision 259). The owner withdrew exception EXC-007 (decision 223), which had let the padding texels differ from Painter's. The coverage-only rule of `padding.h` is applied only when the exact hunt measures it (`InexactPadding::measure`, `uzp-export-tests process`), never by the export.
   - Refused with incomplete coverage: `passthrough` of meshMap and virtualMap sources, the alpha layouts, and under every padding and in statistics files a `Normal_OpenGL` or `Normal_DirectX`, or a diagnosticMap that isolates, compares or summarises one (`CheckIslandNormal`, decision 245). Its island-edge texels read the Height outside the islands, where Painter's Height is not reproduced. A Height without layers is refused too: no recording shows what Painter's empty Height reads outside the islands. `uzpainter.diagnostics` refuses the same views in memory.
 - **Refused before anything is written** (`NotYetSupported`, recorded by R-090 but not fitted, decision 103):
   - dithering at PNG 8 (deterministic, not a threshold matrix) and in OpenEXR (no recording compares it with off);

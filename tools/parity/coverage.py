@@ -9,8 +9,9 @@ The convention of `src/evaluator/geometry_mask.h` and the OBJ reading of `src/me
   u = (col + 1/2) / W, v = 1 - (row + 1/2) / H, and is covered when that centre lies inside or on
   the boundary of a non-degenerate triangle of the material.
 
-The coverage separates the texels compared exactly from the padding texels exception EXC-007
-excepts (`tools/parity/verdict.py`). It equals the export's own coverage
+The coverage separates the texels inside the UV islands from the padding texels, which the Tier 1
+report publishes apart (exception EXC-007 excepted them until the owner withdrew it, decision
+259; `tools/parity/verdict.py`). It equals the export's own coverage
 (`tests/export/test_export_encoders.py`) and Painter's on the position-encoded padding probes.
 """
 

@@ -8,7 +8,8 @@
 // domain written today:
 //
 // - Formats: PNG at 8 or 16 bits and OpenEXR at 16f or 32f; layouts L, L+A, RGB and RGB+A; at the
-//   texture set's own size, with `infinite` or `passthrough` padding (padding.h).
+//   texture set's own size, with `infinite` padding on complete coverage or `passthrough` padding
+//   (padding.h; `infinite` on UV-islanded sets is refused, decision 259).
 // - Values: the file's channels as EvaluateFileOn reads them out, every stored sample as its
 //   operand (evaluator/diagnostics.h `MapOf`). The plan admits Legacy colour management and OCIO
 //   with Painter's substance config (decision 190), which writes the same files but for the PNG 16
@@ -77,9 +78,10 @@ struct EncodedImage {
 
 /// The bytes of `file` from its evaluated raster (CheckProcessing must have passed): the PNG or
 /// OpenEXR file, or the statistics JSON of a statistics file. With `coverage`, the stored values
-/// are padded over it (padding.h `ApplyPadding`) before they are written. Throws
+/// are padded over it (padding.h `ApplyPadding`, with `inexact`) before they are written. Throws
 /// std::invalid_argument when the raster or the coverage does not match the file's size and layout.
 [[nodiscard]] EncodedImage EncodeFile(const PlannedFile& file, const FileRaster& raster,
-                                      const Coverage* coverage = nullptr);
+                                      const Coverage* coverage = nullptr,
+                                      InexactPadding inexact = InexactPadding::refuse);
 
 }  // namespace uzp::exporter

@@ -18,8 +18,13 @@
 //   (R-090 exports a virtual normal with `passthrough` only from layers and no mesh map, where
 //   Painter's r1 and r2 differ on 37095 of 37214 uncovered texels; owner phase1.25_pilot-wand
 //   item 2.7, decision 245). A combined virtual normal is refused before that (below).
-// - `infinite` with incomplete coverage (decision 223, under exception EXC-007): covered texels
-//   keep their evaluated values; the others are filled in two steps.
+// - `infinite` with incomplete coverage: refused with `core::NotYetSupported` naming R-090 and
+//   decision 259, before anything is written. The rule below (decision 223's coverage-only rule)
+//   is not Painter's outside the islands, and the owner withdrew exception EXC-007, which had
+//   excepted those texels (decision 259: every texel identical). It is applied only when a caller
+//   asks to measure it against Painter (`InexactPadding::measure`, the exact hunt of
+//   phase1.25_pilot-wand item 2.7); the export never does. Covered texels keep their evaluated
+//   values; the others are filled in two steps.
 //   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), takes the
 //      mean of those neighbours: weight 1 for a side neighbour and f/(1 - f) for a diagonal,
 //      f = 0.4142245 (decisions 176, 206). On a straight edge (three covered neighbours in one
@@ -35,8 +40,8 @@
 //   a mean of linear values would leave; decision 223 measured the Wand on its PNG 16 codes.
 //   This is Painter's rule on straight edges away from seams only. Painter's ring across UV seams,
 //   at seam corners and at poles is not identified (decision 220), so outside the islands the
-//   values differ from Painter's; EXC-007 excepts exactly those texels, and the exact rule stays
-//   open (phase1.25_pilot-wand item 2.7).
+//   values differ from Painter's, already on the ring (decision 223, measurements); the exact rule
+//   stays open (phase1.25_pilot-wand item 2.7), and the refusal is lifted only when it is exact.
 // - A combined virtual normal (`Normal_OpenGL`, `Normal_DirectX`, or a diagnosticMap that
 //   isolates, compares or summarises one) with incomplete coverage, under every padding and in
 //   statistics files (decision 245): its island-edge texels, the covered texels with an
@@ -67,10 +72,15 @@ struct Coverage {
     [[nodiscard]] bool Complete() const;
 };
 
+/// Whether an `infinite` padding on incomplete coverage, which is not exact (above), is refused, as
+/// the export always does, or written to be measured against Painter (decision 259).
+enum class InexactPadding : uint8_t { refuse, measure };
+
 /// Throws `core::NotYetSupported` (see above) when `file`'s padding over `coverage` is not fitted,
 /// and std::invalid_argument when the coverage does not have the file's size. A statistics file
 /// has no padding and always passes.
-void CheckPadding(const PlannedFile& file, const Coverage& coverage);
+void CheckPadding(const PlannedFile& file, const Coverage& coverage,
+                  InexactPadding inexact = InexactPadding::refuse);
 
 /// Whether `source` reads a combined virtual normal: the virtualMap Normal_OpenGL or
 /// Normal_DirectX, or a diagnosticMap that isolates, compares or summarises one.
@@ -87,9 +97,10 @@ void CheckPadding(const PlannedFile& file, const Coverage& coverage);
 void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage);
 
 /// Applies `file`'s padding over `coverage` to `stored`, the values the file stores (above),
-/// `channels` per texel, rows top first, after CheckPadding (which it repeats): `infinite` on
-/// incomplete coverage fills the uncovered texels; every other admitted case keeps the values.
-/// Returns whether any texel was filled.
-bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored);
+/// `channels` per texel, rows top first, after CheckPadding (which it repeats with `inexact`):
+/// `infinite` on incomplete coverage, measured only, fills the uncovered texels; every other
+/// admitted case keeps the values. Returns whether any texel was filled.
+bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored,
+                  InexactPadding inexact = InexactPadding::refuse);
 
 }  // namespace uzp::exporter

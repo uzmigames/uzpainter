@@ -15,7 +15,7 @@ namespace uzp::exporter {
 
 namespace {
 
-/// The owner of padding on UV-islanded sets (decisions 103, 223 and 245).
+/// The owner of padding on UV-islanded sets (decisions 103, 245 and 259).
 constexpr std::string_view kIslandsOwner = "owner phase1.25_pilot-wand item 2.7";
 
 [[noreturn]] void Unfitted(const PlannedFile& file, const std::string& what,
@@ -192,7 +192,7 @@ bool Coverage::Complete() const {
     return std::all_of(covered.begin(), covered.end(), [](uint8_t c) { return c != 0; });
 }
 
-void CheckPadding(const PlannedFile& file, const Coverage& coverage) {
+void CheckPadding(const PlannedFile& file, const Coverage& coverage, InexactPadding inexact) {
     if (file.layout == FileLayout::Statistics) return;
     if (coverage.width != file.width || coverage.height != file.height ||
         coverage.covered.size() != size_t{coverage.width} * coverage.height) {
@@ -200,7 +200,14 @@ void CheckPadding(const PlannedFile& file, const Coverage& coverage) {
     }
     if (coverage.Complete()) return;
     const Padding padding = file.parameters->paddingAlgorithm;
-    if (padding == Padding::infinite) return;  // written under EXC-007 (decision 223)
+    if (padding == Padding::infinite) {
+        if (inexact == InexactPadding::measure) return;
+        Unfitted(file,
+                 "the padding \"infinite\" on a texture set whose UV islands do not cover the whole tile is not "
+                 "exact: Painter's ring across UV seams, at seam corners and at poles is not identified, and the "
+                 "best-known rule misses Painter's padding texels by up to 59150 PNG 16 codes (decision 220)",
+                 std::string(kIslandsOwner) + ", " + std::string(kProcessingRecording) + ", decision 259");
+    }
     if (padding != Padding::passthrough) {
         Unfitted(file, "the padding \"" + std::string(PaddingName(padding)) +
                            "\" on a texture set whose UV islands do not cover the whole tile is not fitted");
@@ -251,9 +258,10 @@ void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage) {
                                 "): " + IslandNormalRefusal(normal->source));
 }
 
-bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored) {
-    CheckPadding(file, coverage);
-    // Every other admitted case keeps the values: complete coverage, or `passthrough`.
+bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored,
+                  InexactPadding inexact) {
+    CheckPadding(file, coverage, inexact);
+    // Every other case keeps the values: complete coverage, or `passthrough`.
     if (file.layout == FileLayout::Statistics || file.parameters->paddingAlgorithm != Padding::infinite ||
         coverage.Complete() || std::none_of(coverage.covered.begin(), coverage.covered.end(), [](uint8_t c) {
             return c != 0;

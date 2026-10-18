@@ -11,7 +11,15 @@ import numpy as np
 import pytest
 
 from tools.parity.envelope.registry import current_envelope, initial_registry, save_registry
-from tools.parity.schemas import REGISTER_PATH, REPO_ROOT, SCHEMA_DIR, Schema, is_valid, load_json
+from tools.parity.schemas import (
+    REGISTER_PATH,
+    REPO_ROOT,
+    SCHEMA_DIR,
+    Schema,
+    is_valid,
+    load_json,
+    register_problems,
+)
 from tools.parity.verdict import (
     Comparison,
     Outcome,
@@ -324,12 +332,20 @@ def test_decision_032_entries_catch_injected_defects() -> None:
 
 
 # --- decision 223: an owner scope split excepts the uncovered texels only ---------------------
+# EXC-007 version 1 holds the terms; version 2 withdraws them (decision 259).
+
+
+def exc007(version: int) -> dict[str, Any]:
+    register = load_json(REGISTER_PATH)
+    (entry,) = [
+        e for e in register["entries"] if e["exception_id"] == "EXC-007" and e["version"] == version
+    ]
+    return dict(entry)
 
 
 def scope_split_entry() -> dict[str, Any]:
-    register = load_json(REGISTER_PATH)
-    (entry,) = [e for e in register["entries"] if e["exception_id"] == "EXC-007"]
-    return dict(entry)
+    """EXC-007 version 1's terms, the mechanism of decision 223 (withdrawn, decision 259)."""
+    return exc007(1)
 
 
 def scope_split_case() -> tuple[np.ndarray, np.ndarray]:
@@ -341,8 +357,9 @@ def scope_split_case() -> tuple[np.ndarray, np.ndarray]:
 
 
 def test_owner_scope_split_excepts_only_the_uncovered_texels() -> None:
-    """EXC-007 (decision 223): any padding difference passes and names the entry; the comparison
-    is still exact where it is exact; another tier or domain is not covered."""
+    """EXC-007 version 1 (decision 223) on its own: any padding difference passes and names the
+    entry; the comparison is still exact where it is exact; another tier or domain is not
+    covered."""
     entry = scope_split_entry()
     assert is_valid(load_json(REGISTER_PATH), Schema.EXCEPTIONS)
     assert entry["evidence"]["basis"] == "owner_scope_split"
@@ -363,8 +380,8 @@ def test_owner_scope_split_excepts_only_the_uncovered_texels() -> None:
 
 
 def test_owner_scope_split_catches_injected_defects() -> None:
-    """EXC-007's defect test: every injected defect on the covered texels fails, and so does any
-    padding difference when the comparison has no usable coverage mask."""
+    """EXC-007 version 1's defect test: every injected defect on the covered texels fails, and so
+    does any padding difference when the comparison has no usable coverage mask."""
     entry = scope_split_entry()
     domain = entry["domain"]["selector"]
     oracle, covered = scope_split_case()
@@ -404,6 +421,55 @@ def test_an_owner_scope_split_must_hold_the_covered_texels_exact() -> None:
     stray = {**other, "bounds": [{"metric": "max_abs_diff", "scope": "covered", "max": 0}]}
     for bad in (loose, whole, stray):
         assert not is_valid({**register, "entries": [bad]}, Schema.EXCEPTIONS)
+
+
+# --- decision 259: the owner withdrew EXC-007 ---------------------------------------------------
+
+
+def test_withdrawn_exc007_fails_every_padding_difference() -> None:
+    """EXC-007 version 2 withdraws the id, so nothing of it is in force: with the published
+    register, every injected difference on the Wand v1 Tier 1 domain fails, padding texels
+    included, and relies on no entry; an exact map still passes."""
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    withdrawal = exc007(2)
+    assert withdrawal["withdrawn"] is True and withdrawal["decision_id"] == "259"
+    assert [e for e in in_force(register) if e["exception_id"] == "EXC-007"] == []
+    domain = withdrawal["domain"]["selector"]
+    oracle, covered = scope_split_case()
+    defects: dict[str, np.ndarray] = {}
+    one = oracle.copy()
+    one[0, 0] += 1  # a padding texel
+    defects["one_padding_value_off_by_one_code"] = one
+    every = oracle.copy()
+    every[~covered] = 65535 - every[~covered]
+    defects["every_padding_texel_wrong"] = every
+    inside = oracle.copy()
+    inside[3, 3] += 1
+    defects["one_covered_value_off_by_one_code"] = inside
+    defects["uniform_offset_one_code"] = oracle + 1
+    assert set(defects) == set(withdrawal["defect_detection_test"]["injected_defects"])
+    for name, candidate in defects.items():
+        verdict = evaluate(Comparison("1", domain, oracle, candidate, covered=covered), register)
+        assert verdict.outcome is Outcome.FAIL, name
+        assert verdict.exceptions_relied_on == (), name
+    exact = evaluate(Comparison("1", domain, oracle, oracle.copy(), covered=covered), register)
+    assert exact.outcome is Outcome.PASS and exact.exceptions_relied_on == ()
+    assert withdrawal["defect_detection_test"]["outcome"] == "every_injected_defect_fails"
+
+
+def test_a_withdrawal_leaves_nothing_in_force_and_needs_a_version_to_withdraw() -> None:
+    """A withdrawing version hides its id until a higher version restates terms; one with no
+    lower version of its id is a register problem."""
+    v1 = {**bake_entry(), "decision_id": "259"}  # a recorded decision
+    v2 = {**v1, "version": 2, "withdrawn": True}
+    v3 = {**v1, "version": 3}
+    assert in_force([v1, v2]) == []
+    assert in_force([v1, v2, v3]) == [v3]
+    schema = "uzpainter/parity/exceptions/1"
+    assert register_problems({"schema": schema, "entries": [v1, v2]}) == []
+    lone = {"schema": schema, "entries": [{**v1, "withdrawn": True}]}
+    assert any("withdraws no earlier version" in p for p in register_problems(lone))
+    assert register_problems(load_json(REGISTER_PATH)) == []
 
 
 # --- decisions 034 and 037: the envelope -------------------------------------------------------

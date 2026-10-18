@@ -3,6 +3,7 @@
 **Status**: accepted
 **Date**: 2026-10-13
 **Related Tasks**: phase1.25_pilot-wand, phase1.18_export-engine, phase1.16_export-processing-encoders
+**Superseded in part by**: decision 259 (2026-10-18). The owner rejected EXC-007 himself ("Não, tudo idêntico"). Its version 2 withdraws it, and `infinite` padding on UV islands is refused again until exact. The measurements stand, and the coverage-only rule is kept for measurement only.
 
 ## Context
 

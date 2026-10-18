@@ -689,8 +689,9 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
 
 
 def reference_padding(values: np.ndarray, covered: np.ndarray) -> np.ndarray:
-    """Decision 223's `infinite` padding (src/export/padding.h), written again independently:
-    the ring from the covered 8-neighbours (x wraps), then the jump flood over covered and ring."""
+    """Decision 223's `infinite` padding (src/export/padding.h; measured only, decision 259),
+    written again independently: the ring from the covered 8-neighbours (x wraps), then the jump
+    flood over covered and ring."""
     height, width, _ = values.shape
     out = values.astype(np.float32).copy()
     f = 0.4142245
@@ -747,12 +748,15 @@ def reference_padding(values: np.ndarray, covered: np.ndarray) -> np.ndarray:
 
 
 def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
-    """2.2 (decision 090) and decision 223: on the sphere, whose UV islands leave texels uncovered:
-    - `infinite` padding is written (exception EXC-007): the covered texels hold their evaluated
-      values, and the OpenEXR 32f Height equals the padding of padding.h written independently
-      (`reference_padding`) over the coverage of `tools.parity.coverage`, value for value;
+    """2.2 (decision 090) and decision 259: on the sphere, whose UV islands leave texels uncovered:
     - `passthrough` writes every texel's evaluated value (the L16 roughness holds the ramp's codes
       inside and outside the islands);
+    - `infinite` is refused before anything is written, naming R-090, the owner and decision 259:
+      its padding texels are not Painter's, and the owner withdrew exception EXC-007;
+    - decision 223's rule stays behind that refusal, applied only when measured (`process` over
+      the sphere's coverage): the covered texels keep their values, and the OpenEXR 32f Height
+      equals the padding of padding.h written independently (`reference_padding`) over the
+      coverage of `tools.parity.coverage`, value for value;
     - without a texturing mesh the export fails before writing."""
     from tools.parity.coverage import coverage, obj_triangles
     from tools.parity.feasibility import png
@@ -761,22 +765,44 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
     covered = coverage(obj_triangles(SPHERE, "uzp_sphere"), 256, 256)
     assert 0 < covered.sum() < covered.size
     sphere = spec(tmp_path / "sphere", SPHERE, "uzp_sphere")
-    out = tmp_path / "passthrough"
-    cfg = config(out, root="uzp_sphere", paddingAlgorithm="passthrough")
+    passthrough = tmp_path / "passthrough"
+    cfg = config(passthrough, root="uzp_sphere", paddingAlgorithm="passthrough")
     result = export(export_tests, sphere, cfg, tmp_path / "run-passthrough")
     assert "error" not in result, result
-    rough = png.decode((out / "maps" / "uzp_sphere_Roughness.png").read_bytes()).astype(np.int64)
+    roughness = passthrough / "maps" / "uzp_sphere_Roughness.png"
+    rough = png.decode(roughness.read_bytes()).astype(np.int64)
     assert np.array_equal(rough.reshape(256, 256), ramp_codes())
-    evaluated = decode((out / "uzp_sphere_Height.exr").read_bytes()).values
+    height_file = passthrough / "uzp_sphere_Height.exr"
+    evaluated = decode(height_file.read_bytes()).values
 
     out = tmp_path / "infinite"
     result = export(export_tests, sphere, config(out, root="uzp_sphere"), tmp_path / "run-infinite")
-    assert "error" not in result, result
-    padded = png.decode((out / "maps" / "uzp_sphere_Roughness.png").read_bytes()).astype(np.int64)
-    padded = padded.reshape(256, 256)
+    assert result.get("error") == "NotYetSupported", result
+    message = result["message"]
+    assert (
+        'the padding "infinite" on a texture set whose UV islands do not cover the whole tile '
+        "is not exact" in message
+    ), message
+    assert "recording R-090" in message and "decision 259" in message, message
+    assert "phase1.25_pilot-wand item 2.7" in message, message
+    assert files_under(out) == {}
+
+    cases: list[dict[str, Any]] = [
+        {"source": str(roughness), "format": "png", "bit_depth": "16", "height": False},
+        {"source": str(height_file), "format": "exr", "bit_depth": "32f", "height": True},
+    ]
+    for index, case in enumerate(cases):
+        case["target"] = case["source"]
+        case["mesh"], case["material"] = str(SPHERE), "uzp_sphere"
+        case["out"] = str(tmp_path / f"measured-{index}.{case['format']}")
+    listing = tmp_path / "measured.json"
+    listing.write_text(json.dumps(cases), encoding="utf-8")
+    lines = run(export_tests, "process", str(listing))
+    assert [line["covered_texels"] for line in lines] == [int(covered.sum())] * 2, lines
+    padded = png.decode(Path(cases[0]["out"]).read_bytes()).astype(np.int64).reshape(256, 256)
     assert np.array_equal(padded[covered], ramp_codes()[covered])
     assert not np.array_equal(padded[~covered], ramp_codes()[~covered])
-    height = decode((out / "uzp_sphere_Height.exr").read_bytes()).values
+    height = decode(Path(cases[1]["out"]).read_bytes()).values
     height, evaluated = height.reshape(256, 256, -1), evaluated.reshape(256, 256, -1)
     expected = reference_padding(evaluated.astype(np.float32), covered)
     assert np.array_equal(height.astype(np.float32).view(np.uint32), expected.view(np.uint32))
@@ -794,7 +820,8 @@ def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
     - Normal_OpenGL and Normal_DirectX are refused before anything is written under `infinite` and
       `passthrough`, naming the cause, the evidence and the owner, with a layer writing the Height
       and with none (no recording shows Painter's empty Height outside the islands), and so is the
-      pipeline's five-map export that holds one, as a whole;
+      pipeline's five-map export that holds one, as a whole (under `infinite` its first map is
+      refused first, decision 259);
     - so is every diagnosticMap that isolates, compares or summarises one (`regionStats` a
       statistics file);
     - on the grid, whose coverage is complete, the same sources are written."""
@@ -840,13 +867,16 @@ def test_virtual_normal_on_islands(export_tests: Path, tmp_path: Path) -> None:
                 assert "phase1.25_pilot-wand item 2.7" in message and "decision 245" in message
                 assert files_under(out) == {}, case
 
-    out = tmp_path / "five"
-    cfg = config(out, root="uzp_sphere")
-    cfg["exportPresets"][0]["maps"] += normal_map()
-    result = export(export_tests, relief, cfg, tmp_path / "run-five")
-    assert result.get("error") == "NotYetSupported", result
-    assert "island-edge texels" in result["message"]
-    assert files_under(out) == {}
+    # The five-map export, refused as a whole: its first map under `infinite` (decision 259), its
+    # Normal under `passthrough`.
+    for padding, refusal in (("infinite", "decision 259"), ("passthrough", "island-edge texels")):
+        out = tmp_path / f"five-{padding}"
+        cfg = config(out, root="uzp_sphere", paddingAlgorithm=padding)
+        cfg["exportPresets"][0]["maps"] += normal_map()
+        result = export(export_tests, relief, cfg, tmp_path / f"run-five-{padding}")
+        assert result.get("error") == "NotYetSupported", (padding, result)
+        assert refusal in result["message"], (padding, result["message"])
+        assert files_under(out) == {}, padding
 
     grid = variant("grid", GRID, "s0", height=False)
     for kind, source in sources:
@@ -939,12 +969,13 @@ def test_processing_reproduces_painter_files(
 def test_infinite_padding_on_islands_keeps_covered_texels_exact(
     export_tests: Path, tmp_path: Path
 ) -> None:
-    """Decision 223 (EXC-007): every r1 `infinite` file of the recorded padding goldens, padded by
-    ApplyPadding from Painter's OpenEXR 32f file of the map over the golden's mesh, equals
-    Painter's file exactly on every covered texel (PNG 8, PNG 16, OpenEXR); the export's coverage
-    equals `tools.parity.coverage`'s, and on the position-encoded probes that coverage is exactly
-    the texels holding their own centre (Painter's). The padding texels differ (the exact rule is
-    open, item 2.7); their max |delta| is printed, never asserted."""
+    """Decision 223's rule, measured (decision 259: the export refuses it): every r1 `infinite`
+    file of the recorded padding goldens, padded by ApplyPadding from Painter's OpenEXR 32f file of
+    the map over the golden's mesh, equals Painter's file exactly on every covered texel (PNG 8,
+    PNG 16, OpenEXR); the export's coverage equals `tools.parity.coverage`'s, and on the
+    position-encoded probes that coverage is exactly the texels holding their own centre
+    (Painter's). The padding texels differ (the exact rule is open, item 2.7); their max |delta| is
+    printed, never asserted."""
     from tests.export import encoders_tier0
 
     report = encoders_tier0.padding_goldens(export_tests, tmp_path / "padding")

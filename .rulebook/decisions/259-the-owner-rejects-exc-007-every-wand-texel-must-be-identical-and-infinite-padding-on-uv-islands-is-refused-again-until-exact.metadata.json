@@ -1,0 +1,13 @@
+{
+  "id": 259,
+  "slug": "the-owner-rejects-exc-007-every-wand-texel-must-be-identical-and-infinite-padding-on-uv-islands-is-refused-again-until-exact",
+  "title": "The owner rejects EXC-007: every Wand texel must be identical, and `infinite` padding on UV islands is refused again until exact",
+  "status": "accepted",
+  "date": "2026-10-18",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}

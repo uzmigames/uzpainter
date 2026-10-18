@@ -25,11 +25,13 @@ the normal map is the file the pinned `painter_export.py` exports from the virtu
 `Normal_OpenGL`, `<prefix>_Normal`.
 
 The texture sets' UV coverage (decision 223) comes from the job's staged OBJ mesh inputs: each set
-is the mesh material of its name, and the comparison splits each map into its covered texels,
-compared exactly, and its padding texels, which exception EXC-007 excepts and the report publishes.
+is the mesh material of its name, and the report publishes each map's covered texels and its
+padding texels apart. Both are compared exactly: the owner withdrew exception EXC-007, which had
+excepted the padding texels (decision 259).
 
 An export UzPainter refuses before writing (`NotYetSupported`, while phase1.25 item 2.7 is open:
-decision 245 refuses the five-map export's virtual Normal on the Wand's UV islands) is reported as
+decision 245 refuses the five-map export's virtual Normal on the Wand's UV islands, and decision
+259 its `infinite` padding there) is reported as
 the one structural failure `candidate_export_refused`, with no map compared (decision 255); the
 rebuild keeps the refusal's message. Any other failed call stops the run. Nothing is written
 under the Assets3D root or into the repository except the report, when `UZP_TIER1_REPORT` names

@@ -260,6 +260,48 @@
       "approved_by": "owner",
       "approved_on": "2026-10-13",
       "notes": "Approved on the owner's delegation to the model panel (decision 223: OPTION-2G, 2 of 3; GPT voted a bounded Wand-only variant, whose Wand-only scope is taken). The padding written is decision 223's coverage-only rule (src/export/padding.h). Flagged for the owner's review: he may withdraw or replace these terms by a new version."
+    },
+    {
+      "exception_id": "EXC-007",
+      "version": 2,
+      "withdrawn": true,
+      "tier": "1",
+      "domain": {
+        "kind": "asset_map",
+        "selector": "tier1/pilot/wand-v1"
+      },
+      "bounds": [
+        {
+          "metric": "max_abs_diff",
+          "scope": "covered",
+          "max": 0
+        }
+      ],
+      "evidence": {
+        "basis": "owner_scope_split",
+        "summary": "Withdrawn by the owner (decision 259). Asked on 2026-10-18 whether the padding texels outside the Wand's UV islands may differ from Painter's while every texel inside the islands is identical, he answered himself, verbatim: \"Não, tudo idêntico\" (no, everything identical). Version 1's terms (decision 223) had been recorded as owner-approved on a delegation to the model panel, not on his yes. This version holds the same terms only to record what is withdrawn: nothing of EXC-007 is in force, so every padding texel of the Wand v1 Tier 1 golden that differs from Painter's fails, and the export refuses `infinite` padding on UV-islanded sets before writing (R-090) until phase1.25_pilot-wand item 2.7 makes it exact.",
+        "private_evidence": [
+          {
+            "sha256": "9ff068c77c2c953773695c50f1d067a2d5f46367d8fe064981e8f87b26377d83",
+            "description": "private golden record of tier1/pilot/wand-v1 (recording R9): r1, r1-repeat and r2, the five exported maps of each and their blob hashes"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_withdrawn_exc007_fails_every_padding_difference",
+        "injected_defects": [
+          "one_padding_value_off_by_one_code",
+          "every_padding_texel_wrong",
+          "one_covered_value_off_by_one_code",
+          "uniform_offset_one_code"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "259",
+      "approved_by": "owner",
+      "approved_on": "2026-10-18",
+      "notes": "The owner's own answer, recorded in decision 259, which supersedes decision 223 in this part. Version 1 stays in the register as history."
     }
   ]
 }

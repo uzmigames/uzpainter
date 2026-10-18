@@ -6,12 +6,13 @@ default `E:\\UzmiGames\\Assets3D`), `zig` for a fresh `zig build painter`, the p
 admitted golden `phase1/tier1/wand-v1` (recording R9); hosted CI has none of them and skips it
 with the reason. Synthetic host cases of the comparison are in `../test_tier1_compare.py`.
 
-While phase1.25 item 2.7 is open, UzPainter refuses the pinned five-map export before writing
-(decision 245: the virtual Normal on the Wand's UV islands is not exact). The test then checks that
-both rebuilds refused it with that refusal and that the report states it as the one structural
-failure `candidate_export_refused`, and ends as an expected failure naming the refusal (decision
-255). Any other refusal fails the test with its message; once the refusal is lifted, the equality
-and repeatability assertions run unchanged.
+While phase1.25 item 2.7 is open, UzPainter refuses the pinned five-map export before writing:
+the virtual Normal on the Wand's UV islands is not exact (decision 245), and neither is its
+`infinite` padding there (decision 259; the owner withdrew exception EXC-007). The test then checks
+that both rebuilds refused it with one of those refusals and that the report states it as the one
+structural failure `candidate_export_refused`, and ends as an expected failure naming the refusal
+(decision 255). Any other refusal fails the test with its message; once the refusal is lifted, the
+equality and repeatability assertions run unchanged.
 """
 
 from __future__ import annotations
@@ -31,8 +32,12 @@ from tools.parity.tier1.compare import write_report
 from tools.parity.verdict import resolve_golden
 
 REPORT_ENV = "UZP_TIER1_REPORT"  # repository-relative path of the report to write
-# The decided refusal of the five-map export (src/export/padding.cpp `IslandNormalRefusal`).
-KNOWN_REFUSAL = "the Height outside the UV islands; decision 245"
+# The decided refusals of the five-map export (src/export/padding.cpp `IslandNormalRefusal` and
+# `CheckPadding`), whichever of its files is checked first.
+KNOWN_REFUSALS = (
+    "the Height outside the UV islands; decision 245",
+    "UV islands do not cover the whole tile is not exact",
+)
 
 pytestmark = [
     pytest.mark.skipif(
@@ -79,7 +84,7 @@ def test_wand_v1_maps_equal_painter_and_are_byte_stable(painter: Path, tmp_path:
     equality = report["equality_to_painter"]
     if any(r.refused for r in runs):
         refusals = [r.refusal for r in runs]
-        assert all(KNOWN_REFUSAL in message for message in refusals), refusals
+        assert all(any(k in message for k in KNOWN_REFUSALS) for message in refusals), refusals
         assert equality == {
             "outcome": "fail",
             "exceptions_relied_on": [],
@@ -87,7 +92,7 @@ def test_wand_v1_maps_equal_painter_and_are_byte_stable(painter: Path, tmp_path:
             "structural": [{"output_id": "export", "reason": "candidate_export_refused"}],
         }
         assert report["uzpainter_repeatability"] == {"status": "not_measured", "maps": []}
-        pytest.xfail(f"UzPainter refuses the five-map export (decision 245): {refusals[0]}")
+        pytest.xfail(f"UzPainter refuses the five-map export (decisions 245, 259): {refusals[0]}")
     assert equality["structural"] == []
     assert equality["outcome"] == "pass", equality
     assert report["uzpainter_repeatability"]["status"] == "repeatable"

@@ -228,10 +228,11 @@ ISLAND = np.array(
 )
 
 
-def scope_split(domain: str) -> dict[str, Any]:
-    """EXC-007's terms over the synthetic golden's domain."""
+def scope_split(domain: str, version: int = 1) -> dict[str, Any]:
+    """A version of EXC-007 over the synthetic golden's domain: 1 the terms of decision 223, 2 their
+    withdrawal (decision 259)."""
     entries = load_json(REPO_ROOT / "parity" / "exceptions.json")["entries"]
-    (entry,) = [e for e in entries if e["exception_id"] == "EXC-007"]
+    (entry,) = [e for e in entries if e["exception_id"] == "EXC-007" and e["version"] == version]
     return {**entry, "domain": {**entry["domain"], "selector": domain}}
 
 
@@ -240,7 +241,8 @@ def test_padding_texels_are_excepted_and_published_while_covered_texels_stay_exa
 ) -> None:
     """A subject with UV triangles: each map's padding block splits it by coverage. A padding
     difference passes under the owner scope split and shows in the published padding residuals;
-    one covered value off by one code fails under the same entry."""
+    one covered value off by one code fails under the same entry. With the entry withdrawn
+    (decision 259), the padding difference fails and is still published."""
     resolved, store = stable_golden(tmp_path)
     island = Subject(MANIFEST, "2" * 64, REGIONS, frozenset({NORMAL}), {SET: ISLAND})
     entry = scope_split(MANIFEST["domain"])
@@ -267,6 +269,13 @@ def test_padding_texels_are_excepted_and_published_while_covered_texels_stay_exa
     assert padding["bands"][0]["abs_diff"]["max"] == 900
     rough = by_id(equality["maps"])[f"{SET}/{ROUGH}"]["padding"]
     assert rough["uncovered"]["differing"]["count"] == 0
+    # The entry and its withdrawal: the padding difference fails, published the same way.
+    withdrawn = [entry, scope_split(MANIFEST["domain"], 2)]
+    report = compare(island, resolved, store, runs, IDENTITY, withdrawn)
+    assert report["equality_to_painter"]["outcome"] == "fail"
+    assert report["equality_to_painter"]["exceptions_relied_on"] == []
+    base = by_id(report["equality_to_painter"]["maps"])[f"{SET}/{BASE}"]
+    assert base["padding"]["uncovered"]["abs_diff"]["max"] == 900
     # The same entry, one covered value off by one code: a failure.
     covered = maps()
     covered[BASE][1, 1, 0] += 1

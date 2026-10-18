@@ -264,7 +264,7 @@ def process_painter_files(exe: Path, tmp: Path) -> dict[str, Any]:
     return report
 
 
-# ── `infinite` padding on UV islands (decision 223) ──────────────────────────
+# ── `infinite` padding on UV islands (decision 223; measured only, decision 259) ──
 
 # The recorded `infinite` padding goldens whose UV islands leave texels uncovered.
 PADDING_GOLDENS = (
@@ -1525,10 +1525,12 @@ GAP_FORMULA = (
 )
 
 PADDING_ISLANDS_FORMULA = (
-    "Written under exception EXC-007 (decision 223), not fitted: covered texels keep their "
-    "evaluated values; the ring takes the straight-edge 8-neighbour mean of decisions 176 and "
-    "206 (x wraps) and the gutter the jump flood of decision 197 (src/export/padding.h). "
-    "Painter's ring across UV seams, at seam corners and at poles is not identified."
+    "Release gap (decisions 090, 259): no rule is exact outside the islands; a configuration "
+    "asking for it is refused with NotYetSupported before anything is written, naming recording "
+    "R-090. Decision 223's coverage-only rule (src/export/padding.h: the straight-edge "
+    "8-neighbour ring mean of decisions 176 and 206, x wrapping, then the jump flood of decision "
+    "197) is kept for measurement only; Painter's ring across UV seams, at seam corners and at "
+    "poles is not identified."
 )
 
 
@@ -1729,8 +1731,8 @@ def publish(
             "inside the islands and differ outside them at up to every uncovered texel. Owner "
             "phase1.25_pilot-wand (decision 103). Decision 220 measured the best-known rule at up "
             "to 59150 PNG 16 codes from Painter on padding texels, already on the ring; decision "
-            "223 writes the coverage-only rule under EXC-007 (Wand v1 only: covered texels exact, "
-            "padding texels excepted and published).",
+            "223 wrote the coverage-only rule under EXC-007, which the owner withdrew (decision "
+            "259: every texel identical), so it is refused again until exact.",
         ),
         "padding-dilation": (
             "Padding color, transparent and diffusion with dilationDistance",

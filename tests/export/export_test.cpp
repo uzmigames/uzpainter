@@ -763,7 +763,8 @@ int RunProcess(const fs::path& casesPath) {
                                           std::move(values), std::nullopt, std::nullopt,
                                           std::move(srgbEncoded)};
         // `mesh` (and `material`): the case is padded `infinite` over that mesh's texel-centre
-        // coverage first (padding.h); `coverage_out` receives the coverage, one byte per texel.
+        // coverage first (padding.h), measured: the export refuses that padding (decision 259);
+        // `coverage_out` receives the coverage, one byte per texel.
         std::int64_t coveredTexels = -1;
         std::optional<exporter::Coverage> padding;
         if (c.contains("mesh")) {
@@ -780,7 +781,8 @@ int RunProcess(const fs::path& casesPath) {
             }
             padding = std::move(coverage);
         }
-        const exporter::EncodedImage encoded = exporter::EncodeFile(file, raster, padding ? &*padding : nullptr);
+        const exporter::EncodedImage encoded =
+            exporter::EncodeFile(file, raster, padding ? &*padding : nullptr, exporter::InexactPadding::measure);
         if (c.contains("out")) {
             std::ofstream(Str(c.at("out"), "out"), std::ios::binary)
                 .write(encoded.bytes.data(), static_cast<std::streamsize>(encoded.bytes.size()));

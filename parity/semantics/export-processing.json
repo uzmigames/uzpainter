@@ -13795,7 +13795,7 @@
       "entry_id": "padding-islands",
       "subject": "Padding infinite outside the UV islands of a texture set that does not cover the tile",
       "status": "gap",
-      "formula": "Written under exception EXC-007 (decision 223), not fitted: covered texels keep their evaluated values; the ring takes the straight-edge 8-neighbour mean of decisions 176 and 206 (x wraps) and the gutter the jump flood of decision 197 (src/export/padding.h). Painter's ring across UV seams, at seam corners and at poles is not identified.",
+      "formula": "Release gap (decisions 090, 259): no rule is exact outside the islands; a configuration asking for it is refused with NotYetSupported before anything is written, naming recording R-090. Decision 223's coverage-only rule (src/export/padding.h: the straight-edge 8-neighbour ring mean of decisions 176 and 206, x wrapping, then the jump flood of decision 197) is kept for measurement only; Painter's ring across UV seams, at seam corners and at poles is not identified.",
       "public_sources": [
         {
           "source_id": "A-PYDOC",
@@ -13808,7 +13808,7 @@
       ],
       "parameters": [],
       "residuals": [],
-      "notes": "Not the nearest covered texel: on tier0/semantics/height-normal-bevelled-cube (Height) 12040 of the 12200 uncovered texels differ from it. Partial fit (decision 090): an 8-neighbour copy dilation (first covered neighbour: right, left, up, down, then the diagonals; x wraps, y does not) is exact on the bevelled cube's virtual normals (12200 gutter texels) and misses 32 to 44 texels per sphere normal map at the poles; a document channel's one-texel ring around each island blends across the UV seam with unidentified weights (2344 ring texels on the cube, 2152 on the sphere). Passthrough on such sets is written as no operation: Painter's r1 and r2 agree inside the islands and differ outside them at up to every uncovered texel. Owner phase1.25_pilot-wand (decision 103). Decision 220 measured the best-known rule at up to 59150 PNG 16 codes from Painter on padding texels, already on the ring; decision 223 writes the coverage-only rule under EXC-007 (Wand v1 only: covered texels exact, padding texels excepted and published)."
+      "notes": "Not the nearest covered texel: on tier0/semantics/height-normal-bevelled-cube (Height) 12040 of the 12200 uncovered texels differ from it. Partial fit (decision 090): an 8-neighbour copy dilation (first covered neighbour: right, left, up, down, then the diagonals; x wraps, y does not) is exact on the bevelled cube's virtual normals (12200 gutter texels) and misses 32 to 44 texels per sphere normal map at the poles; a document channel's one-texel ring around each island blends across the UV seam with unidentified weights (2344 ring texels on the cube, 2152 on the sphere). Passthrough on such sets is written as no operation: Painter's r1 and r2 agree inside the islands and differ outside them at up to every uncovered texel. Owner phase1.25_pilot-wand (decision 103). Decision 220 measured the best-known rule at up to 59150 PNG 16 codes from Painter on padding texels, already on the ring; decision 223 wrote the coverage-only rule under EXC-007, which the owner withdrew (decision 259: every texel identical), so it is refused again until exact."
     },
     {
       "entry_id": "padding-dilation",

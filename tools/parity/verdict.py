@@ -16,6 +16,8 @@
 - Decision 223: an owner scope split (`owner_scope_split`) bounds only the texels the comparison's
   UV coverage mask marks covered (bound scope `covered`, `max_abs_diff` 0): the texels outside it
   are the ones the entry excepts. Without a mask, or with no covered texel, it covers nothing.
+- Decision 259: a version that withdraws its id leaves nothing of it in force. The owner withdrew
+  EXC-007, the only owner scope split, so a padding difference on the Wand fails.
 - Diagnostics are computed and reported; they never grant a pass on their own.
 
 Envelope (decisions 034, 037; CONTRACT.md §6.5):
@@ -209,13 +211,14 @@ def _bound_holds(
 
 
 def in_force(entries: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-    """The highest version of each exception id; earlier versions are superseded."""
+    """The highest version of each exception id; earlier versions are superseded, and an id whose
+    highest version withdraws it (decision 259) has nothing in force."""
     latest: dict[str, Mapping[str, Any]] = {}
     for entry in entries:
         current = latest.get(entry["exception_id"])
         if current is None or entry["version"] > current["version"]:
             latest[entry["exception_id"]] = entry
-    return list(latest.values())
+    return [entry for entry in latest.values() if not entry.get("withdrawn")]
 
 
 _UNSTABLE_BASES = {False: {"oracle_instability"}, True: {"oracle_instability", "noise_floor"}}

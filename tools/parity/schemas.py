@@ -83,7 +83,8 @@ def register_problems(
 ) -> list[str]:
     """Schema violations plus the rules a schema cannot state.
 
-    Each (exception_id, version) appears once, and every entry's decision_id names a decision
+    Each (exception_id, version) appears once, a version that withdraws its id (decision 259)
+    has a lower version of that id to withdraw, and every entry's decision_id names a decision
     recorded under `.rulebook/decisions/`.
     """
     problems = validation_errors(register, Schema.EXCEPTIONS)
@@ -95,6 +96,12 @@ def register_problems(
         if key in seen:
             problems.append(f"entries/{index}: duplicate {key[0]} version {key[1]}")
         seen.add(key)
+        if entry.get("withdrawn") and not any(
+            e["exception_id"] == key[0] and e["version"] < key[1] for e in register["entries"]
+        ):
+            problems.append(
+                f"entries/{index}: {key[0]} version {key[1]} withdraws no earlier version"
+            )
         if not any(decisions_dir.glob(f"{entry['decision_id']}-*.md")):
             problems.append(
                 f"entries/{index}: decision {entry['decision_id']} is not recorded in "

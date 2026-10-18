@@ -72,6 +72,10 @@
       "properties": {
         "exception_id": { "type": "string", "pattern": "^EXC-[0-9]{3,}$" },
         "version": { "type": "integer", "minimum": 1 },
+        "withdrawn": {
+          "description": "Decision 259: this version withdraws its id. It repeats the terms withdrawn, its decision records the owner's withdrawal, and while it is the highest version nothing of the id is in force.",
+          "const": true
+        },
         "tier": { "enum": ["0", "1", "2a", "2b", "3"] },
         "domain": {
           "type": "object",

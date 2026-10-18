@@ -47,10 +47,11 @@ dropped), with the tool's identity in `flip_tool`. It is a diagnostic only: it n
 verdict. Without the pinned package (hosted runners), or for float maps, it is omitted.
 
 Padding (decision 223): for a texture set whose UV triangles the subject names, each map is split
-by the set's texel-centre coverage (`tools.parity.coverage`). The verdict receives the coverage, so
-an owner scope split (EXC-007) can except the uncovered texels while the covered ones stay exact,
-and the map's `padding` block publishes the covered and uncovered statistics and the uncovered
-ones within 1, 2, 4 and 8 texels of coverage, whatever the verdict.
+by the set's texel-centre coverage (`tools.parity.coverage`). The verdict receives the coverage
+for an entry that bounds the covered texels only (an owner scope split; the one there was, EXC-007,
+is withdrawn, decision 259, so every padding difference fails), and the map's `padding` block
+publishes the covered and uncovered statistics and the uncovered ones within 1, 2, 4 and 8 texels
+of coverage, whatever the verdict.
 
 Nothing here writes into the repository except `write_report`: decoded values stay in memory, and
 the report holds numbers and hashes only.
