@@ -1,0 +1,13 @@
+{
+  "id": 271,
+  "slug": "the-tie-order-is-not-reduced-precision-positions-mixed-tap-and-ring-arithmetic-derivative-extrapolation-or-a-fixed-neighbour-order-and-seam-own-diagonal-ties-break-on-exact-geometry",
+  "title": "The tie order is not reduced-precision positions, mixed tap and ring arithmetic, derivative extrapolation or a fixed neighbour order; decision 267's comparator stays the best, and seam own-diagonal ties break even on exact geometry",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
