@@ -1,0 +1,13 @@
+{
+  "id": 294,
+  "slug": "294-corner-reach",
+  "title": "Three Wand ring rules without a new recording: a seam edge of another facet reached past its end at a UV corner of the island reaches 1.0 texel when an edge meeting it there is gated and 1.15 otherwise (collinear continuations exempt); an own-far tie is ordered by the float32 distances; own taps within 1e-4 relative are ordered by decision 273's comparator. Wand all four 5,897 -> 5,917, gutter 3,575,535 -> 3,580,689, +20 / -0 per map; 18 probes and 3 Tier 0 goldens unchanged texel for texel; 11 small residue texels left",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.26_gate-g1"
+  ],
+  "supersededBy": null
+}
