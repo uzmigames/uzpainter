@@ -1485,7 +1485,9 @@ def test_a_call_that_fails_after_allocating_a_tile_drops_the_kept_evaluation(run
     normal export allocates its read-out tile, then refuses the Normal channel's minified bitmap:
     repeated on the same revision it refuses the same way and writes nothing (before the fix the
     repeat read the unfilled tile and published a normal map), and the BaseColor and Height
-    exports keep their bytes."""
+    exports keep their bytes. The refusal is CheckNormalTexture's (decision 249: bilinear
+    minification on the Normal channel is not recorded), which runs where the rotated footprint's
+    refusal ran before it, after the read-out tile is allocated."""
     result = ok(
         run(
             REFUSED_AFTER_ALLOCATING
@@ -1498,7 +1500,7 @@ result = {"first": first, "refusals": refusals, "after": after}
         )
     )
     [refused, refused_written], [again, again_written] = result["refusals"]
-    assert refused is not None and "rotation of 30" in refused, refused
+    assert refused is not None and "Normal channel, bilinear minification" in refused, refused
     assert again == refused
     assert refused_written is False and again_written is False
     assert result["after"] == result["first"]

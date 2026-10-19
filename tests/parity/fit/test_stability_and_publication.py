@@ -39,6 +39,7 @@ from tools.parity.fit.stability import (
 )
 from tools.parity.fit.stats import difference
 from tools.parity.guard.guard import Snapshot, run_guard
+from tools.parity.recorder.script_run import R1, R1_REPEAT, R2
 from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
 from tools.parity.store.store import locate
 from tools.parity.tier0_semantics.corpus import COVERAGE, OWNED_ELSEWHERE
@@ -155,8 +156,9 @@ def test_fits_validate_and_name_a_public_source_and_a_residual(path: Path) -> No
         if entry["status"] == "gap":
             continue
         assert entry["residuals"], entry["entry_id"]
+        # r1 and r2 always; a Tier 1 golden's same-session repeat (`r1-repeat`) may add its own.
         recordings = {r["compared_against"] for r in entry["residuals"]}
-        assert recordings == {"r1", "r2"}, entry["entry_id"]
+        assert {R1, R2} <= recordings <= {R1, R1_REPEAT, R2}, entry["entry_id"]
         zero = all(r["difference"]["differing"] == 0 for r in entry["residuals"])
         assert (entry["status"] == "exact") == zero, entry["entry_id"]
         for r in entry["residuals"]:

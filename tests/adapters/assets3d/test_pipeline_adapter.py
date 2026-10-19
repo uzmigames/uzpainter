@@ -24,9 +24,9 @@ import pytest
 
 from adapters.assets3d import client
 from tests.adapters.assets3d.wand import ASSETS3D, REPO_ROOT, Wand
+from tests.python.conftest import png_file
 
 SEMANTICS = REPO_ROOT / "parity" / "semantics" / "export-processing.json"
-PROBE_IMAGE = REPO_ROOT / "parity" / "fixtures" / "api-probes" / "checker-16.png"
 # Assets3D manifest `$defs/path` (the receipt schema's copy).
 A3D_PATH = re.compile(r"^(?!/)(?!.*[\\:])(?!.*(?:^|/)\.\.?(/|$))[^/]+(?:/[^/]+)*$")
 
@@ -417,7 +417,8 @@ def test_sync_repeated_creates_no_duplicate_and_ids_survive_reopen(created: Wand
 # ── 3.6 LAY-07 through sync ─────────────────────────────────────────────────────────────────────
 
 
-UNRELATED = f"""
+# `__IMAGE__`: the resource only `extra` uses, an 8-bit colour bitmap at the texture set's size.
+UNRELATED = """
 import substance_painter.layerstack as ls, substance_painter.textureset as ts
 import substance_painter.resource as rs
 CT = ts.ChannelType
@@ -429,10 +430,10 @@ def group(name):
     return g, f
 metal, _ = group("metal")
 extra, fill = group("extra")
-r = rs.import_project_resource({str(PROBE_IMAGE)!r}, rs.Usage.TEXTURE, "extra_only", "probe")
-fill.active_channels = {{CT.BaseColor}}
+r = rs.import_project_resource(__IMAGE__, rs.Usage.TEXTURE, "extra_only", "probe")
+fill.active_channels = {CT.BaseColor}
 fill.set_source(CT.BaseColor, r.identifier())
-result = {{"extra_fill": fill.uid()}}
+result = {"extra_fill": fill.uid()}
 """
 
 SOURCE = """
@@ -454,7 +455,12 @@ def test_sync_rebuilds_only_its_group_and_keeps_unrelated_content(created: Wand)
     with their content and the resource only `extra` uses; `--keep-visible` keeps `metal` shown."""
     first = created.sync()
     assert first.status == 0, first.stdout + first.stderr
-    fill = created.probe("unrelated", UNRELATED)["extra_fill"]
+    # Under OCIO an 8-bit colour bitmap is supported sampled 1:1 only (decision 190): one at the
+    # wand's 2048 x 2048, since a smaller one is refused before the fill takes it (decision 240).
+    image = created.work / "extra-only.png"
+    png_file(image, 2048, 3, 8)
+    unrelated = UNRELATED.replace("__IMAGE__", repr(str(image)))
+    fill = created.probe("unrelated", unrelated)["extra_fill"]
     title = json.loads(created.staged["wand-stack"].read_text(encoding="utf-8"))["title"]
     before = {n["name"]: n for n in roots(created)["roots"]}
     assert {"metal", "extra", title} <= set(before)

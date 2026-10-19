@@ -117,6 +117,22 @@
     "tier0/semantics/export-ocio-encode-legacy",
     "tier0/semantics/export-padding",
     "tier0/semantics/export-padding-bevelled-cube",
+    "tier0/semantics/export-padding-concave-fine",
+    "tier0/semantics/export-padding-concave-fold",
+    "tier0/semantics/export-padding-concave-shape",
+    "tier0/semantics/export-padding-kernel-atlas-1024",
+    "tier0/semantics/export-padding-kernel-atlas-1024-moved",
+    "tier0/semantics/export-padding-kernel-atlas-2048",
+    "tier0/semantics/export-padding-kernel-atlas-512",
+    "tier0/semantics/export-padding-kernel-bevelled-cube-256",
+    "tier0/semantics/export-padding-kernel-ramp-r1-p0",
+    "tier0/semantics/export-padding-kernel-ramp-r15-p0",
+    "tier0/semantics/export-padding-kernel-ramp-r15-p25",
+    "tier0/semantics/export-padding-kernel-ramp-r2-p0",
+    "tier0/semantics/export-padding-kernel-ramp-r2-p25",
+    "tier0/semantics/export-padding-kernel-sphere-256",
+    "tier0/semantics/export-padding-kernel-tie-2048",
+    "tier0/semantics/export-padding-kernel-tie-512",
     "tier0/semantics/export-padding-ramp-r1-p0",
     "tier0/semantics/export-padding-ramp-r1-p0-box17",
     "tier0/semantics/export-padding-ramp-r1-p0-v2",
@@ -146,6 +162,12 @@
     "tier0/semantics/export-padding-tie-2048-v2",
     "tier0/semantics/export-padding-tie-512",
     "tier0/semantics/export-padding-tie-512-box16",
+    "tier0/semantics/export-padding-tie-sweep-seams-box320",
+    "tier0/semantics/export-padding-tie-sweep-seams-centred",
+    "tier0/semantics/export-padding-tie-sweep-seams-offcentre",
+    "tier0/semantics/export-padding-tie-sweep-strips-box320",
+    "tier0/semantics/export-padding-tie-sweep-strips-centred",
+    "tier0/semantics/export-padding-tie-sweep-strips-offcentre",
     "tier0/semantics/export-resize",
     "tier0/semantics/export-template-base-asm-pbr-metallic-roughness",
     "tier0/semantics/export-template-base-asm-pbr-metallic-roughness-anisotropy-angle",
@@ -5594,7 +5616,7 @@
         },
         {
           "name": "files",
-          "value": 865,
+          "value": 1063,
           "origin": "fitted"
         }
       ],
@@ -6407,6 +6429,486 @@
             "total": 27,
             "affected_texels": 0,
             "texels": 27
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-concave-fine",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-concave-fine",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-concave-fold",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-concave-fold",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-concave-shape",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-concave-shape",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-atlas-1024",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-atlas-1024",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-atlas-1024-moved",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-atlas-1024-moved",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-atlas-2048",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-atlas-2048",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-atlas-512",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-atlas-512",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-bevelled-cube-256",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-bevelled-cube-256",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-ramp-r1-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-ramp-r1-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-ramp-r15-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-ramp-r15-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-ramp-r15-p25",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-ramp-r15-p25",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-ramp-r2-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-ramp-r2-p0",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-ramp-r2-p25",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-ramp-r2-p25",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-sphere-256",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-sphere-256",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-tie-2048",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-tie-2048",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-tie-512",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-kernel-tie-512",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
           }
         },
         {
@@ -7277,6 +7779,186 @@
             "total": 1,
             "affected_texels": 0,
             "texels": 1
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-seams-box320",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-seams-box320",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-seams-centred",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-seams-centred",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-seams-offcentre",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-seams-offcentre",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-strips-box320",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-strips-box320",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-strips-centred",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-strips-centred",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-strips-offcentre",
+          "map": "exr files re-encoded",
+          "compared_against": "r1",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 16,
+            "affected_texels": 0,
+            "texels": 16
+          }
+        },
+        {
+          "golden_id": "tier0/semantics/export-padding-tie-sweep-strips-offcentre",
+          "map": "exr files re-encoded",
+          "compared_against": "r2",
+          "unit": "file (bytes identical)",
+          "difference": {
+            "max": 0,
+            "mean": 0.0,
+            "p99": 0,
+            "differing": 0,
+            "total": 8,
+            "affected_texels": 0,
+            "texels": 8
           }
         },
         {
