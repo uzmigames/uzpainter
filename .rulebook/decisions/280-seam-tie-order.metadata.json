@@ -1,0 +1,13 @@
+{
+  "id": 280,
+  "slug": "280-seam-tie-order",
+  "title": "The seam tie order: own taps by decision 273's comparator then a fixed neighbour order (sides along u, sides along v, diagonals), far taps by their float32 distance from the ring point then a fixed far-window order (the 2 x 2 block at floor(f - 1/2) first); a kept candidate list with no own tap is not a copy",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
