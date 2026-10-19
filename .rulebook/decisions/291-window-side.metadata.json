@@ -1,0 +1,12 @@
+{
+  "id": 291,
+  "slug": "291-window-side",
+  "title": "The bevelled cube's bevel-seam residue is the side of decision 275's far window when the far point lies on a window boundary, not a tie or tap-pool rule; Painter's side is an unreproduced float32 rounding, so a side-dependent ring texel is refused; under decisions 282 + 285 + 288, 54 of the Wand's 70 other texels are exact",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}
