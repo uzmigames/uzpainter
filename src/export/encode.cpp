@@ -6,6 +6,7 @@
 #include "evaluator/hwmath.h"
 #include "evaluator/sources.h"
 #include "export/exr_writer.h"
+#include "export/guards.h"
 #include "export/png_writer.h"
 #include "uzp_core/types/errors.h"
 
@@ -15,124 +16,8 @@
 
 namespace uzp::exporter {
 
-namespace {
-
-/// Recorded by R-090 and not fitted (decision 103); the owners of the remaining fits.
-constexpr std::string_view kSrgb8NotRecorded =
-    "recording R-090 P10 records BaseColor, Specular and Emissive only; decision 126";
-constexpr std::string_view kL8MaterialNotRecorded =
-    "tier0/semantics/export-l8-material records RGB and L files of one L8 channel under Legacy; decision 204";
-constexpr std::string_view kDitherNotFitted = "recording R-090 P3, decision 103";
-constexpr std::string_view kResizeNotFitted =
-    "recording R-090 P4, decision 103; owner phase3.2_unreal-ue56-packed-preset";
-constexpr std::string_view kPaddingNotFitted =
-    "recording R-090 P5 and P9, decision 103; owner phase3.2_unreal-ue56-packed-preset";
-
-[[noreturn]] void Refuse(const PlannedFile& file, const std::string& what, std::string_view owner) {
-    throw core::NotYetSupported("export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
-                                "): " + what + " (" + std::string(owner) + ")");
-}
-
-const core::TextureSet& SetOf(const core::Project& project, const PlannedFile& file) {
-    for (const core::TextureSet& set : project.texture_sets) {
-        if (set.id == file.textureSetId) return set;
-    }
-    throw std::invalid_argument("export: the texture set of " + file.relativePath + " is not in the project");
-}
-
-/// The stack channel of `source` when it is an sRGB8 documentMap channel of `file`'s stack.
-std::optional<core::ChannelType> Srgb8Channel(const core::TextureSet& set, const PlannedFile& file,
-                                              const PlannedSource& source) {
-    if (source.type != SourceType::documentMap || !source.channel) return std::nullopt;
-    for (const core::Stack& stack : set.stacks) {
-        if (stack.id != file.stackId) continue;
-        const auto it = stack.channels.find(*source.channel);
-        if (it != stack.channels.end() && it->second.format == core::ChannelFormat::sRGB8) return *source.channel;
-    }
-    return std::nullopt;
-}
-
-/// The stack channel of `source` when it is an L8 documentMap channel of `file`'s stack.
-std::optional<core::ChannelType> L8Channel(const core::TextureSet& set, const PlannedFile& file,
-                                           const PlannedSource& source) {
-    if (source.type != SourceType::documentMap || !source.channel) return std::nullopt;
-    for (const core::Stack& stack : set.stacks) {
-        if (stack.id != file.stackId) continue;
-        const auto it = stack.channels.find(*source.channel);
-        if (it != stack.channels.end() && it->second.format == core::ChannelFormat::L8) return *source.channel;
-    }
-    return std::nullopt;
-}
-
-bool IsUserChannel(core::ChannelType type) { return core::ToString(type).starts_with("User"); }
-
-/// True when `file` is laid out as export-l8-material records an L8 material channel: an RGB file
-/// whose R, G and B, or an L file whose L, each read that letter of one documentMap source.
-bool RecordedL8Mapping(const PlannedFile& file) {
-    const size_t letters = file.layout == FileLayout::RGB ? 3 : file.layout == FileLayout::L ? 1 : 0;
-    if (letters == 0 || file.channels.size() != letters) return false;
-    return std::all_of(file.channels.begin(), file.channels.end(), [&](const PlannedChannel& c) {
-        return c.src == c.dest && c.source.type == file.channels[0].source.type &&
-               c.source.name == file.channels[0].source.name;
-    });
-}
-
-}  // namespace
-
 void CheckProcessing(const core::Project& project, const PlannedFile& file) {
-    if (file.layout == FileLayout::Statistics) return;
-    const core::TextureSet& set = SetOf(project, file);
-    const ResolvedParameters& p = *file.parameters;
-    if (p.dithering) {
-        // Dithering changes nothing at PNG 16 (recording R-090 P3: on equals off on every map); at
-        // PNG 8 it is deterministic but not fitted; in OpenEXR no recording compares it with off.
-        if (p.fileFormat == FileFormat::png && p.bitDepth == BitDepth::u8) {
-            Refuse(file, "dithering at PNG 8 bits is recorded (deterministic) but not fitted", kDitherNotFitted);
-        }
-        if (p.fileFormat == FileFormat::exr) {
-            Refuse(file, "dithering in OpenEXR is not compared with dithering off by any recording", kDitherNotFitted);
-        }
-    }
-    const auto width = static_cast<uint32_t>(set.resolution.width);
-    const auto height = static_cast<uint32_t>(set.resolution.height);
-    if (file.width != width || file.height != height) {
-        Refuse(file,
-               "resizing " + std::to_string(width) + "x" + std::to_string(height) + " to " + std::to_string(file.width) +
-                   "x" + std::to_string(file.height) +
-                   " (sizeLog2) is recorded but only partly fitted, and no resize is implemented (sRGB8 channels, "
-                   "virtual normals after a downscale and BilinearHQ normal-channel magnification are not reproduced)",
-               kResizeNotFitted);
-    }
-    if (p.paddingAlgorithm != Padding::infinite && p.paddingAlgorithm != Padding::passthrough) {
-        Refuse(file,
-               "the padding \"" + std::string(PaddingName(p.paddingAlgorithm)) +
-                   "\" with dilationDistance is recorded but not fitted",
-               kPaddingNotFitted);
-    }
-    for (const PlannedChannel& channel : file.channels) {
-        const std::optional<core::ChannelType> srgb8 = Srgb8Channel(set, file, channel.source);
-        if (!srgb8 || IsUserChannel(*srgb8) || SrgbEncodedOnExport(*srgb8)) continue;
-        Refuse(file,
-               "the export encoding of the sRGB8 channel " + std::string(core::ToString(*srgb8)) +
-                   " (linear like a User channel, or sRGB-encoded like BaseColor) is not recorded",
-               kSrgb8NotRecorded);
-    }
-    if (p.fileFormat != FileFormat::png) return;
-    for (const PlannedChannel& channel : file.channels) {
-        // An L8 BaseColor, Specular or Emissive is written as the sRGB encode of its linear value
-        // in srcChannel R, B and L and as the linear value in G (export-l8-material, decision 204),
-        // recorded for the RGB and L files of one L8 channel under Legacy.
-        const std::optional<core::ChannelType> l8 = L8Channel(set, file, channel.source);
-        if (!l8 || !SrgbEncodedOnExport(*l8)) continue;
-        const std::string what = "the PNG encoding of the L8 channel " + std::string(core::ToString(*l8));
-        if (evaluator::PainterOcio(project)) Refuse(file, what + " under OCIO is not recorded", kL8MaterialNotRecorded);
-        if (!RecordedL8Mapping(file)) {
-            Refuse(file,
-                   what + " in a file laid out " + std::string(FileLayoutName(file.layout)) +
-                       " other than the channel's own R, G and B, or its L, alone is not recorded",
-                   kL8MaterialNotRecorded);
-        }
-    }
+    if (std::optional<std::string> refusal = ProcessingRefusal(project, file)) throw core::NotYetSupported(*refusal);
 }
 
 namespace {

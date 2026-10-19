@@ -3,6 +3,7 @@
 #include "evaluator/geometry_mask.h"
 #include "evaluator/hwmath.h"
 #include "export/encode.h"
+#include "export/guards.h"
 #include "mesh/texturing_mesh.h"
 #include "uzp_core/types/errors.h"
 
@@ -25,15 +26,6 @@
 namespace uzp::exporter {
 
 namespace {
-
-/// The owner of padding on UV-islanded sets (decisions 103, 245 and 259).
-constexpr std::string_view kIslandsOwner = "owner phase1.25_pilot-wand item 2.7";
-
-[[noreturn]] void Unfitted(const PlannedFile& file, const std::string& what,
-                           std::string_view owner = kProcessingRecording) {
-    throw core::NotYetSupported("export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
-                                "): " + what + " (" + std::string(owner) + ")");
-}
 
 /// A channel reading a combined virtual normal.
 bool ChannelReadsCombinedNormal(const PlannedChannel& channel) { return ReadsCombinedNormal(channel.source); }
@@ -1335,39 +1327,8 @@ void IslandTriangles(Coverage& coverage, const mesh::TexturingMesh& mesh, const 
 std::vector<RingTexel> MeasuredRing(const Coverage& coverage) { return RingOf(coverage); }
 
 void CheckPadding(const PlannedFile& file, const Coverage& coverage, InexactPadding inexact) {
-    if (file.layout == FileLayout::Statistics) return;
-    if (coverage.width != file.width || coverage.height != file.height ||
-        coverage.covered.size() != size_t{coverage.width} * coverage.height) {
-        throw std::invalid_argument("export: the coverage of " + file.relativePath + " does not have its size");
-    }
-    if (coverage.Complete()) return;
-    const Padding padding = file.parameters->paddingAlgorithm;
-    if (padding == Padding::infinite) {
-        if (inexact == InexactPadding::measure) return;
-        Unfitted(file,
-                 "the padding \"infinite\" on a texture set whose UV islands do not cover the whole tile is not "
-                 "exact: Painter's ring across UV seams, at seam corners and at poles is not identified, and the "
-                 "best-known rule misses Painter's padding texels by up to 59150 PNG 16 codes (decision 220)",
-                 std::string(kIslandsOwner) + ", " + std::string(kProcessingRecording) + ", decision 259");
-    }
-    if (padding != Padding::passthrough) {
-        Unfitted(file, "the padding \"" + std::string(PaddingName(padding)) +
-                           "\" on a texture set whose UV islands do not cover the whole tile is not fitted");
-    }
-    if (file.layout == FileLayout::LA || file.layout == FileLayout::RGBA) {
-        Unfitted(file, "an alpha layout (L+A, RGB+A) on a texture set whose UV islands do not cover the whole tile "
-                       "is recorded under infinite and transparent padding only, and not fitted");
-    }
-    for (const PlannedChannel& channel : file.channels) {
-        const SourceType type = channel.source.type;
-        if (type == SourceType::meshMap || type == SourceType::virtualMap) {
-            Unfitted(file,
-                     "the padding \"passthrough\" of a " + std::string(SourceTypeName(type)) +
-                         " source outside the UV islands is not recorded (R-090 records it for a virtual normal "
-                         "from layers without a mesh map only, where Painter's values there differ between "
-                         "recordings)",
-                     std::string(kIslandsOwner) + ", " + std::string(kProcessingRecording) + ", decision 245");
-        }
+    if (std::optional<std::string> refusal = PaddingRefusal(file, coverage, inexact)) {
+        throw core::NotYetSupported(*refusal);
     }
 }
 
@@ -1393,11 +1354,9 @@ std::string IslandNormalRefusal(const PlannedSource& source) {
 }
 
 void CheckIslandNormal(const PlannedFile& file, const Coverage& coverage) {
-    if (coverage.Complete()) return;
-    const auto normal = std::find_if(file.channels.begin(), file.channels.end(), ChannelReadsCombinedNormal);
-    if (normal == file.channels.end()) return;
-    throw core::NotYetSupported("export: " + file.rootPath + " map \"" + file.fileName + "\" (" + file.relativePath +
-                                "): " + IslandNormalRefusal(normal->source));
+    if (std::optional<std::string> refusal = IslandNormalFileRefusal(file, coverage)) {
+        throw core::NotYetSupported(*refusal);
+    }
 }
 
 bool ApplyPadding(const PlannedFile& file, const Coverage& coverage, uint32_t channels, std::vector<float>& stored,

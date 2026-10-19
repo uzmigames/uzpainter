@@ -49,6 +49,13 @@
 //       `ManifestError`.
 //   uzp-export-tests aliases
 //       (phase1.17) Prints {"shipped": [id...], "aliases": [[Painter name, id, [version...]]]}.
+//   uzp-export-tests preflight <templates dir> <spec.json> <config.json>
+//       (SUP-035, decision 091) The project of a spec as `export` builds it: the plan's preflight
+//       (`PreflightExport` over the spec's mesh coverage, `PreflightJson`) with a resource provider
+//       that counts every read, then the export (`WriteExport`); prints {"preflight", "plan":
+//       PlanJson before and "plan_after" after the preflight, "resource_reads": reads during the
+//       preflight, "written_before_export": whether exportPath existed after it, "export":
+//       {"written": [relativePath...]} or {"error": class, "message": text}}.
 //   uzp-export-tests [--fault <point>[:<n>]] publish <templates dir> <spec.json> <config.json>
 //       (phase1.17) As `export`, through `PublishExport`: the files and the receipt published as a
 //       new generation under exportPath; the spec's mesh is also the project's imported mesh (a
@@ -101,6 +108,7 @@
 #include "export/exr_writer.h"
 #include "export/fault.h"
 #include "export/fixed_names.h"
+#include "export/guards.h"
 #include "export/padding.h"
 #include "export/plan.h"
 #include "export/png_writer.h"
@@ -1192,6 +1200,57 @@ int RunHoldLock(const fs::path& exportPath, const std::string& milliseconds) {
 
 }  // namespace
 
+// ── Dry-run preflight (SUP-035) ─────────────────────────────────────────────
+
+namespace {
+
+int RunPreflight(const fs::path& templatesDir, const fs::path& specPath, const fs::path& configPath) {
+    const Spec spec = ParseSpec(specPath);
+    const exporter::ExportPlan plan = exporter::CompilePlan(spec.project, ReadText(configPath));
+    json::Object result{{"plan", exporter::PlanJson(plan)}};
+    // The preflight reads the coverage only: every resource read is counted.
+    auto reads = std::make_shared<size_t>(0);
+    exporter::SourceInputs counted;
+    counted.resources = std::make_shared<evaluator::DecodingResourceProvider>(
+        [reads](std::string_view) -> std::optional<std::string> {
+            ++*reads;
+            return std::nullopt;
+        });
+    counted.geometry = spec.geometry;
+    result["preflight"] =
+        exporter::PreflightJson(exporter::PreflightExport(spec.project, plan, counted, "the spec has no mesh"));
+    result["resource_reads"] = static_cast<std::int64_t>(*reads);
+    result["plan_after"] = exporter::PlanJson(plan);
+    result["written_before_export"] = fs::exists(exporter::Utf8Path(plan.exportPath));
+    json::Object exported;
+    try {
+        auto templates = std::make_shared<const evaluator::TemplateLibrary>(evaluator::TemplateLibrary::Load(templatesDir));
+        evaluator::CpuEvaluator cpu(templates, evaluator::AdmissionLimits{64ull << 30, 1 << 20});
+        exporter::SourceInputs inputs;
+        inputs.templateId = spec.templateId;
+        inputs.resources = spec.resources;
+        inputs.geometry = spec.geometry;
+        render::Result<std::vector<exporter::WrittenFile>> written =
+            exporter::WriteExport(spec.project, 1, plan, inputs, *templates, cpu.store(), cpu.cache());
+        if (!written) {
+            exported["error"] = "Failure";
+            exported["message"] = written.error().reason;
+        } else {
+            json::Array files;
+            for (const exporter::WrittenFile& f : *written) files.emplace_back(f.relativePath);
+            exported["written"] = std::move(files);
+        }
+    } catch (const core::NotYetSupported& e) {
+        exported["error"] = "NotYetSupported";
+        exported["message"] = std::string(e.what());
+    }
+    result["export"] = std::move(exported);
+    std::cout << json::WriteCanonical(result) << "\n";
+    return 0;
+}
+
+}  // namespace
+
 // ── Shipped presets (phase1.17) ─────────────────────────────────────────────
 
 std::string_view LayoutName(exporter::PresetLayout layout) {
@@ -1285,6 +1344,7 @@ int main(int argc, char** argv) {
         if (args.size() == 2 && args[0] == "process") return RunProcess(args[1]);
         if (args.size() == 2 && args[0] == "ring") return RunRing(args[1]);
         if (args.size() == 3 && args[0] == "presets") return RunPresets(args[1], args[2]);
+        if (args.size() == 4 && args[0] == "preflight") return RunPreflight(args[1], args[2], args[3]);
         if (args.size() == 1 && args[0] == "aliases") return RunAliases();
     } catch (const std::exception& e) {
         std::cerr << "uzp-export-tests: " << e.what() << "\n";

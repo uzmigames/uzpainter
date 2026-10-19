@@ -35,6 +35,7 @@
 #include "evaluator/geometry_mask.h"
 #include "evaluator/sources.h"
 #include "evaluator/templates.h"
+#include "export/guards.h"
 #include "export/plan.h"
 #include "export/preset_aliases.h"
 #include "mesh/import_error.h"
@@ -405,7 +406,8 @@ void Worker::DefineTools() {
              "Exports the current revision as a new generation with its receipt, then the fixed-name folders (a long "
              "job): Painter's json_config (`config`), or a shipped preset (`preset`) for the texture sets into "
              "`output_dir`; size_log2, file_format, bit_depth and padding override every map. With dry_run it returns "
-             "the plan and the files the export would write, and writes nothing.",
+             "the plan, the files the plan lists and a preflight of the export's static refusals per file (blocked, "
+             "needs_evaluation, no_known_blocker), and writes nothing.",
              Schema({{"config", json::Object{{"type", json::Array{"object", "string"}},
                                              {"description", "Painter's json_config, as an object or JSON text."},
                                              // Its `exportPath` is a path under the export root.
@@ -1059,7 +1061,10 @@ python::JobBody Worker::Export(const json::Object& arguments) {
         return [text](python::JobContext& job) {
             job.SetProgress(0.0, "planning the export");
             python::Session& session = python::Session::Get();
-            const std::shared_ptr<const core::Project> project = session.ReadProject();
+            // One revision for the plan, the list and the preflight.
+            const std::shared_ptr<python::OpenProject> open = session.Current();
+            const core::Snapshot snapshot = open->document->snapshot();
+            const std::shared_ptr<const core::Project>& project = snapshot.project;
             const std::optional<std::filesystem::path> path = session.FilePath();
             const exporter::PlanContext context{path ? exporter::Utf8String(*path) : std::string()};
             json::Array textures;
@@ -1068,10 +1073,28 @@ python::JobBody Worker::Export(const json::Object& arguments) {
                 for (const std::string& file : entry.files) files.push_back(file);
                 textures.push_back(json::Object{{"texture_set", entry.textureSet}, {"stack", entry.stack}, {"files", std::move(files)}});
             }
+            const exporter::ExportPlan plan = exporter::CompilePlan(*project, text, context);
+            // The preflight's UV coverage, from the revision's own mesh re-derived from its stored
+            // bytes into objects of this call alone: no image, no evaluation, no kept cache.
+            exporter::SourceInputs coverage;
+            std::string unavailable = "the project has no texturing mesh";
+            if (project->mesh) {
+                store::ProjectStore* store = open->store.get();
+                try {
+                    mesh::ImportResult mesh = mesh::RederiveMesh(
+                        *project, [store](const std::string& sha256) { return store->ReadResource(sha256); });
+                    coverage.geometry = std::make_shared<evaluator::MeshGeometryMasks>(
+                        std::make_shared<const mesh::TexturingMesh>(std::move(mesh.mesh)));
+                } catch (const std::exception& error) {
+                    unavailable = std::string("the texturing mesh does not re-derive: ") + error.what();
+                }
+            }
             json::Object result{{"dry_run", true},
-                                {"revision", session.Revision()},
-                                {"plan", exporter::PlanJson(exporter::CompilePlan(*project, text, context))},
-                                {"textures", std::move(textures)}};
+                                {"revision", snapshot.revision},
+                                {"plan", exporter::PlanJson(plan)},
+                                {"textures", std::move(textures)},
+                                {"preflight", exporter::PreflightJson(
+                                                  exporter::PreflightExport(*project, plan, coverage, unavailable))}};
             job.NoOp();
             return result;
         };

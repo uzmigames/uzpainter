@@ -382,6 +382,7 @@ const export_sources = [_][]const u8{
     "export/encode.cpp",
     "export/exr_writer.cpp",
     "export/fixed_names.cpp",
+    "export/guards.cpp",
     "export/padding.cpp",
     "export/plan.cpp",
     "export/png_writer.cpp",
