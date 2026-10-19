@@ -188,7 +188,7 @@ def event_names(output: dict[str, Any]) -> list[str]:
 
 
 def test_every_probe_manifest_is_an_observed_probe_job_requested_or_admitted() -> None:
-    requested = [p.stem for p in REQUEST_DIR.glob("*.json")]
+    requested = [p.stem for p in REQUEST_DIR.glob("phase1-*.json")]
     admitted = [p.stem for p in MANIFEST_DIR.glob("phase1-*.json")]
     assert sorted(requested + admitted) == sorted(STEMS + LIFECYCLE_STEMS)
     for stem in LIFECYCLE_STEMS:

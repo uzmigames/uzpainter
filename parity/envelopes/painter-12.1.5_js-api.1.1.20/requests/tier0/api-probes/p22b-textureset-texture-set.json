@@ -1,0 +1,128 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/p22b-textureset-texture-set",
+  "tier": "0",
+  "domain": "tier0/api-probes/p22b-textureset-texture-set",
+  "description": "API probe P22-B (decision 295): on the plane, TextureSet.set_resolution with Resolution(width=512, height=256) and, as a probe, with a resolution that is not a power of two; the TextureSet.description property set and read back; set_active_stack of the plane's texture set; TextureSet.get_resolution (Resolution.width and height), TextureSet.from_name of the texture set and of a missing name, the original_name property, is_layered_material and get_active_stack, in the first session and after save and reopen.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.textureset.TextureSet.set_resolution",
+        "args": {
+          "width": 512,
+          "height": 256
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.textureset.TextureSet.description",
+        "args": {
+          "value": "uzp probe texture set"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.textureset.set_active_stack",
+        "args": {
+          "texture_set": "uzp_plane"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.textureset.TextureSet.set_resolution",
+        "args": {
+          "width": 300,
+          "height": 300,
+          "probe": true
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.textureset.TextureSet.get_resolution",
+        "args": {}
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.textureset.TextureSet.from_name",
+        "args": {
+          "texture_set": "uzp_plane"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.textureset.TextureSet.from_name",
+        "args": {
+          "texture_set": "uzp_missing"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.textureset.TextureSet.original_name",
+        "args": {}
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.textureset.TextureSet.description",
+        "args": {}
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.textureset.TextureSet.is_layered_material",
+        "args": {}
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.textureset.get_active_stack",
+        "args": {}
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

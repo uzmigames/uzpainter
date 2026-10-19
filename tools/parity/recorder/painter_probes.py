@@ -22,6 +22,7 @@ import json
 import os
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from functools import partial
 from typing import TYPE_CHECKING, Any
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     # At run time these names come from the copy of `painter_side.py`'s namespace.
     from tools.parity.recorder.painter_side import (
         BLENDING_MODES,
+        CHANNEL_FORMATS,
         OPERATIONS,
         TONE_MAPPINGS,
         channel_type,
@@ -947,6 +949,8 @@ def engine_disabled(args: dict[str, Any]) -> dict[str, Any]:
 
 def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -> Any:
     """Apply one edit call; returns what the documented call returned."""
+    if call in P295_EDIT_CALLS or call in P295_VALUE_ARGS:
+        return p295_edit(call, args)
     layerstack = substance_painter.layerstack
     if call == INSERT_FILL:
         return layerstack.insert_fill(insert_position(args))
@@ -1076,6 +1080,8 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
 
 def read(call: str, args: dict[str, Any]) -> Any:
     """Evaluate one readback call; returns the raw documented value."""
+    if call in P295_GETTER_CALLS:
+        return p295_read(call, args)
     if call == ROOT_LAYERS:
         stack = substance_painter.textureset.get_active_stack()
         return [tree(node) for node in substance_painter.layerstack.get_root_layer_nodes(stack)]
@@ -1189,10 +1195,172 @@ def read(call: str, args: dict[str, Any]) -> Any:
     raise ValueError(f"readback {call!r} is not in the probe vocabulary")
 
 
+# --- P22-B: texture sets, channels and project (decision 295) ------------------------------------
+# Explicit calls for the pending-evidence Painter symbols of the textureset and project modules
+# (phase1.24 item 3.4). Channel calls address the active stack and texture-set calls its texture
+# set, both resolved again for every call.
+P295_ADD_CHANNEL = "substance_painter.textureset.Stack.add_channel"
+P295_EDIT_CHANNEL = "substance_painter.textureset.Stack.edit_channel"
+P295_REMOVE_CHANNEL = "substance_painter.textureset.Stack.remove_channel"
+P295_SET_RESOLUTION = "substance_painter.textureset.TextureSet.set_resolution"
+P295_SET_ACTIVE_STACK = "substance_painter.textureset.set_active_stack"
+P295_METADATA_SET = "substance_painter.project.Metadata.set"
+P295_HAS_CHANNEL = "substance_painter.textureset.Stack.has_channel"
+P295_GET_CHANNEL = "substance_painter.textureset.Stack.get_channel"
+P295_FROM_NAME = "substance_painter.textureset.TextureSet.from_name"
+P295_ORIGINAL_NAME = "substance_painter.textureset.TextureSet.original_name"
+P295_DESCRIPTION = "substance_painter.textureset.TextureSet.description"
+P295_IS_LAYERED = "substance_painter.textureset.TextureSet.is_layered_material"
+P295_GET_ACTIVE_STACK = "substance_painter.textureset.get_active_stack"
+P295_METADATA_LIST = "substance_painter.project.Metadata.list"
+P295_METADATA_GET = "substance_painter.project.Metadata.get"
+P295_GET_UUID = "substance_painter.project.get_uuid"
+P295_LAST_MESH = "substance_painter.project.last_imported_mesh_path"
+
+P295_EDIT_CALLS = (
+    "substance_painter.textureset.Stack.add_channel",
+    "substance_painter.textureset.Stack.edit_channel",
+    "substance_painter.textureset.Stack.remove_channel",
+    "substance_painter.textureset.Channel.edit",
+    "substance_painter.textureset.TextureSet.set_resolution",
+    "substance_painter.textureset.set_active_stack",
+    "substance_painter.project.Metadata.set",
+)
+P295_GETTER_CALLS = (
+    "substance_painter.textureset.Stack.has_channel",
+    "substance_painter.textureset.Stack.get_channel",
+    "substance_painter.textureset.TextureSet.from_name",
+    "substance_painter.textureset.TextureSet.original_name",
+    "substance_painter.textureset.TextureSet.description",
+    "substance_painter.textureset.TextureSet.is_layered_material",
+    "substance_painter.textureset.get_active_stack",
+    "substance_painter.project.Metadata.list",
+    "substance_painter.project.Metadata.get",
+    "substance_painter.project.get_uuid",
+    "substance_painter.project.last_imported_mesh_path",
+)
+# `TextureSet.description` with `value` assigns the documented property.
+P295_VALUE_ARGS = {"substance_painter.textureset.TextureSet.description": "value"}
+
+# The first `get_uuid` value of each run, by the run's private directory: a project's UUID is new
+# for every created project, so a readback records facts about it, never the value.
+P295_UUIDS: dict[str, str] = {}
+
+
+def active_texture_set() -> Any:
+    return substance_painter.textureset.get_active_stack().material()
+
+
+def channel_record(channel: Any) -> dict[str, Any]:
+    """A `Channel` as its documented type, format and label."""
+    return {
+        "type": describe(channel.type()),
+        "format": describe(channel.format()),
+        "label": channel.label(),
+    }
+
+
+def uuid_record(value: Any) -> dict[str, Any]:
+    """`project.get_uuid()` as facts that do not change between runs, as Painter gives them:
+    whether it is a `uuid.UUID`, whether its text parses as one and with which version, and
+    whether it equals the run's first read (the same project after save and reopen)."""
+    text = str(value)
+    run = str(ROOT["dir"])
+    if run not in P295_UUIDS:
+        P295_UUIDS[run] = text
+    try:
+        version = uuid.UUID(text).version
+        parses = True
+    except ValueError:
+        version, parses = None, False
+    return {
+        "is_uuid_instance": isinstance(value, uuid.UUID),
+        "parses_as_uuid": parses,
+        "version": version,
+        "same_as_first_read": text == P295_UUIDS[run],
+    }
+
+
+def p295_channel_edit(call: str, args: dict[str, Any]) -> Any:
+    """`add_channel`, `edit_channel`, `remove_channel` or `Channel.edit` on the active stack; the
+    label is passed only when the step gives one (a standard channel takes none)."""
+    stack = substance_painter.textureset.get_active_stack()
+    kind = channel_type(args["channel"])
+    if call == P295_REMOVE_CHANNEL:
+        return stack.remove_channel(kind)
+    channel_format = member(CHANNEL_FORMATS, "ChannelFormat", args["format"])
+    label = args.get("label")
+    if call == P295_ADD_CHANNEL:
+        if label is None:
+            return channel_record(stack.add_channel(kind, channel_format))
+        return channel_record(stack.add_channel(kind, channel_format, str(label)))
+    if call == P295_EDIT_CHANNEL:
+        if label is None:
+            return stack.edit_channel(kind, channel_format)
+        return stack.edit_channel(kind, channel_format, str(label))
+    channel = stack.get_channel(kind)
+    if label is None:
+        return channel.edit(channel_format)
+    return channel.edit(channel_format, str(label))
+
+
+def p295_edit(call: str, args: dict[str, Any]) -> Any:
+    textureset = substance_painter.textureset
+    if call == P295_SET_RESOLUTION:
+        resolution = textureset.Resolution(int(args["width"]), int(args["height"]))
+        return active_texture_set().set_resolution(resolution)
+    if call == P295_SET_ACTIVE_STACK:
+        stack = textureset.Stack.from_name(str(args["texture_set"]), str(args.get("stack", "")))
+        return textureset.set_active_stack(stack)
+    if call == P295_DESCRIPTION:
+        active_texture_set().description = str(args["value"])
+        return None
+    if call == P295_METADATA_SET:
+        # A dict value is authored as `dict_keys` and `dict_values` (step arguments do not nest).
+        if "dict_keys" in args:
+            value = dict(zip(args["dict_keys"], args["dict_values"], strict=True))
+        else:
+            value = args["value"]
+        metadata = substance_painter.project.Metadata(str(args["context"]))
+        return metadata.set(str(args["key"]), value)
+    return p295_channel_edit(call, args)
+
+
+def p295_read(call: str, args: dict[str, Any]) -> Any:
+    textureset = substance_painter.textureset
+    project = substance_painter.project
+    if call == P295_HAS_CHANNEL:
+        return textureset.get_active_stack().has_channel(channel_type(args["channel"]))
+    if call == P295_GET_CHANNEL:
+        stack = textureset.get_active_stack()
+        return channel_record(stack.get_channel(channel_type(args["channel"])))
+    if call == P295_FROM_NAME:
+        return {"texture_set": textureset.TextureSet.from_name(str(args["texture_set"])).name()}
+    if call == P295_ORIGINAL_NAME:
+        return active_texture_set().original_name
+    if call == P295_DESCRIPTION:
+        return active_texture_set().description
+    if call == P295_IS_LAYERED:
+        return active_texture_set().is_layered_material()
+    if call == P295_GET_ACTIVE_STACK:
+        stack = textureset.get_active_stack()
+        return {"texture_set": stack.material().name(), "stack": stack.name()}
+    if call == P295_METADATA_LIST:
+        return project.Metadata(str(args["context"])).list()
+    if call == P295_METADATA_GET:
+        return project.Metadata(str(args["context"])).get(str(args["key"]))
+    if call == P295_GET_UUID:
+        return uuid_record(project.get_uuid())
+    if call == P295_LAST_MESH:
+        return run_path(project.last_imported_mesh_path())
+    raise ValueError(f"readback {call!r} is not in the probe vocabulary")
+
+
 def is_read(call: str, args: dict[str, Any]) -> bool:
-    if call in VALUE_ARGS:
-        return VALUE_ARGS[call] not in args
-    return call in GETTER_CALLS
+    values = {**VALUE_ARGS, **P295_VALUE_ARGS}
+    if call in values:
+        return values[call] not in args
+    return call in GETTER_CALLS or call in P295_GETTER_CALLS
 
 
 def probe_step(args: dict[str, Any]) -> dict[str, Any]:

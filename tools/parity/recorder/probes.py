@@ -115,10 +115,15 @@ def probe_constants() -> dict[str, Any]:
 
 
 CONSTANTS = probe_constants()
-EDIT_CALLS: frozenset[str] = frozenset(CONSTANTS["EDIT_CALLS"])
-GETTER_CALLS: frozenset[str] = frozenset(CONSTANTS["GETTER_CALLS"])
+# With the P22-B blocks of `painter_probes.py` (decision 295: texture sets, channels, project).
+EDIT_CALLS: frozenset[str] = frozenset(CONSTANTS["EDIT_CALLS"]) | frozenset(
+    CONSTANTS["P295_EDIT_CALLS"]
+)
+GETTER_CALLS: frozenset[str] = frozenset(CONSTANTS["GETTER_CALLS"]) | frozenset(
+    CONSTANTS["P295_GETTER_CALLS"]
+)
 INSERT_CALLS: frozenset[str] = frozenset(CONSTANTS["INSERT_CALLS"])
-VALUE_ARGS: dict[str, str] = CONSTANTS["VALUE_ARGS"]
+VALUE_ARGS: dict[str, str] = {**CONSTANTS["VALUE_ARGS"], **CONSTANTS["P295_VALUE_ARGS"]}
 IMPORT_RESOURCE: str = CONSTANTS["IMPORT_RESOURCE"]
 EVENT_CONNECT: str = CONSTANTS["EVENT_CONNECT"]
 PROJECT_SAVE_AS: str = CONSTANTS["PROJECT_SAVE_AS"]
@@ -149,6 +154,9 @@ CREATE_FOLDERS = ("default_save_path", "export_path")
 SHELF_FOLDER, SHELF_INPUTS = "folder", "inputs"
 # An export probe step without `exportPath` (P21-B): Painter chooses where the files go.
 DEFAULT_EXPORT_PATH = "default_export_path"
+# An export probe step whose `exportPath` is taken by a regular file the host made in the run's
+# private directory, so the export fails (P22-B, `ExportStatus.Error`; decision 295).
+EXPORT_PATH_BLOCKED = "export_path_blocked"
 # The lifecycle procedure with `create` and `open` timed by a second thread (P21-F, decision 109).
 TIMING_FLAG = "timing"
 # `wait: false`: the step's events and states are recorded with the next step's.
@@ -525,7 +533,11 @@ def probe_export(
     settled) the files in its directory with their SHA-256, compared by the capture exports."""
     export = export_step(Step(step.step, EXPORT, step.args))
     export_dir = directory / f"probe-export-step{step.step}"
-    export_dir.mkdir(parents=True)
+    if step.args.get(EXPORT_PATH_BLOCKED) is True:
+        export_dir.parent.mkdir(parents=True, exist_ok=True)
+        export_dir.write_bytes(b"")
+    else:
+        export_dir.mkdir(parents=True)
     roots = [ts if not st else f"{ts}/{st}" for ts, st in export_roots(template)]
     config = export.config(export_dir, roots)
     default_path = step.args.get(DEFAULT_EXPORT_PATH) is True

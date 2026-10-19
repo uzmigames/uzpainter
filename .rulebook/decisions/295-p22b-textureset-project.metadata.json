@@ -1,0 +1,13 @@
+{
+  "id": 295,
+  "slug": "295-p22b-textureset-project",
+  "title": "P22-B for the textureset, project, export, baking and source modules: eight requests exercise 80 pending symbols, and four take another evidence route",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.24_python-api-facade",
+    "phase3.5_embree-bakers",
+    "phase3.2_proc-material-families"
+  ],
+  "supersededBy": null
+}

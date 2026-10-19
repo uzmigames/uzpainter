@@ -1215,6 +1215,22 @@
       "documented_as": "substance_painter.project.MeshReloadingSettings",
       "page": "substance_painter/project.html"
     },
+    "substance_painter.project.Metadata": {
+      "documented_as": "substance_painter.project.Metadata",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.Metadata.get": {
+      "documented_as": "substance_painter.project.Metadata.get",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.Metadata.list": {
+      "documented_as": "substance_painter.project.Metadata.list",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.Metadata.set": {
+      "documented_as": "substance_painter.project.Metadata.set",
+      "page": "substance_painter/project.html"
+    },
     "substance_painter.project.NormalMapFormat": {
       "documented_as": "substance_painter.project.NormalMapFormat",
       "page": "substance_painter/project.html"
@@ -1325,6 +1341,10 @@
     },
     "substance_painter.project.get_scene_bounding_box": {
       "documented_as": "substance_painter.project.get_scene_bounding_box",
+      "page": "substance_painter/project.html"
+    },
+    "substance_painter.project.get_uuid": {
+      "documented_as": "substance_painter.project.get_uuid",
       "page": "substance_painter/project.html"
     },
     "substance_painter.project.is_busy": {
@@ -1643,6 +1663,10 @@
       "documented_as": "substance_painter.textureset.Channel.bit_depth",
       "page": "substance_painter/textureset/channel.html"
     },
+    "substance_painter.textureset.Channel.edit": {
+      "documented_as": "substance_painter.textureset.Channel.edit",
+      "page": "substance_painter/textureset/channel.html"
+    },
     "substance_painter.textureset.Channel.format": {
       "documented_as": "substance_painter.textureset.Channel.format",
       "page": "substance_painter/textureset/channel.html"
@@ -1657,6 +1681,10 @@
     },
     "substance_painter.textureset.Channel.label": {
       "documented_as": "substance_painter.textureset.Channel.label",
+      "page": "substance_painter/textureset/channel.html"
+    },
+    "substance_painter.textureset.Channel.type": {
+      "documented_as": "substance_painter.textureset.Channel.type",
       "page": "substance_painter/textureset/channel.html"
     },
     "substance_painter.textureset.ChannelFormat": {
@@ -2111,6 +2139,14 @@
       "documented_as": "substance_painter.textureset.Stack.from_name",
       "page": "substance_painter/textureset/stack.html"
     },
+    "substance_painter.textureset.Stack.get_channel": {
+      "documented_as": "substance_painter.textureset.Stack.get_channel",
+      "page": "substance_painter/textureset/stack.html"
+    },
+    "substance_painter.textureset.Stack.has_channel": {
+      "documented_as": "substance_painter.textureset.Stack.has_channel",
+      "page": "substance_painter/textureset/stack.html"
+    },
     "substance_painter.textureset.Stack.material": {
       "documented_as": "substance_painter.textureset.Stack.material",
       "page": "substance_painter/textureset/stack.html"
@@ -2119,8 +2155,16 @@
       "documented_as": "substance_painter.textureset.Stack.name",
       "page": "substance_painter/textureset/stack.html"
     },
+    "substance_painter.textureset.Stack.remove_channel": {
+      "documented_as": "substance_painter.textureset.Stack.remove_channel",
+      "page": "substance_painter/textureset/stack.html"
+    },
     "substance_painter.textureset.TextureSet.all_stacks": {
       "documented_as": "substance_painter.textureset.TextureSet.all_stacks",
+      "page": "substance_painter/textureset/textureset.html"
+    },
+    "substance_painter.textureset.TextureSet.description": {
+      "documented_as": "substance_painter.textureset.TextureSet.description",
       "page": "substance_painter/textureset/textureset.html"
     },
     "substance_painter.textureset.TextureSet.from_name": {
@@ -2139,6 +2183,10 @@
       "documented_as": "substance_painter.textureset.TextureSet.get_stack",
       "page": "substance_painter/textureset/textureset.html"
     },
+    "substance_painter.textureset.TextureSet.is_layered_material": {
+      "documented_as": "substance_painter.textureset.TextureSet.is_layered_material",
+      "page": "substance_painter/textureset/textureset.html"
+    },
     "substance_painter.textureset.TextureSet.name": {
       "documented_as": "substance_painter.textureset.TextureSet.name",
       "page": "substance_painter/textureset/textureset.html"
@@ -2149,6 +2197,10 @@
     },
     "substance_painter.textureset.TextureSet.set_mesh_map_resource": {
       "documented_as": "substance_painter.textureset.TextureSet.set_mesh_map_resource",
+      "page": "substance_painter/textureset/textureset.html"
+    },
+    "substance_painter.textureset.TextureSet.set_resolution": {
+      "documented_as": "substance_painter.textureset.TextureSet.set_resolution",
       "page": "substance_painter/textureset/textureset.html"
     },
     "substance_painter.textureset.all_texture_sets": {

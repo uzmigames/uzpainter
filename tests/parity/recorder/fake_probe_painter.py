@@ -18,6 +18,7 @@ import datetime
 import enum
 import json
 import types
+import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ from uzp_recorder_fake_painter import (  # type: ignore[import-not-found]
     BlendingMode,
     ChannelType,
     Color,
+    ExportStatus,
     FakeWorld,
     GenericColorSpace,
     ProjectError,
@@ -304,6 +306,7 @@ class ProbeWorld(FakeWorld):  # type: ignore[misc]
         data: dict[str, Any] = super().snapshot()
         data["tree"] = [dump(item) for item in self.roots]
         data["mesh_maps"] = {usage.name: rid.url() for usage, rid in self.mesh_maps.items()}
+        data["p295"] = p295_snapshot(self)
         return data
 
     def restore(self, data: dict[str, Any]) -> None:
@@ -339,6 +342,7 @@ class ProbeWorld(FakeWorld):  # type: ignore[misc]
         self.mesh_maps = {
             MeshMapUsage[name]: resource_id.from_url(url) for name, url in data["mesh_maps"].items()
         }
+        p295_restore(self, data["p295"])
 
     # Export --------------------------------------------------------------------------------
     def composite(self, channel: ChannelType) -> tuple[float, float, float]:
@@ -896,6 +900,7 @@ def extend_modules(world: ProbeWorld) -> None:
     project.name = name
     extend_async(world, events)
     extend_host(world, events)
+    extend_p295(world, events)
 
     root = modules["substance_painter"]
     root.layerstack = modules["substance_painter.layerstack"]
@@ -1150,3 +1155,169 @@ def module(name: str, **members: Any) -> types.ModuleType:
     for key, value in members.items():
         setattr(mod, key, value)
     return mod
+
+
+# --- P22-B: channels, texture sets, project metadata and export status (decision 295) -------------
+
+
+def p295_snapshot(world: ProbeWorld) -> dict[str, Any]:
+    """What a save keeps of the P22-B state: channel labels, the texture-set description, the
+    project UUID and its metadata."""
+    return {
+        "labels": {kind.name: label for kind, label in world.channel_labels.items()},
+        "description": world.description,
+        "uuid": None if world.project_uuid is None else str(world.project_uuid),
+        "metadata": world.metadata,
+    }
+
+
+def p295_restore(world: ProbeWorld, data: dict[str, Any]) -> None:
+    world.channel_labels = {ChannelType[name]: label for name, label in data["labels"].items()}
+    world.description = data["description"]
+    world.project_uuid = None if data["uuid"] is None else uuid.UUID(data["uuid"])
+    world.metadata = json.loads(json.dumps(data["metadata"]))
+
+
+def extend_p295(world: ProbeWorld, events: dict[str, type]) -> None:
+    """Stack channel edits, `Channel.type`/`edit`, the texture-set description, layering and
+    resolution, project UUID and metadata, and a failing export (the fake's authored rules: a
+    channel exists once, only `User*` channels take a label, a resolution is a power of two from
+    128 to 4096, a project gets a new UUID at create, and an export under a regular file fails
+    with `ExportTexturesEnded(Error)` and raises)."""
+    modules = world.modules
+    textureset = modules["substance_painter.textureset"]
+    project = modules["substance_painter.project"]
+    export = modules["substance_painter.export"]
+    world.channel_labels = {}
+    world.description = ""
+    world.project_uuid = None
+    world.metadata = {}
+
+    def require_channel(kind: Any) -> None:
+        if kind not in world.channels:
+            raise ValueError(f"there is no channel of type {kind.name} in this Texture Set")
+
+    def check_label(kind: Any, label: str | None) -> None:
+        if label is not None and not kind.name.startswith("User"):
+            raise ValueError("a label was provided but the channel type is not a user type")
+
+    class Channel:
+        def __init__(self, kind: Any) -> None:
+            self.kind = kind
+
+        def type(self) -> Any:
+            return self.kind
+
+        def format(self) -> Any:
+            require_channel(self.kind)
+            return world.channels[self.kind]
+
+        def label(self) -> str:
+            return str(world.channel_labels.get(self.kind, ""))
+
+        def edit(self, channel_format: Any, label: str | None = None) -> None:
+            edit_channel(None, self.kind, channel_format, label)
+
+    def add_channel(self: Any, kind: Any, channel_format: Any, label: str | None = None) -> Any:
+        world.require_open()
+        if kind in world.channels:
+            raise ValueError(f"a channel of type {kind.name} already exists in this Texture Set")
+        check_label(kind, label)
+        world.channels[kind] = channel_format
+        if label is not None:
+            world.channel_labels[kind] = label
+        return Channel(kind)
+
+    def edit_channel(self: Any, kind: Any, channel_format: Any, label: str | None = None) -> None:
+        world.require_open()
+        require_channel(kind)
+        check_label(kind, label)
+        world.channels[kind] = channel_format
+        if label is not None:
+            world.channel_labels[kind] = label
+
+    def remove_channel(self: Any, kind: Any) -> None:
+        world.require_open()
+        require_channel(kind)
+        del world.channels[kind]
+        world.channel_labels.pop(kind, None)
+
+    def has_channel(self: Any, kind: Any) -> bool:
+        world.require_open()
+        return kind in world.channels
+
+    def get_channel(self: Any, kind: Any) -> Channel:
+        world.require_open()
+        require_channel(kind)
+        return Channel(kind)
+
+    stack = textureset.Stack
+    stack.add_channel, stack.edit_channel = add_channel, edit_channel
+    stack.remove_channel, stack.has_channel, stack.get_channel = (
+        remove_channel,
+        has_channel,
+        get_channel,
+    )
+
+    def get_description(self: Any) -> str:
+        world.require_open()
+        return str(world.description)
+
+    def set_description(self: Any, value: str) -> None:
+        world.require_open()
+        world.description = value
+
+    def set_resolution(self: Any, resolution: Any) -> None:
+        sizes = (128, 256, 512, 1024, 2048, 4096)
+        if resolution.width not in sizes or resolution.height not in sizes:
+            raise ValueError("the resolution is not a valid resolution")
+        world.set_resolution(self.name(), (resolution.width, resolution.height))
+
+    texture_set = textureset.TextureSet
+    texture_set.description = property(get_description, set_description)
+    texture_set.is_layered_material = lambda self: False
+    texture_set.set_resolution = set_resolution
+
+    class Metadata:
+        def __init__(self, context: str) -> None:
+            self.context = context
+
+        def entries(self) -> dict[str, Any]:
+            world.require_open()
+            entries: dict[str, Any] = world.metadata.setdefault(self.context, {})
+            return entries
+
+        def list(self) -> Any:
+            return [*self.entries()]
+
+        def get(self, key: str) -> Any:
+            return self.entries().get(key)
+
+        def set(self, key: str, value: Any) -> None:
+            self.entries()[key] = json.loads(json.dumps(value))
+
+    def get_uuid() -> uuid.UUID:
+        world.require_open()
+        value: uuid.UUID = world.project_uuid
+        return value
+
+    create_before = project.create
+
+    def create(mesh_file_path: str, settings: Any, **others: Any) -> None:
+        create_before(mesh_file_path=mesh_file_path, settings=settings, **others)
+        world.channel_labels, world.description, world.metadata = {}, "", {}
+        world.project_uuid = uuid.uuid4()
+
+    project.create, project.get_uuid, project.Metadata = create, get_uuid, Metadata
+    export_before = export.export_project_textures
+
+    def export_project_textures(config: dict[str, Any]) -> Any:
+        target = config.get("exportPath")
+        if target is not None and Path(str(target)).is_file():
+            world.emit(events["ExportTexturesAboutToStart"]({}))
+            message = "fake: the export path is a regular file"
+            world.emit(events["ExportTexturesEnded"](ExportStatus.Error, message, {}))
+            raise RuntimeError(message)
+        return export_before(config)
+
+    export.export_project_textures = export_project_textures

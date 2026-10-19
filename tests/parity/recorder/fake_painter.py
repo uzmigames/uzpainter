@@ -92,6 +92,57 @@ class ChannelType(enum.Enum):
     Height = 5
     SpecularRoughness = 6
     BaseMetalness = 7
+    # The members the P22-B channel probes pass (decision 295); each is its own channel here.
+    AO = 8
+    AbsorptionColor = 9
+    Anisotropylevel = 10
+    BaseDiffuseRoughness = 11
+    BaseWeight = 12
+    BlendingMask = 13
+    CoatOpacity = 14
+    CoatRoughnessAnisotropy = 15
+    CoatSpecularLevel = 16
+    CoatTangent = 17
+    Displacement = 18
+    Emissive = 19
+    Ior = 20
+    Reflection = 21
+    Scattering = 22
+    ScatteringColor = 23
+    SheenColor = 24
+    SheenOpacity = 25
+    SheenRoughness = 26
+    SpecularColor = 27
+    SpecularEdgeColor = 28
+    SpecularWeight = 29
+    ThinFilmWeight = 30
+    Translucency = 31
+    TransmissionColor = 32
+    TransmissionWeight = 33
+    User8 = 34
+    User9 = 35
+    User10 = 36
+    User11 = 37
+    User12 = 38
+    User13 = 39
+    User14 = 40
+    User15 = 41
+    User16 = 42
+    User17 = 43
+    User18 = 44
+    User19 = 45
+    User20 = 46
+    User21 = 47
+    User22 = 48
+    User23 = 49
+    User24 = 50
+    User25 = 51
+    User26 = 52
+    User27 = 53
+    User28 = 54
+    User29 = 55
+    User30 = 56
+    User31 = 57
 
 
 class ChannelFormat(enum.Enum):
@@ -100,6 +151,11 @@ class ChannelFormat(enum.Enum):
     RGB16 = 3
     RGB16F = 4
     L16F = 5
+    # The other documented formats the P22-B channel probes pass (decision 295).
+    RGB8 = 6
+    L16 = 7
+    L32F = 8
+    RGB32F = 9
 
 
 class BlendingMode(enum.Enum):
