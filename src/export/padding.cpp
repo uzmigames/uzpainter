@@ -56,8 +56,8 @@ constexpr size_t kKeptCandidates = 8;
 constexpr double kEqualShare = 1e-9;
 // A nearest candidate this close (relative to the nearest covered neighbour) is at distance 0.
 constexpr double kZeroDistance = 1e-6;
-// The far window: the texels within this many far texels of the unfolded ring point (decision 268).
-constexpr int kFarReach = 3;
+// The far window: the far texels within this many columns and rows of its centre (decision 275).
+constexpr int kFarReach = 1;
 // Two triangles are coplanar (one planar face) within this relative tolerance.
 constexpr double kCoplanar = 1e-6;
 
@@ -79,7 +79,7 @@ struct KernelTriangle {
     std::array<std::array<double, 2>, 3> t{};       // texel space (u W, (1 - v) H): centres at + 1/2
     std::array<uint32_t, 3> vertex{};               // the position's identity (its value)
     std::array<uint32_t, 3> corner{};               // the (position, UV) pair's identity
-    std::array<std::array<float, 2>, 3> raster{};   // the comparator's float32 (u W, (1 - v) H)
+    std::array<std::array<float, 2>, 3> uv{};       // the comparator's float32 UV (v up)
     std::array<std::array<float, 3>, 3> normalised{};  // the comparator's mesh-box-normalised position
     uint32_t chart = 0;                             // UV island: triangles joined by shared UV edges
     uint32_t face = 0;                              // planar face: coplanar triangles joined by 3D edges
@@ -173,8 +173,17 @@ uint32_t Find(std::vector<uint32_t>& parent, uint32_t i) {
     return i;
 }
 
-/// The coverage's triangles, their islands and planar faces, and the triangle covering each
-/// covered texel (the first in mesh order, as the coverage rasterises them).
+/// A UV seam edge: edge `edge` (opposite corner `edge`) of triangle `own`, shared in 3D with
+/// triangle `far`, whose UVs there differ.
+struct SeamEdge {
+    uint32_t own = 0;
+    size_t edge = 0;
+    uint32_t far = 0;
+};
+
+/// The coverage's triangles, their islands and planar faces, the UV seam edges of each island, and
+/// the triangle covering each covered texel (the first in mesh order, as the coverage rasterises
+/// them).
 class RingGeometry {
 public:
     explicit RingGeometry(const Coverage& coverage);
@@ -184,6 +193,7 @@ public:
     std::vector<KernelTriangle> triangles;
     std::vector<int32_t> owner;  // per texel: the covering triangle, -1 when uncovered
     std::map<std::pair<uint32_t, uint32_t>, std::vector<uint32_t>> edges;  // sorted vertex pair -> triangles
+    std::map<uint32_t, std::vector<SeamEdge>> seams;  // island -> its triangles' seam edges, in mesh order
 
     /// `p`, a point of triangle `k`, in tau's frame: as it is in tau's planar face, rotated about
     /// an edge shared by the two faces, else as it is.
@@ -200,16 +210,18 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
     }
     const double w = width;
     const double h = height;
-    const float fw = static_cast<float>(width);
-    const float fh = static_cast<float>(height);
-    // The mesh box (decision 261): c = float32 centre, half = float32 half of the largest extent.
+    // The mesh box (decision 273): ext = hi - lo, c = lo + ext / 2, r = 1 / (max(ext) / 2), each a
+    // correctly rounded float32 operation; a position P normalises to P r - c r.
     std::array<float, 3> centre{};
-    double extent = 0.0;
+    float extent = 0.0f;
     for (size_t c = 0; c < 3; ++c) {
-        centre[c] = static_cast<float>((static_cast<double>(coverage.boxMin[c]) + coverage.boxMax[c]) / 2.0);
-        extent = std::max(extent, static_cast<double>(coverage.boxMax[c]) - coverage.boxMin[c]);
+        const float ext = coverage.boxMax[c] - coverage.boxMin[c];
+        const float halfExt = ext * 0.5f;
+        centre[c] = coverage.boxMin[c] + halfExt;
+        extent = std::max(extent, ext);
     }
-    const float half = static_cast<float>(extent / 2.0);
+    const float halfExtent = extent * 0.5f;
+    const float scale = 1.0f / halfExtent;
     std::map<std::array<uint32_t, 3>, uint32_t> vertices;
     std::map<std::array<uint32_t, 3>, uint32_t> corners;
     std::vector<int32_t> index(coverage.triangles.size(), -1);
@@ -224,8 +236,12 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
             const auto& p = source.position[c];
             k.p[c] = {p[0], p[1], p[2]};
             k.t[c] = {uv[c][0] * w, (1.0 - static_cast<double>(uv[c][1])) * h};
-            k.raster[c] = {uv[c][0] * fw, (1.0f - uv[c][1]) * fh};
-            for (size_t d = 0; d < 3; ++d) k.normalised[c][d] = p[d] / half - centre[d] / half;
+            k.uv[c] = uv[c];
+            for (size_t d = 0; d < 3; ++d) {
+                const float scaled = p[d] * scale;
+                const float shift = centre[d] * scale;
+                k.normalised[c][d] = scaled - shift;
+            }
             const std::array<uint32_t, 3> bits{std::bit_cast<uint32_t>(p[0]), std::bit_cast<uint32_t>(p[1]),
                                                std::bit_cast<uint32_t>(p[2])};
             k.vertex[c] = vertices.try_emplace(bits, static_cast<uint32_t>(vertices.size())).first->second;
@@ -280,6 +296,22 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
         if (added) m_faces.emplace_back();
         triangles[i].face = it->second;
         m_faces[it->second].push_back(i);
+    }
+    // Each island's seam edges: an edge whose other triangles there have other UVs.
+    for (uint32_t i = 0; i < count; ++i) {
+        const KernelTriangle& own = triangles[i];
+        for (size_t e = 0; e < 3; ++e) {
+            const uint32_t a = own.vertex[(e + 1) % 3];
+            const uint32_t b = own.vertex[(e + 2) % 3];
+            for (const uint32_t j : edges.at({std::min(a, b), std::max(a, b)})) {
+                const KernelTriangle& other = triangles[j];
+                if (j == i || (cornerAt(other, a) == own.corner[(e + 1) % 3] &&
+                               cornerAt(other, b) == own.corner[(e + 2) % 3])) {
+                    continue;  // the same island across the edge
+                }
+                seams[own.chart].push_back({i, e, j});
+            }
+        }
     }
     // The covering triangle of each texel, by the coverage's own test (evaluator/geometry_mask.cpp).
     owner.assign(size_t{width} * height, -1);
@@ -338,26 +370,37 @@ Vec3 RingGeometry::Frame(const Vec3& p, uint32_t k, uint32_t tau) const {
     return it->second ? Unfold(*it->second, p) : p;
 }
 
-/// The recording GPU's float32 distance of decision 267's comparator from the ring texel (rx, ry)
-/// to the tap (tx, ty) of triangle `k`: both points interpolated in `k` (edge-function
-/// barycentrics in raster space, fma(l2, P2, fma(l0, P0, l1 P1))) over the mesh-box-normalised
-/// positions, the squared distance by FMA, then the GPU's square root.
-float CompareDistance(const KernelTriangle& k, uint32_t rx, uint32_t ry, uint32_t tx, uint32_t ty) {
+/// The recording GPU's float32 distance of decision 273's comparator from the ring texel (rx, ry)
+/// to the tap (tx, ty) of triangle `k`, on a `width` x `height` tile. Both texel centres (u, v) =
+/// ((x + 1/2) / W, 1 - (y + 1/2) / H) take barycentrics from `k`'s UV inverse matrix based at its
+/// third corner, through the GPU's reciprocal of the determinant, and interpolate the
+/// mesh-box-normalised positions as fma(l2, P2, fma(l0, P0, l1 P1)); then the squared distance by
+/// FMA and the GPU's square root. Every other operation is one correctly rounded float32 operation.
+float CompareDistance(const KernelTriangle& k, uint32_t width, uint32_t height, uint32_t rx, uint32_t ry, uint32_t tx,
+                      uint32_t ty) {
+    const auto& U = k.uv;
+    const float e0u = U[0][0] - U[2][0];
+    const float e0v = U[0][1] - U[2][1];
+    const float e1u = U[1][0] - U[2][0];
+    const float e1v = U[1][1] - U[2][1];
+    const float a = e0u * e1v;
+    const float b = e0v * e1u;
+    const float r = evaluator::hw::Rcp(a - b);
+    const float m00 = e1v * r;
+    const float m01 = -e1u * r;
+    const float m10 = -e0v * r;
+    const float m11 = e0u * r;
+    const auto fw = static_cast<float>(width);
+    const auto fh = static_cast<float>(height);
     const auto position = [&](uint32_t x, uint32_t y) {
-        const float pu = static_cast<float>(x) + 0.5f;
-        const float pv = static_cast<float>(y) + 0.5f;
-        const auto& r = k.raster;
-        const auto edge = [&](const std::array<float, 2>& p, const std::array<float, 2>& q) {
-            const float a = (q[0] - p[0]) * (pv - p[1]);
-            const float b = (q[1] - p[1]) * (pu - p[0]);
-            return a - b;
-        };
-        const float a0 = (r[1][0] - r[0][0]) * (r[2][1] - r[0][1]);
-        const float a1 = (r[1][1] - r[0][1]) * (r[2][0] - r[0][0]);
-        const float area = a0 - a1;
-        const float l0 = edge(r[1], r[2]) / area;
-        const float l1 = edge(r[2], r[0]) / area;
-        const float l2 = edge(r[0], r[1]) / area;
+        const float pu = (static_cast<float>(x) + 0.5f) / fw;
+        const float pv = 1.0f - (static_cast<float>(y) + 0.5f) / fh;
+        const float dx = pu - U[2][0];
+        const float dy = pv - U[2][1];
+        const float l0 = std::fma(m00, dx, m01 * dy);
+        const float l1 = std::fma(m10, dx, m11 * dy);
+        const float sum = l0 + l1;
+        const float l2 = 1.0f - sum;
         std::array<float, 3> out{};
         for (size_t c = 0; c < 3; ++c) {
             const auto& n = k.normalised;
@@ -395,29 +438,28 @@ std::vector<Candidate> Candidates(const RingGeometry& g, uint32_t x, uint32_t y,
         out.push_back({{tx, ty, Norm(Sub(q, p)), far}, texel, k});
     };
     for (const size_t texel : own) add(texel, false);
-    // Across each UV seam edge q lies beyond: the far island's covered texels around q unfolded.
-    for (size_t i = 0; i < 3; ++i) {
-        if (!(l[i] < 0.0)) continue;
-        const uint32_t va = T.vertex[(i + 1) % 3];
-        const uint32_t vb = T.vertex[(i + 2) % 3];
-        const auto ca = T.corner[(i + 1) % 3];
-        const auto cb = T.corner[(i + 2) % 3];
-        for (const uint32_t j : g.edges.at({std::min(va, vb), std::max(va, vb)})) {
-            const KernelTriangle& J = g.triangles[j];
-            const auto at = [&](uint32_t v) {
-                return J.corner[static_cast<size_t>(std::find(J.vertex.begin(), J.vertex.end(), v) - J.vertex.begin())];
-            };
-            if (j == tau || (at(va) == ca && at(vb) == cb)) continue;  // the same island across the edge
-            const std::array<double, 2> far = TexelOf(J, Fold(MakeHinge(T, J, va, vb), q));
+    // Across every UV seam edge of tau's island, whichever side of it q lies on (decision 275): q
+    // folded about the edge into the far triangle J, f its point in J's texel space, and J's
+    // island's covered texels in the 3 x 3 block of columns floor(f_u - 1/2) +- 1 and rows
+    // ceil(f_v - 1/2) +- 1.
+    if (const auto seams = g.seams.find(T.chart); seams != g.seams.end()) {
+        for (const SeamEdge& seam : seams->second) {
+            const KernelTriangle& E = g.triangles[seam.own];
+            const KernelTriangle& J = g.triangles[seam.far];
+            const uint32_t va = E.vertex[(seam.edge + 1) % 3];
+            const uint32_t vb = E.vertex[(seam.edge + 2) % 3];
+            const std::array<double, 2> far = TexelOf(J, Fold(MakeHinge(E, J, va, vb), q));
             const auto col0 = static_cast<int64_t>(std::floor(far[0] - 0.5));
-            const auto row0 = static_cast<int64_t>(std::floor(far[1] - 0.5));
-            for (int64_t row = row0 - kFarReach + 1; row <= row0 + kFarReach; ++row) {
-                for (int64_t col = col0 - kFarReach + 1; col <= col0 + kFarReach; ++col) {
+            const auto row0 = static_cast<int64_t>(std::ceil(far[1] - 0.5));
+            for (int64_t row = row0 - kFarReach; row <= row0 + kFarReach; ++row) {
+                for (int64_t col = col0 - kFarReach; col <= col0 + kFarReach; ++col) {
                     if (row < 0 || col < 0 || row >= g.height || col >= g.width) continue;
                     const size_t texel = static_cast<size_t>(row) * g.width + static_cast<size_t>(col);
                     const int32_t k = g.owner[texel];
                     if (k < 0 || g.triangles[static_cast<size_t>(k)].chart != J.chart) continue;
-                    if (std::any_of(out.begin(), out.end(), [&](const Candidate& c) { return c.texel == texel; })) continue;
+                    if (std::any_of(out.begin(), out.end(), [&](const Candidate& c) { return c.texel == texel; })) {
+                        continue;
+                    }
                     add(texel, true);
                 }
             }
@@ -433,7 +475,8 @@ std::vector<Candidate> Candidates(const RingGeometry& g, uint32_t x, uint32_t y,
             std::vector<std::pair<float, Candidate>> group;
             for (size_t i = first; i < last; ++i) {
                 const Candidate& c = out[i];
-                group.emplace_back(c.tap.far ? 0.0f : CompareDistance(g.triangles[c.triangle], x, y, c.tap.x, c.tap.y), c);
+                const KernelTriangle& k = g.triangles[c.triangle];
+                group.emplace_back(c.tap.far ? 0.0f : CompareDistance(k, g.width, g.height, x, y, c.tap.x, c.tap.y), c);
             }
             std::stable_sort(group.begin(), group.end(), [](const auto& a, const auto& b) {
                 if (a.second.tap.far != b.second.tap.far) return !a.second.tap.far;

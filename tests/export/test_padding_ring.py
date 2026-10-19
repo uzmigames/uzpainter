@@ -1,12 +1,13 @@
 """Synthetic cases of the measured `infinite` padding ring (src/export/padding.h; phase1.25 item
-2.7, decisions 267, 268 and 270), through `uzp-export-tests ring`.
+2.7, decisions 267, 268, 270, 273 and 275), through `uzp-export-tests ring`.
 
 Each case pads random float32 values over a small OBJ written here, and compares UzPainter's ring
-texels bit for bit with this file's own reference of the rule: the ring point extrapolated through
-its island's affine map, the covered 8-neighbours and, across a UV seam, the far island's texels
-unfolded, the 4 nearest, the exact 1/d shares quantised to 10, 8 and 6 bits, the float32 FMA lerp
-chain and decision 206's rounding; equal shares ordered by decision 267's comparator, then toward
-+u, +v. No Painter data is read.
+texels bit for bit with a reference of the rule: on a single island this file's own (the ring
+point extrapolated through the island's affine map, the covered 8-neighbours, the 4 nearest, the
+exact 1/d shares quantised to 10, 8 and 6 bits, the float32 FMA lerp chain and decision 206's
+rounding; equal shares ordered by decision 273's comparator, then toward +u, +v); across a UV seam
+`padding_reference` (the far window of decision 275 in padding.cpp's double arithmetic). No
+Painter data is read.
 """
 
 from __future__ import annotations
@@ -14,66 +15,24 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
 
+from tests.export.padding_reference import (
+    F32,
+    NEIGHBOURS,
+    Ring,
+    box_normalised,
+    chain,
+    compare_distance,
+    fractions,
+)
 from tools.parity.feasibility import png
-from tools.parity.fit import hwmath
 
-F32 = np.float32
-LEVELS = ((4, 1023), (3, 255), (2, 63))
-NEIGHBOURS = [(dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1) if (dy, dx) != (0, 0)]
 Quad = tuple[list[tuple[float, float, float]], list[tuple[float, float]]]  # positions, UVs
-
-
-def f32(x: Any) -> np.float32:
-    return F32(x)
-
-
-def round_f32(x: Fraction) -> np.float32:
-    """`x` rounded to the nearest float32, ties to even."""
-    near = F32(float(x))
-    best: tuple[Fraction, np.float32] | None = None
-    for c in (np.nextafter(near, F32(-np.inf)), near, np.nextafter(near, F32(np.inf))):
-        d = abs(Fraction(float(c)) - x)
-        even = int(np.array([c], F32).view(np.uint32)[0]) % 2 == 0
-        if best is None or d < best[0] or (d == best[0] and even):
-            best = (d, F32(c))
-    assert best is not None
-    return best[1]
-
-
-def fma(a: Any, b: Any, c: Any) -> np.float32:
-    return round_f32(Fraction(float(a)) * Fraction(float(b)) + Fraction(float(c)))
-
-
-def fractions(distances: list[float]) -> list[np.float32]:
-    """Decision 268's chain fractions for taps at `distances`, in tap order."""
-    out: list[np.float32] = []
-    if len(distances) < 2:
-        return out
-    inv = [1.0 / d for d in distances]
-    for level in range(len(distances) - 1):
-        k, levels = LEVELS[level]
-        share = inv[level] / sum(inv[level:])
-        u = min(max(round((share - 1 / k) * k / (k - 1) * levels), 0), levels)
-        out.append(F32(float(Fraction(levels + (k - 1) * u, k * levels))))
-    return out
-
-
-def chain(values: list[np.float32], t: list[np.float32]) -> np.float32:
-    n = len(values)
-    m = values[0]
-    if n > 1:
-        last = f32(f32(1) - t[n - 2])
-        m = fma(last, f32(values[n - 1] - values[n - 2]), values[n - 2])
-        for level in range(n - 3, -1, -1):
-            m = fma(t[level], f32(values[level] - m), m)
-    return f32(f32(1) - f32(f32(1) - m))
 
 
 class Mesh:
@@ -95,12 +54,7 @@ class Mesh:
                 self.island.append(i)
         allp = np.array([v for p, _ in quads for v in p], F32)
         lo, hi = allp.min(0), allp.max(0)
-        centre = ((lo.astype(np.float64) + hi) / 2).astype(F32)
-        half = F32((hi.astype(np.float64) - lo).max() / 2)
-        self.normalised = [
-            ((t / half).astype(F32) - (centre / half).astype(F32)).astype(F32)
-            for t, _ in self.triangles
-        ]
+        self.normalised = [box_normalised(t, lo, hi) for t, _ in self.triangles]
         self.owner = -np.ones((size, size), int)
         for k, (_, tuv) in enumerate(self.triangles):
             uvd = tuv.astype(np.float64)
@@ -145,43 +99,17 @@ class Mesh:
         return result
 
     def compare(self, ring: tuple[int, int], tap: tuple[int, int]) -> np.float32:
-        """Decision 267's comparator distance of `tap` in its own triangle."""
+        """Decision 273's comparator distance of `tap` in its own triangle."""
         k = int(self.owner[tap[1], tap[0]])
-        _, uv = self.triangles[k]
-        n = self.normalised[k]
-        r = [(f32(u * f32(self.size)), f32(f32(f32(1) - v) * f32(self.size))) for u, v in uv]
-
-        def pos(x: int, y: int) -> list[np.float32]:
-            pu, pv = f32(x + 0.5), f32(y + 0.5)
-
-            def edge(a: tuple[Any, Any], b: tuple[Any, Any]) -> np.float32:
-                return f32(
-                    f32(f32(b[0] - a[0]) * f32(pv - a[1])) - f32(f32(b[1] - a[1]) * f32(pu - a[0]))
-                )
-
-            area = f32(
-                f32(f32(r[1][0] - r[0][0]) * f32(r[2][1] - r[0][1]))
-                - f32(f32(r[1][1] - r[0][1]) * f32(r[2][0] - r[0][0]))
-            )
-            l0, l1, l2 = (
-                f32(edge(r[1], r[2]) / area),
-                f32(edge(r[2], r[0]) / area),
-                f32(edge(r[0], r[1]) / area),
-            )
-            return [fma(l2, n[2][c], fma(l0, n[0][c], f32(l1 * n[1][c]))) for c in range(3)]
-
-        q, p = pos(*ring), pos(*tap)
-        d = [f32(q[c] - p[c]) for c in range(3)]
-        return F32(
-            hwmath.sqrt(np.array([fma(d[2], d[2], fma(d[1], d[1], f32(d[0] * d[0])))], F32))[0]
+        return compare_distance(
+            self.triangles[k][1], self.normalised[k], self.size, self.size, ring, tap
         )
 
 
 def reference(
-    mesh: Mesh, values: np.ndarray, ring: tuple[int, int], seams: dict[int, int]
+    mesh: Mesh, values: np.ndarray, ring: tuple[int, int]
 ) -> tuple[list[tuple[int, int]], np.ndarray]:
-    """The taps (tap order) and value of ring texel `ring` = (x, y). `seams` maps an island to the
-    island across its seam; both lie flat in one plane, so their points need no unfolding."""
+    """The taps (tap order) and value of ring texel `ring` = (x, y) of an island without seams."""
     x, y = ring
     size = mesh.size
     own = [
@@ -195,20 +123,9 @@ def reference(
         (float(np.linalg.norm(q - mesh.point(island, tx + 0.5, ty + 0.5))), False, (tx, ty))
         for tx, ty in own
     ]
-    if island in seams:
-        far = seams[island]
-        for ty, tx in zip(*np.nonzero(mesh.owner >= 0), strict=True):
-            if mesh.island[int(mesh.owner[ty, tx])] == far:
-                cands.append(
-                    (
-                        float(np.linalg.norm(q - mesh.point(far, tx + 0.5, ty + 0.5))),
-                        True,
-                        (int(tx), int(ty)),
-                    )
-                )
 
     def key(c: tuple[float, bool, tuple[int, int]]) -> tuple[Any, ...]:
-        return (c[1], 0.0 if c[1] else float(mesh.compare(ring, c[2])), -c[2][0], c[2][1])
+        return (float(mesh.compare(ring, c[2])), -c[2][0], c[2][1])
 
     cands.sort(key=lambda c: c[0])
     ordered: list[tuple[float, bool, tuple[int, int]]] = []
@@ -216,11 +133,7 @@ def reference(
         group = [c for c in cands if c[0] <= cands[0][0] * (1 + 1e-9)]
         cands = cands[len(group) :]
         ordered += sorted(group, key=key) if len(group) > 1 else group
-    taps = (
-        ordered[:1]
-        if ordered[0][0] <= 1e-6 * min(c[0] for c in ordered if not c[1])
-        else ordered[:4]
-    )
+    taps = ordered[:1] if ordered[0][0] <= 1e-6 * min(c[0] for c in ordered) else ordered[:4]
     t = fractions([c[0] for c in taps])
     out = np.array(
         [
@@ -270,7 +183,7 @@ def bits(x: Any) -> int:
     return int(np.array([x], F32).view(np.uint32)[0])
 
 
-def test_straight_edge_ring_is_decision_267s_chain(export_tests: Path, tmp_path: Path) -> None:
+def test_straight_edge_ring_is_decision_273s_chain(export_tests: Path, tmp_path: Path) -> None:
     """A dyadic square island: each straight-edge ring texel takes its side tap (code 224 of 1023,
     t = 0x3ED41505) and the two diagonals (code 64 of 255, t = 0x3F002AD6; the shares tie exactly,
     so the strong diagonal is +x on horizontal edges, -row on vertical ones), each outer corner
@@ -283,7 +196,7 @@ def test_straight_edge_ring_is_decision_267s_chain(export_tests: Path, tmp_path:
     for r in ring:
         x, y = r["x"], r["y"]
         taps = [(c[0], c[1]) for c in r["candidates"][: r["taps"]]]
-        expected_taps, expected = reference(mesh, values, (x, y), {})
+        expected_taps, expected = reference(mesh, values, (x, y))
         assert taps == expected_taps, (x, y)
         assert out[y, x].view(np.uint32).tolist() == expected.view(np.uint32).tolist(), (x, y)
         if 5 <= x <= 10 and y in (3, 12):
@@ -307,14 +220,14 @@ def test_straight_edge_ring_is_decision_267s_chain(export_tests: Path, tmp_path:
 
 def test_equal_diagonal_shares_follow_the_comparator(export_tests: Path, tmp_path: Path) -> None:
     """A square island on non-dyadic UVs and positions: the two diagonals' shares are equal, and the
-    strong one is decision 267's comparator's nearer one (an exact float32 tie: +x, -row)."""
+    strong one is decision 273's comparator's nearer one (an exact float32 tie: +x, -row)."""
     mesh = Mesh([flat_square(0.15, 0.85, 2.9)], 20)
     values, out, ring = run(export_tests, tmp_path, mesh, "square-odd", 2)
     away = 0
     for r in ring:
         x, y = r["x"], r["y"]
         taps = [(c[0], c[1]) for c in r["candidates"][: r["taps"]]]
-        expected_taps, expected = reference(mesh, values, (x, y), {})
+        expected_taps, expected = reference(mesh, values, (x, y))
         assert taps == expected_taps, (x, y)
         assert out[y, x].view(np.uint32).tolist() == expected.view(np.uint32).tolist(), (x, y)
         if r["taps"] == 3 and taps[1][0] != taps[2][0]:
@@ -327,10 +240,12 @@ def test_equal_diagonal_shares_follow_the_comparator(export_tests: Path, tmp_pat
 @pytest.mark.parametrize("offset", [0.0, 0.3])
 def test_seam_ring_reads_the_far_island(export_tests: Path, tmp_path: Path, offset: float) -> None:
     """Two islands A and B, 4 x 4 texels each, sharing a 3D edge (a UV seam). The ring of A
-    beyond the seam takes the 4 nearest of its covered neighbours and B's texels unfolded about the
-    edge (decision 268): with B aligned (offset 0) each such ring texel copies the B texel at
+    beyond the seam takes the 4 nearest of its covered neighbours and the far window of B
+    (decision 275: B's covered texels in the 3 x 3 block of columns floor(f_u - 1/2) +- 1, rows
+    ceil(f_v - 1/2) +- 1 around the ring point f folded into B), equal to `padding_reference` on
+    every seam texel: with B aligned (offset 0) each such ring texel copies the B texel at
     distance 0; offset by 0.3 texel it blends far and own taps. Folding B by 90 degrees about the
-    edge gives the same ring (decision 270's unfolding)."""
+    edge gives the same ring there (decision 270's unfolding)."""
     s = 1 / 32
     a_uv = [(4 * s, 16 * s), (8 * s, 16 * s), (8 * s, 20 * s), (4 * s, 20 * s)]
     b_uv = [
@@ -347,16 +262,32 @@ def test_seam_ring_reads_the_far_island(export_tests: Path, tmp_path: Path, offs
         [a, ([(1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (1.0, 1.0, 1.0), (1.0, 0.0, 1.0)], b_uv)], 32
     )
     values, out, ring = run(export_tests, tmp_path, flat, f"seam-{offset}", 3)
-    _, out_folded, _ = run(export_tests, tmp_path, folded, f"seam-folded-{offset}", 3)
+    _, out_folded, ring_folded = run(export_tests, tmp_path, folded, f"seam-folded-{offset}", 3)
+    for name, outcome, texels in (("seam", out, ring), ("seam-folded", out_folded, ring_folded)):
+        expected = {
+            (x, y): (cands, taps)
+            for x, y, cands, taps in Ring(tmp_path / f"{name}-{offset}.obj", "m", 32, 32).texels()
+        }
+        assert sorted(expected) == sorted((r["x"], r["y"]) for r in texels)
+        for r in texels:
+            x, y = r["x"], r["y"]
+            cands, n = expected[(x, y)]
+            assert [(c[0], c[1]) for c in r["candidates"][: r["taps"]]] == [
+                c[2] for c in cands[:n]
+            ], (name, x, y)
+            t = fractions([c[0] for c in cands[:n]])
+            chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
+            value = [chain([v[c] for v in chosen], t) for c in range(3)]
+            assert (
+                outcome[y, x].view(np.uint32).tolist()
+                == np.array(value, F32).view(np.uint32).tolist()
+            ), (name, x, y)
     seam = [r for r in ring if r["x"] == 8]
     assert len(seam) == 6
     for r in seam:
         x, y = r["x"], r["y"]
         taps = [(c[0], c[1]) for c in r["candidates"][: r["taps"]]]
-        expected_taps, expected = reference(flat, values, (x, y), {0: 1})
-        assert taps == expected_taps, (x, y)
-        assert out[y, x].view(np.uint32).tolist() == expected.view(np.uint32).tolist(), (x, y)
-        assert out_folded[y, x].view(np.uint32).tolist() == expected.view(np.uint32).tolist(), (
+        assert out_folded[y, x].view(np.uint32).tolist() == out[y, x].view(np.uint32).tolist(), (
             x,
             y,
         )

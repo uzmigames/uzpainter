@@ -688,76 +688,19 @@ def test_no_export_reads_an_inferred_template_base(export_tests: Path, tmp_path:
         assert files_under(out) == {}, (channel, fmt)
 
 
-def reference_padding(values: np.ndarray, covered: np.ndarray) -> np.ndarray:
-    """Decision 223's `infinite` padding (src/export/padding.h; measured only, decision 259),
-    written again independently: the ring from the covered 8-neighbours (x wraps), then the jump
-    flood over covered and ring."""
-    height, width, _ = values.shape
-    out = values.astype(np.float32).copy()
-    f = 0.4142245
-    diagonal = f / (1.0 - f)
-    shift = 24.875 * 2.0**-15
-    weaken = (diagonal - shift * (1.0 + diagonal)) / (diagonal * (1.0 + shift))
-    seed = covered.copy()
-    for y, x in zip(*np.nonzero(~covered), strict=True):
-        near = [
-            (dy, dx, y + dy, (x + dx) % width)
-            for dy, dx in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
-            if 0 <= y + dy < height and covered[y + dy, (x + dx) % width]
-        ]
-        if not near:
-            continue
-        seed[y, x] = True
-        taps = [values[yy, xx] for _, _, yy, xx in near]
-        if all(np.array_equal(taps[0], tap) for tap in taps):
-            out[y, x] = taps[0]
-            continue
-        rows, cols = {n[0] for n in near}, {n[1] for n in near}
-        flat = len(near) == 3 and len(rows) == 1 and 0 not in rows and cols == {-1, 0, 1}
-        upright = len(near) == 3 and len(cols) == 1 and 0 not in cols and rows == {-1, 0, 1}
-        total, weights = np.zeros(values.shape[2]), 0.0
-        for dy, dx, yy, xx in near:
-            w = 1.0 if dy == 0 or dx == 0 else diagonal
-            w *= weaken if (flat and dx == -1) or (upright and dy == 1) else 1.0
-            total = total + w * values[yy, xx].astype(np.float64)
-            weights += w
-        mean = (total / weights).astype(np.float32)
-        out[y, x] = np.float32(1.0) - (np.float32(1.0) - mean)
-    ys, xs = np.mgrid[0:height, 0:width]
-    sy, sx = np.where(seed, ys, -1), np.where(seed, xs, -1)
-    big = np.iinfo(np.int64).max
-    k = max(width, height) // 2
-    while k >= 1:
-        by, bx = sy.copy(), sx.copy()
-        best = np.where(by >= 0, (by - ys) ** 2 + (bx - xs) ** 2, big)
-        for dy, dx in ((0, 1), (0, -1), (-1, 0), (1, 0), (-1, 1), (1, -1), (-1, -1), (1, 1)):
-            cy, cx = np.full_like(sy, -1), np.full_like(sx, -1)
-            y0, y1 = max(0, -dy * k), min(height, height - dy * k)
-            x0, x1 = max(0, -dx * k), min(width, width - dx * k)
-            cy[y0:y1, x0:x1] = sy[y0 + dy * k : y1 + dy * k, x0 + dx * k : x1 + dx * k]
-            cx[y0:y1, x0:x1] = sx[y0 + dy * k : y1 + dy * k, x0 + dx * k : x1 + dx * k]
-            d = np.where(cy >= 0, (cy - ys) ** 2 + (cx - xs) ** 2, big)
-            better = d < best
-            by, bx = np.where(better, cy, by), np.where(better, cx, bx)
-            best = np.where(better, d, best)
-        sy, sx = by, bx
-        k //= 2
-    gutter = ~seed & (sy >= 0)
-    out[gutter] = out[sy[gutter], sx[gutter]]
-    return out
-
-
 def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
     """2.2 (decision 090) and decision 259: on the sphere, whose UV islands leave texels uncovered:
     - `passthrough` writes every texel's evaluated value (the L16 roughness holds the ramp's codes
       inside and outside the islands);
     - `infinite` is refused before anything is written, naming R-090, the owner and decision 259:
       its padding texels are not Painter's, and the owner withdrew exception EXC-007;
-    - decision 223's rule stays behind that refusal, applied only when measured (`process` over
-      the sphere's coverage): the covered texels keep their values, and the OpenEXR 32f Height
-      equals the padding of padding.h written independently (`reference_padding`) over the
-      coverage of `tools.parity.coverage`, value for value;
+    - the rule of padding.h stays behind that refusal, applied only when measured (`process`
+      over the sphere's coverage): the covered texels keep their values, and the OpenEXR 32f
+      Height equals that padding written independently (`padding_reference`: the ring of
+      decisions 267, 268, 270, 273 and 275 over the sphere's triangles, then the jump flood),
+      value for value, over the coverage of `tools.parity.coverage`;
     - without a texturing mesh the export fails before writing."""
+    from tests.export import padding_reference
     from tools.parity.coverage import coverage, obj_triangles
     from tools.parity.feasibility import png
     from tools.parity.fit.decode import decode
@@ -804,7 +747,7 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
     assert not np.array_equal(padded[~covered], ramp_codes()[~covered])
     height = decode(Path(cases[1]["out"]).read_bytes()).values
     height, evaluated = height.reshape(256, 256, -1), evaluated.reshape(256, 256, -1)
-    expected = reference_padding(evaluated.astype(np.float32), covered)
+    expected = padding_reference.padding(evaluated.astype(np.float32), SPHERE, "uzp_sphere")
     assert np.array_equal(height.astype(np.float32).view(np.uint32), expected.view(np.uint32))
 
     out = tmp_path / "no-mesh"

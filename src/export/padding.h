@@ -26,26 +26,35 @@
 //   over the coverage's triangles (`IslandTriangles`); the export never does. Covered texels keep
 //   their evaluated values; the others are filled in two steps.
 //   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), is an FMA
-//      lerp chain over at most 4 taps (decisions 267, 268, 270):
+//      lerp chain over at most 4 taps (decisions 267, 268, 270, 273, 275):
 //      - the ring point q is the texel centre extrapolated through its own triangle tau, the
 //        triangle of its covered 8-neighbours (the highest-index one when they lie in several:
 //        decision 270's V-gap majority);
-//      - the candidates are the covered 8-neighbours and, across each UV seam edge of tau that q
-//        lies beyond, the covered texels of the far island around q unfolded into it; a candidate
-//        in tau's planar face is used at its 3D position, one in a face sharing a 3D edge with that
-//        face is rotated about the edge into its plane, onto the far side, any other one is used at
-//        its 3D position; d is the distance from q;
+//      - the candidates are the covered 8-neighbours and, across every UV seam edge of tau's island
+//        whichever side of it q lies on, the far window (decision 275): q folded about the edge
+//        into the far triangle, f its point in that triangle's texel space (v down, centres at
+//        + 1/2), and the far island's covered texels in the 3 x 3 block of columns
+//        floor(f_u - 1/2) +- 1 and rows ceil(f_v - 1/2) +- 1; a candidate in tau's planar face is
+//        used at its 3D position, one in a face sharing a 3D edge with that face is rotated about
+//        the edge into its plane, onto the far side, any other one is used at its 3D position; d
+//        is the distance from q;
 //      - the taps are the 4 nearest; a nearest at distance 0 is copied;
 //      - the tap order is the exact 1/d share, largest first; equal shares are ordered by decision
-//        267's comparator (each own tap's GPU-sqrt distance in mesh-box-normalised float32 object
-//        space to q extrapolated through that tap's own triangle), then toward +u, +v (far taps
-//        after own ones): the best known order, not exact on non-dyadic UVs (decision 271);
+//        273's comparator (each own tap's GPU-sqrt distance, squared by FMA, to q, both
+//        interpolated through that tap's own triangle: float32 texel-centre UVs, barycentrics from
+//        the UV inverse matrix based at the third corner with the GPU's reciprocal, and
+//        fma(l2, P2, fma(l0, P0, l1 P1)) over positions normalised by the mesh box as
+//        P r - c r, c = lo + ext / 2, r = 1 / (max(ext) / 2)), then toward +u, +v (far taps after
+//        own ones): exact on every recorded straight-edge tie but one (decision 273); the order of
+//        tied seam taps is not identified;
 //      - level l of the n - 1 levels codes tap l's share s among taps l..n with (k, L) = (4, 1023),
 //        (3, 255), (2, 63): u = round((s - 1/k) k / (k - 1) L) in [0, L], t = float32(1/k +
 //        (k - 1)/k u / L); the value is m = fma(1 - t, v_n - v_n-1, v_n-1) for the last level, then
 //        m = fma(t, v_l - m, m) outward, rounded through 1 - (1 - m) (decision 206).
 //      Painter's ring is not this at V-gap positions, at pole tap sets, on multi-facet bevels, on
-//      anisotropic islands and in the order of equal shares (decisions 267, 270, 271).
+//      anisotropic islands, in the order of equal seam shares and at the Wand's single-triangle
+//      seam texels whose values no chain over the far window's taps gives (decisions 267, 270,
+//      273, 275).
 //   2. Every other texel copies its seed found by a jump flood over the covered and ring texels
 //      (decision 197): steps k = max(width, height)/2 down to 1, eight offsets in a fixed order,
 //      the strictly nearest seed kept.
@@ -114,7 +123,8 @@ struct Coverage {
 };
 
 /// The triangles of `material` in `mesh` (every object, in mesh order, each corner's position moved
-/// by its object's transform) and the box of every triangle corner of the mesh, into `coverage`.
+/// by its object's transform) and the box of every triangle corner of the mesh (decision 273's
+/// box), into `coverage`.
 void IslandTriangles(Coverage& coverage, const mesh::TexturingMesh& mesh, const std::string& material);
 
 /// One candidate tap of a ring texel of the measured `infinite` padding: its texel, its distance d
