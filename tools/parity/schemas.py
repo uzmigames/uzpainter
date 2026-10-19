@@ -84,9 +84,12 @@ def register_problems(
     """Schema violations plus the rules a schema cannot state.
 
     Each (exception_id, version) appears once, a version that withdraws its id (decision 259)
-    has a lower version of that id to withdraw, and every entry's decision_id names a decision
-    recorded under `.rulebook/decisions/`.
+    has a lower version of that id to withdraw, every entry's decision_id names a decision
+    recorded under `.rulebook/decisions/`, and every golden an entry's domain lists (decision 307)
+    resolves through the current envelope with that domain.
     """
+    from tools.parity.verdict import resolve_golden  # the verdict imports this module
+
     problems = validation_errors(register, Schema.EXCEPTIONS)
     if problems:
         return problems
@@ -107,6 +110,13 @@ def register_problems(
                 f"entries/{index}: decision {entry['decision_id']} is not recorded in "
                 f"{decisions_dir.as_posix()}"
             )
+        for golden_id in entry["domain"].get("goldens", []):
+            golden = resolve_golden(golden_id)
+            if golden is None or golden.manifest["domain"] != entry["domain"]["selector"]:
+                problems.append(
+                    f"entries/{index}: golden {golden_id} is not a current golden of "
+                    f"{entry['domain']['selector']}"
+                )
     return problems
 
 

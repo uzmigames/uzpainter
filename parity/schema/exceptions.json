@@ -96,8 +96,23 @@
               "description": "The comparison domain covered, exactly as named by the public manifests (golden-public.json `domain`).",
               "type": "string",
               "pattern": "^[a-z0-9][a-z0-9._:-]*(/[A-Za-z0-9][A-Za-z0-9._:-]*)*$"
+            },
+            "goldens": {
+              "description": "Decision 307: the goldens of the domain this entry covers (their public manifests' `golden_id`); a comparison naming no listed golden is not covered. Absent: every golden of the domain.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)+$" }
+            },
+            "outputs": {
+              "description": "Decision 307: the recorded outputs of the listed goldens this entry covers (the private record's output ids, e.g. `s5/basecolor/step46`); requires `goldens`. Absent: every output of the listed goldens.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
             }
-          }
+          },
+          "dependentRequired": { "outputs": ["goldens"] }
         },
         "bounds": {
           "type": "array",

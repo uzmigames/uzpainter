@@ -220,6 +220,57 @@
       "notes": "The evaluator equals r1 exactly on s5's BaseColor at PNG 16, PNG 8 and OpenEXR 32f (phase1.15_compositor-colour-fits item 2.4, decision 152). The OCIO twin export-ocio-encode shares the domain but is unrecorded (Session O); its comparisons need their own evidence and a new version of this entry if it is unstable. Entered under decision 032's standing approval; flagged for the owner's review."
     },
     {
+      "exception_id": "EXC-006",
+      "version": 2,
+      "tier": "0",
+      "domain": {
+        "kind": "channel",
+        "selector": "tier0/colour/ocio-encode",
+        "goldens": ["tier0/semantics/export-ocio-encode-legacy"],
+        "outputs": [
+          "s5/basecolor/step46",
+          "s5/basecolor/step47",
+          "s5/basecolor/step48",
+          "probe/s50/s5_basecolor_.png",
+          "probe/s51/s5_basecolor_.png"
+        ]
+      },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 619 },
+        { "metric": "mean_abs_diff", "scope": "whole", "max": 20.1657 },
+        { "metric": "differing_count", "scope": "whole", "max": 15947 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Version 1's terms, scoped to the Legacy golden and its five unstable outputs (decision 307). Painter is unstable on tier0/semantics/export-ocio-encode-legacy (R5's Legacy twin): after save and reopen, r2 of set s5 (the 8-bit sRGB ramp at 1:1 on BaseColor inside a group masked by grey A) differs from r1 on 15 947 of 196 608 BaseColor values (14 662 texels) in each export, PNG 16 (step 46: max |delta| 619 codes, mean 20.165660), PNG 8 (step 47: max 2 codes) and OpenEXR 32f (step 48: max 0.015625), and in the two probe exports of the same map (probe 50 = step 46's file, probe 51 = step 47's, in each recording); only texels where the mask is strictly between 0 and 1 differ, and every other map of the golden is stable (parity/reports/phase0/tier0-stability.md §4). The OCIO twin, recorded a day later in another Painter process (Session O), reproduces r1 and r2 of the PNG 8 and OpenEXR 32f files byte for byte. Under decision 032 r1 is the exact target and every comparison against r1 must be exact (the evaluator writes r1's three BaseColor files of s5 byte for byte, tests/export/test_export_encoders.py::test_srgb8_bitmap_equals_painter_files; decision 152); this entry covers only the comparisons against r2 of the listed outputs, per map in native units (16-bit codes, 8-bit codes, float values). Its bounds are the r2 residuals of the PNG 16 export, the largest: max |delta| 619 codes, mean 20.1657, 15 947 values differing.",
+        "private_evidence": [
+          {
+            "sha256": "ce9a70b4272ca35478221871a6b66e6148ce7bbf62619092913627a2405c076b",
+            "description": "private golden record of tier0/semantics/export-ocio-encode-legacy: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          },
+          {
+            "sha256": "7f6acce36a4fbaf0e52cd93602af111bed8d104b68b325cc08e320de8940153f",
+            "description": "private golden record of tier0/semantics/export-ocio-encode (the OCIO twin, another Painter process): its s5 PNG 8 and OpenEXR 32f BaseColor blobs of r1 and of r2 equal this golden's"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "Version 2 (decision 307, SUP-027) replaces version 1's note that the OCIO twin was unrecorded: export-ocio-encode was recorded in Session O (decision 180), is unstable on the same outputs, and has its own entry, EXC-008, with its own bounds. This version keeps version 1's bounds and limits them to the Legacy golden's listed outputs, so neither entry covers the other golden. The evaluator equals r1 exactly on s5's BaseColor at PNG 16, PNG 8 and OpenEXR 32f (phase1.15_compositor-colour-fits item 2.4, decision 152). Entered under decision 032's standing approval; flagged for the owner's review."
+    },
+    {
       "exception_id": "EXC-007",
       "version": 1,
       "tier": "1",
@@ -302,6 +353,105 @@
       "approved_by": "owner",
       "approved_on": "2026-10-18",
       "notes": "The owner's own answer, recorded in decision 259, which supersedes decision 223 in this part. Version 1 stays in the register as history."
+    },
+    {
+      "exception_id": "EXC-008",
+      "version": 1,
+      "tier": "0",
+      "domain": {
+        "kind": "channel",
+        "selector": "tier0/colour/ocio-encode",
+        "goldens": ["tier0/semantics/export-ocio-encode"],
+        "outputs": [
+          "s5/basecolor/step46",
+          "s5/basecolor/step47",
+          "s5/basecolor/step48",
+          "probe/s50/s5_basecolor_sRGB.png",
+          "probe/s51/s5_basecolor_sRGB.png"
+        ]
+      },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 620 },
+        { "metric": "mean_abs_diff", "scope": "whole", "max": 20.1659 },
+        { "metric": "differing_count", "scope": "whole", "max": 15947 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Painter is unstable on tier0/semantics/export-ocio-encode (R5 under OCIO with Painter's substance config, Session O; the domain tier0/colour/ocio-encode): after save and reopen, r2 of set s5 (the 8-bit sRGB ramp at 1:1 on BaseColor inside a group masked by grey A) differs from r1 on 15 947 of 196 608 BaseColor values (14 662 texels, the same texels in every file, each with grey A strictly between 0 and 65 535) in PNG 16 (step 46: max |delta| 620 codes, mean 20.165838, p99 308), PNG 8 (step 47: max 2 codes, mean 0.081212) and OpenEXR 32f (step 48: max 0.015625, mean 0.000520673), and in the `$colorSpace` probes of the same map (probe 50 = step 46's file and probe 51 = step 47's, in each recording); every other map of the golden is stable. Independent reproduction: within each recording the probe re-export equals its step's file (r1 repeats; r2 repeats), and the Legacy twin export-ocio-encode-legacy, a separate project recorded a day earlier in another Painter process, has byte-identical r1 and r2 PNG 8 and OpenEXR 32f files (its PNG 16 differs only by the measured OCIO PNG 16 encode, decision 190). Under decision 032 r1 is the exact target and every comparison against r1 must be exact (UzPainter writes r1's five s5 BaseColor files byte for byte, tests/export/test_export_encoders.py::test_ocio_encode_equals_painter_files); this entry covers only the comparisons against r2 of the listed outputs, per map in native units (16-bit codes, 8-bit codes, float values). Its bounds are the r2 residuals of the PNG 16 files, the largest: max |delta| 620 codes, mean 20.1659 (20.165838 rounded up), 15 947 values differing. They are measured on this golden, not taken from EXC-006.",
+        "private_evidence": [
+          {
+            "sha256": "7f6acce36a4fbaf0e52cd93602af111bed8d104b68b325cc08e320de8940153f",
+            "description": "private golden record of tier0/semantics/export-ocio-encode: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          },
+          {
+            "sha256": "ce9a70b4272ca35478221871a6b66e6148ce7bbf62619092913627a2405c076b",
+            "description": "private golden record of tier0/semantics/export-ocio-encode-legacy (another Painter process): its s5 PNG 8 and OpenEXR 32f BaseColor blobs of r1 and of r2 equal this golden's"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "SUP-027, decision 307: the OCIO twin that EXC-006 version 1 left unrecorded. UzPainter equals r1 exactly on every map of steps 46-49 and the probes 50 and 51 (phase1.15_compositor-colour-fits item 2.3, decision 190). Entered under decision 032's standing approval; flagged for the owner's review."
+    },
+    {
+      "exception_id": "EXC-009",
+      "version": 1,
+      "tier": "0",
+      "domain": {
+        "kind": "channel",
+        "selector": "tier0/colour/srgb-bitmaps",
+        "goldens": ["tier0/semantics/srgb-bitmap-variants-v2"],
+        "outputs": [
+          "s5/basecolor/step78",
+          "s5/basecolor/step79",
+          "s5/basecolor/step80",
+          "s5/basecolor/step81",
+          "s5/basecolor/step82",
+          "s5/basecolor/step83"
+        ]
+      },
+      "bounds": [
+        { "metric": "max_abs_diff", "scope": "whole", "max": 334 },
+        { "metric": "mean_abs_diff", "scope": "whole", "max": 19.5912 },
+        { "metric": "differing_count", "scope": "whole", "max": 15360 }
+      ],
+      "evidence": {
+        "basis": "oracle_instability",
+        "summary": "Painter is unstable on tier0/semantics/srgb-bitmap-variants-v2 (the domain tier0/colour/srgb-bitmaps): after save and reopen, r2 of set s5 (BaseColor uniform (0.2, 0.5, 0.8) in sRGB under a Black mask whose fill effect's source is grey A, its set_color_space(sRGB) refused) differs from r1 on 15 360 of 196 608 BaseColor values (14 592 texels, the same texels in every file, each with grey A strictly between 0 and 65 535) in PNG 16 (steps 78 and 79: max |delta| 334 codes, mean 19.591146, p99 294), PNG 8 (steps 80 and 81: max 1 code, mean 0.078125) and OpenEXR 32f (steps 82 and 83: max 0.0078125, mean 0.000454903); every other map of the golden is stable. Independent reproduction: every export step was done twice in the session, and in each recording the repeat (79, 81, 83) equals its first export byte for byte, so r1 repeats and r2 differs from both of r1's exports identically. Under decision 032 r1 is the exact target and every comparison against r1 must be exact (UzPainter writes r1's three s5 BaseColor files of steps 78, 80 and 82 byte for byte, tests/export/test_export_encoders.py::test_srgb_variants_equal_painter_files); this entry covers only the comparisons against r2 of the listed outputs, per map in native units (16-bit codes, 8-bit codes, float values). Its bounds are the r2 residuals of the PNG 16 files, the largest: max |delta| 334 codes, mean 19.5912 (19.591146 rounded up), 15 360 values differing. The stable golden srgb-bitmap-minification of the same domain is not covered.",
+        "private_evidence": [
+          {
+            "sha256": "6b39d103255a3d8b1a499f346c7d801370b4f239c7c88a524248af2ca151584e",
+            "description": "private golden record of tier0/semantics/srgb-bitmap-variants-v2: recordings r1 (same session) and r2 (after save and reopen), every exported map and its blob hash"
+          }
+        ],
+        "uncontrolled_settings": []
+      },
+      "defect_detection_test": {
+        "test_id": "tests/parity/test_verdict.py::test_decision_032_entries_catch_injected_defects",
+        "injected_defects": [
+          "one_value_off_by_one_code",
+          "uniform_offset_one_code",
+          "one_wrong_texel_region",
+          "float32_last_place_residual"
+        ],
+        "outcome": "every_injected_defect_fails"
+      },
+      "decision_id": "032",
+      "approved_by": "owner",
+      "approved_on": "2026-10-11",
+      "notes": "SUP-027, decision 307. UzPainter equals r1 exactly on every map of steps 78, 80 and 82 of the compared sets (phase1.15_compositor-colour-fits item 2.2, decision 174). Entered under decision 032's standing approval; flagged for the owner's review."
     }
   ]
 }

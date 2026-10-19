@@ -1,0 +1,11 @@
+{
+  "id": 307,
+  "slug": "307-scoped-r2-entries",
+  "title": "The OCIO and sRGB-variants r2 residuals get their own decision 032 entries, EXC-008 and EXC-009, and register entries can be scoped to goldens and outputs",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.15_compositor-colour-fits"
+  ],
+  "supersededBy": null
+}

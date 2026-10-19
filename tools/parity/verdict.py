@@ -18,6 +18,10 @@
   are the ones the entry excepts. Without a mask, or with no covered texel, it covers nothing.
 - Decision 259: a version that withdraws its id leaves nothing of it in force. The owner withdrew
   EXC-007, the only owner scope split, so a padding difference on the Wand fails.
+- Decision 307: an entry whose domain lists `goldens` covers only comparisons that name one of
+  them (`Comparison.golden_id`), and with `outputs` only those outputs (`Comparison.output_id`);
+  an entry without them covers its whole domain. Two goldens of one domain thus keep their own
+  entries and bounds.
 - Diagnostics are computed and reported; they never grant a pass on their own.
 
 Envelope (decisions 034, 037; CONTRACT.md §6.5):
@@ -108,7 +112,9 @@ class Comparison:
     `exact_target` marks, for an unstable oracle, the comparison against the same-session
     recording r1 (decision 032). `covered` is the UV coverage mask of a texture map, rows by
     columns of its first two axes (`tools/parity/coverage.py`), for entries bounding the covered
-    texels only (decision 223); None when the comparison has none.
+    texels only (decision 223); None when the comparison has none. `golden_id` and `output_id`
+    name the golden (its public manifest's `golden_id`) and the recorded output compared, for
+    entries scoped to some goldens or outputs of their domain (decision 307); None when unnamed.
 
     `envelope_id` is the envelope of the golden compared against (`ResolvedGolden.envelope_id`);
     None means the caller resolved the golden through the current envelope. `oracle_side` marks
@@ -129,6 +135,8 @@ class Comparison:
     golden_environment: Mapping[str, Any] | None = None
     candidate_environment: Mapping[str, Any] | None = None
     covered: npt.NDArray[np.bool_] | None = None
+    golden_id: str | None = None
+    output_id: str | None = None
 
 
 def _flat(values: Values) -> npt.NDArray[Any]:
@@ -221,6 +229,19 @@ def in_force(entries: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return [entry for entry in latest.values() if not entry.get("withdrawn")]
 
 
+def _scope_holds(entry: Mapping[str, Any], comparison: Comparison) -> bool:
+    """The entry's domain names the comparison: its selector, and its `goldens` and `outputs`
+    when it lists them (decision 307; a comparison that names none is outside a scoped entry)."""
+    domain = entry["domain"]
+    if domain["selector"] != comparison.domain:
+        return False
+    goldens = domain.get("goldens")
+    if goldens is not None and comparison.golden_id not in goldens:
+        return False
+    outputs = domain.get("outputs")
+    return outputs is None or comparison.output_id in outputs
+
+
 _UNSTABLE_BASES = {False: {"oracle_instability"}, True: {"oracle_instability", "noise_floor"}}
 
 
@@ -234,7 +255,7 @@ def _exact_target(
         entry
         for entry in in_force(register_entries)
         if entry["tier"] == comparison.tier
-        and entry["domain"]["selector"] == comparison.domain
+        and _scope_holds(entry, comparison)
         and entry["evidence"]["basis"] == "oracle_instability"
     ]
     if not covering:
@@ -287,7 +308,7 @@ def _evaluate(
         entry
         for entry in in_force(register_entries)
         if entry["tier"] == comparison.tier
-        and entry["domain"]["selector"] == comparison.domain
+        and _scope_holds(entry, comparison)
         and (stable or entry["evidence"]["basis"] in _UNSTABLE_BASES[comparison.tier == "3"])
         and all(_bound_holds(bound, comparison, metrics) for bound in entry["bounds"])
     ]

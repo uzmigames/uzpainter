@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import numpy as np
 import pytest
@@ -252,8 +252,9 @@ def test_tier3_noise_floor_entry_covers_an_unstable_iray_oracle() -> None:
 
 
 def decision_032_entries() -> list[dict[str, Any]]:
+    """The in-force entries of decision 032 in the published register."""
     register: dict[str, Any] = load_json(REGISTER_PATH)
-    entries = [e for e in register["entries"] if e["decision_id"] == "032"]
+    entries = [dict(e) for e in in_force(register["entries"]) if e["decision_id"] == "032"]
     assert {e["domain"]["selector"] for e in entries} == {
         "tier0/quantisation/thirds",
         "tier0/blend/inputs",
@@ -261,8 +262,24 @@ def decision_032_entries() -> list[dict[str, Any]]:
         "tier0/height-normal/combination",
         "tier0/height-normal/resolution",
         "tier0/colour/ocio-encode",
+        "tier0/colour/srgb-bitmaps",
     }
     return entries
+
+
+class Case(TypedDict):
+    golden_id: str | None
+    output_id: str | None
+
+
+def case_of(entry: dict[str, Any]) -> Case:
+    """A golden and output the entry covers (decision 307: its first listed ones; none when the
+    entry covers its whole domain), as `Comparison` keywords."""
+    domain = entry["domain"]
+    return {
+        "golden_id": domain.get("goldens", [None])[0],
+        "output_id": domain.get("outputs", [None])[0],
+    }
 
 
 def golden_verdicts(
@@ -272,8 +289,9 @@ def golden_verdicts(
     register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
     domain = entry["domain"]["selector"]
     tier = entry["tier"]
-    exact = Comparison(tier, domain, r1, candidate, oracle_stable=False, exact_target=True)
-    other = Comparison(tier, domain, r2, candidate, oracle_stable=False)
+    case = case_of(entry)
+    exact = Comparison(tier, domain, r1, candidate, oracle_stable=False, exact_target=True, **case)
+    other = Comparison(tier, domain, r2, candidate, oracle_stable=False, **case)
     return evaluate(exact, register).outcome, evaluate(other, register).outcome
 
 
@@ -296,6 +314,7 @@ def test_decision_032_r1_equality_passes_through_the_entry() -> None:
             list(r1),
             oracle_stable=False,
             exact_target=True,
+            **case_of(entry),
         )
         verdict = evaluate(exact, [entry])
         assert verdict.exceptions_relied_on == ((entry["exception_id"], entry["version"]),)
@@ -329,6 +348,93 @@ def test_decision_032_entries_catch_injected_defects() -> None:
         exact, _ = golden_verdicts(entry, floats, list(floats), last_place)
         assert exact is Outcome.FAIL
         assert entry["defect_detection_test"]["outcome"] == "every_injected_defect_fails"
+
+
+# --- decision 307: entries scoped to goldens and outputs of their domain -----------------------
+
+OCIO_DOMAIN = "tier0/colour/ocio-encode"
+SRGB_BITMAPS = "tier0/colour/srgb-bitmaps"
+LEGACY_GOLDEN = "tier0/semantics/export-ocio-encode-legacy"
+OCIO_GOLDEN = "tier0/semantics/export-ocio-encode"
+VARIANTS_GOLDEN = "tier0/semantics/srgb-bitmap-variants-v2"
+
+
+def test_scoped_entries_cover_only_their_golden_and_outputs() -> None:
+    """SUP-027 (decision 307): with the published register, the r2 comparisons of the Legacy and
+    OCIO twins pass only through their own entries (EXC-006 version 2 and EXC-008), each within
+    its own measured bounds; the s5 r2 comparisons of srgb-bitmap-variants-v2 pass through EXC-009
+    only. None of them covers a comparison that names no golden, another golden of the domain,
+    or an output it does not list, so the stable golden srgb-bitmap-minification and the stable
+    maps of the covered goldens still fail on any difference."""
+    register: list[dict[str, Any]] = load_json(REGISTER_PATH)["entries"]
+    r1 = [float(1000 + i) for i in range(64)]
+
+    def judge(
+        selector: str, golden: str | None, output: str | None, delta: float, *, stable: bool = False
+    ) -> Verdict:
+        oracle = list(r1)
+        oracle[7] += delta
+        comparison = Comparison(
+            "0",
+            selector,
+            oracle,
+            list(r1),
+            oracle_stable=stable,
+            golden_id=golden,
+            output_id=output,
+        )
+        return evaluate(comparison, register)
+
+    legacy_png16 = (OCIO_DOMAIN, LEGACY_GOLDEN, "s5/basecolor/step46")
+    ocio_png16 = (OCIO_DOMAIN, OCIO_GOLDEN, "s5/basecolor/step46")
+    ocio_probe = (OCIO_DOMAIN, OCIO_GOLDEN, "probe/s50/s5_basecolor_sRGB.png")
+    variants_png16 = (SRGB_BITMAPS, VARIANTS_GOLDEN, "s5/basecolor/step78")
+    for case, delta, relied in (
+        (legacy_png16, 619, ("EXC-006", 2)),
+        (ocio_png16, 619, ("EXC-008", 1)),
+        (ocio_png16, 620, ("EXC-008", 1)),
+        (ocio_probe, 620, ("EXC-008", 1)),
+        (variants_png16, 334, ("EXC-009", 1)),
+    ):
+        verdict = judge(*case, delta)
+        assert verdict.outcome is Outcome.PASS, (case, delta)
+        assert verdict.exceptions_relied_on == (relied,), (case, delta)
+    # Each golden keeps its own bounds: the OCIO max does not pass on the Legacy golden.
+    assert judge(*legacy_png16, 620).outcome is Outcome.BLOCKED
+    assert judge(*ocio_png16, 621).outcome is Outcome.BLOCKED
+    assert judge(*variants_png16, 335).outcome is Outcome.BLOCKED
+    # Unnamed, other goldens and unlisted outputs are outside the scoped entries.
+    assert judge(OCIO_DOMAIN, None, None, 1).outcome is Outcome.BLOCKED
+    assert judge(OCIO_DOMAIN, OCIO_GOLDEN, None, 1).outcome is Outcome.BLOCKED
+    assert judge(OCIO_DOMAIN, OCIO_GOLDEN, "s3/basecolor/step46", 1).outcome is Outcome.BLOCKED
+    stable_cases: tuple[tuple[str, str | None, str | None], ...] = (
+        (OCIO_DOMAIN, OCIO_GOLDEN, "s3/basecolor/step46"),
+        (SRGB_BITMAPS, VARIANTS_GOLDEN, "s0/basecolor/step78"),
+        (SRGB_BITMAPS, "tier0/semantics/srgb-bitmap-minification", "s4/basecolor/step36"),
+        (SRGB_BITMAPS, None, None),
+    )
+    for stable_case in stable_cases:
+        assert judge(*stable_case, 1, stable=True).outcome is Outcome.FAIL, stable_case
+
+
+def test_register_scopes_name_current_goldens_of_their_domain() -> None:
+    """Decision 307: `outputs` needs `goldens`, and every listed golden resolves through the
+    current envelope with the entry's domain (`register_problems`)."""
+    register: dict[str, Any] = load_json(REGISTER_PATH)
+    assert register_problems(register) == []
+    entry = next(e for e in register["entries"] if e["exception_id"] == "EXC-009")
+    for goldens, expected in (
+        ([OCIO_GOLDEN], f"golden {OCIO_GOLDEN} is not a current golden of {SRGB_BITMAPS}"),
+        (["tier0/semantics/no-such-golden"], "no-such-golden is not a current golden"),
+    ):
+        changed = json.loads(json.dumps(register))
+        target = next(e for e in changed["entries"] if e["exception_id"] == "EXC-009")
+        target["domain"]["goldens"] = goldens
+        problems = register_problems(changed)
+        assert len(problems) == 1 and expected in problems[0], problems
+    unscoped = json.loads(json.dumps(entry))
+    del unscoped["domain"]["goldens"]
+    assert not is_valid({"schema": register["schema"], "entries": [unscoped]}, Schema.EXCEPTIONS)
 
 
 # --- decision 223: an owner scope split excepts the uncovered texels only ---------------------
@@ -592,10 +698,17 @@ def test_oracle_side_comparison_inside_the_envelope_follows_the_rules() -> None:
 def test_decision_032_exact_target_holds_within_the_current_envelope() -> None:
     for entry in decision_032_entries():
         r1, _ = recordings(entry)
-        tier, selector = entry["tier"], entry["domain"]["selector"]
+        tier, selector, case = entry["tier"], entry["domain"]["selector"], case_of(entry)
         moved = [v + 1.0 for v in r1]
         exact = Comparison(
-            tier, selector, r1, moved, oracle_stable=False, exact_target=True, envelope_id=CURRENT
+            tier,
+            selector,
+            r1,
+            moved,
+            oracle_stable=False,
+            exact_target=True,
+            envelope_id=CURRENT,
+            **case,
         )
         assert evaluate(exact, [entry], CURRENT).outcome is Outcome.FAIL
         equal = Comparison(
@@ -606,10 +719,18 @@ def test_decision_032_exact_target_holds_within_the_current_envelope() -> None:
             oracle_stable=False,
             exact_target=True,
             envelope_id=CURRENT,
+            **case,
         )
         assert evaluate(equal, [entry], CURRENT).outcome is Outcome.PASS
         older = Comparison(
-            tier, selector, r1, list(r1), oracle_stable=False, exact_target=True, envelope_id=OLDER
+            tier,
+            selector,
+            r1,
+            list(r1),
+            oracle_stable=False,
+            exact_target=True,
+            envelope_id=OLDER,
+            **case,
         )
         assert evaluate(older, [entry], CURRENT).outcome is Outcome.STALE
 

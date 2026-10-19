@@ -992,7 +992,8 @@ def test_srgb8_bitmap_equals_painter_files(export_tests: Path, tmp_path: Path) -
     inside a group masked by grey A (s5), rebuilt per texture set and written by WriteExport at
     PNG 16, PNG 8 and OpenEXR 32f, is byte-identical to Painter's files: r1 and r2 of s3 and s4,
     r1 of s5. Painter is unstable on s5 (decision 032): its r2 is judged through the exception
-    register, where EXC-006 covers it (decision 152)."""
+    register, where EXC-006 covers it (decision 152), version 2 scoped to this golden (decision
+    307)."""
     from tests.export import encoders_tier0
 
     report = encoders_tier0.srgb8_bitmap_written(export_tests, tmp_path)
@@ -1000,7 +1001,7 @@ def test_srgb8_bitmap_equals_painter_files(export_tests: Path, tmp_path: Path) -
     assert report["files"] == 3 * 3, report
     assert report["identical"] == report["comparisons"] == 2 * report["files"] - 3, report
     assert [(where, outcomes, relied) for where, _, outcomes, relied in report["register"]] == [
-        (f"s5 step {step}", ["pass", "pass"], [("EXC-006", 1)]) for step in (46, 47, 48)
+        (f"s5 step {step}", ["pass", "pass"], [("EXC-006", 2)]) for step in (46, 47, 48)
     ], report["register"]
 
 
@@ -1008,8 +1009,9 @@ def test_ocio_encode_equals_painter_files(export_tests: Path, tmp_path: Path) ->
     """phase1.15_compositor-colour-fits item 2.3 (decision 190): export-ocio-encode (Session O,
     OCIO with Painter's substance config) rebuilt per texture set as an OCIO project and written by
     WriteExport, every map of steps 46-49 and the `$colorSpace` probes 50 and 51, is byte-identical
-    to Painter's files: r1 everywhere, r2 wherever r2 equals r1 (s5's BaseColor, an sRGB bitmap
-    in a group masked by grey A, is unstable in Painter: r1 is its exact target, decision 032).
+    to Painter's files: r1 everywhere, r2 wherever r2 equals r1. s5's BaseColor, an sRGB bitmap
+    in a group masked by grey A, is unstable in Painter (decision 032): r1 is its exact target,
+    and its r2 is judged through the exception register, where EXC-008 covers it (decision 307).
     This covers the measured PNG 16 encode of the sRGB8 codes and the empty BaseColor (s0-s7), the
     8-bit Raw bitmap read through a binary16 rounded toward zero (s4), and the probes' names
     (`sRGB`, `Raw`)."""
@@ -1019,13 +1021,16 @@ def test_ocio_encode_equals_painter_files(export_tests: Path, tmp_path: Path) ->
     assert report["problems"] == [], report["problems"][:10]
     assert report["files"] == 8 * (4 + 4 + 1 + 1 + 3 + 3), report
     assert report["names"] == 8 * 3 * 2, report
-    assert report["unstable"] == [
-        "s5 step 46: s5_basecolor.png",
-        "s5 step 47: s5_basecolor.png",
-        "s5 step 48: s5_basecolor.exr",
-        "s5 probe 50: s5_basecolor_sRGB.png",
-        "s5 probe 51: s5_basecolor_sRGB.png",
-    ], report["unstable"]
+    assert report["register"] == [
+        (where, rel, ["pass", "pass"], [("EXC-008", 1)])
+        for where, rel in (
+            ("s5 step 46", "s5_basecolor.png"),
+            ("s5 step 47", "s5_basecolor.png"),
+            ("s5 step 48", "s5_basecolor.exr"),
+            ("s5 probe 50", "s5_basecolor_sRGB.png"),
+            ("s5 probe 51", "s5_basecolor_sRGB.png"),
+        )
+    ], report["register"]
     assert report["identical"] == report["comparisons"] == 2 * report["files"] - 5, report
 
 
@@ -1104,18 +1109,19 @@ def test_srgb_variants_equal_painter_files(export_tests: Path, tmp_path: Path) -
     byte-identical to Painter's files: the 8-bit grey sRGB ramp at 1:1 (s0); field A and the 8-bit
     sRGB ramp magnified by BilinearHQ (s2) and under Nearest at scale 2 (s3); the user channels
     whose sRGB Painter refused, read as Data (s4); BaseColor under a mask whose grey source stays
-    Data (s5, r1: Painter is unstable there, decision 032); Working, Legacy Linear and Legacy sRGB
-    (s6-s8). s1 (BilinearHQ minification at 30 degrees) is refused for every bitmap."""
+    Data (s5, r1: Painter is unstable there, decision 032, and its r2 is judged through the
+    exception register, where EXC-009 covers it, decision 307); Working, Legacy Linear and Legacy
+    sRGB (s6-s8). s1 (BilinearHQ minification at 30 degrees) is refused for every bitmap."""
     from tests.export import encoders_tier0
 
     report = encoders_tier0.srgb_variants_written(export_tests, tmp_path)
     assert report["problems"] == [], report["problems"][:10]
     assert set(report["refused"]) == {"s1"}, report["refused"]
     assert report["files"] == 8 * 8 * 3, report
-    assert report["unstable"] == [
-        f"s5 step {step}: s5_basecolor.{ext}"
+    assert report["register"] == [
+        (f"s5 step {step}", f"s5_basecolor.{ext}", ["pass", "pass"], [("EXC-009", 1)])
         for step, ext in ((78, "png"), (80, "png"), (82, "exr"))
-    ], report["unstable"]
+    ], report["register"]
     assert report["identical"] == report["comparisons"] == 2 * report["files"] - 3, report
 
 

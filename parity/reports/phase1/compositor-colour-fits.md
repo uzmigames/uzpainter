@@ -4,10 +4,10 @@ Items 3.1 and 4.1 (decision 028): every colour fit this task lifted is compared 
 - the decision 219 refusal names this task;
 - P20-A's maps are evaluated on DX12 (`test_fill_channel_defaults_gpu_equals_cpu`).
 
-**Result: every lifted case is exact over the stable comparison domain.** On the CPU every fitted output equals Painter's r1, and equals r2 wherever Painter's r2 equals its r1. Three named r2 exceptions, all on set s5 (BaseColor in a group masked by grey A, where Painter itself is unstable after save and reopen):
-- `test_ocio_encode_equals_painter_files` leaves out 5 unstable r2 comparisons (decision 032);
-- `test_srgb_variants_equal_painter_files` leaves out 3 (decision 032);
-- `test_srgb8_bitmap_equals_painter_files` judges its 3 Legacy r2 comparisons through EXC-006.
+**Result: every lifted case is exact over the stable comparison domain.** On the CPU every fitted output equals Painter's r1, and equals r2 wherever Painter's r2 equals its r1. Three named r2 exceptions, all on set s5's BaseColor under a mask from grey A, where Painter itself is unstable after save and reopen. Each is judged through its golden's own register entry (decision 032; scoped entries, decision 307):
+- `test_ocio_encode_equals_painter_files`: 5 r2 comparisons, through EXC-008;
+- `test_srgb_variants_equal_painter_files`: 3, through EXC-009;
+- `test_srgb8_bitmap_equals_painter_files`: 3 Legacy r2 comparisons, through EXC-006 version 2.
 
 r1 is exact in all 11. On DX12 every channel the export writes is byte-identical to the CPU store. Every case that stays unrecorded is refused, and each refusal names this task.
 
@@ -56,9 +56,9 @@ The scratchpad is temporary. Once it is gone, the commit SHAs and the hashes abo
 | Fit | Decision | Test | Result |
 |---|---|---|---|
 | 16-bit grey and 8-bit colour sRGB at 1:1; L8 material channels | 145, 204, 208 | `test_srgb8_material_channels_equal_painter_files`, `test_l8_material_channels_equal_painter_files`, `test_srgb8_material_channels_are_written_encoded`, `test_l8_material_channels_are_written_encoded` | byte-identical; `export-l8-material` 288 of 288 comparisons |
-| Legacy twin s3 to s5 | 145, 152 | `test_srgb8_bitmap_equals_painter_files` | 9 files: 15 of 15 compared byte-identical (r1 and r2 of s3 and s4, r1 of s5). Exception: s5's 3 r2 BaseColor files (steps 46, 47, 48) are judged through EXC-006 (pass) |
-| sRGB variants (s0, s2 to s8) and Painter's sRGB refusals | 174 | `test_srgb_variants_equal_painter_files`, `test_bitmap_spaces_offered_and_refused_as_painter` | 192 files: 381 of 381 compared byte-identical. Exception: 3 unstable r2 comparisons left out (s5 BaseColor, steps 78 PNG 16, 80 PNG 8, 82 OpenEXR 32f); their r1 is exact. Refusals as Painter's |
-| OCIO evaluator and export | 190 | `test_ocio_encode_equals_painter_files`, `test_painter_ocio_png16_differs_from_legacy_on_74_values`, `test_ocio_png16_differs_from_legacy_where_painter_does` | 128 files: 251 of 251 compared byte-identical; 48 of 48 probe names. Exception: 5 unstable r2 comparisons left out (s5 BaseColor, steps 46, 47, 48 and probes 50, 51); their r1 is exact |
+| Legacy twin s3 to s5 | 145, 152 | `test_srgb8_bitmap_equals_painter_files` | 9 files: 15 of 15 compared byte-identical (r1 and r2 of s3 and s4, r1 of s5). Exception: s5's 3 r2 BaseColor files (steps 46, 47, 48) are judged through EXC-006 version 2 (pass) |
+| sRGB variants (s0, s2 to s8) and Painter's sRGB refusals | 174 | `test_srgb_variants_equal_painter_files`, `test_bitmap_spaces_offered_and_refused_as_painter` | 192 files: 381 of 381 compared byte-identical. Exception: 3 unstable r2 comparisons (s5 BaseColor, steps 78 PNG 16, 80 PNG 8, 82 OpenEXR 32f) are judged through EXC-009 (pass); their r1 is exact. Refusals as Painter's |
+| OCIO evaluator and export | 190 | `test_ocio_encode_equals_painter_files`, `test_painter_ocio_png16_differs_from_legacy_on_74_values`, `test_ocio_png16_differs_from_legacy_where_painter_does` | 128 files: 251 of 251 compared byte-identical; 48 of 48 probe names. Exception: 5 unstable r2 comparisons (s5 BaseColor, steps 46, 47, 48 and probes 50, 51) are judged through EXC-008 (pass); their r1 is exact |
 | Facade under OCIO | 202, 240 | `test_facade_ocio_uniform_decode_equals_painter[part1..4]`, `test_colour_rule_readbacks_equal_painter[export-ocio-encode, export-ocio-encode-legacy]`, `test_colour_rules_implicit_space_conversions_and_the_pinned_profile`, `test_every_path_stores_a_uniform_colour_as_painter`, `test_create_takes_colour_management_from_the_environment_at_the_call` | every readback equal |
 | sRGB minification: 16-bit (s4 to s7), 8-bit on level 0 (s0, s2) | 203, 219 | `test_srgb_minification_equals_painter_files` | 24 of 24 comparisons; s1 and s3 refused, naming this task |
 | Legacy sRGB decode (P20-B); fill channel defaults (P20-A) | 214, 218, 224, 226, 249 | `test_facade_legacy_uniform_decode_equals_painter[part1..4]`, `test_facade_fill_channel_defaults_equal_painter` (1 passed, 13.6 s) | every readback and the four exact maps equal; Normal refused (decision 249) |
@@ -66,13 +66,30 @@ The scratchpad is temporary. Once it is gone, the commit SHAs and the hashes abo
 
 ### The r2 exceptions and what approves them
 
-| Golden | Test | r2 comparisons not held exact | Basis |
-|---|---|---|---|
-| `export-ocio-encode` | `test_ocio_encode_equals_painter_files` | 5: s5 step 46 `s5_basecolor.png`, step 47 `s5_basecolor.png`, step 48 `s5_basecolor.exr`, probe 50 and probe 51 `s5_basecolor_sRGB.png` | decision 032 (owner, 2026-10-11): for an unstable golden, r1 is the exact target |
-| `srgb-bitmap-variants-v2` | `test_srgb_variants_equal_painter_files` | 3: s5 step 78 `s5_basecolor.png`, step 80 `s5_basecolor.png`, step 82 `s5_basecolor.exr` | decision 032; the instability is recorded in `parity/reports/phase0/tier0-stability.md` |
-| `export-ocio-encode-legacy` | `test_srgb8_bitmap_equals_painter_files` | 3: s5 steps 46, 47 and 48, judged through the register | EXC-006 (`parity/exceptions.json`): `approved_by: owner` under decision 032's standing approval, flagged for the owner's review |
+Each test judges a file whose r2 differs from r1 through `tools/parity/verdict.py` against both recordings:
+- r1 is the exact target, so any difference fails;
+- r2 must hold within the entry's bounds;
+- the verdict must name the golden's own entry.
 
-Decision 032 also asks for a register entry in `parity/exceptions.json` for each unstable golden. `export-ocio-encode` and `srgb-bitmap-variants-v2` have none. EXC-006 covers only `export-ocio-encode-legacy`, and its notes say the OCIO twin needs its own evidence and a new version of the entry if it is unstable. Their 8 r2 comparisons are left out by the tests rather than judged through the register, and that stays open.
+Every entry is scoped to its golden and its unstable outputs (decision 307), so no golden passes through another's bounds. The bounds are the r2 residuals of the PNG 16 files, measured on each golden's private record. Every entry records `approved_by: owner` under decision 032's standing approval (owner, 2026-10-11) and is flagged for the owner's review.
+
+| Golden (private record) | Test | r2 comparisons judged | Entry and bounds (max \|Δ\|, mean \|Δ\|, differing values) | Instability evidence |
+|---|---|---|---|---|
+| `export-ocio-encode` (`7f6acce3…`) | `test_ocio_encode_equals_painter_files` | 5: s5 step 46 `s5_basecolor.png`, step 47 `s5_basecolor.png`, step 48 `s5_basecolor.exr`, probe 50 and probe 51 `s5_basecolor_sRGB.png` | EXC-008: 620, 20.1659, 15 947 (measured 620, 20.165838, 15 947) | Probes 50 and 51 repeat steps 46 and 47 byte for byte in each recording. The Legacy twin, another project in another Painter process, has the same r1 and r2 PNG 8 and OpenEXR blobs |
+| `srgb-bitmap-variants-v2` (`6b39d103…`) | `test_srgb_variants_equal_painter_files` | 3: s5 step 78 `s5_basecolor.png`, step 80 `s5_basecolor.png`, step 82 `s5_basecolor.exr` | EXC-009: 334, 19.5912, 15 360 (measured 334, 19.591146, 15 360) | Steps 79, 81 and 83 repeat 78, 80 and 82 byte for byte in each recording |
+| `export-ocio-encode-legacy` (`ce9a70b4…`) | `test_srgb8_bitmap_equals_painter_files` | 3: s5 steps 46, 47 and 48 | EXC-006 version 2: 619, 20.1657, 15 947 (version 1's bounds, now scoped) | As for the OCIO twin |
+
+In each golden the differing texels are the same in every file, and all lie where grey A is strictly between 0 and 65 535 (OCIO 14 662 texels, variants 14 592). The other formats' residuals are smaller:
+- PNG 8: OCIO max 2 codes, variants max 1;
+- OpenEXR 32f: OCIO max 0.015625, variants max 0.0078125.
+
+EXC-006 version 2 replaces version 1's stale note that the OCIO twin was unrecorded.
+
+**Register run** (SUP-027, 2026-10-19, CPU, branch `wt/exc-reg` on f6fa380):
+- the three tests above, `-k`: 3 passed, exit code 0, 606 s;
+- `tests/parity/test_verdict.py` and `tests/parity/test_schemas.py`: 137 passed, exit code 0.
+
+**Open.** An unscoped instability entry, EXC-001 to EXC-005, still covers differences on stable comparisons of its domain. This needs its own task (decision 307).
 
 ## DX12: GPU = CPU on every lifted case (37 passed, exit 0, 291 s)
 

@@ -485,6 +485,12 @@ def _painter_files(golden: Golden, recording: str, step: int, texture_set: str) 
     return files
 
 
+def _map_of(relative_path: str, texture_set: str) -> str:
+    """The map of a `$textureSet_<map>` file `_painter_files` names (`s5_basecolor.png`:
+    `basecolor`)."""
+    return relative_path.rsplit(".", 1)[0].removeprefix(f"{texture_set}_")
+
+
 def write_export(
     exe: Path, spec: dict[str, Any], spec_dir: Path, config: dict[str, Any], run_dir: Path
 ) -> dict[str, Any]:
@@ -988,6 +994,34 @@ SRGB8_BITMAP_SETS = ("s3", "s4", "s5")
 SRGB8_BITMAP_STEPS = (46, 47, 48)
 
 
+def _register_verdicts(
+    golden: Golden, output_id: str, written: dict[str, Any], entries: list[dict[str, Any]]
+) -> tuple[list[str], list[tuple[str, int]]]:
+    """`written` (a file of `WriteExport`) judged through the exception register against both
+    recordings of `output_id`, an output whose r2 differs from r1 (decision 032: r1 the exact
+    target, r2 within an entry's bounds; decision 307: the comparison names its golden and
+    output). Returns the two outcomes (r1, r2) and the entries relied on."""
+    ours = decode(Path(written["path"]).read_bytes()).values
+    verdicts = [
+        evaluate(
+            Comparison(
+                "0",
+                str(golden.manifest["domain"]),
+                golden.map(recording, output_id).values.reshape(ours.shape),
+                ours,
+                oracle_stable=False,
+                exact_target=recording == "r1",
+                golden_id=golden.golden_id,
+                output_id=output_id,
+            ),
+            entries,
+        )
+        for recording in ("r1", "r2")
+    ]
+    relied = sorted({e for v in verdicts for e in v.exceptions_relied_on})
+    return [v.outcome.value for v in verdicts], relied
+
+
 def _legacy_bitmap_golden() -> tuple[Golden, dict[str, Any]]:
     """export-ocio-encode-legacy and its sequence without the colour-space listings (readbacks: the
     stack does not depend on them)."""
@@ -1037,30 +1071,9 @@ def srgb8_bitmap_written(exe: Path, tmp: Path) -> dict[str, Any]:
                 report["files"] += 1
                 for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
                     if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
-                        ours = decode(Path(written["path"]).read_bytes()).values
                         key = f"{texture_set}/basecolor/step{step}"
-                        verdicts = [
-                            evaluate(
-                                Comparison(
-                                    "0",
-                                    str(golden.manifest["domain"]),
-                                    golden.map(r, key).values.reshape(ours.shape),
-                                    ours,
-                                    oracle_stable=False,
-                                    exact_target=r == "r1",
-                                ),
-                                entries,
-                            )
-                            for r in ("r1", "r2")
-                        ]
-                        report["register"].append(
-                            (
-                                where,
-                                rel,
-                                [v.outcome.value for v in verdicts],
-                                sorted({e for v in verdicts for e in v.exceptions_relied_on}),
-                            )
-                        )
+                        outcomes, relied = _register_verdicts(golden, key, written, entries)
+                        report["register"].append((where, rel, outcomes, relied))
                         continue
                     report["comparisons"] += 1
                     if written["sha256"] == theirs.get(rel):
@@ -1116,28 +1129,34 @@ def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
     """export-ocio-encode rebuilt per texture set on the grid mesh as an OCIO project with Painter's
     substance config and written by `WriteExport`: every map of steps 46-49, and the probe
     configurations of steps 50 and 51 (`$colorSpace` in the names), compared byte for byte with
-    Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032: r1 is the exact target
-    of a file whose r2 differs, listed in `unstable`). Uniform colours in the sRGB space (or in
-    none, Painter's default on BaseColor) are given as their working values (`working_colours`).
-    The probes' written names are compared with Painter's listing (`names`). Returns the counts
-    and the differing files or refusals."""
+    Painter's files of r1, and of r2 wherever r2 equals r1. Painter is unstable on some files
+    (decision 032): r1 is their exact target, and a file whose r2 differs from r1 is judged
+    against both recordings through the exception register (`_register_verdicts`), listed in
+    `register`. Uniform colours in the sRGB space (or in none, Painter's default on BaseColor)
+    are given as their working values (`working_colours`). The probes' written names are
+    compared with Painter's listing (`names`). Returns the counts and the differing files or
+    refusals."""
     golden, manifest = _ocio_encode_golden()
     by_step = {s["step"]: s for s in golden.manifest["instruction_sequence"]["steps"]}
     inputs = {i["input_id"]: REPO_ROOT / i["path"] for i in golden.manifest["inputs"]}
+    entries = load_json(REGISTER_PATH)["entries"]
     report: dict[str, Any] = {
         "files": 0,
         "comparisons": 0,
         "identical": 0,
         "names": 0,
-        "unstable": [],
+        "register": [],
         "problems": [],
     }
 
-    def compare(where: str, written: dict[str, Any], r1: str | None, r2: str | None) -> None:
+    def compare(
+        where: str, written: dict[str, Any], output_id: str, r1: str | None, r2: str | None
+    ) -> None:
         report["files"] += 1
         for recording, theirs in (("r1", r1), ("r2", r2)):
             if recording == "r2" and r2 != r1:
-                report["unstable"].append(f"{where}: {written['relativePath']}")
+                outcomes, relied = _register_verdicts(golden, output_id, written, entries)
+                report["register"].append((where, written["relativePath"], outcomes, relied))
                 continue
             report["comparisons"] += 1
             if theirs is not None and written["sha256"] == theirs:
@@ -1168,7 +1187,8 @@ def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
                 )
             for written in result["written"]:
                 rel = written["relativePath"]
-                compare(where, written, theirs_r1.get(rel), theirs_r2.get(rel))
+                output_id = f"{texture_set}/{_map_of(rel, texture_set)}/step{step}"
+                compare(where, written, output_id, theirs_r1.get(rel), theirs_r2.get(rel))
         for step, input_id in OCIO_PROBE_STEPS.items():
             config = json.loads(inputs[input_id].read_text(encoding="utf-8"))
             config["exportList"] = [e for e in config["exportList"] if e["rootPath"] == texture_set]
@@ -1189,7 +1209,7 @@ def ocio_encode_written(exe: Path, tmp: Path) -> dict[str, Any]:
                 for recording in ("r1", "r2"):
                     output = golden.recordings[recording].outputs.get(f"probe/s{step}/{rel}")
                     files.append(None if output is None else str(output["blob"]["sha256"]))
-                compare(where, written, files[0], files[1])
+                compare(where, written, f"probe/s{step}/{rel}", files[0], files[1])
     return report
 
 
@@ -1361,17 +1381,19 @@ def _variants_golden() -> tuple[Golden, dict[str, Any]]:
 def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
     """srgb-bitmap-variants-v2 rebuilt per texture set on the grid mesh and written by
     `WriteExport` at each step of `SRGB_VARIANT_STEPS`, every map of the step: compared byte for
-    byte with Painter's files of r1, and of r2 wherever r2 equals r1 (decision 032). Returns the
-    counts, the refused sets with their messages, the files whose r2 differs from r1
-    (`unstable`), and the differing files or refusals."""
+    byte with Painter's files of r1, and of r2 wherever r2 equals r1. A file whose r2 differs
+    from r1 (decision 032: r1 is its exact target) is judged against both recordings through the
+    exception register (`_register_verdicts`), listed in `register`. Returns the counts, the
+    refused sets with their messages, `register`, and the differing files or refusals."""
     golden, manifest = _variants_golden()
     by_step = {s["step"]: s for s in golden.manifest["instruction_sequence"]["steps"]}
+    entries = load_json(REGISTER_PATH)["entries"]
     report: dict[str, Any] = {
         "files": 0,
         "comparisons": 0,
         "identical": 0,
         "refused": {},
-        "unstable": [],
+        "register": [],
         "problems": [],
     }
     for texture_set in (*SRGB_VARIANT_SETS, *SRGB_VARIANT_REFUSED):
@@ -1399,7 +1421,9 @@ def srgb_variants_written(exe: Path, tmp: Path) -> dict[str, Any]:
                 report["files"] += 1
                 for recording, theirs in (("r1", theirs_r1), ("r2", theirs_r2)):
                     if recording == "r2" and theirs_r2.get(rel) != theirs_r1.get(rel):
-                        report["unstable"].append(f"{where}: {rel}")
+                        key = f"{texture_set}/{_map_of(rel, texture_set)}/step{step}"
+                        outcomes, relied = _register_verdicts(golden, key, written, entries)
+                        report["register"].append((where, rel, outcomes, relied))
                         continue
                     report["comparisons"] += 1
                     if written["sha256"] == theirs.get(rel):
