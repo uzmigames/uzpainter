@@ -52,7 +52,7 @@ def write_manifest(path: Path, document: dict[str, Any]) -> None:
         raise StoreError(f"{path}: the updated manifest is invalid: " + "; ".join(errors))
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    temporary.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8", newline="\n")
     os.replace(temporary, path)
 
 

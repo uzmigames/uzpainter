@@ -602,4 +602,4 @@ def write_report(report: Mapping[str, Any], path: Path) -> None:
     if problems:
         raise ValueError(f"the comparison report is invalid: {problems}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")

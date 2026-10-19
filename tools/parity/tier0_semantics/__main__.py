@@ -110,7 +110,7 @@ def write(root: Path = REPO_ROOT) -> list[str]:
                 "private_records": json.loads(path.read_text("utf-8"))["private_records"],
             }
         text = manifest_text(data)
-        if not path.is_file() or path.read_text(encoding="utf-8") != text:
+        if not path.is_file() or path.read_bytes() != text.encode("utf-8"):
             path.write_text(text, encoding="utf-8", newline="\n")
     return []
 

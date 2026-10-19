@@ -143,6 +143,8 @@ def write(path: Path, entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         raise ReportError(f"{path.name}: refusing to write an invalid report: {problems[:5]}")
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
     temporary.replace(path)
     return document

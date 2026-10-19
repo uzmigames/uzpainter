@@ -32,3 +32,12 @@
 /parity/fixtures/** -text
 # Git hooks run under sh: keep LF endings on every checkout (parity/GUARD.md).
 /.githooks/** text eol=lf
+# Public parity records whose file SHA-256 is an evidence identity (tools/parity/tier1/compare.py,
+# the Tier 1 and recipe runners, gate records): LF on every checkout, whatever core.autocrlf says.
+/parity/manifests/**/*.json text eol=lf
+/parity/envelopes/*/manifests/**/*.json text eol=lf
+/parity/envelopes/*/requests/**/*.json text eol=lf
+/parity/envelopes/registry.json text eol=lf
+/parity/exceptions.json text eol=lf
+/parity/semantics/*.json text eol=lf
+/parity/reports/**/*.json text eol=lf
