@@ -1,0 +1,13 @@
+{
+  "id": 270,
+  "slug": "270-pole-and-cube-corner-rings-take-268-s-quantised-1-d-shares-over-unfolded-distances-bit-exact-on-single-triangle-texels-v-gap-and-tap-set-open",
+  "title": "Pole and cube-corner ring texels take decision 268's quantised 1/d shares over unfolded distances from the own-triangle extrapolation, bit-exact on every single-triangle texel; the V-gap position and the tap set stay open",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
