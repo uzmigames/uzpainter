@@ -1,0 +1,12 @@
+{
+  "id": 290,
+  "slug": "290-tile-border-rows",
+  "title": "The sphere's tile-border rows: decision 270's 1-8 ulp texels are a reversed tap order, a u-border seam edge opens no window, a clamped window base finds the bottom-row taps, and the 54 corner gutter texels were a ring artefact; three window selectors stay open",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}
