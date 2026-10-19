@@ -1,0 +1,13 @@
+{
+  "id": 276,
+  "slug": "276-the-normal-gutter-is-the-mesh-map-on-the-padded-mesh-free-normal",
+  "title": "Outside the islands, Painter's Normal is the mesh map at each texel combined with the padded mesh-free normal, not the stencil of the padded Height",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.12_compositor-height-normal",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}

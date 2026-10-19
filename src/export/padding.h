@@ -65,6 +65,11 @@
 //   exact. Such a file is refused (`CheckIslandNormal`), a Height without layers included: no
 //   recording shows what Painter's empty Height reads outside the islands, and its other virtual
 //   maps read an empty channel as a constant that is not the channel's base (R-092).
+//   Outside the islands Painter's combined normal is neither the padding above of its stored
+//   values nor the stencil of the padded Height (decision 276): each gutter texel is the bound
+//   Normal mesh map at that texel combined with the mesh-free normal of its flood seed in the
+//   ring. Measuring a Normal file with this padding is therefore wrong wherever a mesh map is
+//   bound, whatever the ring.
 
 #include <array>
 #include <cstdint>
