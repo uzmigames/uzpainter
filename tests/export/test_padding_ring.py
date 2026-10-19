@@ -1,18 +1,19 @@
 """Synthetic cases of the measured `infinite` padding ring (src/export/padding.h; phase1.25 item
-2.7, decisions 267, 268, 270, 273 and 275), through `uzp-export-tests ring`.
+2.7, decisions 267, 268, 270, 273, 275, 278 and 279), through `uzp-export-tests ring`.
 
 Each case pads random float32 values over a small OBJ written here, and compares UzPainter's ring
 texels bit for bit with a reference of the rule: on a single island this file's own (the ring
 point extrapolated through the island's affine map, the covered 8-neighbours, the 4 nearest, the
 exact 1/d shares quantised to 10, 8 and 6 bits, the float32 FMA lerp chain and decision 206's
 rounding; equal shares ordered by decision 273's comparator, then toward +u, +v); across a UV seam
-`padding_reference` (the far window of decision 275 in padding.cpp's double arithmetic). No
-Painter data is read.
+`padding_reference` (the far window of decision 275 in padding.cpp's double arithmetic, decision
+278's seam gate and decision 279's ring point, neighbours and reach). No Painter data is read.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import re
 import subprocess
 from pathlib import Path
@@ -296,6 +297,221 @@ def test_seam_ring_reads_the_far_island(export_tests: Path, tmp_path: Path, offs
         if offset != 0.0 and 12 <= y <= 15:
             assert r["taps"] == 4 and any(c[3] for c in r["candidates"][:4])
             assert any(not c[3] for c in r["candidates"][:4])
+
+
+def _matches_reference(
+    tmp: Path, name: str, values: np.ndarray, out: np.ndarray, ring: list[dict[str, Any]]
+) -> None:
+    """UzPainter's ring texels, their taps, values and undecided gate flags equal
+    `padding_reference`'s over the OBJ `name`."""
+    reference = Ring(tmp / f"{name}.obj", "m", 32, 32)
+    expected = {(x, y): (cands, taps) for x, y, cands, taps in reference.texels()}
+    assert sorted(expected) == sorted((r["x"], r["y"]) for r in ring), name
+    for r in ring:
+        x, y = r["x"], r["y"]
+        cands, n = expected[(x, y)]
+        assert [(c[0], c[1]) for c in r["candidates"][: r["taps"]]] == [c[2] for c in cands[:n]], (
+            name,
+            x,
+            y,
+        )
+        assert [(c[0], c[1]) for c in r["candidates"]] == [c[2] for c in cands], (name, x, y)
+        assert set(r["undecided"]) == reference.undecided[(x, y)], (name, x, y)
+        t = fractions([c[0] for c in cands[:n]])
+        chosen = [values[ty, tx] for _, _, (tx, ty) in cands[:n]]
+        value = [chain([v[c] for v in chosen], t) for c in range(3)]
+        assert (
+            out[y, x].view(np.uint32).tolist() == np.array(value, F32).view(np.uint32).tolist()
+        ), (
+            name,
+            x,
+            y,
+        )
+
+
+def _folded_pair(angle: float, *, wide: bool = False, top: bool = False) -> Mesh:
+    """Island A, 4 x 4 texels on the plane y = 0 (face normal -y, its seam line the texel column
+    boundary 8), and island B, 4 x 4 texels beyond A's edge x = 1 (its seam line at texel column
+    16.25, offset 0.3 texel in v, so that no far point falls on a window boundary), turned about
+    that edge by `angle` degrees: positive is concave (B rises on A's normal side), negative convex.
+    `wide` widens A by half a texel, so that its seam line passes through the centre of ring texel
+    (8, 11); `top` adds a flat island C beyond A's edge z = 1 (rows 4 to 7)."""
+    s = 1 / 32
+    c, n = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    x0, u0, u1 = (-0.125, 4.5 * s, 8.5 * s) if wide else (0.0, 4 * s, 8 * s)
+    a = (
+        [(x0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 0.0, 1.0), (x0, 0.0, 1.0)],
+        [(u0, 16 * s), (u1, 16 * s), (u1, 20 * s), (u0, 20 * s)],
+    )
+    b = (
+        [(1.0, 0.0, 0.0), (1.0 + c, -n, 0.0), (1.0 + c, -n, 1.0), (1.0, 0.0, 1.0)],
+        [
+            (16.25 * s, 16.3 * s),
+            (20.25 * s, 16.3 * s),
+            (20.25 * s, 20.3 * s),
+            (16.25 * s, 20.3 * s),
+        ],
+    )
+    quads = [a, b]
+    if top:
+        quads.append(
+            (
+                [(0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 0.0, 2.0), (0.0, 0.0, 2.0)],
+                [(4 * s, 24 * s), (8 * s, 24 * s), (8 * s, 28 * s), (4 * s, 28 * s)],
+            )
+        )
+    return Mesh(quads, 32)
+
+
+def test_seam_gate_follows_the_fold_and_the_far_plane(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 278: a ring texel takes no far taps across a seam edge when the two faces' float32
+    unit normals meet at a dot product of at most 0.985 (a fold of about 9.94 degrees) and its ring
+    point lies behind the far face's plane. Islands A and B share an edge (`_folded_pair`):
+    - folded 9.5 degrees either way, decision 275's far taps stay, on the ring texels beyond each
+      island's seam line and on corners on its own side;
+    - concave by 10.5 degrees, the texels beyond the seam line (behind the far face) take no far
+      candidates, and the own-side corners (in front of it) keep theirs; convex by 10.5, the
+      reverse;
+    - at 9.935 degrees (normal dot 0.985004, inside Painter's bracket (0.98498905, 0.98501915]),
+      the taps are the 0.985 rule's (kept), and the texels whose far taps the bracket decides
+      (beyond the seam line when concave, own-side corners when convex) are flagged "fold-bracket";
+    - a ring point on the far plane (A half a texel wider, its seam line through the centre of
+      ring texel (8, 11)) keeps its far taps and is flagged "on-far-plane";
+    - with B concave by 10.5 degrees and a flat island C beyond A's other edge z = 1, a ring texel
+      whose taps come across B's gated edge and C's kept one is flagged "mixed-gates", and takes
+      C's taps and none of B's.
+    Every case equals `padding_reference` bit for bit, candidates and flags included."""
+    rings: dict[str, dict[tuple[int, int], dict[str, Any]]] = {}
+    for label, angle, wide, top in (
+        ("p9.5", 9.5, False, False),
+        ("p10.5", 10.5, False, False),
+        ("m9.5", -9.5, False, False),
+        ("m10.5", -10.5, False, False),
+        ("p9.935", 9.935, False, False),
+        ("m9.935", -9.935, False, False),
+        ("wide-p10.5", 10.5, True, False),
+        ("top-p10.5", 10.5, False, True),
+    ):
+        name = f"gate-{label}"
+        values, out, ring = run(
+            export_tests, tmp_path, _folded_pair(angle, wide=wide, top=top), name, 278
+        )
+        _matches_reference(tmp_path, name, values, out, ring)
+        rings[label] = {(r["x"], r["y"]): r for r in ring}
+
+    def far_taps(label: str) -> set[tuple[int, int]]:
+        return {
+            k for k, r in rings[label].items() if any(c[3] for c in r["candidates"][: r["taps"]])
+        }
+
+    def far_candidates(label: str) -> set[tuple[int, int]]:
+        return {k for k, r in rings[label].items() if any(c[3] for c in r["candidates"])}
+
+    def flagged(label: str, flag: str) -> set[tuple[int, int]]:
+        return {k for k, r in rings[label].items() if flag in r["undecided"]}
+
+    def beyond(k: tuple[int, int]) -> bool:
+        """Whether ring texel `k`'s centre lies beyond its island's seam line."""
+        return k[0] + 0.5 > 8 if k[0] <= 8 else k[0] + 0.5 < 16.25
+
+    for label in ("p9.5", "m9.5"):
+        assert {k for k in far_taps(label) if beyond(k)} >= {(8, y) for y in range(12, 16)}, label
+        assert any(not beyond(k) for k in far_taps(label)), label
+    behind = {"p10.5": True, "m10.5": False}
+    for label, ungated in (("p10.5", "p9.5"), ("m10.5", "m9.5")):
+        assert not any(beyond(k) == behind[label] for k in far_candidates(label)), label
+        assert {k for k in far_taps(ungated) if beyond(k) != behind[label]} <= far_taps(label), (
+            label
+        )
+    for label, ungated, side in (("p9.935", "p9.5", True), ("m9.935", "m9.5", False)):
+        assert far_taps(label) == far_taps(ungated), label
+        assert flagged(label, "fold-bracket") == {k for k in far_taps(ungated) if beyond(k) == side}
+    for label in ("p9.5", "p10.5", "m9.5", "m10.5"):
+        assert all(r["undecided"] == [] for r in rings[label].values()), label
+    assert flagged("wide-p10.5", "on-far-plane") >= {(8, 11)}
+    assert (8, 11) in far_taps("wide-p10.5")
+    mixed = flagged("top-p10.5", "mixed-gates")
+    assert mixed and mixed <= far_taps("top-p10.5")
+    for k in mixed:
+        assert all(c[0] < 9 for c in rings["top-p10.5"][k]["candidates"]), k  # none of B's
+
+
+def _quad(
+    x: tuple[float, float],
+    u: tuple[float, float],
+    rows: tuple[float, float],
+    base: float,
+    scale: float = 0.25,
+) -> Quad:
+    """A flat quad on y = 0 over UV columns `u` and rows `rows` (texels, top first), at 3D x in `x`
+    and z = (base - row) `scale`."""
+    (x0, x1), (u0, u1), (w0, w1) = x, u, rows
+    z0, z1 = (base - w1) * scale, (base - w0) * scale
+    return (
+        [(x0, 0.0, z0), (x1, 0.0, z0), (x1, 0.0, z1), (x0, 0.0, z1)],
+        [
+            (u0 / 32, 1 - w1 / 32),
+            (u1 / 32, 1 - w1 / 32),
+            (u1 / 32, 1 - w0 / 32),
+            (u0 / 32, 1 - w0 / 32),
+        ],
+    )
+
+
+def test_ring_point_neighbours_and_reach_follow_decision_279(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 279, against `padding_reference` bit for bit, candidates and flags included:
+    - two islands one texel column apart in UV and apart in 3D (A 4 x 4 texels at 1 unit per 4,
+      D 4 x 4 at 1.25 per 4, half a texel lower): the ring texels between them take own taps from
+      both, the other island's at min(|q_k - P|, |q - P|), and their ring point comes from the
+      triangle of the neighbour nearest under decision 273's comparator, which on some of them is
+      not the highest-index triangle;
+    - a seam edge that ends 1.72 texels from a ring texel (A's right edge only along its upper part,
+      shared with B, whose UV island continues below it): the ring texel (8, 15) takes B's texels
+      through that edge's window, and is flagged "reach-bracket", since a cap of 1.7 texels would
+      drop them."""
+    from tests.export.padding_reference import Ring
+
+    vgap = Mesh(
+        [
+            _quad((0.0, 1.0), (4.0, 8.0), (12.0, 16.0), 16.0),
+            _quad((3.0, 4.25), (9.0, 13.0), (11.5, 15.5), 15.5, 0.3125),
+        ],
+        32,
+    )
+    values, out, ring = run(export_tests, tmp_path, vgap, "vgap", 279)
+    _matches_reference(tmp_path, "vgap", values, out, ring)
+    reference = Ring(tmp_path / "vgap.obj", "m", 32, 32)
+    both = [r for r in ring if {c[0] < 8 for c in r["candidates"][: r["taps"]]} == {True, False}]
+    assert both and all(r["triangles"] > 1 for r in both)
+    covered = reference.owner >= 0
+    switched = 0
+    for r in both:
+        x, y = r["x"], r["y"]
+        own = [
+            ((x + dx) % 32, y + dy)
+            for dy, dx in NEIGHBOURS
+            if 0 <= y + dy < 32 and covered[y + dy, (x + dx) % 32]
+        ]
+        switched += reference.tau(x, y, own) != max(int(reference.owner[ty, tx]) for tx, ty in own)
+    assert switched > 0
+
+    reach = Mesh(
+        [
+            _quad((0.0, 0.875), (4.0, 7.5), (12.0, 13.85), 16.0),
+            _quad((0.875, 1.0), (7.5, 8.0), (12.0, 13.85), 16.0),
+            _quad((0.0, 0.875), (4.0, 7.5), (13.85, 16.0), 16.0),
+            _quad((1.0, 2.0), (16.25, 20.25), (12.3, 14.15), 16.3),
+            _quad((1.0, 2.0), (16.25, 20.25), (14.15, 16.3), 16.3),
+        ],
+        32,
+    )
+    values, out, ring = run(export_tests, tmp_path, reach, "reach", 279)
+    _matches_reference(tmp_path, "reach", values, out, ring)
+    flagged = {(r["x"], r["y"]): r for r in ring if "reach-bracket" in r["undecided"]}
+    assert list(flagged) == [(8, 15)]
+    assert (16, 15) in [(c[0], c[1]) for c in flagged[(8, 15)]["candidates"] if c[3]]
 
 
 def _source_table(path: str, name: str) -> list[int]:

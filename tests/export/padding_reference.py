@@ -1,19 +1,20 @@
 """The measured `infinite` padding of src/export/padding.h (phase1.25 item 2.7; decisions 197, 206,
-267, 268, 270, 273, 275; measured only, decision 259), written again independently in Python
-for the tests: the ring over an OBJ's triangles, then the jump flood.
+267, 268, 270, 273, 275, 278, 279; measured only, decision 259), written again independently in
+Python for the tests: the ring over an OBJ's triangles, then the jump flood.
 
 The geometry (barycentrics, folds about seam edges, distances) is double precision with each
 operation in padding.cpp's order, so that a far point at an exact half-texel boundary, where
 decision 275's window is not identified (its open item (b)), falls on the same side as in
 UzPainter. The comparator of equal shares (decision 273), the chain fractions (decision 268) and
 the lerp chain are float32, each operation correctly rounded, through the recording GPU's
-reciprocal and square root (tools/parity/fit/hwmath). No Painter data is read.
+reciprocal and square root (tools/parity/fit/hwmath). So are decision 278's seam gate's face
+normals and their dot product. No Painter data is read.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,15 @@ EQUAL_SHARE = 1e-9
 ZERO_DISTANCE = 1e-6
 COPLANAR = 1e-6
 KEPT = 8
+# Decision 278's seam gate: the faces' float32 normal dot product at most FOLD_GATE; Painter's
+# constant lies in (FOLD_LOW, FOLD_HIGH].
+FOLD_GATE = F32(0.985)
+FOLD_LOW = F32(0.98498905)
+FOLD_HIGH = F32(0.98501915)
+# Decision 279's seam reach: UV segment distance at most REACH_CAP texels; Painter's cap lies in
+# (REACH_LOW, REACH_CAP].
+REACH_CAP = 1.8
+REACH_LOW = 1.7
 
 Vec = tuple[float, float, float]
 
@@ -81,6 +91,50 @@ def chain(values: Sequence[np.float32], t: Sequence[np.float32]) -> np.float32:
         for level in range(n - 3, -1, -1):
             m = fma(t[level], f32(values[level] - m), m)
     return f32(f32(1) - f32(f32(1) - m))
+
+
+def face_normal(p: Sequence[Sequence[float]]) -> list[np.float32]:
+    """Decision 278's unit face normal of the triangle at float32 positions `p`:
+    cross(P1 - P0, P2 - P0) divided by its length, each float32 operation rounded."""
+    q = [[f32(c) for c in v] for v in p]
+    e1 = [f32(q[1][i] - q[0][i]) for i in range(3)]
+    e2 = [f32(q[2][i] - q[0][i]) for i in range(3)]
+    n = [
+        f32(f32(e1[1] * e2[2]) - f32(e1[2] * e2[1])),
+        f32(f32(e1[2] * e2[0]) - f32(e1[0] * e2[2])),
+        f32(f32(e1[0] * e2[1]) - f32(e1[1] * e2[0])),
+    ]
+    length = f32(np.sqrt(f32(f32(f32(n[0] * n[0]) + f32(n[1] * n[1])) + f32(n[2] * n[2]))))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return [f32(c / length) for c in n]
+
+
+def seam_gate(
+    n_own: Sequence[np.float32], n_far: Sequence[np.float32], q: Vec, p: Vec
+) -> tuple[bool, bool, bool]:
+    """Decision 278's gate of a seam edge for ring point `q` (p a vertex of the edge): (gated, in
+    the bracket, on the far plane)."""
+    d = f32(f32(f32(n_own[0] * n_far[0]) + f32(n_own[1] * n_far[1])) + f32(n_own[2] * n_far[2]))
+    side = dot((float(n_far[0]), float(n_far[1]), float(n_far[2])), sub(q, p))
+    return (
+        bool(d <= FOLD_GATE and side < 0.0),
+        bool(FOLD_LOW < d <= FOLD_HIGH and side < 0.0),
+        bool(side == 0.0 and d <= FOLD_HIGH),
+    )
+
+
+def segment_distance(a: tuple[float, float], b: tuple[float, float], px: float, py: float) -> float:
+    """The texel-space distance from (px, py) to the segment a b."""
+    ex, ey = b[0] - a[0], b[1] - a[1]
+    length = ex * ex + ey * ey
+    u = 0.0 if length == 0.0 else min(max(((px - a[0]) * ex + (py - a[1]) * ey) / length, 0.0), 1.0)
+    return math.hypot(px - a[0] - u * ex, py - a[1] - u * ey)
+
+
+def tap_count(cands: Sequence[tuple[float, bool, tuple[int, int]]]) -> int:
+    """The chain's number of taps over `cands` (tap order): 1 when the nearest is at distance 0."""
+    nearest = min((c[0] for c in cands if not c[1]), default=math.inf)
+    return min(4, len(cands)) if cands[0][0] > ZERO_DISTANCE * nearest else 1
 
 
 def box_normalised(positions: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> np.ndarray:
@@ -179,6 +233,7 @@ class Triangle:
         self.chart = 0
         self.face = 0
         self.normalised = np.zeros((3, 3), F32)
+        self.normal = face_normal(p)
 
     def bary(self, x: float, y: float) -> tuple[float, float, float]:
         a, b, c = self.t
@@ -376,6 +431,8 @@ class Ring:
                     if inside and self.owner[row, col] < 0:
                         self.owner[row, col] = index[i]
         self.hinges: dict[tuple[int, int], Hinge | None] = {}
+        # Per ring texel (texels()): where decision 278's gate does not decide its taps.
+        self.undecided: dict[tuple[int, int], set[str]] = {}
 
     @staticmethod
     def _coplanar(a: Triangle, b: Triangle) -> bool:
@@ -409,37 +466,11 @@ class Ring:
         h = self.hinges[(dst, src)]
         return p if h is None else unfold(h, p)
 
-    def candidates(
-        self, x: int, y: int, own: list[tuple[int, int]], tau: int
+    def _ordered(
+        self, x: int, y: int, cands: list[tuple[float, bool, tuple[int, int]]]
     ) -> list[tuple[float, bool, tuple[int, int]]]:
-        """Ring texel (x, y)'s candidates (distance, far, texel) in tap order, through `tau`."""
-        T = self.tris[tau]
-        q = T.point(T.bary(x + 0.5, y + 0.5))
-        out: dict[tuple[int, int], tuple[float, bool, tuple[int, int]]] = {}
-
-        def put(tx: int, ty: int, far: bool) -> None:
-            k = int(self.owner[ty, tx])
-            p = self.frame(self.tris[k].point(self.tris[k].bary(tx + 0.5, ty + 0.5)), k, tau)
-            out[(tx, ty)] = (norm(sub(q, p)), far, (tx, ty))
-
-        for tx, ty in own:
-            put(tx, ty, False)
-        # Decision 275: every seam edge of tau's island, q folded into the far triangle, and the
-        # far island's covered texels of columns floor(f_u - 1/2) +- 1, rows ceil(f_v - 1/2) +- 1.
-        for e_index, edge, j in self.seams.get(T.chart, []):
-            E, J = self.tris[e_index], self.tris[j]
-            va, vb = E.vertex[(edge + 1) % 3], E.vertex[(edge + 2) % 3]
-            fu, fv = J.texel_of(fold(hinge(E, J, va, vb), q))
-            col0, row0 = math.floor(fu - 0.5), math.ceil(fv - 0.5)
-            for row in range(row0 - 1, row0 + 2):
-                for col in range(col0 - 1, col0 + 2):
-                    if not (0 <= row < self.height and 0 <= col < self.width):
-                        continue
-                    k = int(self.owner[row, col])
-                    if k < 0 or self.tris[k].chart != J.chart or (col, row) in out:
-                        continue
-                    put(col, row, True)
-        ordered = sorted(out.values(), key=lambda c: (c[0], c[2][1] * self.width + c[2][0]))
+        """`cands` in tap order: nearest first, equal distances by the comparator (own), +u, +v."""
+        ordered = sorted(cands, key=lambda c: (c[0], c[2][1] * self.width + c[2][0]))
         result: list[tuple[float, bool, tuple[int, int]]] = []
         while ordered:
             group = [ordered[0]]
@@ -461,6 +492,109 @@ class Ring:
             result += group
         return result[:KEPT]
 
+    def candidates(
+        self, x: int, y: int, own: list[tuple[int, int]], tau: int
+    ) -> tuple[list[tuple[float, bool, tuple[int, int]]], set[str]]:
+        """Ring texel (x, y)'s candidates (distance, far, texel) in tap order, through `tau`, and
+        where the rule (decisions 278, 279) does not decide them."""
+        T = self.tris[tau]
+        q = T.point(T.bary(x + 0.5, y + 0.5))
+        # texel -> [distance in tau's frame, distance as an own neighbour outside tau's island or
+        # None, own neighbour?]; texel -> the seam edges whose window holds it.
+        pool: dict[tuple[int, int], list[Any]] = {}
+        via: dict[tuple[int, int], list[int]] = {}
+
+        def put(tx: int, ty: int) -> list[Any]:
+            if (tx, ty) not in pool:
+                k = int(self.owner[ty, tx])
+                K = self.tris[k]
+                p = K.point(K.bary(tx + 0.5, ty + 0.5))
+                outside = None
+                if K.chart != T.chart:
+                    outside = min(norm(sub(K.point(K.bary(x + 0.5, y + 0.5)), p)), norm(sub(q, p)))
+                pool[(tx, ty)] = [norm(sub(q, self.frame(p, k, tau))), outside, False]
+            return pool[(tx, ty)]
+
+        for tx, ty in own:
+            put(tx, ty)[2] = True
+        # Decision 279: the seam edges of every island owning an own neighbour, within REACH_CAP
+        # texels (UV segment distance); decision 275: q folded into the far triangle, the far
+        # island's covered texels of columns floor(f_u - 1/2) +- 1, rows ceil(f_v - 1/2) +- 1;
+        # decision 278: the gate.
+        edges: list[tuple[tuple[bool, bool, bool], float]] = []
+        charts = sorted({self.tris[int(self.owner[ty, tx])].chart for tx, ty in own})
+        for chart in charts:
+            for e_index, edge, j in self.seams.get(chart, []):
+                E, J = self.tris[e_index], self.tris[j]
+                reach = segment_distance(E.t[(edge + 1) % 3], E.t[(edge + 2) % 3], x + 0.5, y + 0.5)
+                if reach > REACH_CAP:
+                    continue
+                va, vb = E.vertex[(edge + 1) % 3], E.vertex[(edge + 2) % 3]
+                edges.append((seam_gate(E.normal, J.normal, q, E.p[(edge + 1) % 3]), reach))
+                fu, fv = J.texel_of(fold(hinge(E, J, va, vb), q))
+                col0, row0 = math.floor(fu - 0.5), math.ceil(fv - 0.5)
+                for row in range(row0 - 1, row0 + 2):
+                    for col in range(col0 - 1, col0 + 2):
+                        if not (0 <= row < self.height and 0 <= col < self.width):
+                            continue
+                        k = int(self.owner[row, col])
+                        if k < 0 or self.tris[k].chart != J.chart:
+                            continue
+                        put(col, row)
+                        lst = via.setdefault((col, row), [])
+                        if not lst or lst[-1] != len(edges) - 1:
+                            lst.append(len(edges) - 1)
+
+        def build(
+            is_open: Callable[[tuple[tuple[bool, bool, bool], float]], bool],
+        ) -> list[tuple[float, bool, tuple[int, int]]]:
+            out = []
+            for texel, (frame, outside, is_own) in pool.items():
+                inside = is_own and outside is None
+                if not inside and any(is_open(edges[e]) for e in via.get(texel, [])):
+                    out.append((frame, True, texel))
+                elif is_own:
+                    out.append((frame if inside else outside, False, texel))
+            return self._ordered(x, y, out)
+
+        result = build(lambda e: not e[0][0])
+        undecided: set[str] = set()
+        if edges:
+            inner = build(lambda e: not e[0][0] and e[1] <= REACH_LOW)
+            n = tap_count(result)
+            if tap_count(inner) != n or inner[:n] != result[:n]:
+                undecided.add("reach-bracket")
+            ungated = build(lambda e: True)
+            reaching = {
+                e
+                for lst in (result, ungated)
+                for c in lst[: tap_count(lst)]
+                if c[1]
+                for e in via[c[2]]
+            }
+            if any(edges[e][0][1] for e in reaching):
+                undecided.add("fold-bracket")
+            if any(edges[e][0][2] for e in reaching):
+                undecided.add("on-far-plane")
+            if len({edges[e][0][0] for e in reaching}) > 1:
+                undecided.add("mixed-gates")
+        return result, undecided
+
+    def tau(self, x: int, y: int, own: list[tuple[int, int]]) -> int:
+        """Decision 279: the triangle of the own neighbour nearest under decision 273's comparator
+        (through its own triangle), an exact tie toward +u, then +v."""
+        triangles = {int(self.owner[ty, tx]) for tx, ty in own}
+        if len(triangles) == 1:
+            return triangles.pop()
+
+        def key(t: tuple[int, int]) -> tuple[float, int, int]:
+            k = self.tris[int(self.owner[t[1], t[0]])]
+            d = compare_distance(k.uv, k.normalised, self.width, self.height, (x, y), t)
+            return (float(d), -t[0], t[1])
+
+        nearest = min(own, key=key)
+        return int(self.owner[nearest[1], nearest[0]])
+
     def texels(self) -> list[tuple[int, int, list[tuple[float, bool, tuple[int, int]]], int]]:
         """Every ring texel: (x, y, candidates in tap order, the chain's number of taps)."""
         covered = self.owner >= 0
@@ -476,11 +610,8 @@ class Ring:
                 ]
                 if not own:
                     continue
-                tau = max(int(self.owner[ty, tx]) for tx, ty in own)
-                cands = self.candidates(x, y, own, tau)
-                nearest = min((c[0] for c in cands if not c[1]), default=math.inf)
-                taps = min(4, len(cands)) if cands[0][0] > ZERO_DISTANCE * nearest else 1
-                out.append((x, y, cands, taps))
+                cands, self.undecided[(x, y)] = self.candidates(x, y, own, self.tau(x, y, own))
+                out.append((x, y, cands, tap_count(cands)))
         return out
 
 

@@ -26,18 +26,31 @@
 //   over the coverage's triangles (`IslandTriangles`); the export never does. Covered texels keep
 //   their evaluated values; the others are filled in two steps.
 //   1. The ring, every uncovered texel with a covered 8-neighbour (x wraps, y does not), is an FMA
-//      lerp chain over at most 4 taps (decisions 267, 268, 270, 273, 275):
+//      lerp chain over at most 4 taps (decisions 267, 268, 270, 273, 275, 278, 279):
 //      - the ring point q is the texel centre extrapolated through its own triangle tau, the
-//        triangle of its covered 8-neighbours (the highest-index one when they lie in several:
-//        decision 270's V-gap majority);
-//      - the candidates are the covered 8-neighbours and, across every UV seam edge of tau's island
-//        whichever side of it q lies on, the far window (decision 275): q folded about the edge
-//        into the far triangle, f its point in that triangle's texel space (v down, centres at
-//        + 1/2), and the far island's covered texels in the 3 x 3 block of columns
-//        floor(f_u - 1/2) +- 1 and rows ceil(f_v - 1/2) +- 1; a candidate in tau's planar face is
-//        used at its 3D position, one in a face sharing a 3D edge with that face is rotated about
-//        the edge into its plane, onto the far side, any other one is used at its 3D position; d
-//        is the distance from q;
+//        triangle of its covered 8-neighbours; when they lie in several, the triangle of the one
+//        nearest under decision 273's comparator (below, through that neighbour's own triangle),
+//        an exact tie toward +u, then +v (decision 279);
+//      - the candidates are the covered 8-neighbours and the far windows of the UV seam edges of
+//        every island that owns one of them, whose UV segment lies within 1.8 texels of the texel
+//        centre, whichever side of it q lies on (decisions 275, 279): q folded about the edge into
+//        the far triangle, f its point in that triangle's texel space (v down, centres at + 1/2),
+//        and the far island's covered texels in the 3 x 3 block of columns floor(f_u - 1/2) +- 1
+//        and rows ceil(f_v - 1/2) +- 1. A seam edge (E, J), E its triangle on the near side and J
+//        the far one, gives no far candidates when the float32 dot product of E's and J's unit face
+//        normals (cross(P1 - P0, P2 - P0) over the stored positions, divided by its length) is at
+//        most 0.985 and q lies behind J's plane, n_J . (q - p) < 0 with p a vertex of the edge
+//        (decision 278's gate);
+//      - a candidate in tau's planar face is used at its 3D position, one in a face sharing a 3D
+//        edge with that face is rotated about the edge into its plane, onto the far side, any other
+//        one is used at its 3D position; d is the distance from q. An own neighbour outside tau's
+//        island that no window holds is an own tap at min(|q_k - P|, |q - P|), q_k the texel centre
+//        extrapolated through the neighbour's own triangle and P its raw 3D position; one a window
+//        holds is a far tap (decision 279);
+//      - not identified, and flagged by the measured ring (`RingTexel`): Painter's reach cap, in
+//        (1.7, 1.8] texels; the gate's constant, in (0.98498905, 0.98501915], and whether it
+//        compares with <= or <; a ring point on J's plane; a texel reached across two seam edges
+//        with different gates;
 //      - the taps are the 4 nearest; a nearest at distance 0 is copied;
 //      - the tap order is the exact 1/d share, largest first; equal shares are ordered by decision
 //        273's comparator (each own tap's GPU-sqrt distance, squared by FMA, to q, both
@@ -51,10 +64,10 @@
 //        (3, 255), (2, 63): u = round((s - 1/k) k / (k - 1) L) in [0, L], t = float32(1/k +
 //        (k - 1)/k u / L); the value is m = fma(1 - t, v_n - v_n-1, v_n-1) for the last level, then
 //        m = fma(t, v_l - m, m) outward, rounded through 1 - (1 - m) (decision 206).
-//      Painter's ring is not this at V-gap positions, at pole tap sets, on multi-facet bevels, on
-//      anisotropic islands, in the order of equal seam shares and at the Wand's single-triangle
-//      seam texels whose values no chain over the far window's taps gives (decisions 267, 270,
-//      273, 275).
+//      Painter's ring is not this at pole tap sets, on multi-facet bevels, on anisotropic
+//      islands, in the order of equal seam shares, at far points on an exact texel centre, on
+//      curved shared islands and at the Wand's convex seam texels whose Height no chain over these
+//      taps gives (decisions 267, 270, 273, 275, 277, 279).
 //   2. Every other texel copies its seed found by a jump flood over the covered and ring texels
 //      (decision 197): steps k = max(width, height)/2 down to 1, eight offsets in a fixed order,
 //      the strictly nearest seed kept.
@@ -141,6 +154,13 @@ struct RingTap {
 /// number of distinct triangles among its covered 8-neighbours. `alternatives` holds, for each of
 /// those triangles other than tau (in decreasing index), the candidates in tap order with q
 /// extrapolated through it instead: what a measurement of the V-gap position compares.
+/// The four flags mark where the rule above does not decide the taps: a seam edge whose window
+/// gives the chain a tap, with decision 278's gate or without it, has its faces' normal dot product
+/// inside the open bracket (0.98498905, 0.98501915] with q behind the far plane (`foldBracket`), or
+/// q exactly on the far plane with a dot product of at most 0.98501915 (`onFarPlane`); two such
+/// edges are gated differently (`mixedGates`); a reach cap of 1.7 instead of 1.8 texels changes the
+/// taps (`reachBracket`, decision 279). The taps are still those of the rule above (constant 0.985,
+/// gated per edge, cap 1.8).
 struct RingTexel {
     uint32_t x = 0;
     uint32_t y = 0;
@@ -149,6 +169,10 @@ struct RingTexel {
     std::vector<float> fractions;
     uint32_t triangles = 0;
     std::vector<std::vector<RingTap>> alternatives;
+    bool foldBracket = false;
+    bool onFarPlane = false;
+    bool mixedGates = false;
+    bool reachBracket = false;
 };
 
 /// The ring of the measured `infinite` padding over `coverage` (which needs its triangles), rows

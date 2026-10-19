@@ -697,8 +697,8 @@ def test_padding_on_islands(export_tests: Path, tmp_path: Path) -> None:
     - the rule of padding.h stays behind that refusal, applied only when measured (`process`
       over the sphere's coverage): the covered texels keep their values, and the OpenEXR 32f
       Height equals that padding written independently (`padding_reference`: the ring of
-      decisions 267, 268, 270, 273 and 275 over the sphere's triangles, then the jump flood),
-      value for value, over the coverage of `tools.parity.coverage`;
+      decisions 267, 268, 270, 273, 275, 278 and 279 over the sphere's triangles, then the jump
+      flood), value for value, over the coverage of `tools.parity.coverage`;
     - without a texturing mesh the export fails before writing."""
     from tests.export import padding_reference
     from tools.parity.coverage import coverage, obj_triangles

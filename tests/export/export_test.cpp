@@ -698,7 +698,9 @@ bool SameBits(const std::vector<float>& a, const std::vector<float>& b) {
 }
 
 /// The measured ring (padding.h `MeasuredRing`): per ring texel {"x", "y", "taps", "triangles",
-/// "fractions": [float32 bits], "candidates": [[x, y, distance, far]], "alternatives": [[...]]}.
+/// "fractions": [float32 bits], "candidates": [[x, y, distance, far]], "alternatives": [[...]],
+/// "undecided": the flags of the rule that are set (padding.h `RingTexel`), of "fold-bracket",
+/// "on-far-plane", "mixed-gates", "reach-bracket"}.
 json::Value RingJson(const std::vector<exporter::RingTexel>& ring) {
     const auto taps = [](const std::vector<exporter::RingTap>& list) {
         json::Array out;
@@ -714,13 +716,19 @@ json::Value RingJson(const std::vector<exporter::RingTexel>& ring) {
         for (const float t : r.fractions) fractions.push_back(static_cast<std::int64_t>(std::bit_cast<uint32_t>(t)));
         json::Array alternatives;
         for (const auto& list : r.alternatives) alternatives.push_back(taps(list));
+        json::Array undecided;
+        if (r.foldBracket) undecided.push_back("fold-bracket");
+        if (r.onFarPlane) undecided.push_back("on-far-plane");
+        if (r.mixedGates) undecided.push_back("mixed-gates");
+        if (r.reachBracket) undecided.push_back("reach-bracket");
         out.push_back(json::Object{{"x", static_cast<std::int64_t>(r.x)},
                                    {"y", static_cast<std::int64_t>(r.y)},
                                    {"taps", static_cast<std::int64_t>(r.taps)},
                                    {"triangles", static_cast<std::int64_t>(r.triangles)},
                                    {"fractions", std::move(fractions)},
                                    {"candidates", taps(r.candidates)},
-                                   {"alternatives", std::move(alternatives)}});
+                                   {"alternatives", std::move(alternatives)},
+                                   {"undecided", std::move(undecided)}});
     }
     return out;
 }

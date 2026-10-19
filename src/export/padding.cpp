@@ -60,6 +60,17 @@ constexpr double kZeroDistance = 1e-6;
 constexpr int kFarReach = 1;
 // Two triangles are coplanar (one planar face) within this relative tolerance.
 constexpr double kCoplanar = 1e-6;
+// The seam gate (decision 278): a seam edge whose faces' float32 unit normals meet at a dot product
+// of at most kFoldGate is folded enough. Painter's constant lies in (kFoldLow, kFoldHigh], and
+// whether its comparison is <= or < is not identified (decision 278 open item (a)).
+constexpr float kFoldGate = 0.985f;
+constexpr float kFoldLow = 0.98498905f;
+constexpr float kFoldHigh = 0.98501915f;
+// The seam reach (decision 279): a seam edge feeds the far window when its UV segment lies within
+// kReachCap texels of the ring texel's centre; Painter's cap lies in (kReachLow, kReachCap] (decision
+// 279 open item (c)).
+constexpr double kReachCap = 1.8;
+constexpr double kReachLow = 1.7;
 
 using Vec3 = std::array<double, 3>;
 
@@ -81,6 +92,7 @@ struct KernelTriangle {
     std::array<uint32_t, 3> corner{};               // the (position, UV) pair's identity
     std::array<std::array<float, 2>, 3> uv{};       // the comparator's float32 UV (v up)
     std::array<std::array<float, 3>, 3> normalised{};  // the comparator's mesh-box-normalised position
+    std::array<float, 3> normal{};                  // the seam gate's float32 unit face normal
     uint32_t chart = 0;                             // UV island: triangles joined by shared UV edges
     uint32_t face = 0;                              // planar face: coplanar triangles joined by 3D edges
 };
@@ -232,6 +244,17 @@ RingGeometry::RingGeometry(const Coverage& coverage) : width(coverage.width), he
                             (static_cast<double>(uv[1][1]) - uv[0][1]) * (static_cast<double>(uv[2][0]) - uv[0][0]);
         if (area == 0.0) continue;  // covers nothing, as in the coverage
         KernelTriangle k;
+        // The face normal (decision 278): cross(P1 - P0, P2 - P0) over the stored positions, divided
+        // by its length, each a correctly rounded float32 operation.
+        {
+            const auto& P = source.position;
+            const std::array<float, 3> e1{P[1][0] - P[0][0], P[1][1] - P[0][1], P[1][2] - P[0][2]};
+            const std::array<float, 3> e2{P[2][0] - P[0][0], P[2][1] - P[0][1], P[2][2] - P[0][2]};
+            const std::array<float, 3> n{e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
+                                         e1[0] * e2[1] - e1[1] * e2[0]};
+            const float length = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+            for (size_t c = 0; c < 3; ++c) k.normal[c] = n[c] / length;
+        }
         for (size_t c = 0; c < 3; ++c) {
             const auto& p = source.position[c];
             k.p[c] = {p[0], p[1], p[2]};
@@ -422,49 +445,38 @@ struct Candidate {
     uint32_t triangle = 0;
 };
 
-/// The candidates of ring texel (x, y) with q extrapolated through `tau`, in tap order: nearest
-/// first, equal distances by the comparator (own taps), then toward +u, +v.
-std::vector<Candidate> Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std::vector<size_t>& own,
-                                  uint32_t tau) {
-    const KernelTriangle& T = g.triangles[tau];
-    const std::array<double, 3> l = TexelBary(T, x + 0.5, y + 0.5);
-    const Vec3 q = Point(T, l);
-    std::vector<Candidate> out;
-    const auto add = [&](size_t texel, bool far) {
-        const auto k = static_cast<uint32_t>(g.owner[texel]);
-        const auto tx = static_cast<uint32_t>(texel % g.width);
-        const auto ty = static_cast<uint32_t>(texel / g.width);
-        const Vec3 p = g.Frame(Point(g.triangles[k], TexelBary(g.triangles[k], tx + 0.5, ty + 0.5)), k, tau);
-        out.push_back({{tx, ty, Norm(Sub(q, p)), far}, texel, k});
-    };
-    for (const size_t texel : own) add(texel, false);
-    // Across every UV seam edge of tau's island, whichever side of it q lies on (decision 275): q
-    // folded about the edge into the far triangle J, f its point in J's texel space, and J's
-    // island's covered texels in the 3 x 3 block of columns floor(f_u - 1/2) +- 1 and rows
-    // ceil(f_v - 1/2) +- 1.
-    if (const auto seams = g.seams.find(T.chart); seams != g.seams.end()) {
-        for (const SeamEdge& seam : seams->second) {
-            const KernelTriangle& E = g.triangles[seam.own];
-            const KernelTriangle& J = g.triangles[seam.far];
-            const uint32_t va = E.vertex[(seam.edge + 1) % 3];
-            const uint32_t vb = E.vertex[(seam.edge + 2) % 3];
-            const std::array<double, 2> far = TexelOf(J, Fold(MakeHinge(E, J, va, vb), q));
-            const auto col0 = static_cast<int64_t>(std::floor(far[0] - 0.5));
-            const auto row0 = static_cast<int64_t>(std::ceil(far[1] - 0.5));
-            for (int64_t row = row0 - kFarReach; row <= row0 + kFarReach; ++row) {
-                for (int64_t col = col0 - kFarReach; col <= col0 + kFarReach; ++col) {
-                    if (row < 0 || col < 0 || row >= g.height || col >= g.width) continue;
-                    const size_t texel = static_cast<size_t>(row) * g.width + static_cast<size_t>(col);
-                    const int32_t k = g.owner[texel];
-                    if (k < 0 || g.triangles[static_cast<size_t>(k)].chart != J.chart) continue;
-                    if (std::any_of(out.begin(), out.end(), [&](const Candidate& c) { return c.texel == texel; })) {
-                        continue;
-                    }
-                    add(texel, true);
-                }
-            }
-        }
-    }
+/// Decision 278's seam gate of one seam edge (tau's ring point q, the edge's own triangle E and far
+/// triangle J): `gated` when the faces' float32 unit normals meet at a dot product of at most
+/// kFoldGate and q lies behind J's plane (n_J . (q - p) < 0, p the edge's first vertex).
+/// `bracket` when the dot product lies in (kFoldLow, kFoldHigh] and q lies behind J, `onPlane` when
+/// q lies on J's plane and the dot product is at most kFoldHigh: there the gate is not identified.
+struct SeamGate {
+    bool gated = false;
+    bool bracket = false;
+    bool onPlane = false;
+};
+
+SeamGate GateOf(const KernelTriangle& E, const KernelTriangle& J, const Vec3& q, const Vec3& p) {
+    const float dot = E.normal[0] * J.normal[0] + E.normal[1] * J.normal[1] + E.normal[2] * J.normal[2];
+    const double side = Dot({J.normal[0], J.normal[1], J.normal[2]}, Sub(q, p));
+    return {dot <= kFoldGate && side < 0.0, dot > kFoldLow && dot <= kFoldHigh && side < 0.0,
+            side == 0.0 && dot <= kFoldHigh};
+}
+
+/// The texel-space distance from (px, py) to the UV segment of edge `edge` of `k`.
+double SegmentDistance(const KernelTriangle& k, size_t edge, double px, double py) {
+    const auto& a = k.t[(edge + 1) % 3];
+    const auto& b = k.t[(edge + 2) % 3];
+    const double ex = b[0] - a[0];
+    const double ey = b[1] - a[1];
+    const double length = ex * ex + ey * ey;
+    const double u = length == 0.0 ? 0.0 : std::clamp(((px - a[0]) * ex + (py - a[1]) * ey) / length, 0.0, 1.0);
+    return std::hypot(px - a[0] - u * ex, py - a[1] - u * ey);
+}
+
+/// `out` in tap order: nearest first, equal distances by the comparator (own taps), then toward
+/// +u, +v; the first kKeptCandidates.
+std::vector<Candidate> Ordered(const RingGeometry& g, uint32_t x, uint32_t y, std::vector<Candidate> out) {
     std::sort(out.begin(), out.end(), [](const Candidate& a, const Candidate& b) {
         return a.tap.distance != b.tap.distance ? a.tap.distance < b.tap.distance : a.texel < b.texel;
     });
@@ -489,6 +501,164 @@ std::vector<Candidate> Candidates(const RingGeometry& g, uint32_t x, uint32_t y,
         first = last;
     }
     if (out.size() > kKeptCandidates) out.resize(kKeptCandidates);
+    return out;
+}
+
+/// The chain's number of taps over `candidates` (tap order): the 4 nearest, or 1 when the nearest
+/// lies at distance 0.
+uint32_t TapCount(const std::vector<Candidate>& candidates) {
+    double nearest = std::numeric_limits<double>::infinity();
+    for (const Candidate& c : candidates) {
+        if (!c.tap.far) nearest = std::min(nearest, c.tap.distance);
+    }
+    return candidates[0].tap.distance > kZeroDistance * nearest
+               ? static_cast<uint32_t>(std::min(kMaxTaps, candidates.size()))
+               : 1u;
+}
+
+/// Whether the chains over `a` and `b` (tap order) take the same taps at the same distances.
+bool SameTaps(const std::vector<Candidate>& a, const std::vector<Candidate>& b) {
+    const uint32_t n = TapCount(a);
+    if (TapCount(b) != n) return false;
+    for (uint32_t i = 0; i < n; ++i) {
+        if (a[i].texel != b[i].texel || a[i].tap.far != b[i].tap.far || a[i].tap.distance != b[i].tap.distance) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// A ring texel's candidates in tap order, and where decisions 278's gate and 279's reach do not
+/// decide them.
+struct CandidateSet {
+    std::vector<Candidate> candidates;
+    bool foldBracket = false;
+    bool onFarPlane = false;
+    bool mixedGates = false;
+    bool reachBracket = false;
+};
+
+/// The candidates of ring texel (x, y) with q extrapolated through `tau` (decisions 275, 278, 279).
+CandidateSet Candidates(const RingGeometry& g, uint32_t x, uint32_t y, const std::vector<size_t>& own, uint32_t tau) {
+    const KernelTriangle& T = g.triangles[tau];
+    const std::array<double, 3> l = TexelBary(T, x + 0.5, y + 0.5);
+    const Vec3 q = Point(T, l);
+    // Each texel the ring may read: an own neighbour, or a far texel in the window of some seam edges.
+    struct Entry {
+        size_t texel = 0;
+        uint32_t triangle = 0;
+        double frame = 0.0;    // |q - P|, P in tau's frame: the distance of an own tap of tau's island or a far tap
+        double outside = -1;   // an own neighbour outside tau's island: min(|q_k - P|, |q - P|) (decision 279)
+        bool own = false;
+        std::vector<uint32_t> via;  // the seam edges (indices into `edges`) whose window holds it
+    };
+    std::vector<Entry> pool;
+    const auto entry = [&](size_t texel) -> Entry& {
+        for (Entry& e : pool) {
+            if (e.texel == texel) return e;
+        }
+        Entry e;
+        e.texel = texel;
+        e.triangle = static_cast<uint32_t>(g.owner[texel]);
+        const KernelTriangle& k = g.triangles[e.triangle];
+        const double tx = static_cast<double>(texel % g.width) + 0.5;
+        const double ty = static_cast<double>(texel / g.width) + 0.5;
+        const Vec3 p = Point(k, TexelBary(k, tx, ty));
+        e.frame = Norm(Sub(q, g.Frame(p, e.triangle, tau)));
+        if (k.chart != T.chart) {
+            e.outside = std::min(Norm(Sub(Point(k, TexelBary(k, x + 0.5, y + 0.5)), p)), Norm(Sub(q, p)));
+        }
+        pool.push_back(std::move(e));
+        return pool.back();
+    };
+    for (const size_t texel : own) entry(texel).own = true;
+    // The seam edges of every island that owns an own neighbour whose UV segment lies within
+    // kReachCap texels of the ring texel's centre (decision 279), each through decision 278's gate:
+    // q folded about the edge into the far triangle J, f its point in J's texel space, and J's
+    // island's covered texels in the 3 x 3 block of columns floor(f_u - 1/2) +- 1 and rows
+    // ceil(f_v - 1/2) +- 1 (decision 275).
+    std::vector<uint32_t> charts;
+    for (const size_t texel : own) charts.push_back(g.triangles[static_cast<size_t>(g.owner[texel])].chart);
+    std::sort(charts.begin(), charts.end());
+    charts.erase(std::unique(charts.begin(), charts.end()), charts.end());
+    struct Edge {
+        SeamGate gate;
+        double reach = 0.0;
+    };
+    std::vector<Edge> edges;
+    for (const uint32_t chart : charts) {
+        const auto seams = g.seams.find(chart);
+        if (seams == g.seams.end()) continue;
+        for (const SeamEdge& seam : seams->second) {
+            const KernelTriangle& E = g.triangles[seam.own];
+            const double reach = SegmentDistance(E, seam.edge, x + 0.5, y + 0.5);
+            if (reach > kReachCap) continue;
+            const KernelTriangle& J = g.triangles[seam.far];
+            const uint32_t va = E.vertex[(seam.edge + 1) % 3];
+            const uint32_t vb = E.vertex[(seam.edge + 2) % 3];
+            const auto index = static_cast<uint32_t>(edges.size());
+            edges.push_back({GateOf(E, J, q, E.p[(seam.edge + 1) % 3]), reach});
+            const std::array<double, 2> far = TexelOf(J, Fold(MakeHinge(E, J, va, vb), q));
+            const auto col0 = static_cast<int64_t>(std::floor(far[0] - 0.5));
+            const auto row0 = static_cast<int64_t>(std::ceil(far[1] - 0.5));
+            for (int64_t row = row0 - kFarReach; row <= row0 + kFarReach; ++row) {
+                for (int64_t col = col0 - kFarReach; col <= col0 + kFarReach; ++col) {
+                    if (row < 0 || col < 0 || row >= g.height || col >= g.width) continue;
+                    const size_t texel = static_cast<size_t>(row) * g.width + static_cast<size_t>(col);
+                    const int32_t k = g.owner[texel];
+                    if (k < 0 || g.triangles[static_cast<size_t>(k)].chart != J.chart) continue;
+                    Entry& e = entry(texel);
+                    if (e.via.empty() || e.via.back() != index) e.via.push_back(index);
+                }
+            }
+        }
+    }
+    // The candidates when the edges `open` feed the far windows: an own neighbour of tau's island
+    // is an own tap; any other texel is a far tap when an open edge's window holds it, else an own
+    // neighbour outside tau's island is an own tap at its `outside` distance (decision 279).
+    const auto build = [&](const auto& open) {
+        std::vector<Candidate> out;
+        for (const Entry& e : pool) {
+            const auto tx = static_cast<uint32_t>(e.texel % g.width);
+            const auto ty = static_cast<uint32_t>(e.texel / g.width);
+            const bool inside = e.own && e.outside < 0.0;
+            if (!inside && std::any_of(e.via.begin(), e.via.end(), [&](uint32_t i) { return open(edges[i]); })) {
+                out.push_back({{tx, ty, e.frame, true}, e.texel, e.triangle});
+            } else if (e.own) {
+                out.push_back({{tx, ty, inside ? e.frame : e.outside, false}, e.texel, e.triangle});
+            }
+        }
+        return Ordered(g, x, y, std::move(out));
+    };
+    CandidateSet out{build([](const Edge& e) { return !e.gate.gated; })};
+    if (edges.empty()) return out;
+    // Where the rule is not identified: the reach cap between kReachLow and kReachCap changes the
+    // taps (decision 279 open item (c)); an edge whose window gives the chain a tap, with the gate
+    // or without it, has its fold in the bracket or q on its far plane, or two such edges are gated
+    // differently (decision 278 open items (a) and (b)).
+    out.reachBracket =
+        !SameTaps(out.candidates, build([](const Edge& e) { return !e.gate.gated && e.reach <= kReachLow; }));
+    const std::vector<Candidate> ungated = build([](const Edge&) { return true; });
+    std::vector<uint8_t> reaches(edges.size(), 0);
+    for (const std::vector<Candidate>* list : {&std::as_const(out.candidates), &ungated}) {
+        const uint32_t n = TapCount(*list);
+        for (uint32_t i = 0; i < n; ++i) {
+            if (!(*list)[i].tap.far) continue;
+            for (const Entry& e : pool) {
+                if (e.texel != (*list)[i].texel) continue;
+                for (const uint32_t v : e.via) reaches[v] = 1;
+            }
+        }
+    }
+    bool gated = false;
+    bool open = false;
+    for (size_t i = 0; i < edges.size(); ++i) {
+        if (reaches[i] == 0) continue;
+        out.foldBracket = out.foldBracket || edges[i].gate.bracket;
+        out.onFarPlane = out.onFarPlane || edges[i].gate.onPlane;
+        (edges[i].gate.gated ? gated : open) = true;
+    }
+    out.mixedGates = gated && open;
     return out;
 }
 
@@ -544,27 +714,47 @@ std::vector<RingTexel> RingOf(const Coverage& coverage) {
                 if (coverage.covered[texel] != 0) own.push_back(texel);
             }
             if (own.empty()) continue;
+            const auto rx = static_cast<uint32_t>(x);
+            const auto ry = static_cast<uint32_t>(y);
             std::vector<uint32_t> triangles;
             for (const size_t texel : own) triangles.push_back(static_cast<uint32_t>(g.owner[texel]));
             std::sort(triangles.begin(), triangles.end(), std::greater<>());
             triangles.erase(std::unique(triangles.begin(), triangles.end()), triangles.end());
-            const auto rx = static_cast<uint32_t>(x);
-            const auto ry = static_cast<uint32_t>(y);
+            // tau (decision 279): the triangle of the own neighbour nearest under decision 273's
+            // comparator, through that neighbour's own triangle; a tie goes toward +u, then +v.
+            if (triangles.size() > 1) {
+                size_t best = own[0];
+                float nearest = std::numeric_limits<float>::infinity();
+                for (const size_t texel : own) {
+                    const auto tx = static_cast<uint32_t>(texel % coverage.width);
+                    const auto ty = static_cast<uint32_t>(texel / coverage.width);
+                    const auto k = static_cast<size_t>(g.owner[texel]);
+                    const float d = CompareDistance(g.triangles[k], g.width, g.height, rx, ry, tx, ty);
+                    const auto bx = static_cast<uint32_t>(best % coverage.width);
+                    const auto by = static_cast<uint32_t>(best / coverage.width);
+                    if (d < nearest || (d == nearest && (tx > bx || (tx == bx && ty < by)))) {
+                        nearest = d;
+                        best = texel;
+                    }
+                }
+                const auto tau = static_cast<uint32_t>(g.owner[best]);
+                std::rotate(triangles.begin(), std::find(triangles.begin(), triangles.end(), tau),
+                            std::find(triangles.begin(), triangles.end(), tau) + 1);
+            }
             RingTexel r;
             r.x = rx;
             r.y = ry;
             r.triangles = static_cast<uint32_t>(triangles.size());
-            r.candidates = Taps(Candidates(g, rx, ry, own, triangles[0]));
-            double nearest = std::numeric_limits<double>::infinity();
-            for (const RingTap& tap : r.candidates) {
-                if (!tap.far) nearest = std::min(nearest, tap.distance);
-            }
-            r.taps = r.candidates[0].distance > kZeroDistance * nearest
-                         ? static_cast<uint32_t>(std::min(kMaxTaps, r.candidates.size()))
-                         : 1u;
+            const CandidateSet set = Candidates(g, rx, ry, own, triangles[0]);
+            r.candidates = Taps(set.candidates);
+            r.taps = TapCount(set.candidates);
             r.fractions = Fractions(r.candidates, r.taps);
+            r.foldBracket = set.foldBracket;
+            r.onFarPlane = set.onFarPlane;
+            r.mixedGates = set.mixedGates;
+            r.reachBracket = set.reachBracket;
             for (size_t i = 1; i < triangles.size(); ++i) {
-                r.alternatives.push_back(Taps(Candidates(g, rx, ry, own, triangles[i])));
+                r.alternatives.push_back(Taps(Candidates(g, rx, ry, own, triangles[i]).candidates));
             }
             ring.push_back(std::move(r));
         }
