@@ -1,0 +1,13 @@
+{
+  "id": 269,
+  "slug": "corner-ring-texels-are-a-float32-fma-lerp-chain-with-fixed-fractions-bit-exact-on-every-isotropic-corner-but-the-fractions-are-not-1-d-and-the-poles-stay-open",
+  "title": "Corner ring texels are a float32 FMA lerp chain with fixed fractions, bit-exact on every isotropic corner, but the fractions are not 1/d and the poles stay open",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
