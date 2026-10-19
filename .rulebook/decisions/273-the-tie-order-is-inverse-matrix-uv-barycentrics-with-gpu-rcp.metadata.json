@@ -1,0 +1,13 @@
+{
+  "id": 273,
+  "slug": "273-the-tie-order-is-inverse-matrix-uv-barycentrics-with-gpu-rcp",
+  "title": "The straight-edge tie order is decision 267's comparator with inverse-matrix UV barycentrics, the GPU reciprocal and a reciprocal box scale: exact on all 17,472 sweep ties and on 18,350 of 18,351 older ones",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
