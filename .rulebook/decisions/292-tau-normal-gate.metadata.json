@@ -1,0 +1,13 @@
+{
+  "id": 292,
+  "slug": "292-tau-normal-gate",
+  "title": "The Wand's residue under the full padding model, classified: 457 all-four ring misses (293 Height operand waiting on decision 283's float recording, 132 multi-facet, 20 mixed-gates, 9 near-tie, 3 small, 0 other); decision 278's gate takes the ring texel's own triangle's normal as 278 wrote it, not the seam edge triangle's (Wand all four 5,877 -> 5,897, gutter 3,571,662 -> 3,575,535, 18 probes unchanged); the clamped flood closes the Wand Normal gutter's 28 seed ties",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.26_gate-g1"
+  ],
+  "supersededBy": null
+}
