@@ -1366,6 +1366,61 @@ def test_a_job_running_on_the_worker_still_makes_saving_busy(run: Run) -> None:
     assert result["busy"] is None and result["closed"] is None
 
 
+def test_a_job_that_failed_or_was_cancelled_leaves_the_busy_check_as_it_was(run: Run) -> None:
+    """The job thread's own job (jobs.cpp `running_here`) is reset after a body that throws and
+    after one that is cancelled: in the round after each, a job held at the barrier is the one
+    `save` and `save_as` from the command thread are busy with, it sees the export queued behind
+    it (not itself), and once both ended `save` and `save_as` succeed."""
+    result = ok(
+        run(
+            with_values("""
+        import uzp_job_test
+        create()
+        project.save_as(WORK + "/plane.uzp")
+
+        def handle(job_id):
+            return next(j for j in jobs.list() if j.id == job_id)
+
+        def end(how):
+            held = uzp_job_test.hold("throw" if how == "throw" else "checkpoint")
+            job = handle(held)
+            if how == "cancel":
+                job.cancel()
+            uzp_job_test.release()
+            return [raises(job.wait), job.status]
+
+        def probe(name):
+            held = uzp_job_test.hold()
+            refused = [raises(project.save), raises(project.save_as, WORK + "/" + name + ".uzp")]
+            queued = export.start(__CONFIG__)
+            uzp_job_test.release()
+            seen = handle(held).wait()
+            queued.wait()
+            return {"held": held, "refused": refused, "queued": queued.id, "seen": seen,
+                    "busy": jobs.busy(), "written": os.path.exists(WORK + "/" + name + ".uzp"),
+                    "save": raises(project.save),
+                    "save_as": raises(project.save_as, WORK + "/after-" + name + ".uzp")}
+
+        result = {"thrown": end("throw"), "after_throw": probe("throw"),
+                  "cancelled": end("cancel"), "after_cancel": probe("cancel")}
+        """)
+        )
+    )
+    thrown_error, thrown_status = result["thrown"]
+    assert thrown_status == "failed" and thrown_error == "RuntimeError: the held job failed"
+    cancelled_error, cancelled_status = result["cancelled"]
+    assert cancelled_status == "cancelled" and cancelled_error.endswith(" was cancelled")
+    for after in (result["after_throw"], result["after_cancel"]):
+        held = after["held"]
+        assert after["refused"] == [
+            f"BusyError: {call} is refused while job {held} is running"
+            for call in ("save()", "save_as()")
+        ], after
+        assert after["written"] is False
+        assert after["seen"] == {"busy": after["queued"]}, after
+        assert after["busy"] is None and after["save"] is None and after["save_as"] is None, after
+
+
 # ── B19: the calls on one committed revision share its CPU evaluation (decision 246) ───────────
 
 # The export helpers: the plane's BaseColor (RGB) and Height (L) as 16-bit PNGs, passthrough; and

@@ -6,10 +6,12 @@
 // 1 when it failed, 2 for a usage error, 3 when the interpreter did not start. Installed beside the
 // vendored interpreter and `assets/` (tests/python/conftest.py).
 //
-// Test hook `uzp_job_test` (this runner only, never UzPainter.exe): `hold()` starts a job and
-// returns its id once its body runs, held at a barrier until `release()`; released, the body
-// returns `{busy}`, what `JobEngine::Busy` answers on the job's own thread. A test can so call the
-// API while another job is executing, without relying on timing.
+// Test hook `uzp_job_test` (this runner only, never UzPainter.exe): `hold(end="return")` starts a
+// job and returns its id once its body runs, held at a barrier until `release()`; released, the
+// body returns `{busy}`, what `JobEngine::Busy` answers on the job's own thread (`end="return"`),
+// throws `RuntimeError` (`"throw"`) or stops at a checkpoint, so a cancel asked while it was held
+// cancels it (`"checkpoint"`). A test can so call the API while another job is executing, or after
+// one ended either way, without relying on timing.
 
 #include "python/jobs.h"
 #include "python/run.h"
@@ -21,6 +23,7 @@
 #include <cstdlib>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -34,28 +37,34 @@ bool hold_released = false;
 }  // namespace
 
 PYBIND11_EMBEDDED_MODULE(uzp_job_test, m) {
-    m.def("hold", [] {
-        {
-            std::lock_guard lock(hold_mutex);
-            hold_running = false;
-            hold_released = false;
-        }
-        const auto job = uzp::python::JobEngine::Get().Start("test_hold", [](uzp::python::JobContext&) {
+    m.def(
+        "hold",
+        [](const std::string& end) {
+            if (end != "return" && end != "throw" && end != "checkpoint") throw pybind11::value_error("end: " + end);
             {
-                std::unique_lock lock(hold_mutex);
-                hold_running = true;
-                hold_changed.notify_all();
-                hold_changed.wait(lock, [] { return hold_released; });
+                std::lock_guard lock(hold_mutex);
+                hold_running = false;
+                hold_released = false;
             }
-            const std::optional<std::string> busy = uzp::python::JobEngine::Get().Busy();
-            namespace json = uzp::core::json;
-            return json::Object{{"busy", busy ? json::Value(*busy) : json::Value(nullptr)}};
-        });
-        pybind11::gil_scoped_release release;
-        std::unique_lock lock(hold_mutex);
-        hold_changed.wait(lock, [] { return hold_running; });
-        return job->id();
-    });
+            const auto job = uzp::python::JobEngine::Get().Start("test_hold", [end](uzp::python::JobContext& context) {
+                {
+                    std::unique_lock lock(hold_mutex);
+                    hold_running = true;
+                    hold_changed.notify_all();
+                    hold_changed.wait(lock, [] { return hold_released; });
+                }
+                if (end == "throw") throw std::runtime_error("the held job failed");
+                if (end == "checkpoint") context.Checkpoint();
+                const std::optional<std::string> busy = uzp::python::JobEngine::Get().Busy();
+                namespace json = uzp::core::json;
+                return json::Object{{"busy", busy ? json::Value(*busy) : json::Value(nullptr)}};
+            });
+            pybind11::gil_scoped_release release;
+            std::unique_lock lock(hold_mutex);
+            hold_changed.wait(lock, [] { return hold_running; });
+            return job->id();
+        },
+        pybind11::arg("end") = "return");
     m.def("release", [] {
         std::lock_guard lock(hold_mutex);
         hold_released = true;
