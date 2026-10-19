@@ -700,8 +700,8 @@ bool SameBits(const std::vector<float>& a, const std::vector<float>& b) {
 /// The measured ring (padding.h `MeasuredRing`): per ring texel {"x", "y", "taps", "triangles",
 /// "fractions": [float32 bits], "candidates": [[x, y, distance, far]], "alternatives": [[...]],
 /// "undecided": the flags of the rule that are set (padding.h `RingTexel`), of "fold-bracket",
-/// "on-far-plane", "mixed-gates", "reach-bracket", "own-far-tie", "own-order", "far-fold",
-/// "far-order", "multi-facet"}.
+/// "on-far-plane", "mixed-gates", "reach-bracket", "window-side", "own-far-tie", "own-order",
+/// "far-fold", "far-order", "multi-facet"}.
 json::Value RingJson(const std::vector<exporter::RingTexel>& ring) {
     const auto taps = [](const std::vector<exporter::RingTap>& list) {
         json::Array out;
@@ -722,6 +722,7 @@ json::Value RingJson(const std::vector<exporter::RingTexel>& ring) {
         if (r.onFarPlane) undecided.push_back("on-far-plane");
         if (r.mixedGates) undecided.push_back("mixed-gates");
         if (r.reachBracket) undecided.push_back("reach-bracket");
+        if (r.windowSide) undecided.push_back("window-side");
         if (r.ownFarTie) undecided.push_back("own-far-tie");
         if (r.ownOrder) undecided.push_back("own-order");
         if (r.farFold) undecided.push_back("far-fold");

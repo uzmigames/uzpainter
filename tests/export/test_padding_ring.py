@@ -1,16 +1,19 @@
 """Synthetic cases of the measured `infinite` padding ring (src/export/padding.h; phase1.25 item
-2.7, decisions 267, 268, 270, 273, 275, 278 to 281, 285 and 288), through `uzp-export-tests ring`.
+2.7, decisions 267, 268, 270, 273, 275, 278 to 282, 285, 288 and 290 to 292), through
+`uzp-export-tests ring`.
 
 Each case pads random float32 values over a small OBJ written here, and compares UzPainter's ring
 texels bit for bit with a reference of the rule: on a single island this file's own (the ring
 point extrapolated through the island's affine map, the covered 8-neighbours, the 4 nearest, the
 exact 1/d shares quantised to 10, 8 and 6 bits, the float32 FMA lerp chain and decision 206's
-rounding; equal shares ordered by decision 273's comparator, then decision 280's neighbour
-order); across a UV seam `padding_reference` (the far window of decision 275 in padding.cpp's
-double arithmetic, decision 278's seam gate, decision 279's ring point, neighbours and reach,
-decision 280's far tie order and tap count, decisions 285 and 288's distances, reach and welding),
-and the gutter's clamped jump flood (decision 285). The coverage snaps vertices to 1/256 texel
-(decision 281). No Painter data is read.
+rounding; shares within decision 282's band ordered by decision 273's comparator, then decision
+280's neighbour order); across a UV seam `padding_reference` (the far window of decision 275 in
+padding.cpp's double arithmetic, decision 278's seam gate with tau's normal (decision 292),
+decision 279's ring point, neighbours and reach, decision 280's tap count, decision 282's hinge
+gate and far tie order, decisions 285 and 288's distances, reach and welding, the windows that
+decisions 288 and 290 close, decision 291's window side), and the gutter's clamped jump flood
+(decision 285). The coverage snaps vertices to 1/256 texel (decision 281). No Painter data is
+read.
 """
 
 from __future__ import annotations
@@ -30,11 +33,14 @@ from tests.export.padding_reference import (
     FLOOD,
     NEIGHBOURS,
     OWN_ORDER,
+    REACH_CAP,
     Ring,
     box_normalised,
     chain,
     compare_distance,
     fractions,
+    segment_distance,
+    unfold,
 )
 from tools.parity.feasibility import png
 
@@ -139,7 +145,7 @@ def reference(
     cands.sort(key=lambda c: c[0])
     ordered: list[tuple[float, bool, tuple[int, int]]] = []
     while cands:
-        group = [c for c in cands if c[0] <= cands[0][0] * (1 + 1e-9)]
+        group = [c for c in cands if c[0] <= cands[0][0] * (1 + 1e-5)]
         cands = cands[len(group) :]
         ordered += sorted(group, key=key) if len(group) > 1 else group
     taps = ordered[:1] if ordered[0][0] <= 1e-6 * min(c[0] for c in ordered) else ordered[:4]
@@ -898,3 +904,152 @@ def test_coverage_snaps_vertices_to_a_256th_of_a_texel(export_tests: Path, tmp_p
     ring_texels = {(r["x"], r["y"]) for r in ring}
     assert {(9, y) for y in range(12, 16)} <= ring_texels
     assert {(8, y) for y in range(20, 24)} <= ring_texels
+
+
+def _own(reference: Ring, x: int, y: int) -> list[tuple[int, int]]:
+    """Ring texel (x, y)'s covered 8-neighbours (x wraps)."""
+    covered = reference.owner >= 0
+    return [
+        ((x + dx) % 32, y + dy)
+        for dy, dx in NEIGHBOURS
+        if 0 <= y + dy < 32 and covered[y + dy, (x + dx) % 32]
+    ]
+
+
+def test_shallow_hinge_is_not_unfolded(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 282: a far tap across a hinge is rotated into tau's plane only when the two faces'
+    float32 unit normals meet at a dot product of at most 0.985. Islands A and B of `_folded_pair`,
+    folded convex by 9.9 degrees (dot 0.98511) and by 10.0 degrees (dot 0.98481): on the ring
+    texels beyond A's seam line, each far chain tap is at its raw 3D distance |q - P| at 9.9
+    degrees and at its unfolded one at 10.0 degrees, which differ. Against `padding_reference` bit
+    for bit, candidates and flags included."""
+    for label, angle, unfolded in (("m9.9", -9.9, False), ("m10.0", -10.0, True)):
+        name = f"hinge-{label}"
+        values, out, ring = run(export_tests, tmp_path, _folded_pair(angle), name, 282)
+        _matches_reference(tmp_path, name, values, out, ring)
+        reference = Ring(tmp_path / f"{name}.obj", "m", 32, 32)
+        assert reference.folded(0, 2) == unfolded, label
+        checked = 0
+        for r in ring:
+            x, y = r["x"], r["y"]
+            if x != 8:
+                continue
+            T = reference.tris[reference.tau(x, y, _own(reference, x, y))]
+            q = T.point(T.bary(x + 0.5, y + 0.5))
+            for tx, ty, d, far in r["candidates"][: r["taps"]]:
+                if not far:
+                    continue
+                K = reference.tris[int(reference.owner[ty, tx])]
+                p = K.point(K.bary(tx + 0.5, ty + 0.5))
+                h = reference._hinge(T.face, K.face)
+                assert h is not None
+                raw = float(np.linalg.norm(np.subtract(q, p)))
+                rotated = float(np.linalg.norm(np.subtract(q, unfold(h[1], p))))
+                assert abs(raw - rotated) > 1e-6 * raw, (label, x, y, tx, ty)
+                assert math.isclose(d, rotated if unfolded else raw, rel_tol=1e-12), (label, x, y)
+                checked += 1
+        assert checked > 0, label
+
+
+def _flat_pair(a_u: float, b_dv: float) -> Mesh:
+    """Islands A (4 x 4 texels from texel column `a_u`, rows 12 to 15, on the plane y = 0 at 3D
+    x in [0, 1]) and B (4 x 4 texels from column 16.25, `b_dv` texel lower, flat beyond A's 3D
+    edge x = 0, at x in [-1, 0]): a UV seam between A's left edge and B's right edge."""
+    s = 1 / 32
+    a = (
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 0.0, 1.0), (0.0, 0.0, 1.0)],
+        [(a_u * s, 16 * s), ((a_u + 4) * s, 16 * s), ((a_u + 4) * s, 20 * s), (a_u * s, 20 * s)],
+    )
+    b0, b1 = (16 - b_dv) * s, (20 - b_dv) * s
+    b = (
+        [(-1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), (-1.0, 0.0, 1.0)],
+        [(16.25 * s, b0), (20.25 * s, b0), (20.25 * s, b1), (16.25 * s, b1)],
+    )
+    return Mesh([a, b], 32)
+
+
+def test_seam_edge_on_the_tile_border_opens_no_window(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 290: a seam edge whose two UV ends both lie on u = 0 opens no window. With A's seam
+    edge on the tile's left border, no ring texel of A takes a far tap of B, not even (0, 11)
+    above the edge's upper end, 0.71 texel from it, whose ring point folds across the edge to
+    within B's window, while B's own seam edge, inside the tile, still opens A's window to B's
+    ring texels. With A one texel to the right, the same ring texel (1, 11) and the ring texels
+    of column 0 take B's far taps. Against `padding_reference` bit for bit, candidates and flags
+    included."""
+    for name, a_u in (("border", 0.0), ("inside", 1.0)):
+        values, out, ring = run(export_tests, tmp_path, _flat_pair(a_u, 0.3), name, 290)
+        _matches_reference(tmp_path, name, values, out, ring)
+        of_a = {
+            (r["x"], r["y"]): r for r in ring if all(c[0] < 8 for c in r["candidates"] if not c[3])
+        }
+        assert (int(a_u), 11) in of_a, name
+        reaching = {k for k, r in of_a.items() if any(c[3] for c in r["candidates"])}
+        if name == "border":
+            assert reaching == set()
+        else:
+            assert {(1, 11)} | {(0, y) for y in range(11, 16)} <= reaching
+        b_side = [r for r in ring if r["x"] == 20 and 12 <= r["y"] <= 15]
+        assert len(b_side) == 4 and all(any(c[3] for c in r["candidates"]) for r in b_side), name
+
+
+def _pole_fan(segments: int) -> Triangles:
+    """A pyramid's apex fan of `segments` quarter turns over a band of quads, one UV island laid
+    out as a strip: each apex triangle has its own apex UV (V-gaps between them, joined in UV
+    through the band below, as on a sphere's pole), so neighbouring apex triangles share their
+    spoke in 3D across a UV seam inside the island."""
+    w, rim, low, top = 0.2, 0.6, 0.35, 0.85
+    tris: list[Quad] = []
+    for i in range(segments):
+        a, b = math.radians(90 * i), math.radians(90 * (i + 1))
+        r0, r1 = (math.cos(a), 0.5, math.sin(a)), (math.cos(b), 0.5, math.sin(b))
+        l0, l1 = (math.cos(a), 0.0, math.sin(a)), (math.cos(b), 0.0, math.sin(b))
+        u0, u1 = 0.1 + w * i, 0.1 + w * (i + 1)
+        tris.append(([l0, l1, r1], [(u0, low), (u1, low), (u1, rim)]))
+        tris.append(([l0, r1, r0], [(u0, low), (u1, rim), (u0, rim)]))
+        tris.append(([r0, r1, (0.0, 1.0, 0.0)], [(u0, rim), (u1, rim), ((u0 + u1) / 2, top)]))
+    return Triangles(tris, 32)
+
+
+def test_seam_edge_folding_back_into_tau_opens_no_window(
+    export_tests: Path, tmp_path: Path
+) -> None:
+    """Decision 288: a seam edge whose far triangle is the ring texel's own triangle tau opens no
+    window. In the V-gaps of `_pole_fan`, ring texels reach the neighbouring apex triangle's
+    spoke, whose far triangle is tau, and take no far tap in tau. Against `padding_reference` bit
+    for bit, candidates and flags included."""
+    values, out, ring = run(export_tests, tmp_path, _pole_fan(3), "pole-fan", 288)
+    _matches_reference(tmp_path, "pole-fan", values, out, ring)
+    reference = Ring(tmp_path / "pole-fan.obj", "m", 32, 32)
+    assert len({t.chart for t in reference.tris}) == 1
+    reached = 0
+    for r in ring:
+        x, y = r["x"], r["y"]
+        tau = reference.tau(x, y, _own(reference, x, y))
+        tris = reference.tris
+        if any(
+            j == tau
+            and segment_distance(tris[e].t[(k + 1) % 3], tris[e].t[(k + 2) % 3], x + 0.5, y + 0.5)
+            <= REACH_CAP
+            for e, k, j in reference.seams.get(tris[tau].chart, [])
+        ):
+            reached += 1
+            owners = {int(reference.owner[c[1], c[0]]) for c in r["candidates"] if c[3]}
+            assert tau not in owners, (x, y)
+    assert reached > 0
+
+
+def test_far_point_on_a_window_boundary_is_flagged(export_tests: Path, tmp_path: Path) -> None:
+    """Decision 291: a ring texel whose far point f lies within 1e-4 texel of a window boundary
+    (f_v - 1/2 integral: B's rows aligned with A's), where the window on the other side gives
+    another chain, is flagged "window-side"; its taps stay those of the window based at
+    (floor(f_u - 1/2), ceil(f_v - 1/2)). With B 0.3 texel lower no far point is near a boundary,
+    and none is flagged. Against `padding_reference` bit for bit, candidates and flags included."""
+    flagged: dict[str, set[tuple[int, int]]] = {}
+    for name, dv in (("aligned", 0.0), ("offset", 0.3)):
+        values, out, ring = run(export_tests, tmp_path, _flat_pair(1.0, dv), name, 291)
+        _matches_reference(tmp_path, name, values, out, ring)
+        flagged[name] = {(r["x"], r["y"]) for r in ring if "window-side" in r["undecided"]}
+        far = {(r["x"], r["y"]) for r in ring if any(c[3] for c in r["candidates"])}
+        assert flagged[name] <= far, name
+    assert flagged["offset"] == set()
+    assert {(0, y) for y in range(13, 16)} <= flagged["aligned"]
