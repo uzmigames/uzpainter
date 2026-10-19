@@ -61,3 +61,8 @@
   - `test_typed_tools.py::test_an_export_release_gap_is_a_capability_gap` + `tests/parity/tier1/test_mcp_round.py`: 2 passed, exit 0.
   - Earlier, before the worker fix: the stand-in round failed on the RuntimeError mapping, which is what led to the fix.
   - `python -m tools.sources.check`: ok. ruff, `ruff format --check` and mypy on the touched files: clean. `zig build painter` (-Werror on own sources): exit 0.
+
+## 8. Notes (decision 300; 2026-10-19, branch `wt/res-qual`)
+- Recovery step (SUP-008): Painter's Export resource is qualified first on 13 disposable PROJECT bitmaps (`resource-export-qual`, run pending in the `rec-batch` window). Nothing is taken from the sash's `.spp` before that.
+- If the verdict is `EXACT`, or `PARTIAL` with the pilot forms qualified, a separate request exports the 19 masks, `T_sash`, Normal and AO from a hash-checked private copy of the stored `.spp`. A file is accepted only if its SHA-1 equals the version a sash migration readback records for its binding.
+- The low OBJ, MTL and both arguments files are not resources and stay lost on every outcome. What item 6 cannot recover goes to the pinned current round, `phase2/tier1/sash-v5-current`: the unchanged scripts, every input stored first, compared with a sash migration golden. Using it as the changed baseline (2.8, 4.1) waits on the owner's own yes.

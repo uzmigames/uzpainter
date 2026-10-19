@@ -18,6 +18,8 @@ r"""Command line of the Painter oracle recorder (operator guide: `parity/RECORDE
     python -m tools.parity.recorder refresh [--launch]
     python -m tools.parity.recorder stability-study <manifest or dir>... [--launch] [--admit]
     python -m tools.parity.recorder canary [--launch]
+    python -m tools.parity.recorder resource-export-qual --launch [--operator console|ui]
+    python -m tools.parity.recorder resource-export-qual-analyse <run directory> [--report <md>]
 
 Every recording command reads the running Painter build first: a build that is neither the
 current nor the candidate envelope's starts the envelope refresh (decision 037; `refresh`, exit
@@ -42,6 +44,12 @@ SHA-256 (`script_run.py`, decision 099); its inputs are hash-checked under `--as
 Painter is touched, and `--launch` starts (and finally stops) Painter itself. `record-migration`
 records a Tier 1 migration golden the same way: a UzmiGames project saved by Painter, opened from a
 hash-checked private copy and exported (`migration.py`, decision 194).
+
+`resource-export-qual` runs decision 300's qualification of the Assets window's Export resource
+on disposable project bitmaps (`resource_qualification.py`); it needs `--launch`, because its
+condition B runs in a freshly started Painter. `resource-export-qual-analyse` re-runs the
+analysis of a run without Painter and, with `--report`, writes the public report (identifiers,
+statuses and hashes only).
 
 Painter must already run with `--enable-remote-scripting` and no project open (or `--launch`).
 Records go to `UZP_ORACLE_INBOX` (default `%LOCALAPPDATA%\UzPainter\oracle-inbox`), working files to
@@ -142,6 +150,14 @@ def parse(argv: Sequence[str]) -> argparse.Namespace:
         parser_.add_argument("manifest", type=Path)
         parser_.add_argument("--assets-root", type=Path, required=True, help="the Assets3D root")
         add_painter_options(parser_)
+    qualification = commands.add_parser(
+        "resource-export-qual", help="qualify Export resource on project bitmaps (300)"
+    )
+    qualification.add_argument("--operator", choices=["console", "ui"], default="console")
+    add_painter_options(qualification)
+    analysis = commands.add_parser("resource-export-qual-analyse", help="re-run its analysis")
+    analysis.add_argument("directory", type=Path)
+    analysis.add_argument("--report", type=Path, help="write the public report there")
     return parser.parse_args(argv)
 
 
@@ -292,6 +308,59 @@ def run_record_script(args: argparse.Namespace, launcher: Launcher | None = None
     return 0
 
 
+def run_resource_qualification(args: argparse.Namespace, launcher: Launcher | None = None) -> int:
+    """Decision 300: record the qualification (Painter started, restarted for condition B and
+    stopped by the launcher), or analyse a recorded run."""
+    from tools.parity.recorder import resource_qualification as rq
+
+    try:
+        if args.command == "resource-export-qual-analyse":
+            analysis = rq.analyse(args.directory)
+            (args.directory / "analysis.json").write_text(
+                json.dumps(analysis, indent=1), encoding="utf-8"
+            )
+            if args.report:
+                evidence = json.loads((args.directory / "evidence.json").read_text("utf-8"))
+                args.report.write_text(rq.report_markdown(analysis, evidence), encoding="utf-8")
+            print(f"verdict: {analysis['outcome']['verdict']} ({analysis['outcome']['meaning']})")
+            return 0
+        if not args.launch:
+            print("refused: condition B needs a freshly started Painter: use --launch")
+            return 2
+        painter: Launcher = launcher or PainterLauncher(
+            args.painter_exe or default_painter_exe(), host=args.host, port=args.port
+        )
+        operator = make_operator(args.operator)
+        current = [rq.ResourceSession(HttpTransport(args.host, args.port))]
+
+        def restart(old: PainterSession) -> PainterSession:
+            painter.stop(old)
+            painter.start()
+            from tools.parity.recorder.painter_ui import PainterUi, UiOperator
+
+            if isinstance(operator, UiOperator):  # it binds to the new process's main window
+                operator.ui = PainterUi()
+            fresh = rq.ResourceSession(HttpTransport(args.host, args.port))
+            fresh.connect()
+            current[0] = fresh
+            return fresh
+
+        painter.start()
+        try:
+            run = rq.record_qualification(current[0], operator, work_root(), restart)
+        finally:
+            painter.stop(current[0])
+    except UnseenBuild as error:
+        return refresh_after_unseen_build(args, error)
+    except RecorderError as error:
+        print(f"refused: {error}", file=sys.stderr)
+        return 2
+    verdict = json.loads((run / "analysis.json").read_text(encoding="utf-8"))["outcome"]
+    print(f"recorded: {run}")
+    print(f"verdict: {verdict['verdict']} ({verdict['meaning']})")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse(sys.argv[1:] if argv is None else argv)
     if args.command == "check":
@@ -320,6 +389,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_iray(args)
     if args.command in ("record-script", "record-migration"):
         return run_record_script(args)
+    if args.command in ("resource-export-qual", "resource-export-qual-analyse"):
+        return run_resource_qualification(args)
     run: Path | None
     try:
         session = PainterSession(HttpTransport(args.host, args.port))

@@ -38,6 +38,7 @@ need them.
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from collections.abc import Callable
@@ -92,6 +93,12 @@ LIST_ROW_NAME_X = 40
 LAYER_TARGET = re.compile(
     r"^Blending mode of layer '(?P<layer>[^']+)' in channel '(?P<channel>[^']+)'$"
 )
+# The Assets window (decision 300): the dock's title, the item types that can show a resource,
+# and the label of the Export resource menu item (`&` mnemonics and a trailing ellipsis removed).
+ASSETS_TITLE = "Assets"
+ASSET_ITEM_TYPES = ("ListItem", "DataItem", "TreeItem")
+EXPORT_RESOURCE_ITEM = re.compile(r"^export\b.*\bresources?$", re.IGNORECASE)
+QT_FILE_DIALOG_CLASS = "QFileDialog"
 TIME_UNITS = {"s": "Seconds", "min": "Minutes", "h": "Hours"}
 VIEWPORT_TRANSFORM = "Viewport display transform"
 TRANSFORM_OVERLAY = (320, 60)  # pixels at the viewport's top-right corner holding the selector
@@ -262,6 +269,7 @@ class PainterUi:
         spec = self.desktop.window(class_name=MAIN_WINDOW_CLASS)
         self.button_spec = spec
         self.window = spec.wrapper_object()
+        self.window_surveyed = False
 
     def front(self) -> None:
         """Bring Painter to the foreground before a mouse or keyboard action, so the action
@@ -705,9 +713,10 @@ class PainterUi:
     def panel_image(self, panel: str, path: Path) -> Path:
         if panel == VIEWPORT_TRANSFORM:
             return self.display_transform_image(path)
-        if panel in TAB_DOCKS:
+        if panel in TAB_DOCKS or panel == ASSETS_TITLE:
             image, (left, top) = self.print_window(self.window.handle)
-            box = self.tab_dock(panel).rectangle()
+            dock = self.assets_dock() if panel == ASSETS_TITLE else self.tab_dock(panel)
+            box = dock.rectangle()
             crop = image.crop((box.left - left, box.top - top, box.right - left, box.bottom - top))
             path.parent.mkdir(parents=True, exist_ok=True)
             crop.save(path)
@@ -870,6 +879,196 @@ class PainterUi:
         wait_file(target, self.timeout_s)
         return before
 
+    # -- Assets window: Export resource (decision 300) ------------------------------------------
+
+    @staticmethod
+    def survey(root: Any) -> list[dict[str, Any]]:
+        """Every element under `root` as UI Automation shows it (private evidence, read only):
+        the record a re-run's locators are fixed from when a step cannot be completed."""
+        rows = []
+        for element in [root, *root.descendants()]:
+            info = element.element_info
+            box = element.rectangle()
+            rows.append(
+                {
+                    "control_type": info.control_type,
+                    "automation_id": info.automation_id,
+                    "class_name": info.class_name,
+                    "text": str(element.window_text())[:120],
+                    "enabled": bool(element.is_enabled()),
+                    "box": [box.left, box.top, box.right, box.bottom],
+                }
+            )
+        return rows
+
+    def assets_dock(self) -> Any:
+        """The Assets window docked in the main window, its tab brought forward when another tab
+        hides it (UI Automation tab selection: navigation only)."""
+        for _ in range(3):
+            docks = [
+                c for c in self.window.children() if str(c.window_text()).strip() == ASSETS_TITLE
+            ]
+            if len(docks) == 1 and self.on_screen(docks[0]):
+                return docks[0]
+            tabs = [
+                tab
+                for bar in self.window.children()
+                if bar.element_info.class_name == "QMainWindowTabBar"
+                for tab in bar.children()
+                if str(tab.window_text()).strip() == ASSETS_TITLE
+            ]
+            if len(tabs) != 1:
+                raise RecorderError(
+                    f"Painter's Assets window: {len(docks)} docks and {len(tabs)} tabs found"
+                )
+            tabs[0].iface_selection_item.Select()
+            time.sleep(1.0)
+        raise RecorderError("Painter's Assets window could not be shown")
+
+    def asset_items(self, dock: Any, gui_name: str) -> list[Any]:
+        return [
+            e
+            for e in dock.descendants()
+            if e.element_info.control_type in ASSET_ITEM_TYPES
+            and str(e.window_text()).strip() == gui_name
+            and self.on_screen(e)
+        ]
+
+    def asset_item(self, gui_name: str, evidence: dict[str, Any]) -> Any:
+        """The one visible item showing `gui_name` (the recorder highlighted it through the
+        documented `Resource.show_in_ui`); when none is visible, the name is typed into the
+        window's one search field (a filter of the view, no setting) and the items read again."""
+        dock = self.assets_dock()
+        items = self.asset_items(dock, gui_name)
+        if not items:
+            fields = [
+                e
+                for e in dock.descendants()
+                if e.element_info.control_type == "Edit" and self.on_screen(e)
+            ]
+            evidence["search_fields"] = len(fields)
+            if len(fields) == 1:
+                self.front()
+                type_into(fields[0], gui_name)
+                time.sleep(1.0)
+                evidence["searched"] = gui_name
+                items = self.asset_items(self.assets_dock(), gui_name)
+        if len(items) != 1:
+            evidence["assets_survey"] = self.survey(self.assets_dock())
+            raise RecorderError(
+                f"the Assets window shows {len(items)} visible items named {gui_name!r}"
+            )
+        return items[0]
+
+    def context_menu(self, element: Any) -> Any:
+        """A real right click at the element's centre (the point checked to belong to Painter's
+        window, as for every click), and the menu it opened."""
+        import win32gui
+
+        box = element.rectangle()
+        point = ((box.left + box.right) // 2, (box.top + box.bottom) // 2)
+        self.front()
+        if win32gui.GetAncestor(win32gui.WindowFromPoint(point), 2) != self.window.handle:
+            raise RecorderError(
+                f"the point {point} of the Assets window is covered by another window; "
+                "nothing was clicked"
+            )
+        element.click_input(button="right")
+        return self.menu()
+
+    def file_dialog(self) -> Any | None:
+        """The dialog the menu item opened, or None when none opened within the timeout."""
+        deadline = time.monotonic() + self.timeout_s
+        while time.monotonic() < deadline:
+            dialogs = [
+                c
+                for c in self.window.children()
+                if c.element_info.class_name in (DIALOG_CLASS, QT_FILE_DIALOG_CLASS)
+            ]
+            if dialogs:
+                return dialogs[0]
+            time.sleep(0.25)
+        return None
+
+    def export_resource(self, gui_name: str, target: Path, evidence: dict[str, Any]) -> str:
+        """Export resource on the highlighted project resource into the folder `target`; returns
+        the label of the menu item used, or `absent` or `disabled` when no enabled Export
+        resource item is offered (an observation: nothing else is clicked).
+
+        `evidence` receives what happened, also when the step is refused: the menu's items, the
+        dialog's kind and title and survey, the file name it proposed and its file types, and
+        the text of any message box after it. A native folder picker is given `target`; a
+        native save dialog is given `target` joined with the name it proposed. A Qt
+        (non-native) dialog is cancelled and the step refused, with the dialog's survey kept."""
+        evidence.update(resource=gui_name, target=str(target))
+        try:
+            item = self.asset_item(gui_name, evidence)
+        except RecorderError:
+            if "assets_survey" not in evidence and not self.window_surveyed:
+                self.window_surveyed = True  # once per process: the whole window is large
+                evidence["window_survey"] = self.survey(self.window)
+            raise
+        menu = self.context_menu(item)
+        entries = menu.descendants(control_type="MenuItem")
+        evidence["menu"] = [
+            {"text": str(e.window_text()), "enabled": bool(e.is_enabled())} for e in entries
+        ]
+        matches = [e for e in entries if EXPORT_RESOURCE_ITEM.match(menu_label(e.window_text()))]
+        if len(matches) > 1:
+            menu.type_keys("{ESC}")
+            raise RecorderError(f"the menu offers {len(matches)} Export resource items")
+        if not matches or not matches[0].is_enabled():
+            menu.type_keys("{ESC}")
+            evidence["label"] = "absent" if not matches else "disabled"
+            return str(evidence["label"])
+        evidence["label"] = str(matches[0].window_text())
+        self.click(matches[0], owner=menu.handle)
+        dialog = self.file_dialog()
+        if dialog is None:
+            evidence["dialog"] = None
+            return str(evidence["label"])
+        evidence["dialog"] = {
+            "class": dialog.element_info.class_name,
+            "title": str(dialog.window_text()),
+            "survey": self.survey(dialog),
+        }
+        if dialog.element_info.class_name != DIALOG_CLASS:
+            dialog.type_keys("{ESC}")
+            raise RecorderError("Export resource opened a non-native dialog; it was cancelled")
+        elements = self.dialog_elements(dialog)
+        saving = any(e.element_info.automation_id == "FileTypeControlHost" for e in elements)
+        evidence["dialog"]["kind"] = "save" if saving else "folder"
+        edits = [e for e in elements if e.element_info.control_type == "Edit"]
+        named = [e for e in edits if e.element_info.automation_id in ("1001", "1152")]
+        field = named[0] if named else edits[0] if len(edits) == 1 else None
+        if field is None:
+            self.cancel(dialog)
+            raise RecorderError(f"the {evidence['dialog']['kind']} dialog has no single name field")
+        if saving:
+            evidence["dialog"]["file_types"] = self.file_types(dialog)
+            proposed = str(field.iface_value.CurrentValue)
+            evidence["dialog"]["proposed"] = proposed
+            field.iface_value.SetValue(str(target / proposed))
+        else:
+            field.iface_value.SetValue(str(target))
+        self.dialog_button(dialog, "1").invoke()
+        time.sleep(1.0)
+        messages = [c for c in self.window.children() if c.element_info.class_name == DIALOG_CLASS]
+        if messages:
+            evidence["message"] = [
+                str(e.window_text())
+                for e in self.dialog_elements(messages[0])
+                if e.element_info.control_type == "Text"
+            ]
+            messages[0].type_keys("{ESC}")
+        self.wait_dialog_closed()
+        return str(evidence["label"])
+
+
+def menu_label(text: str) -> str:
+    """A menu item's label without its `&` mnemonics and trailing ellipsis."""
+    return str(text).replace("&", "").rstrip(".… ").strip()
+
 
 def type_into(element: Any, text: str) -> None:
     """Replace a field's text and commit it with Enter. A double click gives the field the
@@ -905,6 +1104,12 @@ CHANGE_PROMPT = re.compile(
     r"(?: (?P<unit>s|min|h|px))?, then press Enter\.$"
 )
 WAIT_TELL = re.compile(r"(Wait until Status reads Done\.|^Let Iray converge)")
+# The Export resource prompt of `resource_qualification.py` (decision 300).
+RESOURCE_EXPORT_PROMPT = re.compile(
+    r"^Export resource: in the Assets window, export the highlighted project resource "
+    r"'(?P<gui_name>[^']+)' with its Export resource menu item into the folder (?P<target>.+)\. "
+    r"Enter the menu item's label as shown, or 'absent' or 'disabled':$"
+)
 
 
 @dataclass
@@ -954,6 +1159,9 @@ class UiOperator:
         match = IMAGE_PROMPT.match(question)
         if match:
             return str(self.panel_image(match["panel"]))
+        match = RESOURCE_EXPORT_PROMPT.match(question)
+        if match:
+            return self.export_resource(match["gui_name"], Path(match["target"]))
         if VIEWPORT_PROMPT.match(question):
             path = self.images / f"viewport-{len(self.log):03d}.png"
             size = self.ui.viewport_image(path)
@@ -970,6 +1178,22 @@ class UiOperator:
         if unit and shown.endswith(" " + TIME_UNITS.get(unit, unit)):
             shown = shown.rsplit(" ", 1)[0]
         return shown
+
+    def export_resource(self, gui_name: str, target: Path) -> str:
+        """Export resource through the Assets window; the step's evidence (menu, dialog and
+        surveys) is written next to the panel images, also when the step is refused."""
+        evidence: dict[str, Any] = {}
+        path = self.images / f"export-{len(self.log):03d}.json"
+        try:
+            label = self.ui.export_resource(gui_name, target, evidence)
+        except RecorderError as error:
+            evidence["refused"] = str(error)
+            raise
+        finally:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(evidence, indent=1), encoding="utf-8")
+            self.note("export_resource", resource=gui_name, file=path.name)
+        return label
 
     def panel_image(self, panel: str) -> Path:
         name = re.sub(r"[^a-z0-9]+", "-", panel.lower())

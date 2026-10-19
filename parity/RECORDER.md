@@ -307,6 +307,31 @@ Code: `tools/parity/recorder/migration.py` (host) and `migration_readback` in `p
 
   Until the nine masks that only the Painter project holds are back at `_tmp/claude/<name>.png`, the command refuses and lists them.
 
+## 9c. Export resource qualification (decision 300)
+
+Code: `tools/parity/recorder/resource_qualification.py` (host), `painter_resources.py` (inside Painter, loaded like `painter_scripts.py`), and `PainterUi.export_resource` in `painter_ui.py`. Tests: `tests/parity/recorder/test_resource_qualification.py`.
+
+The documented APIs cannot read back a project resource's original bytes. This run qualifies the Assets window's Export resource on PROJECT resources, and only on bitmaps UzmiGames authored for it. It does that before the operation may ever be used on a pilot.
+
+- **The bitmaps.** They are the 13 `CASES`, pinned by SHA-256, SHA-1 and size. Twelve are committed in `parity/fixtures/resource-export/`. The 2048 px mask is generated at run time.
+  - `python -m tools.parity.recorder.resource_qualification fixtures` checks the pins.
+- **The command.** `python -m tools.parity.recorder resource-export-qual --launch --operator ui`, under OCIO with Painter's substance configuration. `--launch` is required, because Painter is restarted between the conditions.
+  1. **Setup.** The recorder creates a throwaway project on the plane mesh. It imports each case with usage TEXTURE, the name `uzp_rq_<case>_<SHA-1[:6]>` and the group `uzp_rq300`. It binds each case as BaseColor, a layer mask's fill, or the Normal or AO mesh map, then saves.
+  2. **Condition A.** Per case:
+     - `Resource.show_in_ui`, then an Assets panel image;
+     - a fence, then the operator's Export resource into a fresh folder.
+  3. **Between the conditions.** The recorder closes the project, deletes the staged sources, restarts Painter, copies the project to a new folder and reopens the copy. `list_project_resources` must list every case again.
+  4. **Condition B.** The same exports again.
+- **The UI operator.**
+  - It right-clicks the one visible Assets item that shows the resource's name. If none shows, it first filters the view with the window's search field.
+  - It clicks the one enabled item labelled Export resource. It answers `absent` or `disabled` otherwise.
+  - It gives a native folder picker the target folder, or a native save dialog the folder joined with the name it proposed. A Qt dialog is cancelled and refused.
+  - The menu, the dialog and the UI Automation surveys go to `export-<n>.json` next to the panel images.
+- **Evidence and verdict.** The evidence stays private: `UZP_ORACLE_WORK\resource-export-qual\<run>\evidence.json`, with the exports.
+  - **Exact.** A case is exact when all of these hold: one file is written after the fence, not a link; its SHA-256, size and SHA-1 equal the original's; its SHA-1 equals the version shown; the location is PROJECT; the version is stable across A and B; and B ran in another process. The measured fields always name what differs.
+  - **Verdicts.** `EXACT`, `PARTIAL` (only the exact cases' forms qualify), `RE_ENCODED`, `SOURCE_DEPENDENT`, `UNAVAILABLE` and `INCONCLUSIVE`.
+  - **The public report.** `python -m tools.parity.recorder resource-export-qual-analyse <run> --report parity/reports/phase2/resource-export-qualification.md` re-runs the analysis without Painter and writes it. The report holds identifiers, statuses and hashes only.
+
 ## 10. Oracle envelope: rolling refresh, stability study, canary
 
 Task `phase0.9_oracle-envelope`, decisions 034 (envelope, study, canary) and 037 (rolling oracle). Code: `tools/parity/envelope/` and `tools/parity/recorder/{environment,launcher}.py`; tests: `tests/parity/test_oracle_envelope.py` (fake Painter only); report: `parity/reports/phase0/oracle-envelope.md` (generated, numbers and hashes only).

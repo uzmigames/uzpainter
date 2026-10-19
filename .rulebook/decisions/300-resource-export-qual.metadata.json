@@ -1,0 +1,13 @@
+{
+  "id": 300,
+  "slug": "300-resource-export-qual",
+  "title": "Qualify the Assets window's Export resource on 13 disposable PROJECT bitmaps (PNG 8/16 in sRGB, linear, Blender and plain forms, the pilots' Pillow mask and base-colour forms, a 2048 px mask, TGA raw/RLE, EXR half/float, JPEG), bound as the pilots bind theirs; condition A with sources present, condition B after deleting the sources, restarting Painter and reopening a moved copy; exact = one file after the fence, SHA-256, size and SHA-1 equal to the original and to the version shown, PROJECT location, version stable; verdicts EXACT / PARTIAL / RE_ENCODED / SOURCE_DEPENDENT / UNAVAILABLE / INCONCLUSIVE mapped to the Sash and the Tunic; pilot files later accepted only by SHA-1 = recorded version; otherwise the pinned current round; changed baseline needs the owner's yes; run pending",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase2.9_pilot-belt",
+    "phase2.10_pilot-tunic-recovery",
+    "phase2.11_gate-g2"
+  ],
+  "supersededBy": null
+}

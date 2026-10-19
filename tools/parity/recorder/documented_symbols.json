@@ -1599,6 +1599,18 @@
       "documented_as": "substance_painter.resource.Resource.identifier",
       "page": "substance_painter/resource.html"
     },
+    "substance_painter.resource.Resource.location": {
+      "documented_as": "substance_painter.resource.Resource.location",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Resource.retrieve": {
+      "documented_as": "substance_painter.resource.Resource.retrieve",
+      "page": "substance_painter/resource.html"
+    },
+    "substance_painter.resource.Resource.show_in_ui": {
+      "documented_as": "substance_painter.resource.Resource.show_in_ui",
+      "page": "substance_painter/resource.html"
+    },
     "substance_painter.resource.Resource.usages": {
       "documented_as": "substance_painter.resource.Resource.usages",
       "page": "substance_painter/resource.html"
