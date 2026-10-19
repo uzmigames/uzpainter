@@ -1,0 +1,13 @@
+{
+  "id": 285,
+  "slug": "285-flood-clamp-own-edge",
+  "title": "The gutter flood reads clamped to the image edge, which closes the Wand's 83 flood misses; an own tap in a triangle that shares a UV edge with the ring texel's triangle is measured through its own triangle; the seam reach D lies in [1.772, 1.787) texels of plain segment distance",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
