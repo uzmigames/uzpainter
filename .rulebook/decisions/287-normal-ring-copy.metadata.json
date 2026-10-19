@@ -1,0 +1,13 @@
+{
+  "id": 287,
+  "slug": "287-normal-ring-copy",
+  "title": "The Normal's padding ring is a plain copy of the nearest covered 8-neighbour, not the ring kernel: bit-exact on every Tier 0 float32 ring texel, and the Wand's Normal ring and gutter within 1 code up to 28 flood-seed ties",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.12_compositor-height-normal",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}
