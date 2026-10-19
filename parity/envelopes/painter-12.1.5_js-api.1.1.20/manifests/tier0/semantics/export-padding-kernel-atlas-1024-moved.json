@@ -1,16 +1,16 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/semantics/export-padding-kernel-ramp-r15-p25",
+  "golden_id": "tier0/semantics/export-padding-kernel-atlas-1024-moved",
   "tier": "0",
   "domain": "tier0/export/processing",
-  "description": "Decision 266's kernel-code probe (phase1.25_pilot-wand item 2.7: the infinite ring tap by tap), exploratory: the P-ramp mesh of export-padding-ramp-r15-p25-v2 (scale ratio 1.5, every UV shifted by +0.25/1024); document resolution 1024. User0-User7 added as RGB32F (a record whose template capture shows one of them not 32F is void); one fill with the eight channels active, Normal at opacity 1, default projection (read back), sources the authored float32 kernel code at the document size: User0-User2 one-hot the nine classes x mod 3 + 3 (y mod 3) of the texel (column x, row y from the top), User3 the UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5, User4 and User5 the periodic codes d and e (k/256, one 17 x 13 texel tile each), User6 (d + e)/2 and User7 1 - d. The eight maps at OpenEXR 32f with infinite padding and with passthrough (every covered texel must equal its source bit for bit, or the probe is void), every export step done twice in the session.",
+  "description": "Decision 266's kernel-code probe (phase1.25_pilot-wand item 2.7: the infinite ring tap by tap), exploratory: the kernel atlas at 1024 px with its positions scaled by 1.7 and offset by (3.1, 0, -2.3) cm, so that the box-normalised positions round; document resolution 1024. User0-User7 added as RGB32F (a record whose template capture shows one of them not 32F is void); one fill with the eight channels active, Normal at opacity 1, default projection (read back), sources the authored float32 kernel code at the document size: User0-User2 one-hot the nine classes x mod 3 + 3 (y mod 3) of the texel (column x, row y from the top), User3 the UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5, User4 and User5 the periodic codes d and e (k/256, one 17 x 13 texel tile each), User6 (d + e)/2 and User7 1 - d. The eight maps at OpenEXR 32f with infinite padding and with passthrough (every covered texel must equal its source bit for bit, or the probe is void), every export step done twice in the session.",
   "inputs": [
     {
-      "input_id": "seam-ramp-r15-p25",
+      "input_id": "kernel-atlas-n1024-moved",
       "kind": "mesh",
-      "path": "parity/fixtures/tier0-semantics/meshes/seam-ramp-r15-p25.obj",
-      "sha256": "ebf2bc7a92ece0d4e17f263c4579d7f1145a0364cb28f55224fe27e13acf8c59",
+      "path": "parity/fixtures/tier0-semantics/meshes/kernel-atlas-n1024-moved.obj",
+      "sha256": "aff46af9de8ca33f6c54416c8136c1c3b216946bf4be4466bf179a7b5e578d81",
       "provenance": {
         "origin": "uzmigames_authored",
         "licence": "Apache-2.0",
@@ -114,7 +114,7 @@
         "step": 1,
         "call": "substance_painter.project.create",
         "args": {
-          "mesh": "seam-ramp-r15-p25",
+          "mesh": "kernel-atlas-n1024-moved",
           "normal_map_format": "OpenGL",
           "default_texture_resolution": 1024
         }
@@ -252,7 +252,7 @@
         "call": "substance_painter.layerstack.insert_fill",
         "args": {
           "position": "top",
-          "texture_set": "uzp_seam"
+          "texture_set": "uzp_kernel_atlas"
         }
       },
       {
@@ -619,5 +619,402 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "e1ef54bb952a8feef58c28fbb9ccb8be36e8171e3874fcd8ab23bdc20c582f1e",
+      "size_bytes": 54867
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user0-step45",
+      "kind": "exported_map",
+      "sha256": "15f948b6a27bb3f9dcf61b5884839d74ee7af91fe4be48c42f237d36d9a67319",
+      "size_bytes": 475005
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user1-step45",
+      "kind": "exported_map",
+      "sha256": "b8c07358390589b0bebece55929686619a4227b12f5507ea183200810b2f4d30",
+      "size_bytes": 515951
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user2-step45",
+      "kind": "exported_map",
+      "sha256": "07acf58c1df2cf03bb5aa135ea5d1fca7cbf6d0001988a2cae5188be5727b9cf",
+      "size_bytes": 441380
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user3-step45",
+      "kind": "exported_map",
+      "sha256": "6fb1a2321b7dbd2d0cbf14c189d9f7204d144b938fea1896b8e4665b7ac79846",
+      "size_bytes": 525406
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user4-step45",
+      "kind": "exported_map",
+      "sha256": "db8db0866566862dc43e08ab542ff0510bbafdde390e7855bf760195ae65dc84",
+      "size_bytes": 996258
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user5-step45",
+      "kind": "exported_map",
+      "sha256": "64125c808ad4b7ba9c864f68585fb30eecfc7a91bd3ef8f0852720d4894df360",
+      "size_bytes": 999263
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user6-step45",
+      "kind": "exported_map",
+      "sha256": "940851abfd903d83866659881b3accd0180b48ba8503b29bb77a6a629229bf28",
+      "size_bytes": 991827
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user7-step45",
+      "kind": "exported_map",
+      "sha256": "5d64e7e7a946a8f5fcbd9f4f10b8cd96aa5837b98949d38d6793721a7e836c05",
+      "size_bytes": 1000644
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user0-step46",
+      "kind": "exported_map",
+      "sha256": "15f948b6a27bb3f9dcf61b5884839d74ee7af91fe4be48c42f237d36d9a67319",
+      "size_bytes": 475005
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user1-step46",
+      "kind": "exported_map",
+      "sha256": "b8c07358390589b0bebece55929686619a4227b12f5507ea183200810b2f4d30",
+      "size_bytes": 515951
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user2-step46",
+      "kind": "exported_map",
+      "sha256": "07acf58c1df2cf03bb5aa135ea5d1fca7cbf6d0001988a2cae5188be5727b9cf",
+      "size_bytes": 441380
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user3-step46",
+      "kind": "exported_map",
+      "sha256": "6fb1a2321b7dbd2d0cbf14c189d9f7204d144b938fea1896b8e4665b7ac79846",
+      "size_bytes": 525406
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user4-step46",
+      "kind": "exported_map",
+      "sha256": "db8db0866566862dc43e08ab542ff0510bbafdde390e7855bf760195ae65dc84",
+      "size_bytes": 996258
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user5-step46",
+      "kind": "exported_map",
+      "sha256": "64125c808ad4b7ba9c864f68585fb30eecfc7a91bd3ef8f0852720d4894df360",
+      "size_bytes": 999263
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user6-step46",
+      "kind": "exported_map",
+      "sha256": "940851abfd903d83866659881b3accd0180b48ba8503b29bb77a6a629229bf28",
+      "size_bytes": 991827
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user7-step46",
+      "kind": "exported_map",
+      "sha256": "5d64e7e7a946a8f5fcbd9f4f10b8cd96aa5837b98949d38d6793721a7e836c05",
+      "size_bytes": 1000644
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user0-step47",
+      "kind": "exported_map",
+      "sha256": "5c13862a1c94d4e620d493e47d51a0a297975b077ce657f88524b19f2004f81b",
+      "size_bytes": 640947
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user1-step47",
+      "kind": "exported_map",
+      "sha256": "f73774806342a62dbd7a842120c1801cd7b75413e8e3e70f31791eb6d631a934",
+      "size_bytes": 639228
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user2-step47",
+      "kind": "exported_map",
+      "sha256": "86ae126f74a67b1a8cfbdeeb9c76a08e4b4d783acb2a580d9d2a1b1eeb0153a1",
+      "size_bytes": 639228
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user3-step47",
+      "kind": "exported_map",
+      "sha256": "efc37dec01c4b030e128600a97cfc4f583878e2e09a29d71564c589a5bda5737",
+      "size_bytes": 824557
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user4-step47",
+      "kind": "exported_map",
+      "sha256": "1d4a519d7cb956b729a27b714b0a2003ea7ca44ac72226d3a80c006c506af779",
+      "size_bytes": 4061187
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user5-step47",
+      "kind": "exported_map",
+      "sha256": "21723b4d0d99c439238299ea4361ff0286cad50592d14b93dc49f6f5d3dfb41f",
+      "size_bytes": 4032440
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user6-step47",
+      "kind": "exported_map",
+      "sha256": "0ac223d5c8bc5cec30fda8d9308c9d71b3b8f1f28317724bf9cb706aae081240",
+      "size_bytes": 5309413
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user7-step47",
+      "kind": "exported_map",
+      "sha256": "20ff67ee5637ab93e8b5e4841413fe2a5574668dcacaea0d2965d37f9cd1e09a",
+      "size_bytes": 4061402
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user0-step48",
+      "kind": "exported_map",
+      "sha256": "5c13862a1c94d4e620d493e47d51a0a297975b077ce657f88524b19f2004f81b",
+      "size_bytes": 640947
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user1-step48",
+      "kind": "exported_map",
+      "sha256": "f73774806342a62dbd7a842120c1801cd7b75413e8e3e70f31791eb6d631a934",
+      "size_bytes": 639228
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user2-step48",
+      "kind": "exported_map",
+      "sha256": "86ae126f74a67b1a8cfbdeeb9c76a08e4b4d783acb2a580d9d2a1b1eeb0153a1",
+      "size_bytes": 639228
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user3-step48",
+      "kind": "exported_map",
+      "sha256": "efc37dec01c4b030e128600a97cfc4f583878e2e09a29d71564c589a5bda5737",
+      "size_bytes": 824557
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user4-step48",
+      "kind": "exported_map",
+      "sha256": "1d4a519d7cb956b729a27b714b0a2003ea7ca44ac72226d3a80c006c506af779",
+      "size_bytes": 4061187
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user5-step48",
+      "kind": "exported_map",
+      "sha256": "21723b4d0d99c439238299ea4361ff0286cad50592d14b93dc49f6f5d3dfb41f",
+      "size_bytes": 4032440
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user6-step48",
+      "kind": "exported_map",
+      "sha256": "0ac223d5c8bc5cec30fda8d9308c9d71b3b8f1f28317724bf9cb706aae081240",
+      "size_bytes": 5309413
+    },
+    {
+      "record_id": "r1-uzp_kernel_atlas-user7-step48",
+      "kind": "exported_map",
+      "sha256": "20ff67ee5637ab93e8b5e4841413fe2a5574668dcacaea0d2965d37f9cd1e09a",
+      "size_bytes": 4061402
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user0-step45",
+      "kind": "exported_map",
+      "sha256": "15f948b6a27bb3f9dcf61b5884839d74ee7af91fe4be48c42f237d36d9a67319",
+      "size_bytes": 475005
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user1-step45",
+      "kind": "exported_map",
+      "sha256": "b8c07358390589b0bebece55929686619a4227b12f5507ea183200810b2f4d30",
+      "size_bytes": 515951
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user2-step45",
+      "kind": "exported_map",
+      "sha256": "07acf58c1df2cf03bb5aa135ea5d1fca7cbf6d0001988a2cae5188be5727b9cf",
+      "size_bytes": 441380
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user3-step45",
+      "kind": "exported_map",
+      "sha256": "6fb1a2321b7dbd2d0cbf14c189d9f7204d144b938fea1896b8e4665b7ac79846",
+      "size_bytes": 525406
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user4-step45",
+      "kind": "exported_map",
+      "sha256": "db8db0866566862dc43e08ab542ff0510bbafdde390e7855bf760195ae65dc84",
+      "size_bytes": 996258
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user5-step45",
+      "kind": "exported_map",
+      "sha256": "64125c808ad4b7ba9c864f68585fb30eecfc7a91bd3ef8f0852720d4894df360",
+      "size_bytes": 999263
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user6-step45",
+      "kind": "exported_map",
+      "sha256": "940851abfd903d83866659881b3accd0180b48ba8503b29bb77a6a629229bf28",
+      "size_bytes": 991827
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user7-step45",
+      "kind": "exported_map",
+      "sha256": "5d64e7e7a946a8f5fcbd9f4f10b8cd96aa5837b98949d38d6793721a7e836c05",
+      "size_bytes": 1000644
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user0-step46",
+      "kind": "exported_map",
+      "sha256": "15f948b6a27bb3f9dcf61b5884839d74ee7af91fe4be48c42f237d36d9a67319",
+      "size_bytes": 475005
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user1-step46",
+      "kind": "exported_map",
+      "sha256": "b8c07358390589b0bebece55929686619a4227b12f5507ea183200810b2f4d30",
+      "size_bytes": 515951
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user2-step46",
+      "kind": "exported_map",
+      "sha256": "07acf58c1df2cf03bb5aa135ea5d1fca7cbf6d0001988a2cae5188be5727b9cf",
+      "size_bytes": 441380
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user3-step46",
+      "kind": "exported_map",
+      "sha256": "6fb1a2321b7dbd2d0cbf14c189d9f7204d144b938fea1896b8e4665b7ac79846",
+      "size_bytes": 525406
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user4-step46",
+      "kind": "exported_map",
+      "sha256": "db8db0866566862dc43e08ab542ff0510bbafdde390e7855bf760195ae65dc84",
+      "size_bytes": 996258
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user5-step46",
+      "kind": "exported_map",
+      "sha256": "64125c808ad4b7ba9c864f68585fb30eecfc7a91bd3ef8f0852720d4894df360",
+      "size_bytes": 999263
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user6-step46",
+      "kind": "exported_map",
+      "sha256": "940851abfd903d83866659881b3accd0180b48ba8503b29bb77a6a629229bf28",
+      "size_bytes": 991827
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user7-step46",
+      "kind": "exported_map",
+      "sha256": "5d64e7e7a946a8f5fcbd9f4f10b8cd96aa5837b98949d38d6793721a7e836c05",
+      "size_bytes": 1000644
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user0-step47",
+      "kind": "exported_map",
+      "sha256": "15f948b6a27bb3f9dcf61b5884839d74ee7af91fe4be48c42f237d36d9a67319",
+      "size_bytes": 475005
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user1-step47",
+      "kind": "exported_map",
+      "sha256": "b8c07358390589b0bebece55929686619a4227b12f5507ea183200810b2f4d30",
+      "size_bytes": 515951
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user2-step47",
+      "kind": "exported_map",
+      "sha256": "07acf58c1df2cf03bb5aa135ea5d1fca7cbf6d0001988a2cae5188be5727b9cf",
+      "size_bytes": 441380
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user3-step47",
+      "kind": "exported_map",
+      "sha256": "6fb1a2321b7dbd2d0cbf14c189d9f7204d144b938fea1896b8e4665b7ac79846",
+      "size_bytes": 525406
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user4-step47",
+      "kind": "exported_map",
+      "sha256": "db8db0866566862dc43e08ab542ff0510bbafdde390e7855bf760195ae65dc84",
+      "size_bytes": 996258
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user5-step47",
+      "kind": "exported_map",
+      "sha256": "64125c808ad4b7ba9c864f68585fb30eecfc7a91bd3ef8f0852720d4894df360",
+      "size_bytes": 999263
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user6-step47",
+      "kind": "exported_map",
+      "sha256": "940851abfd903d83866659881b3accd0180b48ba8503b29bb77a6a629229bf28",
+      "size_bytes": 991827
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user7-step47",
+      "kind": "exported_map",
+      "sha256": "5d64e7e7a946a8f5fcbd9f4f10b8cd96aa5837b98949d38d6793721a7e836c05",
+      "size_bytes": 1000644
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user0-step48",
+      "kind": "exported_map",
+      "sha256": "15f948b6a27bb3f9dcf61b5884839d74ee7af91fe4be48c42f237d36d9a67319",
+      "size_bytes": 475005
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user1-step48",
+      "kind": "exported_map",
+      "sha256": "b8c07358390589b0bebece55929686619a4227b12f5507ea183200810b2f4d30",
+      "size_bytes": 515951
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user2-step48",
+      "kind": "exported_map",
+      "sha256": "07acf58c1df2cf03bb5aa135ea5d1fca7cbf6d0001988a2cae5188be5727b9cf",
+      "size_bytes": 441380
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user3-step48",
+      "kind": "exported_map",
+      "sha256": "6fb1a2321b7dbd2d0cbf14c189d9f7204d144b938fea1896b8e4665b7ac79846",
+      "size_bytes": 525406
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user4-step48",
+      "kind": "exported_map",
+      "sha256": "db8db0866566862dc43e08ab542ff0510bbafdde390e7855bf760195ae65dc84",
+      "size_bytes": 996258
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user5-step48",
+      "kind": "exported_map",
+      "sha256": "64125c808ad4b7ba9c864f68585fb30eecfc7a91bd3ef8f0852720d4894df360",
+      "size_bytes": 999263
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user6-step48",
+      "kind": "exported_map",
+      "sha256": "940851abfd903d83866659881b3accd0180b48ba8503b29bb77a6a629229bf28",
+      "size_bytes": 991827
+    },
+    {
+      "record_id": "r2-uzp_kernel_atlas-user7-step48",
+      "kind": "exported_map",
+      "sha256": "5d64e7e7a946a8f5fcbd9f4f10b8cd96aa5837b98949d38d6793721a7e836c05",
+      "size_bytes": 1000644
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "29c44b309275b8eaac4765712d5ec8272b4afd9be091d05b98528659e4889c8e",
+      "size_bytes": 402
+    }
+  ]
 }

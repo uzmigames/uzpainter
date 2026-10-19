@@ -1495,9 +1495,9 @@ def later_goldens() -> list[Golden]:
     ]
 
 
-# Goldens that the Painter sessions of 2026-10-12 and 2026-10-13 recorded and the store admitted
-# (decisions 101, 160, 167, 172, 180, 198 and 216): their manifests live under the envelope's
-# `manifests/`, and their requests are deleted.
+# Goldens that the Painter sessions of 2026-10-12, 2026-10-13 and 2026-10-19 recorded and the
+# store admitted (decisions 101, 160, 167, 172, 180, 198, 216 and 266): their manifests live under
+# the envelope's `manifests/`, and their requests are deleted.
 ADMITTED = frozenset(
     {
         "export-bit-depth",
@@ -1546,6 +1546,8 @@ ADMITTED = frozenset(
         "export-padding-seam-ramp-1024",
         "export-padding-tie-512-box16",
         "export-padding-ramp-r1-p0-box17",
+        # Decision 266's kernel-code probes (Painter session of 2026-10-19, 09:58, Legacy).
+        *(f"export-padding-kernel-{name}" for name in KERNEL_PROBES),
     }
 )
 

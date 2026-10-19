@@ -1,16 +1,16 @@
 {
   "schema": "uzpainter/parity/golden-public/1",
   "record_class": "public_manifest",
-  "golden_id": "tier0/semantics/export-padding-kernel-atlas-512",
+  "golden_id": "tier0/semantics/export-padding-kernel-tie-512",
   "tier": "0",
   "domain": "tier0/export/processing",
-  "description": "Decision 266's kernel-code probe (phase1.25_pilot-wand item 2.7: the infinite ring tap by tap), exploratory: the kernel atlas (single texels, pairs, gaps, L, blocks, rows and columns, a diamond, UV seam pairs at scale ratios 1, 1.25, 1.5 and 2, turned 0, 30 and 90 degrees, flat and folded, two cube corners and four pole fans), its mesh box exactly [-256, 256] cm; document resolution 512. User0-User7 added as RGB32F (a record whose template capture shows one of them not 32F is void); one fill with the eight channels active, Normal at opacity 1, default projection (read back), sources the authored float32 kernel code at the document size: User0-User2 one-hot the nine classes x mod 3 + 3 (y mod 3) of the texel (column x, row y from the top), User3 the UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5, User4 and User5 the periodic codes d and e (k/256, one 17 x 13 texel tile each), User6 (d + e)/2 and User7 1 - d. The eight maps at OpenEXR 32f with infinite padding and with passthrough (every covered texel must equal its source bit for bit, or the probe is void), every export step done twice in the session.",
+  "description": "Decision 266's kernel-code probe (phase1.25_pilot-wand item 2.7: the infinite ring tap by tap), exploratory: the P-tie mesh of export-padding-tie-512; document resolution 512. User0-User7 added as RGB32F (a record whose template capture shows one of them not 32F is void); one fill with the eight channels active, Normal at opacity 1, default projection (read back), sources the authored float32 kernel code at the document size: User0-User2 one-hot the nine classes x mod 3 + 3 (y mod 3) of the texel (column x, row y from the top), User3 the UV ramp R = (x + 0.5)/N, G = (y + 0.5)/N, B = 0.5, User4 and User5 the periodic codes d and e (k/256, one 17 x 13 texel tile each), User6 (d + e)/2 and User7 1 - d. The eight maps at OpenEXR 32f with infinite padding and with passthrough (every covered texel must equal its source bit for bit, or the probe is void), every export step done twice in the session.",
   "inputs": [
     {
-      "input_id": "kernel-atlas-n512",
+      "input_id": "tie",
       "kind": "mesh",
-      "path": "parity/fixtures/tier0-semantics/meshes/kernel-atlas-n512.obj",
-      "sha256": "010cb0c9cabe0b0ca771a6c36a986858fe50b2cbf25cbeaa48941597336b0c32",
+      "path": "parity/fixtures/tier0-semantics/meshes/tie.obj",
+      "sha256": "a8e2302f22b00b1e1962c2f20efcda340c01120c3ab2d001a5def9bf8a5e8d70",
       "provenance": {
         "origin": "uzmigames_authored",
         "licence": "Apache-2.0",
@@ -114,7 +114,7 @@
         "step": 1,
         "call": "substance_painter.project.create",
         "args": {
-          "mesh": "kernel-atlas-n512",
+          "mesh": "tie",
           "normal_map_format": "OpenGL",
           "default_texture_resolution": 512
         }
@@ -252,7 +252,7 @@
         "call": "substance_painter.layerstack.insert_fill",
         "args": {
           "position": "top",
-          "texture_set": "uzp_kernel_atlas"
+          "texture_set": "uzp_tie"
         }
       },
       {
@@ -619,5 +619,402 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "f3759d72de947f6937c8e23c8e7c05ae7b5d4b93ed34045757a2a914ae5ab54b",
+      "size_bytes": 53579
+    },
+    {
+      "record_id": "r1-uzp_tie-user0-step45",
+      "kind": "exported_map",
+      "sha256": "8e8740511b01318ee5e152527b97057c09b6e96553363e409c8f58ef2a939639",
+      "size_bytes": 143415
+    },
+    {
+      "record_id": "r1-uzp_tie-user1-step45",
+      "kind": "exported_map",
+      "sha256": "ef58ed7f051961a65ec23c0ad8b440e2bdfb1f70cc93e234e7d52e7a8bfeefcf",
+      "size_bytes": 167605
+    },
+    {
+      "record_id": "r1-uzp_tie-user2-step45",
+      "kind": "exported_map",
+      "sha256": "914626d6863779fca7d07ed47ea73a0feef2a466eb69895a5b41a936e5cb6c9b",
+      "size_bytes": 68589
+    },
+    {
+      "record_id": "r1-uzp_tie-user3-step45",
+      "kind": "exported_map",
+      "sha256": "29b29bf09e345058201c67acd994114f9ae139363bd1aa833f9df8e91e30d0ec",
+      "size_bytes": 174121
+    },
+    {
+      "record_id": "r1-uzp_tie-user4-step45",
+      "kind": "exported_map",
+      "sha256": "c6f54a55a9c9f39cce9b15f1b69c2cd8e2c98b1939b32cefce1c780e479700d5",
+      "size_bytes": 441229
+    },
+    {
+      "record_id": "r1-uzp_tie-user5-step45",
+      "kind": "exported_map",
+      "sha256": "4862b98ee34fd8b5f523baefa90c56b7bbe1394c4fa4d13b83af4afae56d6383",
+      "size_bytes": 441353
+    },
+    {
+      "record_id": "r1-uzp_tie-user6-step45",
+      "kind": "exported_map",
+      "sha256": "ce3eb893e5977368f8f810dc497ad77c3b0deee57a960f56f5ef402e9f102ea1",
+      "size_bytes": 459571
+    },
+    {
+      "record_id": "r1-uzp_tie-user7-step45",
+      "kind": "exported_map",
+      "sha256": "3deeddbcbaddd6710724416d6d93f9cbfa95066a3cc17c46f4130beafb089093",
+      "size_bytes": 443260
+    },
+    {
+      "record_id": "r1-uzp_tie-user0-step46",
+      "kind": "exported_map",
+      "sha256": "8e8740511b01318ee5e152527b97057c09b6e96553363e409c8f58ef2a939639",
+      "size_bytes": 143415
+    },
+    {
+      "record_id": "r1-uzp_tie-user1-step46",
+      "kind": "exported_map",
+      "sha256": "ef58ed7f051961a65ec23c0ad8b440e2bdfb1f70cc93e234e7d52e7a8bfeefcf",
+      "size_bytes": 167605
+    },
+    {
+      "record_id": "r1-uzp_tie-user2-step46",
+      "kind": "exported_map",
+      "sha256": "914626d6863779fca7d07ed47ea73a0feef2a466eb69895a5b41a936e5cb6c9b",
+      "size_bytes": 68589
+    },
+    {
+      "record_id": "r1-uzp_tie-user3-step46",
+      "kind": "exported_map",
+      "sha256": "29b29bf09e345058201c67acd994114f9ae139363bd1aa833f9df8e91e30d0ec",
+      "size_bytes": 174121
+    },
+    {
+      "record_id": "r1-uzp_tie-user4-step46",
+      "kind": "exported_map",
+      "sha256": "c6f54a55a9c9f39cce9b15f1b69c2cd8e2c98b1939b32cefce1c780e479700d5",
+      "size_bytes": 441229
+    },
+    {
+      "record_id": "r1-uzp_tie-user5-step46",
+      "kind": "exported_map",
+      "sha256": "4862b98ee34fd8b5f523baefa90c56b7bbe1394c4fa4d13b83af4afae56d6383",
+      "size_bytes": 441353
+    },
+    {
+      "record_id": "r1-uzp_tie-user6-step46",
+      "kind": "exported_map",
+      "sha256": "ce3eb893e5977368f8f810dc497ad77c3b0deee57a960f56f5ef402e9f102ea1",
+      "size_bytes": 459571
+    },
+    {
+      "record_id": "r1-uzp_tie-user7-step46",
+      "kind": "exported_map",
+      "sha256": "3deeddbcbaddd6710724416d6d93f9cbfa95066a3cc17c46f4130beafb089093",
+      "size_bytes": 443260
+    },
+    {
+      "record_id": "r1-uzp_tie-user0-step47",
+      "kind": "exported_map",
+      "sha256": "13434624d8265ade7826b461aa4aa6096db4811286ea0d5f6237cc858d55a555",
+      "size_bytes": 164365
+    },
+    {
+      "record_id": "r1-uzp_tie-user1-step47",
+      "kind": "exported_map",
+      "sha256": "23b604ab2a9023d618f426ed5c201d898f079fdfb2fee6fbf64019ef65720927",
+      "size_bytes": 164365
+    },
+    {
+      "record_id": "r1-uzp_tie-user2-step47",
+      "kind": "exported_map",
+      "sha256": "5b8fd1c088390d930f4cf195738018bd276beadbf2864153f58e28e949029aec",
+      "size_bytes": 163505
+    },
+    {
+      "record_id": "r1-uzp_tie-user3-step47",
+      "kind": "exported_map",
+      "sha256": "e7b2a8b4f2ff85b220419cb252525b53a889ee8f5e5f268ee516630d07e73b55",
+      "size_bytes": 211833
+    },
+    {
+      "record_id": "r1-uzp_tie-user4-step47",
+      "kind": "exported_map",
+      "sha256": "f0c2e63861b2618bbe7cfcfdfa7eb195dbf69d64026770934710cb0533da46ba",
+      "size_bytes": 1023834
+    },
+    {
+      "record_id": "r1-uzp_tie-user5-step47",
+      "kind": "exported_map",
+      "sha256": "418d5c2e079591c65f959059b0fc433fa5b0816f47411fadb619491090d7831c",
+      "size_bytes": 1016446
+    },
+    {
+      "record_id": "r1-uzp_tie-user6-step47",
+      "kind": "exported_map",
+      "sha256": "75e4c35f1a7b7b0576b9c1bf2a94a7ea944c5813e3fc3a9d9172a743fbcd0f49",
+      "size_bytes": 1352501
+    },
+    {
+      "record_id": "r1-uzp_tie-user7-step47",
+      "kind": "exported_map",
+      "sha256": "6864bae37a067dcb0e4c436ffdf00aafc92361a69ed50810cdc482f257678079",
+      "size_bytes": 1023924
+    },
+    {
+      "record_id": "r1-uzp_tie-user0-step48",
+      "kind": "exported_map",
+      "sha256": "13434624d8265ade7826b461aa4aa6096db4811286ea0d5f6237cc858d55a555",
+      "size_bytes": 164365
+    },
+    {
+      "record_id": "r1-uzp_tie-user1-step48",
+      "kind": "exported_map",
+      "sha256": "23b604ab2a9023d618f426ed5c201d898f079fdfb2fee6fbf64019ef65720927",
+      "size_bytes": 164365
+    },
+    {
+      "record_id": "r1-uzp_tie-user2-step48",
+      "kind": "exported_map",
+      "sha256": "5b8fd1c088390d930f4cf195738018bd276beadbf2864153f58e28e949029aec",
+      "size_bytes": 163505
+    },
+    {
+      "record_id": "r1-uzp_tie-user3-step48",
+      "kind": "exported_map",
+      "sha256": "e7b2a8b4f2ff85b220419cb252525b53a889ee8f5e5f268ee516630d07e73b55",
+      "size_bytes": 211833
+    },
+    {
+      "record_id": "r1-uzp_tie-user4-step48",
+      "kind": "exported_map",
+      "sha256": "f0c2e63861b2618bbe7cfcfdfa7eb195dbf69d64026770934710cb0533da46ba",
+      "size_bytes": 1023834
+    },
+    {
+      "record_id": "r1-uzp_tie-user5-step48",
+      "kind": "exported_map",
+      "sha256": "418d5c2e079591c65f959059b0fc433fa5b0816f47411fadb619491090d7831c",
+      "size_bytes": 1016446
+    },
+    {
+      "record_id": "r1-uzp_tie-user6-step48",
+      "kind": "exported_map",
+      "sha256": "75e4c35f1a7b7b0576b9c1bf2a94a7ea944c5813e3fc3a9d9172a743fbcd0f49",
+      "size_bytes": 1352501
+    },
+    {
+      "record_id": "r1-uzp_tie-user7-step48",
+      "kind": "exported_map",
+      "sha256": "6864bae37a067dcb0e4c436ffdf00aafc92361a69ed50810cdc482f257678079",
+      "size_bytes": 1023924
+    },
+    {
+      "record_id": "r2-uzp_tie-user0-step45",
+      "kind": "exported_map",
+      "sha256": "8e8740511b01318ee5e152527b97057c09b6e96553363e409c8f58ef2a939639",
+      "size_bytes": 143415
+    },
+    {
+      "record_id": "r2-uzp_tie-user1-step45",
+      "kind": "exported_map",
+      "sha256": "ef58ed7f051961a65ec23c0ad8b440e2bdfb1f70cc93e234e7d52e7a8bfeefcf",
+      "size_bytes": 167605
+    },
+    {
+      "record_id": "r2-uzp_tie-user2-step45",
+      "kind": "exported_map",
+      "sha256": "914626d6863779fca7d07ed47ea73a0feef2a466eb69895a5b41a936e5cb6c9b",
+      "size_bytes": 68589
+    },
+    {
+      "record_id": "r2-uzp_tie-user3-step45",
+      "kind": "exported_map",
+      "sha256": "29b29bf09e345058201c67acd994114f9ae139363bd1aa833f9df8e91e30d0ec",
+      "size_bytes": 174121
+    },
+    {
+      "record_id": "r2-uzp_tie-user4-step45",
+      "kind": "exported_map",
+      "sha256": "c6f54a55a9c9f39cce9b15f1b69c2cd8e2c98b1939b32cefce1c780e479700d5",
+      "size_bytes": 441229
+    },
+    {
+      "record_id": "r2-uzp_tie-user5-step45",
+      "kind": "exported_map",
+      "sha256": "4862b98ee34fd8b5f523baefa90c56b7bbe1394c4fa4d13b83af4afae56d6383",
+      "size_bytes": 441353
+    },
+    {
+      "record_id": "r2-uzp_tie-user6-step45",
+      "kind": "exported_map",
+      "sha256": "ce3eb893e5977368f8f810dc497ad77c3b0deee57a960f56f5ef402e9f102ea1",
+      "size_bytes": 459571
+    },
+    {
+      "record_id": "r2-uzp_tie-user7-step45",
+      "kind": "exported_map",
+      "sha256": "3deeddbcbaddd6710724416d6d93f9cbfa95066a3cc17c46f4130beafb089093",
+      "size_bytes": 443260
+    },
+    {
+      "record_id": "r2-uzp_tie-user0-step46",
+      "kind": "exported_map",
+      "sha256": "8e8740511b01318ee5e152527b97057c09b6e96553363e409c8f58ef2a939639",
+      "size_bytes": 143415
+    },
+    {
+      "record_id": "r2-uzp_tie-user1-step46",
+      "kind": "exported_map",
+      "sha256": "ef58ed7f051961a65ec23c0ad8b440e2bdfb1f70cc93e234e7d52e7a8bfeefcf",
+      "size_bytes": 167605
+    },
+    {
+      "record_id": "r2-uzp_tie-user2-step46",
+      "kind": "exported_map",
+      "sha256": "914626d6863779fca7d07ed47ea73a0feef2a466eb69895a5b41a936e5cb6c9b",
+      "size_bytes": 68589
+    },
+    {
+      "record_id": "r2-uzp_tie-user3-step46",
+      "kind": "exported_map",
+      "sha256": "29b29bf09e345058201c67acd994114f9ae139363bd1aa833f9df8e91e30d0ec",
+      "size_bytes": 174121
+    },
+    {
+      "record_id": "r2-uzp_tie-user4-step46",
+      "kind": "exported_map",
+      "sha256": "c6f54a55a9c9f39cce9b15f1b69c2cd8e2c98b1939b32cefce1c780e479700d5",
+      "size_bytes": 441229
+    },
+    {
+      "record_id": "r2-uzp_tie-user5-step46",
+      "kind": "exported_map",
+      "sha256": "4862b98ee34fd8b5f523baefa90c56b7bbe1394c4fa4d13b83af4afae56d6383",
+      "size_bytes": 441353
+    },
+    {
+      "record_id": "r2-uzp_tie-user6-step46",
+      "kind": "exported_map",
+      "sha256": "ce3eb893e5977368f8f810dc497ad77c3b0deee57a960f56f5ef402e9f102ea1",
+      "size_bytes": 459571
+    },
+    {
+      "record_id": "r2-uzp_tie-user7-step46",
+      "kind": "exported_map",
+      "sha256": "3deeddbcbaddd6710724416d6d93f9cbfa95066a3cc17c46f4130beafb089093",
+      "size_bytes": 443260
+    },
+    {
+      "record_id": "r2-uzp_tie-user0-step47",
+      "kind": "exported_map",
+      "sha256": "8e8740511b01318ee5e152527b97057c09b6e96553363e409c8f58ef2a939639",
+      "size_bytes": 143415
+    },
+    {
+      "record_id": "r2-uzp_tie-user1-step47",
+      "kind": "exported_map",
+      "sha256": "ef58ed7f051961a65ec23c0ad8b440e2bdfb1f70cc93e234e7d52e7a8bfeefcf",
+      "size_bytes": 167605
+    },
+    {
+      "record_id": "r2-uzp_tie-user2-step47",
+      "kind": "exported_map",
+      "sha256": "914626d6863779fca7d07ed47ea73a0feef2a466eb69895a5b41a936e5cb6c9b",
+      "size_bytes": 68589
+    },
+    {
+      "record_id": "r2-uzp_tie-user3-step47",
+      "kind": "exported_map",
+      "sha256": "29b29bf09e345058201c67acd994114f9ae139363bd1aa833f9df8e91e30d0ec",
+      "size_bytes": 174121
+    },
+    {
+      "record_id": "r2-uzp_tie-user4-step47",
+      "kind": "exported_map",
+      "sha256": "c6f54a55a9c9f39cce9b15f1b69c2cd8e2c98b1939b32cefce1c780e479700d5",
+      "size_bytes": 441229
+    },
+    {
+      "record_id": "r2-uzp_tie-user5-step47",
+      "kind": "exported_map",
+      "sha256": "4862b98ee34fd8b5f523baefa90c56b7bbe1394c4fa4d13b83af4afae56d6383",
+      "size_bytes": 441353
+    },
+    {
+      "record_id": "r2-uzp_tie-user6-step47",
+      "kind": "exported_map",
+      "sha256": "ce3eb893e5977368f8f810dc497ad77c3b0deee57a960f56f5ef402e9f102ea1",
+      "size_bytes": 459571
+    },
+    {
+      "record_id": "r2-uzp_tie-user7-step47",
+      "kind": "exported_map",
+      "sha256": "3deeddbcbaddd6710724416d6d93f9cbfa95066a3cc17c46f4130beafb089093",
+      "size_bytes": 443260
+    },
+    {
+      "record_id": "r2-uzp_tie-user0-step48",
+      "kind": "exported_map",
+      "sha256": "8e8740511b01318ee5e152527b97057c09b6e96553363e409c8f58ef2a939639",
+      "size_bytes": 143415
+    },
+    {
+      "record_id": "r2-uzp_tie-user1-step48",
+      "kind": "exported_map",
+      "sha256": "ef58ed7f051961a65ec23c0ad8b440e2bdfb1f70cc93e234e7d52e7a8bfeefcf",
+      "size_bytes": 167605
+    },
+    {
+      "record_id": "r2-uzp_tie-user2-step48",
+      "kind": "exported_map",
+      "sha256": "914626d6863779fca7d07ed47ea73a0feef2a466eb69895a5b41a936e5cb6c9b",
+      "size_bytes": 68589
+    },
+    {
+      "record_id": "r2-uzp_tie-user3-step48",
+      "kind": "exported_map",
+      "sha256": "29b29bf09e345058201c67acd994114f9ae139363bd1aa833f9df8e91e30d0ec",
+      "size_bytes": 174121
+    },
+    {
+      "record_id": "r2-uzp_tie-user4-step48",
+      "kind": "exported_map",
+      "sha256": "c6f54a55a9c9f39cce9b15f1b69c2cd8e2c98b1939b32cefce1c780e479700d5",
+      "size_bytes": 441229
+    },
+    {
+      "record_id": "r2-uzp_tie-user5-step48",
+      "kind": "exported_map",
+      "sha256": "4862b98ee34fd8b5f523baefa90c56b7bbe1394c4fa4d13b83af4afae56d6383",
+      "size_bytes": 441353
+    },
+    {
+      "record_id": "r2-uzp_tie-user6-step48",
+      "kind": "exported_map",
+      "sha256": "ce3eb893e5977368f8f810dc497ad77c3b0deee57a960f56f5ef402e9f102ea1",
+      "size_bytes": 459571
+    },
+    {
+      "record_id": "r2-uzp_tie-user7-step48",
+      "kind": "exported_map",
+      "sha256": "3deeddbcbaddd6710724416d6d93f9cbfa95066a3cc17c46f4130beafb089093",
+      "size_bytes": 443260
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "29c44b309275b8eaac4765712d5ec8272b4afd9be091d05b98528659e4889c8e",
+      "size_bytes": 402
+    }
+  ]
 }

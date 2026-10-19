@@ -619,5 +619,402 @@
     },
     "uzpainter_build_hash": null
   },
-  "private_records": []
+  "private_records": [
+    {
+      "record_id": "golden-record",
+      "kind": "private_oracle_record",
+      "sha256": "f6a1619d4d13390e008cb80311204f3e1b0e4b3ce248347cb5d5aab00cfcf98b",
+      "size_bytes": 54903
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user0-step45",
+      "kind": "exported_map",
+      "sha256": "42ca9adae2a524a2bb479774b530abafef2547e5c4eb20270db28cf95fb958cf",
+      "size_bytes": 182997
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user1-step45",
+      "kind": "exported_map",
+      "sha256": "3a4a91538f2baf24ce98d4d9aec52db9f09ed199eb14e71b46cb7adf1c6d5670",
+      "size_bytes": 197658
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user2-step45",
+      "kind": "exported_map",
+      "sha256": "d56264b979387a74d607d8439dc752a2a60a41473654ad38e1fa7a8fc031324b",
+      "size_bytes": 190926
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user3-step45",
+      "kind": "exported_map",
+      "sha256": "fb574d727ec8ae1d04961d15a2a19f0d2ce5f4e4a2dcdb39cc9b2d2ba79565f9",
+      "size_bytes": 138113
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user4-step45",
+      "kind": "exported_map",
+      "sha256": "bf58275cfdc008ed6f15c1ab9d1075c9d52c1b37089193d90afa9472152ac892",
+      "size_bytes": 359105
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user5-step45",
+      "kind": "exported_map",
+      "sha256": "cfa8d84e38c2ce38964c36f222432ce15d29672f1522363e69617ec09adf0569",
+      "size_bytes": 357868
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user6-step45",
+      "kind": "exported_map",
+      "sha256": "7389860ae0b8de864efd21021a58dc3a43d2cf74f4e94f6b0ce9b9bb672ca11b",
+      "size_bytes": 410345
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user7-step45",
+      "kind": "exported_map",
+      "sha256": "86b00779555d7311894be7d85dfd1d4012e90bc0428ab5cc1eb4c7bc05992258",
+      "size_bytes": 359301
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user0-step46",
+      "kind": "exported_map",
+      "sha256": "42ca9adae2a524a2bb479774b530abafef2547e5c4eb20270db28cf95fb958cf",
+      "size_bytes": 182997
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user1-step46",
+      "kind": "exported_map",
+      "sha256": "3a4a91538f2baf24ce98d4d9aec52db9f09ed199eb14e71b46cb7adf1c6d5670",
+      "size_bytes": 197658
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user2-step46",
+      "kind": "exported_map",
+      "sha256": "d56264b979387a74d607d8439dc752a2a60a41473654ad38e1fa7a8fc031324b",
+      "size_bytes": 190926
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user3-step46",
+      "kind": "exported_map",
+      "sha256": "fb574d727ec8ae1d04961d15a2a19f0d2ce5f4e4a2dcdb39cc9b2d2ba79565f9",
+      "size_bytes": 138113
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user4-step46",
+      "kind": "exported_map",
+      "sha256": "bf58275cfdc008ed6f15c1ab9d1075c9d52c1b37089193d90afa9472152ac892",
+      "size_bytes": 359105
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user5-step46",
+      "kind": "exported_map",
+      "sha256": "cfa8d84e38c2ce38964c36f222432ce15d29672f1522363e69617ec09adf0569",
+      "size_bytes": 357868
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user6-step46",
+      "kind": "exported_map",
+      "sha256": "7389860ae0b8de864efd21021a58dc3a43d2cf74f4e94f6b0ce9b9bb672ca11b",
+      "size_bytes": 410345
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user7-step46",
+      "kind": "exported_map",
+      "sha256": "86b00779555d7311894be7d85dfd1d4012e90bc0428ab5cc1eb4c7bc05992258",
+      "size_bytes": 359301
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user0-step47",
+      "kind": "exported_map",
+      "sha256": "0ea0e3a67be469e549db44a93abd080bb2b98d0be6823cf83352418b3bf3479c",
+      "size_bytes": 43479
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user1-step47",
+      "kind": "exported_map",
+      "sha256": "e49a845a268346d4a9e9f5f8ae018b832d711289a3c6d505eb7fa3b4ca700bc1",
+      "size_bytes": 43050
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user2-step47",
+      "kind": "exported_map",
+      "sha256": "cd56751e474dfa0c9f689725afac340ca42d34d2fe9a7d515a2e0881a6050bc5",
+      "size_bytes": 43050
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user3-step47",
+      "kind": "exported_map",
+      "sha256": "1a76d0eefd6e4a70b9fa85e68f97bf0c6a94b025633a94c9c967b469ba75a947",
+      "size_bytes": 55129
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user4-step47",
+      "kind": "exported_map",
+      "sha256": "7a31b8824cc148bfcd487f1a04d49cb52e162affae0cdbc5ae7eaffe0e9fb582",
+      "size_bytes": 260299
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user5-step47",
+      "kind": "exported_map",
+      "sha256": "17927d2a9cd0403619beb535432b9bd21144bb238129f594beb655790f5bda80",
+      "size_bytes": 258404
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user6-step47",
+      "kind": "exported_map",
+      "sha256": "282ffcf421c23bdf51c510acdce05b9e9f13da735e7ef3b5d18810a48aac4a77",
+      "size_bytes": 350734
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user7-step47",
+      "kind": "exported_map",
+      "sha256": "f12a2d235974e87c39f4a5495033226d1346d0755834a99afed89718981a213c",
+      "size_bytes": 260345
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user0-step48",
+      "kind": "exported_map",
+      "sha256": "0ea0e3a67be469e549db44a93abd080bb2b98d0be6823cf83352418b3bf3479c",
+      "size_bytes": 43479
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user1-step48",
+      "kind": "exported_map",
+      "sha256": "e49a845a268346d4a9e9f5f8ae018b832d711289a3c6d505eb7fa3b4ca700bc1",
+      "size_bytes": 43050
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user2-step48",
+      "kind": "exported_map",
+      "sha256": "cd56751e474dfa0c9f689725afac340ca42d34d2fe9a7d515a2e0881a6050bc5",
+      "size_bytes": 43050
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user3-step48",
+      "kind": "exported_map",
+      "sha256": "1a76d0eefd6e4a70b9fa85e68f97bf0c6a94b025633a94c9c967b469ba75a947",
+      "size_bytes": 55129
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user4-step48",
+      "kind": "exported_map",
+      "sha256": "7a31b8824cc148bfcd487f1a04d49cb52e162affae0cdbc5ae7eaffe0e9fb582",
+      "size_bytes": 260299
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user5-step48",
+      "kind": "exported_map",
+      "sha256": "17927d2a9cd0403619beb535432b9bd21144bb238129f594beb655790f5bda80",
+      "size_bytes": 258404
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user6-step48",
+      "kind": "exported_map",
+      "sha256": "282ffcf421c23bdf51c510acdce05b9e9f13da735e7ef3b5d18810a48aac4a77",
+      "size_bytes": 350734
+    },
+    {
+      "record_id": "r1-uzp_bevelled_cube-user7-step48",
+      "kind": "exported_map",
+      "sha256": "f12a2d235974e87c39f4a5495033226d1346d0755834a99afed89718981a213c",
+      "size_bytes": 260345
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user0-step45",
+      "kind": "exported_map",
+      "sha256": "42ca9adae2a524a2bb479774b530abafef2547e5c4eb20270db28cf95fb958cf",
+      "size_bytes": 182997
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user1-step45",
+      "kind": "exported_map",
+      "sha256": "3a4a91538f2baf24ce98d4d9aec52db9f09ed199eb14e71b46cb7adf1c6d5670",
+      "size_bytes": 197658
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user2-step45",
+      "kind": "exported_map",
+      "sha256": "d56264b979387a74d607d8439dc752a2a60a41473654ad38e1fa7a8fc031324b",
+      "size_bytes": 190926
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user3-step45",
+      "kind": "exported_map",
+      "sha256": "fb574d727ec8ae1d04961d15a2a19f0d2ce5f4e4a2dcdb39cc9b2d2ba79565f9",
+      "size_bytes": 138113
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user4-step45",
+      "kind": "exported_map",
+      "sha256": "bf58275cfdc008ed6f15c1ab9d1075c9d52c1b37089193d90afa9472152ac892",
+      "size_bytes": 359105
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user5-step45",
+      "kind": "exported_map",
+      "sha256": "cfa8d84e38c2ce38964c36f222432ce15d29672f1522363e69617ec09adf0569",
+      "size_bytes": 357868
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user6-step45",
+      "kind": "exported_map",
+      "sha256": "7389860ae0b8de864efd21021a58dc3a43d2cf74f4e94f6b0ce9b9bb672ca11b",
+      "size_bytes": 410345
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user7-step45",
+      "kind": "exported_map",
+      "sha256": "86b00779555d7311894be7d85dfd1d4012e90bc0428ab5cc1eb4c7bc05992258",
+      "size_bytes": 359301
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user0-step46",
+      "kind": "exported_map",
+      "sha256": "42ca9adae2a524a2bb479774b530abafef2547e5c4eb20270db28cf95fb958cf",
+      "size_bytes": 182997
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user1-step46",
+      "kind": "exported_map",
+      "sha256": "3a4a91538f2baf24ce98d4d9aec52db9f09ed199eb14e71b46cb7adf1c6d5670",
+      "size_bytes": 197658
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user2-step46",
+      "kind": "exported_map",
+      "sha256": "d56264b979387a74d607d8439dc752a2a60a41473654ad38e1fa7a8fc031324b",
+      "size_bytes": 190926
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user3-step46",
+      "kind": "exported_map",
+      "sha256": "fb574d727ec8ae1d04961d15a2a19f0d2ce5f4e4a2dcdb39cc9b2d2ba79565f9",
+      "size_bytes": 138113
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user4-step46",
+      "kind": "exported_map",
+      "sha256": "bf58275cfdc008ed6f15c1ab9d1075c9d52c1b37089193d90afa9472152ac892",
+      "size_bytes": 359105
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user5-step46",
+      "kind": "exported_map",
+      "sha256": "cfa8d84e38c2ce38964c36f222432ce15d29672f1522363e69617ec09adf0569",
+      "size_bytes": 357868
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user6-step46",
+      "kind": "exported_map",
+      "sha256": "7389860ae0b8de864efd21021a58dc3a43d2cf74f4e94f6b0ce9b9bb672ca11b",
+      "size_bytes": 410345
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user7-step46",
+      "kind": "exported_map",
+      "sha256": "86b00779555d7311894be7d85dfd1d4012e90bc0428ab5cc1eb4c7bc05992258",
+      "size_bytes": 359301
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user0-step47",
+      "kind": "exported_map",
+      "sha256": "42ca9adae2a524a2bb479774b530abafef2547e5c4eb20270db28cf95fb958cf",
+      "size_bytes": 182997
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user1-step47",
+      "kind": "exported_map",
+      "sha256": "3a4a91538f2baf24ce98d4d9aec52db9f09ed199eb14e71b46cb7adf1c6d5670",
+      "size_bytes": 197658
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user2-step47",
+      "kind": "exported_map",
+      "sha256": "d56264b979387a74d607d8439dc752a2a60a41473654ad38e1fa7a8fc031324b",
+      "size_bytes": 190926
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user3-step47",
+      "kind": "exported_map",
+      "sha256": "fb574d727ec8ae1d04961d15a2a19f0d2ce5f4e4a2dcdb39cc9b2d2ba79565f9",
+      "size_bytes": 138113
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user4-step47",
+      "kind": "exported_map",
+      "sha256": "bf58275cfdc008ed6f15c1ab9d1075c9d52c1b37089193d90afa9472152ac892",
+      "size_bytes": 359105
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user5-step47",
+      "kind": "exported_map",
+      "sha256": "cfa8d84e38c2ce38964c36f222432ce15d29672f1522363e69617ec09adf0569",
+      "size_bytes": 357868
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user6-step47",
+      "kind": "exported_map",
+      "sha256": "7389860ae0b8de864efd21021a58dc3a43d2cf74f4e94f6b0ce9b9bb672ca11b",
+      "size_bytes": 410345
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user7-step47",
+      "kind": "exported_map",
+      "sha256": "86b00779555d7311894be7d85dfd1d4012e90bc0428ab5cc1eb4c7bc05992258",
+      "size_bytes": 359301
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user0-step48",
+      "kind": "exported_map",
+      "sha256": "42ca9adae2a524a2bb479774b530abafef2547e5c4eb20270db28cf95fb958cf",
+      "size_bytes": 182997
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user1-step48",
+      "kind": "exported_map",
+      "sha256": "3a4a91538f2baf24ce98d4d9aec52db9f09ed199eb14e71b46cb7adf1c6d5670",
+      "size_bytes": 197658
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user2-step48",
+      "kind": "exported_map",
+      "sha256": "d56264b979387a74d607d8439dc752a2a60a41473654ad38e1fa7a8fc031324b",
+      "size_bytes": 190926
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user3-step48",
+      "kind": "exported_map",
+      "sha256": "fb574d727ec8ae1d04961d15a2a19f0d2ce5f4e4a2dcdb39cc9b2d2ba79565f9",
+      "size_bytes": 138113
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user4-step48",
+      "kind": "exported_map",
+      "sha256": "bf58275cfdc008ed6f15c1ab9d1075c9d52c1b37089193d90afa9472152ac892",
+      "size_bytes": 359105
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user5-step48",
+      "kind": "exported_map",
+      "sha256": "cfa8d84e38c2ce38964c36f222432ce15d29672f1522363e69617ec09adf0569",
+      "size_bytes": 357868
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user6-step48",
+      "kind": "exported_map",
+      "sha256": "7389860ae0b8de864efd21021a58dc3a43d2cf74f4e94f6b0ce9b9bb672ca11b",
+      "size_bytes": 410345
+    },
+    {
+      "record_id": "r2-uzp_bevelled_cube-user7-step48",
+      "kind": "exported_map",
+      "sha256": "86b00779555d7311894be7d85dfd1d4012e90bc0428ab5cc1eb4c7bc05992258",
+      "size_bytes": 359301
+    },
+    {
+      "record_id": "oracle-environment",
+      "kind": "oracle_environment_record",
+      "sha256": "29c44b309275b8eaac4765712d5ec8272b4afd9be091d05b98528659e4889c8e",
+      "size_bytes": 402
+    }
+  ]
 }
