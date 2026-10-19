@@ -1,0 +1,13 @@
+{
+  "id": 268,
+  "slug": "268-the-ring-fractions-are-unfolded-1-d-shares-quantised-to-10-8-and-6-bit-unorm-in-an-fma-lerp-chain-bit-exact-on-every-decoded-seam-ring-texel",
+  "title": "The ring fractions are unfolded 1/d shares quantised to 10-, 8- and 6-bit UNORM in an FMA lerp chain, bit-exact on every decoded seam-ring texel",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
