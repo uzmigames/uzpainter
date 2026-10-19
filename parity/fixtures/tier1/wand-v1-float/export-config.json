@@ -1,0 +1,49 @@
+{
+  "exportShaderParams": false,
+  "defaultExportPreset": "v6-f32",
+  "exportPresets": [
+    {
+      "name": "v6-f32",
+      "maps": [
+        {
+          "fileName": "11-Varinha-Madeira_v1r2_BaseColor_f32",
+          "channels": [
+            { "destChannel": "R", "srcChannel": "R", "srcMapType": "documentMap", "srcMapName": "basecolor" },
+            { "destChannel": "G", "srcChannel": "G", "srcMapType": "documentMap", "srcMapName": "basecolor" },
+            { "destChannel": "B", "srcChannel": "B", "srcMapType": "documentMap", "srcMapName": "basecolor" }
+          ]
+        },
+        {
+          "fileName": "11-Varinha-Madeira_v1r2_Roughness_f32",
+          "channels": [
+            { "destChannel": "L", "srcChannel": "L", "srcMapType": "documentMap", "srcMapName": "roughness" }
+          ]
+        },
+        {
+          "fileName": "11-Varinha-Madeira_v1r2_Metallic_f32",
+          "channels": [
+            { "destChannel": "L", "srcChannel": "L", "srcMapType": "documentMap", "srcMapName": "metallic" }
+          ]
+        },
+        {
+          "fileName": "11-Varinha-Madeira_v1r2_Height_f32",
+          "channels": [
+            { "destChannel": "L", "srcChannel": "L", "srcMapType": "documentMap", "srcMapName": "height" }
+          ]
+        }
+      ]
+    }
+  ],
+  "exportList": [{ "rootPath": "11-Varinha-Madeira" }],
+  "exportParameters": [
+    {
+      "parameters": {
+        "fileFormat": "exr",
+        "bitDepth": "32f",
+        "sizeLog2": 11,
+        "paddingAlgorithm": "infinite",
+        "dithering": false
+      }
+    }
+  ]
+}

@@ -27,18 +27,11 @@ capture. Records go to the oracle inbox like every other golden (`output.py`).
 
 from __future__ import annotations
 
-import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from tools.parity.recorder.capture import (
-    MEDIA_TYPES,
-    measure_storage_format,
-    verify_current_outputs,
-    write_fence,
-)
 from tools.parity.recorder.job import Job, canonical_json, sha256_bytes, sha256_file
 from tools.parity.recorder.output import ensure_outside_repository, run_name, write_run
 from tools.parity.recorder.script_run import (
@@ -48,16 +41,17 @@ from tools.parity.recorder.script_run import (
     R1_REPEAT,
     R2,
     SAME_SESSION,
+    ConfigExport,
+    export_config,
     input_file,
     recording,
+    run_config_export,
     template_output,
 )
 from tools.parity.recorder.session import PainterSession, RecorderError
 from tools.parity.recorder.texture import (
-    UNDETERMINED,
     Now,
     close_quietly,
-    output_safe,
     require_colour_management,
     utc_now,
 )
@@ -71,11 +65,6 @@ EXPORT = "substance_painter.export.export_project_textures"
 READBACK = "substance_painter.layerstack.get_root_layer_nodes"
 PROJECT_KIND = "painter_project"
 CONFIG_KIND = "recipe_json"
-# Keys of an export `json_config` the authored configuration may hold (`exportPath` is the
-# recorder's, a fresh private directory per recording).
-CONFIG_KEYS = frozenset(
-    {"exportShaderParams", "defaultExportPreset", "exportPresets", "exportList", "exportParameters"}
-)
 
 
 @dataclass(frozen=True)
@@ -106,24 +95,6 @@ def step_input(
     if item is None or item["kind"] != kind:
         raise RecorderError(f"step {step['step']}: `{arg}` must name a {kind} input")
     return item
-
-
-def export_config(item: dict[str, Any], repo_root: Path) -> dict[str, Any]:
-    """The authored `json_config` (a repository file, hash-checked) without `exportPath`."""
-    if "path" not in item:
-        raise RecorderError(f"input {item['input_id']}: the export configuration is a repo file")
-    file = repo_root / item["path"]
-    if not file.is_file() or sha256_file(file) != item["sha256"]:
-        raise RecorderError(f"input {item['input_id']}: {file} is missing or not the pinned bytes")
-    config = json.loads(file.read_bytes().decode("utf-8"))
-    if not isinstance(config, dict) or not set(config) <= CONFIG_KEYS:
-        raise RecorderError(
-            f"input {item['input_id']}: an export configuration holds only {sorted(CONFIG_KEYS)} "
-            "(the recorder sets `exportPath`)"
-        )
-    if not config.get("exportList") or not config.get("exportParameters"):
-        raise RecorderError(f"input {item['input_id']}: `exportList` and `exportParameters`")
-    return config
 
 
 def migration_job_from_manifest(
@@ -202,56 +173,8 @@ def run_export(
     session: PainterSession, job: MigrationJob, directory: Path, name: str
 ) -> tuple[list[dict[str, Any]], list[Path]]:
     """One export into a fresh directory, verified like a texture golden's export."""
-    out = directory / name / "export"
-    out.mkdir(parents=True)
-    session.wait_ready()
-    fence_ns = write_fence(directory / name / "fence")
-    reply = session.call("export_textures", config={**job.config, "exportPath": out.as_posix()})
-    session.wait_ready()
-    if reply["status"] != "Success":
-        raise RecorderError(f"{name}: export {reply['status']}: {reply['message']}")
-    files = [Path(f) for entry in reply["textures"] for f in entry["files"]]
-    verify_current_outputs(files, out, fence_ns)
-    value = {"status": reply["status"], "message": reply["message"], "textures": reply["textures"]}
-    outputs: list[dict[str, Any]] = [
-        {
-            "output_id": "export/s2",
-            "kind": "api_readback",
-            "call": EXPORT,
-            "args": {"step": 2, "config": job.config_id},
-            "value": value,
-        }
-    ]
-    for entry in reply["textures"]:
-        texture_set = entry["texture_set"] + (f"/{entry['stack']}" if entry["stack"] else "")
-        for file_name in entry["files"]:
-            path = Path(file_name)
-            measured = measure_storage_format(path)
-            encoding, basis = (
-                (measured.encoding, "file")
-                if measured.encoding is not None
-                else (UNDETERMINED, "migration_export")
-            )
-            outputs.append(
-                {
-                    "output_id": f"export/{output_safe(path.stem)}",
-                    "kind": "exported_map",
-                    "texture_set": texture_set,
-                    "map": path.stem,
-                    "blob": {
-                        "sha256": sha256_file(path),
-                        "size_bytes": path.stat().st_size,
-                        "media_type": MEDIA_TYPES[measured.container],
-                    },
-                    "storage_format": measured.as_schema(encoding),
-                    "export_settings": {
-                        "step": 2,
-                        "config": job.config_id,
-                        "encoding_basis": basis,
-                    },
-                }
-            )
-    return outputs, files
+    export = ConfigExport(2, job.config_id, job.config)
+    return run_config_export(session, export, directory / name, "migration_export")
 
 
 def record_migration_golden(

@@ -2,7 +2,7 @@ r"""Tier 1 goldens from UzmiGames pipeline scripts run byte-unchanged in Painter
 
     python -m tools.parity.recorder record-script <manifest.json> --assets-root <Assets3D>
     python -m tools.parity.recorder.script_run manifest --assets-root <Assets3D> --out <path> \
-        [--pilot wand|belt|sash|tunic|tunic-rebuild] [--store]
+        [--pilot wand|wand-float|belt|sash|tunic|tunic-rebuild] [--store]
 
 The manifest's `instruction_sequence.interface` is `uzmigames_pipeline_scripts`: every step is one
 script run (`uzmigames.pipeline.run_script`), and its inputs live in the UzmiGames asset
@@ -36,6 +36,12 @@ b. **Transport swap.** The sync script's own `execute(code, token=None)` is repl
    pinned bytes for the run. The
    project lies in the private work directory, outside a production character's folder, so the
    guard passes without an attempt token; any other verdict is refused.
+
+A fourth step may close the sequence: `substance_painter.export.export_project_textures` with
+`config`, an authored `recipe_json` repository file holding the `json_config` without `exportPath`
+(as a migration golden's export, decision 194). The recorder runs it after every script export,
+on the same document, into a fresh directory of its own: the Wand's float recording exports the
+same maps as OpenEXR 32f with the script's padding (decision 283).
 
 Recordings: `r1` (`same_session`: create, sync, export), `r1-repeat` (`same_session`: export again
 into a fresh directory) and `r2` (`after_save_reopen`: close, reopen the saved project, export
@@ -77,7 +83,7 @@ from tools.parity.recorder.texture import (
     require_colour_management,
     utc_now,
 )
-from tools.parity.schemas import Schema, load_json, validation_errors
+from tools.parity.schemas import REPO_ROOT, Schema, load_json, validation_errors
 from tools.parity.store.store import OracleStore, Status, locate
 
 INTERFACE = "uzmigames_pipeline_scripts"
@@ -98,6 +104,13 @@ SYNC_ARGS = frozenset({"script", "command", "stack", "masks", "mask_files", "imp
 EXPORT_INPUTS = {"script": ("pipeline_script",), "args_file": ("recipe_json",)}
 MASK_KINDS = ("mask", "image")
 SYNC_COMMAND = "sync"
+# The optional closing step: the recorder's export of an authored `json_config` (decision 283).
+CONFIG_EXPORT = "substance_painter.export.export_project_textures"
+# Keys of an export `json_config` the authored configuration may hold (`exportPath` is the
+# recorder's, a fresh private directory per recording).
+CONFIG_KEYS = frozenset(
+    {"exportShaderParams", "defaultExportPreset", "exportPresets", "exportList", "exportParameters"}
+)
 
 # Keys of the two arguments files: the repointed ones and those kept as authored.
 CREATE_KEYS = frozenset({"mesh", "normal", "ao", "dst", "name"})
@@ -140,12 +153,22 @@ class ScriptStep:
 
 
 @dataclass(frozen=True)
+class ConfigExport:
+    """The closing recorder export: an authored `json_config` (a repository file)."""
+
+    step: int
+    config_id: str
+    config: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class ScriptJob:
     manifest: dict[str, Any]
     inputs: dict[str, PinnedInput]
     create: ScriptStep
     sync: ScriptStep
     export: ScriptStep
+    config_export: ConfigExport | None = None
 
     @property
     def golden_id(self) -> str:
@@ -183,6 +206,8 @@ def pinned_inputs(
 ) -> dict[str, PinnedInput]:
     inputs: dict[str, PinnedInput] = {}
     for item in manifest["inputs"]:
+        if "path" in item:
+            continue  # a repository file: only a config export's configuration (checked by the job)
         where = f"input {item['input_id']}"
         if "assets3d_path" not in item or item["provenance"]["licence"] != ASSETS3D_LICENCE:
             raise RecorderError(f"{where}: a pipeline-script job names Assets3D inputs only")
@@ -309,8 +334,41 @@ def stack_bitmaps(stack: dict[str, Any]) -> set[str]:
     return names | {x["base_tex"] for x in stack["layers"] if x.get("base_tex")}
 
 
+def export_config(item: dict[str, Any], repo_root: Path) -> dict[str, Any]:
+    """The authored `json_config` (a repository file, hash-checked) without `exportPath`."""
+    if "path" not in item:
+        raise RecorderError(f"input {item['input_id']}: the export configuration is a repo file")
+    file = repo_root / item["path"]
+    if not file.is_file() or sha256_file(file) != item["sha256"]:
+        raise RecorderError(f"input {item['input_id']}: {file} is missing or not the pinned bytes")
+    config = json.loads(file.read_bytes().decode("utf-8"))
+    if not isinstance(config, dict) or not set(config) <= CONFIG_KEYS:
+        raise RecorderError(
+            f"input {item['input_id']}: an export configuration holds only {sorted(CONFIG_KEYS)} "
+            "(the recorder sets `exportPath`)"
+        )
+    if not config.get("exportList") or not config.get("exportParameters"):
+        raise RecorderError(f"input {item['input_id']}: `exportList` and `exportParameters`")
+    return config
+
+
+def config_export_step(
+    raw: dict[str, Any], manifest: dict[str, Any], repo_root: Path
+) -> ConfigExport:
+    step, args = raw["step"], raw.get("args", {})
+    if set(args) != {"config"}:
+        raise RecorderError(f"step {step}: {CONFIG_EXPORT} takes only `config`")
+    item = next((i for i in manifest["inputs"] if i["input_id"] == args["config"]), None)
+    if item is None or item["kind"] != "recipe_json":
+        raise RecorderError(f"step {step}: `config` must name a recipe_json input")
+    return ConfigExport(step, item["input_id"], export_config(item, repo_root))
+
+
 def script_job_from_manifest(
-    manifest: dict[str, Any], assets_root: Path, store: OracleStore | None = None
+    manifest: dict[str, Any],
+    assets_root: Path,
+    store: OracleStore | None = None,
+    repo_root: Path = REPO_ROOT,
 ) -> ScriptJob:
     """The job of a pipeline-script manifest; refused before Painter is touched on any input
     neither Assets3D nor the private store (`store`, default: this machine's) holds, or any step
@@ -323,10 +381,20 @@ def script_job_from_manifest(
     steps = manifest["instruction_sequence"]["steps"]
     if [s["step"] for s in steps] != list(range(1, len(steps) + 1)):
         raise RecorderError("instruction steps must be numbered 1..n in order")
+    config_export = None
+    if steps and steps[-1]["call"] == CONFIG_EXPORT:
+        config_export = config_export_step(steps[-1], manifest, repo_root)
+        steps = steps[:-1]
+    repo_files = {i["input_id"] for i in manifest["inputs"] if "path" in i}
+    if repo_files != ({config_export.config_id} if config_export else set()):
+        raise RecorderError(
+            f"{manifest['golden_id']}: a repository-file input is only the configuration of a "
+            f"closing {CONFIG_EXPORT}"
+        )
     roles = [script_step(raw, inputs) for raw in steps]
     if [role for role, _ in roles] != ["create", "sync", "export"]:
         raise RecorderError("a pipeline-script golden runs create, sync and export, in order")
-    return ScriptJob(manifest, inputs, roles[0][1], roles[1][1], roles[2][1])
+    return ScriptJob(manifest, inputs, roles[0][1], roles[1][1], roles[2][1], config_export)
 
 
 def load_script_job(path: Path, assets_root: Path, store: OracleStore | None = None) -> ScriptJob:
@@ -599,6 +667,79 @@ def run_export(
     return outputs, files
 
 
+def run_config_export(
+    session: PainterSession, export: ConfigExport, base: Path, basis: str
+) -> tuple[list[dict[str, Any]], list[Path]]:
+    """The authored configuration exported into a fresh directory `base/export`, verified like a
+    texture golden's export; `basis` is the encoding basis of a map whose file tells none."""
+    out = base / "export"
+    out.mkdir(parents=True)
+    session.wait_ready()
+    fence_ns = write_fence(base / "fence")
+    reply = session.call("export_textures", config={**export.config, "exportPath": out.as_posix()})
+    session.wait_ready()
+    if reply["status"] != "Success":
+        raise RecorderError(f"{base.name}: export {reply['status']}: {reply['message']}")
+    files = [Path(f) for entry in reply["textures"] for f in entry["files"]]
+    verify_current_outputs(files, out, fence_ns)
+    value = {"status": reply["status"], "message": reply["message"], "textures": reply["textures"]}
+    outputs: list[dict[str, Any]] = [
+        {
+            "output_id": f"export/s{export.step}",
+            "kind": "api_readback",
+            "call": CONFIG_EXPORT,
+            "args": {"step": export.step, "config": export.config_id},
+            "value": value,
+        }
+    ]
+    for entry in reply["textures"]:
+        texture_set = entry["texture_set"] + (f"/{entry['stack']}" if entry["stack"] else "")
+        for file_name in entry["files"]:
+            path = Path(file_name)
+            measured = measure_storage_format(path)
+            encoding, found = (
+                (measured.encoding, "file")
+                if measured.encoding is not None
+                else (UNDETERMINED, basis)
+            )
+            outputs.append(
+                {
+                    "output_id": f"export/{output_safe(path.stem)}",
+                    "kind": "exported_map",
+                    "texture_set": texture_set,
+                    "map": path.stem,
+                    "blob": {
+                        "sha256": sha256_file(path),
+                        "size_bytes": path.stat().st_size,
+                        "media_type": MEDIA_TYPES[measured.container],
+                    },
+                    "storage_format": measured.as_schema(encoding),
+                    "export_settings": {
+                        "step": export.step,
+                        "config": export.config_id,
+                        "encoding_basis": found,
+                    },
+                }
+            )
+    return outputs, files
+
+
+def run_exports(
+    session: PainterSession, job: ScriptJob, directory: Path, recording: str
+) -> tuple[list[dict[str, Any]], list[Path]]:
+    """The script's export, then the closing config export (if any) of the same document."""
+    outputs, files = run_export(session, job, directory, recording)
+    if job.config_export is not None:
+        more, more_files = run_config_export(
+            session, job.config_export, directory / recording / "config", "config_export"
+        )
+        ids = [o["output_id"] for o in outputs + more]
+        if len(set(ids)) != len(ids):
+            raise RecorderError(f"{recording}: the two exports write maps of the same name")
+        outputs, files = outputs + more, files + more_files
+    return outputs, files
+
+
 def template_output(session: PainterSession) -> dict[str, Any]:
     return {
         "output_id": "template/texture-sets",
@@ -645,14 +786,14 @@ def record_script_golden(
         synced = run_sync(session, job, staged, directory)
         first = [readback(job.create, created), readback(job.sync, synced)]
         first.append(template_output(session))
-        exported, first_blobs = run_export(session, job, directory, R1)
-        repeat, repeat_blobs = run_export(session, job, directory, R1_REPEAT)
+        exported, first_blobs = run_exports(session, job, directory, R1)
+        repeat, repeat_blobs = run_exports(session, job, directory, R1_REPEAT)
         session.call("close_project")
         session.wait_closed()
         session.call("open_project", path=project.as_posix())
         session.wait_ready()
         second = [template_output(session)]
-        reopened, second_blobs = run_export(session, job, directory, R2)
+        reopened, second_blobs = run_exports(session, job, directory, R2)
     finally:
         close_quietly(session)
     record = {
@@ -869,6 +1010,67 @@ def wand_manifest(assets_root: Path) -> dict[str, Any]:
         ["route-check-py"],
         assets_root,
     )
+
+
+# --- The Wand float request (phase1/tier1/wand-v1-float; decision 283) ---------------------------
+
+WAND_FLOAT_CONFIG = "parity/fixtures/tier1/wand-v1-float/export-config.json"
+WAND_FLOAT_DESCRIPTION = (
+    "Float recording of the Tier 1 Wand v1 golden (phase1/tier1/wand-v1; decisions 099 and 283), "
+    "so that its infinite padding can be scored on the document's own values: the Wand's Height "
+    "is L16F, and each PNG 16 code of the golden has several L16F preimages (decisions 277 and "
+    "281). Steps 1 to 3 and every input are the Wand v1 golden's, byte for byte (the three "
+    "UzmiGames pipeline scripts and their arguments, the stack, the masks, the mesh and the mesh "
+    "maps, all pinned by SHA-256), run with the same two recorder adaptations. Step 4 is the "
+    "recorder's own export of the same document after every script export: the authored "
+    "configuration export-config.json exports BaseColor, Roughness, Metallic and Height from the "
+    "same document maps and channels as painter_export.py, as OpenEXR 32f with the script's "
+    "parameters otherwise (sizeLog2 11, infinite padding, no dithering), each file name the "
+    "script's with the suffix _f32, into a fresh directory of its own. The run's PNG 16 maps "
+    "must equal the Wand v1 golden's byte for byte, which proves it is the same document. "
+    "Recordings: r1 (same session: create, sync, export, float export), r1-repeat (same session, "
+    "both exports again) and r2 (after save, close and reopen, both exports again). Recorded "
+    "on Painter 12.1.5."
+)
+
+
+def wand_float_manifest(assets_root: Path) -> dict[str, Any]:
+    """The Wand float request: the R9 manifest's inputs and steps, then a config export."""
+    manifest = wand_manifest(assets_root)
+    config = {
+        "input_id": "wand-float-export-config",
+        "kind": "recipe_json",
+        "path": WAND_FLOAT_CONFIG,
+        "sha256": sha256_file(REPO_ROOT / WAND_FLOAT_CONFIG),
+        "provenance": {
+            "origin": "uzmigames_authored",
+            "licence": "Apache-2.0",
+            "note": "The OpenEXR 32f export of the Wand float recording (decision 283).",
+        },
+    }
+    steps = manifest["instruction_sequence"]["steps"]
+    steps.append(
+        {
+            "step": len(steps) + 1,
+            "call": CONFIG_EXPORT,
+            "args": {"config": "wand-float-export-config"},
+        }
+    )
+    manifest.update(
+        golden_id="phase1/tier1/wand-v1-float",
+        domain="tier1/pilot/wand-v1-float",
+        description=WAND_FLOAT_DESCRIPTION,
+        inputs=[*manifest["inputs"], config],
+        applied_settings=[
+            *manifest["applied_settings"],
+            {"name": "export.exr.bit_depth", "value": "32f", "applied_by": "recorder_api"},
+        ],
+    )
+    problems = validation_errors(manifest, Schema.GOLDEN_PUBLIC)
+    if problems:
+        raise RecorderError(f"the wand-v1-float manifest is invalid: {problems}")
+    script_job_from_manifest(manifest, assets_root)
+    return manifest
 
 
 # --- The Belt v5 request (phase2/tier1/belt-v5; phase2.9, decision 192) -------------------------
@@ -1096,7 +1298,12 @@ def sash_manifest(assets_root: Path) -> dict[str, Any]:
     return waist_manifest(assets_root, SASH_PIECE)
 
 
-PILOTS = {"wand": wand_manifest, "belt": belt_manifest, "sash": sash_manifest}
+PILOTS = {
+    "wand": wand_manifest,
+    "wand-float": wand_float_manifest,
+    "belt": belt_manifest,
+    "sash": sash_manifest,
+}
 
 
 def store_inputs(manifest: dict[str, Any], assets_root: Path, store: OracleStore) -> int:

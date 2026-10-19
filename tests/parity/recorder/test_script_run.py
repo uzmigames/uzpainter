@@ -22,12 +22,14 @@ from tools.parity.recorder import script_run
 from tools.parity.recorder import session as session_module
 from tools.parity.recorder.script_run import (
     ASSETS3D_LICENCE,
+    CONFIG_EXPORT,
     PAINTER_SCRIPTS,
     RUN_SCRIPT,
     ScriptSession,
     load_script_job,
     record_script_golden,
     script_job_from_manifest,
+    wand_float_manifest,
     wand_manifest,
 )
 from tools.parity.recorder.session import RecorderError
@@ -850,3 +852,157 @@ def test_committed_manifest_matches_the_real_assets(
     pinned = tmp_path / "pinned"
     script_run.stage_inputs(job, pinned)
     assert {**committed, "private_records": []} == wand_manifest(pinned)
+
+
+# --- a closing config export: the Wand float request (decision 283) --------------------------
+
+ENVELOPE = REPO_ROOT / "parity/envelopes/painter-12.1.5_js-api.1.1.20"
+FLOAT_GOLDEN = "phase1/tier1/wand-v1-float.json"
+
+
+def with_config_export(
+    manifest: dict[str, Any], repo: Path, texture_set: str, name: str = "W_v1_Height_f32"
+) -> dict[str, Any]:
+    """The stand-in manifest closed by a config export of its Height as OpenEXR 32f."""
+    config = {
+        "exportShaderParams": False,
+        "defaultExportPreset": "f32",
+        "exportPresets": [
+            {
+                "name": "f32",
+                "maps": [
+                    {
+                        "fileName": name,
+                        "channels": [
+                            {
+                                "destChannel": "L",
+                                "srcChannel": "L",
+                                "srcMapType": "documentMap",
+                                "srcMapName": "height",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "exportList": [{"rootPath": texture_set}],
+        "exportParameters": [
+            {
+                "parameters": {
+                    "fileFormat": "exr",
+                    "bitDepth": "32f",
+                    "sizeLog2": 11,
+                    "paddingAlgorithm": "infinite",
+                    "dithering": False,
+                }
+            }
+        ],
+    }
+    write(repo / "fixtures/config.json", json.dumps(config))
+    changed = copy.deepcopy(manifest)
+    changed["inputs"].append(
+        {
+            "input_id": "float-config",
+            "kind": "recipe_json",
+            "path": "fixtures/config.json",
+            "sha256": hashlib.sha256((repo / "fixtures/config.json").read_bytes()).hexdigest(),
+            "provenance": {"origin": "uzmigames_authored", "licence": "Apache-2.0"},
+        }
+    )
+    changed["instruction_sequence"]["steps"].append(
+        {"step": 4, "call": CONFIG_EXPORT, "args": {"config": "float-config"}}
+    )
+    assert validation_errors(changed, Schema.GOLDEN_PUBLIC) == []
+    return changed
+
+
+def test_a_closing_config_export_follows_every_script_export(
+    painter: tuple[Any, ScriptSession], manifest: dict[str, Any], assets: Path, tmp_path: Path
+) -> None:
+    world, session = painter
+    changed = with_config_export(manifest, tmp_path / "repo", world.texture_set)
+    job = script_job_from_manifest(changed, assets, repo_root=tmp_path / "repo")
+    assert job.config_export is not None and job.config_export.step == 4
+    run = record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+
+    data = json.loads((run / "record.json").read_text(encoding="utf-8"))
+    assert record_problems(data) == []
+    for recording in data["recordings"]:
+        maps = {o["map"]: o for o in recording["outputs"] if o["kind"] == "exported_map"}
+        assert sorted(maps) == ["W_v1_BaseColor", "W_v1_Height", "W_v1_Height_f32"]
+        assert maps["W_v1_Height_f32"]["export_settings"]["step"] == 4
+        assert maps["W_v1_Height"]["export_settings"]["step"] == 3
+        readbacks = [o for o in recording["outputs"] if o["output_id"] == "export/s4"]
+        assert len(readbacks) == 1 and readbacks[0]["call"] == CONFIG_EXPORT
+        files = [f for t in readbacks[0]["value"]["textures"] for f in t["files"]]
+        # A fresh directory of its own, next to the script's export of the same recording.
+        assert [Path(f).parent.parent.name for f in files] == ["config"]
+        assert Path(files[0]).parent.parent.parent.name == recording["recording_id"]
+
+
+def test_two_exports_writing_maps_of_one_name_are_refused(
+    painter: tuple[Any, ScriptSession], manifest: dict[str, Any], assets: Path, tmp_path: Path
+) -> None:
+    world, session = painter
+    changed = with_config_export(manifest, tmp_path / "repo", world.texture_set, "W_v1_Height")
+    job = script_job_from_manifest(changed, assets, repo_root=tmp_path / "repo")
+    with pytest.raises(RecorderError, match="maps of the same name"):
+        record_script_golden(session, job, tmp_path / "work", tmp_path / "inbox")
+
+
+def test_job_refuses_a_repository_input_no_config_export_names(
+    assets: Path, manifest: dict[str, Any], tmp_path: Path
+) -> None:
+    changed = with_config_export(manifest, tmp_path / "repo", "uzp_plane")
+    del changed["instruction_sequence"]["steps"][3]
+    with pytest.raises(RecorderError, match="only the configuration of a closing"):
+        script_job_from_manifest(changed, assets, repo_root=tmp_path / "repo")
+
+
+def test_job_refuses_a_config_export_before_the_script_export(
+    assets: Path, manifest: dict[str, Any], tmp_path: Path
+) -> None:
+    changed = with_config_export(manifest, tmp_path / "repo", "uzp_plane")
+    steps = changed["instruction_sequence"]["steps"]
+    steps[2]["call"], steps[3]["call"] = steps[3]["call"], steps[2]["call"]
+    steps[2]["args"], steps[3]["args"] = steps[3]["args"], steps[2]["args"]
+    with pytest.raises(RecorderError, match="only the configuration of a closing"):
+        script_job_from_manifest(changed, assets, repo_root=tmp_path / "repo")
+
+
+def test_job_refuses_a_config_whose_bytes_differ_from_the_pin(
+    assets: Path, manifest: dict[str, Any], tmp_path: Path
+) -> None:
+    changed = with_config_export(manifest, tmp_path / "repo", "uzp_plane")
+    (tmp_path / "repo/fixtures/config.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(RecorderError, match="not the pinned bytes"):
+        script_job_from_manifest(changed, assets, repo_root=tmp_path / "repo")
+
+
+def test_committed_float_golden_replays_the_wand_golden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The float golden (its request until admitted) holds the Wand v1 golden's inputs, steps and
+    settings unchanged, then the config export; the generator writes it over the pinned files."""
+    monkeypatch.undo()  # the owner's store, read only
+    if not (REAL_ASSETS / "AGENTS.md").is_file():
+        pytest.skip(f"the UzmiGames asset repository is not at {REAL_ASSETS}")
+    admitted = ENVELOPE / "manifests" / FLOAT_GOLDEN
+    path = admitted if admitted.is_file() else ENVELOPE / "requests" / FLOAT_GOLDEN
+    committed, wand = load_json(path), load_json(COMMITTED)
+    assert committed["inputs"][:-1] == wand["inputs"]
+    assert committed["instruction_sequence"]["steps"][:3] == wand["instruction_sequence"]["steps"]
+    assert committed["applied_settings"][:-1] == wand["applied_settings"]
+    job = load_script_job(path, REAL_ASSETS, locate_store())
+    assert job.config_export is not None
+    parameters = job.config_export.config["exportParameters"][0]["parameters"]
+    assert parameters == {
+        "fileFormat": "exr",
+        "bitDepth": "32f",
+        "sizeLog2": 11,
+        "paddingAlgorithm": "infinite",
+        "dithering": False,
+    }
+    pinned = tmp_path / "pinned"
+    script_run.stage_inputs(job, pinned)
+    assert {**committed, "private_records": []} == wand_float_manifest(pinned)

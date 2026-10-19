@@ -151,7 +151,7 @@
       "properties": {
         "author": { "const": "UzmiGames" },
         "interface": {
-          "description": "Painter's documented Python API (A-PYDOC): each step is one documented substance_painter call; or UzmiGames pipeline scripts run byte-unchanged, pinned by SHA-256, through Painter's documented remote control: each step is one script run (call uzmigames.pipeline.run_script); the scripts are UzmiGames code calling Painter's public Python API, pinned rather than checked symbol by symbol (a Tier 1 rebuild, decision 099). The community MCP bridge is never an interface. painter_project_migration: a UzmiGames project saved by Painter (a painter_project input) is opened from a private copy and exported through the documented API, its state read back privately (a Tier 1 migration golden, decision 194).",
+          "description": "Painter's documented Python API (A-PYDOC): each step is one documented substance_painter call; or UzmiGames pipeline scripts run byte-unchanged, pinned by SHA-256, through Painter's documented remote control: each step is one script run (call uzmigames.pipeline.run_script), and the last may be the recorder's export of an authored configuration (substance_painter.export.export_project_textures, decision 283); the scripts are UzmiGames code calling Painter's public Python API, pinned rather than checked symbol by symbol (a Tier 1 rebuild, decision 099). The community MCP bridge is never an interface. painter_project_migration: a UzmiGames project saved by Painter (a painter_project input) is opened from a private copy and exported through the documented API, its state read back privately (a Tier 1 migration golden, decision 194).",
           "enum": [
             "substance_painter_documented_python_api",
             "uzmigames_pipeline_scripts",
@@ -184,7 +184,7 @@
       "if": { "properties": { "interface": { "const": "uzmigames_pipeline_scripts" } } },
       "then": {
         "properties": {
-          "steps": { "items": { "properties": { "call": { "const": "uzmigames.pipeline.run_script" } } } }
+          "steps": { "items": { "properties": { "call": { "enum": ["uzmigames.pipeline.run_script", "substance_painter.export.export_project_textures"] } } } }
         }
       },
       "else": {

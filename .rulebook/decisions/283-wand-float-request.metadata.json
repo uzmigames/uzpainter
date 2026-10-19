@@ -1,0 +1,12 @@
+{
+  "id": 283,
+  "slug": "283-wand-float-request",
+  "title": "The Wand float request: the Wand v1 golden replayed byte for byte, closed by a recorder export of BaseColor, Roughness, Metallic and Height as OpenEXR 32f with the same infinite padding",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine"
+  ],
+  "supersededBy": null
+}
