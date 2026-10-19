@@ -436,7 +436,7 @@ refused = {
     "lut": raises(d.set_color_lut_resource, resource.ResourceID("project", "sepia")),
     "lut_import": raises(resource.import_project_resource, IMAGES + "/checker-16.png",
                          resource.Usage.COLOR_LUT),
-    "shader_value": raises(shader.set_parameters, {"double_sided": True}),
+    "shader_value": raises(shader.set_parameters, {"coat_enabled": True}),
     "shader_unknown": raises(shader.set_parameters, {"emissive_intensity": 1.0}),
     "get_tone_mapping": raises(d.get_tone_mapping),
     "set_tone_mapping": raises(d.set_tone_mapping, d.ToneMappingFunction.ACES),
@@ -475,6 +475,146 @@ def test_values_outside_the_fixed_pipeline_are_refused_and_change_nothing(run: R
     assert "environment.exposure 1.0" in refused["preset_exposure"]
     assert result["accepted"] == ["no_op"] * 7 + [None]
     assert result["unchanged"]
+
+
+# ── The stored double-sided state (decision 196, amendment of 2026-10-19) ──────────────────────
+
+DOUBLE_SIDED = """
+from uzpainter.render import display as rd, shader
+stack = create()
+fill = ls.insert_fill(top(stack))
+fill.active_channels = {CT.BaseColor, CT.Height}
+fill.set_source(CT.BaseColor, cm.Color(0.2, 0.3, 0.4))
+fill.set_source(CT.Height, cm.Color(0.25, 0.25, 0.25, "Raw"))
+
+
+def exported(folder):
+    def doc(name, source, letters):
+        return {"fileName": "$textureSet_" + name, "channels": [
+            {"destChannel": c, "srcChannel": c, "srcMapType": "documentMap", "srcMapName": source}
+            for c in letters]}
+    config = {"exportShaderParams": False, "exportPath": WORK + "/" + folder,
+              "defaultExportPreset": "p",
+              "exportPresets": [{"name": "p", "maps": [doc("BaseColor", "basecolor", "RGB"),
+                                                       doc("Height", "height", "L")]}],
+              "exportList": [{"rootPath": "uzp_plane"}],
+              "exportParameters": [{"parameters": {"fileFormat": "png", "bitDepth": "16",
+                                                   "dithering": False,
+                                                   "paddingAlgorithm": "passthrough"}}]}
+    out = export.export_project_textures(config)
+    return {f["relative_path"]: f["sha256"] for f in out["files"]}
+
+
+off_maps = exported("off")
+defaults = shader.parameters()
+before = (project.revision(), shader.parameters(), rd.state()["parity"])
+refused = {
+    "int": raises(shader.set_parameters, {"double_sided": 1}),
+    "string": raises(shader.set_parameters, {"double_sided": "true"}),
+    "null": raises(shader.set_parameters, {"double_sided": None}),
+    "valid_then_refused": raises(shader.set_parameters,
+                                 {"double_sided": True, "thin_film_enabled": True}),
+    "refused_then_malformed": raises(shader.set_parameters,
+                                     {"coat_enabled": True, "double_sided": 0}),
+    "default_then_malformed": raises(shader.set_parameters,
+                                     {"specular_ior": 1.5, "double_sided": 0.0}),
+}
+unchanged = (project.revision(), shader.parameters(), rd.state()["parity"]) == before
+on = shader.set_parameters({"double_sided": True}).status
+on_parameters = shader.parameters()
+# A later set of other identifiers merges: the stored double_sided stays.
+merged = shader.set_parameters({"specular_ior": 1.5, "tessellation_subdivisions": 1.0}).status
+merged_parameters = shader.parameters()
+on_state = rd.state()
+on_maps = exported("on")
+project.save_as(WORK + "/double-sided.uzp")
+project.close()
+project.open(WORK + "/double-sided.uzp")
+reopened = {"parameters": shader.parameters(), "state": rd.state()}
+off = shader.set_parameters({"double_sided": False}).status
+again = shader.set_parameters({"double_sided": False}).status
+off_parameters = shader.parameters()
+result = {"defaults": defaults, "refused": refused, "unchanged": unchanged, "on": on,
+          "on_parameters": on_parameters, "merged": merged, "merged_parameters": merged_parameters,
+          "on_state": on_state, "off_maps": off_maps, "on_maps": on_maps, "reopened": reopened,
+          "off": off, "again": again, "off_parameters": off_parameters}
+"""
+
+
+def test_double_sided_is_stored_project_state_that_no_export_reads(run: Run) -> None:
+    """Decision 196 option (b), amendment of 2026-10-19: `double_sided` takes true or false only,
+    every value is checked before anything changes, a set merges into the stored parameters, the
+    state survives save and reopen and reads back the same through `parameters()` and `state()`,
+    a stored true is a non-parity state, and the exported maps are byte-identical with it on and
+    off. The other 18 identifiers stay default-only."""
+    result = ok(run(DOUBLE_SIDED))
+    defaults = result["defaults"]
+    assert len(defaults) == 19 and defaults["double_sided"] is False
+    refused = result["refused"]
+    malformed = "ValueError: the shader parameter 'double_sided' must be a boolean"
+    for key in ("int", "string", "null", "default_then_malformed"):
+        assert refused[key] == malformed, (key, refused[key])
+    assert refused["valid_then_refused"].startswith("UnsupportedInUzPainter: ")
+    assert "the shader parameter 'thin_film_enabled' true" in refused["valid_then_refused"]
+    assert refused["refused_then_malformed"].startswith("UnsupportedInUzPainter: ")
+    assert "'coat_enabled'" in refused["refused_then_malformed"]
+    assert result["unchanged"]
+    assert result["on"] == "committed"
+    assert result["on_parameters"] == {**defaults, "double_sided": True}
+    assert result["merged"] == "no_op"
+    assert result["merged_parameters"] == result["on_parameters"]
+    state = result["on_state"]
+    assert state["parity"] is False
+    assert state["shader"] == {"shader": "open-pbr", "parameters": result["on_parameters"]}
+    reopened = result["reopened"]
+    assert reopened["parameters"] == result["on_parameters"]
+    assert reopened["state"]["shader"]["parameters"] == result["on_parameters"]
+    assert reopened["state"]["parity"] is False
+    assert result["off"] == "committed" and result["again"] == "no_op"
+    assert result["off_parameters"] == defaults
+    assert result["on_maps"] == result["off_maps"] and len(result["off_maps"]) == 2
+
+
+REF_MATCH_HDRI = STANDARD.parent / "HDRI" / "TOS-RefMatch-Skeletal-Mage.exr"
+
+PARITY = """
+from uzpainter.render import display as rd, shader
+create()
+env = resource.import_project_resource(HDRI, resource.Usage.ENVIRONMENT, "ref-match")
+preset = rd.presets()[1]
+preset["environment"]["sha256"] = env.identifier().version
+rd.apply_preset(preset)
+states = {"default": rd.state()}
+shader.set_parameters({"double_sided": True})
+states["on"] = rd.state()
+shader.set_parameters({"double_sided": False})
+states["explicit_false"] = rd.state()
+result = states
+"""
+
+
+def test_render_evidence_needs_the_parity_state(run: Run) -> None:
+    """Decision 196 option (b), amendment of 2026-10-19: with the `ref_match` preset lit by the
+    render standard's own HDRI the state is the parity state, a stored `double_sided` true makes
+    it a non-parity state and an explicit false restores parity. A Tier 3 comparison rejects a
+    candidate render captured in the non-parity state as render evidence, whatever its values; the
+    parity state is admitted and still needs a register entry to pass (no render parity is
+    claimed)."""
+    from tools.parity.verdict import Comparison, Outcome, evaluate
+
+    if not REF_MATCH_HDRI.is_file():
+        pytest.skip(f"{REF_MATCH_HDRI} is not on this machine (set UZP_RENDER_STANDARD)")
+    states = ok(run(f"HDRI = {REF_MATCH_HDRI.as_posix()!r}\n" + PARITY))
+    assert states["default"]["parity"] is True
+    assert states["on"]["parity"] is False
+    assert states["explicit_false"]["parity"] is True
+    domain = "tier3/analytic/sphere-constant-material"
+    on = Comparison("3", domain, [0.5], [0.5], candidate_display_state=states["on"])
+    rejected = evaluate(on, [])
+    assert rejected.outcome is Outcome.FAIL
+    assert rejected.reason.startswith("rejected as render evidence")
+    parity = Comparison("3", domain, [0.5], [0.5], candidate_display_state=states["explicit_false"])
+    assert evaluate(parity, []).outcome is Outcome.BLOCKED
 
 
 OCIO = """

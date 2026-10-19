@@ -33,6 +33,8 @@ from tools.parity.verdict import (
 
 ENTRIES = SCHEMA_DIR / "samples" / "exceptions"
 TIER1_DOMAIN = "tier1/wand_v1/Wand/BaseColor"
+# The display state of a Tier 3 candidate's captured revision in the comparison standard's state.
+PARITY = {"parity": True}
 
 
 def bake_entry() -> dict[str, Any]:
@@ -103,7 +105,14 @@ def test_entry_never_covers_another_tier_or_domain() -> None:
 
 def test_tier3_without_entry_is_blocked() -> None:
     verdict = evaluate(
-        Comparison("3", "tier3/analytic/sphere-constant-material", [0.5, 0.5], [0.5, 0.51]), []
+        Comparison(
+            "3",
+            "tier3/analytic/sphere-constant-material",
+            [0.5, 0.5],
+            [0.5, 0.51],
+            candidate_display_state=PARITY,
+        ),
+        [],
     )
     assert verdict.outcome is Outcome.BLOCKED
 
@@ -114,9 +123,21 @@ def test_tier3_entry_applies_per_region_bounds() -> None:
     oracle, candidate = [0.5, 0.5], [0.5, 0.51]
     within = {"metal": {"abs_mean_signed_diff_in_se": 1.0, "p99_abs_diff": 0.01}}
     outside = {**within, "plastic": {"abs_mean_signed_diff_in_se": 5.0, "p99_abs_diff": 0.01}}
-    passed = evaluate(Comparison("3", domain, oracle, candidate, region_metrics=within), [entry])
-    blocked = evaluate(Comparison("3", domain, oracle, candidate, region_metrics=outside), [entry])
-    no_regions = evaluate(Comparison("3", domain, oracle, candidate), [entry])
+    passed = evaluate(
+        Comparison(
+            "3", domain, oracle, candidate, region_metrics=within, candidate_display_state=PARITY
+        ),
+        [entry],
+    )
+    blocked = evaluate(
+        Comparison(
+            "3", domain, oracle, candidate, region_metrics=outside, candidate_display_state=PARITY
+        ),
+        [entry],
+    )
+    no_regions = evaluate(
+        Comparison("3", domain, oracle, candidate, candidate_display_state=PARITY), [entry]
+    )
     assert passed.outcome is Outcome.PASS
     assert blocked.outcome is Outcome.BLOCKED
     assert no_regions.outcome is Outcome.BLOCKED
@@ -124,8 +145,49 @@ def test_tier3_entry_applies_per_region_bounds() -> None:
 
 def test_structural_difference_fails_even_in_tier3() -> None:
     entry = render_entry()
-    verdict = evaluate(Comparison("3", entry["domain"]["selector"], [0.5, 0.5], [0.5]), [entry])
+    verdict = evaluate(
+        Comparison(
+            "3", entry["domain"]["selector"], [0.5, 0.5], [0.5], candidate_display_state=PARITY
+        ),
+        [entry],
+    )
     assert verdict.outcome is Outcome.FAIL
+    assert verdict.reason == "structural difference: shape mismatch"
+
+
+def test_tier3_rejects_a_candidate_without_the_parity_display_state() -> None:
+    """Decision 196 (amendment of 2026-10-19): a Tier 3 candidate render is evidence only when
+    the display state of the revision it captured has `parity` true. A non-parity state (such as
+    a stored `double_sided` true) or an unknown one is rejected before anything is compared, even
+    when the values are equal and an entry would cover them."""
+    entry = render_entry()
+    domain = entry["domain"]["selector"]
+    regions = {"metal": {"abs_mean_signed_diff_in_se": 0.0, "p99_abs_diff": 0.0}}
+    for state, found in (
+        ({"parity": False}, "parity False"),
+        (None, "unknown"),
+        ({}, "parity None"),
+    ):
+        comparison = Comparison(
+            "3",
+            domain,
+            [0.5, 0.5],
+            [0.5, 0.5],
+            region_metrics=regions,
+            candidate_display_state=state,
+        )
+        verdict = evaluate(comparison, [entry])
+        assert verdict.outcome is Outcome.FAIL, state
+        assert verdict.diagnostics is None and verdict.exceptions_relied_on == ()
+        assert verdict.reason == (
+            f"rejected as render evidence: the candidate's display state is {found} (decision 196)"
+        )
+    admitted = Comparison(
+        "3", domain, [0.5, 0.5], [0.5, 0.5], region_metrics=regions, candidate_display_state=PARITY
+    )
+    assert evaluate(admitted, [entry]).outcome is Outcome.PASS
+    # The other tiers compare exported maps, not renders: the display state plays no part.
+    assert evaluate(Comparison("1", TIER1_DOMAIN, [1.0], [1.0]), []).outcome is Outcome.PASS
 
 
 def test_superseded_version_is_not_in_force() -> None:
@@ -210,9 +272,19 @@ def test_tier3_equal_values_still_need_an_entry() -> None:
     entry = render_entry()
     domain = entry["domain"]["selector"]
     regions = {"metal": {"abs_mean_signed_diff_in_se": 0.0, "p99_abs_diff": 0.0}}
-    without = evaluate(Comparison("3", domain, [0.5, 0.5], [0.5, 0.5]), [])
+    without = evaluate(
+        Comparison("3", domain, [0.5, 0.5], [0.5, 0.5], candidate_display_state=PARITY), []
+    )
     covered = evaluate(
-        Comparison("3", domain, [0.5, 0.5], [0.5, 0.5], region_metrics=regions), [entry]
+        Comparison(
+            "3",
+            domain,
+            [0.5, 0.5],
+            [0.5, 0.5],
+            region_metrics=regions,
+            candidate_display_state=PARITY,
+        ),
+        [entry],
     )
     assert without.outcome is Outcome.BLOCKED
     assert covered.outcome is Outcome.PASS
@@ -242,6 +314,7 @@ def test_tier3_noise_floor_entry_covers_an_unstable_iray_oracle() -> None:
         [0.5, 0.51],
         region_metrics=within,
         oracle_stable=False,
+        candidate_display_state=PARITY,
     )
     verdict = evaluate(comparison, [entry])
     assert verdict.outcome is Outcome.PASS
@@ -610,12 +683,28 @@ def test_a_golden_of_an_older_envelope_is_stale_never_a_pass(tier: str) -> None:
     entry = render_entry()
     regions = {"metal": {"abs_mean_signed_diff_in_se": 0.0, "p99_abs_diff": 0.0}}
     selector = entry["domain"]["selector"]
-    older = Comparison(tier, selector, [0.5], [0.5], region_metrics=regions, envelope_id=OLDER)
+    older = Comparison(
+        tier,
+        selector,
+        [0.5],
+        [0.5],
+        region_metrics=regions,
+        envelope_id=OLDER,
+        candidate_display_state=PARITY,
+    )
     verdict = evaluate(older, [entry, bake_entry()], CURRENT)
     assert verdict.outcome is Outcome.STALE
     assert verdict.diagnostics is not None and verdict.diagnostics.differing_count == 0
     assert verdict.exceptions_relied_on == ()
-    current = Comparison(tier, selector, [0.5], [0.5], region_metrics=regions, envelope_id=CURRENT)
+    current = Comparison(
+        tier,
+        selector,
+        [0.5],
+        [0.5],
+        region_metrics=regions,
+        envelope_id=CURRENT,
+        candidate_display_state=PARITY,
+    )
     assert evaluate(current, [entry], CURRENT).outcome is Outcome.PASS
 
 
@@ -765,7 +854,9 @@ def test_a_tier3_reference_of_an_older_envelope_resolves_stale() -> None:
         return
     assert golden.envelope_id != current_envelope()["envelope_id"]
     domain = golden.manifest["domain"]
-    comparison = Comparison("3", domain, [0.5], [0.5], envelope_id=golden.envelope_id)
+    comparison = Comparison(
+        "3", domain, [0.5], [0.5], envelope_id=golden.envelope_id, candidate_display_state=PARITY
+    )
     assert evaluate(comparison, [render_entry()]).outcome is Outcome.STALE
 
 

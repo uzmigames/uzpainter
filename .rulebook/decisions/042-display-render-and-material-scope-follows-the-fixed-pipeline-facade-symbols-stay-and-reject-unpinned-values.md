@@ -34,3 +34,7 @@ Model panel under the owner's delegation (cx/gpt-6-astra, kimi/kimi-k3, xai/grok
 ## Consequences
 
 Checklist items of the affected tasks are reworded, not deleted: an item made moot reads "pinned to <value> by decision 038". A change of the Assets3D standard, or a Painter build whose default shader or display transform differs, re-opens this scope. The owner decides whether Tunic v10's "Double sided" joins the supported scope.
+
+## Amendment (2026-10-19, decision 196)
+
+Item 5 is amended for the shader parameter `double_sided` only. Decision 196's amendment adopts its option (b) under the owner's delegation of 2026-10-19. `double_sided` is stored as project state at true or false and makes the display state a non-parity state while it is true. A Tier 3 comparison rejects that state as render evidence. Renders stay pinned: no render honours it, and the Tunic v10 production render stays out of Tier 3 acceptance. Every other non-default shader parameter is still refused.

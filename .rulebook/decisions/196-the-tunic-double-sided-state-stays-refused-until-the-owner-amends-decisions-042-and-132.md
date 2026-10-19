@@ -67,3 +67,27 @@ All three reject the panel's authority for (b). 042 and 132 are owner-scoped set
 ## Consequences
 
 The Tunic's Tier 1 export path is not affected: the maps do not depend on the state. Only the double-sided parts of phase2.10's 2.3 and 3.3 stay open, and the owner owns them. They are listed among the owner actions in the task's notes. Decision 042 item 5's Tier 3 exclusion of the Tunic production render is unchanged.
+
+## Amendment (2026-10-19, SUP-030): option (b) adopted
+
+**Authority.** On 2026-10-19 the owner delegated routine technical decisions to the supervisors, Codex and Claude, in his own words: "e pra vc tomar as desicoes junto com o claude, para de me perguntar" ("and you are to take the decisions together with Claude, stop asking me"). The Codex supervisor's joint finding SUP-030 (`tmp/claude-supervision.json`) proposed adopting item 5's option (b) under that delegation. Claude reviewed it against decisions 038, 042 and 132 and found no technical conflict. This amendment is the supervisors' joint decision under the delegation. It is not a new owner answer to item 4. It approves no parity exception, claims no render parity and widens no render setting of decision 038.
+
+**What changes.** Items 1 and 2 are replaced. Option (b) is adopted with every condition of item 5. It amends decision 042 item 5 and decision 132 item 7 for `double_sided` only.
+
+1. **`double_sided` is project state.** `render.shader.set_parameters` and MCP `shader_set` accept `double_sided` true or false. A value of any other type, `1` and `0` included, is a `ValueError`. Over MCP it is `invalid_arguments {type: ValueError}`, as decision 242 made an invalid export configuration.
+2. **The other 18 identifiers stay default-only.** Any other value raises `UnsupportedInUzPainter`, as decision 132 item 7 says.
+3. **Validation comes first.** Every given parameter is checked before anything changes. One refused or malformed value refuses the whole call, and nothing is stored.
+4. **A set merges.** A set merges the given parameters into the stored ones, so setting another identifier keeps a stored `double_sided`. Before this amendment, a set reset every parameter to its default. A default-only identifier is stored as its default value.
+5. **Save, reopen and the getters agree.** The project file already stores `display.shader.parameters`. `shader.parameters()`, `shader_get`, `render.display.state()` and `display_get` read the stored value, before and after save and reopen.
+6. **Parity.** `render.display.state().parity` is true only when the environment is the active preset's standard environment and every stored shader parameter equals its default. A stored `double_sided` true is a non-parity state. An explicit false keeps parity.
+7. **The receipt digest changes.** A `painter_viewport` capture's `render_state_digest` already hashes the full shader object (`src/python/capture.cpp`), so it changes when the state is true. The pixels do not change: no renderer reads the shader parameters, and the preview still has no face culling.
+8. **A non-parity state is rejected as render evidence.** Reporting `parity: false` is not enough. A Tier 3 comparison (`tools/parity/verdict.py`, `Comparison.candidate_display_state`) takes the display state of the revision its candidate render captured. A state whose `parity` is not true, or a missing state, is `fail` with the reason "rejected as render evidence", before anything is compared and whatever the register holds. A parity state is admitted, and it still passes only through a covering register entry (`parity/CONTRACT.md` §4.1).
+9. **Exports are unchanged.** Exported maps do not depend on the state (`exportShaderParams` false). They stay byte-identical with it true and false.
+
+**What does not change.** Decision 038's render scope stays: every render setting is pinned, and no render honours the state. No culling rule is invented (item 3, option (c), stays rejected). Every unrecorded-render refusal stays: `painter_iray` raises `PathTracerUnavailable` before any work, and decision 042 item 5's Tier 3 exclusion of the Tunic v10 production render stands. The rebuild fixture keeps pinning `double_sided: true`. No historical pilot baseline changes.
+
+**Consequences.** The double-sided parts of phase2.10 items 2.3 (the rebuild holds the state) and 3.3 (it reads back after save and reopen) no longer wait on the owner. They stay open on that task's other blockers: the lost masks, the mesh and `infinite` padding. Tests:
+- `tests/python/test_display_presets.py`: the strict boolean, validation before any change, the merge, save and reopen, parity false and true with the render standard's own HDRI, rejection of the non-parity state as render evidence, and byte-identical exports.
+- `tests/supervisor/test_supervisor_mcp.py`: the same through MCP.
+- `tests/parity/test_verdict.py`: the Tier 3 rejection.
+- `tests/preview/test_preview_capture.py`: the receipt digest changes and the pixels do not.

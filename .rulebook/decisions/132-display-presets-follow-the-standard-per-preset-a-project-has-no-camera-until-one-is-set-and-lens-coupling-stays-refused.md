@@ -61,3 +61,7 @@ Model panel under the owner's delegation (cx/gpt-6-astra, kimi/kimi-k3, xai/grok
 ## Consequences
 
 The display state covers exactly the standard's two presets. Phase2.2 capture and the viewport read `render.display.state()` and refuse a Legacy project or a non-parity state for parity evidence. A change of the standard re-opens this decision, as decision 038 says. Recordings R-132-A to R-132-D are owner actions; until they are made, the camera's default, the coupled lens setters and the Tier 0 evidence stay open.
+
+## Amendment (2026-10-19, decision 196)
+
+Item 7 is amended for `double_sided` only. Decision 196's amendment adopts its option (b): `set_parameters` and `shader_set` accept `double_sided` true or false and merge into the stored parameters. A value of any other type is a `ValueError`. The other identifiers stay default-only. Item 2's `parity` also needs every stored shader parameter at its default.

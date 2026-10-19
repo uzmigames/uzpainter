@@ -172,7 +172,8 @@ void BindDisplay(py::module_& display_module, py::module_& render_display, py::m
     // ── uzpainter.render.display (the fixed pipeline's values and presets) ────────────────────
     render_display.def(
         "state", [] { return FromJson(display::State(*Read())); },
-        "The display state: the preset's fields, `parity` (the environment is the preset's standard one), "
+        "The display state: the preset's fields, `parity` (the environment is the preset's standard one and every "
+        "shader parameter is at its default), "
         "`environment_default`, `shadows_effect` (the shadows flag changes no render), `ao_strength` and "
         "`ao_channel` (painter_viewport's AO mesh map strength and the AO channel's use, read-only), "
         "`cavity_radius` (painter_viewport's cavity radius in metres, read-only) and the shader.");
@@ -210,7 +211,7 @@ void BindDisplay(py::module_& display_module, py::module_& render_display, py::m
     // ── uzpainter.render.shader ───────────────────────────────────────────────────────────────
     shader.def(
         "parameters", [] { return FromJson(display::Shader(*Read()).at("parameters")); },
-        "The shader parameters: the default open-pbr instance's (decision 042).");
+        "The shader parameters: the default open-pbr instance's, with the stored double_sided (decisions 042, 196).");
     shader.def(
         "set_parameters",
         [](const py::object& parameters) {
@@ -219,7 +220,10 @@ void BindDisplay(py::module_& display_module, py::module_& render_display, py::m
                 display::SetShaderParameters(edit, "uzpainter.render.shader.set_parameters", value);
             }));
         },
-        py::arg("parameters"), "Accepts only the default open-pbr instance's values (decision 042).");
+        py::arg("parameters"),
+        "Merges into the stored parameters: double_sided takes true or false (project state no render reads; "
+        "true is a non-parity state), every other parameter only the default open-pbr instance's value "
+        "(decisions 042, 196).");
 }
 
 void BindCapture(py::module_& render) {

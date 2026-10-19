@@ -36,11 +36,13 @@
   - Recording (historical blocker, cleared by decision 215): 2.2 is complete; the admitted OCIO golden remains the comparison reference. Rebuild inputs, mesh identity and scope still block 3.1 and 4.1.
   - Nine lost masks (owner): restore their original bytes to `_tmp/claude/<name>.png`, then run `script_run manifest --pilot tunic-rebuild --assets-root E:\UzmiGames\Assets3D --out tests/parity/tier1/tunic_v10/rebuild-fixture.json --store`. Regenerated masks would require an explicitly owner-authorized, separately identified reference, not silently replace approved v10 (2.8). This blocks 2.1 and 2.3-2.5, 3.1-3.5.
   - `infinite` padding (phase1.25 item 2.7): pilot exports remain refused before writing until that capability clears the existing equality/owner-exception contract. Any exception needs measured evidence and an owner-approved, versioned register entry for its domain; no tolerance is assumed.
-  - Double-sided state (owner; decision 196): UzPainter's `shader_set` keeps refusing `double_sided: true`, because decisions 042 and 132 accept only the `open-pbr` defaults and the panel cannot widen an owner-scoped setter contract. The tunic's approved state has it on. The double-sided parts of 2.3 and 3.3 are a scope split owned by the owner. The owner can:
-    - amend 042 item 5 and 132 item 7 to store it as project state with renders pinned (decision 196 item 5 specifies this, tests included);
-    - or drop the pin from the rebuild fixture and from 2.3 and 3.3.
+  - Double-sided state (decision 196; cleared by its amendment of 2026-10-19, SUP-030): decision 196 kept `shader_set` refusing `double_sided: true` until 042 item 5 and 132 item 7 were amended. Under the owner's delegation of 2026-10-19, the supervisors adopted option (b) as decision 196's amendment, with renders pinned:
+    - `shader_set` and `render.shader.set_parameters` store `double_sided` true or false, merged into the stored parameters;
+    - it survives save and reopen;
+    - `parity` is false while it is true, and a Tier 3 comparison rejects that state as render evidence;
+    - exported maps stay byte-identical.
 
-    The rest of 2.3 and 3.3 is unaffected, and so are the exported maps.
+    The rebuild fixture keeps its `double_sided: true` pin. The double-sided parts of 2.3 and 3.3 no longer wait on the owner, and the rest of those items is unaffected. Item 2.8's "keep decision 196 double-sided scope unresolved" is settled by that amendment.
   - 1.1: phase2.9, phase2.2 and phase2.8 are not accepted.
 - 2.1 (open): the generators are written and tested.
   - `--pilot tunic` wrote the golden's request.

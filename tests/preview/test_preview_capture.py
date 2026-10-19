@@ -628,6 +628,37 @@ def test_viewport_capture_after_a_mutation_shows_it(
     assert pipe.call("project_inspect")["result"]["revision"] == revision + 1
 
 
+@GPU
+def test_a_stored_double_sided_changes_the_digest_and_no_pixel(
+    painter: Path, tmp_path: Path, pipes: list[Pipe]
+) -> None:
+    """Decision 196 option (b), amendment of 2026-10-19: a stored `double_sided` true changes the
+    receipt's `render_state_digest` (it hashes the full shader object) and no pixel: no renderer
+    reads the shader parameters and the preview has no face culling, so the PNG and the OpenEXR
+    are byte-identical."""
+    bundle = ocio_bundle(painter, tmp_path / "fixture")
+    pipe = Pipe(painter, tmp_path, "--gpu-backend", "dx12")
+    pipes.append(pipe)
+    if pipe.handshake["gpu_status"] != "ready":
+        pytest.skip("no DX12 device on this machine")
+    revision = pipe.call("project_open", {"path": str(bundle)})["result"]["revision"]
+    args = {"mode": "painter_viewport", "size": [64, 64]}
+    before = pipe.call("capture", {**args, "path": "single.png"})["result"]
+    stored = pipe.call(
+        "shader_set",
+        {"parameters": {"double_sided": True}},
+        idempotency_key="k-ds",
+        expected_revision=revision,
+    )
+    assert stored["committed_revision"] == revision + 1, stored
+    after = pipe.call("capture", {**args, "path": "double.png"})["result"]
+    check_viewport(before, (64, 64))
+    check_viewport(after, (64, 64))
+    assert (before["revision"], after["revision"]) == (revision, revision + 1)
+    assert after["render_state_digest"] != before["render_state_digest"]
+    assert after["hashes"] == before["hashes"]
+
+
 # ── The AO mesh map (phase2.3_realtime-preview item 2.5; decision 257) ────────────────────────
 
 AO_INPUT = """

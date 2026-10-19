@@ -20,6 +20,8 @@
 //   to a colour-managed project (`RuntimeError`, as Painter documents) and is unsupported on a
 //   Legacy one.
 // - The shader is the default `open-pbr` instance at its read-back defaults (`ShaderDefaults`).
+//   `double_sided` alone is stored at true or false (decision 196, amendment of 2026-10-19):
+//   project state that no render reads, and a non-parity state while it is true.
 // - A camera is Painter's documented camera in its Y-up scene space (`CameraFromJson`), with
 //   conversion to and from Blender's convention per the standard's `coordinate_contract`.
 
@@ -72,8 +74,9 @@ void InitialiseNewProject(core::Project& project);
 /// The display state as a preset (round-trips through `ApplyPreset`). A project whose display
 /// was never set by this API (a file older than decision 132) has `name` null.
 json::Object PresetOf(const core::Project& project);
-/// `PresetOf` plus `parity` (the environment is the preset's standard environment, so the state
-/// is the comparison standard's; any other is a non-parity preview), `environment_default` (the
+/// `PresetOf` plus `parity` (the environment is the preset's standard environment and every
+/// stored shader parameter is at its default, so the state is the comparison standard's; any
+/// other is a non-parity preview, decision 196), `environment_default` (the
 /// project names no environment, so `painter_viewport` lights it with the installation's default,
 /// decision 212), `shadows_effect` (`kShadowsEffect`, decision 251), `ao_strength` and
 /// `ao_channel` (`kAoStrength`, `kAoChannel`, decision 257), `cavity_radius` (`kCavityRadius`,
@@ -103,8 +106,10 @@ void SetColorLut(core::Edit& edit, const std::string& symbol, const json::Value&
 json::Object ShaderDefaults();
 /// `{shader, parameters}` of the project.
 json::Object Shader(const core::Project& project);
-/// Accepts only known identifiers at their default value; anything else raises
-/// `UnsupportedInUzPainter` (decision 042 §5).
+/// Validates every given parameter, then merges them into the stored parameters. `double_sided`
+/// takes true or false (`ValueError` for any other type); every other known identifier only its
+/// default value; anything else raises `UnsupportedInUzPainter` (decisions 042 §5 and 196,
+/// amendment of 2026-10-19). A refused call changes nothing.
 void SetShaderParameters(core::Edit& edit, const std::string& symbol, const json::Value& parameters);
 
 /// A validated camera record (Painter's convention): `position`, `rotation` (Euler degrees, X

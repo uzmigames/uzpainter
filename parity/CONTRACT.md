@@ -59,6 +59,7 @@ The reference implementation of rules 3.1 and 3.3 for one compared quantity is `
 - **Why the register is the only route.** Iray is stochastic and its seed is not exposed, so pixel-exact equality between `painter_iray` and an Iray reference is not achievable; this contract does not claim it. A Tier 3 comparison passes only through an owner-approved register entry whose bounds derive from the measured noise floor; without one it is **blocked**, never passed.
 - **Limits.** A Tier 3 entry never relaxes Tiers 0–2 (entries match on their own tier only) and never covers a structural difference: a wrong material binding, a missing map, or a wrong geometry, camera or environment fails regardless of any metric.
 - **Scope.** Tier 3 covers the fixtures and configurations its report lists; any other configuration is a capability gap, not a pass.
+- **Candidate display state (decision 196).** A candidate render is evidence only when the display state of the revision it captured (`uzpainter.render.display.state()`) has `parity` true: the preset's standard environment and every shader parameter at its default. A non-parity state, such as a stored `double_sided` true, or a missing state fails as "rejected as render evidence" before anything is compared, whatever the register holds (`tools/parity/verdict.py`, `Comparison.candidate_display_state`).
 
 ## 5. Exception register
 

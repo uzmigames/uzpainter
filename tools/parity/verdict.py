@@ -6,6 +6,9 @@
   covers the comparison's tier and domain and every bound of that entry holds. An explanation
   is not an input: an explained difference without an entry fails.
 - Tier 3 passes only through a covering entry, even when the values happen to be equal.
+- Decision 196 (amendment of 2026-10-19): a Tier 3 candidate is render evidence only when its
+  display state (`uzpainter.render.display.state()` of the captured revision) has `parity`
+  true. Any other state, or none, is rejected as render evidence: `fail`, nothing compared.
 - An unstable oracle passes only through a covering entry whose evidence is the oracle
   instability or, in Tier 3, the noise floor (which includes Iray's run-to-run difference).
 - Without a covering entry, Tier 3 and comparisons against an unstable oracle are `blocked`;
@@ -120,6 +123,8 @@ class Comparison:
     None means the caller resolved the golden through the current envelope. `oracle_side` marks
     an oracle re-recording compared with the golden; `golden_environment` and
     `candidate_environment` are then the two environment records (`recorder/environment.py`).
+    `candidate_display_state` is, for a Tier 3 candidate render, the display state of the
+    revision it captured (`uzpainter.render.display.state()`, decision 196).
     """
 
     tier: str
@@ -137,6 +142,7 @@ class Comparison:
     covered: npt.NDArray[np.bool_] | None = None
     golden_id: str | None = None
     output_id: str | None = None
+    candidate_display_state: Mapping[str, Any] | None = None
 
 
 def _flat(values: Values) -> npt.NDArray[Any]:
@@ -283,6 +289,15 @@ def _evaluate(
 ) -> Verdict:
     if comparison.oracle is None:
         return Verdict(Outcome.ORACLE_UNAVAILABLE, None, reason="oracle blob unavailable")
+    if comparison.tier == "3" and not comparison.oracle_side:
+        state = comparison.candidate_display_state
+        if state is None or state.get("parity") is not True:
+            found = "unknown" if state is None else f"parity {state.get('parity')!r}"
+            reason = (
+                f"rejected as render evidence: the candidate's display state is {found} "
+                "(decision 196)"
+            )
+            return Verdict(Outcome.FAIL, None, reason=reason)
     same_shape = np.shape(comparison.oracle) == np.shape(comparison.candidate)
     shaped = same_shape and np.size(comparison.oracle) > 0
     if comparison.oracle_side:  # judged by the two environment records alone

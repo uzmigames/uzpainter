@@ -529,10 +529,14 @@ void Worker::DefineTools() {
                 {}),
          true, false},
         [this](const json::Object& a) { return DisplaySet(a); });
-    add({"shader_get", "The shader and its parameters: the default open-pbr instance (decision 042).", Schema({}, {}),
+    add({"shader_get", "The shader and its parameters: the default open-pbr instance, with the stored double_sided "
+         "(decisions 042, 196).", Schema({}, {}),
          false, false},
         [](const json::Object&) { return python::display::Shader(*python::Session::Get().ReadProject()); });
-    add({"shader_set", "Accepts only the default open-pbr instance's parameter values (decision 042).",
+    add({"shader_set",
+         "Merges into the stored parameters: double_sided takes true or false (project state no render reads; true "
+         "is a non-parity state); every other parameter only the default open-pbr instance's value (decisions 042, "
+         "196).",
          Schema({{"parameters", json::Object{{"type", "object"}}}}, {"parameters"}), true, false},
         [this](const json::Object& a) { return ShaderSet(a); });
     add({"camera_get", "The default camera in Painter's convention and in Blender's (null when none is set).",
@@ -1194,8 +1198,14 @@ json::Object Worker::DisplaySet(const json::Object& arguments) {
 json::Object Worker::ShaderSet(const json::Object& arguments) {
     const json::Value* parameters = Field(arguments, "parameters");
     if (!parameters) throw CallError{"invalid_arguments", "shader_set needs parameters", {}};
-    return SubmitAdmitted(
-        [&](core::Edit& edit) { python::display::SetShaderParameters(edit, "shader_set", *parameters); });
+    try {
+        return SubmitAdmitted(
+            [&](core::Edit& edit) { python::display::SetShaderParameters(edit, "shader_set", *parameters); });
+    } catch (const core::ValueError& error) {
+        // A malformed value (`double_sided` not a boolean, decision 196) is a malformed call, as an
+        // invalid export configuration is (decision 242); nothing changed.
+        throw CallError{"invalid_arguments", error.what(), json::Object{{"type", "ValueError"}}};
+    }
 }
 
 json::Object Worker::CameraGet(const json::Object&) {

@@ -504,7 +504,7 @@ def test_display_shader_and_camera_tools_hold_the_fixed_pipeline(
         mutate("display_set", {"exposure": 1.0}, "k-exposure"),
         mutate("display_set", {"rotation": 0.0, "shadows": True}, "k-shadows"),
         mutate("display_set", {"color_lut": "a" * 64}, "k-lut"),
-        mutate("shader_set", {"parameters": {"double_sided": True}}, "k-shader"),
+        mutate("shader_set", {"parameters": {"coat_enabled": True}}, "k-shader"),
         mutate("camera_set", {"camera": {**CAMERA, "aperture": 1.0}}, "k-camera-bad"),
     ]
     for reply in refused:
@@ -514,8 +514,8 @@ def test_display_shader_and_camera_tools_hold_the_fixed_pipeline(
     assert "decision 038" in refused[0]["error"]["message"]
     assert "shadows (preset 'common')" in refused[1]["error"]["message"]
     assert "the colour LUT" in refused[2]["error"]["message"]
-    assert "'double_sided'" in refused[3]["error"]["message"]
-    assert session.call("shader_get")["result"]["parameters"]["double_sided"] is False
+    assert "'coat_enabled'" in refused[3]["error"]["message"]
+    assert session.call("shader_get")["result"]["parameters"]["coat_enabled"] is False
     assert session.call("camera_get")["result"] == {"camera": None, "blender": None}
 
     blender = {
@@ -548,6 +548,68 @@ def test_display_shader_and_camera_tools_hold_the_fixed_pipeline(
     assert accepted["committed_revision"] == revision + 1, accepted
     assert accepted["result"]["status"] == "no_op", accepted
     assert session.call("display_get")["result"]["name"] == "common"
+
+
+def test_shader_set_stores_double_sided_as_a_non_parity_state(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """Decision 196 option (b), amendment of 2026-10-19, through MCP: `shader_set` refuses a
+    non-boolean `double_sided` (`invalid_arguments {type: ValueError}`, as decision 242 made an
+    invalid export configuration) and a set with any other non-default identifier
+    before any change, stores true as project state merged into the stored parameters, and
+    `shader_get` and `display_get` read it back, after save and reopen too. The state is then a
+    non-parity state, which a Tier 3 comparison rejects as render evidence."""
+    from tools.parity.verdict import Comparison, Outcome, evaluate
+
+    # Python stays disabled: with it, the bindings' job check refuses the `project_save_as` job
+    # as busy with itself.
+    session = Mcp(painter, tmp_path, "--gpu-backend", BACKEND)
+    sessions.append(session)
+    project = make_project(painter, tmp_path)
+    revision = session.call("project_open", {"path": str(project), "wait": True})["result"][
+        "revision"
+    ]
+    malformed = session.call("shader_set", {"parameters": {"double_sided": 1}})
+    assert malformed["error"]["code"] == "invalid_arguments", malformed
+    assert malformed["error"]["details"]["type"] == "ValueError", malformed
+    assert "'double_sided' must be a boolean" in malformed["error"]["message"]
+    mixed = session.call(
+        "shader_set", {"parameters": {"double_sided": True, "thin_film_enabled": True}}
+    )
+    assert mixed["error"]["details"]["type"] == "UnsupportedInUzPainter", mixed
+    assert "'thin_film_enabled'" in mixed["error"]["message"]
+    assert session.call("project_inspect")["result"]["revision"] == revision
+    defaults = session.call("shader_get")["result"]["parameters"]
+    assert defaults["double_sided"] is False
+
+    stored = session.call("shader_set", {"parameters": {"double_sided": True}})
+    assert stored["result"]["status"] == "committed", stored
+    assert stored["committed_revision"] == revision + 1, stored
+    merged = session.call("shader_set", {"parameters": {"specular_ior": 1.5}})
+    assert merged["result"]["status"] == "no_op", merged
+    on = {**defaults, "double_sided": True}
+    assert session.call("shader_get")["result"] == {"shader": "open-pbr", "parameters": on}
+    state = session.call("display_get")["result"]
+    assert state["shader"]["parameters"] == on and state["parity"] is False
+
+    path = tmp_path / "saved" / "double-sided.uzp"
+    assert "error" not in session.call("project_save_as", {"path": str(path), "wait": True})
+    assert "error" not in session.call("project_close")
+    session.call("project_open", {"path": str(path), "wait": True})
+    assert session.call("shader_get")["result"]["parameters"] == on
+    reopened = session.call("display_get")["result"]
+    assert reopened["parity"] is False
+
+    evidence = Comparison(
+        "3",
+        "tier3/analytic/sphere-constant-material",
+        [0.5],
+        [0.5],
+        candidate_display_state=reopened,
+    )
+    verdict = evaluate(evidence, [])
+    assert verdict.outcome is Outcome.FAIL
+    assert verdict.reason.startswith("rejected as render evidence")
 
 
 def test_mutating_tools_publish_their_key_and_precondition(

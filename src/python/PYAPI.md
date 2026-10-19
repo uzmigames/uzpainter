@@ -97,7 +97,7 @@ Module and class names follow Painter's documented API wherever a Painter symbol
     - `tessellation_mode`, `tessellation_subdivisions`;
     - `alpha_test_enabled`, `alpha_blending_enabled`, `double_sided`.
 
-    `set_parameters` accepts these at their default values only.
+    `set_parameters` validates every given value first, then merges them into the stored parameters. It accepts `double_sided` at true or false (a value of any other type is a `ValueError`): project state that survives save and reopen and that no render reads. While it is true, `render.display.state()` reports `parity` false, and a Tier 3 comparison rejects the state as render evidence. The other identifiers are accepted at their default values only (decision 196, amendment of 2026-10-19).
 - **Capture** (`capture.{h,cpp}`, bound in `bind_display.cpp`; task phase2.2_preview-capture, decision 148). `render.capture(path, mode, camera=None, size=None, samples=None, seed=None, preset=None, stack=None)` captures the committed revision and returns the receipt (`capture-receipt.schema.json`), which is also written as `<stem>.receipt.json`. Nothing commits.
   - `painter_viewport` is the preview pass rendered offscreen (needs `size`). Its receipt states the self-occlusion rays (`visibility`), the AO mesh map's visibility weight with each texture set's AO source and the normal map's cavity (`occlusion`, decisions 257 and 258) and the requested `shadows` flag with its effect, none (decision 251).
   - `base_color`, `channel:<name>` and `mask:<uid>` are texture-space files equal to the export. `<name>` is a `ChannelType` name or the export's documentMap name of one (decision 242).

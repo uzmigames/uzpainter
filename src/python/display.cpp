@@ -247,6 +247,23 @@ void CheckValue(const std::string& symbol, const std::string& setting, double va
 // ── Shader ──────────────────────────────────────────────────────────────────────────────────────
 
 constexpr const char* kShaderId = "open-pbr";
+/// The one shader identifier stored at either value (decision 196, amendment of 2026-10-19).
+constexpr const char* kDoubleSided = "double_sided";
+
+/// Whether a shader parameter value equals the default `want` (numbers by value).
+bool SameValue(const json::Value& value, const json::Value& want, const std::string& key) {
+    return value.IsNumber() && want.IsNumber() ? Number(value, key) == Number(want, key) : value == want;
+}
+
+/// Whether every stored shader parameter equals its default (an unknown one never does).
+bool DefaultShader(const core::Project& project) {
+    const json::Object defaults = ShaderDefaults();
+    for (const auto& [key, value] : project.display.shader.parameters) {
+        const auto known = defaults.find(key);
+        if (known == defaults.end() || !SameValue(value, known->second, key)) return false;
+    }
+    return true;
+}
 
 // ── Camera ──────────────────────────────────────────────────────────────────────────────────────
 
@@ -398,7 +415,9 @@ json::Object State(const core::Project& project) {
     json::Object state = PresetOf(project);
     const PresetSpec* spec = ActiveSpec(project);
     const auto& resource = project.display.environment.resource;
-    state["parity"] = spec != nullptr && resource && *resource == spec->environment;
+    // Parity: the preset's standard environment and every stored shader parameter at its default
+    // (decision 196, amendment of 2026-10-19: a stored `double_sided` true is a non-parity state).
+    state["parity"] = spec != nullptr && resource && *resource == spec->environment && DefaultShader(project);
     // A project that names no environment renders lit by the installation's default (decision 212).
     state["environment_default"] = !resource.has_value();
     // The `shadows` flag is recorded but changes no render (decision 251).
@@ -602,13 +621,26 @@ void SetShaderParameters(core::Edit& edit, const std::string& symbol, const json
             for (const auto& [name, v] : defaults) names += (names.empty() ? "" : ", ") + name;
             Unsupported(symbol, "the shader parameter '" + key + "'", "(unknown)", "the default open-pbr instance's parameters " + names);
         }
+        // `double_sided` is project state at either value, renders stay pinned (decision 196,
+        // amendment of 2026-10-19); a value of any other type is malformed.
+        if (key == kDoubleSided) {
+            Bool(value, "the shader parameter 'double_sided'");
+            continue;
+        }
         const json::Value& want = known->second;
-        const bool same = value.IsNumber() && want.IsNumber() ? Number(value, key) == Number(want, key) : value == want;
-        if (!same) Unsupported(symbol, "the shader parameter '" + key + "'", Text(value), Text(want) + " (open-pbr default)");
+        if (!SameValue(value, want, key)) {
+            Unsupported(symbol, "the shader parameter '" + key + "'", Text(value), Text(want) + " (open-pbr default)");
+        }
     }
+    // Every value is valid: merge them into the stored parameters (defaults where none is stored).
+    // A default-only identifier is stored as its default, so an equal number of another type
+    // changes nothing.
     core::ShaderState& shader = edit.project().display.shader;
+    json::Object merged = defaults;
+    for (const auto& [key, value] : shader.parameters) merged[key] = value;
+    for (const auto& [key, value] : given) merged[key] = key == kDoubleSided ? value : defaults.at(key);
     shader.id = kShaderId;
-    shader.parameters = defaults;
+    shader.parameters = std::move(merged);
 }
 
 // ── Cameras ─────────────────────────────────────────────────────────────────────────────────────
