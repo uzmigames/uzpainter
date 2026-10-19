@@ -1,12 +1,12 @@
 {
-  "status": "pending",
+  "status": "in-progress",
   "createdAt": "2026-10-10T06:02:39.602Z",
-  "updatedAt": "2026-10-12T10:53:03.000Z",
+  "updatedAt": "2026-10-19T21:00:02.056Z",
   "questions": [
     {
       "id": "q1",
       "question": "May UzPainter ship Painter's own label text for the Dota 2 template's user channels User0-User3, or should it ship generic labels?",
-      "status": "pending",
+      "status": "answered",
       "askedAt": "2026-10-12T10:53:03.000Z",
       "context": "Dota 2 is the only shipped Painter template that labels channels: its User0-User3 carry Painter's own text. UzPainter never reads, parses or copies a .spt file (clean room, decision 116), so today these four labels read \"\" and `test_pyapi_facade_tier0.py` (`project-templates`) requires them to still differ. A label changes no texture: texture sets, resolution, channels and formats of all 26 templates are already exact. Whether Painter's label text may ship is a licence and clean-room ruling only the owner can make; agents do not decide it (decision 117). Item 3.1 of this task stays open on it until answered.",
       "options": [
@@ -20,7 +20,9 @@
         }
       ],
       "recommended": null,
-      "blocks": "3.1 Run the full Tier 0 API-probe comparison (the Dota 2 user-channel labels in report §3)"
+      "blocks": "3.1 Run the full Tier 0 API-probe comparison (the Dota 2 user-channel labels in report §3)",
+      "answer": "Choose option (a): keep the existing generic or empty labels for Dota 2 User0-User3. Do not copy Painter descriptive label text. The names are non-pixel UI metadata; the already exact texture-set/channel/format behaviour remains required. The user explicitly delegated this decision to Codex and Claude on 2026-10-19, in direct reply to this question: \"e pra vc tomar as desicoes junto com o claude, para de me perguntar\". This is the supervisors' technical choice under that delegation, not a claim that the owner performed a licence review or personally approved copying Adobe text. Keep the documented label difference visible, update the applicable report/checklist using existing evidence, and coordinate implementation with Claude.",
+      "answeredAt": "2026-10-19T20:58:34.463Z"
     }
   ]
 }
