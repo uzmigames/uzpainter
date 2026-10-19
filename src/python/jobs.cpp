@@ -13,6 +13,10 @@ namespace {
 /// Thrown by `JobContext::Checkpoint` when the job was asked to stop.
 struct Cancelled {};
 
+/// The job whose body runs on this thread, if any: `Busy` does not count it, so a job that saves
+/// the project (the supervisor's `project_save_as`) is not busy with itself.
+thread_local const Job* running_here = nullptr;
+
 }  // namespace
 
 std::string_view JobStatusName(JobStatus status) {
@@ -147,6 +151,7 @@ void Job::Run() {
     JobStatus status = JobStatus::succeeded;
     core::json::Object result;
     std::exception_ptr error;
+    running_here = this;
     try {
         result = body(context);
     } catch (const Cancelled&) {
@@ -155,6 +160,7 @@ void Job::Run() {
         status = JobStatus::failed;
         error = std::current_exception();
     }
+    running_here = nullptr;
     std::lock_guard lock(mutex_);
     status_ = status;
     if (status == JobStatus::succeeded) progress_ = 1.0;
@@ -190,6 +196,7 @@ std::vector<std::shared_ptr<Job>> JobEngine::List() const {
 std::optional<std::string> JobEngine::Busy() const {
     std::lock_guard lock(mutex_);
     for (const auto& job : jobs_) {
+        if (job.get() == running_here) continue;
         const JobStatus status = job->status();
         if (status == JobStatus::queued || status == JobStatus::running) return job->id();
     }

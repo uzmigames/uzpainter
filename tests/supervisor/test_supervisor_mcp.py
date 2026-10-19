@@ -550,6 +550,102 @@ def test_display_shader_and_camera_tools_hold_the_fixed_pipeline(
     assert session.call("display_get")["result"]["name"] == "common"
 
 
+def test_long_jobs_of_a_python_session_are_not_busy_with_themselves(
+    painter: Path, tmp_path: Path, sessions: list[Mcp]
+) -> None:
+    """With `--allow-python` the bindings' job check (`Session::running_job`) sees every native
+    job, and a long tool runs as one: the job a tool runs in does not count itself, so
+    `project_save_as` and `export` succeed, and so do `project_save` and `project_revert`. A job a
+    script queued (engine computations disabled, so it stays queued) still makes `save`,
+    `save_as` and `close` busy, from Python and through MCP."""
+    session, revision = opened_session(painter, tmp_path, sessions)
+    path = tmp_path / "saved" / "as.uzp"
+    saved = session.call("project_save_as", {"path": str(path), "wait": True})
+    assert "error" not in saved, saved
+    assert Path(saved["result"]["path"]) == path and path.is_file()
+    assert Path(session.status()["project"]) == path
+    config = {
+        "exportPath": str(tmp_path / "out"),
+        "exportShaderParams": False,
+        "defaultExportPreset": "rough",
+        "exportPresets": [
+            {
+                "name": "rough",
+                "maps": [
+                    {
+                        "fileName": "rough",
+                        "channels": [
+                            {
+                                "destChannel": "L",
+                                "srcChannel": "L",
+                                "srcMapType": "documentMap",
+                                "srcMapName": "roughness",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "exportList": [{"rootPath": "uzp_plane"}],
+        "exportParameters": [
+            {
+                "parameters": {
+                    "fileFormat": "png",
+                    "bitDepth": "8",
+                    "dithering": False,
+                    "paddingAlgorithm": "passthrough",
+                }
+            }
+        ],
+    }
+    exported = session.call("export", {"config": config, "wait": True})
+    assert "error" not in exported, exported
+    assert session.call("project_save", {})["result"]["named"] == revision
+    reverted = session.call("project_revert", {"revision": revision - 1})
+    assert reverted["result"]["status"] == "committed", reverted
+    revision += 1
+
+    other = tmp_path / "saved" / "other.uzp"
+    queue = f"""
+from uzpainter import application, export, project
+application.enable_engine_computations(False)
+job = export.start({config!r})
+refused = []
+for call in (project.save, lambda: project.save_as({other.as_posix()!r}), project.close):
+    try:
+        call()
+        refused.append(None)
+    except Exception as error:
+        refused.append(type(error).__name__ + ": " + str(error))
+result = {{"job": job.id, "status": job.status, "refused": refused}}
+"""
+    queued = session.call(
+        "run_python", {"code": queue, "idempotency_key": "k-queue", "expected_revision": revision}
+    )
+    assert "error" not in queued, queued
+    job = queued["result"]["result"]["job"]
+    assert queued["result"]["result"]["status"] == "queued", queued
+    assert queued["result"]["result"]["refused"] == [
+        f"BusyError: {call} is refused while job {job} is running"
+        for call in ("save()", "save_as()", "close()")
+    ], queued
+    assert not other.exists()
+    busy = session.call("project_save", {})
+    assert busy["error"]["code"] == "busy" and busy["error"]["details"]["job_id"] == job, busy
+    release = f"""
+from uzpainter import application, jobs
+cancelled = [j.cancel() for j in jobs.list() if j.id == {job!r}]
+application.enable_engine_computations(True)
+result = {{"cancelled": cancelled, "busy": jobs.busy()}}
+"""
+    released = session.call(
+        "run_python",
+        {"code": release, "idempotency_key": "k-release", "expected_revision": revision},
+    )
+    assert released["result"]["result"] == {"cancelled": [True], "busy": None}, released
+    assert "result" in session.call("project_save", {})
+
+
 def test_shader_set_stores_double_sided_as_a_non_parity_state(
     painter: Path, tmp_path: Path, sessions: list[Mcp]
 ) -> None:
@@ -561,8 +657,6 @@ def test_shader_set_stores_double_sided_as_a_non_parity_state(
     non-parity state, which a Tier 3 comparison rejects as render evidence."""
     from tools.parity.verdict import Comparison, Outcome, evaluate
 
-    # Python stays disabled: with it, the bindings' job check refuses the `project_save_as` job
-    # as busy with itself.
     session = Mcp(painter, tmp_path, "--gpu-backend", BACKEND)
     sessions.append(session)
     project = make_project(painter, tmp_path)

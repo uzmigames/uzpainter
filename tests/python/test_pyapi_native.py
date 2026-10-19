@@ -1329,6 +1329,43 @@ def test_export_plan_dry_run_and_job_errors(run: Run) -> None:
     assert result["closed"] is None
 
 
+def test_a_job_running_on_the_worker_still_makes_saving_busy(run: Run) -> None:
+    """A job is not busy with itself, and only with itself (jobs.cpp): while a job is held
+    running at a barrier (the runner's `uzp_job_test` hook), `save`, `save_as` and `close` from the
+    command thread raise `BusyError` naming it and write nothing; released, that job still sees
+    the export queued behind it."""
+    result = ok(
+        run(
+            with_values("""
+        import uzp_job_test
+        create()
+        project.save_as(WORK + "/plane.uzp")
+        held = uzp_job_test.hold()
+        job = next(j for j in jobs.list() if j.id == held)
+        status = job.status
+        refused = [raises(project.save), raises(project.save_as, WORK + "/other.uzp"),
+                   raises(project.close)]
+        queued = export.start(__CONFIG__)
+        uzp_job_test.release()
+        seen = job.wait()
+        queued.wait()
+        result = {"held": held, "status": status, "refused": refused, "queued": queued.id,
+                  "seen": seen, "busy": jobs.busy(), "other": os.path.exists(WORK + "/other.uzp"),
+                  "closed": raises(project.close)}
+        """)
+        )
+    )
+    held = result["held"]
+    assert result["status"] == "running"
+    assert result["refused"] == [
+        f"BusyError: {call} is refused while job {held} is running"
+        for call in ("save()", "save_as()", "close()")
+    ]
+    assert result["other"] is False
+    assert result["seen"] == {"busy": result["queued"]}
+    assert result["busy"] is None and result["closed"] is None
+
+
 # ── B19: the calls on one committed revision share its CPU evaluation (decision 246) ───────────
 
 # The export helpers: the plane's BaseColor (RGB) and Height (L) as 16-bit PNGs, passthrough; and

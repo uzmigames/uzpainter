@@ -127,7 +127,8 @@ public:
     std::shared_ptr<Job> Start(std::string kind, JobBody body, JobObserver observer = {});
     /// Every job of this process, in submission order.
     std::vector<std::shared_ptr<Job>> List() const;
-    /// A job that is queued or running, if any.
+    /// A job that is queued or running, if any, other than the one whose body runs on the calling
+    /// thread: a job is not busy with itself.
     std::optional<std::string> Busy() const;
     /// Engine computations: while paused, queued jobs wait (see above).
     void SetPaused(bool paused);
