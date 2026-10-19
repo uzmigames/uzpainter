@@ -1,0 +1,11 @@
+{
+  "id": 299,
+  "slug": "299-dota2-labels",
+  "title": "Dota 2's user-channel labels: UzPainter keeps its generic or empty labels and never copies Painter's label text (question q1, option a), chosen by Codex and Claude under the owner's 2026-10-19 delegation; not a licence review, not an owner approval to copy Adobe text",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

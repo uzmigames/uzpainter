@@ -2,7 +2,7 @@
 
 Task `phase1.26_gate-g1` (`docs/dag.md` G1, D14; `docs/roadmap.md` Phase 1 gate, rules 2, 3 and 6). **Draft, pre-verified 2026-10-19** on the owner's machine (Windows 11 Pro 10.0.26200, NVIDIA GeForce RTX 4090, Zig 0.15.2, Python 3.13.9) on a clean checkout of `main` `39d8d7b`. Every check below is CPU only: no GPU run was made for this draft. Numbers and hashes only: every recorded Painter output stays in the private store. SHA-256 values are of the committed file bytes at `39d8d7b` (`git show 39d8d7b:<path>`), as in the G0 record.
 
-**Result: G1 open.** Every item that does not depend on the Wand pilot is evidenced below. Pending: the Wand clauses (§2, `phase1.25_pilot-wand`, item 2.2 of the gate), `phase1.24_python-api-facade` (§3.6), the other open Phase 1 tasks (§5), the gate-commit re-run of the checks (§4) and the Phase 2 duration Hypothesis (§7). The record is final only when it is re-run on the gate commit.
+**Result: G1 open.** The independent checks completed for this draft are evidenced below. Pending: the Wand clauses (§2, `phase1.25_pilot-wand`, item 2.2 of the gate), `phase1.24_python-api-facade` (§3.6), the other open Phase 1 tasks (§5), the gate-commit re-run of the checks (§4) and the Phase 2 duration Hypothesis (§7). The record is final only when it is re-run on the gate commit.
 
 ## 1. Oracle envelope used by this gate (decision 037)
 
@@ -89,12 +89,11 @@ Open. Done: items 2.1-2.6, 3.4 and 3.5. Open: 1.1 (needs `phase1.24_python-api-f
 
 ### 3.6 P1-PYAPI — `phase1.24_python-api-facade` (not accepted)
 
-Children `phase1.19_pyapi-native-module` to `phase1.23_pyapi-pipeline-adapter` archived 2026-10-12. The pipeline-script clause is evidenced by item 3.2 (`tests/adapters`: 44 passed, report §4.1). This draft did not re-run it: the adapter's export runs on DX12. The task still lacks:
+Children `phase1.19_pyapi-native-module` to `phase1.23_pyapi-pipeline-adapter` archived 2026-10-12. The pipeline-script clause is evidenced by item 3.2 (`tests/adapters`: 44 passed, report §4.1). This draft did not re-run it: the adapter's export runs on DX12. Item 1.1 is ticked: `phase1.3_document-model`, `phase1.18_export-engine` and `phase1.8_project-store` are archived (2026-10-10, 2026-10-12, 2026-10-13). The task still lacks:
 
-- item 1.1: its text still says `phase1.18_export-engine` and `phase1.8_project-store` are not accepted. Both are now archived (2026-10-12, 2026-10-13), as is `phase1.3_document-model`. The item is ready to tick on that evidence.
-- item 3.1: owner question q1 (`.rulebook/tasks/phase1.24_python-api-facade/.metadata.json`, pending since 2026-10-12): may UzPainter ship Painter's label text for the Dota 2 template's User0-User3?
+- item 3.1: question q1 (may UzPainter ship Painter's label text for the Dota 2 template's User0-User3?) was answered on 2026-10-19 with option (a), decision 299: UzPainter keeps its generic or empty labels and never copies Painter's text. Codex and Claude chose it under the owner's delegation; it is not a licence review. The label difference stays listed in the task report §3. The item is still open on one run of the 36 traced replays now in `tools/capabilities/tier0-trace.json` on one build: the report records 26 (2026-10-12).
 - item 3.4: P22-B, the 257 `pending-evidence` Painter symbols that decision 189 moved here (probe vocabulary, requests and recordings, by module).
-- item 4.1: its acceptance, after 1.1, 3.1 and 3.4.
+- item 4.1: its acceptance, after 3.1 and 3.4.
 
 | Evidence | SHA-256 |
 |---|---|
@@ -127,7 +126,7 @@ These checks must run again on the gate commit.
 | Task | Open items | Blocked by |
 |---|---|---|
 | `phase1.15_compositor-colour-fits` | 3.1, 4.1, 5.1-5.3 | Items 2.1-2.9 are done. 3.1 and 4.1 need the local DX12 run on the owner's machine for every case lifted after the 2026-10-13 run. That run left 2.1, 2.5 and 2.6 to lift, and 2.7-2.9 came later. Then the tail. |
-| `phase1.24_python-api-facade` | 1.1, 3.1, 3.4, 4.1 | §3.6 |
+| `phase1.24_python-api-facade` | 3.1, 3.4, 4.1 | §3.6 |
 | `phase1.25_pilot-wand` | 1.1, 2.7, 3.1-3.3, 4.1, 4.2, 5.1-5.3 | §3.5 |
 | `phase1.26_gate-g1` | this gate | every row above |
 

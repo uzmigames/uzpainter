@@ -4,7 +4,7 @@
 
 Under decision 028, this report is the local-run evidence for the G1 gate record. The run was on 2026-10-12, branch `wt/phase1.24-api-parent` from main `8dc3c96`, envelope `painter-12.1.5_js-api.1.1.20`. The decisions are 115, 116 and 117.
 
-**Result.** The evidence is recorded below. The P1-PYAPI gate is **open** on two items: 1.1, where two prerequisites are not accepted (§5), and 3.1, where the Dota 2 user-channel labels wait for the owner's clean-room ruling (§3). Decision 117 gave every other output outside the supported scope an owning checklist item. The code changes of this task are ready for merge review apart from task acceptance.
+**Result.** The evidence is recorded below. The P1-PYAPI gate is **open** (§5). Item 1.1 is closed: its three prerequisites are archived. Item 3.1 waits for one run of the current 36 traced replays on one build; the Dota 2 user-channel labels no longer hold it (question q1, decision 299, §3). Decision 117 gave every other output outside the supported scope an owning checklist item. The code changes of this task are ready for merge review apart from task acceptance.
 
 ## 1. Integration added by this task
 
@@ -41,7 +41,9 @@ Under decision 028, this report is the local-run evidence for the G1 gate record
 | **Known divergences that return a value.** Each test requires them to still differ. | | |
 | Painter's empty default paint layer "Layer 1" | Divergence: UzPainter creates no such layer. The structure readbacks are compared without it after asserting it is exactly that empty layer. | phase4.1_nodes-paint-layers item 2.8 |
 | `phase1-reload-resources` recording 2 s9, s12: Painter reports reloads of bytes the project already holds | Divergence (decision 110 §6) | phase5.2_parity-report-tiers item 2.10 (decision 117): after recording 1 is exact, explained by a recording that settles it, or entered in `parity/exceptions.json` as a decision-032 r2 divergence. Named first by decision 110 §6 and phase1.21 item 2.8 (archived). |
-| The channel labels of Dota 2's User0-User3 (`project-templates`) | Divergence: they read "", Painter's text is not shipped (decision 116 §4) | **Owner question q1** in the task's `.metadata.json` (decision 117): (a) ship generic labels, or (b) ship Painter's label text after the owner's licence review. Item 3.1 stays open until it is answered. |
+| The channel labels of Dota 2's User0-User3 (`project-templates`) | Deliberate non-pixel metadata difference: they read "", Painter's text is not shipped (decision 116 §4). No texture changes: texture sets, resolution, channels and formats of all 26 templates are exact. | Question q1 in the task's `.metadata.json`, answered 2026-10-19 with option (a), **decision 299**: UzPainter keeps its generic or empty labels and never copies Painter's label text. Codex and Claude chose it under the owner's delegation of that day. It is not a licence review, and not an owner approval to copy Adobe text. The test still requires the labels to differ: `python -m pytest -q tests/python/test_pyapi_facade_tier0.py -k project_templates`, exit 0, 1 passed (main ed4627c, 2026-10-19). |
+| BaseColor exports of `phase1-srgb-uniform-decode-ocio-part1..4` (`uzp_plane/basecolor`) | Not compared in this replay: the native project is Legacy, since no creation path yields an OCIO project (decision 202, Consequences) | The OCIO evaluation and export are compared by decision 190's `test_ocio_encode_equals_painter_files` (`tests/export/test_export_encoders.py`) |
+| P20-A's Normal map (`phase1-fill-channel-defaults` `uzp_plane/normal`) | Refused: the grey bitmap on Normal (`evaluator:unsupported_source`, decision 249) | phase1.15_compositor-colour-fits (item 2.9's open note): the recording decision 249 lists settles it |
 
 Closed by phase1.15_compositor-colour-fits item 2.1 (decision 214, 2026-10-13): `phase1-reload-resources` recording 1 s9 and s12 (a grey bitmap on BaseColor now binds in sRGB, P20-A) and the 70/255 decode of `export-ocio-encode-legacy` (the Legacy decode fitted from P20-B) are compared exactly; their rows are removed.
 
@@ -91,8 +93,9 @@ The adapter regressions export a project, then each of the following, and requir
 
 ## 5. Open
 
-- **Item 1.1.** `phase1.18_export-engine` is not accepted: it waits on phase1.14_compositor-core and phase1.15_export-plan-compiler. `phase1.8_project-store` is not accepted: it waits on phase1.6_store-save-retention and phase1.7_store-inspect-census. Every child's code is on main.
-- **Item 3.1.** Owner question q1 (`.rulebook/tasks/phase1.24_python-api-facade/.metadata.json`): may UzPainter ship Painter's label text for Dota 2's User0-User3? Decision 117 leaves it to the owner.
+- **Item 1.1: closed.** `phase1.3_document-model`, `phase1.18_export-engine` and `phase1.8_project-store` are archived (`.rulebook/archive/2026-10-10-phase1.3_document-model`, `2026-10-12-phase1.18_export-engine`, `2026-10-13-phase1.8_project-store`).
+- **Item 3.1.** Question q1 is answered (decision 299, §3). Still open: §4 records 26 traced replays, and `tools/capabilities/tier0-trace.json` now holds 36. The 10 added since by phase1.15 (`facade/phase1-srgb-uniform-decode-part1..4` and `-ocio-part1..4`, `facade/phase1-fill-channel-defaults`, `facade/export-ocio-encode`; decisions 202, 214, 218, 224, 226 and 249) have not been run with the others on one build and recorded here. That run is the coordinator's batch: the colour ramps alone take about 16 minutes.
+- **Item 3.4.** P22-B (decision 189), in progress.
 - **Recordings named** (owner action): P23-A, `save_as` onto an existing `.spp` (decision 113); P24-A, a template path that is missing or is not a template (decision 116); P22-B, one api-probe calling every Painter symbol marked `pending-evidence` (decision 112).
 - **The adapter's session carry: fixed (decision 118; commits 1c09894, fbfbf97, 254d96e).** The runner stored `project.file_path()`, as given, as the next call's project. A script that changed directory and then saved under a relative path carried a path that the next process resolved in the client's directory. The call failed, or another project of the same name was reopened (Codex audit, P2).
   - The fix: the runner now carries `uzpainter.project.absolute_file_path()`, the path `open` or `save_as` resolved when it ran, and refuses a session file that names a relative path.
