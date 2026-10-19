@@ -1,0 +1,910 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-layer-navigation",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-layer-navigation",
+  "description": "API probe P22-B, layer stack (phase1.24 item 3.4, decision 296): on the plane, a group holding two fills, and a fill above it with a black mask (a uniform mask fill effect) and a levels effect under a uniform content fill effect; in the first session and after save/reopen: Node.get_parent, get_next_sibling, get_previous_sibling and get_texture_set; isinstance of layerstack.EffectNode on every node; LayerNode.instances of a layer without instances; GroupLayerNode.set_collapsed and is_collapsed; FillLayerNode and FillEffectNode is_symmetry_enabled, before and after a Triplanar projection and FillEffectNode.set_symmetry_enabled (on the content effect and on the mask effect); FillLayerNode and FillEffectNode get_material_source in split mode and in the mask context; FillEffectNode.reset_source on a channel and in the mask context, read back; ProjectionMode.Fill; FilteringMode BilinearHQ, BilinearSharp and Nearest read back; get_selected_nodes, set_selected_nodes (layers, then effects), set_selection_type with every SelectionType member and get_selection_type; a ScopedModification holding a rename, an opacity edit and the selection calls its documentation says raise inside it.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_group",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 3,
+          "name": "uzp group"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 3,
+          "node_stack": "Substack"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 5,
+          "name": "uzp fill 1"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 3,
+          "node_stack": "Substack"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 7,
+          "name": "uzp fill 2"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 9,
+          "name": "uzp fill 3"
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 9,
+          "channels": [
+            "BaseColor"
+          ]
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 9,
+          "channel": "BaseColor",
+          "color": [
+            0.5,
+            0.25,
+            0.75
+          ],
+          "color_space": "Working"
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 9,
+          "background": "Black"
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 9,
+          "node_stack": "Mask"
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 14,
+          "name": "uzp mask fill"
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 14,
+          "color": [
+            0.6,
+            0.6,
+            0.6
+          ],
+          "color_space": "Working"
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.insert_levels_effect",
+        "args": {
+          "inside_step": 9,
+          "node_stack": "Content"
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 17,
+          "name": "uzp levels"
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 9,
+          "node_stack": "Content"
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 19,
+          "name": "uzp content fill"
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.FillLayerNode.active_channels",
+        "args": {
+          "node_step": 19,
+          "channels": [
+            "BaseColor"
+          ]
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 19,
+          "channel": "BaseColor",
+          "color": [
+            0.1,
+            0.2,
+            0.3
+          ],
+          "color_space": "Working"
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.layerstack.Node.get_parent",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.layerstack.Node.get_parent",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.layerstack.Node.get_parent",
+        "args": {
+          "node_step": 7
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.layerstack.Node.get_parent",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.layerstack.Node.get_parent",
+        "args": {
+          "node_step": 14
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.layerstack.Node.get_parent",
+        "args": {
+          "node_step": 17
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.layerstack.Node.get_parent",
+        "args": {
+          "node_step": 19
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.layerstack.Node.get_next_sibling",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 31,
+        "call": "substance_painter.layerstack.Node.get_next_sibling",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 32,
+        "call": "substance_painter.layerstack.Node.get_next_sibling",
+        "args": {
+          "node_step": 7
+        }
+      },
+      {
+        "step": 33,
+        "call": "substance_painter.layerstack.Node.get_next_sibling",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 34,
+        "call": "substance_painter.layerstack.Node.get_next_sibling",
+        "args": {
+          "node_step": 14
+        }
+      },
+      {
+        "step": 35,
+        "call": "substance_painter.layerstack.Node.get_next_sibling",
+        "args": {
+          "node_step": 17
+        }
+      },
+      {
+        "step": 36,
+        "call": "substance_painter.layerstack.Node.get_next_sibling",
+        "args": {
+          "node_step": 19
+        }
+      },
+      {
+        "step": 37,
+        "call": "substance_painter.layerstack.Node.get_previous_sibling",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 38,
+        "call": "substance_painter.layerstack.Node.get_previous_sibling",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 39,
+        "call": "substance_painter.layerstack.Node.get_previous_sibling",
+        "args": {
+          "node_step": 7
+        }
+      },
+      {
+        "step": 40,
+        "call": "substance_painter.layerstack.Node.get_previous_sibling",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 41,
+        "call": "substance_painter.layerstack.Node.get_previous_sibling",
+        "args": {
+          "node_step": 14
+        }
+      },
+      {
+        "step": 42,
+        "call": "substance_painter.layerstack.Node.get_previous_sibling",
+        "args": {
+          "node_step": 17
+        }
+      },
+      {
+        "step": 43,
+        "call": "substance_painter.layerstack.Node.get_previous_sibling",
+        "args": {
+          "node_step": 19
+        }
+      },
+      {
+        "step": 44,
+        "call": "substance_painter.layerstack.Node.get_texture_set",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 45,
+        "call": "substance_painter.layerstack.Node.get_texture_set",
+        "args": {
+          "node_step": 14
+        }
+      },
+      {
+        "step": 46,
+        "call": "substance_painter.layerstack.Node.get_texture_set",
+        "args": {
+          "node_step": 17
+        }
+      },
+      {
+        "step": 47,
+        "call": "substance_painter.layerstack.EffectNode",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 48,
+        "call": "substance_painter.layerstack.EffectNode",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 49,
+        "call": "substance_painter.layerstack.EffectNode",
+        "args": {
+          "node_step": 7
+        }
+      },
+      {
+        "step": 50,
+        "call": "substance_painter.layerstack.EffectNode",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 51,
+        "call": "substance_painter.layerstack.EffectNode",
+        "args": {
+          "node_step": 14
+        }
+      },
+      {
+        "step": 52,
+        "call": "substance_painter.layerstack.EffectNode",
+        "args": {
+          "node_step": 17
+        }
+      },
+      {
+        "step": 53,
+        "call": "substance_painter.layerstack.EffectNode",
+        "args": {
+          "node_step": 19
+        }
+      },
+      {
+        "step": 54,
+        "call": "substance_painter.layerstack.LayerNode.instances",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 55,
+        "call": "substance_painter.layerstack.GroupLayerNode.is_collapsed",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 56,
+        "call": "substance_painter.layerstack.GroupLayerNode.set_collapsed",
+        "args": {
+          "node_step": 3,
+          "collapsed": true,
+          "probe": true
+        }
+      },
+      {
+        "step": 57,
+        "call": "substance_painter.layerstack.GroupLayerNode.is_collapsed",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 58,
+        "call": "substance_painter.layerstack.GroupLayerNode.set_collapsed",
+        "args": {
+          "node_step": 3,
+          "collapsed": false,
+          "probe": true
+        }
+      },
+      {
+        "step": 59,
+        "call": "substance_painter.layerstack.GroupLayerNode.is_collapsed",
+        "args": {
+          "node_step": 3
+        }
+      },
+      {
+        "step": 60,
+        "call": "substance_painter.layerstack.FillLayerNode.is_symmetry_enabled",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 61,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_mode",
+        "args": {
+          "node_step": 9,
+          "projection_mode": "Triplanar",
+          "probe": true
+        }
+      },
+      {
+        "step": 62,
+        "call": "substance_painter.layerstack.FillLayerNode.set_symmetry_enabled",
+        "args": {
+          "node_step": 9,
+          "enabled": true,
+          "probe": true
+        }
+      },
+      {
+        "step": 63,
+        "call": "substance_painter.layerstack.FillLayerNode.is_symmetry_enabled",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 64,
+        "call": "substance_painter.layerstack.FillEffectNode.is_symmetry_enabled",
+        "args": {
+          "node_step": 19
+        }
+      },
+      {
+        "step": 65,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_mode",
+        "args": {
+          "node_step": 19,
+          "projection_mode": "Triplanar",
+          "probe": true
+        }
+      },
+      {
+        "step": 66,
+        "call": "substance_painter.layerstack.FillEffectNode.set_symmetry_enabled",
+        "args": {
+          "node_step": 19,
+          "enabled": true,
+          "probe": true
+        }
+      },
+      {
+        "step": 67,
+        "call": "substance_painter.layerstack.FillEffectNode.is_symmetry_enabled",
+        "args": {
+          "node_step": 19
+        }
+      },
+      {
+        "step": 68,
+        "call": "substance_painter.layerstack.FillEffectNode.set_symmetry_enabled",
+        "args": {
+          "node_step": 19,
+          "enabled": false,
+          "probe": true
+        }
+      },
+      {
+        "step": 69,
+        "call": "substance_painter.layerstack.FillEffectNode.is_symmetry_enabled",
+        "args": {
+          "node_step": 19
+        }
+      },
+      {
+        "step": 70,
+        "call": "substance_painter.layerstack.FillEffectNode.set_symmetry_enabled",
+        "args": {
+          "node_step": 14,
+          "enabled": true,
+          "probe": true
+        }
+      },
+      {
+        "step": 71,
+        "call": "substance_painter.layerstack.FillEffectNode.is_symmetry_enabled",
+        "args": {
+          "node_step": 14
+        }
+      },
+      {
+        "step": 72,
+        "call": "substance_painter.layerstack.FillLayerNode.get_material_source",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 73,
+        "call": "substance_painter.layerstack.FillLayerNode.get_material_source",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 74,
+        "call": "substance_painter.layerstack.FillEffectNode.get_material_source",
+        "args": {
+          "node_step": 19
+        }
+      },
+      {
+        "step": 75,
+        "call": "substance_painter.layerstack.FillEffectNode.get_material_source",
+        "args": {
+          "node_step": 14
+        }
+      },
+      {
+        "step": 76,
+        "call": "substance_painter.layerstack.FillEffectNode.reset_source",
+        "args": {
+          "node_step": 19,
+          "channel": "BaseColor",
+          "probe": true
+        }
+      },
+      {
+        "step": 77,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 19,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 78,
+        "call": "substance_painter.layerstack.FillEffectNode.reset_source",
+        "args": {
+          "node_step": 14,
+          "probe": true
+        }
+      },
+      {
+        "step": 79,
+        "call": "substance_painter.layerstack.FillLayerNode.get_source",
+        "args": {
+          "node_step": 14
+        }
+      },
+      {
+        "step": 80,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_mode",
+        "args": {
+          "node_step": 5,
+          "projection_mode": "Fill",
+          "probe": true
+        }
+      },
+      {
+        "step": 81,
+        "call": "substance_painter.layerstack.FillLayerNode.get_projection_mode",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 82,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
+        "args": {
+          "node_step": 7,
+          "filtering_mode": "BilinearHQ",
+          "uv_wrapping_mode": "Repeat",
+          "scale_mode": "Factors",
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "rotation": 0.0,
+          "offset": [
+            0.0,
+            0.0
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 83,
+        "call": "substance_painter.layerstack.FillLayerNode.get_projection_parameters",
+        "args": {
+          "node_step": 7
+        }
+      },
+      {
+        "step": 84,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
+        "args": {
+          "node_step": 7,
+          "filtering_mode": "BilinearSharp",
+          "uv_wrapping_mode": "Repeat",
+          "scale_mode": "Factors",
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "rotation": 0.0,
+          "offset": [
+            0.0,
+            0.0
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 85,
+        "call": "substance_painter.layerstack.FillLayerNode.get_projection_parameters",
+        "args": {
+          "node_step": 7
+        }
+      },
+      {
+        "step": 86,
+        "call": "substance_painter.layerstack.FillLayerNode.set_projection_parameters",
+        "args": {
+          "node_step": 7,
+          "filtering_mode": "Nearest",
+          "uv_wrapping_mode": "Repeat",
+          "scale_mode": "Factors",
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "rotation": 0.0,
+          "offset": [
+            0.0,
+            0.0
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 87,
+        "call": "substance_painter.layerstack.FillLayerNode.get_projection_parameters",
+        "args": {
+          "node_step": 7
+        }
+      },
+      {
+        "step": 88,
+        "call": "substance_painter.layerstack.get_selected_nodes",
+        "args": {}
+      },
+      {
+        "step": 89,
+        "call": "substance_painter.layerstack.set_selected_nodes",
+        "args": {
+          "node_steps": [
+            5,
+            7
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 90,
+        "call": "substance_painter.layerstack.get_selected_nodes",
+        "args": {}
+      },
+      {
+        "step": 91,
+        "call": "substance_painter.layerstack.set_selected_nodes",
+        "args": {
+          "node_steps": [
+            19,
+            17
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 92,
+        "call": "substance_painter.layerstack.get_selected_nodes",
+        "args": {}
+      },
+      {
+        "step": 93,
+        "call": "substance_painter.layerstack.set_selected_nodes",
+        "args": {
+          "node_steps": [
+            9
+          ],
+          "probe": true
+        }
+      },
+      {
+        "step": 94,
+        "call": "substance_painter.layerstack.get_selected_nodes",
+        "args": {}
+      },
+      {
+        "step": 95,
+        "call": "substance_painter.layerstack.set_selection_type",
+        "args": {
+          "node_step": 9,
+          "selection_type": "Content",
+          "probe": true
+        }
+      },
+      {
+        "step": 96,
+        "call": "substance_painter.layerstack.get_selection_type",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 97,
+        "call": "substance_painter.layerstack.set_selection_type",
+        "args": {
+          "node_step": 9,
+          "selection_type": "Mask",
+          "probe": true
+        }
+      },
+      {
+        "step": 98,
+        "call": "substance_painter.layerstack.get_selection_type",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 99,
+        "call": "substance_painter.layerstack.set_selection_type",
+        "args": {
+          "node_step": 9,
+          "selection_type": "GeometryMask",
+          "probe": true
+        }
+      },
+      {
+        "step": 100,
+        "call": "substance_painter.layerstack.get_selection_type",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 101,
+        "call": "substance_painter.layerstack.set_selection_type",
+        "args": {
+          "node_step": 9,
+          "selection_type": "Properties",
+          "probe": true
+        }
+      },
+      {
+        "step": 102,
+        "call": "substance_painter.layerstack.get_selection_type",
+        "args": {
+          "node_step": 9
+        }
+      },
+      {
+        "step": 103,
+        "call": "substance_painter.layerstack.ScopedModification",
+        "args": {
+          "node_step": 5,
+          "name": "uzp scoped edit",
+          "new_name": "uzp fill 1 scoped",
+          "opacity": 0.25,
+          "channel": "BaseColor",
+          "probe": true
+        }
+      },
+      {
+        "step": 104,
+        "call": "substance_painter.layerstack.Node.get_name",
+        "args": {
+          "node_step": 5
+        }
+      },
+      {
+        "step": 105,
+        "call": "substance_painter.layerstack.Node.get_opacity",
+        "args": {
+          "node_step": 5,
+          "channel": "BaseColor"
+        }
+      },
+      {
+        "step": 106,
+        "call": "substance_painter.layerstack.get_selected_nodes",
+        "args": {}
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

@@ -52,6 +52,10 @@ class NodeType(enum.Enum):
     PaintLayer = 7
     PaintEffect = 8
     AnchorPointEffect = 9
+    # Node kinds of the P22-B layer stack probes (decision 296).
+    FilterEffect = 10
+    GeneratorEffect = 11
+    InstanceLayer = 12
 
 
 class NodeStack(enum.Enum):
@@ -195,7 +199,12 @@ class LevelsParamsMono:
     clamp: bool = False
 
 
-LAYER_KINDS = (NodeType.FillLayer, NodeType.GroupLayer, NodeType.PaintLayer)
+LAYER_KINDS = (
+    NodeType.FillLayer,
+    NodeType.GroupLayer,
+    NodeType.PaintLayer,
+    NodeType.InstanceLayer,
+)
 CONTAINERS = ("Substack", "Content", "Mask")
 
 
@@ -905,6 +914,7 @@ def extend_modules(world: ProbeWorld) -> None:
     root = modules["substance_painter"]
     root.layerstack = modules["substance_painter.layerstack"]
     root.event = modules["substance_painter.event"]
+    extend_layerstack_p22b(world, classes, handle, place)
 
 
 def extend_async(world: ProbeWorld, events: dict[str, type]) -> None:
@@ -1321,3 +1331,231 @@ def extend_p295(world: ProbeWorld, events: dict[str, type]) -> None:
         return export_before(config)
 
     export.export_project_textures = export_project_textures
+
+
+# P22-B layer stack, levels and colour surface (phase1.24 item 3.4, decision 296) -------------
+
+
+class SelectionType(enum.Enum):
+    Content = 0
+    Mask = 1
+    GeometryMask = 2
+    Properties = 3
+
+
+@dataclass
+class LevelsParamsRGB:
+    input_min: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    input_max: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    gamma: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    output_min: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    output_max: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    clamp: bool = False
+
+
+def srgb_encode(value: float) -> float:
+    return value * 12.92 if value <= 0.0031308 else 1.055 * value ** (1 / 2.4) - 0.055
+
+
+def srgb_decode(value: float) -> float:
+    return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+
+def color_value_raw(color: Any) -> tuple[float, float, float]:
+    r, g, b = color.values
+    return (r, g, b)
+
+
+def color_srgb(color: Any) -> tuple[float, float, float]:
+    """The fake's sRGB of a colour: its working value encoded (sRGB data stays as it is)."""
+    if color.color_space is None:
+        raise RuntimeError("the color space of the color is not defined")
+    if color.color_space == GenericColorSpace.sRGB:
+        return color_value_raw(color)
+    r, g, b = (srgb_encode(c) for c in color.working)
+    return (r, g, b)
+
+
+def set_color_srgb(color: Any, value: Any) -> None:
+    if color.color_space is None:
+        raise RuntimeError("the color space of the color is not defined")
+    r, g, b = (float(c) for c in value)
+    if color.color_space != GenericColorSpace.sRGB:
+        r, g, b = srgb_decode(r), srgb_decode(g), srgb_decode(b)
+    color.values = (r, g, b)
+
+
+def color_value(color: Any) -> tuple[float, float, float]:
+    """sRGB when the colour space is defined and not Raw, else the raw data (the fake's rule)."""
+    if color.color_space is None or color.color_space == GenericColorSpace.Raw:
+        return color_value_raw(color)
+    return color_srgb(color)
+
+
+def extend_layerstack_p22b(
+    world: ProbeWorld,
+    classes: dict[NodeType, Any],
+    handle: Callable[[Item], Any],
+    place: Callable[..., Any],
+) -> None:
+    """Navigation, selection, scoped modifications, group collapse, symmetry readback, material
+    sources, instances, filter and generator effects, `levels` and `Color.sRGB`/`Color.value`.
+
+    Authored rules of the fake: selection and collapse live in the session (lost on reopen), an
+    instance forgets its source on reopen, `get_material_source` raises (no fill of the fake is in
+    material mode), and the search finds one filter or generator for a query naming its usage.
+    """
+    modules = world.modules
+    layerstack = modules["substance_painter.layerstack"]
+    resource = modules["substance_painter.resource"]
+    textureset = modules["substance_painter.textureset"]
+    collapsed: dict[int, bool] = {}
+    instance_sources: dict[int, int] = {}
+    selection: list[int] = []
+    selection_types: dict[int, SelectionType] = {}
+    scoped = [0]
+
+    def sibling(node: Any, offset: int) -> Any:
+        item = node.data
+        siblings = world.siblings(item)
+        index = siblings.index(item) + offset
+        return handle(siblings[index]) if 0 <= index < len(siblings) else None
+
+    def get_texture_set(node: Any) -> Any:
+        return textureset.TextureSet(world.texture_set)
+
+    def instances(node: Any) -> list[Any]:
+        return [
+            handle(world.item(uid))
+            for uid, source in sorted(instance_sources.items())
+            if source == node.node_uid and uid in world.items
+        ]
+
+    layerstack.Node.get_next_sibling = lambda node: sibling(node, -1)
+    layerstack.Node.get_previous_sibling = lambda node: sibling(node, 1)
+    layerstack.Node.get_texture_set = get_texture_set
+    layerstack.LayerNode.instances = instances
+
+    class InstanceLayerNode(layerstack.LayerNode):  # type: ignore[misc,name-defined]
+        def instance_source(self) -> Any:
+            if self.node_uid not in instance_sources:
+                raise ValueError("the instance has no source layer")
+            return handle(world.item(instance_sources[self.node_uid]))
+
+    class FilterEffectNode(layerstack.Node):  # type: ignore[misc,name-defined]
+        pass
+
+    class GeneratorEffectNode(layerstack.Node):  # type: ignore[misc,name-defined]
+        pass
+
+    classes[NodeType.InstanceLayer] = InstanceLayerNode
+    classes[NodeType.FilterEffect] = FilterEffectNode
+    classes[NodeType.GeneratorEffect] = GeneratorEffectNode
+
+    def is_collapsed(node: Any) -> bool:
+        return collapsed.get(node.node_uid, False)
+
+    def set_collapsed(node: Any, value: bool) -> None:
+        collapsed[node.node_uid] = bool(value)
+
+    def is_symmetry_enabled(node: Any) -> bool:
+        return bool(node.data.symmetry)
+
+    def get_material_source(node: Any) -> Any:
+        if not node.data.multichannel:
+            raise EditionContextException("the current context is not multi-channel")
+        raise RuntimeError("the source is not in SourceMode.Material")
+
+    layerstack.GroupLayerNode.is_collapsed = is_collapsed
+    layerstack.GroupLayerNode.set_collapsed = set_collapsed
+    for fill in (layerstack.FillLayerNode, layerstack.FillEffectNode):
+        fill.is_symmetry_enabled = is_symmetry_enabled
+        fill.get_material_source = get_material_source
+
+    def instantiate(position: Any, layer: Any) -> Any:
+        node = place(position, NodeType.InstanceLayer, None)
+        instance_sources[node.node_uid] = layer.node_uid
+        return node
+
+    def insert_filter_effect(position: Any, filter_id: Any) -> Any:
+        return place(position, None, NodeType.FilterEffect)
+
+    def insert_generator_effect(position: Any, generator_id: Any) -> Any:
+        return place(position, None, NodeType.GeneratorEffect)
+
+    def not_scoped(call: str) -> None:
+        if scoped[0]:
+            raise RuntimeError(f"{call} cannot be called from a ScopedModification section")
+
+    def get_selected_nodes(stack: Any) -> list[Any]:
+        return [handle(world.item(uid)) for uid in selection if uid in world.items]
+
+    def set_selected_nodes(nodes: list[Any]) -> None:
+        not_scoped("set_selected_nodes")
+        selection[:] = [node.node_uid for node in nodes]
+
+    def get_selection_type(layer: Any) -> SelectionType:
+        return selection_types.get(layer.node_uid, SelectionType.Content)
+
+    def set_selection_type(layer: Any, selection_type: SelectionType) -> None:
+        not_scoped("set_selection_type")
+        instance = layer.get_type() == NodeType.InstanceLayer
+        if selection_type == SelectionType.Properties and not instance:
+            raise ValueError("SelectionType.Properties is only available for instances")
+        selection_types[layer.node_uid] = selection_type
+
+    class ScopedModification:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def __enter__(self) -> ScopedModification:
+            scoped[0] += 1
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            scoped[0] -= 1
+
+    effects = tuple(classes[kind] for kind in classes if kind.name.endswith("Effect"))
+    members = {
+        "EffectNode": effects,  # isinstance() takes it like the documented alias
+        "InstanceLayerNode": InstanceLayerNode,
+        "FilterEffectNode": FilterEffectNode,
+        "GeneratorEffectNode": GeneratorEffectNode,
+        "SelectionType": SelectionType,
+        "ScopedModification": ScopedModification,
+        "instantiate": instantiate,
+        "insert_filter_effect": insert_filter_effect,
+        "insert_generator_effect": insert_generator_effect,
+        "get_selected_nodes": get_selected_nodes,
+        "set_selected_nodes": set_selected_nodes,
+        "get_selection_type": get_selection_type,
+        "set_selection_type": set_selection_type,
+    }
+    for name, value in members.items():
+        setattr(layerstack, name, value)
+
+    search_before = resource.search
+
+    def search(query: str) -> list[Any]:
+        """One fake starter-asset resource for a query naming the filter or generator usage."""
+        for usage, url in (
+            ("u:filter", "resource://starter_assets/Fake Filter"),
+            ("u:generator", "resource://starter_assets/Fake Generator"),
+        ):
+            if usage in query.split():
+                rid = resource.ResourceID.from_url(url)
+                return [resource.Resource(rid, resource.Usage.TEXTURE)]
+        found: list[Any] = search_before(query)
+        return found
+
+    resource.search = search
+    levels = module(
+        "substance_painter.levels",
+        LevelsParamsMono=LevelsParamsMono,
+        LevelsParamsRGB=LevelsParamsRGB,
+    )
+    modules["substance_painter.levels"] = levels
+    modules["substance_painter"].levels = levels
+    Color.value_raw = property(color_value_raw)
+    Color.sRGB = property(color_srgb, set_color_srgb)
+    Color.value = property(color_value)

@@ -33,6 +33,7 @@ import substance_painter.display
 import substance_painter.event
 import substance_painter.export
 import substance_painter.layerstack
+import substance_painter.levels
 import substance_painter.project
 import substance_painter.resource
 import substance_painter.source
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
         channel_type,
         color_of,
         create_project,
+        levels_field,
         member,
         scene_bounding_box,
         set_camera,
@@ -201,6 +203,38 @@ SHELVES_EXISTS = "substance_painter.resource.Shelves.exists"
 SHELF_IS_CRAWLING = "substance_painter.resource.Shelf.is_crawling"
 RESOURCE_SEARCH = "substance_painter.resource.search"
 
+# P22-B layer stack, levels and colour probes (phase1.24 item 3.4, decision 296): navigation,
+# selection, scoped modifications, group collapse, fill-effect sources and symmetry, material
+# sources, instances, filter and generator effects, explicit levels parameters, `Color.sRGB` and
+# `Color.value`.
+SET_COLLAPSED = "substance_painter.layerstack.GroupLayerNode.set_collapsed"
+IS_COLLAPSED = "substance_painter.layerstack.GroupLayerNode.is_collapsed"
+EFFECT_RESET_SOURCE = "substance_painter.layerstack.FillEffectNode.reset_source"
+EFFECT_SET_SYMMETRY = "substance_painter.layerstack.FillEffectNode.set_symmetry_enabled"
+LAYER_IS_SYMMETRY = "substance_painter.layerstack.FillLayerNode.is_symmetry_enabled"
+EFFECT_IS_SYMMETRY = "substance_painter.layerstack.FillEffectNode.is_symmetry_enabled"
+LAYER_MATERIAL_SOURCE = "substance_painter.layerstack.FillLayerNode.get_material_source"
+EFFECT_MATERIAL_SOURCE = "substance_painter.layerstack.FillEffectNode.get_material_source"
+INSTANTIATE = "substance_painter.layerstack.instantiate"
+INSERT_FILTER_EFFECT = "substance_painter.layerstack.insert_filter_effect"
+INSERT_GENERATOR_EFFECT = "substance_painter.layerstack.insert_generator_effect"
+INSTANCE_SOURCE = "substance_painter.layerstack.InstanceLayerNode.instance_source"
+INSTANCES = "substance_painter.layerstack.LayerNode.instances"
+GET_PARENT = "substance_painter.layerstack.Node.get_parent"
+NEXT_SIBLING = "substance_painter.layerstack.Node.get_next_sibling"
+PREVIOUS_SIBLING = "substance_painter.layerstack.Node.get_previous_sibling"
+GET_TEXTURE_SET = "substance_painter.layerstack.Node.get_texture_set"
+IS_EFFECT_NODE = "substance_painter.layerstack.EffectNode"
+GET_SELECTED = "substance_painter.layerstack.get_selected_nodes"
+SET_SELECTED = "substance_painter.layerstack.set_selected_nodes"
+GET_SELECTION_TYPE = "substance_painter.layerstack.get_selection_type"
+SET_SELECTION_TYPE = "substance_painter.layerstack.set_selection_type"
+SCOPED_MODIFICATION = "substance_painter.layerstack.ScopedModification"
+LEVELS_MONO = "substance_painter.levels.LevelsParamsMono"
+LEVELS_RGB = "substance_painter.levels.LevelsParamsRGB"
+COLOR_SRGB = "substance_painter.colormanagement.Color.sRGB"
+COLOR_VALUE = "substance_painter.colormanagement.Color.value"
+
 # Calls the host replays as state steps (applied once) or, with `probe: true`, as probe steps.
 EDIT_CALLS = (
     "substance_painter.layerstack.insert_fill",
@@ -250,6 +284,18 @@ EDIT_CALLS = (
     "substance_painter.display.set_tone_mapping",
     "substance_painter.project.close",
     "substance_painter.project.open",
+    # P22-B layer stack, levels and colour (decision 296).
+    "substance_painter.layerstack.GroupLayerNode.set_collapsed",
+    "substance_painter.layerstack.FillEffectNode.reset_source",
+    "substance_painter.layerstack.FillEffectNode.set_symmetry_enabled",
+    "substance_painter.layerstack.instantiate",
+    "substance_painter.layerstack.insert_filter_effect",
+    "substance_painter.layerstack.insert_generator_effect",
+    "substance_painter.layerstack.set_selected_nodes",
+    "substance_painter.layerstack.set_selection_type",
+    "substance_painter.layerstack.ScopedModification",
+    "substance_painter.levels.LevelsParamsMono",
+    "substance_painter.levels.LevelsParamsRGB",
 )
 
 # Readback calls. `active_channels` and `affected_channel` read when no value is given.
@@ -307,6 +353,23 @@ GETTER_CALLS = (
     "substance_painter.resource.Shelves.exists",
     "substance_painter.resource.Shelf.is_crawling",
     "substance_painter.resource.search",
+    # P22-B layer stack, levels and colour (decision 296).
+    "substance_painter.layerstack.GroupLayerNode.is_collapsed",
+    "substance_painter.layerstack.FillLayerNode.is_symmetry_enabled",
+    "substance_painter.layerstack.FillEffectNode.is_symmetry_enabled",
+    "substance_painter.layerstack.FillLayerNode.get_material_source",
+    "substance_painter.layerstack.FillEffectNode.get_material_source",
+    "substance_painter.layerstack.InstanceLayerNode.instance_source",
+    "substance_painter.layerstack.LayerNode.instances",
+    "substance_painter.layerstack.Node.get_parent",
+    "substance_painter.layerstack.Node.get_next_sibling",
+    "substance_painter.layerstack.Node.get_previous_sibling",
+    "substance_painter.layerstack.Node.get_texture_set",
+    "substance_painter.layerstack.EffectNode",
+    "substance_painter.layerstack.get_selected_nodes",
+    "substance_painter.layerstack.get_selection_type",
+    "substance_painter.colormanagement.Color.sRGB",
+    "substance_painter.colormanagement.Color.value",
 )
 
 # Arguments that, when present, make `active_channels`, `affected_channel` or a camera property
@@ -322,6 +385,8 @@ VALUE_ARGS = {
     "substance_painter.display.Camera.focus_distance": "value",
     "substance_painter.display.Camera.aperture": "value",
     "substance_painter.display.Camera.orthographic_height": "value",
+    # P22-B (decision 296): `Color.sRGB` reads, or with `value` assigns.
+    "substance_painter.colormanagement.Color.sRGB": "value",
 }
 
 # Steps that create a node.
@@ -333,6 +398,10 @@ INSERT_CALLS = (
     "substance_painter.layerstack.insert_color_selection_effect",
     "substance_painter.layerstack.insert_paint",
     "substance_painter.layerstack.insert_anchor_point_effect",
+    # P22-B layer stack (decision 296).
+    "substance_painter.layerstack.instantiate",
+    "substance_painter.layerstack.insert_filter_effect",
+    "substance_painter.layerstack.insert_generator_effect",
 )
 
 # Documented enum members by name (see painter_side.py for why each member is spelled out).
@@ -448,6 +517,14 @@ RESOURCE_FILTERS = {
     "ResourcesListFilter": lambda: substance_painter.resource.ResourcesListFilter,
     "ResourcesUsedByProjectFilter": lambda: substance_painter.resource.ResourcesUsedByProjectFilter,
     "SessionFilter": lambda: substance_painter.resource.SessionFilter,
+}
+
+# layerstack.SelectionType members (P22-B, decision 296).
+SELECTION_TYPES = {
+    "Content": lambda: substance_painter.layerstack.SelectionType.Content,
+    "Mask": lambda: substance_painter.layerstack.SelectionType.Mask,
+    "GeometryMask": lambda: substance_painter.layerstack.SelectionType.GeometryMask,
+    "Properties": lambda: substance_painter.layerstack.SelectionType.Properties,
 }
 
 
@@ -947,6 +1024,212 @@ def engine_disabled(args: dict[str, Any]) -> dict[str, Any]:
     return {"inside": inside, "engine_computations_after": application.engine_computations_status()}
 
 
+# P22-B layer stack, levels and colour (phase1.24 item 3.4, decision 296) -------------------------
+
+# Every call the P22-B block below answers, edit or readback.
+P22B_CALLS = frozenset(
+    {
+        SET_COLLAPSED,
+        IS_COLLAPSED,
+        EFFECT_RESET_SOURCE,
+        EFFECT_SET_SYMMETRY,
+        LAYER_IS_SYMMETRY,
+        EFFECT_IS_SYMMETRY,
+        LAYER_MATERIAL_SOURCE,
+        EFFECT_MATERIAL_SOURCE,
+        INSTANTIATE,
+        INSERT_FILTER_EFFECT,
+        INSERT_GENERATOR_EFFECT,
+        INSTANCE_SOURCE,
+        INSTANCES,
+        GET_PARENT,
+        NEXT_SIBLING,
+        PREVIOUS_SIBLING,
+        GET_TEXTURE_SET,
+        IS_EFFECT_NODE,
+        GET_SELECTED,
+        SET_SELECTED,
+        GET_SELECTION_TYPE,
+        SET_SELECTION_TYPE,
+        SCOPED_MODIFICATION,
+        LEVELS_MONO,
+        LEVELS_RGB,
+        COLOR_SRGB,
+        COLOR_VALUE,
+    }
+)
+
+
+def searched_resource(query: str) -> Any:
+    """The first resource the documented search finds (a starter-asset filter or generator,
+    named exactly by the query, as `effect-order` finds its Blur filter)."""
+    found = substance_painter.resource.search(query)
+    if not found:
+        raise ValueError(f"no resource matches {query!r}")
+    return found[0].identifier()
+
+
+def triple(value: Any) -> tuple[float, float, float]:
+    r, g, b = (float(component) for component in value)
+    return (r, g, b)
+
+
+def levels_params(call: str, args: dict[str, Any]) -> Any:
+    """Levels parameters built with every documented field the step gives (all six)."""
+    if call == LEVELS_RGB:
+        return substance_painter.levels.LevelsParamsRGB(
+            input_min=triple(args["input_min"]),
+            input_max=triple(args["input_max"]),
+            gamma=triple(args["gamma"]),
+            output_min=triple(args["output_min"]),
+            output_max=triple(args["output_max"]),
+            clamp=bool(args["clamp"]),
+        )
+    return substance_painter.levels.LevelsParamsMono(
+        input_min=float(args["input_min"]),
+        input_max=float(args["input_max"]),
+        gamma=float(args["gamma"]),
+        output_min=float(args["output_min"]),
+        output_max=float(args["output_max"]),
+        clamp=bool(args["clamp"]),
+    )
+
+
+def levels_record(params: Any) -> dict[str, Any]:
+    """Levels parameters read field by field, with the documented class they are."""
+    if isinstance(params, substance_painter.levels.LevelsParamsRGB):
+        kind = "LevelsParamsRGB"
+    elif isinstance(params, substance_painter.levels.LevelsParamsMono):
+        kind = "LevelsParamsMono"
+    else:
+        kind = class_name(params)
+    return {
+        "class": kind,
+        "input_min": levels_field(params.input_min),
+        "input_max": levels_field(params.input_max),
+        "gamma": levels_field(params.gamma),
+        "output_min": levels_field(params.output_min),
+        "output_max": levels_field(params.output_max),
+        "clamp": params.clamp,
+    }
+
+
+def step_color(args: dict[str, Any]) -> Any:
+    """The colour a step names: the uniform colour source of `node_step` on `channel` (as
+    `SourceUniformColor.get_color` returns it), or one built from `color` and `color_space`
+    (no colour space when the step gives none)."""
+    if "node_step" in args:
+        return fresh(args["node_step"]).get_source(channel_arg(args)).get_color()
+    return color_of(args["color"], args.get("color_space"))
+
+
+def set_srgb(args: dict[str, Any]) -> Any:
+    """`Color.sRGB = value`: on the colour of a uniform source, then set back on that source with
+    `SourceUniformColor.set_color`; or on a built colour, whose conversions are returned."""
+    value = triple(args["value"])
+    if "node_step" in args:
+        source = fresh(args["node_step"]).get_source(channel_arg(args))
+        color = source.get_color()
+        color.sRGB = value
+        return source.set_color(color)
+    built = color_of(args["color"], args.get("color_space"))
+    built.sRGB = value
+    return {
+        "sRGB": attempt(lambda: list(built.sRGB)),
+        "working": attempt(lambda: list(built.working)),
+        "value_raw": list(built.value_raw),
+        "color_space": describe(built.color_space),
+    }
+
+
+def scoped_modification(args: dict[str, Any]) -> dict[str, Any]:
+    """A `ScopedModification` holding a rename and an opacity edit of `node_step`, and the
+    selection calls its documentation says raise inside it; each inner outcome is recorded."""
+    layerstack = substance_painter.layerstack
+    node = fresh(args["node_step"])
+    channel = channel_arg(args)
+    inside: dict[str, Any] = {}
+    with layerstack.ScopedModification(str(args["name"])):
+        inside["set_name"] = attempt(partial(node.set_name, str(args["new_name"])))
+        inside["set_opacity"] = attempt(partial(node.set_opacity, float(args["opacity"]), channel))
+        inside["set_selected_nodes"] = attempt(partial(layerstack.set_selected_nodes, [node]))
+        content = member(SELECTION_TYPES, "SelectionType", "Content")
+        inside["set_selection_type"] = attempt(
+            partial(layerstack.set_selection_type, node, content)
+        )
+        inside["get_name"] = attempt(node.get_name)
+    return {"inside": inside, "get_name_after": attempt(fresh(args["node_step"]).get_name)}
+
+
+def p22b_edit(call: str, args: dict[str, Any]) -> Any:
+    """One P22-B edit call; returns what the documented call returned."""
+    layerstack = substance_painter.layerstack
+    if call == INSTANTIATE:
+        return layerstack.instantiate(insert_position(args), fresh(args["layer_step"]))
+    if call == INSERT_FILTER_EFFECT:
+        found = searched_resource(str(args["search"]))
+        return layerstack.insert_filter_effect(insert_position(args), found)
+    if call == INSERT_GENERATOR_EFFECT:
+        found = searched_resource(str(args["search"]))
+        return layerstack.insert_generator_effect(insert_position(args), found)
+    if call == SET_SELECTED:
+        return layerstack.set_selected_nodes([fresh(step) for step in args["node_steps"]])
+    if call == SCOPED_MODIFICATION:
+        return scoped_modification(args)
+    if call == COLOR_SRGB:
+        return set_srgb(args)
+    node = fresh(args["node_step"])
+    if call == SET_COLLAPSED:
+        return node.set_collapsed(bool(args["collapsed"]))
+    if call == EFFECT_RESET_SOURCE:
+        return node.reset_source(channel_arg(args))
+    if call == EFFECT_SET_SYMMETRY:
+        return node.set_symmetry_enabled(bool(args["enabled"]))
+    if call == SET_SELECTION_TYPE:
+        kind = member(SELECTION_TYPES, "SelectionType", args["selection_type"])
+        return layerstack.set_selection_type(node, kind)
+    if call in (LEVELS_MONO, LEVELS_RGB):
+        node.set_parameters(levels_params(call, args))
+        return levels_record(node.get_parameters())
+    raise ValueError(f"call {call!r} is not in the probe vocabulary")
+
+
+def p22b_read(call: str, args: dict[str, Any]) -> Any:
+    """One P22-B readback; returns the raw documented value."""
+    layerstack = substance_painter.layerstack
+    if call == GET_SELECTED:
+        return layerstack.get_selected_nodes(substance_painter.textureset.get_active_stack())
+    if call == COLOR_SRGB:
+        return list(step_color(args).sRGB)
+    if call == COLOR_VALUE:
+        return list(step_color(args).value)
+    node = fresh(args["node_step"])
+    if call == IS_COLLAPSED:
+        return node.is_collapsed()
+    if call in (LAYER_IS_SYMMETRY, EFFECT_IS_SYMMETRY):
+        return node.is_symmetry_enabled()
+    if call in (LAYER_MATERIAL_SOURCE, EFFECT_MATERIAL_SOURCE):
+        return node.get_material_source()
+    if call == INSTANCE_SOURCE:
+        return node.instance_source()
+    if call == INSTANCES:
+        return node.instances()
+    if call == GET_PARENT:
+        return node.get_parent()
+    if call == NEXT_SIBLING:
+        return node.get_next_sibling()
+    if call == PREVIOUS_SIBLING:
+        return node.get_previous_sibling()
+    if call == GET_TEXTURE_SET:
+        return node.get_texture_set().name()
+    if call == IS_EFFECT_NODE:
+        # The documented alias of the effect node classes, as an `isinstance` check takes it.
+        return isinstance(node, layerstack.EffectNode)
+    if call == GET_SELECTION_TYPE:
+        return layerstack.get_selection_type(node)
+    raise ValueError(f"readback {call!r} is not in the probe vocabulary")
+
+
 def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -> Any:
     """Apply one edit call; returns what the documented call returned."""
     if call in P295_EDIT_CALLS or call in P295_VALUE_ARGS:
@@ -1024,6 +1307,8 @@ def edit(step: int, call: str, args: dict[str, Any], resolved: dict[str, Any]) -
         return close_project_probe()
     if call == PROJECT_OPEN:
         return open_project_probe(step, resolved)
+    if call in P22B_CALLS:
+        return p22b_edit(call, args)
     node = fresh(args["node_step"])
     if call == SET_NAME:
         return node.set_name(str(args["name"]))
@@ -1145,6 +1430,8 @@ def read(call: str, args: dict[str, Any]) -> Any:
         return sorted(
             (describe(item) for item in found), key=lambda entry: json.dumps(entry, sort_keys=True)
         )
+    if call in P22B_CALLS:
+        return p22b_read(call, args)
     node = fresh(args["node_step"])
     if call == GET_UID:
         return node.uid()

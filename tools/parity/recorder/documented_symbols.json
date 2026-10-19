@@ -79,6 +79,14 @@
       "documented_as": "substance_painter.colormanagement.Color",
       "page": "substance_painter/colormanagement.html"
     },
+    "substance_painter.colormanagement.Color.sRGB": {
+      "documented_as": "substance_painter.colormanagement.Color.sRGB",
+      "page": "substance_painter/colormanagement.html"
+    },
+    "substance_painter.colormanagement.Color.value": {
+      "documented_as": "substance_painter.colormanagement.Color.value",
+      "page": "substance_painter/colormanagement.html"
+    },
     "substance_painter.colormanagement.Color.value_raw": {
       "documented_as": "substance_painter.colormanagement.Color",
       "page": "substance_painter/colormanagement.html"
@@ -643,6 +651,10 @@
       "documented_as": "substance_painter.layerstack.BlendingMode",
       "page": "substance_painter/layerstack/navigation.html"
     },
+    "substance_painter.layerstack.EffectNode": {
+      "documented_as": "substance_painter.layerstack.EffectNode",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
     "substance_painter.layerstack.FillEffectNode": {
       "documented_as": "substance_painter.layerstack.FillEffectNode",
       "page": "substance_painter/layerstack/layereffect/fill.html"
@@ -651,12 +663,28 @@
       "documented_as": "substance_painter.layerstack.FillEffectNode.active_channels",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
+    "substance_painter.layerstack.FillEffectNode.get_material_source": {
+      "documented_as": "substance_painter.layerstack.FillEffectNode.get_material_source",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
     "substance_painter.layerstack.FillEffectNode.get_source": {
       "documented_as": "substance_painter.layerstack.FillEffectNode.get_source",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
+    "substance_painter.layerstack.FillEffectNode.is_symmetry_enabled": {
+      "documented_as": "substance_painter.layerstack.FillEffectNode.is_symmetry_enabled",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.layerstack.FillEffectNode.reset_source": {
+      "documented_as": "substance_painter.layerstack.FillEffectNode.reset_source",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
     "substance_painter.layerstack.FillEffectNode.set_source": {
       "documented_as": "substance_painter.layerstack.FillEffectNode.set_source",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.layerstack.FillEffectNode.set_symmetry_enabled": {
+      "documented_as": "substance_painter.layerstack.FillEffectNode.set_symmetry_enabled",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
     "substance_painter.layerstack.FillLayerNode": {
@@ -665,6 +693,10 @@
     },
     "substance_painter.layerstack.FillLayerNode.active_channels": {
       "documented_as": "substance_painter.layerstack.FillLayerNode.active_channels",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.layerstack.FillLayerNode.get_material_source": {
+      "documented_as": "substance_painter.layerstack.FillLayerNode.get_material_source",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
     "substance_painter.layerstack.FillLayerNode.get_projection_mode": {
@@ -677,6 +709,10 @@
     },
     "substance_painter.layerstack.FillLayerNode.get_source": {
       "documented_as": "substance_painter.layerstack.FillLayerNode.get_source",
+      "page": "substance_painter/layerstack/layereffect/fill.html"
+    },
+    "substance_painter.layerstack.FillLayerNode.is_symmetry_enabled": {
+      "documented_as": "substance_painter.layerstack.FillLayerNode.is_symmetry_enabled",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
     "substance_painter.layerstack.FillLayerNode.reset_source": {
@@ -731,6 +767,14 @@
       "documented_as": "substance_painter.layerstack.GroupLayerNode",
       "page": "substance_painter/layerstack/layereffect/group.html"
     },
+    "substance_painter.layerstack.GroupLayerNode.is_collapsed": {
+      "documented_as": "substance_painter.layerstack.GroupLayerNode.is_collapsed",
+      "page": "substance_painter/layerstack/layereffect/group.html"
+    },
+    "substance_painter.layerstack.GroupLayerNode.set_collapsed": {
+      "documented_as": "substance_painter.layerstack.GroupLayerNode.set_collapsed",
+      "page": "substance_painter/layerstack/layereffect/group.html"
+    },
     "substance_painter.layerstack.GroupLayerNode.sub_layers": {
       "documented_as": "substance_painter.layerstack.GroupLayerNode.sub_layers",
       "page": "substance_painter/layerstack/layereffect/group.html"
@@ -750,6 +794,10 @@
     "substance_painter.layerstack.InsertPosition.inside_node": {
       "documented_as": "substance_painter.layerstack.InsertPosition.inside_node",
       "page": "substance_painter/layerstack/edition.html"
+    },
+    "substance_painter.layerstack.InstanceLayerNode.instance_source": {
+      "documented_as": "substance_painter.layerstack.InstanceLayerNode.instance_source",
+      "page": "substance_painter/layerstack/layereffect/instance.html"
     },
     "substance_painter.layerstack.LayerNode": {
       "documented_as": "substance_painter.layerstack.LayerNode",
@@ -773,6 +821,10 @@
     },
     "substance_painter.layerstack.LayerNode.has_mask": {
       "documented_as": "substance_painter.layerstack.LayerNode.has_mask",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.LayerNode.instances": {
+      "documented_as": "substance_painter.layerstack.LayerNode.instances",
       "page": "substance_painter/layerstack/navigation.html"
     },
     "substance_painter.layerstack.LayerNode.is_mask_enabled": {
@@ -827,6 +879,10 @@
       "documented_as": "substance_painter.layerstack.Node.get_name",
       "page": "substance_painter/layerstack/navigation.html"
     },
+    "substance_painter.layerstack.Node.get_next_sibling": {
+      "documented_as": "substance_painter.layerstack.Node.get_next_sibling",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
     "substance_painter.layerstack.Node.get_opacity": {
       "documented_as": "substance_painter.layerstack.Node.get_opacity",
       "page": "substance_painter/layerstack/navigation.html"
@@ -835,8 +891,16 @@
       "documented_as": "substance_painter.layerstack.Node.get_parent",
       "page": "substance_painter/layerstack/navigation.html"
     },
+    "substance_painter.layerstack.Node.get_previous_sibling": {
+      "documented_as": "substance_painter.layerstack.Node.get_previous_sibling",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
     "substance_painter.layerstack.Node.get_stack": {
       "documented_as": "substance_painter.layerstack.Node.get_stack",
+      "page": "substance_painter/layerstack/navigation.html"
+    },
+    "substance_painter.layerstack.Node.get_texture_set": {
+      "documented_as": "substance_painter.layerstack.Node.get_texture_set",
       "page": "substance_painter/layerstack/navigation.html"
     },
     "substance_painter.layerstack.Node.get_type": {
@@ -987,6 +1051,14 @@
       "documented_as": "substance_painter.layerstack.ScaleMode",
       "page": "substance_painter/layerstack/layereffect/fill.html"
     },
+    "substance_painter.layerstack.ScopedModification": {
+      "documented_as": "substance_painter.layerstack.ScopedModification",
+      "page": "substance_painter/layerstack/edition.html"
+    },
+    "substance_painter.layerstack.SelectionType": {
+      "documented_as": "substance_painter.layerstack.SelectionType",
+      "page": "substance_painter/layerstack/selection.html"
+    },
     "substance_painter.layerstack.SelectionType.Content": {
       "documented_as": "substance_painter.layerstack.SelectionType",
       "page": "substance_painter/layerstack/selection.html"
@@ -1071,6 +1143,14 @@
       "documented_as": "substance_painter.layerstack.get_root_layer_nodes",
       "page": "substance_painter/layerstack/navigation.html"
     },
+    "substance_painter.layerstack.get_selected_nodes": {
+      "documented_as": "substance_painter.layerstack.get_selected_nodes",
+      "page": "substance_painter/layerstack/selection.html"
+    },
+    "substance_painter.layerstack.get_selection_type": {
+      "documented_as": "substance_painter.layerstack.get_selection_type",
+      "page": "substance_painter/layerstack/selection.html"
+    },
     "substance_painter.layerstack.insert_anchor_point_effect": {
       "documented_as": "substance_painter.layerstack.insert_anchor_point_effect",
       "page": "substance_painter/layerstack/layereffect/anchorpoint.html"
@@ -1111,6 +1191,22 @@
       "documented_as": "substance_painter.layerstack.insert_smart_material",
       "page": "substance_painter/layerstack/layereffect/smartmaterial.html"
     },
+    "substance_painter.layerstack.instantiate": {
+      "documented_as": "substance_painter.layerstack.instantiate",
+      "page": "substance_painter/layerstack/layereffect/instance.html"
+    },
+    "substance_painter.layerstack.set_selected_nodes": {
+      "documented_as": "substance_painter.layerstack.set_selected_nodes",
+      "page": "substance_painter/layerstack/selection.html"
+    },
+    "substance_painter.layerstack.set_selection_type": {
+      "documented_as": "substance_painter.layerstack.set_selection_type",
+      "page": "substance_painter/layerstack/selection.html"
+    },
+    "substance_painter.levels.LevelsParamsMono": {
+      "documented_as": "substance_painter.levels.LevelsParamsMono",
+      "page": "substance_painter/layerstack/layereffect/levels.html"
+    },
     "substance_painter.levels.LevelsParamsMono.clamp": {
       "documented_as": "substance_painter.levels.LevelsParamsMono",
       "page": "substance_painter/layerstack/layereffect/levels.html"
@@ -1133,6 +1229,10 @@
     },
     "substance_painter.levels.LevelsParamsMono.output_min": {
       "documented_as": "substance_painter.levels.LevelsParamsMono",
+      "page": "substance_painter/layerstack/layereffect/levels.html"
+    },
+    "substance_painter.levels.LevelsParamsRGB": {
+      "documented_as": "substance_painter.levels.LevelsParamsRGB",
       "page": "substance_painter/layerstack/layereffect/levels.html"
     },
     "substance_painter.levels.LevelsParamsRGB.clamp": {

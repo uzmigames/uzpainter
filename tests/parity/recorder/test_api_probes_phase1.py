@@ -41,6 +41,15 @@ REQUEST_DIR = (
     / "api-probes"
 )
 MANIFEST_DIR = REQUEST_DIR.parents[2] / "manifests" / "tier0" / "api-probes"
+# P22-B layer stack, levels and colour requests (decision 296; test_api_probes_p22b_layerstack.py).
+P22B_LAYERSTACK_STEMS = [
+    "phase1-blending-modes-layer",
+    "phase1-blending-modes-mask",
+    "phase1-color-srgb-value",
+    "phase1-layer-navigation",
+    "phase1-layer-node-kinds",
+    "phase1-levels-params",
+]
 STEMS = [
     "phase1-camera-coupling",
     "phase1-close-without-saving",
@@ -68,6 +77,8 @@ STEMS = [
     *(f"phase1-srgb-uniform-decode-ocio-part{part}" for part in range(1, 5)),
     *(f"phase1-srgb-uniform-decode-part{part}" for part in range(1, 5)),
     "phase1-texture-throttling",
+    # P22-B layer stack, levels and colour (decision 296).
+    *P22B_LAYERSTACK_STEMS,
 ]
 # The lifecycle procedure timed by a second thread (P21-F, decision 109).
 LIFECYCLE_STEMS = ["phase1-create-open-timing"]
@@ -104,6 +115,7 @@ HOST_PROBES = frozenset(
         "phase1-layer-stack-events",
         "phase1-shelves",
         "phase1-texture-throttling",
+        *P22B_LAYERSTACK_STEMS,
     }
 )
 

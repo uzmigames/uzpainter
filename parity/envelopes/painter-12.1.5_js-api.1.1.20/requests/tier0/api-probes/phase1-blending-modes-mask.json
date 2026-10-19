@@ -1,0 +1,631 @@
+{
+  "schema": "uzpainter/parity/golden-public/1",
+  "record_class": "public_manifest",
+  "golden_id": "tier0/api-probes/phase1-blending-modes-mask",
+  "tier": "0",
+  "domain": "tier0/api-probes/phase1-blending-modes-mask",
+  "description": "API probe P22-B, layer stack (phase1.24 item 3.4, decision 296): on the plane, a fill layer with a white mask holding a uniform fill effect; in the first session and after save/reopen, Node.set_blending_mode with every documented layerstack.BlendingMode member on the mask fill effect (no channel: the mask-stack context), each followed by Node.get_blending_mode. Exercises the same 27 BlendingMode members as phase1-blending-modes-layer in the mask-stack context.",
+  "inputs": [
+    {
+      "input_id": "plane",
+      "kind": "mesh",
+      "path": "parity/fixtures/meshes/plane.obj",
+      "sha256": "7d3c5f616c2abf4b06050434fa943d19dcb15ec998245a211d1d4ca7e95197fe",
+      "provenance": {
+        "origin": "uzmigames_authored",
+        "licence": "Apache-2.0"
+      }
+    }
+  ],
+  "instruction_sequence": {
+    "author": "UzmiGames",
+    "interface": "substance_painter_documented_python_api",
+    "steps": [
+      {
+        "step": 1,
+        "call": "substance_painter.project.create",
+        "args": {
+          "mesh": "plane",
+          "normal_map_format": "OpenGL",
+          "default_texture_resolution": 256
+        }
+      },
+      {
+        "step": 2,
+        "call": "substance_painter.event.Dispatcher.connect",
+        "args": {
+          "events": [
+            "BusyStatusChanged"
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "position": "top"
+        }
+      },
+      {
+        "step": 4,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 3,
+          "name": "uzp fill"
+        }
+      },
+      {
+        "step": 5,
+        "call": "substance_painter.layerstack.LayerNode.add_mask",
+        "args": {
+          "node_step": 3,
+          "background": "White"
+        }
+      },
+      {
+        "step": 6,
+        "call": "substance_painter.layerstack.insert_fill",
+        "args": {
+          "inside_step": 3,
+          "node_stack": "Mask"
+        }
+      },
+      {
+        "step": 7,
+        "call": "substance_painter.layerstack.Node.set_name",
+        "args": {
+          "node_step": 6,
+          "name": "uzp mask fill"
+        }
+      },
+      {
+        "step": 8,
+        "call": "substance_painter.layerstack.FillLayerNode.set_source",
+        "args": {
+          "node_step": 6,
+          "color": [
+            0.4,
+            0.4,
+            0.4
+          ],
+          "color_space": "Working"
+        }
+      },
+      {
+        "step": 9,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Normal",
+          "probe": true
+        }
+      },
+      {
+        "step": 10,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 11,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "PassThrough",
+          "probe": true
+        }
+      },
+      {
+        "step": 12,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 13,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Disable",
+          "probe": true
+        }
+      },
+      {
+        "step": 14,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 15,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Replace",
+          "probe": true
+        }
+      },
+      {
+        "step": 16,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 17,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Multiply",
+          "probe": true
+        }
+      },
+      {
+        "step": 18,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 19,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Divide",
+          "probe": true
+        }
+      },
+      {
+        "step": 20,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 21,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "InverseDivide",
+          "probe": true
+        }
+      },
+      {
+        "step": 22,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 23,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Darken",
+          "probe": true
+        }
+      },
+      {
+        "step": 24,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 25,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Lighten",
+          "probe": true
+        }
+      },
+      {
+        "step": 26,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 27,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "LinearDodge",
+          "probe": true
+        }
+      },
+      {
+        "step": 28,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 29,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Subtract",
+          "probe": true
+        }
+      },
+      {
+        "step": 30,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 31,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "InverseSubtract",
+          "probe": true
+        }
+      },
+      {
+        "step": 32,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 33,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Difference",
+          "probe": true
+        }
+      },
+      {
+        "step": 34,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 35,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Exclusion",
+          "probe": true
+        }
+      },
+      {
+        "step": 36,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 37,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "SignedAddition",
+          "probe": true
+        }
+      },
+      {
+        "step": 38,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 39,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Overlay",
+          "probe": true
+        }
+      },
+      {
+        "step": 40,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 41,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Screen",
+          "probe": true
+        }
+      },
+      {
+        "step": 42,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 43,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "LinearBurn",
+          "probe": true
+        }
+      },
+      {
+        "step": 44,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 45,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "ColorBurn",
+          "probe": true
+        }
+      },
+      {
+        "step": 46,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 47,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "ColorDodge",
+          "probe": true
+        }
+      },
+      {
+        "step": 48,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 49,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "SoftLight",
+          "probe": true
+        }
+      },
+      {
+        "step": 50,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 51,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "HardLight",
+          "probe": true
+        }
+      },
+      {
+        "step": 52,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 53,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "VividLight",
+          "probe": true
+        }
+      },
+      {
+        "step": 54,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 55,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "LinearLight",
+          "probe": true
+        }
+      },
+      {
+        "step": 56,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 57,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "PinLight",
+          "probe": true
+        }
+      },
+      {
+        "step": 58,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 59,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Tint",
+          "probe": true
+        }
+      },
+      {
+        "step": 60,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 61,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Saturation",
+          "probe": true
+        }
+      },
+      {
+        "step": 62,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 63,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Color",
+          "probe": true
+        }
+      },
+      {
+        "step": 64,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 65,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "Value",
+          "probe": true
+        }
+      },
+      {
+        "step": 66,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 67,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "NormalMapCombine",
+          "probe": true
+        }
+      },
+      {
+        "step": 68,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 69,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "NormalMapDetail",
+          "probe": true
+        }
+      },
+      {
+        "step": 70,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      },
+      {
+        "step": 71,
+        "call": "substance_painter.layerstack.Node.set_blending_mode",
+        "args": {
+          "node_step": 6,
+          "blending_mode": "NormalMapInverseDetail",
+          "probe": true
+        }
+      },
+      {
+        "step": 72,
+        "call": "substance_painter.layerstack.Node.get_blending_mode",
+        "args": {
+          "node_step": 6
+        }
+      }
+    ]
+  },
+  "applied_settings": [
+    {
+      "name": "project.normal_map_format",
+      "value": "OpenGL",
+      "applied_by": "recorder_api"
+    },
+    {
+      "name": "texture_set.resolution",
+      "value": 256,
+      "unit": "px",
+      "applied_by": "recorder_api"
+    }
+  ],
+  "expectations": [],
+  "software": {
+    "painter": {
+      "product": "Adobe Substance 3D Painter",
+      "version": "12.1.5",
+      "build_id": "12.1.5+js-api.1.1.20"
+    },
+    "uzpainter_build_hash": null
+  },
+  "private_records": []
+}

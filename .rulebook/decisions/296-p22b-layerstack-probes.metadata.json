@@ -1,0 +1,11 @@
+{
+  "id": 296,
+  "slug": "296-p22b-layerstack-probes",
+  "title": "P22-B for layerstack, levels, properties and colormanagement: six requests exercise 76 pending symbols, properties is read by the recorded baking defaults, and three amendments to decision 112",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.24_python-api-facade"
+  ],
+  "supersededBy": null
+}

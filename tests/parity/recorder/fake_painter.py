@@ -162,6 +162,36 @@ class BlendingMode(enum.Enum):
     Normal = 1
     Multiply = 2
     Screen = 3
+    # The other documented members the blending-mode probes pass (decision 296). The fake has no
+    # `PassThrough`, so a probe naming it records the AttributeError (an authored rule).
+    Disable = 4
+    Replace = 5
+    Divide = 6
+    InverseDivide = 7
+    Darken = 8
+    Lighten = 9
+    LinearDodge = 10
+    Subtract = 11
+    InverseSubtract = 12
+    Difference = 13
+    Exclusion = 14
+    SignedAddition = 15
+    Overlay = 16
+    LinearBurn = 17
+    ColorBurn = 18
+    ColorDodge = 19
+    SoftLight = 20
+    HardLight = 21
+    VividLight = 22
+    LinearLight = 23
+    PinLight = 24
+    Tint = 25
+    Saturation = 26
+    Color = 27
+    Value = 28
+    NormalMapCombine = 29
+    NormalMapDetail = 30
+    NormalMapInverseDetail = 31
 
 
 class NodeType(enum.Enum):
