@@ -22,6 +22,7 @@ import pytest
 
 from tests.evaluator.test_compositor_tile_dag import (
     MANIFESTS,
+    REPO_ROOT,
     backends,
     evaluate,
     needs_store,
@@ -232,6 +233,107 @@ def test_lifted_colour_fits_gpu_equals_cpu(
         )
         differing = int(np.count_nonzero(ours != theirs))
         assert differing == 0, f"{stem} {texture_set} {channel}: {differing} bytes differ"
+
+
+# P20-A (`phase1-fill-channel-defaults`): its four exact maps (decisions 218, 224 and 226). Its
+# Normal map is refused before projection, its grey bitmap unrecorded (decision 249); the native
+# `projection-gpu-vs-cpu` checks that refusal on both stores.
+FILL_DEFAULTS_PROBE = "api-probes/phase1-fill-channel-defaults"
+FILL_DEFAULTS_MAPS = ("BaseColor", "BaseMetalness", "Height", "SpecularRoughness")
+# The facade's default sources of a channel made active (`python/uzpainter_facade/nodes.py`
+# `DEFAULT_SOURCES`, decision 214), as Working colours.
+FILL_DEFAULT_SOURCES = {
+    "BaseColor": [0.8, 0.8, 0.8],
+    "BaseMetalness": [0.0, 0.0, 0.0],
+    "Height": [0.0, 0.0, 0.0],
+    "Normal": [0.5, 0.5, 1.0],
+    "SpecularRoughness": [0.3, 0.3, 0.3],
+}
+# Painter's blending of a new fill in a content stack (`src/python/stack_sync.h`
+# `ApplyDefaultBlending`, decision 115).
+FILL_DEFAULT_BLENDING = {
+    "Height": {"mode": "LinearDodge", "opacity": 1.0},
+    "Normal": {"mode": "NormalMapDetail", "opacity": 1.0},
+}
+
+
+def fill_channel_defaults_spec(workdir: Path) -> dict[str, Any]:
+    """P20-A's texture set as the facade builds it, as an evaluator spec: the recorded sequence
+    without its event connection and colour-space listings, a grey bitmap on BaseColor in sRGB,
+    every channel a fill makes active given its default source (decision 214) and each fill
+    Painter's default Height and Normal blending (decision 115)."""
+    from tests.evaluator.masks_fits import envelope_manifest, spec_from_steps
+
+    manifest = envelope_manifest(FILL_DEFAULTS_PROBE)
+    inputs = {i["input_id"]: REPO_ROOT / i["path"] for i in manifest["inputs"]}
+    images = {}
+    steps = []
+    for step in manifest["instruction_sequence"]["steps"]:
+        name = step["call"].rsplit(".", 1)[-1]
+        if name in ("connect", "list_available_color_spaces"):
+            continue
+        args = dict(step["args"])
+        if name == "import_project_resource":
+            images[step["step"]] = inputs[args["image"]].read_bytes()
+        bitmap = images.get(args.get("resource_step", -1)) if name == "set_source" else None
+        grey = bitmap is not None and bitmap[25] not in (2, 6)
+        if grey and args.get("channel") == "BaseColor":  # PNG IHDR colour type: grey
+            args["color_space"] = "sRGB"
+        steps.append({**step, "args": args})
+    sequence = dict(manifest["instruction_sequence"], steps=steps)
+    spec = spec_from_steps(
+        dict(manifest, instruction_sequence=sequence),
+        "uzp_plane",
+        workdir,
+        list(FILL_DEFAULTS_MAPS),
+    )
+    for layer in spec["layers"]:
+        for channel, blending in FILL_DEFAULT_BLENDING.items():
+            layer["blending"].setdefault(channel, dict(blending))
+        for channel in layer.get("active_channels", []):
+            default = {"uniform": FILL_DEFAULT_SOURCES[channel], "color_space": "Working"}
+            layer["sources"].setdefault(channel, default)
+    return spec
+
+
+def test_fill_channel_defaults_gpu_equals_cpu(evaluator_tests: Path, tmp_path: Path) -> None:
+    """phase1.15_compositor-colour-fits items 3.1 and 4.1 (decisions 218, 224 and 226): P20-A's
+    BaseColor (an 8-bit sRGB checker magnified 16 times through the sRGB8 texture unit),
+    BaseMetalness and SpecularRoughness (the colour checker on L8 and as a mask source) and Height
+    (on L16F) evaluate to the same bytes on the DX12 store as on the CPU store, and the CPU's
+    16-bit PNG export of each equals Painter's map on every texel, both recordings."""
+    from tests.evaluator.masks_fits import envelope_golden
+    from tests.evaluator.sources_fits import srgb8_decode
+    from tests.evaluator.test_compositor_tile_dag import write16
+    from tests.export.tier0 import srgb16
+
+    needs_store()
+    spec = fill_channel_defaults_spec(tmp_path)
+    cpu = evaluate(evaluator_tests, spec, tmp_path, "cpu")
+    gpu = evaluate(evaluator_tests, spec, tmp_path, "gpu")
+    assert sorted(cpu["channels"]) == sorted(gpu["channels"]) == sorted(FILL_DEFAULTS_MAPS)
+    golden = envelope_golden(FILL_DEFAULTS_PROBE)
+    decode = srgb8_decode(evaluator_tests, tmp_path)
+    for channel in FILL_DEFAULTS_MAPS:
+        ours, theirs = (
+            np.frombuffer((Path(r["_dir"]) / r["channels"][channel]["file"]).read_bytes(), np.uint8)
+            for r in (gpu, cpu)
+        )
+        differing = int(np.count_nonzero(ours != theirs))
+        assert differing == 0, f"P20-A {channel}: {differing} bytes differ"
+        stored = raster(cpu, channel)
+        if channel == "BaseColor":  # sRGB8, exported sRGB-encoded (decision 126)
+            exported = srgb16(decode[stored].astype(np.float32)).astype(np.int64)
+        elif channel == "Height":  # L16F, the signed Height exports (h + 1) / 2
+            half = (stored.astype(np.float32) + np.float32(1.0)) * np.float32(0.5)
+            exported = np.vectorize(write16)(half.astype(np.float64)).astype(np.int64)
+        else:  # L8
+            exported = stored * 257
+        for recording in ("r1", "r2"):
+            painter = golden.map(recording, f"uzp_plane/{channel.lower()}").values
+            painter = painter.reshape(exported.shape)
+            differing = int(np.count_nonzero(exported != painter))
+            assert differing == 0, f"P20-A {channel} {recording}: {differing} values differ"
 
 
 def test_bilinear_filter_equals_the_gpu(evaluator_tests: Path, tmp_path: Path) -> None:

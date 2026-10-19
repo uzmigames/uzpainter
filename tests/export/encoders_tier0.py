@@ -1473,8 +1473,8 @@ def srgb_minification_written(exe: Path, tmp: Path) -> dict[str, Any]:
 
 
 # phase1.15_compositor-colour-fits items 3.1 and 4.1: the texture sets whose files the colour fits
-# made byte-identical to Painter's (decisions 145, 152, 174, 190 and 203), each golden with its
-# sequence and spec options as its comparison above builds them.
+# made byte-identical to Painter's (decisions 145, 152, 174, 190, 203, 208 and 219), each golden
+# with its sequence and spec options as its comparison above builds them.
 LIFTED_COLOUR_SETS: dict[str, tuple[str, ...]] = {
     "export-bit-depth": ("s4", "s5", "s7"),
     "export-ocio-encode-legacy": SRGB8_BITMAP_SETS,

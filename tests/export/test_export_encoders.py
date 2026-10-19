@@ -1134,6 +1134,7 @@ def test_srgb_minification_equals_painter_files(export_tests: Path, tmp_path: Pa
     assert set(report["refused"]) == {"s1", "s3"}, report["refused"]
     for message in report["refused"].values():
         assert "8-bit sRGB bitmap" in message and "decision 219" in message, message
+        assert "phase1.15_compositor-colour-fits" in message, message
     assert report["files"] == 6 * 3, report
     assert report["identical"] == report["comparisons"] == 2 * report["files"], report
 

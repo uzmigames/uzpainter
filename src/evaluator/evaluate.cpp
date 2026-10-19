@@ -450,7 +450,8 @@ private:
                 ReadsMipLevels(source.projection, m_dag.grid.width, m_dag.grid.height, *image)) {
                 return EvalFail(EvalErrorKind::UnsupportedSource,
                                 "bilinear minification of an 8-bit sRGB bitmap that reads its mip levels is a "
-                                "release gap: Painter's sRGB8 mip levels are not measured (decision 219)", node);
+                                "release gap: Painter's sRGB8 mip levels are not measured "
+                                "(phase1.15_compositor-colour-fits item 2.7, decision 219)", node);
             }
             imageKey += source.l8Material ? "/srgb-l8" : "/srgb";
             std::shared_ptr<const DecodedImage>& decoded =

@@ -81,7 +81,17 @@
   - BaseColor done (decision 224). 8-bit sRGB magnification and 1:1 are now one probe of the sRGB8 texture unit's sums (`tu::Srgb8Probe`, HLSL `Srgb8Probe` over `TuSrgb8Channel`), with the projection's own taps and weights. That is decision 209's single-probe rule. BaseColor is exact on 65 536 of 65 536 texels, r1 and r2, and its exclusion is removed from `test_facade_fill_channel_defaults_equal_painter`. `srgb-bitmap-variants-v2` s0-s8, `export-ocio-encode`, `export-ocio-encode-legacy` s3/s5, `export-bit-depth` and `export-l8-material` stay exact. Normal: decision 226 fitted it, decision 249 refuses its grey bitmap (above).
 
 ## 3. Tests
-- [ ] 3.1 Every fitted output exact against both recordings on CPU and DX12; the refusals of what stays unrecorded still fire before any mutation and name this task
+- [x] 3.1 Every fitted output exact against both recordings on CPU and DX12; the refusals of what stays unrecorded still fire before any mutation and name this task
+  - Done 2026-10-19, after 2.1-2.9 (`parity/reports/phase1/compositor-colour-fits.md`). Logs are in the session scratchpad `t115/`.
+    - CPU against Painter, both recordings: 31 passed, exit code 0 (`cpu-batch.log`). This covers every export comparison of decisions 145, 152, 174, 190, 203, 208 and 219, the facade's P20-B, Session O and colour-rule readbacks (decisions 202, 214, 240) and the lifecycle probes. P20-A on its own: 1 passed, exit code 0 (`facade-p20a.log`).
+    - DX12 = CPU: 37 passed, exit code 0, 291 s (`dx12-batch.log`).
+      - `test_lifted_colour_fits_gpu_equals_cpu`: 30 of 30 lifted texture sets, now with `srgb-bitmap-minification` s0, s2, s4-s7 and `export-l8-material` s0, s1.
+      - New `test_fill_channel_defaults_gpu_equals_cpu`: P20-A's four exact maps are GPU = CPU, and their CPU export equals Painter's on 65 536 of 65 536 texels, r1 and r2.
+      - Also `projection-gpu-vs-cpu`, `bilinear-hardware`, `srgb8-hardware`, `sources`, `order` and `not-yet-supported`.
+    - Refusals:
+      - The document-level gaps are refused before any change: the support check, and the facade under OCIO.
+      - The image-dependent Legacy gaps fail at evaluation, before any output is written. Decision 240 (C5) keeps them there.
+      - The decision 219 refusal (8-bit sRGB minification that reads a mip level) named only its decision. It now names this task's item 2.7, and `test_srgb_minification_equals_painter_files` requires that.
   - DX12 evidence, 2026-10-13 (open until 2.1, 2.5 and 2.6 lift their cases). The export's comparisons evaluate on the CPU store, so each lifted texture set is now evaluated from the export's own spec on the DX12 and CPU stores, and every channel the export writes is compared byte for byte (`test_lifted_colour_fits_gpu_equals_cpu`, `tests/export/encoders_tier0.py` `LIFTED_COLOUR_SETS`). Identical rasters give the files the CPU comparisons already match to Painter's.
     - Build: UzPainter `main` 0fffb00 (no `src/` change). The tests are at `wt/cf-dx12` 2d60f02, with the export-bit-depth outputs fix in 00d54f2. Adapter: RTX 4090 (the RTX 4090-gated GPU cases ran instead of skipping).
     - Command: `python -m pytest -p no:cacheprovider -rA` on `tests/evaluator/test_compositor_sources_projection.py::{test_projection_kernel_equals_cpu, test_bilinear_filter_equals_the_gpu, test_srgb8_tables_equal_the_recording_gpu, test_lifted_colour_fits_gpu_equals_cpu}`. Result: 22 passed, 3 failed, exit code 1, in 304 s (scratchpad `cfdx/dx12-batch.log`).
@@ -94,10 +104,24 @@
     - OCIO cache-key fix (97f8302): its GPU twin in `projection-gpu-vs-cpu` passes. After a legacy evaluation, the warm DX12 evaluator refuses an sRGB bitmap at scale 2 under OCIO for the same reason a fresh evaluator does, and stores a Raw bitmap's OCIO codes at 1:1, not the legacy ones.
 
 ## 4. Acceptance
-- [ ] 4.1 Local DX12 run on the owner's machine exact for every lifted case (decision 028); `compositor:ocio` and `compositor:srgb-unrecorded` registered `supported` only for what is exact
+- [x] 4.1 Local DX12 run on the owner's machine exact for every lifted case (decision 028); `compositor:ocio` and `compositor:srgb-unrecorded` registered `supported` only for what is exact
+  - Done 2026-10-19 on the RTX 4090; the gated hardware cases ran instead of skipping. Every case lifted by 2.1-2.9 is exact on DX12 (3.1's evidence; report `parity/reports/phase1/compositor-colour-fits.md`).
+  - `tools/capabilities/compositor-capabilities.json`:
+    - `compositor:ocio` stays `supported` for what Session O records. Its evidence now adds the four `phase1-srgb-uniform-decode-ocio` probes and the facade's decision 202 fit.
+    - `compositor:ocio-unrecorded` stays a release gap.
+    - `compositor:srgb-unrecorded` stays a release gap for 8-bit sRGB minification that reads a mip level, now refused naming item 2.7. It is not exact: it waits on the recording 2.7 names.
+  - `tests/capabilities/test_capabilities.py -k "compositor or two_generations or tier_evidence"`: 7 passed, exit code 0 (`caps.log`).
   - 2026-10-13, local run on RTX 4090: every case lifted so far (decisions 145, 152, 174 and 190, and the OCIO cache-key fix 97f8302) is exact on DX12. The per-case results, commands, exit codes and logs are in 3.1's evidence note. This stays open until 2.1, 2.5 and 2.6 lift their cases, which then need the same run.
 
 ## 5. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 5.1 Update or create documentation covering the implementation
-- [ ] 5.2 Write tests covering the new behavior
-- [ ] 5.3 Run tests and confirm they pass
+- [x] 5.1 Update or create documentation covering the implementation
+  - `parity/reports/phase1/compositor-colour-fits.md` (the local run report).
+  - `src/evaluator/EVALUATOR.md`: P20-A's DX12 evidence, and the owner the decision 219 refusal names.
+  - The capability notes of `compositor:ocio` and `compositor:srgb-unrecorded`.
+  - Each fit's own documentation is in its decision and in `EVALUATOR.md` / `sources.h`.
+- [x] 5.2 Write tests covering the new behavior
+  - Each fit's tests came with its decision (2.1-2.9).
+  - This item adds `test_fill_channel_defaults_gpu_equals_cpu`, and an assertion in `test_srgb_minification_equals_painter_files` that the refusal names this task.
+- [x] 5.3 Run tests and confirm they pass
+  - CPU batch: 31 passed, exit code 0. DX12 batch: 37 passed, exit code 0. Capabilities: 7 passed, exit code 0.
+  - ruff and mypy are clean on the touched test files (3.1 and 4.1).
