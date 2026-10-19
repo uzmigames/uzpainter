@@ -1,10 +1,11 @@
 #pragma once
 
-// The bake request model of the CPU baker feasibility slice (phase3.1_baker-request-model,
-// `docs/architecture/06-baking.md` §1-§4; decision 302). One request bakes one texture set:
-// its low mesh, its high meshes (or the low mesh itself with `LowAsHigh`), the enabled usages and
-// their settings. Only what this slice implements is modelled; everything else is refused before
-// any work. Parity with Painter's bakers is NOT claimed: every usage here is `pending-evidence`.
+// The bake request model of the CPU baker (phase3.1_baker-request-model,
+// `docs/architecture/06-baking.md` §1-§4; decisions 302 and 306). One request bakes one texture
+// set: its low mesh parts, its high meshes (or the low parts themselves with `LowAsHigh`), an
+// optional custom cage, the enabled usages and their settings. Only what the baker implements is
+// modelled; everything else is refused before any work. Parity with Painter's bakers is NOT
+// claimed: every usage here is `pending-evidence`.
 
 #include <cstdint>
 #include <stdexcept>
@@ -26,7 +27,7 @@ struct Float3 {
 
 /// An indexed triangle mesh. Triangles are counter-clockwise when seen from their front side
 /// (the side `cross(p1 - p0, p2 - p0)` points to). `normals` are per vertex; `uvs` are per vertex
-/// and required on the low mesh only.
+/// and required on the low mesh parts only. `name` drives name matching (`FilterMethod`).
 struct BakeMesh {
     std::string name;
     std::vector<Float3> positions;
@@ -35,7 +36,7 @@ struct BakeMesh {
     std::vector<std::uint32_t> indices;
 };
 
-/// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). This slice bakes `AO` only.
+/// Painter's ten `MeshMapUsage` bakers (`06-baking.md` §2). The CPU baker bakes `AO` only.
 enum class MeshMapUsage {
     Normal,
     WorldSpaceNormal,
@@ -51,23 +52,46 @@ enum class MeshMapUsage {
 
 const char* UsageName(MeshMapUsage usage);
 
-/// `CageMode`: only the distance-based cage is implemented here.
+/// The task that owns the baker of `usage` (`phase3.2_baker-normal`, `phase3.4_baker-*`).
+std::string UsageOwnerTask(MeshMapUsage usage);
+
+/// `CageMode`. `CustomFile` takes the cage meshes in memory (`BakeRequest::cage`); loading them
+/// from a file is the caller's work.
 enum class CageMode { DistanceBased, Automatic, CustomFile };
+
+/// `FilterMethod` (Painter's "Match"): which high meshes a low part's primary rays may hit.
+enum class FilterMethod { Always, ByMeshName };
 
 /// AO `Distribution` of the secondary rays over the hemisphere.
 enum class Distribution { Uniform, Cosine };
 
+/// Common settings: `DilationWidth` (texels) and `ApplyDiffusion`.
+struct CommonSettings {
+    std::uint32_t dilation_width = 0;
+    bool apply_diffusion = false;
+};
+
 /// Detail (high-poly) settings, distances in mesh units (absolute, not relative to the bounding
-/// box). The primary ray starts `max_height` above the low surface along its normal and searches
-/// down to `max_depth` below it.
+/// box). The distance-based primary ray starts `max_height` above the low surface along its
+/// normal and searches down to `max_depth` below it; a custom cage ray starts on the cage and
+/// searches to `max_depth` beyond the low surface (decision 306).
 struct DetailSettings {
     bool low_as_high = true;
     CageMode cage_mode = CageMode::DistanceBased;
     float max_height = 0.01f;
     float max_depth = 0.01f;
+    /// `IgnoreBackface`: primary rays pass through the back faces of every high mesh.
+    bool ignore_backface = false;
+    FilterMethod filter_method = FilterMethod::Always;
+    /// Name-matching suffixes, read only with `FilterMethod::ByMeshName` (decision 306).
+    std::string low_suffix = "_low";
+    std::string high_suffix = "_high";
+    std::string ignore_backface_suffix = "_ignorebf";
+    /// `SubSampling`: k x k primary samples per texel, k in {1, 2, 4, 8} (1 = None).
+    std::uint32_t subsampling = 1;
 };
 
-/// AO settings: `secondary_rays` per texel (`NbSecondary`), occluders searched from
+/// AO settings: `secondary_rays` per primary hit (`NbSecondary`), occluders searched from
 /// `min_distance` to `max_distance` along each ray (mesh units).
 struct AoSettings {
     std::uint32_t secondary_rays = 64;
@@ -83,11 +107,18 @@ struct BakeRequest {
     std::vector<MeshMapUsage> usages;
     /// `OutputSize`: log2 of the width and height.
     std::uint32_t output_size_log2[2] = {8, 8};
+    CommonSettings common;
     DetailSettings detail;
     AoSettings ao;
-    const BakeMesh* low = nullptr;
+    /// The texture set's low mesh parts. Where UV islands overlap, the lowest part index, then
+    /// the lowest triangle index, wins.
+    std::vector<const BakeMesh*> low;
     /// Empty when `detail.low_as_high`.
     std::vector<const BakeMesh*> high;
+    /// `CageMode::CustomFile`: one cage per low part, with the part's vertex count and indices.
+    std::vector<const BakeMesh*> cage;
+    /// Empty, or one byte per texel (row-major, row 0 at v = 1): non-zero texels are hidden.
+    std::vector<std::uint8_t> hidden_mask;
     /// Ray-casting workers; 0 = every hardware thread. Never changes the output bytes.
     std::uint32_t threads = 0;
 };
@@ -104,6 +135,9 @@ struct Capabilities {
     bool qualified = false;
     /// Why the configuration is not qualified (empty when it is).
     std::string unqualified_reason;
+    /// True when the only reason is a BVH build thread count other than the qualified serial
+    /// build: such a baker bakes only on the explicit diagnostic path (decision 306).
+    bool diagnostic_build_threads = false;
     /// Parity status of every usage: never `supported` until Tier 2b evidence exists.
     std::string parity_status;
     std::string parity_owner_task;
@@ -116,13 +150,15 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-/// Classes of a texel (the primary ray from the low surface to the high meshes). Every texel has
-/// exactly one class; only `StraightHit` texels carry a baked value.
+/// Classes of a texel. Every texel has exactly one; only `StraightHit` and `CageHit` texels carry
+/// a baked value. With `SubSampling` the class aggregates the texel's sub-samples (decision 306).
 enum class TexelClass : std::uint8_t {
-    Uncovered = 0,    // the texel centre lies in no UV triangle of the low mesh
-    StraightHit = 1,  // the primary ray hit the front face of a high triangle
-    BackFaceHit = 2,  // the primary ray's first hit was the back face of a high triangle
-    CentreMiss = 3,   // the primary ray found no high triangle within the cage distances
+    Uncovered = 0,    // no sub-sample of the texel lies in a UV triangle of the low parts
+    StraightHit = 1,  // a distance-based primary ray hit the front face of a high triangle
+    BackFaceHit = 2,  // no front hit; a primary ray's first hit was the back face of a high triangle
+    CentreMiss = 3,   // no primary ray found a high triangle within the cage distances
+    CageHit = 4,      // a custom-cage primary ray hit the front face of a high triangle
+    Hidden = 5,       // covered, but marked by the request's hidden mask: no ray is cast
 };
 
 /// Classes of an AO secondary ray, counted per texel and per bake. Every ray has exactly one.
@@ -138,28 +174,52 @@ struct TexelClassCounts {
     std::uint64_t straight_hit = 0;
     std::uint64_t back_face_hit = 0;
     std::uint64_t centre_miss = 0;
+    std::uint64_t cage_hit = 0;
+    std::uint64_t hidden = 0;
 };
 
-/// The RAW AO map and its evidence maps (`06-baking.md` §4), row 0 at the top (v = 1).
-/// `ao_raw` is the escaped fraction of a `StraightHit` texel's rays, round(65535 * escaped / rays)
-/// in integers; every other texel holds 0 and is told apart only by `texel_class`: nothing is
-/// filled or dilated. `back_face_rays` and `self_hit_rays` are per-texel ray counts.
+/// Sub-sample coverage accumulation (`SubSampling`): `covered` = `hit` + `back_face_hit` +
+/// `centre_miss` + `hidden`.
+struct SubsampleCounts {
+    std::uint64_t covered = 0;
+    std::uint64_t hit = 0;
+    std::uint64_t back_face_hit = 0;
+    std::uint64_t centre_miss = 0;
+    std::uint64_t hidden = 0;
+};
+
+/// The baked AO map, its RAW map and its evidence maps (`06-baking.md` §4), row 0 at the top
+/// (v = 1). `ao_raw` is the escaped fraction of the rays of a texel's hit sub-samples,
+/// round(65535 * escaped / (hits * rays)) in integers; every other texel holds 0 and is told
+/// apart only by `texel_class`: nothing is filled or repaired. `ao` is `ao_raw` dilated by
+/// `DilationWidth` into `Uncovered` texels only. `coverage` and `subsample_hits` count a texel's
+/// covered and hit sub-samples; `back_face_rays` and `self_hit_rays` are per-texel ray counts.
 struct BakeResult {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     std::uint32_t tile_size = 0;
     std::uint32_t threads_used = 0;
-    std::uint32_t rays_per_texel = 0;
+    std::uint32_t rays_per_texel = 0;  // secondary rays per hit sub-sample
+    std::uint32_t subsampling = 1;
+    std::uint32_t dilation_width = 0;
+    std::vector<std::uint16_t> ao;
     std::vector<std::uint16_t> ao_raw;
     std::vector<std::uint8_t> texel_class;
+    std::vector<std::uint8_t> coverage;
+    std::vector<std::uint8_t> subsample_hits;
     std::vector<std::uint16_t> back_face_rays;
     std::vector<std::uint16_t> self_hit_rays;
     TexelClassCounts texels;
+    SubsampleCounts subsamples;
     RayClassCounts rays;
+    std::uint64_t dilated_texels = 0;
+    /// Baked on the explicit diagnostic path of an unqualified BVH build thread count: never
+    /// evidence (decision 306). Not part of the canonical bytes.
+    bool diagnostic_unqualified = false;
 };
 
-/// The canonical bytes of a result (little-endian; magic, sizes, the four maps, then the counts):
-/// what the determinism proof compares across thread counts. `threads_used` is not part of it.
+/// The canonical bytes of a result (little-endian; magic, sizes, the maps, then the counts): what
+/// the determinism proof compares across thread counts. `threads_used` is not part of it.
 std::string SerializeResult(const BakeResult& result);
 
 }  // namespace uzp::bake

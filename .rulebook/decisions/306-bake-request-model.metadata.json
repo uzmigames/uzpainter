@@ -1,0 +1,13 @@
+{
+  "id": 306,
+  "slug": "306-bake-request-model",
+  "title": "CPU baker request model: IBaker and JobHandle with refusals before any job, a result published whole or not at all, SUP-023/SUP-031 fixes, name matching and IgnoreBackface through a primary-ray filter, an in-memory custom cage, CageHit and Hidden classes, SubSampling as coverage accumulation, dilation into uncovered texels only, and a parameter model that answers only what admitted sources state; parity pending-evidence",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase3.1_baker-request-model",
+    "phase3.4_baker-ao",
+    "phase3.5_embree-bakers"
+  ],
+  "supersededBy": null
+}

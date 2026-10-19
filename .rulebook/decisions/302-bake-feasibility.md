@@ -113,3 +113,12 @@ Cross-machine bit identity is measured later, not promised (`06-baking.md` §1).
   - an offset relative to scene scale (`MaxDistanceRelativeScale`);
   - `IgnoreBackface`, subsampling and dilation (items 2.4-2.7);
   - Tier 2b evidence.
+
+## Amendment (2026-10-19, decision 306)
+
+Supervisor review SUP-023 of this slice found three faults, fixed under decision 306:
+- a worker spawn that throws could reach `std::terminate` (joinable threads destroyed): workers now live in a joining container;
+- the scene constructor leaked the scene and its geometries on a failed acquisition: every Embree object is now owned from its first acquisition;
+- §5 qualified every `embree_build_threads >= 1`, while §1 measured only the serial build: only `threads=1` is qualified now. Any other count is unqualified and bakes only on an explicit diagnostic path, its results marked `diagnostic_unqualified`.
+
+The synchronous `bake` of §6 is replaced by `IBaker`/`JobHandle` (decision 306).

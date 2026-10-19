@@ -8,7 +8,9 @@
 #include <cmath>
 #include <exception>
 #include <limits>
+#include <system_error>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include "bake/sampling.h"
@@ -60,6 +62,21 @@ std::string UnqualifiedIsaReason(const CpuFeatures& features) {
     return "the CPU lacks " + missing + " of the qualified ISA " + kQualifiedIsa;
 }
 
+/// The Embree API and device a baker and its running jobs share, and the count of the Embree
+/// objects they hold.
+struct EmbreeBaker::Core {
+    const EmbreeApi* api = nullptr;
+    RTCDevice device = nullptr;
+    std::atomic<std::int64_t> live_objects{0};
+
+    Core() = default;
+    Core(const Core&) = delete;
+    Core& operator=(const Core&) = delete;
+    ~Core() {
+        if (device) api->releaseDevice(device);
+    }
+};
+
 namespace {
 
 std::string VersionText(long version) {
@@ -67,25 +84,9 @@ std::string VersionText(long version) {
            std::to_string(version % 100);
 }
 
-std::string UsageOwnerTask(MeshMapUsage usage) {
-    switch (usage) {
-        case MeshMapUsage::Normal: return "phase3.2_baker-normal";
-        case MeshMapUsage::WorldSpaceNormal: return "phase3.4_baker-world-space-normal";
-        case MeshMapUsage::ID: return "phase3.4_baker-id";
-        case MeshMapUsage::AO: return "phase3.4_baker-ao";
-        case MeshMapUsage::Curvature: return "phase3.4_baker-curvature";
-        case MeshMapUsage::Position: return "phase3.4_baker-position";
-        case MeshMapUsage::Thickness: return "phase3.4_baker-thickness";
-        case MeshMapUsage::Height: return "phase3.4_baker-height";
-        case MeshMapUsage::BentNormals: return "phase3.4_baker-bent-normals";
-        case MeshMapUsage::Opacity: return "phase3.4_baker-opacity";
-    }
-    return "phase3.5_embree-bakers";
-}
-
 }  // namespace
 
-EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(config) {
+EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(std::move(config)), core_(std::make_shared<Core>()) {
     caps_.usages = {MeshMapUsage::AO};
     caps_.max_output_size_log2 = kMaxOutputSizeLog2;
     caps_.determinism_class = "repeatable-on-one-build-and-cpu-isa";
@@ -103,22 +104,23 @@ EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(config) {
         caps_.unqualified_reason = "embree_build_threads must be at least 1";
         return;
     }
-    api_ = LoadEmbree(reason);
-    if (!api_) {
+    core_->api = LoadEmbree(reason);
+    if (!core_->api) {
         caps_.unqualified_reason = reason;
         return;
     }
+    const EmbreeApi& api = *core_->api;
     const std::string device_config = "threads=" + std::to_string(config_.embree_build_threads) +
                                       ",isa=" + kQualifiedIsa + ",verbose=0";
-    device_ = api_->newDevice(device_config.c_str());
-    if (!device_) {
+    core_->device = api.newDevice(device_config.c_str());
+    if (!core_->device) {
         caps_.unqualified_reason = "rtcNewDevice(\"" + device_config + "\") failed";
         return;
     }
-    const long version =
-        static_cast<long>(api_->getDeviceProperty(device_, RTC_DEVICE_PROPERTY_VERSION));
+    RTCDevice device = core_->device;
+    const long version = static_cast<long>(api.getDeviceProperty(device, RTC_DEVICE_PROPERTY_VERSION));
     const long tasking =
-        static_cast<long>(api_->getDeviceProperty(device_, RTC_DEVICE_PROPERTY_TASKING_SYSTEM));
+        static_cast<long>(api.getDeviceProperty(device, RTC_DEVICE_PROPERTY_TASKING_SYSTEM));
     caps_.embree_version = VersionText(version);
     caps_.tasking_system = tasking == 0   ? "internal"
                            : tasking == 1 ? "TBB"
@@ -127,20 +129,27 @@ EmbreeBaker::EmbreeBaker(BakerConfig config) : config_(config) {
     if (version != kPinnedEmbreeVersion) {
         caps_.unqualified_reason = "Embree " + caps_.embree_version + " is not the pinned " +
                                    VersionText(kPinnedEmbreeVersion);
-    } else if (api_->getDeviceProperty(device_, RTC_DEVICE_PROPERTY_BACKFACE_CULLING_ENABLED) != 0) {
+    } else if (api.getDeviceProperty(device, RTC_DEVICE_PROPERTY_BACKFACE_CULLING_ENABLED) != 0) {
         // Culling would hide the back-face hits this baker must count.
         caps_.unqualified_reason = "the Embree build culls back faces";
-    } else if (api_->getDeviceProperty(device_, RTC_DEVICE_PROPERTY_TRIANGLE_GEOMETRY_SUPPORTED) ==
-               0) {
+    } else if (api.getDeviceProperty(device, RTC_DEVICE_PROPERTY_TRIANGLE_GEOMETRY_SUPPORTED) == 0) {
         caps_.unqualified_reason = "the Embree build has no triangle geometry";
+    } else if (api.getDeviceProperty(device, RTC_DEVICE_PROPERTY_FILTER_FUNCTION_SUPPORTED) == 0) {
+        // Name matching and IgnoreBackface reject hits in a filter function.
+        caps_.unqualified_reason = "the Embree build has no filter functions";
+    } else if (config_.embree_build_threads != kQualifiedEmbreeBuildThreads) {
+        // Decision 302 qualifies the serial BVH build only (decision 306).
+        caps_.unqualified_reason = "embree_build_threads " + std::to_string(config_.embree_build_threads) +
+                                   " is not the qualified serial BVH build (1 thread, decision 302)";
+        caps_.diagnostic_build_threads = true;
     } else {
         caps_.qualified = true;
     }
 }
 
-EmbreeBaker::~EmbreeBaker() {
-    if (device_) api_->releaseDevice(device_);
-}
+EmbreeBaker::~EmbreeBaker() = default;
+
+std::int64_t EmbreeBaker::live_embree_objects() const { return core_->live_objects.load(); }
 
 // ── Request validation ───────────────────────────────────────────────────────────────────────
 
@@ -171,6 +180,27 @@ void ValidateMesh(const BakeMesh& mesh, bool needs_uvs) {
     }
 }
 
+void ValidateCage(const BakeMesh& cage, const BakeMesh& low) {
+    const std::string what = "cage '" + cage.name + "' of low part '" + low.name + "'";
+    if (cage.positions.size() != low.positions.size() || cage.indices != low.indices) {
+        throw ValueError(what + " needs the low part's vertex count and indices");
+    }
+    for (std::size_t i = 0; i < cage.positions.size(); ++i) {
+        if (!Finite(cage.positions[i])) {
+            throw ValueError(what + " vertex " + std::to_string(i) + " has a non-finite position");
+        }
+    }
+}
+
+bool StripSuffix(std::string& name, const std::string& suffix) {
+    if (suffix.empty() || name.size() < suffix.size() ||
+        name.compare(name.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return false;
+    }
+    name.resize(name.size() - suffix.size());
+    return true;
+}
+
 bool NonNegative(float v) { return std::isfinite(v) && v >= 0.0f; }
 
 void ValidateRequest(const Capabilities& caps, const BakeRequest& request) {
@@ -187,31 +217,40 @@ void ValidateRequest(const Capabilities& caps, const BakeRequest& request) {
                                   std::to_string(caps.max_output_size_log2));
         }
     }
+    if (request.common.apply_diffusion) {
+        throw NotYetSupported(
+            "ApplyDiffusion: the diffusion of the dilated texels is not established "
+            "(phase3.1_baker-request-model item 2.7)");
+    }
     const DetailSettings& detail = request.detail;
     if (detail.cage_mode == CageMode::Automatic) {
         throw CapabilityError(
             "release gap: CageMode Automatic is not established against Painter "
             "(docs/architecture/06-baking.md section 3; phase3.1_baker-request-model item 2.5)");
     }
-    if (detail.cage_mode == CageMode::CustomFile) {
-        throw NotYetSupported("CageMode CustomFile (phase3.1_baker-request-model item 2.5)");
+    if (!NonNegative(detail.max_height) || !NonNegative(detail.max_depth)) {
+        throw ValueError("max_height and max_depth must be finite and >= 0");
     }
-    if (!NonNegative(detail.max_height) || !NonNegative(detail.max_depth) ||
-        !(detail.max_height + detail.max_depth > 0.0f)) {
-        throw ValueError("max_height and max_depth must be finite, >= 0 and not both 0");
+    if (detail.cage_mode == CageMode::DistanceBased && !(detail.max_height + detail.max_depth > 0.0f)) {
+        throw ValueError("the distance-based cage needs max_height + max_depth > 0");
     }
+    const std::uint32_t k = detail.subsampling;
+    if (k != 1 && k != 2 && k != 4 && k != 8) throw ValueError("subsampling must be 1, 2, 4 or 8");
     const AoSettings& ao = request.ao;
-    if (ao.secondary_rays == 0 || ao.secondary_rays > 65535) {
-        throw ValueError("secondary_rays must be in [1, 65535]");
+    if (ao.secondary_rays == 0 || static_cast<std::uint64_t>(ao.secondary_rays) * k * k > 65535) {
+        throw ValueError("secondary_rays must be >= 1 and secondary_rays x subsampling^2 <= 65535");
     }
     if (!NonNegative(ao.min_distance) || !std::isfinite(ao.max_distance) ||
         !(ao.min_distance < ao.max_distance)) {
         throw ValueError("AO distances need 0 <= min_distance < max_distance, finite");
     }
-    if (!request.low) throw ValueError("the request has no low mesh");
-    ValidateMesh(*request.low, true);
+    if (request.low.empty()) throw ValueError("the request has no low mesh part");
+    for (const BakeMesh* low : request.low) {
+        if (!low) throw ValueError("the request has a null low mesh part");
+        ValidateMesh(*low, true);
+    }
     if (detail.low_as_high) {
-        if (!request.high.empty()) throw ValueError("LowAsHigh bakes the low mesh onto itself: no high mesh");
+        if (!request.high.empty()) throw ValueError("LowAsHigh bakes the low parts onto themselves: no high mesh");
     } else {
         if (request.high.empty()) throw ValueError("the request has no high mesh and LowAsHigh is off");
         for (const BakeMesh* high : request.high) {
@@ -219,6 +258,79 @@ void ValidateRequest(const Capabilities& caps, const BakeRequest& request) {
             ValidateMesh(*high, false);
         }
     }
+    if (detail.filter_method == FilterMethod::ByMeshName && !detail.low_as_high) {
+        // A name that is only a suffix pairs with nothing a documented rule settles (decision 306).
+        const auto refuse_empty = [](const std::string& name, std::string base) {
+            if (base.empty()) {
+                throw NotYetSupported("matching mesh '" + name +
+                                      "' by name: the name is only a suffix (phase3.1_baker-request-model item 2.4)");
+            }
+        };
+        for (const BakeMesh* low : request.low) {
+            std::string base = low->name;
+            StripSuffix(base, detail.low_suffix);
+            refuse_empty(low->name, base);
+        }
+        for (const BakeMesh* high : request.high) {
+            std::string base = high->name;
+            StripSuffix(base, detail.ignore_backface_suffix);
+            StripSuffix(base, detail.high_suffix);
+            refuse_empty(high->name, base);
+        }
+    }
+    if (detail.cage_mode == CageMode::CustomFile) {
+        if (request.cage.empty()) {
+            throw NotYetSupported(
+                "CageMode CustomFile without cage meshes: loading the cage file "
+                "(phase3.1_baker-request-model item 2.5)");
+        }
+        if (request.cage.size() != request.low.size()) throw ValueError("the request needs one cage per low part");
+        for (std::size_t i = 0; i < request.cage.size(); ++i) {
+            if (!request.cage[i]) throw ValueError("the request has a null cage");
+            ValidateCage(*request.cage[i], *request.low[i]);
+        }
+    } else if (!request.cage.empty()) {
+        throw ValueError("cage meshes need CageMode CustomFile");
+    }
+    const std::size_t texels = (std::size_t{1} << request.output_size_log2[0]) << request.output_size_log2[1];
+    if (!request.hidden_mask.empty() && request.hidden_mask.size() != texels) {
+        throw ValueError("the hidden mask needs one byte per texel");
+    }
+}
+
+// ── The job's own copy of the request ────────────────────────────────────────────────────────
+
+struct JobInputs {
+    BakeRequest request;  // its mesh pointers point into the vectors below
+    std::vector<BakeMesh> low;
+    std::vector<BakeMesh> high;
+    std::vector<BakeMesh> cage;
+};
+
+std::vector<BakeMesh> CopyMeshes(const std::vector<const BakeMesh*>& meshes) {
+    std::vector<BakeMesh> copies;
+    copies.reserve(meshes.size());
+    for (const BakeMesh* mesh : meshes) copies.push_back(*mesh);
+    return copies;
+}
+
+std::vector<const BakeMesh*> Pointers(const std::vector<BakeMesh>& meshes) {
+    std::vector<const BakeMesh*> pointers;
+    pointers.reserve(meshes.size());
+    for (const BakeMesh& mesh : meshes) pointers.push_back(&mesh);
+    return pointers;
+}
+
+std::shared_ptr<const JobInputs> CopyInputs(const BakeRequest& request) {
+    auto inputs = std::make_shared<JobInputs>();
+    inputs->request = request;
+    inputs->low = CopyMeshes(request.low);
+    inputs->high = CopyMeshes(request.high);
+    inputs->cage = CopyMeshes(request.cage);
+    inputs->request.low = Pointers(inputs->low);
+    inputs->request.high = Pointers(inputs->high);
+    inputs->request.cage = Pointers(inputs->cage);
+    return inputs;
 }
 
 // ── Geometry helpers (double precision, fixed operation order) ────────────────────────────────
@@ -273,14 +385,23 @@ bool UvBarycentric(const BakeMesh& mesh, std::uint32_t tri, double px, double py
     return true;
 }
 
-double TexelU(std::uint32_t x, std::uint32_t width) { return (x + 0.5) / width; }
-double TexelV(std::uint32_t y, std::uint32_t height) { return 1.0 - (y + 0.5) / height; }
-
-constexpr std::uint32_t kNoTriangle = std::numeric_limits<std::uint32_t>::max();
+Vec3d Corner(const BakeMesh& mesh, std::uint32_t tri, int k) {
+    return D(mesh.positions[mesh.indices[3 * tri + k]]);
+}
+Vec3d CornerNormal(const BakeMesh& mesh, std::uint32_t tri, int k) {
+    return D(mesh.normals[mesh.indices[3 * tri + k]]);
+}
+Vec3d BlendCorners(const BakeMesh& mesh, std::uint32_t tri, const UvWeights& w) {
+    return Blend(Corner(mesh, tri, 0), Corner(mesh, tri, 1), Corner(mesh, tri, 2), w.w0, w.w1, w.w2);
+}
+Vec3d BlendNormals(const BakeMesh& mesh, std::uint32_t tri, const UvWeights& w) {
+    return Blend(CornerNormal(mesh, tri, 0), CornerNormal(mesh, tri, 1), CornerNormal(mesh, tri, 2),
+                 w.w0, w.w1, w.w2);
+}
 
 /// Sets the SSE floating-point state the bake runs under (all exceptions masked, round to
 /// nearest, flush-to-zero and denormals-are-zero off) and restores the caller's on exit, so the
-/// BVH build and every casting thread, the calling one included, compute alike.
+/// BVH build and every casting thread compute alike.
 class FixedFpState {
 public:
     FixedFpState() : saved_(_mm_getcsr()) { _mm_setcsr(0x1F80u); }
@@ -292,87 +413,190 @@ private:
     unsigned saved_;
 };
 
-/// The low triangle under each texel centre; the lowest triangle index wins where UV islands
-/// overlap. Serial and in triangle order, so the map is a function of the mesh alone.
-std::vector<std::uint32_t> RasterizeTexels(const BakeMesh& low, std::uint32_t width,
-                                           std::uint32_t height) {
-    std::vector<std::uint32_t> texel_tri(static_cast<std::size_t>(width) * height, kNoTriangle);
-    const std::uint32_t triangles = static_cast<std::uint32_t>(low.indices.size() / 3);
-    for (std::uint32_t tri = 0; tri < triangles; ++tri) {
-        double u_min = 1.0, u_max = 0.0, v_min = 1.0, v_max = 0.0;
-        for (int k = 0; k < 3; ++k) {
-            const Float2 uv = low.uvs[low.indices[3 * tri + k]];
-            u_min = std::min(u_min, static_cast<double>(uv.x));
-            u_max = std::max(u_max, static_cast<double>(uv.x));
-            v_min = std::min(v_min, static_cast<double>(uv.y));
-            v_max = std::max(v_max, static_cast<double>(uv.y));
+// ── Texel candidates ─────────────────────────────────────────────────────────────────────────
+
+/// The low triangles whose UV bounding box, grown by one texel, meets each texel: a superset of
+/// the triangles that can contain any of its sub-samples. Built serially in (part, triangle)
+/// order, so each texel's list is ascending in the global triangle index and the first triangle
+/// that contains a sub-sample is the lowest one.
+struct TexelCandidates {
+    std::vector<std::uint32_t> part_first;  // global index of each part's first triangle
+    std::vector<std::uint32_t> offsets;     // per texel, into `triangles`
+    std::vector<std::uint32_t> triangles;   // global triangle indices
+};
+
+TexelCandidates BuildCandidates(const std::vector<const BakeMesh*>& low, std::uint32_t width,
+                                std::uint32_t height) {
+    TexelCandidates out;
+    struct Range {
+        std::int64_t x0, x1, y0, y1;
+    };
+    std::vector<Range> ranges;
+    std::uint32_t total = 0;
+    for (const BakeMesh* part : low) {
+        out.part_first.push_back(total);
+        const auto triangles = static_cast<std::uint32_t>(part->indices.size() / 3);
+        for (std::uint32_t tri = 0; tri < triangles; ++tri) {
+            double u_min = 1e300, u_max = -1e300, v_min = 1e300, v_max = -1e300;
+            for (int k = 0; k < 3; ++k) {
+                const Float2 uv = part->uvs[part->indices[3 * tri + k]];
+                u_min = std::min(u_min, static_cast<double>(uv.x));
+                u_max = std::max(u_max, static_cast<double>(uv.x));
+                v_min = std::min(v_min, static_cast<double>(uv.y));
+                v_max = std::max(v_max, static_cast<double>(uv.y));
+            }
+            // Texel x spans u in [x / W, (x + 1) / W]; texel y spans v in [1 - (y + 1) / H, 1 - y / H].
+            const auto clamp_index = [](double value, std::uint32_t size) {
+                return static_cast<std::int64_t>(std::clamp(value, 0.0, static_cast<double>(size - 1)));
+            };
+            const auto lo = [](double value) { return std::floor(value) - 1.0; };
+            const auto hi = [](double value) { return std::floor(value) + 1.0; };
+            Range range{clamp_index(lo(u_min * width), width), clamp_index(hi(u_max * width), width),
+                        clamp_index(lo((1.0 - v_max) * height), height),
+                        clamp_index(hi((1.0 - v_min) * height), height)};
+            if (u_max < 0.0 || u_min > 1.0 || v_max < 0.0 || v_min > 1.0) range = {1, 0, 1, 0};
+            ranges.push_back(range);
         }
-        // Texel centres (x + 0.5) / W in [u_min, u_max] and 1 - (y + 0.5) / H in [v_min, v_max].
-        const auto clamp_index = [](double value, std::uint32_t size) {
-            return static_cast<std::int64_t>(std::clamp(value, 0.0, static_cast<double>(size - 1)));
-        };
-        const std::int64_t x0 = clamp_index(std::floor(u_min * width - 0.5), width);
-        const std::int64_t x1 = clamp_index(std::ceil(u_max * width - 0.5), width);
-        const std::int64_t y0 = clamp_index(std::floor((1.0 - v_max) * height - 0.5), height);
-        const std::int64_t y1 = clamp_index(std::ceil((1.0 - v_min) * height - 0.5), height);
-        for (std::int64_t y = y0; y <= y1; ++y) {
-            for (std::int64_t x = x0; x <= x1; ++x) {
-                const std::size_t index = static_cast<std::size_t>(y) * width + static_cast<std::size_t>(x);
-                if (texel_tri[index] != kNoTriangle) continue;
-                UvWeights weights;
-                if (UvBarycentric(low, tri, TexelU(static_cast<std::uint32_t>(x), width),
-                                  TexelV(static_cast<std::uint32_t>(y), height), weights)) {
-                    texel_tri[index] = tri;
-                }
+        total += triangles;
+    }
+    const std::size_t texels = static_cast<std::size_t>(width) * height;
+    out.offsets.assign(texels + 1, 0);
+    for (const Range& r : ranges) {
+        for (std::int64_t y = r.y0; y <= r.y1; ++y) {
+            for (std::int64_t x = r.x0; x <= r.x1; ++x) ++out.offsets[static_cast<std::size_t>(y) * width + x + 1];
+        }
+    }
+    for (std::size_t i = 0; i < texels; ++i) out.offsets[i + 1] += out.offsets[i];
+    out.triangles.resize(out.offsets[texels]);
+    std::vector<std::uint32_t> fill(out.offsets.begin(), out.offsets.end() - 1);
+    for (std::uint32_t tri = 0; tri < ranges.size(); ++tri) {
+        const Range& r = ranges[tri];
+        for (std::int64_t y = r.y0; y <= r.y1; ++y) {
+            for (std::int64_t x = r.x0; x <= r.x1; ++x) {
+                out.triangles[fill[static_cast<std::size_t>(y) * width + x]++] = tri;
             }
         }
     }
-    return texel_tri;
+    return out;
 }
 
-// ── Embree scene ─────────────────────────────────────────────────────────────────────────────
+// ── Name matching (decision 306) ─────────────────────────────────────────────────────────────
+
+/// Which high meshes each low part's primary rays may hit, and which high meshes' back faces
+/// they pass through.
+struct Matching {
+    std::vector<std::vector<std::uint8_t>> allowed;  // [part][high]
+    std::vector<std::uint8_t> part_filtered;         // the part's rays need the filter
+    std::vector<std::uint8_t> ignore_back;           // [high]
+    bool any_filter = false;
+};
+
+Matching MatchMeshes(const BakeRequest& request, const std::vector<const BakeMesh*>& high) {
+    const DetailSettings& detail = request.detail;
+    const bool by_name = detail.filter_method == FilterMethod::ByMeshName;
+    Matching m;
+    std::vector<std::string> high_base(high.size());
+    m.ignore_back.assign(high.size(), detail.ignore_backface ? 1 : 0);
+    for (std::size_t h = 0; h < high.size(); ++h) {
+        high_base[h] = high[h]->name;
+        if (by_name) {
+            if (StripSuffix(high_base[h], detail.ignore_backface_suffix)) m.ignore_back[h] = 1;
+            StripSuffix(high_base[h], detail.high_suffix);
+        }
+    }
+    const bool any_ignore = std::find(m.ignore_back.begin(), m.ignore_back.end(), 1) != m.ignore_back.end();
+    for (std::size_t p = 0; p < request.low.size(); ++p) {
+        std::vector<std::uint8_t> allowed(high.size(), 1);
+        if (by_name) {
+            if (detail.low_as_high) {
+                // Each part is its own high mesh.
+                for (std::size_t h = 0; h < high.size(); ++h) allowed[h] = h == p ? 1 : 0;
+            } else {
+                std::string base = request.low[p]->name;
+                StripSuffix(base, detail.low_suffix);
+                for (std::size_t h = 0; h < high.size(); ++h) allowed[h] = high_base[h] == base ? 1 : 0;
+            }
+        }
+        const bool all = std::find(allowed.begin(), allowed.end(), 0) == allowed.end();
+        m.part_filtered.push_back(!all || any_ignore ? 1 : 0);
+        m.any_filter = m.any_filter || m.part_filtered.back();
+        m.allowed.push_back(std::move(allowed));
+    }
+    return m;
+}
+
+// ── Embree scene (RAII from the first acquisition) ───────────────────────────────────────────
+
+struct SceneRelease {
+    const EmbreeApi* api;
+    std::atomic<std::int64_t>* live;
+    void operator()(std::remove_pointer_t<RTCScene>* scene) const noexcept {
+        api->releaseScene(scene);
+        live->fetch_sub(1);
+    }
+};
+struct GeometryRelease {
+    const EmbreeApi* api;
+    std::atomic<std::int64_t>* live;
+    void operator()(std::remove_pointer_t<RTCGeometry>* geometry) const noexcept {
+        api->releaseGeometry(geometry);
+        live->fetch_sub(1);
+    }
+};
+using ScenePtr = std::unique_ptr<std::remove_pointer_t<RTCScene>, SceneRelease>;
+using GeometryPtr = std::unique_ptr<std::remove_pointer_t<RTCGeometry>, GeometryRelease>;
 
 class Scene {
 public:
-    Scene(const EmbreeApi& api, RTCDevice device, const std::vector<const BakeMesh*>& meshes)
-        : api_(api), scene_(api.newScene(device)) {
-        if (!scene_) throw CapabilityError("rtcNewScene failed");
-        api_.setSceneFlags(scene_, RTC_SCENE_FLAG_ROBUST);
-        api_.setSceneBuildQuality(scene_, RTC_BUILD_QUALITY_MEDIUM);
+    /// Every object acquired is owned by a handle as soon as it exists, so a failure at any step
+    /// (including an injected one) releases everything acquired so far.
+    Scene(EmbreeBaker::Core& core, const std::vector<const BakeMesh*>& meshes, bool filter,
+          const FaultInjection& faults)
+        : scene_(nullptr, SceneRelease{core.api, &core.live_objects}) {
+        const EmbreeApi& api = *core.api;
+        std::uint32_t acquisition = 0;
+        const auto injected = [&] {
+            return faults.embree_acquisition_failure && *faults.embree_acquisition_failure == acquisition++;
+        };
+        RTCScene scene = injected() ? nullptr : api.newScene(core.device);
+        if (!scene) throw CapabilityError("rtcNewScene failed");
+        core.live_objects.fetch_add(1);
+        scene_.reset(scene);
+        api.setSceneFlags(scene, filter ? static_cast<RTCSceneFlags>(RTC_SCENE_FLAG_ROBUST |
+                                                                     RTC_SCENE_FLAG_FILTER_FUNCTION_IN_ARGUMENTS)
+                                        : RTC_SCENE_FLAG_ROBUST);
+        api.setSceneBuildQuality(scene, RTC_BUILD_QUALITY_MEDIUM);
         for (std::size_t m = 0; m < meshes.size(); ++m) {
             const BakeMesh& mesh = *meshes[m];
-            RTCGeometry geometry = api_.newGeometry(device, RTC_GEOMETRY_TYPE_TRIANGLE);
-            if (!geometry) throw CapabilityError("rtcNewGeometry failed");
-            auto* vertices = static_cast<float*>(api_.setNewGeometryBuffer(
-                geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, 3 * sizeof(float),
-                mesh.positions.size()));
-            auto* indices = static_cast<unsigned*>(api_.setNewGeometryBuffer(
-                geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, 3 * sizeof(unsigned),
-                mesh.indices.size() / 3));
-            if (!vertices || !indices) {
-                api_.releaseGeometry(geometry);
-                throw CapabilityError("rtcSetNewGeometryBuffer failed for mesh '" + mesh.name + "'");
-            }
+            RTCGeometry raw = injected() ? nullptr : api.newGeometry(core.device, RTC_GEOMETRY_TYPE_TRIANGLE);
+            if (!raw) throw CapabilityError("rtcNewGeometry failed for mesh '" + mesh.name + "'");
+            core.live_objects.fetch_add(1);
+            const GeometryPtr geometry(raw, GeometryRelease{core.api, &core.live_objects});
+            auto* vertices = injected() ? nullptr
+                                        : static_cast<float*>(api.setNewGeometryBuffer(
+                                              raw, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3,
+                                              3 * sizeof(float), mesh.positions.size()));
+            if (!vertices) throw CapabilityError("rtcSetNewGeometryBuffer (vertices) failed for mesh '" + mesh.name + "'");
+            auto* indices = injected() ? nullptr
+                                       : static_cast<unsigned*>(api.setNewGeometryBuffer(
+                                             raw, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3,
+                                             3 * sizeof(unsigned), mesh.indices.size() / 3));
+            if (!indices) throw CapabilityError("rtcSetNewGeometryBuffer (indices) failed for mesh '" + mesh.name + "'");
             for (std::size_t i = 0; i < mesh.positions.size(); ++i) {
                 vertices[3 * i] = mesh.positions[i].x;
                 vertices[3 * i + 1] = mesh.positions[i].y;
                 vertices[3 * i + 2] = mesh.positions[i].z;
             }
             std::copy(mesh.indices.begin(), mesh.indices.end(), indices);
-            api_.commitGeometry(geometry);
-            api_.attachGeometryByID(scene_, geometry, static_cast<unsigned>(m));
-            api_.releaseGeometry(geometry);
+            api.commitGeometry(raw);
+            api.attachGeometryByID(scene, raw, static_cast<unsigned>(m));  // the scene retains it
         }
-        api_.commitScene(scene_);
+        api.commitScene(scene);
     }
-    ~Scene() { api_.releaseScene(scene_); }
-    Scene(const Scene&) = delete;
-    Scene& operator=(const Scene&) = delete;
-    RTCScene get() const { return scene_; }
+    RTCScene get() const { return scene_.get(); }
 
 private:
-    const EmbreeApi& api_;
-    RTCScene scene_;
+    ScenePtr scene_;
 };
 
 RTCRayHit MakeRay(Vec3d origin, Vec3d direction, float tnear, float tfar) {
@@ -392,10 +616,39 @@ RTCRayHit MakeRay(Vec3d origin, Vec3d direction, float tnear, float tfar) {
     return rh;
 }
 
+/// The ray query context of a filtered primary ray (Embree passes it back to the filter).
+struct PrimaryQuery {
+    RTCRayQueryContext context;  // first member: the filter casts back from it
+    const std::uint8_t* allowed = nullptr;
+    const std::uint8_t* ignore_back = nullptr;
+    const std::vector<const BakeMesh*>* high = nullptr;
+};
+
+/// Rejects hits on high meshes the low part does not match and, where `IgnoreBackface` or the
+/// `_ignorebf` suffix applies, back-face hits (our winding, not Embree's `Ng`).
+void PrimaryFilter(const RTCFilterFunctionNArguments* args) {
+    const auto* query = reinterpret_cast<const PrimaryQuery*>(args->context);
+    for (unsigned i = 0; i < args->N; ++i) {
+        if (args->valid[i] != -1) continue;
+        const unsigned geom = RTCHitN_geomID(args->hit, args->N, i);
+        if (!query->allowed[geom]) {
+            args->valid[i] = 0;
+            continue;
+        }
+        if (query->ignore_back[geom]) {
+            const unsigned prim = RTCHitN_primID(args->hit, args->N, i);
+            const Vec3d dir{RTCRayN_dir_x(args->ray, args->N, i), RTCRayN_dir_y(args->ray, args->N, i),
+                            RTCRayN_dir_z(args->ray, args->N, i)};
+            if (Dot(dir, FaceNormal(*(*query->high)[geom], prim)) >= 0.0) args->valid[i] = 0;
+        }
+    }
+}
+
 // ── The bake ─────────────────────────────────────────────────────────────────────────────────
 
 struct TileCounts {
     TexelClassCounts texels;
+    SubsampleCounts subsamples;
     RayClassCounts rays;
 };
 
@@ -403,104 +656,167 @@ struct Context {
     const EmbreeApi& api;
     RTCScene scene;
     const BakeRequest& request;
-    const BakeMesh& low;
     const std::vector<const BakeMesh*>& high;
-    const std::vector<std::uint32_t>& texel_tri;
+    const TexelCandidates& candidates;
+    const Matching& matching;
     BakeResult& result;
 };
 
-Vec3d Corner(const BakeMesh& mesh, std::uint32_t tri, int k) {
-    return D(mesh.positions[mesh.indices[3 * tri + k]]);
-}
-Vec3d CornerNormal(const BakeMesh& mesh, std::uint32_t tri, int k) {
-    return D(mesh.normals[mesh.indices[3 * tri + k]]);
+std::string TexelText(std::uint32_t x, std::uint32_t y) {
+    return "texel (" + std::to_string(x) + ", " + std::to_string(y) + ")";
 }
 
 void BakeTexel(const Context& ctx, std::uint32_t x, std::uint32_t y, TileCounts& counts) {
     BakeResult& out = ctx.result;
+    const BakeRequest& request = ctx.request;
+    const DetailSettings& detail = request.detail;
+    const AoSettings& ao = request.ao;
     const std::size_t index = static_cast<std::size_t>(y) * out.width + x;
-    const std::uint32_t tri = ctx.texel_tri[index];
-    if (tri == kNoTriangle) {
-        out.texel_class[index] = static_cast<std::uint8_t>(TexelClass::Uncovered);
-        ++counts.texels.uncovered;
-        return;
-    }
-    // The low surface point under the texel centre.
-    UvWeights w;
-    UvBarycentric(ctx.low, tri, TexelU(x, out.width), TexelV(y, out.height), w);
-    const Vec3d p = Blend(Corner(ctx.low, tri, 0), Corner(ctx.low, tri, 1), Corner(ctx.low, tri, 2),
-                          w.w0, w.w1, w.w2);
-    Vec3d n = Blend(CornerNormal(ctx.low, tri, 0), CornerNormal(ctx.low, tri, 1),
-                    CornerNormal(ctx.low, tri, 2), w.w0, w.w1, w.w2);
-    if (!Normalize(n)) {
-        throw ValueError("the normals of low triangle " + std::to_string(tri) + " cancel at texel (" +
-                         std::to_string(x) + ", " + std::to_string(y) + ")");
-    }
+    const std::uint32_t k = detail.subsampling;
+    const bool hidden = !request.hidden_mask.empty() && request.hidden_mask[index] != 0;
+    const bool cage = detail.cage_mode == CageMode::CustomFile;
+    const std::uint32_t first = ctx.candidates.offsets[index];
+    const std::uint32_t last = ctx.candidates.offsets[index + 1];
 
-    // Primary ray: from the distance-based cage `max_height` above the surface, down to
-    // `max_depth` below it.
-    const DetailSettings& detail = ctx.request.detail;
-    const Vec3d down = Scale(n, -1.0);
-    RTCRayHit primary = MakeRay(Add(p, Scale(n, detail.max_height)), down, 0.0f,
-                                detail.max_height + detail.max_depth);
-    ctx.api.intersect1(ctx.scene, &primary, nullptr);
-    if (primary.hit.geomID == RTC_INVALID_GEOMETRY_ID) {
-        out.texel_class[index] = static_cast<std::uint8_t>(TexelClass::CentreMiss);
-        ++counts.texels.centre_miss;
-        return;
-    }
-    const unsigned origin_geom = primary.hit.geomID;
-    const unsigned origin_prim = primary.hit.primID;
-    const BakeMesh& hit_mesh = *ctx.high[origin_geom];
-    if (Dot(down, FaceNormal(hit_mesh, origin_prim)) >= 0.0) {
-        out.texel_class[index] = static_cast<std::uint8_t>(TexelClass::BackFaceHit);
-        ++counts.texels.back_face_hit;
-        return;
-    }
-    out.texel_class[index] = static_cast<std::uint8_t>(TexelClass::StraightHit);
-    ++counts.texels.straight_hit;
-
-    // The high surface point (Embree's barycentrics: p = (1-u-v) p0 + u p1 + v p2).
-    const double hu = primary.hit.u;
-    const double hv = primary.hit.v;
-    const double h0 = 1.0 - hu - hv;
-    const Vec3d ph = Blend(Corner(hit_mesh, origin_prim, 0), Corner(hit_mesh, origin_prim, 1),
-                           Corner(hit_mesh, origin_prim, 2), h0, hu, hv);
-    Vec3d nh = Blend(CornerNormal(hit_mesh, origin_prim, 0), CornerNormal(hit_mesh, origin_prim, 1),
-                     CornerNormal(hit_mesh, origin_prim, 2), h0, hu, hv);
-    if (!Normalize(nh)) {
-        throw ValueError("the normals of high triangle " + std::to_string(origin_prim) + " of '" +
-                         hit_mesh.name + "' cancel at texel (" + std::to_string(x) + ", " +
-                         std::to_string(y) + ")");
-    }
-
-    // AO secondary rays, in sample order.
-    const AoSettings& ao = ctx.request.ao;
+    std::uint32_t covered = 0, hits = 0, back_hits = 0;
     std::uint64_t escaped = 0;
-    std::uint32_t back = 0;
-    std::uint32_t self = 0;
-    for (std::uint32_t s = 0; s < ao.secondary_rays; ++s) {
-        const Vec3d dir = HemisphereDirection(ao.distribution,
-                                              TexelSample(index, s, ao.secondary_rays), nh);
-        RTCRayHit ray = MakeRay(ph, dir, ao.min_distance, ao.max_distance);
-        ctx.api.intersect1(ctx.scene, &ray, nullptr);
-        if (ray.hit.geomID == RTC_INVALID_GEOMETRY_ID) {
-            ++escaped;
-            ++counts.rays.escaped;
-        } else if (ray.hit.geomID == origin_geom && ray.hit.primID == origin_prim) {
-            ++self;
-            ++counts.rays.self_hit;
-        } else if (Dot(dir, FaceNormal(*ctx.high[ray.hit.geomID], ray.hit.primID)) >= 0.0) {
-            ++back;
-            ++counts.rays.back_face_hit;
-        } else {
-            ++counts.rays.front_hit;
+    std::uint32_t back_rays = 0, self_rays = 0;
+    for (std::uint32_t j = 0; j < k; ++j) {
+        for (std::uint32_t i = 0; i < k; ++i) {
+            const std::uint32_t sub = j * k + i;
+            const double u = (x + (i + 0.5) / k) / out.width;
+            const double v = 1.0 - (y + (j + 0.5) / k) / out.height;
+            // The lowest (part, triangle) that contains the sub-sample.
+            std::uint32_t part = 0, tri = 0;
+            UvWeights w;
+            bool found = false;
+            for (std::uint32_t c = first; c < last && !found; ++c) {
+                const std::uint32_t global = ctx.candidates.triangles[c];
+                part = static_cast<std::uint32_t>(
+                    std::upper_bound(ctx.candidates.part_first.begin(), ctx.candidates.part_first.end(), global) -
+                    ctx.candidates.part_first.begin() - 1);
+                tri = global - ctx.candidates.part_first[part];
+                found = UvBarycentric(*request.low[part], tri, u, v, w);
+            }
+            if (!found) continue;
+            ++covered;
+            if (hidden) continue;
+
+            // The primary ray: distance-based from `max_height` above the low surface down to
+            // `max_depth` below it, or from the custom cage through the low surface to
+            // `max_depth` beyond it.
+            const BakeMesh& low = *request.low[part];
+            const Vec3d p = BlendCorners(low, tri, w);
+            Vec3d origin, dir;
+            float tfar = 0.0f;
+            if (cage) {
+                origin = BlendCorners(*request.cage[part], tri, w);
+                dir = Sub(p, origin);
+                const double length = std::sqrt(Dot(dir, dir));
+                if (!Normalize(dir)) {
+                    throw ValueError("the cage of low part '" + low.name + "' meets triangle " +
+                                     std::to_string(tri) + " at " + TexelText(x, y));
+                }
+                tfar = static_cast<float>(length + detail.max_depth);
+            } else {
+                Vec3d n = BlendNormals(low, tri, w);
+                if (!Normalize(n)) {
+                    throw ValueError("the normals of low triangle " + std::to_string(tri) + " of '" + low.name +
+                                     "' cancel at " + TexelText(x, y));
+                }
+                origin = Add(p, Scale(n, detail.max_height));
+                dir = Scale(n, -1.0);
+                tfar = detail.max_height + detail.max_depth;
+            }
+            RTCRayHit primary = MakeRay(origin, dir, 0.0f, tfar);
+            if (ctx.matching.part_filtered[part]) {
+                PrimaryQuery query;
+                rtcInitRayQueryContext(&query.context);
+                query.allowed = ctx.matching.allowed[part].data();
+                query.ignore_back = ctx.matching.ignore_back.data();
+                query.high = &ctx.high;
+                RTCIntersectArguments args;
+                rtcInitIntersectArguments(&args);
+                args.flags = static_cast<RTCRayQueryFlags>(args.flags | RTC_RAY_QUERY_FLAG_INVOKE_ARGUMENT_FILTER);
+                args.filter = PrimaryFilter;
+                args.context = &query.context;
+                ctx.api.intersect1(ctx.scene, &primary, &args);
+            } else {
+                ctx.api.intersect1(ctx.scene, &primary, nullptr);
+            }
+            if (primary.hit.geomID == RTC_INVALID_GEOMETRY_ID) {
+                ++counts.subsamples.centre_miss;
+                continue;
+            }
+            const unsigned origin_geom = primary.hit.geomID;
+            const unsigned origin_prim = primary.hit.primID;
+            const BakeMesh& hit_mesh = *ctx.high[origin_geom];
+            if (Dot(dir, FaceNormal(hit_mesh, origin_prim)) >= 0.0) {
+                ++back_hits;
+                ++counts.subsamples.back_face_hit;
+                continue;
+            }
+            ++hits;
+            ++counts.subsamples.hit;
+
+            // The high surface point (Embree's barycentrics: p = (1-u-v) p0 + u p1 + v p2).
+            const UvWeights hw{1.0 - static_cast<double>(primary.hit.u) - primary.hit.v, primary.hit.u,
+                               primary.hit.v};
+            const Vec3d ph = BlendCorners(hit_mesh, origin_prim, hw);
+            Vec3d nh = BlendNormals(hit_mesh, origin_prim, hw);
+            if (!Normalize(nh)) {
+                throw ValueError("the normals of high triangle " + std::to_string(origin_prim) + " of '" +
+                                 hit_mesh.name + "' cancel at " + TexelText(x, y));
+            }
+
+            // AO secondary rays, in sample order; one Hammersley set over the texel's sub-samples.
+            const std::uint32_t texel_rays = ao.secondary_rays * k * k;
+            for (std::uint32_t s = 0; s < ao.secondary_rays; ++s) {
+                const Vec3d ray_dir = HemisphereDirection(
+                    ao.distribution, TexelSample(index, sub * ao.secondary_rays + s, texel_rays), nh);
+                RTCRayHit ray = MakeRay(ph, ray_dir, ao.min_distance, ao.max_distance);
+                ctx.api.intersect1(ctx.scene, &ray, nullptr);
+                if (ray.hit.geomID == RTC_INVALID_GEOMETRY_ID) {
+                    ++escaped;
+                    ++counts.rays.escaped;
+                } else if (ray.hit.geomID == origin_geom && ray.hit.primID == origin_prim) {
+                    ++self_rays;
+                    ++counts.rays.self_hit;
+                } else if (Dot(ray_dir, FaceNormal(*ctx.high[ray.hit.geomID], ray.hit.primID)) >= 0.0) {
+                    ++back_rays;
+                    ++counts.rays.back_face_hit;
+                } else {
+                    ++counts.rays.front_hit;
+                }
+            }
         }
     }
-    out.ao_raw[index] = static_cast<std::uint16_t>((escaped * 65535u + ao.secondary_rays / 2) /
-                                                   ao.secondary_rays);
-    out.back_face_rays[index] = static_cast<std::uint16_t>(back);
-    out.self_hit_rays[index] = static_cast<std::uint16_t>(self);
+    counts.subsamples.covered += covered;
+    out.coverage[index] = static_cast<std::uint8_t>(covered);
+    TexelClass cls;
+    if (covered == 0) {
+        cls = TexelClass::Uncovered;
+        ++counts.texels.uncovered;
+    } else if (hidden) {
+        cls = TexelClass::Hidden;
+        ++counts.texels.hidden;
+        counts.subsamples.hidden += covered;
+    } else if (hits > 0) {
+        cls = cage ? TexelClass::CageHit : TexelClass::StraightHit;
+        ++(cage ? counts.texels.cage_hit : counts.texels.straight_hit);
+        const std::uint64_t rays = static_cast<std::uint64_t>(hits) * ao.secondary_rays;
+        out.ao_raw[index] = static_cast<std::uint16_t>((escaped * 65535u + rays / 2) / rays);
+        out.subsample_hits[index] = static_cast<std::uint8_t>(hits);
+        out.back_face_rays[index] = static_cast<std::uint16_t>(back_rays);
+        out.self_hit_rays[index] = static_cast<std::uint16_t>(self_rays);
+    } else if (back_hits > 0) {
+        cls = TexelClass::BackFaceHit;
+        ++counts.texels.back_face_hit;
+    } else {
+        cls = TexelClass::CentreMiss;
+        ++counts.texels.centre_miss;
+    }
+    out.texel_class[index] = static_cast<std::uint8_t>(cls);
 }
 
 void Add(TexelClassCounts& a, const TexelClassCounts& b) {
@@ -508,6 +824,16 @@ void Add(TexelClassCounts& a, const TexelClassCounts& b) {
     a.straight_hit += b.straight_hit;
     a.back_face_hit += b.back_face_hit;
     a.centre_miss += b.centre_miss;
+    a.cage_hit += b.cage_hit;
+    a.hidden += b.hidden;
+}
+
+void Add(SubsampleCounts& a, const SubsampleCounts& b) {
+    a.covered += b.covered;
+    a.hit += b.hit;
+    a.back_face_hit += b.back_face_hit;
+    a.centre_miss += b.centre_miss;
+    a.hidden += b.hidden;
 }
 
 void Add(RayClassCounts& a, const RayClassCounts& b) {
@@ -517,43 +843,112 @@ void Add(RayClassCounts& a, const RayClassCounts& b) {
     a.self_hit += b.self_hit;
 }
 
-}  // namespace
-
-BakeResult EmbreeBaker::bake(const BakeRequest& request) {
-    if (!caps_.qualified) {
-        throw CapabilityError("the CPU baker is not qualified on this configuration: " +
-                              caps_.unqualified_reason);
+/// `DilationWidth`: `width` passes; each pass gives every `Uncovered` texel that has a valued
+/// 8-neighbour the rounded mean of its valued neighbours of the previous pass (all of a pass is
+/// read before any of it is written, so the order of the scan never matters). Valued texels are
+/// the hit texels and those already dilated; texels of the used surface without a hit (centre
+/// misses, back-face hits, hidden texels) are never written and never spread. RAW is untouched.
+std::uint64_t Dilate(BakeResult& r, std::uint32_t width, const JobControl& control) {
+    r.ao = r.ao_raw;
+    const std::size_t texels = static_cast<std::size_t>(r.width) * r.height;
+    std::vector<std::uint8_t> valued(texels, 0);
+    for (std::size_t i = 0; i < texels; ++i) {
+        const auto cls = static_cast<TexelClass>(r.texel_class[i]);
+        valued[i] = cls == TexelClass::StraightHit || cls == TexelClass::CageHit;
     }
-    ValidateRequest(caps_, request);
+    std::uint64_t dilated = 0;
+    std::vector<std::pair<std::size_t, std::uint16_t>> fresh;
+    for (std::uint32_t pass = 0; pass < width && !control.stop_requested(); ++pass) {
+        fresh.clear();
+        for (std::uint32_t y = 0; y < r.height; ++y) {
+            for (std::uint32_t x = 0; x < r.width; ++x) {
+                const std::size_t i = static_cast<std::size_t>(y) * r.width + x;
+                if (valued[i] || static_cast<TexelClass>(r.texel_class[i]) != TexelClass::Uncovered) continue;
+                std::uint64_t sum = 0;
+                std::uint32_t count = 0;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const std::int64_t nx = static_cast<std::int64_t>(x) + dx;
+                        const std::int64_t ny = static_cast<std::int64_t>(y) + dy;
+                        if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx >= r.width || ny >= r.height) continue;
+                        const std::size_t n = static_cast<std::size_t>(ny) * r.width + static_cast<std::size_t>(nx);
+                        if (!valued[n]) continue;
+                        sum += r.ao[n];
+                        ++count;
+                    }
+                }
+                if (count > 0) fresh.emplace_back(i, static_cast<std::uint16_t>((sum + count / 2) / count));
+            }
+        }
+        if (fresh.empty()) break;
+        for (const auto& [i, value] : fresh) {
+            r.ao[i] = value;
+            valued[i] = 1;
+        }
+        dilated += fresh.size();
+    }
+    return dilated;
+}
+
+/// Threads that are joined however their owner is left, so a failed spawn never meets a
+/// joinable `std::thread` in a destructor (`std::terminate`).
+class JoiningThreads {
+public:
+    JoiningThreads() = default;
+    JoiningThreads(const JoiningThreads&) = delete;
+    JoiningThreads& operator=(const JoiningThreads&) = delete;
+    ~JoiningThreads() {
+        for (std::thread& thread : threads_) {
+            if (thread.joinable()) thread.join();
+        }
+    }
+    void reserve(std::size_t count) { threads_.reserve(count); }
+    template <typename Fn>
+    void spawn(Fn&& fn) {
+        threads_.emplace_back(std::forward<Fn>(fn));
+    }
+
+private:
+    std::vector<std::thread> threads_;
+};
+
+BakeResult RunBake(EmbreeBaker::Core& core, const BakerConfig& config, const JobInputs& inputs,
+                   JobControl& control) {
     const FixedFpState fp_state;
+    const BakeRequest& request = inputs.request;
+    const EmbreeApi& api = *core.api;
 
     BakeResult result;
     result.width = 1u << request.output_size_log2[0];
     result.height = 1u << request.output_size_log2[1];
     result.tile_size = kTileSize;
     result.rays_per_texel = request.ao.secondary_rays;
+    result.subsampling = request.detail.subsampling;
+    result.dilation_width = request.common.dilation_width;
     const std::size_t texels = static_cast<std::size_t>(result.width) * result.height;
     result.ao_raw.assign(texels, 0);
     result.texel_class.assign(texels, 0);
+    result.coverage.assign(texels, 0);
+    result.subsample_hits.assign(texels, 0);
     result.back_face_rays.assign(texels, 0);
     result.self_hit_rays.assign(texels, 0);
 
-    const std::vector<const BakeMesh*> high =
-        request.detail.low_as_high ? std::vector<const BakeMesh*>{request.low} : request.high;
-    const Scene scene(*api_, device_, high);
-    if (api_->getDeviceError(device_) != RTC_ERROR_NONE) {
+    const std::vector<const BakeMesh*> high = request.detail.low_as_high ? request.low : request.high;
+    const Matching matching = MatchMeshes(request, high);
+    const Scene scene(core, high, matching.any_filter, config.faults);
+    if (api.getDeviceError(core.device) != RTC_ERROR_NONE) {
         throw CapabilityError(std::string("Embree failed to build the scene: ") +
-                              api_->getDeviceLastErrorMessage(device_));
+                              api.getDeviceLastErrorMessage(core.device));
     }
-    const std::vector<std::uint32_t> texel_tri =
-        RasterizeTexels(*request.low, result.width, result.height);
+    const TexelCandidates candidates = BuildCandidates(request.low, result.width, result.height);
 
     const std::uint32_t tiles_x = (result.width + kTileSize - 1) / kTileSize;
     const std::uint32_t tiles_y = (result.height + kTileSize - 1) / kTileSize;
     const std::uint32_t tile_count = tiles_x * tiles_y;
+    control.set_total_tiles(tile_count);
     std::vector<TileCounts> tile_counts(tile_count);
     std::vector<std::exception_ptr> tile_errors(tile_count);
-    const Context ctx{*api_, scene.get(), request, *request.low, high, texel_tri, result};
+    const Context ctx{api, scene.get(), request, high, candidates, matching, result};
 
     std::uint32_t threads = request.threads;
     if (threads == 0) threads = std::max(1u, std::thread::hardware_concurrency());
@@ -562,9 +957,13 @@ BakeResult EmbreeBaker::bake(const BakeRequest& request) {
     // Embree keeps its error code per thread and device, so each worker reads its own.
     std::vector<RTCError> worker_errors(threads, RTC_ERROR_NONE);
     std::atomic<std::uint32_t> next{0};
+    std::atomic<bool> abandon{false};  // a later worker could not be started
     const auto worker = [&](std::uint32_t worker_index) {
-        const FixedFpState fp_state;
-        for (std::uint32_t tile = next.fetch_add(1); tile < tile_count; tile = next.fetch_add(1)) {
+        const FixedFpState worker_fp_state;
+        for (;;) {
+            if (control.stop_requested() || abandon.load()) break;
+            const std::uint32_t tile = next.fetch_add(1);
+            if (tile >= tile_count) break;
             try {
                 const std::uint32_t x0 = (tile % tiles_x) * kTileSize;
                 const std::uint32_t y0 = (tile / tiles_x) * kTileSize;
@@ -576,32 +975,71 @@ BakeResult EmbreeBaker::bake(const BakeRequest& request) {
             } catch (...) {
                 tile_errors[tile] = std::current_exception();
             }
+            control.tile_done();
+            // The callback's errors take the tile's error path: nothing may escape a worker.
+            try {
+                if (config.on_tile_done) config.on_tile_done(tile);
+            } catch (...) {
+                if (!tile_errors[tile]) tile_errors[tile] = std::current_exception();
+            }
         }
-        worker_errors[worker_index] = api_->getDeviceError(device_);
+        worker_errors[worker_index] = api.getDeviceError(core.device);
     };
     if (threads == 1) {
         worker(0);
     } else {
-        std::vector<std::thread> pool;
+        JoiningThreads pool;  // declared after everything the workers use: joined first
         pool.reserve(threads);
-        for (std::uint32_t i = 0; i < threads; ++i) pool.emplace_back(worker, i);
-        for (std::thread& thread : pool) thread.join();
+        try {
+            for (std::uint32_t i = 0; i < threads; ++i) {
+                if (config.faults.worker_spawn_failure && *config.faults.worker_spawn_failure == i) {
+                    throw std::system_error(std::make_error_code(std::errc::resource_unavailable_try_again),
+                                            "injected failure creating bake worker " + std::to_string(i));
+                }
+                pool.spawn([&worker, i] { worker(i); });
+            }
+        } catch (...) {
+            abandon.store(true);
+            throw;  // `pool` joins the started workers on the way out
+        }
     }
+    if (control.stop_requested()) return {};  // a cancelled job publishes nothing
     // The first failing tile in tile order, whatever thread met it first.
     for (const std::exception_ptr& error : tile_errors) {
         if (error) std::rethrow_exception(error);
     }
     for (RTCError error : worker_errors) {
         if (error != RTC_ERROR_NONE) {
-            throw CapabilityError("Embree reported error " + std::to_string(error) +
-                                  " while casting");
+            throw CapabilityError("Embree reported error " + std::to_string(error) + " while casting");
         }
     }
     for (const TileCounts& counts : tile_counts) {
         Add(result.texels, counts.texels);
+        Add(result.subsamples, counts.subsamples);
         Add(result.rays, counts.rays);
     }
+    result.dilated_texels = Dilate(result, request.common.dilation_width, control);
     return result;
+}
+
+}  // namespace
+
+JobHandle EmbreeBaker::bake(const BakeRequest& request) {
+    bool diagnostic = false;
+    if (!caps_.qualified) {
+        if (!(caps_.diagnostic_build_threads && config_.allow_unqualified_build_threads_diagnostic)) {
+            throw CapabilityError("the CPU baker is not qualified on this configuration: " +
+                                  caps_.unqualified_reason);
+        }
+        diagnostic = true;
+    }
+    ValidateRequest(caps_, request);
+    std::shared_ptr<const JobInputs> inputs = CopyInputs(request);
+    return JobHandle::Start([core = core_, config = config_, inputs, diagnostic](JobControl& control) {
+        BakeResult result = RunBake(*core, config, *inputs, control);
+        result.diagnostic_unqualified = diagnostic;
+        return result;
+    });
 }
 
 }  // namespace uzp::bake

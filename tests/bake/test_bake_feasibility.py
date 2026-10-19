@@ -1,11 +1,11 @@
-"""CPU baker feasibility (a slice of phase3.1_baker-request-model, items 2.2, 2.3, 2.6 and 3.3 in
-part; decision 302; `docs/architecture/06-baking.md` §1-§4).
+"""CPU baker (phase3.1_baker-request-model, a permitted slice, not its acceptance; decisions 302
+and 306; `docs/architecture/06-baking.md` §1-§4 and §6).
 
 `uzp-bake-feasibility-tests.exe` (`tests/bake/bake_feasibility_test.cpp`,
 `zig build bake-feasibility-tests`) holds the native cases with their analytic class counts and
-bakes the authored determinism scene on request; these tests run each case, then bake the scene
-in separate processes at 1, 4 and every hardware thread and compare the output bytes. Parity
-with Painter's bakers is not claimed: the baker reports `pending-evidence`. No GPU is involved:
+bakes the authored fixtures on request; these tests run each case, then bake the fixtures in
+separate processes at 1, 4 and every hardware thread and compare the output bytes. Parity with
+Painter's bakers is not claimed: the baker reports `pending-evidence`. No GPU is involved:
 everything runs on the CPU lane.
 """
 
@@ -28,10 +28,27 @@ NATIVE_CASES = (
     "box_inward",  # 2.6: every secondary ray hits a front face
     "box_outward",  # 2.6: every secondary ray hits a back face, counted per texel
     "centre_miss",  # 2.6: centre misses kept as a class, never filled
-    "back_face_primary",  # 2.6: back-face primary hits kept as a class
+    "back_face_primary",  # 2.4, 2.6: back-face primary hits kept; IgnoreBackface passes them
     "self_hit",  # 2.6: self-intersections counted, removed by min_distance
-    "capability_errors",  # 2.2, 3.5: unqualified ISA, usage, size, Automatic cage
+    "capability_errors",  # 2.2, 3.5: unqualified ISA, usage, size, cage and diffusion refusals
+    "build_threads_diagnostic",  # 2.2: only the serial BVH build is qualified (SUP-023)
     "threads_in_process",  # 3.3: identical bytes at 1, 4 and N threads in one process
+    "job_async",  # 2.2: IBaker/JobHandle, progress, ids, published result
+    "job_cancel",  # 2.2: cancellation publishes nothing; dropping a handle cancels
+    "job_fail",  # 2.2: a casting failure ends in Fail with its error
+    "worker_spawn_failure",  # SUP-023: a failed worker spawn joins the started ones
+    "embree_acquisition_failure",  # SUP-023: Embree objects released at every failing step
+    "tile_callback_throws",  # SUP-031: a throwing tile callback fails the job, never terminates
+    "match_by_name",  # 2.4, 3.4: FilterMethod by name, _low/_high/_ignorebf suffixes
+    "match_always",  # 2.4, 3.4: FilterMethod always; IgnoreBackface
+    "low_as_high_matching",  # 2.4: LowAsHigh with name matching
+    "custom_cage",  # 2.5, 2.6: in-memory custom cage, cage-hit class
+    "hidden_mask",  # 2.6: hidden class from the request's mask
+    "subsampling_bevel",  # 2.6, 3.4: SubSampling coverage and hit counts per texel
+    "subsampling_coverage",  # 2.6, 3.4: coverage accumulation on a UV edge
+    "dilation",  # 2.7, 3.4: DilationWidth outside the used surface, RAW kept
+    "bevel_threads_in_process",  # 3.3: the bevelled cube with highs at 1, 4 and N threads
+    "parameters",  # 2.8: the BakingParameters/Property model, one-transaction set()
 )
 
 
@@ -60,8 +77,10 @@ def run(exe: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run([str(exe), *args], capture_output=True, timeout=300, check=False)
 
 
-def bake(exe: Path, fixture: str, threads: int, out: Path | None = None) -> dict[str, Any]:
-    args = ["bake", fixture, str(threads)]
+def bake(
+    exe: Path, fixture: str, threads: int, out: Path | None = None, *extra: str
+) -> dict[str, Any]:
+    args = ["bake", fixture, str(threads), *extra]
     if out is not None:
         args += ["--out", str(out)]
     proc = run(exe, *args)
@@ -77,21 +96,36 @@ def test_native_case(bake_tests: Path, case: str) -> None:
     assert f"PASS {case}".encode() in proc.stdout
 
 
-def test_bytes_equal_across_thread_counts(bake_tests: Path, tmp_path: Path) -> None:
-    """The scene baked in three processes at 1, 4 and N workers: identical bytes."""
+@pytest.mark.parametrize(("fixture", "tiles"), [("scene", 256), ("bevel", 32)])
+def test_bytes_equal_across_thread_counts(
+    bake_tests: Path, tmp_path: Path, fixture: str, tiles: int
+) -> None:
+    """A fixture baked in three processes at 1, 4 and N workers: identical bytes. `bevel` is the
+    bevelled cube with highs and every path of decision 306 on."""
     hardware = os.cpu_count() or 1
     outputs = {}
     for threads in (1, 4, hardware):
-        out = tmp_path / f"scene-{threads}.bin"
-        result = bake(bake_tests, "scene", threads, out)
-        assert result["threads_used"] == min(threads, 256)  # 256 tiles at 256² and 16² tiles
+        out = tmp_path / f"{fixture}-{threads}.bin"
+        result = bake(bake_tests, fixture, threads, out)
+        assert result["threads_used"] == min(threads, tiles)
         assert result["parity_status"] == "pending-evidence"
+        assert result["qualified"] is True and result["diagnostic"] is False
         outputs[threads] = (out.read_bytes(), result)
     reference_bytes, reference = outputs[1]
     for threads, (data, result) in outputs.items():
         assert data == reference_bytes, f"{threads} threads changed the output bytes"
         assert result["sha256"] == reference["sha256"]
         assert result["texels"] == reference["texels"] and result["rays"] == reference["rays"]
+
+
+def test_parallel_bvh_build_is_diagnostic_only(bake_tests: Path) -> None:
+    """A BVH build thread count other than 1 is unqualified (decision 306): refused before any
+    work, and baked only on the explicit diagnostic path, marked as such."""
+    refused = run(bake_tests, "bake", "scene", "4", "--embree-build-threads", "8")
+    assert refused.returncode == 3
+    assert b"CapabilityError" in refused.stderr and b"serial BVH build" in refused.stderr
+    result = bake(bake_tests, "scene", 4, None, "--embree-build-threads", "8", "--diagnostic")
+    assert result["qualified"] is False and result["diagnostic"] is True
 
 
 @pytest.mark.parametrize("fixture", ["scene", "scene_self"])
@@ -102,7 +136,7 @@ def test_miss_classes_are_reported(bake_tests: Path, fixture: str) -> None:
     result = bake(bake_tests, fixture, 4)
     texels, rays = result["texels"], result["rays"]
     assert sum(texels.values()) == result["width"] * result["height"]
-    assert sum(rays.values()) == texels["straight_hit"] * result["rays_per_texel"]
+    assert sum(rays.values()) == result["subsamples"]["hit"] * result["rays_per_texel"]
     assert texels["back_face_hit"] > 0
     assert rays["back_face_hit"] > 0
     assert rays["self_hit"] > 0
