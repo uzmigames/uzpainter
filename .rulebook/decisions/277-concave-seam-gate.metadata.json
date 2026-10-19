@@ -1,0 +1,13 @@
+{
+  "id": 277,
+  "slug": "277-concave-seam-gate",
+  "title": "A seam edge folded concave by about 15° or more gives the ring no far taps: the Wand's 632 residual seam texels are own-only straight-edge texels, and the rest of the Wand's Height misses are the L16F operand inside each PNG 16 code",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
