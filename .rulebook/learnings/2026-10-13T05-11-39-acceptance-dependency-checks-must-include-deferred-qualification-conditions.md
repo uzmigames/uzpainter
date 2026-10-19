@@ -1,0 +1,5 @@
+# Acceptance dependency checks must include deferred qualification conditions
+**Source**: manual
+**Date**: 2026-10-13
+**Tags**: analysis:plan-purpose-review, planning, acceptance, dependency-graph
+The nominal UzPainter DAG is acyclic, but at main173fb65 its checklist acceptance conditions form a loop: Vulkan requires accepted Tunic; Tunic requires accepted MCP; MCP requires accepted Supervisor; Supervisor waits for Vulkan device-fault qualification. A planning review must validate acceptance dependencies as well as nominal implementation edges. Remedy is an explicit sequencing/acceptance split or earlier qualification while retaining later Vulkan obligations, not silently waiving parity. Evidence and recommendations: docs/analysis/plan-purpose-review/01-purpose-and-gates.md F-001.

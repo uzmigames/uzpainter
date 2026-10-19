@@ -6,27 +6,13 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Edit(**/.rulebook/tasks/**)",
             "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/protect-task-scaffolding.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|Edit|Write",
-        "hooks": [
+          },
           {
             "type": "command",
-            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/no-os-scheduling.sh"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/jev-gate.sh prompt",
-            "timeout": 8
+            "if": "Write(**/.rulebook/tasks/**)",
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/protect-task-scaffolding.sh"
           }
         ]
       }
@@ -46,7 +32,35 @@
       "TodoWrite",
       "mcp__rulebook"
     ],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "acceptEdits",
+    "deny": [
+      "Bash(crontab *)",
+      "Bash(at *)",
+      "Bash(batch *)",
+      "Bash(systemctl *.timer*)",
+      "Bash(systemd-run *--on-*)",
+      "Bash(launchctl load *)",
+      "Bash(launchctl bootstrap *)",
+      "Bash(launchctl enable *)",
+      "Bash(launchctl submit *)",
+      "Bash(launchctl kickstart *)",
+      "Bash(schtasks *)",
+      "PowerShell(schtasks *)",
+      "PowerShell(Register-ScheduledTask *)",
+      "PowerShell(New-ScheduledTask *)",
+      "PowerShell(Set-ScheduledTask *)",
+      "PowerShell(Enable-ScheduledTask *)",
+      "PowerShell(Register-ScheduledJob *)",
+      "Edit(//etc/crontab)",
+      "Edit(//etc/cron*/**)",
+      "Edit(//etc/anacrontab)",
+      "Edit(//var/spool/cron/**)",
+      "Edit(//**/LaunchAgents/*.plist)",
+      "Edit(//**/LaunchDaemons/*.plist)",
+      "Edit(//etc/systemd/**/*.timer)",
+      "Edit(//usr/lib/systemd/**/*.timer)",
+      "Edit(~/.config/systemd/user/*.timer)"
+    ]
   },
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
