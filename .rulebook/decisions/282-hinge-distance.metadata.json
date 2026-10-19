@@ -1,0 +1,13 @@
+{
+  "id": 282,
+  "slug": "282-hinge-distance",
+  "title": "A hinge is unfolded only when it is folded past decision 278's gate (float32 normal dot <= 0.985); a shallower hinge is measured in plain 3D, concave or convex, also along a development path; near-tied taps are ordered by float32 comparators, a far tap's with q_E folded into the far plane",
+  "status": "accepted",
+  "date": "2026-10-19",
+  "relatedTasks": [
+    "phase1.25_pilot-wand",
+    "phase1.18_export-engine",
+    "phase1.16_export-processing-encoders"
+  ],
+  "supersededBy": null
+}
